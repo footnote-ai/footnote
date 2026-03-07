@@ -5,7 +5,6 @@
         "outDir": "dist",
         "noEmitOnError": true
     },
-    "references": [{ "path": "../contracts" }],
     "include": ["src/**/*.ts"],
     "exclude": ["node_modules", "dist"]
 }
