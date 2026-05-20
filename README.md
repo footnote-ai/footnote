@@ -6,6 +6,34 @@
 
 Footnote is an AI framework that tries to show its work.
 
+## Standalone CLI (Primary User Path)
+
+Download the `footnote` binary from GitHub Releases, then run:
+
+```bash
+footnote start
+```
+
+Supported v1 runtime: Docker + GHCR image (`ghcr.io/footnote-ai/footnote`).
+
+### CLI Commands (v1)
+
+```bash
+footnote start
+footnote stop
+footnote status
+footnote open
+footnote logs
+```
+
+Optional start flags:
+
+```bash
+footnote start --headless
+footnote start --tag <imageTag>
+footnote start --config-dir <path>
+```
+
 ## Quickstart
 
 ```bash
@@ -18,9 +46,17 @@ Open `http://localhost:8080`.
 
 ## Docker
 
+Default deployment path (pull prebuilt GHCR image):
+
 ```bash
 pnpm validate-env --target server
-docker compose -f deploy/compose.yml up --build
+docker compose -f deploy/compose.yml up
+```
+
+For local source-based image builds, use:
+
+```bash
+docker compose -f deploy/compose.yml -f deploy/compose.dev-build.yml up --build
 ```
 
 ## Docs

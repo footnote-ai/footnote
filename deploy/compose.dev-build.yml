@@ -1,7 +1,10 @@
-name: footnote-server
+name: footnote-server-dev-build
 
 services:
     server:
+        build:
+            context: ..
+            dockerfile: deploy/Dockerfile.server
         image: ${FOOTNOTE_IMAGE_REF:-ghcr.io/footnote-ai/footnote:latest}
         env_file:
             - ../.env

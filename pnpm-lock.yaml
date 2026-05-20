@@ -522,6 +522,28 @@ importers:
                 specifier: 'catalog:'
                 version: 5.9.3
 
+    packages/launcher-cli:
+        dependencies:
+            '@footnote/launcher-core':
+                specifier: workspace:*
+                version: link:../launcher-core
+        devDependencies:
+            '@types/node':
+                specifier: 'catalog:'
+                version: 25.6.0
+            typescript:
+                specifier: 'catalog:'
+                version: 5.9.3
+
+    packages/launcher-core:
+        devDependencies:
+            '@types/node':
+                specifier: 'catalog:'
+                version: 25.6.0
+            typescript:
+                specifier: 'catalog:'
+                version: 5.9.3
+
     packages/prompts:
         dependencies:
             js-yaml:

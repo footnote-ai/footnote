@@ -4,7 +4,11 @@ This folder holds the main project docs. The subfolders cover the working
 system. The top-level files cover project background, licensing posture, and
 philosophy.
 
-For first-time local setup, start at the root [Quickstart](../README.md#quickstart).
+For first-time setup:
+
+- Standalone user path: [README Standalone CLI](../README.md#standalone-cli-primary-user-path)
+- Developer source path: [README Quickstart](../README.md#quickstart)
+- Deployment path: [deploy README](../deploy/README.md)
 
 ## Sections
 

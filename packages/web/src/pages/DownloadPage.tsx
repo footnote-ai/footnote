@@ -1,5 +1,5 @@
 /**
- * @description: Presents the canonical container install path and supervised local-node architecture.
+ * @description: Presents the standalone launcher CLI download path and runtime options.
  * @footnote-scope: web
  * @footnote-module: DownloadPage
  * @footnote-risk: low - Incorrect install copy can misdirect operators without changing runtime behavior.
@@ -15,22 +15,11 @@ const DownloadPage = (): JSX.Element => {
         'idle'
     );
 
-    const dockerCommand = useMemo(
-        () =>
-            [
-                'docker run \\',
-                '  --name footnote \\',
-                '  -p 8080:3000 \\',
-                '  --env-file .env \\',
-                '  -v footnote-data:/data \\',
-                '  ghcr.io/footnote-ai/footnote:latest',
-            ].join('\n'),
-        []
-    );
+    const cliCommand = useMemo(() => ['footnote start'].join('\n'), []);
 
     const handleCopy = async (): Promise<void> => {
         try {
-            await navigator.clipboard.writeText(dockerCommand);
+            await navigator.clipboard.writeText(cliCommand);
             setCopyStatus('copied');
         } catch {
             setCopyStatus('error');
@@ -44,32 +33,33 @@ const DownloadPage = (): JSX.Element => {
                 <section className="page-hero">
                     <h1>Download</h1>
                     <p className="page-hero__summary">
-                        Run Footnote as one server container that serves web,
-                        owns provenance/traces, and supervises local Discord
-                        persona nodes.
+                        Install the standalone launcher binary and run Footnote
+                        with one command.
                     </p>
                     <p>
-                        Container image:{' '}
-                        <code>ghcr.io/footnote-ai/footnote</code>
+                        Primary command: <code>footnote start</code>
+                    </p>
+                    <p>
+                        Runtime image: <code>ghcr.io/footnote-ai/footnote</code>
                     </p>
                     <pre>
-                        <code>{dockerCommand}</code>
+                        <code>{cliCommand}</code>
                     </pre>
                     <div className="cta-group">
                         <a
                             className="cta-button primary"
-                            href="https://github.com/footnote-ai/footnote#run-with-docker"
+                            href="https://github.com/footnote-ai/footnote/releases"
                             target="_blank"
                             rel="noreferrer"
                         >
-                            Run with Docker
+                            Download Footnote CLI
                         </a>
                         <button
                             className="cta-button secondary"
                             type="button"
                             onClick={handleCopy}
                         >
-                            Copy the Docker command
+                            Copy command
                         </button>
                     </div>
                     <p aria-live="polite" role="status">
@@ -80,8 +70,8 @@ const DownloadPage = (): JSX.Element => {
                               : ''}
                     </p>
                     <p>
-                        Configure required environment variables and secrets
-                        before starting the container.
+                        Footnote launcher v1 uses Docker + GHCR. Developer
+                        source workflows still use <code>pnpm start</code>.
                     </p>
                 </section>
             </main>

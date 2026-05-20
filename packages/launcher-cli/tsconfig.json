@@ -1,0 +1,19 @@
+{
+    "extends": "../../tsconfig.json",
+    "compilerOptions": {
+        "rootDir": "src",
+        "outDir": "dist",
+        "module": "NodeNext",
+        "moduleResolution": "NodeNext",
+        "baseUrl": ".",
+        "paths": {
+            "@footnote/launcher-core": ["../launcher-core/src/index.ts"],
+            "@footnote/launcher-core/*": ["../launcher-core/src/*"]
+        },
+        "types": ["node"],
+        "noEmitOnError": true
+    },
+    "include": ["src/**/*.ts"],
+    "exclude": ["node_modules", "dist"],
+    "references": [{ "path": "../launcher-core" }]
+}

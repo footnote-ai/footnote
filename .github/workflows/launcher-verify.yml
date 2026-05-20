@@ -1,0 +1,42 @@
+name: launcher-verify
+
+on:
+    pull_request:
+    push:
+        branches:
+            - main
+
+permissions:
+    contents: read
+
+jobs:
+    verify:
+        strategy:
+            fail-fast: false
+            matrix:
+                os: [ubuntu-latest, macos-latest, windows-latest]
+        runs-on: ${{ matrix.os }}
+        steps:
+            - uses: actions/checkout@v4
+
+            - uses: actions/setup-node@v4
+              with:
+                  node-version: 22
+
+            - run: corepack enable
+            - run: corepack prepare pnpm@10.27.0 --activate
+            - run: pnpm install --frozen-lockfile
+            - run: pnpm sea:build-launcher
+
+            - name: Validate help exits 0
+              run: node packages/launcher-cli/dist/bin.js --help
+
+            - name: Validate read-only status does not bootstrap
+              shell: bash
+              run: |
+                  temp_dir="$(mktemp -d)"
+                  node packages/launcher-cli/dist/bin.js status --config-dir "$temp_dir"
+                  if [ -f "$temp_dir/.env" ] || [ -f "$temp_dir/footnote.yaml" ] || [ -f "$temp_dir/launcher.json" ]; then
+                    echo "status command created config files unexpectedly"
+                    exit 1
+                  fi

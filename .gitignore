@@ -36,6 +36,10 @@ packages/agent-runtime/dist/
 # API client build artifacts
 packages/api-client/dist/
 
+# Launcher build artifacts
+packages/launcher-core/dist/
+packages/launcher-cli/dist/
+
 # Backend build artifacts
 packages/backend/dist/
 
@@ -60,6 +64,7 @@ data/
 packages/discord-bot/logs
 logs/
 artifacts/repomix/
+artifacts/sea/
 .tmp-start*.log
 
 # the 2>nul commmand creates a "nul" file on Unix systems, so we ignore it

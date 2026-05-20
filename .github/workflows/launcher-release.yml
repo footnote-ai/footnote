@@ -1,0 +1,49 @@
+name: launcher-release
+
+on:
+    push:
+        tags:
+            - 'v*.*.*'
+    workflow_dispatch:
+
+permissions:
+    contents: write
+
+jobs:
+    build:
+        strategy:
+            fail-fast: false
+            matrix:
+                os: [ubuntu-latest, macos-latest, windows-latest]
+        runs-on: ${{ matrix.os }}
+        steps:
+            - uses: actions/checkout@v4
+            - uses: actions/setup-node@v4
+              with:
+                  node-version: 22
+            - run: corepack enable
+            - run: corepack prepare pnpm@10.27.0 --activate
+            - run: pnpm install --frozen-lockfile
+            - run: pnpm sea:build-launcher
+            - run: pnpm sea:package
+            - run: pnpm sea:verify
+
+            - name: Upload platform artifacts
+              uses: actions/upload-artifact@v4
+              with:
+                  name: sea-${{ runner.os }}-${{ runner.arch }}
+                  path: artifacts/sea
+
+    publish:
+        if: startsWith(github.ref, 'refs/tags/')
+        needs: build
+        runs-on: ubuntu-latest
+        steps:
+            - uses: actions/download-artifact@v4
+              with:
+                  path: artifacts/sea
+
+            - run: find artifacts/sea -type f
+            - uses: softprops/action-gh-release@v2
+              with:
+                  files: artifacts/sea/**/*
