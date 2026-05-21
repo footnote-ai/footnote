@@ -12,14 +12,24 @@ import { runCliWithExitCode } from './cli.js';
 const pauseBeforeClose = async (): Promise<void> =>
     new Promise((resolve) => {
         process.stdout.write('\nPress Enter to close this window.\n');
+        let finished = false;
+        const finish = (): void => {
+            if (finished) {
+                return;
+            }
+            finished = true;
+            process.stdin.pause();
+            resolve();
+        };
 
         if (!process.stdin.isTTY) {
-            setTimeout(resolve, 8_000);
+            setTimeout(finish, 8_000);
             return;
         }
 
         process.stdin.resume();
-        process.stdin.once('data', () => resolve());
+        process.stdin.once('data', finish);
+        setTimeout(finish, 30_000);
     });
 
 const main = async (): Promise<void> => {
