@@ -52,4 +52,4 @@ jobs:
             - run: find artifacts/sea -type f
             - uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65
               with:
-                  files: artifacts/sea/**/*
+                  files: artifacts/sea/**/footnote-*
