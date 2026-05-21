@@ -9,4 +9,31 @@
 
 import { runCliWithExitCode } from './cli.js';
 
-void runCliWithExitCode(process.argv.slice(2));
+const pauseBeforeClose = async (): Promise<void> =>
+    new Promise((resolve) => {
+        process.stdout.write('\nPress Enter to close this window.\n');
+
+        if (!process.stdin.isTTY) {
+            setTimeout(resolve, 8_000);
+            return;
+        }
+
+        process.stdin.resume();
+        process.stdin.once('data', () => resolve());
+    });
+
+const main = async (): Promise<void> => {
+    const argv = process.argv.slice(2);
+    await runCliWithExitCode(argv);
+
+    const shouldPauseForDoubleClickFailure =
+        process.platform === 'win32' &&
+        argv.length === 0 &&
+        (process.exitCode ?? 0) !== 0;
+
+    if (shouldPauseForDoubleClickFailure) {
+        await pauseBeforeClose();
+    }
+};
+
+void main();
