@@ -1,0 +1,21 @@
+{
+    "name": "@footnote/launcher-cli",
+    "version": "0.0.1",
+    "private": true,
+    "type": "module",
+    "main": "dist/index.js",
+    "types": "dist/index.d.ts",
+    "bin": {
+        "footnote": "dist/bin.js"
+    },
+    "scripts": {
+        "build": "tsc -b tsconfig.json"
+    },
+    "dependencies": {
+        "@footnote/launcher-core": "workspace:*"
+    },
+    "devDependencies": {
+        "@types/node": "catalog:",
+        "typescript": "catalog:"
+    }
+}

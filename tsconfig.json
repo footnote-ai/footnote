@@ -33,6 +33,12 @@
             "@footnote/config-spec/*": ["./packages/config-spec/src/*"],
             "@footnote/contracts": ["./packages/contracts/src/index.ts"],
             "@footnote/contracts/*": ["./packages/contracts/src/*"],
+            "@footnote/launcher-core": [
+                "./packages/launcher-core/src/index.ts"
+            ],
+            "@footnote/launcher-core/*": ["./packages/launcher-core/src/*"],
+            "@footnote/launcher-cli": ["./packages/launcher-cli/src/index.ts"],
+            "@footnote/launcher-cli/*": ["./packages/launcher-cli/src/*"],
             "@footnote/prompts": ["./packages/prompts/src/index.ts"],
             "@footnote/prompts/*": ["./packages/prompts/src/*"],
             "@components/*": ["./packages/web/src/components/*"],

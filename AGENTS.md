@@ -76,7 +76,7 @@ Conditional (must explain if skipped):
 - `pnpm validate-footnote-tags`
 - `pnpm validate-openapi-links` (API boundary changes)
 - `pnpm review` (required for review-ready code changes; explain if skipped)
-- `docker compose -f deploy/compose.yml build` (required for startup, provider, env, deploy, or runtime packaging impact; explain if skipped)
+- `pnpm test:build` (required for startup, provider, env, deploy, or runtime packaging impact; explain if skipped)
 
 ## Working Style
 

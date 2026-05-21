@@ -1,0 +1,69 @@
+name: launcher-sea-spike
+
+on:
+    workflow_dispatch:
+        inputs:
+            draft_tag:
+                description: 'Optional draft release tag (for example sea-spike-2026-05-20)'
+                required: false
+                type: string
+    pull_request:
+        paths:
+            - '.github/workflows/launcher-sea-spike.yml'
+            - 'tools/sea/**'
+            - 'packages/launcher-core/**'
+            - 'packages/launcher-cli/**'
+            - 'package.json'
+            - 'pnpm-lock.yaml'
+
+permissions:
+    contents: read
+
+jobs:
+    build:
+        strategy:
+            fail-fast: false
+            matrix:
+                os: [ubuntu-latest, macos-latest, windows-latest]
+        runs-on: ${{ matrix.os }}
+        steps:
+            - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+              with:
+                  persist-credentials: false
+
+            - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+              with:
+                  node-version: 22
+
+            - run: corepack enable
+            - run: corepack prepare pnpm@10.27.0 --activate
+            - run: pnpm install --frozen-lockfile
+            - run: pnpm sea:build-launcher
+            - run: pnpm sea:package
+            - run: pnpm sea:verify
+            - run: pnpm sea:checksums
+
+            - name: Upload SEA artifact
+              uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+              with:
+                  name: sea-${{ runner.os }}-${{ runner.arch }}
+                  path: artifacts/sea
+
+    publish-draft:
+        permissions:
+            contents: write
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.draft_tag != '' }}
+        needs: build
+        runs-on: ubuntu-latest
+        steps:
+            - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+              with:
+                  path: artifacts/sea
+
+            - uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65
+              with:
+                  tag_name: ${{ inputs.draft_tag }}
+                  name: SEA Spike ${{ inputs.draft_tag }}
+                  draft: true
+                  prerelease: true
+                  files: artifacts/sea/**/*

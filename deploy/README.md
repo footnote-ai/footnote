@@ -2,11 +2,34 @@
 
 Footnote deploys as one server container.
 
+## Runtime Paths
+
+- User CLI path (primary): download `footnote` binary, run `footnote start`.
+- Deployment compose path: use `deploy/compose.yml` (GHCR image default).
+- Developer repo path: `git clone` + `pnpm start`.
+
+## Standalone CLI (v1)
+
+Commands:
+
+- `footnote start`: bootstrap missing config, pull GHCR image, start runtime, wait for readiness.
+- `footnote stop`: stop/remove launcher-managed container only.
+- `footnote status`: read-only status output (does not create config files).
+- `footnote open`: open saved URL only when launcher-managed runtime is live.
+- `footnote logs`: stream logs from launcher-managed container.
+
+Useful flags:
+
+- `footnote start --headless`
+- `footnote start --tag <imageTag>` (persists as default tag)
+- `footnote start --config-dir <path>`
+
 Canonical artifacts:
 
 - `deploy/Dockerfile.server`
 - `deploy/server-entrypoint.sh`
 - `deploy/compose.yml`
+- `deploy/compose.dev-build.yml`
 - `deploy/fly/server.toml`
 
 ## First Setup
@@ -40,8 +63,33 @@ pnpm validate-env --target server
 5. Start:
 
 ```bash
-docker compose -f deploy/compose.yml up --build
+docker compose -f deploy/compose.yml up
 ```
+
+For local source builds during development:
+
+```bash
+docker compose -f deploy/compose.yml -f deploy/compose.dev-build.yml up --build
+```
+
+## Volume Name Migration Note
+
+The compose volume identifier changed from `footnote-data` (old) to
+`footnote_data` (new). This is a breaking naming change for existing Docker
+hosts.
+
+If you already have data in `footnote-data`, choose one of these paths:
+
+1. Migrate data to `footnote_data`:
+   Create the new volume, then run a one-time copy using a temporary container
+   that mounts both volumes and copies all files from `footnote-data` into
+   `footnote_data`.
+2. Keep the old volume name for backwards compatibility:
+   Add a compose override that maps `/data` to `footnote-data` so existing data
+   continues to be used without migration.
+
+Use the exact identifiers `footnote_data` and `footnote-data` when updating
+compose files and operational runbooks.
 
 ## Settings vs Secrets
 

@@ -6,7 +6,22 @@
 
 Footnote is an AI framework that tries to show its work.
 
-## Quickstart
+## Start Here
+
+Use Footnote on this computer:
+
+- Download the `footnote` binary from Releases: https://github.com/footnote-ai/footnote/releases
+- Run:
+
+```bash
+footnote start
+```
+
+Put Footnote online:
+
+- Follow the deployment guide: [deploy/README.md](deploy/README.md)
+
+Build or contribute to Footnote:
 
 ```bash
 git clone https://github.com/footnote-ai/footnote.git
@@ -16,18 +31,13 @@ pnpm start
 
 Open `http://localhost:8080`.
 
-## Docker
-
-```bash
-pnpm validate-env --target server
-docker compose -f deploy/compose.yml up --build
-```
-
-## Docs
+## Need Help?
 
 - Deployment guide: [deploy/README.md](deploy/README.md)
-- Prompt/profile config: [docs/architecture/prompt-resolution.md](docs/architecture/prompt-resolution.md)
+- CI guide: [docs/ci/README.md](docs/ci/README.md)
 - Docs map: [docs/README.md](docs/README.md)
+- GitHub issues: https://github.com/footnote-ai/footnote/issues
+- GitHub discussions: https://github.com/footnote-ai/footnote/discussions
 
 ## License
 
