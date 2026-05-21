@@ -6,6 +6,7 @@
  * @footnote-ethics: medium - Clear, fail-open diagnostics support accountable operations and user autonomy.
  */
 
+import path from 'node:path';
 import {
     bootstrapConfigFiles,
     computeConfigRootHash,
@@ -156,9 +157,10 @@ export const runCli = async (argv: readonly string[]): Promise<number> => {
         return 0;
     }
 
-    const configRoot =
+    const configRoot = path.resolve(
         parsed.configDir ??
-        resolveDefaultConfigRoot(process.platform, process.env);
+            resolveDefaultConfigRoot(process.platform, process.env)
+    );
     const paths = resolveConfigPaths(configRoot);
     const configRootHash = computeConfigRootHash(configRoot);
 

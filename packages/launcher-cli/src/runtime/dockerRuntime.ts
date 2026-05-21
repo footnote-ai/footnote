@@ -551,7 +551,7 @@ export class DockerRuntime implements FootnoteRuntime {
 
         const queue: Array<LogLine | null> = [];
         let resolveNext: (() => void) | null = null;
-        let rejectIteration: ((error: unknown) => void) | null = null;
+        let terminalError: unknown;
 
         const notify = (): void => {
             if (resolveNext) {
@@ -577,16 +577,16 @@ export class DockerRuntime implements FootnoteRuntime {
 
         child.on('error', (error: NodeJS.ErrnoException) => {
             if (error.code === 'ENOENT') {
-                rejectIteration?.(
-                    new LauncherError(
-                        'environment',
-                        'Docker CLI was not found while streaming logs.',
-                        error
-                    )
+                terminalError = new LauncherError(
+                    'environment',
+                    'Docker CLI was not found while streaming logs.',
+                    error
                 );
+                enqueue(null);
                 return;
             }
-            rejectIteration?.(error);
+            terminalError = error;
+            enqueue(null);
         });
 
         child.on('close', (code) => {
@@ -597,24 +597,26 @@ export class DockerRuntime implements FootnoteRuntime {
                 enqueue({ text: stderrState.buffered, stream: 'stderr' });
             }
             if (code !== 0) {
-                enqueue({
-                    text: `docker logs exited with status ${code ?? 1}`,
-                    stream: 'stderr',
-                });
+                terminalError ??= new LauncherError(
+                    'runtime',
+                    `Docker command failed: docker ${args.join(' ')}\ndocker logs exited with status ${code ?? 1}`
+                );
             }
             enqueue(null);
         });
 
         while (true) {
             if (queue.length === 0) {
-                await new Promise<void>((resolve, reject) => {
+                await new Promise<void>((resolve) => {
                     resolveNext = resolve;
-                    rejectIteration = reject;
                 });
             }
 
             const item = queue.shift();
             if (item === null) {
+                if (terminalError) {
+                    throw terminalError;
+                }
                 return;
             }
             if (item) {
