@@ -8,20 +8,22 @@ Footnote is an AI framework that tries to show its work.
 
 ## Start Here
 
-Use Footnote on this computer:
+### Run the app
 
-- Download the `footnote` binary from Releases: https://github.com/footnote-ai/footnote/releases
+- Download the binary from [Releases](https://github.com/footnote-ai/footnote/releases)
 - Run:
 
 ```bash
 footnote start
 ```
 
-Put Footnote online:
+That's it!
 
-- Follow the deployment guide: [deploy/README.md](deploy/README.md)
+### Advanced Setup
 
-Build or contribute to Footnote:
+[Deployment Guide](deploy/README.md)
+
+Run from source:
 
 ```bash
 git clone https://github.com/footnote-ai/footnote.git
@@ -29,16 +31,12 @@ cd footnote
 pnpm start
 ```
 
-Open `http://localhost:8080`.
-
 ## Need Help?
 
-- Deployment guide: [deploy/README.md](deploy/README.md)
-- CI guide: [docs/ci/README.md](docs/ci/README.md)
-- Docs map: [docs/README.md](docs/README.md)
-- GitHub issues: https://github.com/footnote-ai/footnote/issues
-- GitHub discussions: https://github.com/footnote-ai/footnote/discussions
+- [Docs map](docs/README.md)
+- [GitHub issues](https://github.com/footnote-ai/footnote/issues)
+- [GitHub discussions](https://github.com/footnote-ai/footnote/discussions)
 
 ## License
 
-Footnote is dual-licensed under MIT and HL3-CORE. See [docs/LICENSE_STRATEGY.md](docs/LICENSE_STRATEGY.md).
+Footnote is dual-licensed under MIT and HL3-CORE. See the [license strategy](docs/LICENSE_STRATEGY.md) for more details.
