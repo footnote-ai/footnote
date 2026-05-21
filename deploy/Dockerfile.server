@@ -58,7 +58,8 @@ COPY deploy/litestream.yml /etc/litestream.yml
 COPY deploy/backend-entrypoint.sh /usr/local/bin/backend-entrypoint.sh
 COPY deploy/server-entrypoint.sh /usr/local/bin/server-entrypoint.sh
 COPY deploy/traceTokenResolver.mjs /usr/local/bin/trace-token-resolver.mjs
-RUN chmod +x /usr/local/bin/backend-entrypoint.sh /usr/local/bin/server-entrypoint.sh /usr/local/bin/trace-token-resolver.mjs
+RUN sed -i 's/\r$//' /usr/local/bin/backend-entrypoint.sh /usr/local/bin/server-entrypoint.sh \
+  && chmod +x /usr/local/bin/backend-entrypoint.sh /usr/local/bin/server-entrypoint.sh /usr/local/bin/trace-token-resolver.mjs
 
 EXPOSE 3000
 CMD ["/usr/local/bin/server-entrypoint.sh"]
