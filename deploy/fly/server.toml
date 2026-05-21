@@ -1,9 +1,9 @@
 # Fly app: canonical Footnote server (backend + local node supervisor)
-app = 'footnote-server'
+app = 'footnote'
 primary_region = 'ord'
 
 [build]
-  dockerfile = 'deploy/Dockerfile.server'
+  dockerfile = '../Dockerfile.server'
 
 [env]
   NODE_ENV = 'production'
