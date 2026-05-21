@@ -39,7 +39,7 @@ const expectValue = (
 export const parseLauncherArgs = (argv: readonly string[]): LauncherArgs => {
     if (argv.length === 0) {
         return {
-            command: 'help',
+            command: 'start',
             headless: false,
             follow: true,
         };

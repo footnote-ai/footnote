@@ -37,6 +37,7 @@ import { DockerRuntime } from './runtime/dockerRuntime.js';
 const printHelp = (): void => {
     const lines = [
         'footnote <command> [options]',
+        'No command defaults to: footnote start',
         '',
         'Commands:',
         '  start   Start Footnote using Docker + GHCR image',

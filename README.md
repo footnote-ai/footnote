@@ -11,7 +11,9 @@ Footnote is an AI framework that tries to show its work.
 ### Run the app
 
 - Download the binary from [Releases](https://github.com/footnote-ai/footnote/releases)
-- Run:
+- Either:
+  - double-click the binary, or
+  - run:
 
 ```bash
 footnote start
