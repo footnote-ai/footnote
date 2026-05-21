@@ -6,7 +6,7 @@
  * @footnote-ethics: low - Deployment guidance affects operator decisions and reliability expectations.
  */
 
-import { useMemo, useState, type JSX } from 'react';
+import { useState, type JSX } from 'react';
 import Header from '@components/Header';
 import Footer from '@components/Footer';
 
@@ -20,7 +20,7 @@ const DownloadPage = (): JSX.Element => {
         'idle'
     );
 
-    const cliCommand = useMemo(() => ['footnote start'].join('\n'), []);
+    const cliCommand = 'footnote start';
 
     const handleCopy = async (): Promise<void> => {
         try {

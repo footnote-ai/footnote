@@ -6,38 +6,22 @@
 
 Footnote is an AI framework that tries to show its work.
 
-## Standalone CLI (Primary User Path)
+## Start Here
 
-Download the `footnote` binary from GitHub Releases:
-https://github.com/footnote-ai/footnote/releases
+Use Footnote on this computer:
 
-Then run:
-
-```bash
-footnote start
-```
-
-Supported v1 runtime: Docker + GHCR image (`ghcr.io/footnote-ai/footnote`).
-
-### CLI Commands (v1)
+- Download the `footnote` binary from Releases: https://github.com/footnote-ai/footnote/releases
+- Run:
 
 ```bash
 footnote start
-footnote stop
-footnote status
-footnote open
-footnote logs
 ```
 
-Optional start flags:
+Put Footnote online:
 
-```bash
-footnote start --headless
-footnote start --tag <imageTag>
-footnote start --config-dir <path>
-```
+- Follow the deployment guide: [deploy/README.md](deploy/README.md)
 
-## Quickstart
+Build or contribute to Footnote:
 
 ```bash
 git clone https://github.com/footnote-ai/footnote.git
@@ -47,31 +31,13 @@ pnpm start
 
 Open `http://localhost:8080`.
 
-## Docker
-
-Default deployment path (pull prebuilt GHCR image):
-
-```bash
-pnpm validate-env --target server
-docker compose -f deploy/compose.yml up
-```
-
-For local source-based image builds, use:
-
-```bash
-docker compose -f deploy/compose.yml -f deploy/compose.dev-build.yml up --build
-```
-
-## Release Notes
-
-- Docker volume identifier changed from `footnote-data` to `footnote_data`.
-  See [deploy/README.md](deploy/README.md) for migration options.
-
-## Docs
+## Need Help?
 
 - Deployment guide: [deploy/README.md](deploy/README.md)
-- Prompt/profile config: [docs/architecture/prompt-resolution.md](docs/architecture/prompt-resolution.md)
+- CI guide: [docs/ci/README.md](docs/ci/README.md)
 - Docs map: [docs/README.md](docs/README.md)
+- GitHub issues: https://github.com/footnote-ai/footnote/issues
+- GitHub discussions: https://github.com/footnote-ai/footnote/discussions
 
 ## License
 

@@ -14,6 +14,8 @@ For first-time setup:
 
 - [Architecture](./architecture/README.md): current system shape, boundaries,
   and reading order.
+- [CI](./ci/README.md): workflow map, what checks run, and how to debug CI
+  failures.
 - [Decisions](./decisions/): durable technical choices and why they were made.
 - [Proposals](./proposals/): unadopted or exploratory ideas.
 - [Status](./status/): branch-level implementation tracking documents.
