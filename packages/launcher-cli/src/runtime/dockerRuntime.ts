@@ -353,7 +353,25 @@ export class DockerRuntime implements FootnoteRuntime {
         const tag = input.tagOverride ?? input.defaultTag;
         const imageRef = `${input.imageRepository}:${tag}`;
 
-        await runDocker(['pull', imageRef], false, 'environment');
+        try {
+            await runDocker(['pull', imageRef], false, 'environment');
+        } catch (error: unknown) {
+            if (
+                error instanceof LauncherError &&
+                /unauthorized/i.test(error.message)
+            ) {
+                throw new LauncherError(
+                    'environment',
+                    [
+                        `Could not pull ${imageRef} from GHCR: unauthorized.`,
+                        'The image may not be publicly pullable yet.',
+                        'Maintainers: set the GHCR package visibility to Public.',
+                        'Advanced workaround: run `docker login ghcr.io` and retry.',
+                    ].join(' ')
+                );
+            }
+            throw error;
+        }
 
         const warnings: string[] = [];
         const expectedDigest = input.digestByTag?.[tag];
