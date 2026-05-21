@@ -5,7 +5,8 @@ services:
         build:
             context: ..
             dockerfile: deploy/Dockerfile.server
-        image: ${FOOTNOTE_IMAGE_REF:-ghcr.io/footnote-ai/footnote:latest}
+        # Local source build default tag; set FOOTNOTE_IMAGE_REF to a GHCR ref when pulling.
+        image: ${FOOTNOTE_IMAGE_REF:-footnote:dev-local}
         env_file:
             - ../.env
         environment:

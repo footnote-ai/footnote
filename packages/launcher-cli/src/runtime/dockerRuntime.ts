@@ -176,9 +176,18 @@ const waitForReadiness = async (
     const startedAt = Date.now();
     const delayMs = 1_000;
 
-    while (Date.now() - startedAt < timeoutMs) {
+    while (true) {
+        const elapsedMs = Date.now() - startedAt;
+        const remainingMs = timeoutMs - elapsedMs;
+        if (remainingMs <= 0) {
+            break;
+        }
+
+        const attemptTimeoutMs = Math.max(1, Math.min(delayMs, remainingMs));
         try {
-            const response = await fetch(url);
+            const response = await fetch(url, {
+                signal: AbortSignal.timeout(attemptTimeoutMs),
+            });
             if (response.status < 500) {
                 return;
             }
@@ -187,7 +196,7 @@ const waitForReadiness = async (
         }
 
         await new Promise<void>((resolve) => {
-            setTimeout(() => resolve(), delayMs);
+            setTimeout(() => resolve(), attemptTimeoutMs);
         });
     }
 
@@ -328,7 +337,15 @@ const ensureOwnedContainerForLifecycle = async (
     return container;
 };
 
+/**
+ * Docker-backed authoritative runtime adapter for launcher lifecycle operations.
+ * Methods mutate only launcher-owned resources and fail closed on ownership mismatches.
+ */
 export class DockerRuntime implements FootnoteRuntime {
+    /**
+     * Starts the launcher-managed container from the configured image and waits for readiness.
+     * Returns runtime metadata used by the CLI; cleanup runs if startup/readiness fails.
+     */
     public async start(input: StartInput): Promise<StartResult> {
         await verifyDockerAvailable();
 
@@ -386,42 +403,58 @@ export class DockerRuntime implements FootnoteRuntime {
 
         await ensureManagedVolume(input.volumeName, labels);
         await ensureManagedContainerForStart(input.containerName, labels);
+        let containerCreated = false;
+        try {
+            await runDocker([
+                'create',
+                '--name',
+                input.containerName,
+                '--restart',
+                'unless-stopped',
+                ...buildLabelArgs(labels),
+                '--publish',
+                `${port}:3000`,
+                '--env-file',
+                input.envFilePath,
+                '--mount',
+                `type=volume,source=${input.volumeName},target=/data`,
+                '--mount',
+                `type=bind,source=${input.settingsFilePath},target=/data/config/footnote.yaml,readonly`,
+                imageRef,
+            ]);
+            containerCreated = true;
 
-        await runDocker([
-            'create',
-            '--name',
-            input.containerName,
-            '--restart',
-            'unless-stopped',
-            ...buildLabelArgs(labels),
-            '--publish',
-            `${port}:3000`,
-            '--env-file',
-            input.envFilePath,
-            '--mount',
-            `type=volume,source=${input.volumeName},target=/data`,
-            '--mount',
-            `type=bind,source=${input.settingsFilePath},target=/data/config/footnote.yaml,readonly`,
-            imageRef,
-        ]);
+            const startResult = await runDocker(['start', input.containerName]);
+            const containerId = startResult.stdout.trim();
 
-        const startResult = await runDocker(['start', input.containerName]);
-        const containerId = startResult.stdout.trim();
+            await waitForReadiness(url, input.readinessTimeoutMs);
 
-        await waitForReadiness(url, input.readinessTimeoutMs);
-
-        return {
-            state: 'running',
-            url,
-            port,
-            tag,
-            imageRef,
-            containerId,
-            volumeName: input.volumeName,
-            warnings,
-        };
+            return {
+                state: 'running',
+                url,
+                port,
+                tag,
+                imageRef,
+                containerId,
+                volumeName: input.volumeName,
+                warnings,
+            };
+        } catch (error: unknown) {
+            if (containerCreated) {
+                try {
+                    await runDocker(['rm', '-f', input.containerName], true);
+                } catch {
+                    // Best-effort cleanup; preserve original startup failure.
+                }
+            }
+            throw error;
+        }
     }
 
+    /**
+     * Stops and removes the launcher-owned container when present.
+     * Refuses lifecycle operations for mismatched ownership labels.
+     */
     public async stop(input: StopInput): Promise<StopResult> {
         const labels = toDockerLabels(input);
         const container = await ensureOwnedContainerForLifecycle(
@@ -449,6 +482,10 @@ export class DockerRuntime implements FootnoteRuntime {
         };
     }
 
+    /**
+     * Returns read-only runtime status for the managed container and ownership match state.
+     * No bootstrap or resource creation happens in this method.
+     */
     public async status(input: StatusInput): Promise<StatusResult> {
         const labels = toDockerLabels(input);
         const container = await inspectContainer(input.containerName);
@@ -484,6 +521,10 @@ export class DockerRuntime implements FootnoteRuntime {
         };
     }
 
+    /**
+     * Streams logs from the launcher-owned container.
+     * Throws when no owned container is present; never mutates runtime resources.
+     */
     public async *logs(input: LogsInput): AsyncIterable<LogLine> {
         const labels = toDockerLabels(input);
         const container = await ensureOwnedContainerForLifecycle(

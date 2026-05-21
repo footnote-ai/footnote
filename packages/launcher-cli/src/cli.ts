@@ -142,6 +142,12 @@ const ensureLiveUrl = async (url: string): Promise<void> => {
     }
 };
 
+/**
+ * Parses launcher CLI arguments and orchestrates command routing for runtime operations.
+ * This function decides command flow and exit semantics, while delegating runtime actions to DockerRuntime and shared launcher-core helpers.
+ * @param argv Raw CLI arguments after the executable name.
+ * @returns Promise<number> Exit code following launcher contract (0/1/2/3).
+ */
 export const runCli = async (argv: readonly string[]): Promise<number> => {
     const parsed = parseLauncherArgs(argv);
 
@@ -366,6 +372,12 @@ export const runCli = async (argv: readonly string[]): Promise<number> => {
     throw new LauncherError('usage', `Unsupported command: ${parsed.command}`);
 };
 
+/**
+ * Executes the CLI orchestration and writes process exit code plus error output.
+ * This wrapper is responsible for translating thrown errors into operator-facing stderr messages without suppressing failures.
+ * @param argv Raw CLI arguments after the executable name.
+ * @returns Promise<void> Completion after setting process.exitCode.
+ */
 export const runCliWithExitCode = async (
     argv: readonly string[]
 ): Promise<void> => {

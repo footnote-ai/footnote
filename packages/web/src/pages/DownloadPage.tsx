@@ -10,6 +10,11 @@ import { useMemo, useState, type JSX } from 'react';
 import Header from '@components/Header';
 import Footer from '@components/Footer';
 
+/**
+ * Renders the download page for the standalone `footnote` CLI path.
+ * This component has no props and only performs local clipboard copy side effects.
+ * @returns {JSX.Element} Download experience with command copy affordance.
+ */
 const DownloadPage = (): JSX.Element => {
     const [copyStatus, setCopyStatus] = useState<'idle' | 'copied' | 'error'>(
         'idle'
@@ -21,7 +26,8 @@ const DownloadPage = (): JSX.Element => {
         try {
             await navigator.clipboard.writeText(cliCommand);
             setCopyStatus('copied');
-        } catch {
+        } catch (error: unknown) {
+            console.error('Failed to copy CLI command to clipboard.', error);
             setCopyStatus('error');
         }
     };

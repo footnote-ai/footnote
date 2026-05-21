@@ -15,12 +15,35 @@ const FRAME_ANCESTORS_KEY = 'frame-ancestors:';
 const leadingSpaceCount = (line: string): number =>
     line.length - line.trimStart().length;
 
+const isSupportedYamlKeyChar = (char: string): boolean =>
+    (char >= 'a' && char <= 'z') ||
+    (char >= 'A' && char <= 'Z') ||
+    (char >= '0' && char <= '9') ||
+    char === '_' ||
+    char === '-';
+
 const isTopLevelYamlKey = (line: string): boolean => {
     const trimmed = line.trim();
     if (!trimmed || trimmed.startsWith('#')) {
         return false;
     }
-    return leadingSpaceCount(line) === 0 && /[A-Za-z0-9_-]+:\s*$/.test(trimmed);
+
+    if (leadingSpaceCount(line) !== 0 || !trimmed.endsWith(':')) {
+        return false;
+    }
+
+    const key = trimmed.slice(0, -1);
+    if (!key) {
+        return false;
+    }
+
+    for (const char of key) {
+        if (!isSupportedYamlKeyChar(char)) {
+            return false;
+        }
+    }
+
+    return true;
 };
 
 const findSectionEnd = (
@@ -89,7 +112,21 @@ const ensureWebListEntry = (
     }
 
     const existingList = lines.slice(keyIndex + 1, listEnd);
-    if (!existingList.some((line) => line.includes(url))) {
+    const hasExactUrl = existingList.some((line) => {
+        const trimmed = line.trim();
+        if (!trimmed.startsWith('-')) {
+            return false;
+        }
+        const value = trimmed.slice(1).trim();
+        const unquoted =
+            (value.startsWith("'") && value.endsWith("'")) ||
+            (value.startsWith('"') && value.endsWith('"'))
+                ? value.slice(1, -1)
+                : value;
+        return unquoted === url;
+    });
+
+    if (!hasExactUrl) {
         let insertIndex = listEnd;
         while (
             insertIndex > keyIndex + 1 &&
@@ -134,7 +171,11 @@ export const ensureWebLocalUrlInSettings = async (
         return false;
     }
 
-    const next = `${lines.join('\n').replace(/\n*$/, '\n')}`;
+    let joined = lines.join('\n');
+    while (joined.endsWith('\n')) {
+        joined = joined.slice(0, -1);
+    }
+    const next = `${joined}\n`;
     await writeFile(settingsPath, next, 'utf8');
     return true;
 };

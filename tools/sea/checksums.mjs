@@ -30,6 +30,7 @@ const files = walk(seaRoot).filter((target) => {
     return (
         statSync(target).isFile() &&
         !file.endsWith('.sha256') &&
+        file !== 'checksums.txt' &&
         file !== 'sea-config.json' &&
         file !== 'footnote.blob'
     );

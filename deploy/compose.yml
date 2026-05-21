@@ -10,6 +10,8 @@ services:
         ports:
             - '8080:3000'
         volumes:
+            # Breaking change: volume name is `footnote_data` (previously `footnote-data`).
+            # Migration instructions are documented in deploy/README.md.
             - footnote_data:/data
             - ../footnote.yaml:/data/config/footnote.yaml:ro
         restart: unless-stopped

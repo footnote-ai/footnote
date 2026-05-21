@@ -19,8 +19,10 @@ const openWithCommand = (
         });
 
         child.on('error', reject);
-        child.unref();
-        resolve();
+        child.on('spawn', () => {
+            child.unref();
+            resolve();
+        });
     });
 
 export const openInBrowser = async (url: string): Promise<void> => {

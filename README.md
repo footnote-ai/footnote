@@ -8,7 +8,10 @@ Footnote is an AI framework that tries to show its work.
 
 ## Standalone CLI (Primary User Path)
 
-Download the `footnote` binary from GitHub Releases, then run:
+Download the `footnote` binary from GitHub Releases:
+https://github.com/footnote-ai/footnote/releases
+
+Then run:
 
 ```bash
 footnote start
@@ -58,6 +61,11 @@ For local source-based image builds, use:
 ```bash
 docker compose -f deploy/compose.yml -f deploy/compose.dev-build.yml up --build
 ```
+
+## Release Notes
+
+- Docker volume identifier changed from `footnote-data` to `footnote_data`.
+  See [deploy/README.md](deploy/README.md) for migration options.
 
 ## Docs
 

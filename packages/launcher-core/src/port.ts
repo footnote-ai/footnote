@@ -29,6 +29,27 @@ export const selectAvailablePort = async (
     preferredPort: number,
     maxAttempts: number = 100
 ): Promise<number> => {
+    if (!Number.isInteger(preferredPort)) {
+        throw new Error(
+            'preferredPort must be an integer between 1 and 65535.'
+        );
+    }
+    if (preferredPort < 1 || preferredPort > 65_535) {
+        throw new Error(
+            'preferredPort must be within the valid TCP port range (1-65535).'
+        );
+    }
+
+    if (!Number.isInteger(maxAttempts) || maxAttempts <= 0) {
+        throw new Error('maxAttempts must be a positive integer.');
+    }
+
+    if (preferredPort + (maxAttempts - 1) > 65_535) {
+        throw new Error(
+            'preferredPort + (maxAttempts - 1) must not exceed 65535.'
+        );
+    }
+
     for (let offset = 0; offset < maxAttempts; offset += 1) {
         const candidate = preferredPort + offset;
         if (await isPortAvailable(candidate)) {

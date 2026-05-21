@@ -17,6 +17,7 @@ const artifactsRoot = join(repoRoot, 'artifacts', 'sea');
 const platformTarget = `${process.platform}-${process.arch}`;
 const outputDir = join(artifactsRoot, platformTarget);
 const ESBUILD_VERSION = '0.28.0';
+const POSTJECT_VERSION = '1.0.0-alpha.6';
 const launcherEntry = join(
     repoRoot,
     'packages',
@@ -73,7 +74,7 @@ copyFileSync(nodeExec, outputBinary);
 const isMac = process.platform === 'darwin';
 const postjectArgs = [
     'dlx',
-    'postject',
+    `postject@${POSTJECT_VERSION}`,
     outputBinary,
     'NODE_SEA_BLOB',
     blobPath,

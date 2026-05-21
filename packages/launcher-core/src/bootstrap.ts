@@ -49,16 +49,15 @@ const ensureFile = async (
     createdPaths: string[]
 ): Promise<void> => {
     try {
-        await readFile(filePath, 'utf8');
+        await writeFile(filePath, content, { encoding: 'utf8', flag: 'wx' });
+        createdPaths.push(filePath);
     } catch (error: unknown) {
         if (
             error &&
             typeof error === 'object' &&
             'code' in error &&
-            error.code === 'ENOENT'
+            error.code === 'EEXIST'
         ) {
-            await writeFile(filePath, content, 'utf8');
-            createdPaths.push(filePath);
             return;
         }
         throw error;
