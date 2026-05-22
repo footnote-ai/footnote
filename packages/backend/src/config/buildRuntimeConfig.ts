@@ -33,7 +33,10 @@ export const buildRuntimeConfig = (
     env: NodeJS.ProcessEnv,
     warn: WarningSink
 ): RuntimeConfig => {
-    const { yamlSettings, yamlEnv } = loadServerSettings(env, warn);
+    const { settingsPath, yamlSettings, yamlEnv } = loadServerSettings(
+        env,
+        warn
+    );
     const effectiveEnv = buildEffectiveConfigEnv(env, yamlEnv);
     const { runtime, server } = buildRuntimeSections(effectiveEnv, warn);
     const openai = buildOpenAISection(effectiveEnv, warn);
@@ -45,8 +48,13 @@ export const buildRuntimeConfig = (
     );
     const voltagent = buildVoltAgentSection(effectiveEnv, warn);
     const web = buildWebSection(effectiveEnv, warn);
-    const { reflect, trace, langfuseMetadataMirror, chatWorkflow } =
-        buildServiceSections(effectiveEnv, warn);
+    const {
+        reflect,
+        adminSettings,
+        trace,
+        langfuseMetadataMirror,
+        chatWorkflow,
+    } = buildServiceSections(effectiveEnv, warn);
     const executionContractTrustGraph = buildExecutionContractTrustGraphSection(
         effectiveEnv,
         warn
@@ -73,6 +81,7 @@ export const buildRuntimeConfig = (
         cors: web.cors,
         csp: web.csp,
         reflect,
+        adminSettings,
         trace,
         langfuseMetadataMirror,
         chatWorkflow,
@@ -85,6 +94,7 @@ export const buildRuntimeConfig = (
         alerts,
         profile,
         settings: {
+            path: settingsPath,
             discordBots: yamlSettings?.['discord-bots'] ?? null,
         },
     };

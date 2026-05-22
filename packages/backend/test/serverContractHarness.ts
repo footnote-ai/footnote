@@ -17,6 +17,7 @@ import { spawn, type ChildProcess } from 'node:child_process';
 type StartBackendServerContractHarnessOptions = {
     envOverrides?: Record<string, string>;
     staticFixtureMode?: 'create' | 'none';
+    createSettingsFile?: boolean;
 };
 
 type StaticFixture = {
@@ -35,6 +36,7 @@ export type BackendServerContractHarness = {
     baseUrl: string;
     host: string;
     port: number;
+    readProcessOutput: () => string;
     staticFixture: {
         routePath: string;
         indexWasCreated: boolean;
@@ -135,7 +137,9 @@ const ensureStaticFixture = async (
     };
 };
 
-const suppressStaticIndex = async (repoRoot: string): Promise<StaticSuppression> => {
+const suppressStaticIndex = async (
+    repoRoot: string
+): Promise<StaticSuppression> => {
     const distDir = path.join(repoRoot, 'packages/web/dist');
     const indexPath = path.join(distDir, 'index.html');
     const backupPath = path.join(
@@ -254,6 +258,7 @@ const stopChildProcess = async (child: ChildProcess): Promise<void> => {
 export const startBackendServerContractHarness = async ({
     envOverrides = {},
     staticFixtureMode = 'create',
+    createSettingsFile = true,
 }: StartBackendServerContractHarnessOptions = {}): Promise<BackendServerContractHarness> => {
     const repoRoot = getRepoRoot();
     const staticFixture =
@@ -264,10 +269,32 @@ export const startBackendServerContractHarness = async ({
         staticFixtureMode === 'none'
             ? await suppressStaticIndex(repoRoot)
             : null;
-    const port = await reserveFreePort();
+    const port = createSettingsFile ? await reserveFreePort() : 3000;
     const dataDir = await fs.mkdtemp(
         path.join(os.tmpdir(), 'footnote-server-contract-data-')
     );
+    const defaultSettingsPath = path.join(dataDir, 'footnote.yaml');
+    const yamlEscape = (value: string): string =>
+        `'${value.replace(/\\/g, '\\\\').replace(/'/g, "''")}'`;
+    const defaultSettingsYaml = [
+        'version: 1',
+        'server:',
+        `  host: ${TEST_HOST}`,
+        `  port: ${port}`,
+        `  data-dir: ${yamlEscape(dataDir)}`,
+        'web:',
+        '  allowed-origins:',
+        '    - https://allowed.example',
+        '  frame-ancestors:',
+        '    - https://allowed-frame.example',
+        'storage:',
+        `  provenance-sqlite-path: ${yamlEscape(path.join(dataDir, 'provenance.db'))}`,
+        `  incident-sqlite-path: ${yamlEscape(path.join(dataDir, 'incidents.db'))}`,
+        '',
+    ].join('\n');
+    if (createSettingsFile) {
+        await fs.writeFile(defaultSettingsPath, defaultSettingsYaml, 'utf8');
+    }
     const child = spawn(
         process.execPath,
         ['--import', 'tsx', 'packages/backend/src/server.ts'],
@@ -279,6 +306,7 @@ export const startBackendServerContractHarness = async ({
                 HOST: TEST_HOST,
                 PORT: port.toString(),
                 DATA_DIR: dataDir,
+                FOOTNOTE_SETTINGS_PATH: defaultSettingsPath,
                 PROVENANCE_SQLITE_PATH: path.join(dataDir, 'provenance.db'),
                 INCIDENT_SQLITE_PATH: path.join(dataDir, 'incidents.db'),
                 INCIDENT_PSEUDONYMIZATION_SECRET: 'server-contract-secret',
@@ -330,6 +358,7 @@ export const startBackendServerContractHarness = async ({
         baseUrl,
         host: TEST_HOST,
         port,
+        readProcessOutput: () => outputBuffer,
         staticFixture: {
             routePath:
                 staticFixture?.routePath ??

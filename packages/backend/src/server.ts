@@ -47,6 +47,8 @@ import { createChatHandler } from './handlers/chat.js';
 import { createTraceHandlers } from './handlers/trace.js';
 import { createIncidentHandlers } from './handlers/incidents.js';
 import { createRuntimeConfigHandler } from './handlers/config.js';
+import { createAdminSettingsHandlers } from './handlers/adminSettings.js';
+import { createSetupSessionHandlers } from './handlers/setupSession.js';
 import { createIncidentService } from './services/incidents.js';
 import { createIncidentAlertRouter } from './services/incidentAlerts.js';
 import {
@@ -65,6 +67,8 @@ import { createChatProfilesHandler } from './handlers/chatProfiles.js';
 import { createOpenMeteoForecastTool } from './services/contextIntegrations/weather/index.js';
 import { resolveExecutionContractTrustGraphRuntimeOptions } from './services/executionContractTrustGraph/index.js';
 import { createModelProfileResolver } from './services/modelProfileResolver.js';
+import { createSetupBootstrapService } from './services/setupBootstrap.js';
+import { settingsSpecEntries } from './config/settings-spec.js';
 
 /**
  * @footnote-logger: openAiRealtimeVoiceRuntime
@@ -497,8 +501,35 @@ if (incidentStore) {
     handleIncidentRemediationRequest = async (req, res) =>
         logUnavailableRoute(req, res, 'incident remediation');
 }
-const handleRuntimeConfigRequest = createRuntimeConfigHandler({ logRequest });
+const setupBootstrapService = createSetupBootstrapService({
+    settingsPath: runtimeConfig.settings.path,
+});
+
+const handleRuntimeConfigRequest = createRuntimeConfigHandler({
+    logRequest,
+    isSetupRequiredNow: setupBootstrapService.isSetupRequiredNow,
+});
 const handleChatProfilesRequest = createChatProfilesHandler({ logRequest });
+const {
+    handleAdminSettingsSchemaRequest,
+    handleAdminSettingsYamlRequest,
+    handleAdminSettingsValidateRequest,
+    handleAdminSettingsYamlPutRequest,
+} = createAdminSettingsHandlers({
+    adminToken: runtimeConfig.adminSettings.token,
+    maxBodyBytes: runtimeConfig.adminSettings.maxBodyBytes,
+    settingsPath: runtimeConfig.settings.path,
+    settingsSpecEntries,
+    setupBootstrapService,
+    logger,
+    logRequest,
+});
+const { handleSetupSessionPostRequest, handleSetupSessionDeleteRequest } =
+    createSetupSessionHandlers({
+        setupBootstrapService,
+        logger,
+        logRequest,
+    });
 const { handleInternalTextRequest } = createInternalTextHandler({
     internalNewsTaskService,
     internalImageDescriptionTaskService,
@@ -600,6 +631,12 @@ const app = createExpressApp({
     handleTraceCardAssetRequest,
     handleRuntimeConfigRequest,
     handleChatProfilesRequest,
+    handleAdminSettingsSchemaRequest,
+    handleAdminSettingsYamlRequest,
+    handleAdminSettingsValidateRequest,
+    handleAdminSettingsYamlPutRequest,
+    handleSetupSessionPostRequest,
+    handleSetupSessionDeleteRequest,
     handleStaticTransportRequest,
     resolveAsset,
     mimeMap,
@@ -716,4 +753,38 @@ const port = runtimeConfig.server.port;
 const host = runtimeConfig.server.host;
 server.listen(port, host, () => {
     logger.info(`Simple server available on ${host}:${port}`);
+    void (async () => {
+        const setupRequiredNow =
+            await setupBootstrapService.isSetupRequiredNow();
+        if (!setupRequiredNow) {
+            return;
+        }
+        const issued = await setupBootstrapService.issueOrGetActiveCode();
+        if (!issued) {
+            return;
+        }
+        const setupPath = `/setup#code=${encodeURIComponent(issued.code)}`;
+        const setupUrl = `http://localhost:${port}${setupPath}`;
+        logger.info(
+            `[SETUP_EVENT] ${JSON.stringify({
+                event: 'footnote.setup.bootstrap',
+                setupPath,
+                setupUrl,
+                expiresAt: issued.expiresAt,
+            })}`
+        );
+        logger.info(
+            [
+                'First setup is required because footnote.yaml is missing.',
+                `Setup URL: ${setupUrl}`,
+                `Expires: ${issued.expiresAt}`,
+            ].join('\n')
+        );
+    })().catch((error) => {
+        logger.error(
+            `Failed to issue startup setup bootstrap code: ${
+                error instanceof Error ? error.message : String(error)
+            }`
+        );
+    });
 });

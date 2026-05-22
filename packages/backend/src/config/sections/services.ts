@@ -81,7 +81,11 @@ export const buildServiceSections = (
     warn: WarningSink
 ): Pick<
     RuntimeConfig,
-    'reflect' | 'trace' | 'langfuseMetadataMirror' | 'chatWorkflow'
+    | 'reflect'
+    | 'adminSettings'
+    | 'trace'
+    | 'langfuseMetadataMirror'
+    | 'chatWorkflow'
 > => ({
     reflect: {
         serviceToken: parseOptionalTrimmedString(env.REFLECT_SERVICE_TOKEN),
@@ -89,6 +93,15 @@ export const buildServiceSections = (
             env.REFLECT_API_MAX_BODY_BYTES,
             envDefaultValues.REFLECT_API_MAX_BODY_BYTES,
             'REFLECT_API_MAX_BODY_BYTES',
+            warn
+        ),
+    },
+    adminSettings: {
+        token: parseOptionalTrimmedString(env.SETTINGS_ADMIN_TOKEN),
+        maxBodyBytes: parsePositiveIntEnv(
+            env.SETTINGS_ADMIN_MAX_BODY_BYTES,
+            envDefaultValues.SETTINGS_ADMIN_MAX_BODY_BYTES,
+            'SETTINGS_ADMIN_MAX_BODY_BYTES',
             warn
         ),
     },

@@ -111,6 +111,30 @@ test('public routes are Express-owned and bypass central /api dispatch while pre
             res.setHeader('Content-Type', 'application/json; charset=utf-8');
             res.end(JSON.stringify({ profiles: [] }));
         },
+        handleAdminSettingsSchemaRequest: async (_req, res) => {
+            res.statusCode = 200;
+            res.end('admin-settings-schema');
+        },
+        handleAdminSettingsYamlRequest: async (_req, res) => {
+            res.statusCode = 200;
+            res.end('admin-settings-yaml');
+        },
+        handleAdminSettingsValidateRequest: async (_req, res) => {
+            res.statusCode = 200;
+            res.end('admin-settings-validate');
+        },
+        handleAdminSettingsYamlPutRequest: async (_req, res) => {
+            res.statusCode = 200;
+            res.end('admin-settings-put');
+        },
+        handleSetupSessionPostRequest: async (_req, res) => {
+            res.statusCode = 200;
+            res.end('setup-session-post');
+        },
+        handleSetupSessionDeleteRequest: async (_req, res) => {
+            res.statusCode = 204;
+            res.end();
+        },
         handleStaticTransportRequest: async ({ res }) => {
             res.statusCode = 404;
             res.end('static');

@@ -51,10 +51,38 @@ export type FootnoteSettings = {
     settingsEnv: SettingsMap;
 };
 
+export type ServerSettingsValidationErrorCategory =
+    | 'yaml_parse_error'
+    | 'invalid_root'
+    | 'legacy_shape_removed'
+    | 'invalid_key_format'
+    | 'unsupported_key'
+    | 'secret_key_forbidden'
+    | 'bootstrap_key_forbidden'
+    | 'invalid_version'
+    | 'type_mismatch';
+
+export class ServerSettingsValidationError extends Error {
+    category: ServerSettingsValidationErrorCategory;
+    pointer: string | null;
+
+    constructor(args: {
+        message: string;
+        category: ServerSettingsValidationErrorCategory;
+        pointer?: string | null;
+        cause?: unknown;
+    }) {
+        super(args.message, args.cause ? { cause: args.cause } : undefined);
+        this.name = 'ServerSettingsValidationError';
+        this.category = args.category;
+        this.pointer = args.pointer ?? null;
+    }
+}
+
 const isRecord = (value: unknown): value is Record<string, unknown> =>
     typeof value === 'object' && value !== null && !Array.isArray(value);
 
-const normalizePath = (value: string | undefined): string =>
+export const resolveSettingsPath = (value: string | undefined): string =>
     value?.trim() || DEFAULT_SETTINGS_PATH;
 
 const validateKebabCaseKeys = (value: unknown, pointer = 'root'): void => {
@@ -69,9 +97,11 @@ const validateKebabCaseKeys = (value: unknown, pointer = 'root'): void => {
     }
     for (const [key, child] of Object.entries(value)) {
         if (!KEBAB_KEY_PATTERN.test(key)) {
-            throw new Error(
-                `Invalid key "${key}" at ${pointer}. Use kebab-case keys in footnote.yaml.`
-            );
+            throw new ServerSettingsValidationError({
+                message: `Invalid key "${key}" at ${pointer}. Use kebab-case keys in footnote.yaml.`,
+                category: 'invalid_key_format',
+                pointer: pointer === 'root' ? key : `${pointer}.${key}`,
+            });
         }
         validateKebabCaseKeys(child, `${pointer}.${key}`);
     }
@@ -96,7 +126,11 @@ const validateSettingValue = (
     switch (kind) {
         case 'boolean':
             if (typeof value !== 'boolean') {
-                throw new Error(`${keyPath} must be a boolean.`);
+                throw new ServerSettingsValidationError({
+                    message: `${keyPath} must be a boolean.`,
+                    category: 'type_mismatch',
+                    pointer: keyPath,
+                });
             }
             return value;
         case 'integer':
@@ -105,37 +139,57 @@ const validateSettingValue = (
                 Number.isNaN(value) ||
                 !Number.isInteger(value)
             ) {
-                throw new Error(`${keyPath} must be an integer.`);
+                throw new ServerSettingsValidationError({
+                    message: `${keyPath} must be an integer.`,
+                    category: 'type_mismatch',
+                    pointer: keyPath,
+                });
             }
             return value;
         case 'number':
             if (typeof value !== 'number' || Number.isNaN(value)) {
-                throw new Error(`${keyPath} must be a number.`);
+                throw new ServerSettingsValidationError({
+                    message: `${keyPath} must be a number.`,
+                    category: 'type_mismatch',
+                    pointer: keyPath,
+                });
             }
             return value;
         case 'csv':
             if (Array.isArray(value)) {
                 if (!value.every((entry) => typeof entry === 'string')) {
-                    throw new Error(
-                        `${keyPath} array entries must be strings.`
-                    );
+                    throw new ServerSettingsValidationError({
+                        message: `${keyPath} array entries must be strings.`,
+                        category: 'type_mismatch',
+                        pointer: keyPath,
+                    });
                 }
                 return value;
             }
             if (typeof value !== 'string') {
-                throw new Error(
-                    `${keyPath} must be a comma-separated string or string array.`
-                );
+                throw new ServerSettingsValidationError({
+                    message: `${keyPath} must be a comma-separated string or string array.`,
+                    category: 'type_mismatch',
+                    pointer: keyPath,
+                });
             }
             return value;
         case 'json':
             if (!isRecord(value)) {
-                throw new Error(`${keyPath} must be an object.`);
+                throw new ServerSettingsValidationError({
+                    message: `${keyPath} must be an object.`,
+                    category: 'type_mismatch',
+                    pointer: keyPath,
+                });
             }
             return JSON.stringify(value);
         default:
             if (typeof value !== 'string') {
-                throw new Error(`${keyPath} must be a string.`);
+                throw new ServerSettingsValidationError({
+                    message: `${keyPath} must be a string.`,
+                    category: 'type_mismatch',
+                    pointer: keyPath,
+                });
             }
             return value;
     }
@@ -189,37 +243,47 @@ const validateSupportedSettingsKeys = (
         const path = pointer === 'root' ? key : `${pointer}.${key}`;
         const next = node.children.get(key);
         if (!next) {
-            throw new Error(
-                `Invalid server settings YAML: ${path} is not a supported key.`
-            );
+            throw new ServerSettingsValidationError({
+                message: `Invalid server settings YAML: ${path} is not a supported key.`,
+                category: 'unsupported_key',
+                pointer: path,
+            });
         }
 
         if (next.source === 'secret_env') {
-            throw new Error(
-                `Invalid server settings YAML: ${path} maps to secret env key ${next.envKey} and is not YAML-configurable.`
-            );
+            throw new ServerSettingsValidationError({
+                message: `Invalid server settings YAML: ${path} maps to secret env key ${next.envKey} and is not YAML-configurable.`,
+                category: 'secret_key_forbidden',
+                pointer: path,
+            });
         }
 
         if (next.source === 'bootstrap_env') {
-            throw new Error(
-                `Invalid server settings YAML: ${path} maps to bootstrap env key ${next.envKey} and is not YAML-configurable.`
-            );
+            throw new ServerSettingsValidationError({
+                message: `Invalid server settings YAML: ${path} maps to bootstrap env key ${next.envKey} and is not YAML-configurable.`,
+                category: 'bootstrap_key_forbidden',
+                pointer: path,
+            });
         }
 
         if (next.children.size > 0) {
             if (!isRecord(value)) {
-                throw new Error(
-                    `Invalid server settings YAML: ${path} must be an object.`
-                );
+                throw new ServerSettingsValidationError({
+                    message: `Invalid server settings YAML: ${path} must be an object.`,
+                    category: 'type_mismatch',
+                    pointer: path,
+                });
             }
             validateSupportedSettingsKeys(value, path, next);
             continue;
         }
 
         if (isRecord(value) && next.kind !== 'json') {
-            throw new Error(
-                `Invalid server settings YAML: ${path} must be a scalar or array value.`
-            );
+            throw new ServerSettingsValidationError({
+                message: `Invalid server settings YAML: ${path} must be a scalar or array value.`,
+                category: 'type_mismatch',
+                pointer: path,
+            });
         }
     }
 };
@@ -229,16 +293,21 @@ const normalizeDiscordBots = (value: unknown, settingsPath: string) => {
         return [] as CanonicalDiscordBot[];
     }
     if (!Array.isArray(value)) {
-        throw new Error(
-            `Invalid server settings YAML at ${settingsPath}: discord-bots must be an array when provided.`
-        );
+        throw new ServerSettingsValidationError({
+            message: `Invalid server settings YAML at ${settingsPath}: discord-bots must be an array when provided.`,
+            category: 'type_mismatch',
+            pointer: 'discord-bots',
+        });
     }
 
     return value.map((entry, index): CanonicalDiscordBot => {
+        const botPointer = `discord-bots[${index}]`;
         if (!isRecord(entry)) {
-            throw new Error(
-                `Invalid server settings YAML at ${settingsPath}: discord-bots[${index}] must be an object.`
-            );
+            throw new ServerSettingsValidationError({
+                message: `Invalid server settings YAML at ${settingsPath}: ${botPointer} must be an object.`,
+                category: 'type_mismatch',
+                pointer: botPointer,
+            });
         }
         const allowedBotKeys = new Set([
             'id',
@@ -249,19 +318,22 @@ const normalizeDiscordBots = (value: unknown, settingsPath: string) => {
         ]);
         for (const key of Object.keys(entry)) {
             if (!allowedBotKeys.has(key)) {
-                throw new Error(
-                    `Invalid server settings YAML at ${settingsPath}: discord-bots[${index}] contains unsupported key "${key}".`
-                );
+                throw new ServerSettingsValidationError({
+                    message: `Invalid server settings YAML at ${settingsPath}: ${botPointer} contains unsupported key "${key}".`,
+                    category: 'unsupported_key',
+                    pointer: `${botPointer}.${key}`,
+                });
             }
         }
 
         const credentialsSource = entry['credentials'];
         const profileSource = entry['profile'];
-        if (!isRecord(credentialsSource)) {
-            throw new Error(
-                `Invalid server settings YAML at ${settingsPath}: discord-bots[${index}].credentials must be an object.`
-            );
-        }
+        const credentialsRecord = isRecord(credentialsSource)
+            ? credentialsSource
+            : undefined;
+        const profileRecord = isRecord(profileSource)
+            ? profileSource
+            : undefined;
         const allowedCredentialKeys = new Set([
             'discord-token-env',
             'discord-client-id-env',
@@ -269,17 +341,23 @@ const normalizeDiscordBots = (value: unknown, settingsPath: string) => {
             'discord-user-id-env',
             'incident-secret-env',
         ]);
-        for (const key of Object.keys(credentialsSource)) {
-            if (!allowedCredentialKeys.has(key)) {
-                throw new Error(
-                    `Invalid server settings YAML at ${settingsPath}: discord-bots[${index}].credentials contains unsupported key "${key}".`
-                );
+        if (credentialsSource !== undefined) {
+            if (!isRecord(credentialsSource)) {
+                throw new ServerSettingsValidationError({
+                    message: `Invalid server settings YAML at ${settingsPath}: ${botPointer}.credentials must be an object.`,
+                    category: 'type_mismatch',
+                    pointer: `${botPointer}.credentials`,
+                });
             }
-        }
-        if (!isRecord(profileSource)) {
-            throw new Error(
-                `Invalid server settings YAML at ${settingsPath}: discord-bots[${index}].profile must be an object.`
-            );
+            for (const key of Object.keys(credentialsSource)) {
+                if (!allowedCredentialKeys.has(key)) {
+                    throw new ServerSettingsValidationError({
+                        message: `Invalid server settings YAML at ${settingsPath}: ${botPointer}.credentials contains unsupported key "${key}".`,
+                        category: 'unsupported_key',
+                        pointer: `${botPointer}.credentials.${key}`,
+                    });
+                }
+            }
         }
         const allowedProfileKeys = new Set([
             'id',
@@ -287,23 +365,88 @@ const normalizeDiscordBots = (value: unknown, settingsPath: string) => {
             'overlay-path',
             'mention-aliases',
         ]);
-        for (const key of Object.keys(profileSource)) {
-            if (!allowedProfileKeys.has(key)) {
-                throw new Error(
-                    `Invalid server settings YAML at ${settingsPath}: discord-bots[${index}].profile contains unsupported key "${key}".`
-                );
+        if (profileSource !== undefined) {
+            if (!isRecord(profileSource)) {
+                throw new ServerSettingsValidationError({
+                    message: `Invalid server settings YAML at ${settingsPath}: ${botPointer}.profile must be an object.`,
+                    category: 'type_mismatch',
+                    pointer: `${botPointer}.profile`,
+                });
+            }
+            for (const key of Object.keys(profileSource)) {
+                if (!allowedProfileKeys.has(key)) {
+                    throw new ServerSettingsValidationError({
+                        message: `Invalid server settings YAML at ${settingsPath}: ${botPointer}.profile contains unsupported key "${key}".`,
+                        category: 'unsupported_key',
+                        pointer: `${botPointer}.profile.${key}`,
+                    });
+                }
             }
         }
-        const mentionAliases = profileSource['mention-aliases'];
+        const mentionAliases = isRecord(profileSource)
+            ? profileSource['mention-aliases']
+            : undefined;
         if (
             mentionAliases !== undefined &&
             (!Array.isArray(mentionAliases) ||
                 !mentionAliases.every((entry) => typeof entry === 'string'))
         ) {
-            throw new Error(
-                `Invalid server settings YAML at ${settingsPath}: discord-bots[${index}].profile.mention-aliases must be an array of strings.`
-            );
+            throw new ServerSettingsValidationError({
+                message: `Invalid server settings YAML at ${settingsPath}: ${botPointer}.profile.mention-aliases must be an array of strings.`,
+                category: 'type_mismatch',
+                pointer: `${botPointer}.profile.mention-aliases`,
+            });
         }
+
+        const credentialsObj = {
+            discordTokenEnv:
+                typeof credentialsRecord?.['discord-token-env'] === 'string'
+                    ? credentialsRecord['discord-token-env']
+                    : undefined,
+            discordClientIdEnv:
+                typeof credentialsRecord?.['discord-client-id-env'] ===
+                'string'
+                    ? credentialsRecord['discord-client-id-env']
+                    : undefined,
+            discordGuildIdsEnv:
+                typeof credentialsRecord?.['discord-guild-ids-env'] ===
+                'string'
+                    ? credentialsRecord['discord-guild-ids-env']
+                    : undefined,
+            discordUserIdEnv:
+                typeof credentialsRecord?.['discord-user-id-env'] === 'string'
+                    ? credentialsRecord['discord-user-id-env']
+                    : undefined,
+            incidentSecretEnv:
+                typeof credentialsRecord?.['incident-secret-env'] === 'string'
+                    ? credentialsRecord['incident-secret-env']
+                    : undefined,
+        };
+        const hasCredentials = Object.values(credentialsObj).some(
+            (value) => value !== undefined
+        );
+
+        const profileObj = {
+            id:
+                typeof profileRecord?.['id'] === 'string'
+                    ? profileRecord['id']
+                    : undefined,
+            displayName:
+                typeof profileRecord?.['display-name'] === 'string'
+                    ? profileRecord['display-name']
+                    : undefined,
+            overlayPath:
+                typeof profileRecord?.['overlay-path'] === 'string'
+                    ? profileRecord['overlay-path']
+                    : undefined,
+            mentionAliases:
+                Array.isArray(mentionAliases) && mentionAliases.length > 0
+                    ? (mentionAliases as string[])
+                    : undefined,
+        };
+        const hasProfile = Object.values(profileObj).some(
+            (value) => value !== undefined
+        );
 
         return {
             id: typeof entry.id === 'string' ? entry.id : undefined,
@@ -313,50 +456,122 @@ const normalizeDiscordBots = (value: unknown, settingsPath: string) => {
                 typeof entry.required === 'boolean'
                     ? entry.required
                     : undefined,
-            credentials: {
-                discordTokenEnv:
-                    typeof credentialsSource['discord-token-env'] === 'string'
-                        ? credentialsSource['discord-token-env']
-                        : undefined,
-                discordClientIdEnv:
-                    typeof credentialsSource['discord-client-id-env'] ===
-                    'string'
-                        ? credentialsSource['discord-client-id-env']
-                        : undefined,
-                discordGuildIdsEnv:
-                    typeof credentialsSource['discord-guild-ids-env'] ===
-                    'string'
-                        ? credentialsSource['discord-guild-ids-env']
-                        : undefined,
-                discordUserIdEnv:
-                    typeof credentialsSource['discord-user-id-env'] === 'string'
-                        ? credentialsSource['discord-user-id-env']
-                        : undefined,
-                incidentSecretEnv:
-                    typeof credentialsSource['incident-secret-env'] === 'string'
-                        ? credentialsSource['incident-secret-env']
-                        : undefined,
-            },
-            profile: {
-                id:
-                    typeof profileSource['id'] === 'string'
-                        ? profileSource['id']
-                        : undefined,
-                displayName:
-                    typeof profileSource['display-name'] === 'string'
-                        ? profileSource['display-name']
-                        : undefined,
-                overlayPath:
-                    typeof profileSource['overlay-path'] === 'string'
-                        ? profileSource['overlay-path']
-                        : undefined,
-                mentionAliases:
-                    Array.isArray(mentionAliases) && mentionAliases.length > 0
-                        ? (mentionAliases as string[])
-                        : undefined,
-            },
+            ...(hasCredentials ? { credentials: credentialsObj } : {}),
+            ...(hasProfile ? { profile: profileObj } : {}),
         };
     });
+};
+
+/**
+ * `parseServerSettingsYaml` is a pure boundary validator and normalizer for server settings YAML.
+ *
+ * Inputs:
+ * - `rawText`: YAML source text to parse and validate.
+ * - `settingsPath`: source path used for actionable validation error messages.
+ *
+ * Outputs:
+ * - `yamlSettings`: canonical `FootnoteSettings` (normalized version, discord-bots, and settings map).
+ * - `yamlEnv`: `NodeJS.ProcessEnv` projection of YAML-configurable non-secret keys.
+ *
+ * Fail-closed behavior:
+ * - Throws on malformed YAML, invalid root/shape, unsupported keys, forbidden secret/bootstrap keys,
+ *   type mismatches, or invalid version.
+ * - Secrets/bootstrap credentials in YAML are rejected by source-boundary validation, not projected.
+ *
+ * Authority and side effects:
+ * - No external I/O or mutations; this function only parses/validates and returns derived objects.
+ * - `yamlEnv` is produced from validated setting specs so downstream runtime config can consume
+ *   YAML-backed values through env-shaped interfaces.
+ */
+export const parseServerSettingsYaml = ({
+    rawText,
+    settingsPath,
+}: {
+    rawText: string;
+    settingsPath: string;
+}): {
+    yamlSettings: FootnoteSettings;
+    yamlEnv: NodeJS.ProcessEnv;
+} => {
+    let parsed: unknown;
+    try {
+        parsed = yaml.load(rawText);
+    } catch (error) {
+        throw new ServerSettingsValidationError({
+            message: `Invalid server settings YAML at ${settingsPath}: ${error instanceof Error ? error.message : String(error)}`,
+            category: 'yaml_parse_error',
+            cause: error,
+        });
+    }
+
+    if (!isRecord(parsed)) {
+        throw new ServerSettingsValidationError({
+            message: `Invalid server settings YAML at ${settingsPath}: root must be an object.`,
+            category: 'invalid_root',
+            pointer: 'root',
+        });
+    }
+
+    if ('settings' in parsed) {
+        if (
+            isRecord(parsed.settings) &&
+            isRecord(parsed.settings['localNodes']) &&
+            parsed.settings['localNodes']['configPath'] !== undefined
+        ) {
+            throw new ServerSettingsValidationError({
+                message: `Invalid server settings YAML at ${settingsPath}: settings.localNodes.configPath is removed. Configure bots under top-level discord-bots.`,
+                category: 'legacy_shape_removed',
+                pointer: 'settings.localNodes.configPath',
+            });
+        }
+        throw new ServerSettingsValidationError({
+            message: `Invalid server settings YAML at ${settingsPath}: legacy settings.* shape is removed. Use top-level kebab-case keys in footnote.yaml.`,
+            category: 'legacy_shape_removed',
+            pointer: 'settings',
+        });
+    }
+
+    validateKebabCaseKeys(parsed);
+    validateSupportedSettingsKeys(parsed);
+
+    const version = parsed.version;
+    if (version !== 1) {
+        throw new ServerSettingsValidationError({
+            message: `Invalid server settings YAML at ${settingsPath}: version must be 1.`,
+            category: 'invalid_version',
+            pointer: 'version',
+        });
+    }
+
+    const settingsEnv: SettingsMap = {};
+    const yamlEnv: NodeJS.ProcessEnv = {};
+    for (const specEntry of settingsSpecEntries) {
+        const rawValue = getNestedValue(parsed, specEntry.path);
+        if (rawValue === undefined) {
+            continue;
+        }
+        const keyPath = specEntry.path.join('.');
+        const normalized = validateSettingValue(
+            specEntry.kind,
+            rawValue,
+            keyPath
+        );
+        settingsEnv[keyPath] = normalized;
+        yamlEnv[specEntry.envKey] = serializeSettingValue(normalized);
+    }
+
+    const discordBots = normalizeDiscordBots(
+        parsed['discord-bots'],
+        settingsPath
+    );
+    return {
+        yamlSettings: {
+            version: 1,
+            'discord-bots': discordBots,
+            settingsEnv,
+        },
+        yamlEnv,
+    };
 };
 
 /**
@@ -390,7 +605,7 @@ export const loadServerSettings = (
     yamlSettings: FootnoteSettings | null;
     yamlEnv: NodeJS.ProcessEnv;
 } => {
-    const settingsPath = normalizePath(env.FOOTNOTE_SETTINGS_PATH);
+    const settingsPath = resolveSettingsPath(env.FOOTNOTE_SETTINGS_PATH);
     let rawText: string;
     try {
         rawText = fs.readFileSync(settingsPath, 'utf8');
@@ -409,66 +624,10 @@ export const loadServerSettings = (
             { cause: error }
         );
     }
-
-    const parsed = yaml.load(rawText);
-    if (!isRecord(parsed)) {
-        throw new Error(
-            `Invalid server settings YAML at ${settingsPath}: root must be an object.`
-        );
-    }
-
-    if ('settings' in parsed) {
-        if (
-            isRecord(parsed.settings) &&
-            isRecord(parsed.settings['localNodes']) &&
-            parsed.settings['localNodes']['configPath'] !== undefined
-        ) {
-            throw new Error(
-                `Invalid server settings YAML at ${settingsPath}: settings.localNodes.configPath is removed. Configure bots under top-level discord-bots.`
-            );
-        }
-        throw new Error(
-            `Invalid server settings YAML at ${settingsPath}: legacy settings.* shape is removed. Use top-level kebab-case keys in footnote.yaml.`
-        );
-    }
-
-    validateKebabCaseKeys(parsed);
-    validateSupportedSettingsKeys(parsed);
-
-    const version = parsed.version;
-    if (version !== 1) {
-        throw new Error(
-            `Invalid server settings YAML at ${settingsPath}: version must be 1.`
-        );
-    }
-
-    const settingsEnv: SettingsMap = {};
-    const yamlEnv: NodeJS.ProcessEnv = {};
-    for (const specEntry of settingsSpecEntries) {
-        const rawValue = getNestedValue(parsed, specEntry.path);
-        if (rawValue === undefined) {
-            continue;
-        }
-        const keyPath = specEntry.path.join('.');
-        const normalized = validateSettingValue(
-            specEntry.kind,
-            rawValue,
-            keyPath
-        );
-        settingsEnv[keyPath] = normalized;
-        yamlEnv[specEntry.envKey] = serializeSettingValue(normalized);
-    }
-
-    const discordBots = normalizeDiscordBots(
-        parsed['discord-bots'],
-        settingsPath
-    );
-    const yamlSettings: FootnoteSettings = {
-        version: 1,
-        'discord-bots': discordBots,
-        settingsEnv,
-    };
-
+    const { yamlSettings, yamlEnv } = parseServerSettingsYaml({
+        rawText,
+        settingsPath,
+    });
     return { settingsPath, yamlSettings, yamlEnv };
 };
 

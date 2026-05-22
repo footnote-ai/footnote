@@ -111,6 +111,34 @@ export type { GetTraceResponse, GetTraceStaleResponse } from './types.js';
 export type { GetRuntimeConfigResponse } from './types.js';
 
 /**
+ * @api.operationId: postSetupSession
+ * @api.path: POST /api/setup/session
+ */
+export type {
+    PostSetupSessionRequest,
+    PostSetupSessionResponse,
+} from './types.js';
+
+/**
+ * @api.operationId: getAdminSettingsSchema
+ * @api.path: GET /api/admin/settings/schema
+ * @api.operationId: postAdminSettingsValidate
+ * @api.path: POST /api/admin/settings/validate
+ * @api.operationId: putAdminSettingsYaml
+ * @api.path: PUT /api/admin/settings.yaml
+ */
+export type {
+    AdminSettingsSchemaField,
+    AdminSettingsValidationErrorCategory,
+    AdminSettingsValidationError,
+    AdminSettingsValidationFailureResponse,
+    GetAdminSettingsSchemaResponse,
+    PostAdminSettingsValidateRequest,
+    PostAdminSettingsValidateResponse,
+    PutAdminSettingsYamlResponse,
+} from './types.js';
+
+/**
  * @api.operationId: postIncidentReport
  * @api.path: POST /api/incidents/report
  * @api.operationId: listIncidents
@@ -148,6 +176,8 @@ export type {
 // Runtime validation schemas for chat/traces contracts.
 export {
     ApiErrorResponseSchema,
+    PostSetupSessionRequestSchema,
+    PostSetupSessionResponseSchema,
     CitationSchema,
     GetTraceApiResponseSchema,
     GetIncidentResponseSchema,
@@ -166,6 +196,12 @@ export {
     PostIncidentStatusResponseSchema,
     PostInternalNewsTaskRequestSchema,
     PostInternalNewsTaskResponseSchema,
+    AdminSettingsValidationErrorSchema,
+    AdminSettingsValidationFailureResponseSchema,
+    GetAdminSettingsSchemaResponseSchema,
+    PostAdminSettingsValidateRequestSchema,
+    PostAdminSettingsValidateResponseSchema,
+    PutAdminSettingsYamlResponseSchema,
     PostInternalImageGenerateRequestSchema,
     PostInternalImageGenerateResponseSchema,
     PostInternalImageRequestSchema,

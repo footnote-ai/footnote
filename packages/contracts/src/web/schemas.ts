@@ -1477,6 +1477,136 @@ export const ApiErrorResponseSchema = z
     })
     .strict();
 
+/**
+ * @api.operationId: postSetupSession
+ * @api.path: POST /api/setup/session
+ */
+export const PostSetupSessionRequestSchema = z
+    .object({
+        code: z.string().min(1),
+    })
+    .strict();
+
+/**
+ * @api.operationId: postSetupSession
+ * @api.path: POST /api/setup/session
+ */
+export const PostSetupSessionResponseSchema = z
+    .object({
+        ok: z.literal(true),
+        expiresAt: z.string().datetime(),
+        csrfToken: z.string().min(1),
+    })
+    .strict();
+
+const AdminSettingsValidationErrorCategorySchema = z.enum([
+    'yaml_parse_error',
+    'invalid_root',
+    'legacy_shape_removed',
+    'invalid_key_format',
+    'unsupported_key',
+    'secret_key_forbidden',
+    'bootstrap_key_forbidden',
+    'invalid_version',
+    'type_mismatch',
+    'payload_too_large',
+    'internal_error',
+]);
+
+export const AdminSettingsValidationErrorSchema = z
+    .object({
+        message: z.string().min(1),
+        pointer: z.string().min(1).nullable(),
+        category: AdminSettingsValidationErrorCategorySchema,
+    })
+    .strict();
+
+export const AdminSettingsValidationFailureResponseSchema = z
+    .object({
+        error: z.string().min(1),
+        validationErrors: z.array(AdminSettingsValidationErrorSchema).min(1),
+    })
+    .strict();
+
+/**
+ * @api.operationId: getAdminSettingsSchema
+ * @api.path: GET /api/admin/settings/schema
+ */
+export const GetAdminSettingsSchemaResponseSchema = z
+    .object({
+        ok: z.literal(true),
+        schemaVersion: z.number().int().positive(),
+        settingsDocumentVersion: z.number().int().positive(),
+        fields: z.array(
+            z
+                .object({
+                    envKey: z.string().min(1),
+                    section: z.string().min(1),
+                    path: z.array(z.string().min(1)).min(1),
+                    kind: z.enum([
+                        'string',
+                        'boolean',
+                        'integer',
+                        'number',
+                        'csv',
+                        'enum',
+                        'json',
+                    ]),
+                    description: z.string().min(1),
+                    defaultValue: z
+                        .union([
+                            z.string(),
+                            z.number(),
+                            z.boolean(),
+                            z.array(z.string()),
+                        ])
+                        .optional(),
+                    allowedValues: z.array(z.string()).optional(),
+                })
+                .strict()
+        ),
+    })
+    .strict();
+
+/**
+ * @api.operationId: postAdminSettingsValidate
+ * @api.path: POST /api/admin/settings/validate
+ */
+export const PostAdminSettingsValidateRequestSchema = z.string();
+
+/**
+ * @api.operationId: postAdminSettingsValidate
+ * @api.path: POST /api/admin/settings/validate
+ */
+export const PostAdminSettingsValidateResponseSchema = z
+    .object({
+        ok: z.literal(true),
+        valid: z.literal(true),
+        normalizedSummary: z
+            .object({
+                version: z.number().int().positive(),
+                settingsKeysCount: z.number().int().nonnegative(),
+                discordBotsCount: z.number().int().nonnegative(),
+            })
+            .strict(),
+        warnings: z.array(z.string()),
+        restartRequired: z.literal(true),
+    })
+    .strict();
+
+/**
+ * @api.operationId: putAdminSettingsYaml
+ * @api.path: PUT /api/admin/settings.yaml
+ */
+export const PutAdminSettingsYamlResponseSchema = z
+    .object({
+        ok: z.literal(true),
+        etag: z.string().min(1),
+        restartRequired: z.literal(true),
+        applied: z.literal(false),
+    })
+    .strict();
+
 const IncidentPointersSchema = z
     .object({
         responseId: z.string().min(1).optional(),

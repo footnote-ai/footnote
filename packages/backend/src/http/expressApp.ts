@@ -9,6 +9,8 @@
 import type http from 'node:http';
 import express from 'express';
 import { registerPublicRoutes } from './publicRoutes.js';
+import { registerAdminRoutes } from './adminRoutes.js';
+import { registerSetupRoutes } from './setupRoutes.js';
 import { registerIncidentRoutes } from './incidentRoutes.js';
 import { registerChatRoutes } from './chatRoutes.js';
 import { registerInternalRoutes } from './internalRoutes.js';
@@ -118,6 +120,30 @@ type CreateExpressAppDeps = {
         req: http.IncomingMessage,
         res: http.ServerResponse
     ) => Promise<void>;
+    handleAdminSettingsSchemaRequest: (
+        req: http.IncomingMessage,
+        res: http.ServerResponse
+    ) => Promise<void>;
+    handleAdminSettingsYamlRequest: (
+        req: http.IncomingMessage,
+        res: http.ServerResponse
+    ) => Promise<void>;
+    handleAdminSettingsValidateRequest: (
+        req: http.IncomingMessage,
+        res: http.ServerResponse
+    ) => Promise<void>;
+    handleAdminSettingsYamlPutRequest: (
+        req: http.IncomingMessage,
+        res: http.ServerResponse
+    ) => Promise<void>;
+    handleSetupSessionPostRequest: (
+        req: http.IncomingMessage,
+        res: http.ServerResponse
+    ) => Promise<void>;
+    handleSetupSessionDeleteRequest: (
+        req: http.IncomingMessage,
+        res: http.ServerResponse
+    ) => Promise<void>;
     handleStaticTransportRequest: HandleStaticTransportRequest;
     resolveAsset: ResolveAsset;
     mimeMap: ReadonlyMap<string, string>;
@@ -145,6 +171,12 @@ const createExpressApp = ({
     handleTraceCardAssetRequest,
     handleRuntimeConfigRequest,
     handleChatProfilesRequest,
+    handleAdminSettingsSchemaRequest,
+    handleAdminSettingsYamlRequest,
+    handleAdminSettingsValidateRequest,
+    handleAdminSettingsYamlPutRequest,
+    handleSetupSessionPostRequest,
+    handleSetupSessionDeleteRequest,
     handleStaticTransportRequest,
     resolveAsset,
     mimeMap,
@@ -160,6 +192,22 @@ const createExpressApp = ({
         app,
         handleRuntimeConfigRequest,
         handleChatProfilesRequest,
+        logRequest,
+    });
+    registerAdminRoutes({
+        app,
+        normalizePathname,
+        handleAdminSettingsSchemaRequest,
+        handleAdminSettingsYamlRequest,
+        handleAdminSettingsValidateRequest,
+        handleAdminSettingsYamlPutRequest,
+        logRequest,
+    });
+    registerSetupRoutes({
+        app,
+        normalizePathname,
+        handleSetupSessionPostRequest,
+        handleSetupSessionDeleteRequest,
         logRequest,
     });
     registerIncidentRoutes({
