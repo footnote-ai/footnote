@@ -515,6 +515,20 @@ const handleSetupCommand = async (context: CommandContext): Promise<number> => {
     const setupRequiredNow = await dependencies.isSettingsFileMissingFn(
         paths.settingsFilePath
     );
+    const shouldShowBootstrap = setupRequiredNow;
+
+    if (!shouldShowBootstrap) {
+        throw new LauncherError(
+            'environment',
+            formatSteps(
+                `${path.basename(paths.settingsFilePath)} already exists; setup bootstrap is not required.`,
+                [
+                    'Run `footnote open` to open the current runtime URL.',
+                    'Run `footnote status` to inspect runtime state.',
+                ]
+            )
+        );
+    }
 
     const statusBefore = await runtime.status({
         configRoot,
@@ -574,11 +588,10 @@ const handleSetupCommand = async (context: CommandContext): Promise<number> => {
         }
     }
 
-    let setupEvent = readUsableSetupEventFromMetadata(
-        activeMetadata,
-        setupRequiredNow
-    );
-    if (!setupEvent) {
+    let setupEvent = shouldShowBootstrap
+        ? readUsableSetupEventFromMetadata(activeMetadata, shouldShowBootstrap)
+        : null;
+    if (!setupEvent && shouldShowBootstrap) {
         const latestFromLogs = await captureLatestSetupEventFromRuntimeLogs({
             runtime,
             configRoot,
@@ -941,7 +954,13 @@ const handleInfoCommand = async (context: CommandContext): Promise<number> => {
     const { dependencies } = context;
 
     if (!dependencies.isInteractiveTty()) {
-        await handleStatusCommand(context);
+        try {
+            await handleStatusCommand(context);
+        } catch (error: unknown) {
+            const message =
+                error instanceof Error ? error.message : String(error);
+            writeLine(dependencies, formatMessage('warn', message));
+        }
         printReadOnlyInfoSnapshot(dependencies, context.configRoot);
         return 0;
     }
@@ -982,7 +1001,7 @@ const handleInfoCommand = async (context: CommandContext): Promise<number> => {
  * @param argv Raw CLI arguments after the executable name.
  * @returns Promise<number> Exit code following launcher contract (0/1/2/3).
  */
-export const runCli = async (
+export const runCliWithDeps = async (
     argv: readonly string[],
     dependencyOverrides: Partial<CliDependencies> = {}
 ): Promise<number> => {
@@ -1023,6 +1042,9 @@ export const runCli = async (
 
     return executeCommand(parsed.command, context);
 };
+
+export const runCli = async (argv: readonly string[]): Promise<number> =>
+    runCliWithDeps(argv);
 
 /**
  * Executes the CLI orchestration and writes process exit code plus error output.

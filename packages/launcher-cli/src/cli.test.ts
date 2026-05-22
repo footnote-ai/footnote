@@ -13,7 +13,7 @@ import type {
     LauncherConfigPaths,
     LauncherMetadata,
 } from '@footnote/launcher-core';
-import { runCli } from './cli.js';
+import { runCliWithDeps } from './cli.js';
 
 const TEST_CONFIG_PATHS: LauncherConfigPaths = {
     configRoot: '/tmp/footnote-test',
@@ -63,7 +63,7 @@ const createNoopRuntime = (): FootnoteRuntime => ({
 test('runCli info non-TTY prints read-only status/help snapshot and exits', async () => {
     const output: string[] = [];
 
-    const exitCode = await runCli(['info'], {
+    const exitCode = await runCliWithDeps(['info'], {
         createRuntime: createNoopRuntime,
         resolveConfigPathsFn: () => TEST_CONFIG_PATHS,
         readLauncherMetadataFn: async () => null,
@@ -80,12 +80,42 @@ test('runCli info non-TTY prints read-only status/help snapshot and exits', asyn
     assert.match(text, /footnote update/);
 });
 
+test('runCli info non-TTY still prints snapshot when status path fails', async () => {
+    const output: string[] = [];
+
+    const exitCode = await runCliWithDeps(['info'], {
+        resolveConfigPathsFn: () => TEST_CONFIG_PATHS,
+        readLauncherMetadataFn: async () => ({
+            version: 1,
+            runtime: 'docker',
+            instance: 'default',
+            imageRepository: 'ghcr.io/footnote-ai/footnote',
+            defaultTag: 'stable',
+        }),
+        isInteractiveTty: () => false,
+        writeStdout: (text: string) => {
+            output.push(text);
+        },
+        createRuntime: () => ({
+            ...createNoopRuntime(),
+            async status() {
+                throw new Error('status failed');
+            },
+        }),
+    });
+
+    const text = output.join('');
+    assert.equal(exitCode, 0);
+    assert.match(text, /\[warn\] status failed/);
+    assert.match(text, /Read-only launcher snapshot/);
+});
+
 test('runCli update fails with setup guidance when settings file is missing', async () => {
     const runtime = createNoopRuntime();
 
     await assert.rejects(
         async () =>
-            runCli(['update'], {
+            runCliWithDeps(['update'], {
                 createRuntime: () => runtime,
                 resolveConfigPathsFn: () => TEST_CONFIG_PATHS,
                 bootstrapConfigFilesFn: async () => ({
@@ -149,7 +179,7 @@ test('runCli update executes stop->start and writes refreshed metadata', async (
         },
     };
 
-    const exitCode = await runCli(['update'], {
+    const exitCode = await runCliWithDeps(['update'], {
         createRuntime: () => runtime,
         resolveConfigPathsFn: () => TEST_CONFIG_PATHS,
         bootstrapConfigFilesFn: async () => ({
@@ -226,7 +256,7 @@ test('runCli info menu maps Start selection to start command flow', async () => 
 
     const menuSelections: Array<'start' | 'exit'> = ['start', 'exit'];
 
-    const exitCode = await runCli(['info'], {
+    const exitCode = await runCliWithDeps(['info'], {
         createRuntime: () => runtime,
         resolveConfigPathsFn: () => TEST_CONFIG_PATHS,
         bootstrapConfigFilesFn: async () => ({
