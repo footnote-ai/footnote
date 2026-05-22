@@ -6,11 +6,13 @@
  * @footnote-ethics: medium - The top-level route map affects access to transparency and self-hosting guidance.
  */
 
-import { Suspense, lazy, useEffect } from 'react';
-import { Routes, Route } from 'react-router-dom';
+import { Suspense, lazy, useEffect, useState } from 'react';
+import { Routes, Route, useLocation } from 'react-router-dom';
 import Header from '@components/Header';
 import Hero from '@components/Hero';
 import Footer from '@components/Footer';
+import { loadRuntimeConfig } from './config';
+import { shouldRedirectToSetup } from './utils/setupFlow';
 
 const NotFound = (): JSX.Element => (
     <>
@@ -36,12 +38,15 @@ const loadAboutPage = (): Promise<typeof import('@pages/AboutPage')> =>
 const loadOnboardingPage = (): Promise<
     typeof import('@pages/OnboardingPage')
 > => import('@pages/OnboardingPage');
+const loadSetupPage = (): Promise<typeof import('@pages/SetupPage')> =>
+    import('@pages/SetupPage');
 
 const TracePage = lazy(loadTracePage);
 const DownloadPage = lazy(loadDownloadPage);
 const EmbedPage = lazy(loadEmbedPage);
 const AboutPage = lazy(loadAboutPage);
 const OnboardingPage = lazy(loadOnboardingPage);
+const SetupPage = lazy(loadSetupPage);
 
 const routeFallback = (
     <main id="main-content" className="route-loading-shell">
@@ -59,6 +64,43 @@ const routeFallback = (
 
 // The App component stitches together the landing page sections in their intended scroll order.
 const App = (): JSX.Element => {
+    const location = useLocation();
+    const [setupGate, setSetupGate] = useState<{
+        loaded: boolean;
+        required: boolean;
+        routePath: '/setup';
+    }>({
+        loaded: false,
+        required: false,
+        routePath: '/setup',
+    });
+
+    useEffect(() => {
+        let cancelled = false;
+        void loadRuntimeConfig()
+            .then((config) => {
+                if (!cancelled) {
+                    setSetupGate({
+                        loaded: true,
+                        required: config.setup.required,
+                        routePath: config.setup.routePath,
+                    });
+                }
+            })
+            .catch(() => {
+                if (!cancelled) {
+                    setSetupGate({
+                        loaded: true,
+                        required: true,
+                        routePath: '/setup',
+                    });
+                }
+            });
+        return () => {
+            cancelled = true;
+        };
+    }, []);
+
     useEffect(() => {
         const windowWithIdleCallbacks = window as typeof globalThis & {
             requestIdleCallback?: (callback: () => void) => number;
@@ -72,6 +114,7 @@ const App = (): JSX.Element => {
                 loadEmbedPage(),
                 loadAboutPage(),
                 loadOnboardingPage(),
+                loadSetupPage(),
             ]);
         };
 
@@ -93,6 +136,35 @@ const App = (): JSX.Element => {
             window.clearTimeout(timeoutId);
         };
     }, []);
+
+    useEffect(() => {
+        if (!setupGate.loaded) {
+            return;
+        }
+        if (
+            shouldRedirectToSetup({
+                setupRequired: setupGate.required,
+                routePath: setupGate.routePath,
+                currentPath: location.pathname,
+            })
+        ) {
+            window.location.replace(setupGate.routePath);
+        }
+    }, [location.pathname, setupGate]);
+
+    if (!setupGate.loaded) {
+        return routeFallback;
+    }
+
+    if (
+        shouldRedirectToSetup({
+            setupRequired: setupGate.required,
+            routePath: setupGate.routePath,
+            currentPath: location.pathname,
+        })
+    ) {
+        return routeFallback;
+    }
 
     return (
         <div className="app-shell">
@@ -133,6 +205,14 @@ const App = (): JSX.Element => {
                     element={
                         <Suspense fallback={routeFallback}>
                             <OnboardingPage />
+                        </Suspense>
+                    }
+                />
+                <Route
+                    path="/setup"
+                    element={
+                        <Suspense fallback={routeFallback}>
+                            <SetupPage />
                         </Suspense>
                     }
                 />
