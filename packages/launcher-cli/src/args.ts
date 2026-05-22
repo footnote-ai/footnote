@@ -87,7 +87,7 @@ export const parseLauncherArgs = (argv: readonly string[]): LauncherArgs => {
                 if (args.command !== 'start') {
                     throw new LauncherError(
                         'usage',
-                        '--headless is only supported for footnote start.'
+                        '--headless is only supported for the start command.'
                     );
                 }
                 args.headless = true;
@@ -96,7 +96,7 @@ export const parseLauncherArgs = (argv: readonly string[]): LauncherArgs => {
                 if (args.command !== 'start') {
                     throw new LauncherError(
                         'usage',
-                        '--tag is only supported for footnote start.'
+                        '--tag is only supported for the start command.'
                     );
                 }
                 args.tag = expectValue(argv, index, token);
@@ -110,7 +110,7 @@ export const parseLauncherArgs = (argv: readonly string[]): LauncherArgs => {
                 if (args.command !== 'logs') {
                     throw new LauncherError(
                         'usage',
-                        '--follow is only supported for footnote logs.'
+                        '--follow is only supported for the logs command.'
                     );
                 }
                 args.follow = true;
@@ -119,7 +119,7 @@ export const parseLauncherArgs = (argv: readonly string[]): LauncherArgs => {
                 if (args.command !== 'logs') {
                     throw new LauncherError(
                         'usage',
-                        '--no-follow is only supported for footnote logs.'
+                        '--no-follow is only supported for the logs command.'
                     );
                 }
                 args.follow = false;

@@ -60,6 +60,28 @@ const OWNERSHIP_LABELS = {
 const normalizeContainerName = (name: string): string =>
     name.startsWith('/') ? name.slice(1) : name;
 
+const isNodeExecutableName = (name: string): boolean =>
+    /^node(\.exe)?$/i.test(name);
+
+const resolveInvocationName = (
+    argv: readonly string[] = process.argv
+): string => {
+    const executablePath = argv[0];
+    if (!executablePath) {
+        return 'footnote';
+    }
+
+    const executableName = path.basename(executablePath);
+    if (!executableName || isNodeExecutableName(executableName)) {
+        return 'footnote';
+    }
+
+    return executableName;
+};
+
+const formatCommand = (command: string): string =>
+    `${resolveInvocationName(process.argv)} ${command}`;
+
 const readLinesFromChunk = (
     state: { buffered: string },
     chunk: Buffer,
@@ -206,7 +228,7 @@ const waitForReadiness = async (
         [
             `Runtime readiness timed out after ${Math.round(timeoutMs / 1_000)}s.`,
             `URL: ${url}`,
-            'Run `footnote logs` for diagnostic output.',
+            `Run \`${formatCommand('logs')}\` for diagnostic output.`,
         ].join(' ')
     );
 };
@@ -254,7 +276,7 @@ const verifyDockerAvailable = async (): Promise<void> => {
             'environment',
             [
                 'Docker daemon is not reachable.',
-                'Start Docker Desktop (or Docker Engine) and retry `footnote start`.',
+                `Start Docker Desktop (or Docker Engine) and retry \`${formatCommand('start')}\`.`,
             ].join(' ')
         );
     }

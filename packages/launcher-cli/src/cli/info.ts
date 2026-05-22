@@ -1,0 +1,62 @@
+/**
+ * @description: Info command orchestration for interactive launcher menu and non-TTY snapshot behavior.
+ * @footnote-scope: core
+ * @footnote-module: LauncherCliInfoCommand
+ * @footnote-risk: medium - Info-flow errors can block discoverability of runtime actions.
+ * @footnote-ethics: low - Read-only fallback preserves safe visibility in automation contexts.
+ */
+
+import { formatMessage } from '@footnote/launcher-core';
+import { printHelp, printReadOnlyInfoSnapshot } from './help.js';
+import type { CommandContext } from './types.js';
+import { executeCommand } from './commands/dispatch.js';
+import { handleLogsCommand } from './commands/logs.js';
+import { handleStatusCommand } from './commands/status.js';
+
+const writeLine = (context: CommandContext, line: string): void => {
+    context.dependencies.writeStdout(`${line}\n`);
+};
+
+export const handleInfoCommand = async (
+    context: CommandContext
+): Promise<number> => {
+    const { dependencies } = context;
+
+    if (!dependencies.isInteractiveTty()) {
+        try {
+            await handleStatusCommand(context);
+        } catch (error: unknown) {
+            const message =
+                error instanceof Error ? error.message : String(error);
+            writeLine(context, formatMessage('warn', message));
+        }
+        printReadOnlyInfoSnapshot(dependencies, context.configRoot);
+        return 0;
+    }
+
+    while (true) {
+        const action = await dependencies.promptInfoMenuAction();
+
+        if (action === 'exit') {
+            writeLine(context, formatMessage('info', 'Exiting launcher menu.'));
+            return 0;
+        }
+
+        if (action === 'help') {
+            printHelp(dependencies);
+            continue;
+        }
+
+        try {
+            if (action === 'logs_no_follow') {
+                await handleLogsCommand(context, false);
+                continue;
+            }
+            await executeCommand(action, context);
+        } catch (error: unknown) {
+            const message =
+                error instanceof Error ? error.message : String(error);
+            writeLine(context, formatMessage('error', message));
+        }
+    }
+};

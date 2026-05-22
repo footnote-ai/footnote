@@ -110,6 +110,26 @@ test('runCli info non-TTY still prints snapshot when status path fails', async (
     assert.match(text, /Read-only launcher snapshot/);
 });
 
+test('runCli info snapshot uses injected invocation formatter', async () => {
+    const output: string[] = [];
+
+    const exitCode = await runCliWithDeps(['info'], {
+        createRuntime: createNoopRuntime,
+        resolveConfigPathsFn: () => TEST_CONFIG_PATHS,
+        readLauncherMetadataFn: async () => null,
+        isInteractiveTty: () => false,
+        formatCommand: (command: string) => `custom-launcher ${command}`,
+        writeStdout: (text: string) => {
+            output.push(text);
+        },
+    });
+
+    const text = output.join('');
+    assert.equal(exitCode, 0);
+    assert.match(text, /custom-launcher update/);
+    assert.match(text, /custom-launcher logs --no-follow/);
+});
+
 test('runCli update fails with setup guidance when settings file is missing', async () => {
     const runtime = createNoopRuntime();
 
@@ -134,6 +154,35 @@ test('runCli update fails with setup guidance when settings file is missing', as
                 },
             }),
         /Run `footnote setup`/
+    );
+});
+
+test('runCli update missing-settings guidance uses injected invocation formatter', async () => {
+    const runtime = createNoopRuntime();
+
+    await assert.rejects(
+        async () =>
+            runCliWithDeps(['update'], {
+                createRuntime: () => runtime,
+                resolveConfigPathsFn: () => TEST_CONFIG_PATHS,
+                bootstrapConfigFilesFn: async () => ({
+                    createdPaths: [],
+                    metadata: {
+                        version: 1,
+                        runtime: 'docker',
+                        instance: 'default',
+                        imageRepository: 'ghcr.io/footnote-ai/footnote',
+                        defaultTag: 'stable',
+                    },
+                }),
+                isSettingsFileMissingFn: async () => true,
+                formatCommand: (command: string) =>
+                    `custom-launcher ${command}`,
+                writeStdout: () => {
+                    // Ignore output for this test.
+                },
+            }),
+        /Run `custom-launcher setup`/
     );
 });
 
