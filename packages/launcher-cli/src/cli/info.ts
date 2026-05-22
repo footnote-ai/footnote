@@ -12,10 +12,7 @@ import type { CommandContext } from './types.js';
 import { executeCommand } from './commands/dispatch.js';
 import { handleLogsCommand } from './commands/logs.js';
 import { handleStatusCommand } from './commands/status.js';
-
-const writeLine = (context: CommandContext, line: string): void => {
-    context.dependencies.writeStdout(`${line}\n`);
-};
+import { writeLine } from './writeLine.js';
 
 export const handleInfoCommand = async (
     context: CommandContext
@@ -23,6 +20,8 @@ export const handleInfoCommand = async (
     const { dependencies } = context;
 
     if (!dependencies.isInteractiveTty()) {
+        // Fail-open behavior for automation: status errors are downgraded to warnings
+        // so read-only info output still prints via printReadOnlyInfoSnapshot.
         try {
             await handleStatusCommand(context);
         } catch (error: unknown) {

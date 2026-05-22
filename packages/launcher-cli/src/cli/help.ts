@@ -7,11 +7,8 @@
  */
 
 import { formatMessage } from '@footnote/launcher-core';
-import type { CliDependencies } from './types.js';
-
-const writeLine = (dependencies: CliDependencies, line: string): void => {
-    dependencies.writeStdout(`${line}\n`);
-};
+import type { CliDependencies, CommandContext } from './types.js';
+import { writeLine } from './writeLine.js';
 
 export const printHelp = (dependencies: CliDependencies): void => {
     const launcherCommand = dependencies.formatCommand('<command> [options]');
@@ -55,19 +52,25 @@ export const printReadOnlyInfoSnapshot = (
     ].join(' | ');
 
     writeLine(
-        dependencies,
+        { dependencies } as CommandContext,
         formatMessage(
             'info',
             'Read-only launcher snapshot (non-interactive mode).'
         )
     );
     writeLine(
-        dependencies,
+        { dependencies } as CommandContext,
         formatMessage(
             'info',
             `Use \`${infoCommand}\` in a terminal for the interactive menu.`
         )
     );
-    writeLine(dependencies, formatMessage('info', `configRoot: ${configRoot}`));
-    writeLine(dependencies, formatMessage('info', `Actions: ${actions}`));
+    writeLine(
+        { dependencies } as CommandContext,
+        formatMessage('info', `configRoot: ${configRoot}`)
+    );
+    writeLine(
+        { dependencies } as CommandContext,
+        formatMessage('info', `Actions: ${actions}`)
+    );
 };

@@ -28,10 +28,7 @@ import {
     resolveSetupUrlForLauncher,
 } from '../setupEvents.js';
 import type { CommandContext } from '../types.js';
-
-const writeLine = (context: CommandContext, line: string): void => {
-    context.dependencies.writeStdout(`${line}\n`);
-};
+import { writeLine } from '../writeLine.js';
 
 export const handleSetupCommand = async (
     context: CommandContext
@@ -187,6 +184,8 @@ export const handleSetupCommand = async (
             formatMessage('success', `Opened setup link: ${setupUrl}`)
         );
     } catch (error: unknown) {
+        // Fail-open by design: setup remains successful even if browser launch fails.
+        // We warn, print the setup URL, and return success so operators can continue manually.
         const message =
             error instanceof Error
                 ? error.message

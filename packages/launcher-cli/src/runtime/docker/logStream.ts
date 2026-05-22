@@ -65,14 +65,14 @@ export const streamDockerLogs = async function* ({
     const stdoutState = { buffered: '' };
     const stderrState = { buffered: '' };
 
-    child.stdout.on('data', (chunk: Buffer) => {
+    const onStdoutData = (chunk: Buffer): void => {
         readLinesFromChunk(stdoutState, chunk, 'stdout', enqueue);
-    });
-    child.stderr.on('data', (chunk: Buffer) => {
+    };
+    const onStderrData = (chunk: Buffer): void => {
         readLinesFromChunk(stderrState, chunk, 'stderr', enqueue);
-    });
+    };
 
-    child.on('error', (error: NodeJS.ErrnoException) => {
+    const onError = (error: NodeJS.ErrnoException): void => {
         if (error.code === 'ENOENT') {
             terminalError = new LauncherError(
                 'environment',
@@ -84,9 +84,9 @@ export const streamDockerLogs = async function* ({
         }
         terminalError = error;
         enqueue(null);
-    });
+    };
 
-    child.on('close', (code) => {
+    const onClose = (code: number | null): void => {
         if (stdoutState.buffered.length > 0) {
             enqueue({ text: stdoutState.buffered, stream: 'stdout' });
         }
@@ -100,24 +100,48 @@ export const streamDockerLogs = async function* ({
             );
         }
         enqueue(null);
-    });
+    };
 
-    while (true) {
-        if (queue.length === 0) {
-            await new Promise<void>((resolve) => {
-                resolveNext = resolve;
-            });
-        }
+    child.stdout.on('data', onStdoutData);
+    child.stderr.on('data', onStderrData);
+    child.on('error', onError);
+    child.on('close', onClose);
 
-        const item = queue.shift();
-        if (item === null) {
-            if (terminalError) {
-                throw terminalError;
+    try {
+        while (true) {
+            if (queue.length === 0) {
+                await new Promise<void>((resolve) => {
+                    resolveNext = resolve;
+                });
             }
-            return;
+
+            const item = queue.shift();
+            if (item === null) {
+                if (terminalError) {
+                    throw terminalError;
+                }
+                return;
+            }
+            if (item) {
+                yield item;
+            }
         }
-        if (item) {
-            yield item;
+    } finally {
+        child.stdout.off('data', onStdoutData);
+        child.stderr.off('data', onStderrData);
+        child.off('error', onError);
+        child.off('close', onClose);
+
+        if (child.exitCode === null && !child.killed) {
+            child.kill('SIGTERM');
+            setTimeout(() => {
+                if (child.exitCode === null && !child.killed) {
+                    child.kill('SIGKILL');
+                }
+            }, 1_000).unref();
         }
+
+        notify();
+        enqueue(null);
     }
 };

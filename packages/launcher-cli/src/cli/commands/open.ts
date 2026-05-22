@@ -17,30 +17,47 @@ import {
     LAUNCHER_ID,
 } from '../../constants.js';
 import type { CommandContext } from '../types.js';
+import { writeLine } from '../writeLine.js';
 
-const writeLine = (context: CommandContext, line: string): void => {
-    context.dependencies.writeStdout(`${line}\n`);
-};
+const isAllowedProtocol = (protocol: string): boolean =>
+    protocol === 'http:' || protocol === 'https:';
 
 const ensureLiveUrl = async (
     url: string,
     formatCommand: (command: string) => string
 ): Promise<void> => {
+    const controller = new AbortController();
+    const timeoutMs = 5_000;
+    const timeoutHandle = setTimeout(() => {
+        controller.abort();
+    }, timeoutMs);
+
     try {
-        const response = await fetch(url);
+        const response = await fetch(url, {
+            signal: controller.signal,
+        });
         if (response.status >= 500) {
             throw new Error(`HTTP ${response.status}`);
         }
-    } catch {
+    } catch (error: unknown) {
+        const timeoutSuffix =
+            error instanceof Error && error.name === 'AbortError'
+                ? ` (timed out after ${timeoutMs / 1_000}s)`
+                : '';
         const startCommand = formatCommand('start');
         const logsCommand = formatCommand('logs');
         throw new LauncherError(
             'environment',
-            formatSteps('Runtime is not reachable at the saved URL.', [
-                `Run \`${startCommand}\` to start the runtime.`,
-                `Run \`${logsCommand}\` to inspect startup output.`,
-            ])
+            formatSteps(
+                `Runtime is not reachable at the saved URL${timeoutSuffix}.`,
+                [
+                    `Run \`${startCommand}\` to start the runtime.`,
+                    `Run \`${logsCommand}\` to inspect startup output.`,
+                ]
+            )
         );
+    } finally {
+        clearTimeout(timeoutHandle);
     }
 };
 
@@ -87,6 +104,23 @@ export const handleOpenCommand = async (
     }
 
     const liveUrl = status.url ?? metadata.lastKnown.url;
+    let parsedLiveUrl: URL;
+    try {
+        parsedLiveUrl = new URL(liveUrl);
+    } catch (error: unknown) {
+        const reason = error instanceof Error ? error.message : String(error);
+        throw new LauncherError(
+            'environment',
+            `Saved runtime URL is invalid: ${reason}`
+        );
+    }
+    if (!isAllowedProtocol(parsedLiveUrl.protocol)) {
+        throw new LauncherError(
+            'environment',
+            `Refusing to open URL with unsupported protocol: ${parsedLiveUrl.protocol}`
+        );
+    }
+
     await ensureLiveUrl(liveUrl, dependencies.formatCommand);
     await dependencies.openInBrowserFn(liveUrl);
     writeLine(context, formatMessage('success', `Opened ${liveUrl}`));

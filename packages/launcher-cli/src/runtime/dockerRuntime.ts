@@ -12,6 +12,7 @@ import {
     LauncherError,
     selectAvailablePort,
     type FootnoteRuntime,
+    type LogLine,
     type LogsInput,
     type StartInput,
     type StartResult,
@@ -252,7 +253,7 @@ export class DockerRuntime implements FootnoteRuntime {
      * Streams logs from the launcher-owned container.
      * Throws when no owned container is present; never mutates runtime resources.
      */
-    public async *logs(input: LogsInput) {
+    public async *logs(input: LogsInput): AsyncGenerator<LogLine, void, void> {
         const labels = toDockerLabels(input);
         const container = await ensureOwnedContainerForLifecycle(
             input.containerName,

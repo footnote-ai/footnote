@@ -31,8 +31,16 @@ const isSetupRequiredByMissingSettingsFile = async (
     try {
         await access(settingsFilePath);
         return false;
-    } catch {
-        return true;
+    } catch (error: unknown) {
+        if (
+            typeof error === 'object' &&
+            error !== null &&
+            'code' in error &&
+            error.code === 'ENOENT'
+        ) {
+            return true;
+        }
+        throw error;
     }
 };
 
