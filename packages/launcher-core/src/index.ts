@@ -25,6 +25,11 @@ export {
 } from './metadata.js';
 export { formatMessage, formatSteps, type MessageTone } from './messages.js';
 export { selectAvailablePort } from './port.js';
+export {
+    parseSetupBootstrapEventLine,
+    isSetupBootstrapEventUsable,
+    type SetupBootstrapEvent,
+} from './setupEvent.js';
 export { ensureWebLocalUrlInSettings } from './settings.js';
 export type {
     BootstrapResult,

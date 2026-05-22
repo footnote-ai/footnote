@@ -106,6 +106,12 @@ const baseAppDeps = (
         createUnhandledRouteHandler(req, res),
     handleRuntimeConfigRequest: createUnhandledRouteHandler,
     handleChatProfilesRequest: createUnhandledRouteHandler,
+    handleAdminSettingsSchemaRequest: createUnhandledRouteHandler,
+    handleAdminSettingsYamlRequest: createUnhandledRouteHandler,
+    handleAdminSettingsValidateRequest: createUnhandledRouteHandler,
+    handleAdminSettingsYamlPutRequest: createUnhandledRouteHandler,
+    handleSetupSessionPostRequest: createUnhandledRouteHandler,
+    handleSetupSessionDeleteRequest: createUnhandledRouteHandler,
     handleStaticTransportRequest: async ({ res }) => {
         res.statusCode = 404;
         res.end('static');
@@ -213,6 +219,172 @@ test('internal HTTP routes are Express-owned and bypass central dispatch', async
     );
     assert.equal(unrelatedApiResponse.status, 404);
     assert.equal(dispatchCalls.includes('/api/internal/voice/realtime'), true);
+});
+
+test('admin settings routes are Express-owned and bypass central dispatch', async (t) => {
+    const dispatchCalls: string[] = [];
+    const adminCalls: string[] = [];
+
+    const app = createExpressApp(
+        baseAppDeps(dispatchCalls, {
+            handleAdminSettingsSchemaRequest: async (_req, res) => {
+                adminCalls.push('/api/admin/settings/schema');
+                res.statusCode = 200;
+                res.end('admin-schema');
+            },
+            handleAdminSettingsYamlRequest: async (_req, res) => {
+                adminCalls.push('/api/admin/settings.yaml:get');
+                res.statusCode = 200;
+                res.end('admin-yaml-get');
+            },
+            handleAdminSettingsValidateRequest: async (_req, res) => {
+                adminCalls.push('/api/admin/settings/validate');
+                res.statusCode = 200;
+                res.end('admin-validate');
+            },
+            handleAdminSettingsYamlPutRequest: async (_req, res) => {
+                adminCalls.push('/api/admin/settings.yaml:put');
+                res.statusCode = 200;
+                res.end('admin-yaml-put');
+            },
+        })
+    );
+
+    const server = await createTestServer(app);
+    t.after(async () => {
+        await server.stop();
+    });
+
+    const schemaResponse = await fetch(
+        `${server.baseUrl}/api/admin/settings/schema`
+    );
+    assert.equal(schemaResponse.status, 200);
+    assert.equal(await schemaResponse.text(), 'admin-schema');
+
+    const yamlGetResponse = await fetch(
+        `${server.baseUrl}/api/admin/settings.yaml`
+    );
+    assert.equal(yamlGetResponse.status, 200);
+    assert.equal(await yamlGetResponse.text(), 'admin-yaml-get');
+
+    const validateResponse = await fetch(
+        `${server.baseUrl}/api/admin/settings/validate`,
+        {
+            method: 'POST',
+        }
+    );
+    assert.equal(validateResponse.status, 200);
+    assert.equal(await validateResponse.text(), 'admin-validate');
+
+    const yamlPutResponse = await fetch(
+        `${server.baseUrl}/api/admin/settings.yaml`,
+        {
+            method: 'PUT',
+        }
+    );
+    assert.equal(yamlPutResponse.status, 200);
+    assert.equal(await yamlPutResponse.text(), 'admin-yaml-put');
+
+    assert.deepEqual(adminCalls, [
+        '/api/admin/settings/schema',
+        '/api/admin/settings.yaml:get',
+        '/api/admin/settings/validate',
+        '/api/admin/settings.yaml:put',
+    ]);
+    assert.equal(dispatchCalls.includes('/api/admin/settings/schema'), false);
+    assert.equal(dispatchCalls.includes('/api/admin/settings.yaml'), false);
+    assert.equal(dispatchCalls.includes('/api/admin/settings/validate'), false);
+});
+
+test('admin settings schema and validate routes enforce method ownership before handler dispatch', async (t) => {
+    const dispatchCalls: string[] = [];
+    const adminCalls: string[] = [];
+
+    const app = createExpressApp(
+        baseAppDeps(dispatchCalls, {
+            handleAdminSettingsSchemaRequest: async (_req, res) => {
+                adminCalls.push('/api/admin/settings/schema');
+                res.statusCode = 200;
+                res.end('admin-schema');
+            },
+            handleAdminSettingsValidateRequest: async (_req, res) => {
+                adminCalls.push('/api/admin/settings/validate');
+                res.statusCode = 200;
+                res.end('admin-validate');
+            },
+        })
+    );
+
+    const server = await createTestServer(app);
+    t.after(async () => {
+        await server.stop();
+    });
+
+    const schemaPost = await fetch(
+        `${server.baseUrl}/api/admin/settings/schema`,
+        {
+            method: 'POST',
+        }
+    );
+    assert.equal(schemaPost.status, 404);
+
+    const validateGet = await fetch(
+        `${server.baseUrl}/api/admin/settings/validate`,
+        {
+            method: 'GET',
+        }
+    );
+    assert.equal(validateGet.status, 404);
+
+    assert.equal(adminCalls.includes('/api/admin/settings/schema'), false);
+    assert.equal(adminCalls.includes('/api/admin/settings/validate'), false);
+    assert.equal(dispatchCalls.includes('/api/admin/settings/schema'), true);
+    assert.equal(dispatchCalls.includes('/api/admin/settings/validate'), true);
+});
+
+test('setup session routes are Express-owned and bypass central dispatch', async (t) => {
+    const dispatchCalls: string[] = [];
+    const setupCalls: string[] = [];
+
+    const app = createExpressApp(
+        baseAppDeps(dispatchCalls, {
+            handleSetupSessionPostRequest: async (_req, res) => {
+                setupCalls.push('/api/setup/session:post');
+                res.statusCode = 200;
+                res.end('setup-post');
+            },
+            handleSetupSessionDeleteRequest: async (_req, res) => {
+                setupCalls.push('/api/setup/session:delete');
+                res.statusCode = 204;
+                res.end();
+            },
+        })
+    );
+
+    const server = await createTestServer(app);
+    t.after(async () => {
+        await server.stop();
+    });
+
+    const postResponse = await fetch(`${server.baseUrl}/api/setup/session`, {
+        method: 'POST',
+    });
+    assert.equal(postResponse.status, 200);
+    assert.equal(await postResponse.text(), 'setup-post');
+
+    const deleteResponse = await fetch(`${server.baseUrl}/api/setup/session`, {
+        method: 'DELETE',
+    });
+    assert.equal(deleteResponse.status, 204);
+
+    const getResponse = await fetch(`${server.baseUrl}/api/setup/session`);
+    assert.equal(getResponse.status, 404);
+
+    assert.deepEqual(setupCalls, [
+        '/api/setup/session:post',
+        '/api/setup/session:delete',
+    ]);
+    assert.equal(dispatchCalls.includes('/api/setup/session'), true);
 });
 
 test('trace write/card route is Express-owned while Accept-negotiated trace read stays in special transport dispatch', async (t) => {

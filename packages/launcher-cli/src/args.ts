@@ -13,6 +13,7 @@ export type LauncherCommand =
     | 'stop'
     | 'status'
     | 'open'
+    | 'setup'
     | 'logs'
     | 'help';
 
@@ -59,6 +60,7 @@ export const parseLauncherArgs = (argv: readonly string[]): LauncherArgs => {
         first !== 'stop' &&
         first !== 'status' &&
         first !== 'open' &&
+        first !== 'setup' &&
         first !== 'logs'
     ) {
         throw new LauncherError('usage', `Unknown command "${first}".`);

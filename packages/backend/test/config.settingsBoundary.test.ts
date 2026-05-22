@@ -12,6 +12,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { buildRuntimeConfig } from '../src/config/buildRuntimeConfig.js';
+import { parseServerSettingsYaml } from '../src/config/settings.js';
 
 const withSettingsFile = (contents: string): string => {
     const tempDir = fs.mkdtempSync(
@@ -62,9 +63,9 @@ test('settings_yaml env keys in process.env are ignored with warning', () => {
     );
 
     assert.equal(config.rateLimits.web.ip.limit, 41);
-    assert.match(
-        warnings.join('\n'),
-        /Ignoring deprecated env key WEB_API_RATE_LIMIT_IP/i
+    assert.equal(
+        warnings.some((message) => /WEB_API_RATE_LIMIT_IP/i.test(message)),
+        false
     );
 });
 
@@ -90,7 +91,7 @@ test('secret env key in footnote.yaml fails validation', () => {
     const settingsPath = withSettingsFile(
         [
             'version: 1',
-            'security:',
+            'trace:',
             '  trace-api-token: should-not-be-here',
             '',
         ].join('\n')
@@ -184,6 +185,36 @@ test('canonical discord-bots definitions load from footnote.yaml', () => {
     );
 });
 
+test('discord-bots entries allow omitted credentials/profile blocks', () => {
+    const rawYaml = [
+        'version: 1',
+        'discord-bots:',
+        '  - id: bot-with-minimal-shape',
+        '    enabled: true',
+        '',
+    ].join('\n');
+    const settingsPath = withSettingsFile(rawYaml);
+
+    const parsed = parseServerSettingsYaml({
+        rawText: rawYaml,
+        settingsPath,
+    });
+
+    assert.equal(parsed.yamlSettings['discord-bots'].length, 1);
+    assert.equal(
+        parsed.yamlSettings['discord-bots'][0]?.id,
+        'bot-with-minimal-shape'
+    );
+    assert.equal(
+        parsed.yamlSettings['discord-bots'][0]?.credentials?.discordTokenEnv,
+        undefined
+    );
+    assert.equal(
+        parsed.yamlSettings['discord-bots'][0]?.profile?.id,
+        undefined
+    );
+});
+
 test('invalid present YAML fails startup', () => {
     const settingsPath = withSettingsFile('version: [1\n');
 
@@ -196,4 +227,34 @@ test('invalid present YAML fails startup', () => {
             () => undefined
         );
     }, /YAMLException|unexpected end/i);
+});
+
+test('parseServerSettingsYaml helper stays aligned with startup settings parsing behavior', () => {
+    const rawYaml = [
+        'version: 1',
+        'rate-limits:',
+        '  web-api-rate-limit-ip: 41',
+        '',
+    ].join('\n');
+    const settingsPath = withSettingsFile(rawYaml);
+    const parsed = parseServerSettingsYaml({
+        rawText: rawYaml,
+        settingsPath,
+    });
+
+    const config = buildRuntimeConfig(
+        {
+            NODE_ENV: 'test',
+            FOOTNOTE_SETTINGS_PATH: settingsPath,
+        },
+        () => undefined
+    );
+
+    assert.equal(parsed.yamlSettings.version, 1);
+    assert.equal(
+        parsed.yamlSettings.settingsEnv['rate-limits.web-api-rate-limit-ip'],
+        41
+    );
+    assert.equal(parsed.yamlEnv.WEB_API_RATE_LIMIT_IP, '41');
+    assert.equal(config.rateLimits.web.ip.limit, 41);
 });

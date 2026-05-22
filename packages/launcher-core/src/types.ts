@@ -6,6 +6,8 @@
  * @footnote-ethics: low - Contract typing improves predictable operator behavior without changing governance semantics.
  */
 
+import type { SetupBootstrapEvent } from './setupEvent.js';
+
 export type RuntimeKind = 'docker' | 'local';
 
 export type RuntimeState = 'running' | 'stopped' | 'not_found';
@@ -31,6 +33,7 @@ export type StartInput = {
     preferredPort: number;
     envFilePath: string;
     settingsFilePath: string;
+    settingsMountMode?: 'file' | 'directory';
     headless: boolean;
     readinessTimeoutMs: number;
 };
@@ -119,6 +122,11 @@ export type LauncherMetadata = {
         containerName: string;
         volumeName: string;
         updatedAtIso: string;
+    };
+    setup?: {
+        lastBootstrapEvent?: SetupBootstrapEvent & {
+            capturedAtIso: string;
+        };
     };
 };
 

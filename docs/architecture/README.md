@@ -41,6 +41,12 @@ detail once you have the main runtime shape in mind.
 
 ## Subsystem Notes
 
+- [Admin Settings API](./admin-settings-architecture.md): trusted YAML settings
+  management API (`/api/admin/*`), auth/ETag semantics, and planned admin
+  surface direction.
+- [First-Setup Flow](./first-setup-flow.md): bootstrap link/session flow used
+  when `footnote.yaml` is missing, including setup-route gating and first-write
+  sentinel behavior.
 - [Footnote and Common Agentic Patterns](./footnote-and-common-agentic-patterns.md):
   external-pattern comparison and fit.
 - [Footnote Annotations](./footnote-annotations.md): code annotation conventions.

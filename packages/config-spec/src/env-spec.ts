@@ -1805,6 +1805,34 @@ export const envEntries = [
     }),
 
     defineEnv({
+        key: 'SETTINGS_ADMIN_TOKEN',
+        owner: 'backend',
+        stage: 'runtime',
+        section: 'admin',
+        required: false,
+        secret: true,
+        kind: 'string',
+        description:
+            'Dedicated trusted token required by admin settings endpoints under /api/admin.',
+        defaultValue: noDefault(),
+        usedBy: ['packages/backend/src/config.ts'],
+    }),
+
+    defineEnv({
+        key: 'SETTINGS_ADMIN_MAX_BODY_BYTES',
+        owner: 'backend',
+        stage: 'runtime',
+        section: 'admin',
+        required: false,
+        secret: false,
+        kind: 'integer',
+        description:
+            'Maximum request body size for admin settings YAML validate and write endpoints.',
+        defaultValue: literal(262144),
+        usedBy: ['packages/backend/src/config.ts'],
+    }),
+
+    defineEnv({
         key: 'CHAT_WORKFLOW_MODE_ID',
         owner: 'backend',
         stage: 'runtime',

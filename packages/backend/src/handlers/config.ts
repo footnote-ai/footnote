@@ -16,7 +16,13 @@ type LogRequest = (
 
 // --- Handler factory ---
 const createRuntimeConfigHandler =
-    ({ logRequest }: { logRequest: LogRequest }) =>
+    ({
+        logRequest,
+        isSetupRequiredNow,
+    }: {
+        logRequest: LogRequest;
+        isSetupRequiredNow: () => Promise<boolean>;
+    }) =>
     /**
      * @api.operationId: getRuntimeConfig
      * @api.path: GET /config.json
@@ -43,6 +49,10 @@ const createRuntimeConfigHandler =
                 turnstileSiteKey: hasTurnstileKeys
                     ? runtimeConfig.turnstile.siteKey
                     : '',
+                setup: {
+                    required: await isSetupRequiredNow(),
+                    routePath: '/setup',
+                },
             };
 
             // --- Response ---

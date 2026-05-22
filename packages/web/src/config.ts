@@ -18,6 +18,10 @@ export type RuntimeConfig = GetRuntimeConfigResponse;
  */
 const DEFAULT_CONFIG: RuntimeConfig = {
     turnstileSiteKey: '',
+    setup: {
+        required: false,
+        routePath: '/setup',
+    },
 };
 
 let cachedConfig: RuntimeConfig | null = null;
@@ -32,12 +36,22 @@ const normalizeConfig = (payload: unknown): RuntimeConfig => {
         return DEFAULT_CONFIG;
     }
 
-    const raw = payload as { turnstileSiteKey?: unknown };
+    const raw = payload as {
+        turnstileSiteKey?: unknown;
+        setup?: {
+            required?: unknown;
+            routePath?: unknown;
+        };
+    };
     return {
         turnstileSiteKey:
             typeof raw.turnstileSiteKey === 'string'
                 ? raw.turnstileSiteKey
                 : '',
+        setup: {
+            required: raw.setup?.required === true,
+            routePath: raw.setup?.routePath === '/setup' ? '/setup' : '/setup',
+        },
     };
 };
 

@@ -7,6 +7,7 @@
  */
 
 import { spawn } from 'node:child_process';
+import path from 'node:path';
 import {
     ensureWebLocalUrlInSettings,
     LauncherError,
@@ -225,7 +226,7 @@ const inspectContainer = async (
     containerName: string
 ): Promise<DockerInspectContainer | null> => {
     const result = await runDocker(
-        ['container', 'inspect', '--type', 'container', containerName],
+        ['inspect', '--type', 'container', containerName],
         true
     );
     if (result.code !== 0) {
@@ -423,6 +424,16 @@ export class DockerRuntime implements FootnoteRuntime {
         await ensureManagedContainerForStart(input.containerName, labels);
         let containerCreated = false;
         try {
+            const settingsMountMode = input.settingsMountMode ?? 'file';
+            const settingsMountSource =
+                settingsMountMode === 'directory'
+                    ? path.dirname(input.settingsFilePath)
+                    : input.settingsFilePath;
+            const settingsMountTarget =
+                settingsMountMode === 'directory'
+                    ? '/data/config'
+                    : '/data/config/footnote.yaml';
+
             await runDocker([
                 'create',
                 '--name',
@@ -437,7 +448,7 @@ export class DockerRuntime implements FootnoteRuntime {
                 '--mount',
                 `type=volume,source=${input.volumeName},target=/data`,
                 '--mount',
-                `type=bind,source=${input.settingsFilePath},target=/data/config/footnote.yaml,readonly`,
+                `type=bind,source=${settingsMountSource},target=${settingsMountTarget}`,
                 imageRef,
             ]);
             containerCreated = true;

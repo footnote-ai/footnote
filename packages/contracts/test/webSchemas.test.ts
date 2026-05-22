@@ -14,6 +14,14 @@ import { fileURLToPath } from 'node:url';
 
 import {
     ApiErrorResponseSchema,
+    AdminSettingsValidationErrorSchema,
+    AdminSettingsValidationFailureResponseSchema,
+    GetAdminSettingsSchemaResponseSchema,
+    PostAdminSettingsValidateRequestSchema,
+    PostAdminSettingsValidateResponseSchema,
+    PostSetupSessionRequestSchema,
+    PostSetupSessionResponseSchema,
+    PutAdminSettingsYamlResponseSchema,
     GetIncidentResponseSchema,
     GetIncidentsResponseSchema,
     InternalImageStreamEventSchema,
@@ -49,8 +57,10 @@ import {
     internalImageTextModels,
 } from '../src/providers';
 import type {
+    GetAdminSettingsSchemaResponse,
     GetIncidentResponse,
     GetIncidentsResponse,
+    PutAdminSettingsYamlResponse,
     PostInternalImageGenerateResponse,
     PostInternalImageResponse,
     PostInternalNewsTaskResponse,
@@ -1347,6 +1357,118 @@ test('ApiErrorResponseSchema enforces strict known error envelope fields', () =>
         }).success,
         false
     );
+});
+
+test('admin settings schemas validate contract payloads', () => {
+    assert.equal(
+        GetAdminSettingsSchemaResponseSchema.safeParse({
+            ok: true,
+            schemaVersion: 1,
+            settingsDocumentVersion: 1,
+            fields: [
+                {
+                    envKey: 'WEB_API_RATE_LIMIT_IP',
+                    section: 'rate-limits',
+                    path: ['rate-limits', 'web-api-rate-limit-ip'],
+                    kind: 'integer',
+                    description: 'Public web API rate limit per IP.',
+                    defaultValue: 3,
+                },
+            ],
+        }).success,
+        true
+    );
+
+    assert.equal(
+        PostAdminSettingsValidateRequestSchema.safeParse('version: 1\n')
+            .success,
+        true
+    );
+
+    assert.equal(
+        PostSetupSessionRequestSchema.safeParse({
+            code: 'fn_setup_example',
+        }).success,
+        true
+    );
+
+    assert.equal(
+        PostSetupSessionResponseSchema.safeParse({
+            ok: true,
+            expiresAt: new Date().toISOString(),
+            csrfToken: 'csrf_token',
+        }).success,
+        true
+    );
+
+    assert.equal(
+        PostAdminSettingsValidateResponseSchema.safeParse({
+            ok: true,
+            valid: true,
+            normalizedSummary: {
+                version: 1,
+                settingsKeysCount: 2,
+                discordBotsCount: 0,
+            },
+            warnings: [],
+            restartRequired: true,
+        }).success,
+        true
+    );
+
+    assert.equal(
+        AdminSettingsValidationErrorSchema.safeParse({
+            message: 'Invalid version.',
+            pointer: 'version',
+            category: 'invalid_version',
+        }).success,
+        true
+    );
+
+    assert.equal(
+        AdminSettingsValidationFailureResponseSchema.safeParse({
+            error: 'Invalid settings YAML',
+            validationErrors: [
+                {
+                    message: 'Invalid version.',
+                    pointer: 'version',
+                    category: 'invalid_version',
+                },
+            ],
+        }).success,
+        true
+    );
+
+    assert.equal(
+        PutAdminSettingsYamlResponseSchema.safeParse({
+            ok: true,
+            etag: '"etag-value"',
+            restartRequired: true,
+            applied: false,
+        }).success,
+        true
+    );
+});
+
+test('admin settings schema validators stay assignable to shared contract types', () => {
+    const schemaValidator = createSchemaResponseValidator(
+        GetAdminSettingsSchemaResponseSchema
+    );
+    const putValidator = createSchemaResponseValidator(
+        PutAdminSettingsYamlResponseSchema
+    );
+
+    const typedSchemaValidator: (
+        data: unknown
+    ) => ApiResponseValidationResult<GetAdminSettingsSchemaResponse> =
+        schemaValidator;
+    const typedPutValidator: (
+        data: unknown
+    ) => ApiResponseValidationResult<PutAdminSettingsYamlResponse> =
+        putValidator;
+
+    assert.equal(typeof typedSchemaValidator, 'function');
+    assert.equal(typeof typedPutValidator, 'function');
 });
 
 test('incident schemas accept valid request and response payloads', () => {

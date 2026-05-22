@@ -92,6 +92,10 @@ export type RuntimeConfig = {
         serviceToken: string | null;
         maxBodyBytes: number;
     };
+    adminSettings: {
+        token: string | null;
+        maxBodyBytes: number;
+    };
     trace: {
         apiToken: string | null;
         maxBodyBytes: number;
@@ -228,6 +232,7 @@ export type RuntimeConfig = {
         };
     };
     settings: {
+        path: string;
         discordBots: Array<{
             id?: string;
             enabled?: boolean;

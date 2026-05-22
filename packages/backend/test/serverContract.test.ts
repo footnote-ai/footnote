@@ -49,6 +49,33 @@ const createInternalImageStreamPayload = (): Record<string, unknown> => ({
     },
 });
 
+const canBindPort = async (port: number): Promise<boolean> =>
+    await new Promise((resolve) => {
+        const server = net.createServer();
+        server.once('error', () => resolve(false));
+        server.listen(port, '::', () => {
+            server.close(() => resolve(true));
+        });
+    });
+
+const waitForSetupEventFromHarnessOutput = async (
+    readOutput: () => string,
+    timeoutMs: number = 5_000
+): Promise<string> => {
+    const startedAt = Date.now();
+    while (Date.now() - startedAt < timeoutMs) {
+        const output = readOutput();
+        const match = output.match(/\[SETUP_EVENT\]\s+(\{[^\n]+\})/);
+        if (match?.[1]) {
+            return match[1];
+        }
+        await new Promise<void>((resolve) => {
+            setTimeout(resolve, 100);
+        });
+    }
+    throw new Error('Timed out waiting for setup bootstrap event in logs.');
+};
+
 const readUpgradeResponse = async ({
     host,
     port,
@@ -246,8 +273,14 @@ test('backend server contract baseline routes and transport behavior stay stable
 
             const payload = (await response.json()) as {
                 turnstileSiteKey?: string;
+                setup?: {
+                    required?: boolean;
+                    routePath?: string;
+                };
             };
             assert.equal(typeof payload.turnstileSiteKey, 'string');
+            assert.equal(typeof payload.setup?.required, 'boolean');
+            assert.equal(payload.setup?.routePath, '/setup');
         }
     );
 
@@ -364,27 +397,367 @@ test('/api/internal/image stream path keeps NDJSON response contract', async (t)
     assert.ok(terminalType === 'result' || terminalType === 'error');
 });
 
-test(
-    'backend stays available when static index output is missing',
-    async (t) => {
-        const harness = await startBackendServerContractHarness({
-            staticFixtureMode: 'none',
-        });
-        t.after(async () => {
-            await harness.stop();
-        });
+test('backend stays available when static index output is missing', async (t) => {
+    const harness = await startBackendServerContractHarness({
+        staticFixtureMode: 'none',
+    });
+    t.after(async () => {
+        await harness.stop();
+    });
 
-        const staticResponse = await fetch(
-            `${harness.baseUrl}/missing-static-route`
-        );
-        assert.equal(staticResponse.status, 404);
-        assert.equal(await staticResponse.text(), 'Not Found');
+    const staticResponse = await fetch(
+        `${harness.baseUrl}/missing-static-route`
+    );
+    assert.equal(staticResponse.status, 404);
+    assert.equal(await staticResponse.text(), 'Not Found');
 
-        const configResponse = await fetch(`${harness.baseUrl}/config.json`);
-        assert.equal(configResponse.status, 200);
-        assert.match(
-            configResponse.headers.get('content-type') ?? '',
-            /application\/json/i
+    const configResponse = await fetch(`${harness.baseUrl}/config.json`);
+    assert.equal(configResponse.status, 200);
+    assert.match(
+        configResponse.headers.get('content-type') ?? '',
+        /application\/json/i
+    );
+});
+
+test('admin settings server contract: auth, YAML read/write ETag flow, and restart semantics stay stable', async (t) => {
+    const harness = await startBackendServerContractHarness({
+        envOverrides: {
+            SETTINGS_ADMIN_TOKEN: 'contract-admin-token',
+        },
+    });
+    t.after(async () => {
+        await harness.stop();
+    });
+
+    await t.test(
+        'admin routes require x-admin-token when enabled',
+        async () => {
+            const response = await fetch(
+                `${harness.baseUrl}/api/admin/settings/schema`
+            );
+            assert.equal(response.status, 401);
+        }
+    );
+
+    await t.test(
+        'admin YAML read returns content-type and etag headers',
+        async () => {
+            const response = await fetch(
+                `${harness.baseUrl}/api/admin/settings.yaml`,
+                {
+                    headers: {
+                        'x-admin-token': 'contract-admin-token',
+                    },
+                }
+            );
+            assert.equal(response.status, 200);
+            assert.equal(
+                response.headers.get('content-type'),
+                'text/yaml; charset=utf-8'
+            );
+            const etag = response.headers.get('etag');
+            assert.ok(etag && etag.length > 0);
+        }
+    );
+
+    await t.test(
+        'admin validate returns restartRequired=true and write returns applied=false with new etag',
+        async () => {
+            const validateResponse = await fetch(
+                `${harness.baseUrl}/api/admin/settings/validate`,
+                {
+                    method: 'POST',
+                    headers: {
+                        'x-admin-token': 'contract-admin-token',
+                        'content-type': 'text/yaml',
+                    },
+                    body: [
+                        'version: 1',
+                        'rate-limits:',
+                        '  web-api-rate-limit-ip: 17',
+                        '',
+                    ].join('\n'),
+                }
+            );
+            assert.equal(validateResponse.status, 200);
+            const validatePayload = (await validateResponse.json()) as {
+                restartRequired: boolean;
+                valid: boolean;
+            };
+            assert.equal(validatePayload.valid, true);
+            assert.equal(validatePayload.restartRequired, true);
+
+            const readBefore = await fetch(
+                `${harness.baseUrl}/api/admin/settings.yaml`,
+                {
+                    headers: {
+                        'x-admin-token': 'contract-admin-token',
+                    },
+                }
+            );
+            const priorEtag = readBefore.headers.get('etag');
+            assert.ok(priorEtag);
+
+            const writeResponse = await fetch(
+                `${harness.baseUrl}/api/admin/settings.yaml`,
+                {
+                    method: 'PUT',
+                    headers: {
+                        'x-admin-token': 'contract-admin-token',
+                        'if-match': priorEtag!,
+                        'content-type': 'text/yaml',
+                    },
+                    body: [
+                        'version: 1',
+                        'rate-limits:',
+                        '  web-api-rate-limit-ip: 21',
+                        '',
+                    ].join('\n'),
+                }
+            );
+            assert.equal(writeResponse.status, 200);
+            const writePayload = (await writeResponse.json()) as {
+                etag: string;
+                restartRequired: boolean;
+                applied: boolean;
+            };
+            assert.equal(writePayload.restartRequired, true);
+            assert.equal(writePayload.applied, false);
+            assert.notEqual(writePayload.etag, priorEtag);
+
+            const readAfter = await fetch(
+                `${harness.baseUrl}/api/admin/settings.yaml`,
+                {
+                    headers: {
+                        'x-admin-token': 'contract-admin-token',
+                    },
+                }
+            );
+            assert.equal(readAfter.status, 200);
+            assert.equal(readAfter.headers.get('etag'), writePayload.etag);
+            const yamlBody = await readAfter.text();
+            assert.match(yamlBody, /web-api-rate-limit-ip:\s*21/);
+        }
+    );
+});
+
+test('first-setup contract: /config.json setup-required + setup session auth + first-write sentinel flow', async (t) => {
+    if (!(await canBindPort(3000))) {
+        t.skip(
+            'Skipped setup-required server contract because default port 3000 is busy in this environment.'
         );
+        return;
     }
-);
+    const harness = await startBackendServerContractHarness({
+        envOverrides: {
+            SETTINGS_ADMIN_TOKEN: '',
+        },
+        createSettingsFile: false,
+    });
+    t.after(async () => {
+        await harness.stop();
+    });
+
+    const configResponse = await fetch(`${harness.baseUrl}/config.json`);
+    assert.equal(configResponse.status, 200);
+    const configPayload = (await configResponse.json()) as {
+        setup?: {
+            required?: boolean;
+            routePath?: string;
+        };
+    };
+    assert.equal(configPayload.setup?.required, true);
+    assert.equal(configPayload.setup?.routePath, '/setup');
+
+    const unauthAdminResponse = await fetch(
+        `${harness.baseUrl}/api/admin/settings/schema`
+    );
+    assert.equal(unauthAdminResponse.status, 401);
+
+    const setupEventLogs = await fetch(`${harness.baseUrl}/api/setup/session`, {
+        method: 'POST',
+        headers: {
+            'content-type': 'application/json',
+        },
+        body: JSON.stringify({ code: 'fn_setup_invalid' }),
+    });
+    assert.equal(setupEventLogs.status, 401);
+
+    const setupEventJson = await waitForSetupEventFromHarnessOutput(
+        harness.readProcessOutput
+    );
+    const setupEvent = JSON.parse(setupEventJson) as {
+        setupPath: string;
+    };
+    const codeFromPath = setupEvent.setupPath.split('#code=')[1] ?? '';
+    const setupCode = decodeURIComponent(codeFromPath);
+    assert.ok(setupCode.startsWith('fn_setup_'));
+
+    const sessionResponse = await fetch(
+        `${harness.baseUrl}/api/setup/session`,
+        {
+            method: 'POST',
+            headers: {
+                'content-type': 'application/json',
+            },
+            body: JSON.stringify({ code: setupCode }),
+        }
+    );
+    assert.equal(sessionResponse.status, 200);
+    const sessionPayload = (await sessionResponse.json()) as {
+        ok: boolean;
+        csrfToken: string;
+        expiresAt: string;
+    };
+    assert.equal(sessionPayload.ok, true);
+    assert.equal(typeof sessionPayload.csrfToken, 'string');
+    assert.equal(typeof sessionPayload.expiresAt, 'string');
+    const sessionCookie = sessionResponse.headers
+        .get('set-cookie')
+        ?.split(';')[0];
+    assert.ok(sessionCookie);
+
+    const schemaResponse = await fetch(
+        `${harness.baseUrl}/api/admin/settings/schema`,
+        {
+            headers: {
+                cookie: sessionCookie!,
+            },
+        }
+    );
+    assert.equal(schemaResponse.status, 200);
+
+    const missingCsrfWrite = await fetch(
+        `${harness.baseUrl}/api/admin/settings.yaml`,
+        {
+            method: 'PUT',
+            headers: {
+                cookie: sessionCookie!,
+                'if-match': '"footnote-settings-missing"',
+            },
+            body: [
+                'version: 1',
+                'rate-limits:',
+                '  web-api-rate-limit-ip: 13',
+                '',
+            ].join('\n'),
+        }
+    );
+    assert.equal(missingCsrfWrite.status, 403);
+
+    const firstWrite = await fetch(
+        `${harness.baseUrl}/api/admin/settings.yaml`,
+        {
+            method: 'PUT',
+            headers: {
+                cookie: sessionCookie!,
+                'x-setup-csrf': sessionPayload.csrfToken,
+                'if-match': '"footnote-settings-missing"',
+            },
+            body: [
+                'version: 1',
+                'rate-limits:',
+                '  web-api-rate-limit-ip: 13',
+                '',
+            ].join('\n'),
+        }
+    );
+    assert.equal(firstWrite.status, 200);
+    const firstWritePayload = (await firstWrite.json()) as {
+        restartRequired: boolean;
+        applied: boolean;
+    };
+    assert.equal(firstWritePayload.restartRequired, true);
+    assert.equal(firstWritePayload.applied, false);
+
+    const configAfterWrite = await fetch(`${harness.baseUrl}/config.json`);
+    assert.equal(configAfterWrite.status, 200);
+    const configAfterWritePayload = (await configAfterWrite.json()) as {
+        setup?: { required?: boolean };
+    };
+    assert.equal(configAfterWritePayload.setup?.required, false);
+});
+
+test('first-write sentinel transitions to normal ETag checks once settings file exists', async (t) => {
+    if (!(await canBindPort(3000))) {
+        t.skip(
+            'Skipped setup-required sentinel contract because default port 3000 is busy in this environment.'
+        );
+        return;
+    }
+    const harness = await startBackendServerContractHarness({
+        envOverrides: {
+            SETTINGS_ADMIN_TOKEN: 'contract-admin-token',
+        },
+        createSettingsFile: false,
+    });
+    t.after(async () => {
+        await harness.stop();
+    });
+
+    const firstWrite = await fetch(
+        `${harness.baseUrl}/api/admin/settings.yaml`,
+        {
+            method: 'PUT',
+            headers: {
+                'x-admin-token': 'contract-admin-token',
+                'if-match': '"footnote-settings-missing"',
+            },
+            body: [
+                'version: 1',
+                'rate-limits:',
+                '  web-api-rate-limit-ip: 14',
+                '',
+            ].join('\n'),
+        }
+    );
+    assert.equal(firstWrite.status, 200);
+
+    const sentinelAfterExists = await fetch(
+        `${harness.baseUrl}/api/admin/settings.yaml`,
+        {
+            method: 'PUT',
+            headers: {
+                'x-admin-token': 'contract-admin-token',
+                'if-match': '"footnote-settings-missing"',
+            },
+            body: [
+                'version: 1',
+                'rate-limits:',
+                '  web-api-rate-limit-ip: 15',
+                '',
+            ].join('\n'),
+        }
+    );
+    assert.equal(sentinelAfterExists.status, 412);
+
+    const readAfter = await fetch(
+        `${harness.baseUrl}/api/admin/settings.yaml`,
+        {
+            headers: {
+                'x-admin-token': 'contract-admin-token',
+            },
+        }
+    );
+    assert.equal(readAfter.status, 200);
+    const etag = readAfter.headers.get('etag');
+    assert.ok(etag);
+
+    const normalWrite = await fetch(
+        `${harness.baseUrl}/api/admin/settings.yaml`,
+        {
+            method: 'PUT',
+            headers: {
+                'x-admin-token': 'contract-admin-token',
+                'if-match': etag!,
+            },
+            body: [
+                'version: 1',
+                'rate-limits:',
+                '  web-api-rate-limit-ip: 16',
+                '',
+            ].join('\n'),
+        }
+    );
+    assert.equal(normalWrite.status, 200);
+});

@@ -2948,3 +2948,61 @@ kbd {
         order: 2;
     }
 }
+
+.setup-panel,
+.setup-editor {
+    max-width: min(1320px, 97vw);
+    margin: 0 auto 1.4rem auto;
+}
+
+.setup-editor {
+    display: grid;
+    gap: 0.8rem;
+}
+
+.setup-textarea {
+    width: 100%;
+    min-height: 560px;
+    resize: vertical;
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 0.9rem;
+    font-family: var(--mono-font);
+    font-size: 0.88rem;
+    line-height: 1.55;
+    color: var(--text);
+    background: var(--bg-alt);
+}
+
+.setup-actions {
+    display: flex;
+    gap: 0.6rem;
+    flex-wrap: wrap;
+}
+
+.setup-actions button {
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 0.52rem 0.84rem;
+    background: var(--bg-soft);
+    color: var(--text);
+    cursor: pointer;
+}
+
+.setup-actions button:disabled {
+    opacity: 0.65;
+    cursor: not-allowed;
+}
+
+.setup-error {
+    color: #b02a37;
+}
+
+.setup-note {
+    color: var(--subtle-text);
+}
+
+.setup-errors {
+    margin: 0;
+    padding-left: 1.2rem;
+}

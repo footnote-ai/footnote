@@ -904,4 +904,110 @@ export type GetTraceStaleResponse = {
  */
 export type GetRuntimeConfigResponse = {
     turnstileSiteKey: string;
+    setup: {
+        required: boolean;
+        routePath: '/setup';
+    };
+};
+
+/**
+ * @api.operationId: postSetupSession
+ * @api.path: POST /api/setup/session
+ */
+export type PostSetupSessionRequest = {
+    code: string;
+};
+
+/**
+ * @api.operationId: postSetupSession
+ * @api.path: POST /api/setup/session
+ */
+export type PostSetupSessionResponse = {
+    ok: true;
+    expiresAt: string;
+    csrfToken: string;
+};
+
+export type AdminSettingsValidationErrorCategory =
+    | 'yaml_parse_error'
+    | 'invalid_root'
+    | 'legacy_shape_removed'
+    | 'invalid_key_format'
+    | 'unsupported_key'
+    | 'secret_key_forbidden'
+    | 'bootstrap_key_forbidden'
+    | 'invalid_version'
+    | 'type_mismatch'
+    | 'payload_too_large'
+    | 'internal_error';
+
+export type AdminSettingsValidationError = {
+    message: string;
+    pointer: string | null;
+    category: AdminSettingsValidationErrorCategory;
+};
+
+export type AdminSettingsSchemaField = {
+    envKey: string;
+    section: string;
+    path: string[];
+    kind: 'string' | 'boolean' | 'integer' | 'number' | 'csv' | 'enum' | 'json';
+    description: string;
+    defaultValue?: string | number | boolean | readonly string[];
+    allowedValues?: readonly string[];
+};
+
+/**
+ * @api.operationId: getAdminSettingsSchema
+ * @api.path: GET /api/admin/settings/schema
+ */
+export type GetAdminSettingsSchemaResponse = {
+    ok: true;
+    schemaVersion: number;
+    settingsDocumentVersion: number;
+    fields: AdminSettingsSchemaField[];
+};
+
+/**
+ * @api.operationId: postAdminSettingsValidate
+ * @api.path: POST /api/admin/settings/validate
+ */
+export type PostAdminSettingsValidateRequest = string;
+
+/**
+ * @api.operationId: postAdminSettingsValidate
+ * @api.path: POST /api/admin/settings/validate
+ */
+export type PostAdminSettingsValidateResponse = {
+    ok: true;
+    valid: true;
+    normalizedSummary: {
+        version: number;
+        settingsKeysCount: number;
+        discordBotsCount: number;
+    };
+    warnings: string[];
+    restartRequired: true;
+};
+
+/**
+ * @api.operationId: postAdminSettingsValidate
+ * @api.path: POST /api/admin/settings/validate
+ * @api.operationId: putAdminSettingsYaml
+ * @api.path: PUT /api/admin/settings.yaml
+ */
+export type AdminSettingsValidationFailureResponse = {
+    error: string;
+    validationErrors: AdminSettingsValidationError[];
+};
+
+/**
+ * @api.operationId: putAdminSettingsYaml
+ * @api.path: PUT /api/admin/settings.yaml
+ */
+export type PutAdminSettingsYamlResponse = {
+    ok: true;
+    etag: string;
+    restartRequired: true;
+    applied: false;
 };

@@ -20,6 +20,12 @@ openapi: 3.1.0
 # - POST /api/trace-cards/from-trace: Generate/store trace-card from stored trace metadata by responseId (TraceToken required)
 # - GET /api/traces/{responseId}: Trace fetch (public)
 # - GET /api/traces/{responseId}/assets/trace-card.svg: Trace-card SVG fetch (public)
+# - POST /api/setup/session: Exchange one-time setup bootstrap code for short-lived setup session
+# - DELETE /api/setup/session: Clear setup session cookie
+# - GET /api/admin/settings/schema: Admin editable settings schema metadata (AdminSettingsToken OR setup session during setup-required mode)
+# - GET /api/admin/settings.yaml: Admin canonical settings YAML read (AdminSettingsToken OR setup session during setup-required mode)
+# - POST /api/admin/settings/validate: Admin settings YAML validation (AdminSettingsToken OR setup session during setup-required mode)
+# - PUT /api/admin/settings.yaml: Admin settings YAML replace with If-Match concurrency (AdminSettingsToken OR setup session during setup-required mode)
 # - GET /config.json: Runtime config (public)
 # - Operation/code index: docs/api/operation-map.md
 
@@ -66,6 +72,8 @@ tags:
       description: Voice and audio.
     - name: Traces
       description: Trace storage and retrieval.
+    - name: Admin
+      description: Trusted admin settings read/validate/write endpoints.
     - name: System
       description: Runtime config and service metadata.
 
@@ -807,6 +815,202 @@ paths:
                 '503':
                     $ref: '#/components/responses/ServiceUnavailable'
 
+    /api/setup/session:
+        post:
+            operationId: postSetupSession
+            x-codeRefs:
+                - packages/backend/src/handlers/setupSession.ts#createSetupSessionHandlers
+                - packages/contracts/src/web/types.ts#PostSetupSessionRequest
+                - packages/contracts/src/web/types.ts#PostSetupSessionResponse
+            summary: Exchange one-time setup bootstrap code for setup session
+            description: |
+                Exchanges a one-time `fn_setup_...` bootstrap code for a short-lived httpOnly setup session cookie.
+                Returns setup-session CSRF token required for non-GET admin settings writes during setup-required mode.
+            tags:
+                - Admin
+            requestBody:
+                required: true
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/SetupSessionRequest'
+            responses:
+                '200':
+                    $ref: '#/components/responses/SetupSessionOk'
+                '400':
+                    $ref: '#/components/responses/BadRequest'
+                '401':
+                    $ref: '#/components/responses/Unauthorized'
+                '409':
+                    $ref: '#/components/responses/Conflict'
+                '405':
+                    $ref: '#/components/responses/MethodNotAllowed'
+                '500':
+                    $ref: '#/components/responses/InternalServerError'
+        delete:
+            operationId: deleteSetupSession
+            x-codeRefs:
+                - packages/backend/src/handlers/setupSession.ts#createSetupSessionHandlers
+            summary: Clear setup session cookie
+            description: |
+                Clears setup session cookie and invalidates the in-memory session record when present.
+            tags:
+                - Admin
+            responses:
+                '204':
+                    description: Setup session cleared.
+                    headers:
+                        Set-Cookie:
+                            description: Expires the setup-session cookie immediately.
+                            schema:
+                                type: string
+                            example: footnote_setup_session=; Path=/; Max-Age=0; HttpOnly; SameSite=Strict
+                '405':
+                    $ref: '#/components/responses/MethodNotAllowed'
+
+    /api/admin/settings/schema:
+        get:
+            operationId: getAdminSettingsSchema
+            x-codeRefs:
+                - packages/backend/src/handlers/adminSettings.ts#createAdminSettingsHandlers
+                - packages/contracts/src/web/types.ts#GetAdminSettingsSchemaResponse
+            summary: Fetch editable settings schema metadata
+            description: |
+                Trusted admin endpoint that returns metadata for YAML-editable runtime settings.
+                Auth accepts either `x-admin-token`, or setup session cookie while setup is currently required.
+                When setup is not required and SETTINGS_ADMIN_TOKEN is unset, endpoint returns 503.
+            tags:
+                - Admin
+            security:
+                - AdminSettingsToken: []
+                - SetupSessionCookie: []
+            responses:
+                '200':
+                    $ref: '#/components/responses/AdminSettingsSchemaOk'
+                '401':
+                    $ref: '#/components/responses/Unauthorized'
+                '403':
+                    $ref: '#/components/responses/Forbidden'
+                '405':
+                    $ref: '#/components/responses/MethodNotAllowed'
+                '503':
+                    $ref: '#/components/responses/ServiceUnavailable'
+
+    /api/admin/settings.yaml:
+        get:
+            operationId: getAdminSettingsYaml
+            x-codeRefs:
+                - packages/backend/src/handlers/adminSettings.ts#createAdminSettingsHandlers
+            summary: Fetch canonical settings YAML
+            description: |
+                Trusted admin endpoint that returns the canonical persisted settings YAML document.
+                Auth accepts either `x-admin-token`, or setup session cookie while setup is currently required.
+                When setup is not required and SETTINGS_ADMIN_TOKEN is unset, endpoint returns 503.
+            tags:
+                - Admin
+            security:
+                - AdminSettingsToken: []
+                - SetupSessionCookie: []
+            responses:
+                '200':
+                    $ref: '#/components/responses/AdminSettingsYamlOk'
+                '401':
+                    $ref: '#/components/responses/Unauthorized'
+                '403':
+                    $ref: '#/components/responses/Forbidden'
+                '404':
+                    $ref: '#/components/responses/NotFound'
+                '405':
+                    $ref: '#/components/responses/MethodNotAllowed'
+                '503':
+                    $ref: '#/components/responses/ServiceUnavailable'
+        put:
+            operationId: putAdminSettingsYaml
+            x-codeRefs:
+                - packages/backend/src/handlers/adminSettings.ts#createAdminSettingsHandlers
+                - packages/contracts/src/web/types.ts#PutAdminSettingsYamlResponse
+            summary: Replace canonical settings YAML
+            description: |
+                Trusted admin endpoint that validates and replaces the canonical persisted settings YAML document.
+                Auth accepts either `x-admin-token`, or setup session cookie while setup is currently required.
+                Setup-session auth requires `x-setup-csrf` on non-GET calls.
+                Requires If-Match optimistic concurrency with either current YAML ETag or `"footnote-settings-missing"` while file is absent.
+            tags:
+                - Admin
+            security:
+                - AdminSettingsToken: []
+                - SetupSessionCookie: []
+            parameters:
+                - $ref: '#/components/parameters/IfMatchHeader'
+                - $ref: '#/components/parameters/SetupCsrfHeader'
+            requestBody:
+                required: true
+                content:
+                    text/yaml:
+                        schema:
+                            type: string
+            responses:
+                '200':
+                    $ref: '#/components/responses/AdminSettingsYamlPutOk'
+                '400':
+                    $ref: '#/components/responses/AdminSettingsValidationFailed'
+                '401':
+                    $ref: '#/components/responses/Unauthorized'
+                '403':
+                    $ref: '#/components/responses/Forbidden'
+                '405':
+                    $ref: '#/components/responses/MethodNotAllowed'
+                '412':
+                    $ref: '#/components/responses/PreconditionFailed'
+                '413':
+                    $ref: '#/components/responses/PayloadTooLarge'
+                '428':
+                    $ref: '#/components/responses/PreconditionRequired'
+                '503':
+                    $ref: '#/components/responses/ServiceUnavailable'
+
+    /api/admin/settings/validate:
+        post:
+            operationId: postAdminSettingsValidate
+            x-codeRefs:
+                - packages/backend/src/handlers/adminSettings.ts#createAdminSettingsHandlers
+                - packages/contracts/src/web/types.ts#PostAdminSettingsValidateRequest
+                - packages/contracts/src/web/types.ts#PostAdminSettingsValidateResponse
+            summary: Validate admin settings YAML without writing
+            description: |
+                Trusted admin endpoint that validates YAML settings without persisting changes.
+                Auth accepts either `x-admin-token`, or setup session cookie while setup is currently required.
+                Setup-session auth requires `x-setup-csrf` on non-GET calls.
+                When setup is not required and SETTINGS_ADMIN_TOKEN is unset, endpoint returns 503.
+            tags:
+                - Admin
+            security:
+                - AdminSettingsToken: []
+                - SetupSessionCookie: []
+            parameters:
+                - $ref: '#/components/parameters/SetupCsrfHeader'
+            requestBody:
+                required: true
+                content:
+                    text/yaml:
+                        schema:
+                            type: string
+            responses:
+                '200':
+                    $ref: '#/components/responses/AdminSettingsValidateOk'
+                '400':
+                    $ref: '#/components/responses/AdminSettingsValidationFailed'
+                '401':
+                    $ref: '#/components/responses/Unauthorized'
+                '403':
+                    $ref: '#/components/responses/Forbidden'
+                '405':
+                    $ref: '#/components/responses/MethodNotAllowed'
+                '413':
+                    $ref: '#/components/responses/PayloadTooLarge'
+                '503':
+                    $ref: '#/components/responses/ServiceUnavailable'
+
     # Runtime config (public).
     /config.json:
         get:
@@ -846,6 +1050,16 @@ components:
             in: header
             name: x-service-token
             description: Shared secret for trusted internal service callers.
+        AdminSettingsToken:
+            type: apiKey
+            in: header
+            name: x-admin-token
+            description: Dedicated trusted admin token for settings endpoints.
+        SetupSessionCookie:
+            type: apiKey
+            in: cookie
+            name: footnote_setup_session
+            description: Short-lived setup session cookie accepted only while setup is currently required.
 
     # Data models for request/response payloads.
     schemas:
@@ -2883,8 +3097,209 @@ components:
                 turnstileSiteKey:
                     type: string
                     description: Empty string when Turnstile is disabled.
+                setup:
+                    type: object
+                    properties:
+                        required:
+                            type: boolean
+                            description: True only when FOOTNOTE_SETTINGS_PATH currently resolves to a missing file (ENOENT).
+                        routePath:
+                            type: string
+                            enum: ['/setup']
+                    required:
+                        - required
+                        - routePath
+                    additionalProperties: false
             required:
                 - turnstileSiteKey
+                - setup
+            additionalProperties: false
+
+        SetupSessionRequest:
+            type: object
+            properties:
+                code:
+                    type: string
+                    minLength: 1
+            required:
+                - code
+            additionalProperties: false
+
+        SetupSessionResponse:
+            type: object
+            properties:
+                ok:
+                    type: boolean
+                    const: true
+                expiresAt:
+                    type: string
+                    format: date-time
+                csrfToken:
+                    type: string
+            required:
+                - ok
+                - expiresAt
+                - csrfToken
+            additionalProperties: false
+
+        AdminSettingsSchemaField:
+            type: object
+            properties:
+                envKey:
+                    type: string
+                section:
+                    type: string
+                path:
+                    type: array
+                    items:
+                        type: string
+                kind:
+                    type: string
+                    enum: [string, boolean, integer, number, csv, enum, json]
+                description:
+                    type: string
+                defaultValue:
+                    oneOf:
+                        - type: string
+                        - type: number
+                        - type: boolean
+                        - type: array
+                          items:
+                              type: string
+                allowedValues:
+                    type: array
+                    items:
+                        type: string
+            required:
+                - envKey
+                - section
+                - path
+                - kind
+                - description
+            additionalProperties: false
+
+        AdminSettingsSchemaResponse:
+            type: object
+            properties:
+                ok:
+                    type: boolean
+                    const: true
+                schemaVersion:
+                    type: integer
+                settingsDocumentVersion:
+                    type: integer
+                fields:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/AdminSettingsSchemaField'
+            required:
+                - ok
+                - schemaVersion
+                - settingsDocumentVersion
+                - fields
+            additionalProperties: false
+
+        AdminSettingsValidateResponse:
+            type: object
+            properties:
+                ok:
+                    type: boolean
+                    const: true
+                valid:
+                    type: boolean
+                    const: true
+                normalizedSummary:
+                    type: object
+                    properties:
+                        version:
+                            type: integer
+                        settingsKeysCount:
+                            type: integer
+                        discordBotsCount:
+                            type: integer
+                    required:
+                        - version
+                        - settingsKeysCount
+                        - discordBotsCount
+                    additionalProperties: false
+                warnings:
+                    type: array
+                    items:
+                        type: string
+                restartRequired:
+                    type: boolean
+                    const: true
+            required:
+                - ok
+                - valid
+                - normalizedSummary
+                - warnings
+                - restartRequired
+            additionalProperties: false
+
+        AdminSettingsValidationError:
+            type: object
+            properties:
+                message:
+                    type: string
+                pointer:
+                    type: string
+                    nullable: true
+                category:
+                    type: string
+                    enum:
+                        [
+                            yaml_parse_error,
+                            invalid_root,
+                            legacy_shape_removed,
+                            invalid_key_format,
+                            unsupported_key,
+                            secret_key_forbidden,
+                            bootstrap_key_forbidden,
+                            invalid_version,
+                            type_mismatch,
+                            payload_too_large,
+                            internal_error,
+                        ]
+            required:
+                - message
+                - pointer
+                - category
+            additionalProperties: false
+
+        AdminSettingsValidationFailureResponse:
+            type: object
+            properties:
+                error:
+                    type: string
+                validationErrors:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/AdminSettingsValidationError'
+            required:
+                - error
+                - validationErrors
+            additionalProperties: false
+
+        AdminSettingsYamlPutResponse:
+            type: object
+            properties:
+                ok:
+                    type: boolean
+                    const: true
+                etag:
+                    type: string
+                restartRequired:
+                    type: boolean
+                    const: true
+                applied:
+                    type: boolean
+                    const: false
+            required:
+                - ok
+                - etag
+                - restartRequired
+                - applied
             additionalProperties: false
 
     parameters:
@@ -2903,6 +3318,22 @@ components:
             in: header
             required: false
             description: Turnstile CAPTCHA token header when enabled.
+            schema:
+                type: string
+
+        IfMatchHeader:
+            name: If-Match
+            in: header
+            required: true
+            description: Required optimistic concurrency token from latest GET /api/admin/settings.yaml ETag, or `"footnote-settings-missing"` only while settings file is absent.
+            schema:
+                type: string
+
+        SetupCsrfHeader:
+            name: x-setup-csrf
+            in: header
+            required: false
+            description: Required for non-GET admin settings calls when authenticated with setup session cookie.
             schema:
                 type: string
 
@@ -3090,6 +3521,52 @@ components:
                 application/json:
                     schema:
                         $ref: '#/components/schemas/RuntimeConfig'
+        SetupSessionOk:
+            description: Setup session established.
+            headers:
+                Set-Cookie:
+                    description: httpOnly setup-session cookie with short TTL and SameSite=Strict.
+                    schema:
+                        type: string
+            content:
+                application/json:
+                    schema:
+                        $ref: '#/components/schemas/SetupSessionResponse'
+        AdminSettingsSchemaOk:
+            description: Admin settings schema metadata.
+            content:
+                application/json:
+                    schema:
+                        $ref: '#/components/schemas/AdminSettingsSchemaResponse'
+        AdminSettingsYamlOk:
+            description: Canonical settings YAML.
+            headers:
+                ETag:
+                    description: Strong ETag used for If-Match optimistic concurrency on PUT.
+                    schema:
+                        type: string
+            content:
+                text/yaml:
+                    schema:
+                        type: string
+        AdminSettingsValidateOk:
+            description: Settings YAML validated successfully.
+            content:
+                application/json:
+                    schema:
+                        $ref: '#/components/schemas/AdminSettingsValidateResponse'
+        AdminSettingsYamlPutOk:
+            description: Canonical settings YAML replaced successfully.
+            content:
+                application/json:
+                    schema:
+                        $ref: '#/components/schemas/AdminSettingsYamlPutResponse'
+        AdminSettingsValidationFailed:
+            description: Settings YAML failed validation.
+            content:
+                application/json:
+                    schema:
+                        $ref: '#/components/schemas/AdminSettingsValidationFailureResponse'
         # Error envelope: use ErrorResponse (error required; details/retryAfter optional). Add request-id here if introduced.
         BadRequest:
             description: Bad request.
@@ -3105,6 +3582,24 @@ components:
                         $ref: '#/components/schemas/ErrorResponse'
         Forbidden:
             description: Request was refused.
+            content:
+                application/json:
+                    schema:
+                        $ref: '#/components/schemas/ErrorResponse'
+        Conflict:
+            description: Request conflicts with current resource/setup state.
+            content:
+                application/json:
+                    schema:
+                        $ref: '#/components/schemas/ErrorResponse'
+        PreconditionFailed:
+            description: Optimistic concurrency check failed (stale If-Match).
+            content:
+                application/json:
+                    schema:
+                        $ref: '#/components/schemas/ErrorResponse'
+        PreconditionRequired:
+            description: Missing required optimistic concurrency header (If-Match).
             content:
                 application/json:
                     schema:
