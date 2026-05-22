@@ -10,6 +10,10 @@ For first-time setup:
 - Developer source path: [README Quickstart](../README.md#quickstart)
 - Deployment path: [deploy README](../deploy/README.md)
 
+Standalone launcher note: running `footnote` with no command (or double-clicking
+the binary) opens the `footnote info` launcher menu. Use explicit commands like
+`footnote start`, `footnote setup`, and `footnote update` for automation.
+
 ## Sections
 
 - [Architecture](./architecture/README.md): current system shape, boundaries,
