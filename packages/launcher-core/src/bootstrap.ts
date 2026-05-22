@@ -72,19 +72,36 @@ export const createDefaultMetadata = (): LauncherMetadata => ({
     defaultTag: DEFAULT_IMAGE_TAG,
 });
 
+/**
+ * Bootstraps launcher-owned config files inside `paths.configRoot`.
+ *
+ * Caller contract:
+ * - `options?.createSettingsFile` defaults to `true`, which creates
+ *   `footnote.yaml` for standard first-run startup behavior.
+ * - Callers may pass `{ createSettingsFile: false }` for setup-mode flows where
+ *   settings must remain missing so first-setup bootstrap can run.
+ * - `shouldCreateSettingsFile` is derived from `options?.createSettingsFile ?? true`.
+ */
 export const bootstrapConfigFiles = async (
-    paths: LauncherConfigPaths
+    paths: LauncherConfigPaths,
+    options?: {
+        createSettingsFile?: boolean;
+    }
 ): Promise<BootstrapResult> => {
+    const shouldCreateSettingsFile = options?.createSettingsFile ?? true;
+
     await mkdir(paths.configRoot, { recursive: true });
 
     const createdPaths: string[] = [];
 
     await ensureFile(paths.envFilePath, DEFAULT_ENV_FILE, createdPaths);
-    await ensureFile(
-        paths.settingsFilePath,
-        DEFAULT_SETTINGS_FILE,
-        createdPaths
-    );
+    if (shouldCreateSettingsFile) {
+        await ensureFile(
+            paths.settingsFilePath,
+            DEFAULT_SETTINGS_FILE,
+            createdPaths
+        );
+    }
 
     const existingMetadata = await readExistingMetadata(
         paths.launcherMetadataPath

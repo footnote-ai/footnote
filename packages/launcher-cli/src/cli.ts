@@ -7,6 +7,7 @@
  */
 
 import path from 'node:path';
+import { access } from 'node:fs/promises';
 import {
     bootstrapConfigFiles,
     computeConfigRootHash,
@@ -20,8 +21,11 @@ import {
     readLauncherMetadata,
     resolveConfigPaths,
     resolveDefaultConfigRoot,
+    parseSetupBootstrapEventLine,
+    isSetupBootstrapEventUsable,
     writeLauncherMetadata,
     type LauncherMetadata,
+    type SetupBootstrapEvent,
     type StatusResult,
 } from '@footnote/launcher-core';
 import {
@@ -44,6 +48,7 @@ const printHelp = (): void => {
         '  stop    Stop/remove launcher-managed container',
         '  status  Show runtime status without bootstrapping config files',
         '  open    Open the running launcher-managed URL if live',
+        '  setup   Open first-setup link when footnote.yaml is missing',
         '  logs    Stream logs from launcher-managed container',
         '',
         'Options:',
@@ -144,6 +149,86 @@ const ensureLiveUrl = async (url: string): Promise<void> => {
     }
 };
 
+const readUsableSetupEventFromMetadata = (
+    metadata: LauncherMetadata | null,
+    allowMetadataFallback: boolean
+): SetupBootstrapEvent | null => {
+    if (!allowMetadataFallback) {
+        return null;
+    }
+    const setupEvent = metadata?.setup?.lastBootstrapEvent;
+    if (!setupEvent) {
+        return null;
+    }
+    if (!isSetupBootstrapEventUsable(setupEvent)) {
+        return null;
+    }
+    return {
+        event: 'footnote.setup.bootstrap',
+        setupPath: setupEvent.setupPath,
+        setupUrl: setupEvent.setupUrl,
+        expiresAt: setupEvent.expiresAt,
+    };
+};
+
+const captureLatestSetupEventFromRuntimeLogs = async ({
+    runtime,
+    configRoot,
+    configRootHash,
+    instance,
+}: {
+    runtime: DockerRuntime;
+    configRoot: string;
+    configRootHash: string;
+    instance: string;
+}): Promise<SetupBootstrapEvent | null> => {
+    const lines = runtime.logs({
+        configRoot,
+        configRootHash,
+        instance,
+        launcherId: LAUNCHER_ID,
+        containerName: DEFAULT_CONTAINER_NAME,
+        follow: false,
+    });
+    let latest: SetupBootstrapEvent | null = null;
+    for await (const line of lines) {
+        const parsed = parseSetupBootstrapEventLine(line.text);
+        if (parsed) {
+            latest = parsed;
+        }
+    }
+    return latest;
+};
+
+const resolveSetupUrlForLauncher = ({
+    setupEvent,
+    runtimeUrl,
+}: {
+    setupEvent: SetupBootstrapEvent;
+    runtimeUrl?: string;
+}): string => {
+    if (!runtimeUrl) {
+        return setupEvent.setupUrl;
+    }
+    try {
+        const baseUrl = new URL(runtimeUrl);
+        return new URL(setupEvent.setupPath, baseUrl).toString();
+    } catch {
+        return setupEvent.setupUrl;
+    }
+};
+
+const isSetupRequiredByMissingSettingsFile = async (
+    settingsFilePath: string
+): Promise<boolean> => {
+    try {
+        await access(settingsFilePath);
+        return false;
+    } catch {
+        return true;
+    }
+};
+
 /**
  * Parses launcher CLI arguments and orchestrates command routing for runtime operations.
  * This function decides command flow and exit semantics, while delegating runtime actions to DockerRuntime and shared launcher-core helpers.
@@ -204,7 +289,7 @@ export const runCli = async (argv: readonly string[]): Promise<number> => {
             readinessTimeoutMs: DEFAULT_READINESS_TIMEOUT_MS,
         });
 
-        const updatedMetadata: LauncherMetadata = {
+        let updatedMetadata: LauncherMetadata = {
             ...metadataForStart,
             defaultTag: persistedTag,
             lastKnown: {
@@ -217,6 +302,30 @@ export const runCli = async (argv: readonly string[]): Promise<number> => {
                 updatedAtIso: new Date().toISOString(),
             },
         };
+
+        try {
+            const latestSetupEvent =
+                await captureLatestSetupEventFromRuntimeLogs({
+                    runtime,
+                    configRoot,
+                    configRootHash,
+                    instance: metadataForStart.instance,
+                });
+            if (latestSetupEvent) {
+                updatedMetadata = {
+                    ...updatedMetadata,
+                    setup: {
+                        ...updatedMetadata.setup,
+                        lastBootstrapEvent: {
+                            ...latestSetupEvent,
+                            capturedAtIso: new Date().toISOString(),
+                        },
+                    },
+                };
+            }
+        } catch {
+            // Fail-open: setup-event capture is best-effort metadata enrichment.
+        }
 
         await writeLauncherMetadata(
             paths.launcherMetadataPath,
@@ -251,6 +360,153 @@ export const runCli = async (argv: readonly string[]): Promise<number> => {
             }
         }
 
+        return 0;
+    }
+
+    if (parsed.command === 'setup') {
+        const bootstrapResult = await bootstrapConfigFiles(paths, {
+            createSettingsFile: false,
+        });
+        const metadata = resolveMetadataWithDefaults(bootstrapResult.metadata);
+        const setupRequiredNow = await isSetupRequiredByMissingSettingsFile(
+            paths.settingsFilePath
+        );
+
+        const statusBefore = await runtime.status({
+            configRoot,
+            configRootHash,
+            instance: metadata.instance,
+            launcherId: LAUNCHER_ID,
+            containerName: DEFAULT_CONTAINER_NAME,
+            volumeName: DEFAULT_VOLUME_NAME,
+        });
+
+        let activeMetadata: LauncherMetadata = metadata;
+        if (
+            statusBefore.state !== 'running' ||
+            !statusBefore.ownershipMatches ||
+            !statusBefore.url ||
+            statusBefore.port === undefined
+        ) {
+            const preferredPort =
+                metadata.lastKnown?.port ?? DEFAULT_PREFERRED_PORT;
+            const startResult = await runtime.start({
+                configRoot,
+                configRootHash,
+                instance: metadata.instance,
+                launcherId: LAUNCHER_ID,
+                containerName: DEFAULT_CONTAINER_NAME,
+                volumeName: DEFAULT_VOLUME_NAME,
+                imageRepository: metadata.imageRepository,
+                defaultTag: metadata.defaultTag,
+                digestByTag: metadata.digestByTag,
+                preferredPort,
+                envFilePath: paths.envFilePath,
+                settingsFilePath: paths.settingsFilePath,
+                settingsMountMode: 'directory',
+                headless: true,
+                readinessTimeoutMs: DEFAULT_READINESS_TIMEOUT_MS,
+            });
+
+            activeMetadata = {
+                ...metadata,
+                lastKnown: {
+                    url: startResult.url,
+                    port: startResult.port,
+                    tag: startResult.tag,
+                    imageRef: startResult.imageRef,
+                    containerName: DEFAULT_CONTAINER_NAME,
+                    volumeName: DEFAULT_VOLUME_NAME,
+                    updatedAtIso: new Date().toISOString(),
+                },
+            };
+            await writeLauncherMetadata(
+                paths.launcherMetadataPath,
+                activeMetadata
+            );
+
+            for (const warning of startResult.warnings) {
+                process.stdout.write(`${formatMessage('warn', warning)}\n`);
+            }
+        }
+
+        let setupEvent = readUsableSetupEventFromMetadata(
+            activeMetadata,
+            setupRequiredNow
+        );
+        if (!setupEvent) {
+            const latestFromLogs = await captureLatestSetupEventFromRuntimeLogs(
+                {
+                    runtime,
+                    configRoot,
+                    configRootHash,
+                    instance: activeMetadata.instance,
+                }
+            );
+            if (latestFromLogs) {
+                activeMetadata = {
+                    ...activeMetadata,
+                    setup: {
+                        ...activeMetadata.setup,
+                        lastBootstrapEvent: {
+                            ...latestFromLogs,
+                            capturedAtIso: new Date().toISOString(),
+                        },
+                    },
+                };
+                await writeLauncherMetadata(
+                    paths.launcherMetadataPath,
+                    activeMetadata
+                );
+                if (isSetupBootstrapEventUsable(latestFromLogs)) {
+                    setupEvent = latestFromLogs;
+                }
+            }
+        }
+
+        if (!setupEvent) {
+            throw new LauncherError(
+                'environment',
+                formatSteps(
+                    'No usable setup bootstrap link is available from launcher-managed state or runtime logs.',
+                    [
+                        'Confirm setup is required (footnote.yaml missing).',
+                        'If the previous setup code expired, restart the runtime and run `footnote setup` again.',
+                        'Run `footnote logs --no-follow` to inspect setup startup events.',
+                    ]
+                )
+            );
+        }
+
+        const runtimeUrlForSetup =
+            statusBefore.state === 'running' &&
+            statusBefore.ownershipMatches &&
+            statusBefore.url
+                ? statusBefore.url
+                : activeMetadata.lastKnown?.url;
+
+        const setupUrl = resolveSetupUrlForLauncher({
+            setupEvent,
+            runtimeUrl: runtimeUrlForSetup,
+        });
+
+        try {
+            await openInBrowser(setupUrl);
+            process.stdout.write(
+                `${formatMessage('success', `Opened setup link: ${setupUrl}`)}\n`
+            );
+        } catch (error: unknown) {
+            const message =
+                error instanceof Error
+                    ? error.message
+                    : 'Unknown browser open error.';
+            process.stdout.write(
+                `${formatMessage('warn', `Could not open browser automatically: ${message}`)}\n`
+            );
+            process.stdout.write(
+                `${formatMessage('info', `Setup link: ${setupUrl}`)}\n`
+            );
+        }
         return 0;
     }
 
