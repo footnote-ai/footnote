@@ -6,16 +6,13 @@
  * @footnote-ethics: medium - Safe ownership checks prevent accidental impact to unrelated operator resources.
  */
 
-import { spawn } from 'node:child_process';
 import path from 'node:path';
 import {
     ensureWebLocalUrlInSettings,
     LauncherError,
     selectAvailablePort,
     type FootnoteRuntime,
-    type LogLine,
     type LogsInput,
-    type ManagedResourceLabels,
     type StartInput,
     type StartResult,
     type StatusInput,
@@ -23,342 +20,21 @@ import {
     type StopInput,
     type StopResult,
 } from '@footnote/launcher-core';
-
-type DockerCommandResult = {
-    code: number;
-    stdout: string;
-    stderr: string;
-};
-
-type DockerInspectContainer = {
-    Id: string;
-    Name: string;
-    Config: {
-        Image: string;
-        Labels?: Record<string, string>;
-    };
-    State: {
-        Running: boolean;
-    };
-    NetworkSettings?: {
-        Ports?: Record<string, Array<{ HostPort: string }> | null>;
-    };
-};
-
-type DockerInspectVolume = {
-    Name: string;
-    Labels?: Record<string, string>;
-};
-
-const OWNERSHIP_LABELS = {
-    managed: 'dev.footnote.managed',
-    launcher: 'dev.footnote.launcher',
-    instance: 'dev.footnote.instance',
-    configRootHash: 'dev.footnote.configRootHash',
-} as const;
-
-const normalizeContainerName = (name: string): string =>
-    name.startsWith('/') ? name.slice(1) : name;
-
-const isNodeExecutableName = (name: string): boolean =>
-    /^node(\.exe)?$/i.test(name);
-
-const resolveInvocationName = (
-    argv: readonly string[] = process.argv
-): string => {
-    const executablePath = argv[0];
-    if (!executablePath) {
-        return 'footnote';
-    }
-
-    const executableName = path.basename(executablePath);
-    if (!executableName || isNodeExecutableName(executableName)) {
-        return 'footnote';
-    }
-
-    return executableName;
-};
-
-const formatCommand = (command: string): string =>
-    `${resolveInvocationName(process.argv)} ${command}`;
-
-const readLinesFromChunk = (
-    state: { buffered: string },
-    chunk: Buffer,
-    stream: LogLine['stream'],
-    enqueue: (line: LogLine) => void
-): void => {
-    state.buffered += chunk.toString('utf8');
-
-    let lineBreakIndex = state.buffered.indexOf('\n');
-    while (lineBreakIndex >= 0) {
-        const raw = state.buffered.slice(0, lineBreakIndex);
-        const text = raw.endsWith('\r') ? raw.slice(0, -1) : raw;
-        if (text.length > 0) {
-            enqueue({ text, stream });
-        }
-        state.buffered = state.buffered.slice(lineBreakIndex + 1);
-        lineBreakIndex = state.buffered.indexOf('\n');
-    }
-};
-
-const toDockerLabels = (
-    input: StartInput | StopInput | StatusInput | LogsInput
-): ManagedResourceLabels => ({
-    managed: 'true',
-    launcher: input.launcherId,
-    instance: input.instance,
-    configRootHash: input.configRootHash,
-});
-
-const labelsMatch = (
-    labels: Record<string, string> | undefined,
-    expected: ManagedResourceLabels
-): boolean => {
-    if (!labels) {
-        return false;
-    }
-
-    return (
-        labels[OWNERSHIP_LABELS.managed] === expected.managed &&
-        labels[OWNERSHIP_LABELS.launcher] === expected.launcher &&
-        labels[OWNERSHIP_LABELS.instance] === expected.instance &&
-        labels[OWNERSHIP_LABELS.configRootHash] === expected.configRootHash
-    );
-};
-
-const runDocker = async (
-    args: readonly string[],
-    allowFailure: boolean = false,
-    failureKind: 'environment' | 'runtime' = 'runtime'
-): Promise<DockerCommandResult> =>
-    new Promise((resolve, reject) => {
-        const child = spawn('docker', args, {
-            stdio: ['ignore', 'pipe', 'pipe'],
-        });
-
-        let stdout = '';
-        let stderr = '';
-
-        child.stdout.on('data', (chunk: Buffer) => {
-            stdout += chunk.toString('utf8');
-        });
-        child.stderr.on('data', (chunk: Buffer) => {
-            stderr += chunk.toString('utf8');
-        });
-
-        child.on('error', (error: NodeJS.ErrnoException) => {
-            if (error.code === 'ENOENT') {
-                reject(
-                    new LauncherError(
-                        'environment',
-                        [
-                            'Docker CLI was not found.',
-                            'Install Docker Desktop (or Docker Engine) and confirm `docker --version` works.',
-                        ].join(' '),
-                        error
-                    )
-                );
-                return;
-            }
-            reject(error);
-        });
-
-        child.on('close', (code) => {
-            const result: DockerCommandResult = {
-                code: code ?? 1,
-                stdout,
-                stderr,
-            };
-            if (!allowFailure && result.code !== 0) {
-                reject(
-                    new LauncherError(
-                        failureKind,
-                        `Docker command failed: docker ${args.join(' ')}\n${stderr.trim() || stdout.trim()}`
-                    )
-                );
-                return;
-            }
-            resolve(result);
-        });
-    });
-
-const parseInspect = <T>(stdout: string): T | null => {
-    const trimmed = stdout.trim();
-    if (!trimmed) {
-        return null;
-    }
-    const parsed = JSON.parse(trimmed) as T[];
-    return parsed[0] ?? null;
-};
-
-const waitForReadiness = async (
-    url: string,
-    timeoutMs: number
-): Promise<void> => {
-    const startedAt = Date.now();
-    const delayMs = 1_000;
-
-    while (true) {
-        const elapsedMs = Date.now() - startedAt;
-        const remainingMs = timeoutMs - elapsedMs;
-        if (remainingMs <= 0) {
-            break;
-        }
-
-        const attemptTimeoutMs = Math.max(1, Math.min(delayMs, remainingMs));
-        try {
-            const response = await fetch(url, {
-                signal: AbortSignal.timeout(attemptTimeoutMs),
-            });
-            if (response.status < 500) {
-                return;
-            }
-        } catch {
-            // Keep polling until timeout.
-        }
-
-        await new Promise<void>((resolve) => {
-            setTimeout(() => resolve(), attemptTimeoutMs);
-        });
-    }
-
-    throw new LauncherError(
-        'runtime',
-        [
-            `Runtime readiness timed out after ${Math.round(timeoutMs / 1_000)}s.`,
-            `URL: ${url}`,
-            `Run \`${formatCommand('logs')}\` for diagnostic output.`,
-        ].join(' ')
-    );
-};
-
-const buildLabelArgs = (labels: ManagedResourceLabels): string[] => [
-    '--label',
-    `${OWNERSHIP_LABELS.managed}=${labels.managed}`,
-    '--label',
-    `${OWNERSHIP_LABELS.launcher}=${labels.launcher}`,
-    '--label',
-    `${OWNERSHIP_LABELS.instance}=${labels.instance}`,
-    '--label',
-    `${OWNERSHIP_LABELS.configRootHash}=${labels.configRootHash}`,
-];
-
-const inspectContainer = async (
-    containerName: string
-): Promise<DockerInspectContainer | null> => {
-    const result = await runDocker(
-        ['inspect', '--type', 'container', containerName],
-        true
-    );
-    if (result.code !== 0) {
-        return null;
-    }
-    return parseInspect<DockerInspectContainer>(result.stdout);
-};
-
-const inspectVolume = async (
-    volumeName: string
-): Promise<DockerInspectVolume | null> => {
-    const result = await runDocker(['volume', 'inspect', volumeName], true);
-    if (result.code !== 0) {
-        return null;
-    }
-    return parseInspect<DockerInspectVolume>(result.stdout);
-};
-
-const verifyDockerAvailable = async (): Promise<void> => {
-    await runDocker(['--version']);
-
-    const daemonResult = await runDocker(['info'], true);
-    if (daemonResult.code !== 0) {
-        throw new LauncherError(
-            'environment',
-            [
-                'Docker daemon is not reachable.',
-                `Start Docker Desktop (or Docker Engine) and retry \`${formatCommand('start')}\`.`,
-            ].join(' ')
-        );
-    }
-};
-
-const ensureManagedVolume = async (
-    volumeName: string,
-    labels: ManagedResourceLabels
-): Promise<void> => {
-    const volume = await inspectVolume(volumeName);
-
-    if (!volume) {
-        await runDocker([
-            'volume',
-            'create',
-            ...buildLabelArgs(labels),
-            volumeName,
-        ]);
-        return;
-    }
-
-    if (!labelsMatch(volume.Labels, labels)) {
-        throw new LauncherError(
-            'runtime',
-            `Refusing to use Docker volume "${volumeName}" because ownership labels do not match launcher-managed resources.`
-        );
-    }
-};
-
-const ensureManagedContainerForStart = async (
-    containerName: string,
-    labels: ManagedResourceLabels
-): Promise<void> => {
-    const container = await inspectContainer(containerName);
-    if (!container) {
-        return;
-    }
-
-    const currentName = normalizeContainerName(container.Name);
-    if (currentName !== containerName) {
-        throw new LauncherError(
-            'runtime',
-            `Container name mismatch while resolving launcher-owned resource: expected "${containerName}", got "${currentName}".`
-        );
-    }
-
-    if (!labelsMatch(container.Config.Labels, labels)) {
-        throw new LauncherError(
-            'runtime',
-            `Refusing to modify Docker container "${containerName}" because ownership labels do not match launcher-managed resources.`
-        );
-    }
-
-    await runDocker(['rm', '--force', containerName]);
-};
-
-const ensureOwnedContainerForLifecycle = async (
-    containerName: string,
-    labels: ManagedResourceLabels
-): Promise<DockerInspectContainer | null> => {
-    const container = await inspectContainer(containerName);
-    if (!container) {
-        return null;
-    }
-
-    const currentName = normalizeContainerName(container.Name);
-    if (currentName !== containerName) {
-        throw new LauncherError(
-            'runtime',
-            `Container name mismatch while resolving launcher-owned resource: expected "${containerName}", got "${currentName}".`
-        );
-    }
-
-    if (!labelsMatch(container.Config.Labels, labels)) {
-        throw new LauncherError(
-            'runtime',
-            `Refusing lifecycle operation on "${containerName}" because required ownership labels are missing or mismatched.`
-        );
-    }
-
-    return container;
-};
+import { runDocker } from './docker/command.js';
+import { inspectContainer } from './docker/inspect.js';
+import {
+    ensureManagedContainerForStart,
+    ensureManagedVolume,
+    ensureOwnedContainerForLifecycle,
+    verifyDockerAvailable,
+} from './docker/lifecycleGuards.js';
+import { streamDockerLogs } from './docker/logStream.js';
+import {
+    buildLabelArgs,
+    labelsMatch,
+    toDockerLabels,
+} from './docker/labels.js';
+import { waitForReadiness } from './docker/readiness.js';
 
 /**
  * Docker-backed authoritative runtime adapter for launcher lifecycle operations.
@@ -576,7 +252,7 @@ export class DockerRuntime implements FootnoteRuntime {
      * Streams logs from the launcher-owned container.
      * Throws when no owned container is present; never mutates runtime resources.
      */
-    public async *logs(input: LogsInput): AsyncIterable<LogLine> {
+    public async *logs(input: LogsInput) {
         const labels = toDockerLabels(input);
         const container = await ensureOwnedContainerForLifecycle(
             input.containerName,
@@ -590,89 +266,9 @@ export class DockerRuntime implements FootnoteRuntime {
             );
         }
 
-        const args = ['logs'];
-        if (input.follow) {
-            args.push('--follow');
-        }
-        args.push(input.containerName);
-
-        const child = spawn('docker', args, {
-            stdio: ['ignore', 'pipe', 'pipe'],
+        yield* streamDockerLogs({
+            containerName: input.containerName,
+            follow: input.follow,
         });
-
-        const queue: Array<LogLine | null> = [];
-        let resolveNext: (() => void) | null = null;
-        let terminalError: unknown;
-
-        const notify = (): void => {
-            if (resolveNext) {
-                resolveNext();
-                resolveNext = null;
-            }
-        };
-
-        const enqueue = (line: LogLine | null): void => {
-            queue.push(line);
-            notify();
-        };
-
-        const stdoutState = { buffered: '' };
-        const stderrState = { buffered: '' };
-
-        child.stdout.on('data', (chunk: Buffer) => {
-            readLinesFromChunk(stdoutState, chunk, 'stdout', enqueue);
-        });
-        child.stderr.on('data', (chunk: Buffer) => {
-            readLinesFromChunk(stderrState, chunk, 'stderr', enqueue);
-        });
-
-        child.on('error', (error: NodeJS.ErrnoException) => {
-            if (error.code === 'ENOENT') {
-                terminalError = new LauncherError(
-                    'environment',
-                    'Docker CLI was not found while streaming logs.',
-                    error
-                );
-                enqueue(null);
-                return;
-            }
-            terminalError = error;
-            enqueue(null);
-        });
-
-        child.on('close', (code) => {
-            if (stdoutState.buffered.length > 0) {
-                enqueue({ text: stdoutState.buffered, stream: 'stdout' });
-            }
-            if (stderrState.buffered.length > 0) {
-                enqueue({ text: stderrState.buffered, stream: 'stderr' });
-            }
-            if (code !== 0) {
-                terminalError ??= new LauncherError(
-                    'runtime',
-                    `Docker command failed: docker ${args.join(' ')}\ndocker logs exited with status ${code ?? 1}`
-                );
-            }
-            enqueue(null);
-        });
-
-        while (true) {
-            if (queue.length === 0) {
-                await new Promise<void>((resolve) => {
-                    resolveNext = resolve;
-                });
-            }
-
-            const item = queue.shift();
-            if (item === null) {
-                if (terminalError) {
-                    throw terminalError;
-                }
-                return;
-            }
-            if (item) {
-                yield item;
-            }
-        }
     }
 }
