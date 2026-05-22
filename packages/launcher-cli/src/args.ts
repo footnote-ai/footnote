@@ -9,7 +9,9 @@
 import { LauncherError } from '@footnote/launcher-core';
 
 export type LauncherCommand =
+    | 'info'
     | 'start'
+    | 'update'
     | 'stop'
     | 'status'
     | 'open'
@@ -40,7 +42,7 @@ const expectValue = (
 export const parseLauncherArgs = (argv: readonly string[]): LauncherArgs => {
     if (argv.length === 0) {
         return {
-            command: 'start',
+            command: 'info',
             headless: false,
             follow: true,
         };
@@ -56,7 +58,9 @@ export const parseLauncherArgs = (argv: readonly string[]): LauncherArgs => {
     }
 
     if (
+        first !== 'info' &&
         first !== 'start' &&
+        first !== 'update' &&
         first !== 'stop' &&
         first !== 'status' &&
         first !== 'open' &&

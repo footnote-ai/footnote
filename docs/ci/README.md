@@ -86,6 +86,10 @@ This checks the launcher packages without doing the full SEA release build.
 
 It runs on pushes to `main` and on pull requests. It builds the launcher on Linux, macOS, and Windows. It also checks that the help command works and that `footnote status --config-dir <temp>` does not create config files.
 
+Launcher invocation behavior: `footnote` with no command routes to `footnote info`.
+CI workflows should keep using explicit commands (`footnote status`, `footnote start`,
+`footnote update`) for deterministic automation.
+
 If this fails, check which operating system failed first. A Windows-only failure is often a path or shell issue.
 
 ### `launcher-sea-spike.yml`

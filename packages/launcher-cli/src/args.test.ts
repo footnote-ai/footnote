@@ -21,3 +21,22 @@ test('parseLauncherArgs keeps setup command compatible with shared options', () 
     assert.equal(parsed.command, 'setup');
     assert.equal(parsed.configDir, './tmp');
 });
+
+test('parseLauncherArgs defaults no-arg command to info', () => {
+    const parsed = parseLauncherArgs([]);
+    assert.equal(parsed.command, 'info');
+    assert.equal(parsed.headless, false);
+    assert.equal(parsed.follow, true);
+});
+
+test('parseLauncherArgs accepts info command', () => {
+    const parsed = parseLauncherArgs(['info']);
+    assert.equal(parsed.command, 'info');
+    assert.equal(parsed.headless, false);
+});
+
+test('parseLauncherArgs accepts update command', () => {
+    const parsed = parseLauncherArgs(['update']);
+    assert.equal(parsed.command, 'update');
+    assert.equal(parsed.headless, false);
+});
