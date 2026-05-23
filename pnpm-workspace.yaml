@@ -3,6 +3,18 @@ packages:
 syncInjectedDepsAfterScripts:
     - build
 injectWorkspacePackages: true
+overrides:
+    '@types/react': 19.2.14
+    '@types/react-dom': 19.2.3
+    csstype: 3.2.3
+onlyBuiltDependencies:
+    - better-sqlite3
+    - '@swc/core'
+    - esbuild
+    - protobufjs
+    - '@discordjs/opus'
+    - bufferutil
+    - zlib-sync
 catalog:
     '@discordjs/opus': ^0.10.0
     '@discordjs/voice': ^0.19.2

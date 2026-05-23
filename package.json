@@ -2,9 +2,6 @@
     "name": "footnote",
     "private": true,
     "packageManager": "pnpm@10.27.0",
-    "workspaces": [
-        "packages/*"
-    ],
     "scripts": {
         "start": "node scripts/start.cjs",
         "dev": "concurrently \"pnpm dev:backend\" \"pnpm dev:web\"",
@@ -86,22 +83,6 @@
         "repomix": "catalog:",
         "tsx": "catalog:",
         "typescript": "catalog:"
-    },
-    "pnpm": {
-        "overrides": {
-            "@types/react": "19.2.14",
-            "@types/react-dom": "19.2.3",
-            "csstype": "3.2.3"
-        },
-        "onlyBuiltDependencies": [
-            "better-sqlite3",
-            "@swc/core",
-            "esbuild",
-            "protobufjs",
-            "@discordjs/opus",
-            "bufferutil",
-            "zlib-sync"
-        ]
     },
     "dependencies": {
         "dotenv": "catalog:",
