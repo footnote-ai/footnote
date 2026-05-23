@@ -12,15 +12,6 @@ Footnote is an AI framework that tries to show its work.
 
 - Download the binary from [Releases](https://github.com/footnote-ai/footnote/releases)
 - Double-click the binary to open the launcher menu.
-- Or run explicit commands:
-
-```bash
-footnote start
-footnote setup
-footnote update
-```
-
-That's it!
 
 ### Advanced Setup
 
