@@ -25,6 +25,7 @@ export type LauncherArgs = {
     headless: boolean;
     tag?: string;
     follow: boolean;
+    setupForce: boolean;
 };
 
 const expectValue = (
@@ -45,6 +46,7 @@ export const parseLauncherArgs = (argv: readonly string[]): LauncherArgs => {
             command: 'info',
             headless: false,
             follow: true,
+            setupForce: false,
         };
     }
 
@@ -54,6 +56,7 @@ export const parseLauncherArgs = (argv: readonly string[]): LauncherArgs => {
             command: 'help',
             headless: false,
             follow: true,
+            setupForce: false,
         };
     }
 
@@ -74,6 +77,7 @@ export const parseLauncherArgs = (argv: readonly string[]): LauncherArgs => {
         command: first,
         headless: false,
         follow: true,
+        setupForce: false,
     };
 
     for (let index = 1; index < argv.length; index += 1) {
@@ -123,6 +127,15 @@ export const parseLauncherArgs = (argv: readonly string[]): LauncherArgs => {
                     );
                 }
                 args.follow = false;
+                break;
+            case '--force':
+                if (args.command !== 'setup') {
+                    throw new LauncherError(
+                        'usage',
+                        '--force is only supported for the setup command.'
+                    );
+                }
+                args.setupForce = true;
                 break;
             default:
                 throw new LauncherError('usage', `Unknown option "${token}".`);

@@ -7,6 +7,7 @@
  */
 
 import path from 'node:path';
+import { rename } from 'node:fs/promises';
 import {
     formatMessage,
     formatSteps,
@@ -31,7 +32,12 @@ import type { CommandContext } from '../types.js';
 import { writeLine } from '../writeLine.js';
 
 export const handleSetupCommand = async (
-    context: CommandContext
+    context: CommandContext,
+    options: {
+        force: boolean;
+    } = {
+        force: false,
+    }
 ): Promise<number> => {
     const { configRoot, configRootHash, paths, runtime, dependencies } =
         context;
@@ -43,11 +49,22 @@ export const handleSetupCommand = async (
     const setupRequiredNow = await dependencies.isSettingsFileMissingFn(
         paths.settingsFilePath
     );
-    const shouldShowBootstrap = setupRequiredNow;
+    const shouldShowBootstrap = setupRequiredNow || options.force;
 
-    if (!shouldShowBootstrap) {
+    if (!setupRequiredNow && options.force) {
+        const backupPath = `${paths.settingsFilePath}.setup-backup-${Date.now()}`;
+        await rename(paths.settingsFilePath, backupPath);
+        writeLine(
+            context,
+            formatMessage(
+                'warn',
+                `Forced setup mode moved existing ${path.basename(paths.settingsFilePath)} to ${path.basename(backupPath)}.`
+            )
+        );
+    } else if (!shouldShowBootstrap) {
         const openCommand = dependencies.formatCommand('open');
         const statusCommand = dependencies.formatCommand('status');
+        const forcedSetupCommand = dependencies.formatCommand('setup --force');
         throw new LauncherError(
             'environment',
             formatSteps(
@@ -55,6 +72,7 @@ export const handleSetupCommand = async (
                 [
                     `Run \`${openCommand}\` to open the current runtime URL.`,
                     `Run \`${statusCommand}\` to inspect runtime state.`,
+                    `Run \`${forcedSetupCommand}\` to force first-setup and back up the current settings file.`,
                 ]
             )
         );

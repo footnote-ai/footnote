@@ -22,7 +22,10 @@ import {
     formatCommandForInvocation,
     resolveInvocationName,
 } from './invocation.js';
-import { promptInfoMenuActionDefault } from './menu.js';
+import {
+    promptInfoMenuActionDefault,
+    promptSetupForceConfirmationDefault,
+} from './menu.js';
 import type { CliDependencies } from './types.js';
 
 const isSetupRequiredByMissingSettingsFile = async (
@@ -58,6 +61,7 @@ export const DEFAULT_CLI_DEPENDENCIES: CliDependencies = {
     isInteractiveTty: () =>
         Boolean(process.stdin.isTTY && process.stdout.isTTY),
     promptInfoMenuAction: promptInfoMenuActionDefault,
+    promptSetupForceConfirmation: promptSetupForceConfirmationDefault,
     nowIso: () => new Date().toISOString(),
     formatCommand: (command: string) =>
         formatCommandForInvocation('footnote', command),

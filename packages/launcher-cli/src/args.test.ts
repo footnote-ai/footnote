@@ -14,12 +14,27 @@ test('parseLauncherArgs accepts setup command', () => {
     const parsed = parseLauncherArgs(['setup']);
     assert.equal(parsed.command, 'setup');
     assert.equal(parsed.headless, false);
+    assert.equal(parsed.setupForce, false);
 });
 
 test('parseLauncherArgs keeps setup command compatible with shared options', () => {
     const parsed = parseLauncherArgs(['setup', '--config-dir', './tmp']);
     assert.equal(parsed.command, 'setup');
     assert.equal(parsed.configDir, './tmp');
+    assert.equal(parsed.setupForce, false);
+});
+
+test('parseLauncherArgs accepts setup --force', () => {
+    const parsed = parseLauncherArgs(['setup', '--force']);
+    assert.equal(parsed.command, 'setup');
+    assert.equal(parsed.setupForce, true);
+});
+
+test('parseLauncherArgs rejects --force for non-setup commands', () => {
+    assert.throws(
+        () => parseLauncherArgs(['start', '--force']),
+        /--force is only supported for the setup command/
+    );
 });
 
 test('parseLauncherArgs defaults no-arg command to info', () => {

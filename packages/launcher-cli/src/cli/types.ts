@@ -43,6 +43,7 @@ export type CliDependencies = {
     isSettingsFileMissingFn: (settingsFilePath: string) => Promise<boolean>;
     isInteractiveTty: () => boolean;
     promptInfoMenuAction: () => Promise<InfoMenuAction>;
+    promptSetupForceConfirmation: () => Promise<boolean>;
     nowIso: () => string;
     formatCommand: (command: string) => string;
     writeStdout: (text: string) => void;

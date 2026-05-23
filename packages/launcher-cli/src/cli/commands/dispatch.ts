@@ -29,7 +29,9 @@ export const executeCommand = async (
                 tagOverride: context.parsed.tag,
             });
         case 'setup':
-            return handleSetupCommand(context);
+            return handleSetupCommand(context, {
+                force: context.parsed.setupForce,
+            });
         case 'update':
             return handleUpdateCommand(context);
         case 'status':

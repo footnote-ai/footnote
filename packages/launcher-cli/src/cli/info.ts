@@ -17,7 +17,7 @@ import { writeLine } from './writeLine.js';
 export const handleInfoCommand = async (
     context: CommandContext
 ): Promise<number> => {
-    const { dependencies } = context;
+    const { dependencies, parsed, paths } = context;
 
     if (!dependencies.isInteractiveTty()) {
         // Fail-open behavior for automation: status errors are downgraded to warnings
@@ -49,6 +49,23 @@ export const handleInfoCommand = async (
         try {
             if (action === 'logs_no_follow') {
                 await handleLogsCommand(context, false);
+                continue;
+            }
+            if (action === 'setup') {
+                const setupRequiredNow =
+                    await dependencies.isSettingsFileMissingFn(
+                        paths.settingsFilePath
+                    );
+                const setupForce =
+                    !setupRequiredNow &&
+                    (await dependencies.promptSetupForceConfirmation());
+                await executeCommand(action, {
+                    ...context,
+                    parsed: {
+                        ...parsed,
+                        setupForce,
+                    },
+                });
                 continue;
             }
             await executeCommand(action, context);

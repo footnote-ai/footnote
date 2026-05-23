@@ -8,6 +8,9 @@
 
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import os from 'node:os';
+import path from 'node:path';
+import { mkdtemp, readFile, writeFile } from 'node:fs/promises';
 import type {
     FootnoteRuntime,
     LauncherConfigPaths,
@@ -337,4 +340,68 @@ test('runCli info menu maps Start selection to start command flow', async () => 
     assert.equal(exitCode, 0);
     assert.equal(calls.start, 1);
     assert.equal(calls.openInBrowser, 1);
+});
+
+test('runCli setup --force backs up existing settings and opens setup link', async () => {
+    const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'footnote-setup-'));
+    const settingsFilePath = path.join(tempRoot, 'footnote.yaml');
+    await writeFile(settingsFilePath, 'server-port: 8080\n', 'utf8');
+    const tempPaths: LauncherConfigPaths = {
+        configRoot: tempRoot,
+        envFilePath: path.join(tempRoot, '.env'),
+        settingsFilePath,
+        launcherMetadataPath: path.join(tempRoot, 'launcher.metadata.json'),
+    };
+
+    let openedUrl: string | null = null;
+
+    const exitCode = await runCliWithDeps(['setup', '--force'], {
+        resolveConfigPathsFn: () => tempPaths,
+        bootstrapConfigFilesFn: async () => ({
+            createdPaths: [],
+            metadata: {
+                version: 1,
+                runtime: 'docker',
+                instance: 'default',
+                imageRepository: 'ghcr.io/footnote-ai/footnote',
+                defaultTag: 'stable',
+                setup: {
+                    lastBootstrapEvent: {
+                        event: 'footnote.setup.bootstrap',
+                        setupPath: '/setup?code=test-code',
+                        setupUrl: 'http://localhost:8080/setup?code=test-code',
+                        expiresAt: '2099-01-01T00:00:00.000Z',
+                        capturedAtIso: '2026-05-22T00:00:00.000Z',
+                    },
+                },
+            },
+        }),
+        createRuntime: () => ({
+            ...createNoopRuntime(),
+            async status() {
+                return {
+                    state: 'running',
+                    containerName: 'footnote-server',
+                    containerId: 'container-1',
+                    url: 'http://localhost:8080',
+                    port: 8080,
+                    imageRef: 'ghcr.io/footnote-ai/footnote:stable',
+                    configRoot: tempRoot,
+                    volumeName: 'footnote_data',
+                    ownershipMatches: true,
+                };
+            },
+        }),
+        isSettingsFileMissingFn: async () => false,
+        openInBrowserFn: async (url: string) => {
+            openedUrl = url;
+        },
+        writeStdout: () => {
+            // Ignore output.
+        },
+    });
+
+    assert.equal(exitCode, 0);
+    assert.equal(openedUrl, 'http://localhost:8080/setup?code=test-code');
+    await assert.rejects(() => readFile(settingsFilePath, 'utf8'), /ENOENT/);
 });

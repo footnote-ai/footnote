@@ -20,7 +20,7 @@ export const printHelp = (dependencies: CliDependencies): void => {
         'Commands:',
         '  info    Show launcher info and interactive menu in TTY mode',
         '  start   Start Footnote using Docker + GHCR image',
-        '  setup   Open first-setup link when footnote.yaml is missing',
+        '  setup   Open first-setup link (or use --force to re-run first-setup)',
         '  update  Restart launcher-managed runtime with persisted/default tag',
         '  stop    Stop/remove launcher-managed container',
         '  status  Show runtime status without bootstrapping config files',
@@ -31,6 +31,7 @@ export const printHelp = (dependencies: CliDependencies): void => {
         '  --config-dir <path>  Override launcher config root',
         '  --tag <imageTag>     Start with a specific GHCR tag and persist it',
         '  --headless           Do not auto-open browser on start',
+        '  --force              For setup, back up footnote.yaml and force first-setup',
         '  --no-follow          For logs, print current logs and exit',
     ];
     dependencies.writeStdout(`${lines.join('\n')}\n`);

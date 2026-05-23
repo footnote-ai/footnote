@@ -59,3 +59,24 @@ export const promptInfoMenuActionDefault =
             readline.close();
         }
     };
+
+export const promptSetupForceConfirmationDefault =
+    async (): Promise<boolean> => {
+        const readline = createInterface({
+            input: process.stdin,
+            output: process.stdout,
+        });
+
+        try {
+            const answer = (
+                await readline.question(
+                    'footnote.yaml exists. Force setup by backing it up and reopening first-setup? (y/N): '
+                )
+            )
+                .trim()
+                .toLowerCase();
+            return answer === 'y' || answer === 'yes';
+        } finally {
+            readline.close();
+        }
+    };
