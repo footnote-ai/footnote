@@ -78,7 +78,7 @@ export const handleSetupCommand = async (
         );
     }
 
-    const statusBefore = await runtime.status({
+    let statusBefore = await runtime.status({
         configRoot,
         configRootHash,
         instance: metadata.instance,
@@ -86,6 +86,39 @@ export const handleSetupCommand = async (
         containerName: DEFAULT_CONTAINER_NAME,
         volumeName: DEFAULT_VOLUME_NAME,
     });
+    if (options.force && statusBefore.state === 'running') {
+        if (statusBefore.ownershipMatches) {
+            await runtime.stop({
+                configRoot,
+                configRootHash,
+                instance: metadata.instance,
+                launcherId: LAUNCHER_ID,
+                containerName: DEFAULT_CONTAINER_NAME,
+                volumeName: DEFAULT_VOLUME_NAME,
+            });
+            writeLine(
+                context,
+                formatMessage(
+                    'info',
+                    'Forced setup mode restarted the launcher-managed runtime to issue a fresh setup link.'
+                )
+            );
+            statusBefore = {
+                ...statusBefore,
+                state: 'not_found',
+                url: undefined,
+                port: undefined,
+            };
+        } else {
+            writeLine(
+                context,
+                formatMessage(
+                    'warn',
+                    'Forced setup mode detected a non-launcher runtime; skipping auto-restart and continuing setup-link discovery.'
+                )
+            );
+        }
+    }
 
     let activeMetadata: LauncherMetadata = metadata;
     if (

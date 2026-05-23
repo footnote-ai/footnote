@@ -354,6 +354,8 @@ test('runCli setup --force backs up existing settings and opens setup link', asy
     };
 
     let openedUrl: string | null = null;
+    let stopCalls = 0;
+    let startCalls = 0;
 
     const exitCode = await runCliWithDeps(['setup', '--force'], {
         resolveConfigPathsFn: () => tempPaths,
@@ -378,6 +380,27 @@ test('runCli setup --force backs up existing settings and opens setup link', asy
         }),
         createRuntime: () => ({
             ...createNoopRuntime(),
+            async start() {
+                startCalls += 1;
+                return {
+                    state: 'running',
+                    url: 'http://localhost:8080',
+                    port: 8080,
+                    tag: 'stable',
+                    imageRef: 'ghcr.io/footnote-ai/footnote:stable',
+                    containerId: 'container-setup-force',
+                    volumeName: 'footnote_data',
+                    warnings: [],
+                };
+            },
+            async stop() {
+                stopCalls += 1;
+                return {
+                    stopped: true,
+                    removed: true,
+                    message: 'stopped',
+                };
+            },
             async status() {
                 return {
                     state: 'running',
@@ -402,6 +425,8 @@ test('runCli setup --force backs up existing settings and opens setup link', asy
     });
 
     assert.equal(exitCode, 0);
+    assert.equal(stopCalls, 1);
+    assert.equal(startCalls, 1);
     assert.equal(openedUrl, 'http://localhost:8080/setup?code=test-code');
     await assert.rejects(() => readFile(settingsFilePath, 'utf8'), /ENOENT/);
 });
