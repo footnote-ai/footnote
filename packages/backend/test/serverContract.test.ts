@@ -588,10 +588,15 @@ test('first-setup contract: /config.json setup-required + setup session auth + f
     );
     const setupEvent = JSON.parse(setupEventJson) as {
         setupPath: string;
+        setupUrl: string;
     };
     const codeFromPath = setupEvent.setupPath.split('#code=')[1] ?? '';
     const setupCode = decodeURIComponent(codeFromPath);
     assert.ok(setupCode.startsWith('fn_setup_'));
+    assert.match(
+        setupEvent.setupUrl,
+        /^http:\/\/localhost:3000\/setup#code=fn_setup_/
+    );
 
     const sessionResponse = await fetch(
         `${harness.baseUrl}/api/setup/session`,
@@ -676,6 +681,37 @@ test('first-setup contract: /config.json setup-required + setup session auth + f
         setup?: { required?: boolean };
     };
     assert.equal(configAfterWritePayload.setup?.required, false);
+});
+
+test('first-setup setup-event uses Fly hostname when FLY_APP_NAME is set', async (t) => {
+    if (!(await canBindPort(3000))) {
+        t.skip(
+            'Skipped setup-event fly-url contract because default port 3000 is busy in this environment.'
+        );
+        return;
+    }
+    const harness = await startBackendServerContractHarness({
+        envOverrides: {
+            FLY_APP_NAME: 'footnote',
+        },
+        createSettingsFile: false,
+    });
+    t.after(async () => {
+        await harness.stop();
+    });
+
+    const setupEventJson = await waitForSetupEventFromHarnessOutput(
+        harness.readProcessOutput
+    );
+    const setupEvent = JSON.parse(setupEventJson) as {
+        setupPath: string;
+        setupUrl: string;
+    };
+    assert.match(
+        setupEvent.setupUrl,
+        /^https:\/\/footnote\.fly\.dev\/setup#code=fn_setup_/
+    );
+    assert.match(setupEvent.setupPath, /^\/setup#code=fn_setup_/);
 });
 
 test('first-write sentinel transitions to normal ETag checks once settings file exists', async (t) => {

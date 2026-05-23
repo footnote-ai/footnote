@@ -748,6 +748,35 @@ const shutdownGracefully = (signal: 'SIGINT' | 'SIGTERM'): void => {
 process.once('SIGINT', () => shutdownGracefully('SIGINT'));
 process.once('SIGTERM', () => shutdownGracefully('SIGTERM'));
 
+const resolveSetupBaseUrl = ({
+    flyAppName,
+    port,
+}: {
+    flyAppName: string | null;
+    port: number;
+}): string => {
+    if (flyAppName) {
+        return `https://${flyAppName}.fly.dev`;
+    }
+    return `http://localhost:${port}`;
+};
+
+const formatSetupExpiry = (
+    expiresAtIso: string,
+    nowMs: number = Date.now()
+): string => {
+    const expiresAtMs = Date.parse(expiresAtIso);
+    if (Number.isNaN(expiresAtMs)) {
+        return `Expires: ${expiresAtIso}`;
+    }
+    const minutesRemaining = Math.max(
+        0,
+        Math.ceil((expiresAtMs - nowMs) / 60_000)
+    );
+    const minutesLabel = minutesRemaining <= 0 ? '<1m' : `${minutesRemaining}m`;
+    return `Expires: ${minutesLabel} (${expiresAtIso})`;
+};
+
 // --- Server startup ---
 const port = runtimeConfig.server.port;
 const host = runtimeConfig.server.host;
@@ -764,7 +793,11 @@ server.listen(port, host, () => {
             return;
         }
         const setupPath = `/setup#code=${encodeURIComponent(issued.code)}`;
-        const setupUrl = `http://localhost:${port}${setupPath}`;
+        const setupBaseUrl = resolveSetupBaseUrl({
+            flyAppName: runtimeConfig.runtime.flyAppName,
+            port,
+        });
+        const setupUrl = `${setupBaseUrl}${setupPath}`;
         logger.info(
             `[SETUP_EVENT] ${JSON.stringify({
                 event: 'footnote.setup.bootstrap',
@@ -777,7 +810,7 @@ server.listen(port, host, () => {
             [
                 'First setup is required because footnote.yaml is missing.',
                 `Setup URL: ${setupUrl}`,
-                `Expires: ${issued.expiresAt}`,
+                formatSetupExpiry(issued.expiresAt),
             ].join('\n')
         );
     })().catch((error) => {
