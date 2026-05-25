@@ -3,70 +3,28 @@
 /* global __dirname, process, console */
 
 /**
- * @description: Generates deterministic canonical footnote.yaml defaults for server runtime settings.
+ * @description: Generates canonical footnote.yaml defaults from shared config-spec template authority.
  * @footnote-scope: utility
  * @footnote-module: GenerateFootnoteSettings
- * @footnote-risk: medium - Wrong defaults here can mislead first-run setup behavior.
+ * @footnote-risk: medium - Incorrect generation can mislead first-run setup behavior.
  * @footnote-ethics: low - Developer/operator bootstrap helper only.
  */
 
 const fs = require('node:fs');
 const path = require('node:path');
+const { spawnSync } = require('node:child_process');
+const { pathToFileURL } = require('node:url');
 
 const repoRoot = path.resolve(__dirname, '..');
 const defaultOutputPath = path.join(repoRoot, 'footnote.yaml');
 const lineEnding = process.platform === 'win32' ? '\r\n' : '\n';
-
-const templateLines = [
-    '# Footnote canonical settings',
-    '#',
-    '# Rule of thumb:',
-    '# - normal runtime settings live in this file',
-    '# - secrets stay in environment variables / Fly secrets',
-    '# - for discord-bots credentials, put env var NAMES here, never secret values',
-    '',
-    'version: 1',
-    '',
-    '# Backend HTTP runtime',
-    'server:',
-    '  host: "::"',
-    '  port: 3000',
-    '  trust-proxy: false',
-    '  data-dir: "/data"',
-    '',
-    '# Browser-facing policy defaults',
-    'web:',
-    '  allowed-origins:',
-    '    - "http://localhost:8080"',
-    '    - "http://localhost:3000"',
-    '  frame-ancestors:',
-    '    - "\'self\'"',
-    '    - "http://localhost:8080"',
-    '    - "http://localhost:3000"',
-    '',
-    '# Discord bots supervised by the server process.',
-    '# Most users can keep this empty at first.',
-    'discord-bots: []',
-    '',
-    '# Example (uncomment and fill env key names only):',
-    '# discord-bots:',
-    '#   - id: "main-discord"',
-    '#     enabled: true',
-    '#     required: false',
-    '#     credentials:',
-    '#       discord-token-env: "DISCORD_TOKEN"',
-    '#       discord-client-id-env: "DISCORD_CLIENT_ID"',
-    '#       discord-guild-ids-env: "DISCORD_GUILD_IDS"',
-    '#       discord-user-id-env: "DISCORD_USER_ID"',
-    '#       incident-secret-env: "INCIDENT_PSEUDONYMIZATION_SECRET"',
-    '#     profile:',
-    '#       id: "default"',
-    '#       display-name: "Footnote"',
-    '#       overlay-path: ""',
-    '#       mention-aliases: []',
-];
-
-const renderTemplate = () => `${templateLines.join(lineEnding)}${lineEnding}`;
+const configSpecDistIndexPath = path.join(
+    repoRoot,
+    'packages',
+    'config-spec',
+    'dist',
+    'index.js'
+);
 
 const parseArgs = () => {
     const args = process.argv.slice(2);
@@ -93,7 +51,60 @@ const parseArgs = () => {
     return { outputPath, ifMissing };
 };
 
-const main = () => {
+const ensureConfigSpecBuild = () => {
+    const result = spawnSync(
+        'pnpm --filter @footnote/config-spec run build:dev',
+        {
+            cwd: repoRoot,
+            stdio: 'inherit',
+            shell: true,
+        }
+    );
+
+    if (result.error) {
+        throw result.error;
+    }
+
+    if ((result.status ?? 1) !== 0) {
+        throw new Error(
+            'Unable to build @footnote/config-spec before rendering settings template.'
+        );
+    }
+};
+
+const loadTemplateRenderer = async () => {
+    const loadModule = async () =>
+        import(pathToFileURL(configSpecDistIndexPath).href);
+
+    let hasRetriedBuild = false;
+    let module;
+    try {
+        module = await loadModule();
+    } catch {
+        ensureConfigSpecBuild();
+        hasRetriedBuild = true;
+        module = await loadModule();
+    }
+
+    if (
+        typeof module.renderSettingsTemplateYaml !== 'function' &&
+        !hasRetriedBuild
+    ) {
+        ensureConfigSpecBuild();
+        hasRetriedBuild = true;
+        module = await loadModule();
+    }
+
+    if (typeof module.renderSettingsTemplateYaml !== 'function') {
+        throw new Error(
+            'renderSettingsTemplateYaml export was not found in @footnote/config-spec after one build retry.'
+        );
+    }
+
+    return module.renderSettingsTemplateYaml;
+};
+
+const main = async () => {
     const { outputPath, ifMissing } = parseArgs();
     if (ifMissing && fs.existsSync(outputPath)) {
         console.log(
@@ -102,10 +113,22 @@ const main = () => {
         return;
     }
 
+    const renderSettingsTemplateYaml = await loadTemplateRenderer();
+    const output = renderSettingsTemplateYaml({
+        target: 'auto',
+        env: process.env,
+        lineEnding,
+    });
+
     const parentDir = path.dirname(outputPath);
     fs.mkdirSync(parentDir, { recursive: true });
-    fs.writeFileSync(outputPath, renderTemplate(), 'utf8');
+    fs.writeFileSync(outputPath, output, 'utf8');
     console.log(`[settings:init] Wrote ${outputPath}`);
 };
 
-main();
+void main().catch((error) => {
+    console.error(
+        `[settings:init] Failed: ${error instanceof Error ? error.message : String(error)}`
+    );
+    process.exitCode = 1;
+});

@@ -16,27 +16,6 @@ import Footer from '@components/Footer';
 import { parseSetupCodeFromHash } from '../utils/setupFlow';
 
 const MISSING_SETTINGS_SENTINEL = '"footnote-settings-missing"';
-const DEFAULT_SETUP_YAML = [
-    'version: 1',
-    '',
-    'server:',
-    "    host: '::'",
-    '    port: 3000',
-    '    trust-proxy: false',
-    "    data-dir: '/data'",
-    '',
-    'web:',
-    '    allowed-origins:',
-    "        - 'http://localhost:8080'",
-    "        - 'http://localhost:3000'",
-    '    frame-ancestors:',
-    `        - "'self'"`,
-    "        - 'http://localhost:8080'",
-    "        - 'http://localhost:3000'",
-    '',
-    'discord-bots: []',
-    '',
-].join('\n');
 
 type ExchangeState =
     | { status: 'idle' }
@@ -79,8 +58,9 @@ const SetupPage = (): JSX.Element => {
     const [yamlState, setYamlState] = useState<LoadYamlState>({
         status: 'idle',
     });
-    const [yamlText, setYamlText] = useState<string>(DEFAULT_SETUP_YAML);
+    const [yamlText, setYamlText] = useState<string>('');
     const [ifMatch, setIfMatch] = useState<string>(MISSING_SETTINGS_SENTINEL);
+    const [yamlRetryKey, setYamlRetryKey] = useState(0);
     const [validationErrors, setValidationErrors] = useState<
         AdminSettingsValidationError[]
     >([]);
@@ -150,29 +130,53 @@ const SetupPage = (): JSX.Element => {
         }
         let cancelled = false;
         setYamlState({ status: 'loading' });
+        const setYamlError = (message: string): void => {
+            if (cancelled) {
+                return;
+            }
+            setYamlState({ status: 'error', message });
+        };
         void (async () => {
             const response = await fetch('/api/admin/settings.yaml', {
                 method: 'GET',
             });
             if (response.status === 404) {
+                const templateResponse = await fetch(
+                    '/api/admin/settings/template',
+                    {
+                        method: 'GET',
+                    }
+                );
+                if (!templateResponse.ok) {
+                    setYamlError(await readErrorMessage(templateResponse));
+                    return;
+                }
+                const templateText = await templateResponse.text();
+                if (templateText.trim().length === 0) {
+                    setYamlError(
+                        'Settings template response was empty. Retry loading setup.'
+                    );
+                    return;
+                }
                 if (!cancelled) {
                     setIfMatch(MISSING_SETTINGS_SENTINEL);
-                    setYamlText(DEFAULT_SETUP_YAML);
+                    setYamlText(templateText);
                     setYamlState({ status: 'ready' });
                 }
                 return;
             }
             if (!response.ok) {
-                const message = await readErrorMessage(response);
-                if (!cancelled) {
-                    setYamlState({ status: 'error', message });
-                }
+                setYamlError(await readErrorMessage(response));
                 return;
             }
             const body = await response.text();
+            if (body.trim().length === 0) {
+                setYamlError('Settings file is empty. Retry loading setup.');
+                return;
+            }
             const etag = response.headers.get('etag');
             if (!cancelled) {
-                setYamlText(body.trim().length > 0 ? body : DEFAULT_SETUP_YAML);
+                setYamlText(body);
                 setIfMatch(
                     typeof etag === 'string' && etag.length > 0
                         ? etag
@@ -181,21 +185,17 @@ const SetupPage = (): JSX.Element => {
                 setYamlState({ status: 'ready' });
             }
         })().catch((error) => {
-            if (!cancelled) {
-                setYamlState({
-                    status: 'error',
-                    message:
-                        error instanceof Error
-                            ? error.message
-                            : 'Failed to load settings YAML.',
-                });
-            }
+            setYamlError(
+                error instanceof Error
+                    ? error.message
+                    : 'Failed to load settings YAML.'
+            );
         });
 
         return () => {
             cancelled = true;
         };
-    }, [exchangeState]);
+    }, [exchangeState, yamlRetryKey]);
 
     const handleValidate = async (): Promise<void> => {
         if (exchangeState.status !== 'ready' || yamlState.status !== 'ready') {
@@ -321,7 +321,19 @@ const SetupPage = (): JSX.Element => {
                         <p>Loading settings...</p>
                     )}
                     {yamlState.status === 'error' && (
-                        <p className="setup-error">{yamlState.message}</p>
+                        <>
+                            <p className="setup-error">{yamlState.message}</p>
+                            <div className="setup-actions">
+                                <button
+                                    type="button"
+                                    onClick={() =>
+                                        setYamlRetryKey((prior) => prior + 1)
+                                    }
+                                >
+                                    Retry loading settings
+                                </button>
+                            </div>
+                        </>
                     )}
                 </section>
 

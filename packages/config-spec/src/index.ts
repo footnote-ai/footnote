@@ -20,6 +20,29 @@ export {
     envSpec,
     envSpecByKey,
 } from './env-spec.js';
+export {
+    envPathSourceEntries,
+    settingsSpecEntries,
+    toKebabCase,
+} from './settings-spec.js';
+export {
+    buildSettingsTemplateModel,
+    renderSettingsTemplateYaml,
+    resolveTemplateTarget,
+} from './settings-template.js';
+export type {
+    EnvPathSourceEntry,
+    SettingsDefaultValue,
+    SettingsSpecEntry,
+    SettingsValueKind,
+} from './settings-spec.js';
+export type {
+    ResolvedTemplateTarget,
+    TemplateField,
+    TemplateModel,
+    TemplateRenderedDefault,
+    TemplateTarget,
+} from './settings-template.js';
 export type {
     ConfigSource,
     EnvDefault,

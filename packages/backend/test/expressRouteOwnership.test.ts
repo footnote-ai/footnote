@@ -107,6 +107,7 @@ const baseAppDeps = (
     handleRuntimeConfigRequest: createUnhandledRouteHandler,
     handleChatProfilesRequest: createUnhandledRouteHandler,
     handleAdminSettingsSchemaRequest: createUnhandledRouteHandler,
+    handleAdminSettingsTemplateRequest: createUnhandledRouteHandler,
     handleAdminSettingsYamlRequest: createUnhandledRouteHandler,
     handleAdminSettingsValidateRequest: createUnhandledRouteHandler,
     handleAdminSettingsYamlPutRequest: createUnhandledRouteHandler,
@@ -232,6 +233,11 @@ test('admin settings routes are Express-owned and bypass central dispatch', asyn
                 res.statusCode = 200;
                 res.end('admin-schema');
             },
+            handleAdminSettingsTemplateRequest: async (_req, res) => {
+                adminCalls.push('/api/admin/settings/template');
+                res.statusCode = 200;
+                res.end('admin-template');
+            },
             handleAdminSettingsYamlRequest: async (_req, res) => {
                 adminCalls.push('/api/admin/settings.yaml:get');
                 res.statusCode = 200;
@@ -261,6 +267,12 @@ test('admin settings routes are Express-owned and bypass central dispatch', asyn
     assert.equal(schemaResponse.status, 200);
     assert.equal(await schemaResponse.text(), 'admin-schema');
 
+    const templateResponse = await fetch(
+        `${server.baseUrl}/api/admin/settings/template`
+    );
+    assert.equal(templateResponse.status, 200);
+    assert.equal(await templateResponse.text(), 'admin-template');
+
     const yamlGetResponse = await fetch(
         `${server.baseUrl}/api/admin/settings.yaml`
     );
@@ -287,11 +299,13 @@ test('admin settings routes are Express-owned and bypass central dispatch', asyn
 
     assert.deepEqual(adminCalls, [
         '/api/admin/settings/schema',
+        '/api/admin/settings/template',
         '/api/admin/settings.yaml:get',
         '/api/admin/settings/validate',
         '/api/admin/settings.yaml:put',
     ]);
     assert.equal(dispatchCalls.includes('/api/admin/settings/schema'), false);
+    assert.equal(dispatchCalls.includes('/api/admin/settings/template'), false);
     assert.equal(dispatchCalls.includes('/api/admin/settings.yaml'), false);
     assert.equal(dispatchCalls.includes('/api/admin/settings/validate'), false);
 });
@@ -306,6 +320,11 @@ test('admin settings schema and validate routes enforce method ownership before 
                 adminCalls.push('/api/admin/settings/schema');
                 res.statusCode = 200;
                 res.end('admin-schema');
+            },
+            handleAdminSettingsTemplateRequest: async (_req, res) => {
+                adminCalls.push('/api/admin/settings/template');
+                res.statusCode = 200;
+                res.end('admin-template');
             },
             handleAdminSettingsValidateRequest: async (_req, res) => {
                 adminCalls.push('/api/admin/settings/validate');
@@ -336,9 +355,19 @@ test('admin settings schema and validate routes enforce method ownership before 
     );
     assert.equal(validateGet.status, 404);
 
+    const templatePost = await fetch(
+        `${server.baseUrl}/api/admin/settings/template`,
+        {
+            method: 'POST',
+        }
+    );
+    assert.equal(templatePost.status, 404);
+
     assert.equal(adminCalls.includes('/api/admin/settings/schema'), false);
+    assert.equal(adminCalls.includes('/api/admin/settings/template'), false);
     assert.equal(adminCalls.includes('/api/admin/settings/validate'), false);
     assert.equal(dispatchCalls.includes('/api/admin/settings/schema'), true);
+    assert.equal(dispatchCalls.includes('/api/admin/settings/template'), true);
     assert.equal(dispatchCalls.includes('/api/admin/settings/validate'), true);
 });
 

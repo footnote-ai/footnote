@@ -7,6 +7,7 @@
  */
 
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
+import { renderSettingsTemplateYaml } from '@footnote/config-spec';
 import {
     DEFAULT_IMAGE_REPOSITORY,
     DEFAULT_IMAGE_TAG,
@@ -20,8 +21,6 @@ import type {
 } from './types.js';
 
 const DEFAULT_ENV_FILE = `# Footnote runtime environment\n# Add secrets here if needed.\n\nNODE_ENV=production\n`;
-
-const DEFAULT_SETTINGS_FILE = `version: 1\n\nserver:\n    host: '::'\n    port: 3000\n    trust-proxy: false\n    data-dir: '/data'\n\nweb:\n    allowed-origins:\n        - 'http://localhost:8080'\n        - 'http://localhost:3000'\n    frame-ancestors:\n        - "'self'"\n        - 'http://localhost:8080'\n        - 'http://localhost:3000'\n\ndiscord-bots: []\n`;
 
 const readExistingMetadata = async (
     metadataPath: string
@@ -96,9 +95,14 @@ export const bootstrapConfigFiles = async (
 
     await ensureFile(paths.envFilePath, DEFAULT_ENV_FILE, createdPaths);
     if (shouldCreateSettingsFile) {
+        const defaultSettingsFile = renderSettingsTemplateYaml({
+            target: 'auto',
+            env: process.env,
+            lineEnding: '\n',
+        });
         await ensureFile(
             paths.settingsFilePath,
-            DEFAULT_SETTINGS_FILE,
+            defaultSettingsFile,
             createdPaths
         );
     }

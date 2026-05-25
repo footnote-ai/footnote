@@ -512,6 +512,7 @@ const handleRuntimeConfigRequest = createRuntimeConfigHandler({
 const handleChatProfilesRequest = createChatProfilesHandler({ logRequest });
 const {
     handleAdminSettingsSchemaRequest,
+    handleAdminSettingsTemplateRequest,
     handleAdminSettingsYamlRequest,
     handleAdminSettingsValidateRequest,
     handleAdminSettingsYamlPutRequest,
@@ -632,6 +633,7 @@ const app = createExpressApp({
     handleRuntimeConfigRequest,
     handleChatProfilesRequest,
     handleAdminSettingsSchemaRequest,
+    handleAdminSettingsTemplateRequest,
     handleAdminSettingsYamlRequest,
     handleAdminSettingsValidateRequest,
     handleAdminSettingsYamlPutRequest,

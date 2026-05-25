@@ -124,6 +124,10 @@ type CreateExpressAppDeps = {
         req: http.IncomingMessage,
         res: http.ServerResponse
     ) => Promise<void>;
+    handleAdminSettingsTemplateRequest: (
+        req: http.IncomingMessage,
+        res: http.ServerResponse
+    ) => Promise<void>;
     handleAdminSettingsYamlRequest: (
         req: http.IncomingMessage,
         res: http.ServerResponse
@@ -172,6 +176,7 @@ const createExpressApp = ({
     handleRuntimeConfigRequest,
     handleChatProfilesRequest,
     handleAdminSettingsSchemaRequest,
+    handleAdminSettingsTemplateRequest,
     handleAdminSettingsYamlRequest,
     handleAdminSettingsValidateRequest,
     handleAdminSettingsYamlPutRequest,
@@ -198,6 +203,7 @@ const createExpressApp = ({
         app,
         normalizePathname,
         handleAdminSettingsSchemaRequest,
+        handleAdminSettingsTemplateRequest,
         handleAdminSettingsYamlRequest,
         handleAdminSettingsValidateRequest,
         handleAdminSettingsYamlPutRequest,

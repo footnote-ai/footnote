@@ -440,6 +440,28 @@ test('admin settings server contract: auth, YAML read/write ETag flow, and resta
     );
 
     await t.test(
+        'admin template read returns canonical text/yaml payload',
+        async () => {
+            const response = await fetch(
+                `${harness.baseUrl}/api/admin/settings/template`,
+                {
+                    headers: {
+                        'x-admin-token': 'contract-admin-token',
+                    },
+                }
+            );
+            assert.equal(response.status, 200);
+            assert.equal(
+                response.headers.get('content-type'),
+                'text/yaml; charset=utf-8'
+            );
+            const template = await response.text();
+            assert.match(template, /version:\s*1/);
+            assert.match(template, /discord-bots:\s*\[\]/);
+        }
+    );
+
+    await t.test(
         'admin YAML read returns content-type and etag headers',
         async () => {
             const response = await fetch(
