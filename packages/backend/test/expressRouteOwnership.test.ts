@@ -310,7 +310,7 @@ test('admin settings routes are Express-owned and bypass central dispatch', asyn
     assert.equal(dispatchCalls.includes('/api/admin/settings/validate'), false);
 });
 
-test('admin settings schema and validate routes enforce method ownership before handler dispatch', async (t) => {
+test('admin settings schema/validate enforce method ownership and template path enforces in handler', async (t) => {
     const dispatchCalls: string[] = [];
     const adminCalls: string[] = [];
 
@@ -323,8 +323,8 @@ test('admin settings schema and validate routes enforce method ownership before 
             },
             handleAdminSettingsTemplateRequest: async (_req, res) => {
                 adminCalls.push('/api/admin/settings/template');
-                res.statusCode = 200;
-                res.end('admin-template');
+                res.statusCode = 405;
+                res.end('method-not-allowed');
             },
             handleAdminSettingsValidateRequest: async (_req, res) => {
                 adminCalls.push('/api/admin/settings/validate');
@@ -361,13 +361,13 @@ test('admin settings schema and validate routes enforce method ownership before 
             method: 'POST',
         }
     );
-    assert.equal(templatePost.status, 404);
+    assert.equal(templatePost.status, 405);
 
     assert.equal(adminCalls.includes('/api/admin/settings/schema'), false);
-    assert.equal(adminCalls.includes('/api/admin/settings/template'), false);
+    assert.equal(adminCalls.includes('/api/admin/settings/template'), true);
     assert.equal(adminCalls.includes('/api/admin/settings/validate'), false);
     assert.equal(dispatchCalls.includes('/api/admin/settings/schema'), true);
-    assert.equal(dispatchCalls.includes('/api/admin/settings/template'), true);
+    assert.equal(dispatchCalls.includes('/api/admin/settings/template'), false);
     assert.equal(dispatchCalls.includes('/api/admin/settings/validate'), true);
 });
 

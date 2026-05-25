@@ -47,10 +47,7 @@ const registerAdminRoutes = ({
                 return;
             }
 
-            if (
-                req.method === 'GET' &&
-                normalizedPathname === '/api/admin/settings/template'
-            ) {
+            if (normalizedPathname === '/api/admin/settings/template') {
                 await handleAdminSettingsTemplateRequest(req, res);
                 return;
             }

@@ -119,6 +119,21 @@ test('fly target renders fly concrete defaults for derived keys', () => {
     assert.equal(urls['web-base-url'], 'https://footnote-app.fly.dev');
 });
 
+test('template preserves literal JSON defaults for settings_yaml keys', () => {
+    const rendered = renderSettingsTemplateYaml({
+        target: 'local',
+        env: {},
+    });
+    const parsed = parseYamlObject(rendered);
+
+    const image = parsed.image as Record<string, unknown>;
+    assert.deepEqual(image['image-model-multipliers'], {
+        'gpt-image-1-mini': 1,
+        'gpt-image-1': 2,
+        'gpt-image-1.5': 2,
+    });
+});
+
 test('every settings key has a one-line comment directly above it', () => {
     const rendered = renderSettingsTemplateYaml({
         target: 'local',

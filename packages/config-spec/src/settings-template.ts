@@ -42,7 +42,6 @@ export type TemplateModel = {
 const FLY_INTERNAL_BACKEND_BASE_URL = 'http://footnote-backend.internal:3000';
 const DEFAULT_LOCAL_BACKEND_BASE_URL = 'http://localhost:3000';
 const DEFAULT_LOCAL_WEB_BASE_URL = 'http://localhost:8080';
-const KEBAB_KEY_PATTERN = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 
 const OPERATOR_ROOT_ORDER = [
     'server',
@@ -90,7 +89,7 @@ const ROOT_GROUP_LABELS: Record<string, string> = {
     storage: 'Storage',
     logging: 'Logging',
     alerts: 'Alerts',
-    trace: 'Execution Contract TrustGraph and VoltAgent',
+    trace: 'Trace, Trust Graph, and Runtime Metadata',
     admin: 'Services and Workflow Knobs',
     webhooks: 'Services and Workflow Knobs',
     'discord-bots': 'Discord Bots',
@@ -200,21 +199,6 @@ const resolveRenderedDefault = ({
     }
 
     if (entry.defaultKind === 'literal' && entry.templateDefaultValue) {
-        if (
-            entry.kind === 'json' &&
-            typeof entry.templateDefaultValue === 'object' &&
-            entry.templateDefaultValue !== null &&
-            !Array.isArray(entry.templateDefaultValue)
-        ) {
-            const objectValue = entry.templateDefaultValue as Readonly<
-                Record<string, number>
-            >;
-            const validObjectKeys = Object.keys(objectValue).every((key) =>
-                KEBAB_KEY_PATTERN.test(key)
-            );
-            return validObjectKeys ? objectValue : {};
-        }
-
         return entry.templateDefaultValue as TemplateRenderedDefault;
     }
 
@@ -240,15 +224,6 @@ const buildFieldComment = ({
     target: ResolvedTemplateTarget;
 }): string => {
     const baseComment = entry.description.replace(/\s+/g, ' ').trim();
-    const literalJsonHasUnsupportedKeys =
-        entry.kind === 'json' &&
-        entry.defaultKind === 'literal' &&
-        typeof entry.templateDefaultValue === 'object' &&
-        entry.templateDefaultValue !== null &&
-        !Array.isArray(entry.templateDefaultValue) &&
-        Object.keys(entry.templateDefaultValue).some(
-            (key) => !KEBAB_KEY_PATTERN.test(key)
-        );
 
     if (entry.defaultKind === 'derived') {
         const defaultRule =
@@ -264,10 +239,6 @@ const buildFieldComment = ({
 
     if (entry.defaultKind === 'runtime') {
         return `${baseComment} Runtime-derived default is represented as a safe placeholder.`;
-    }
-
-    if (literalJsonHasUnsupportedKeys) {
-        return `${baseComment} Default object keys are not kebab-case, so template uses {} to stay validator-compatible.`;
     }
 
     return baseComment;
