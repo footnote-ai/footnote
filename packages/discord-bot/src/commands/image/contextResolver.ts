@@ -606,27 +606,6 @@ export async function recoverContextDetailsFromTrace(
     }
 }
 
-/**
- * Resolves image generation context from trace metadata.
- *
- * Returns the recovered `ImageGenerationContext` when
- * `recoverContextDetailsFromTrace` succeeds, otherwise returns `null`
- * (fail-open). Callers must handle the null-on-miss path explicitly.
- */
-export async function recoverContextFromTrace(
-    responseId: string
-): Promise<ImageGenerationContext | null> {
-    const recovered = await recoverContextDetailsFromTrace(responseId);
-    return recovered ? recovered.context : null;
-}
-
-export async function recoverContextFromMessage(
-    message: Message
-): Promise<ImageGenerationContext | null> {
-    const recovered = await recoverContextDetailsFromMessage(message);
-    return recovered ? recovered.context : null;
-}
-
 export async function recoverContextDetailsFromMessage(
     message: Message
 ): Promise<RecoveredImageContext | null> {

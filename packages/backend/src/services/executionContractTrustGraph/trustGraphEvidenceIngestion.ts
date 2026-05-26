@@ -708,11 +708,3 @@ export const runEvidenceIngestion = async (
         };
     }
 };
-
-export const getRegistryMetadata = (): {
-    approvedFieldPaths: readonly string[];
-    approvedConsumers: readonly MappingRegistryConsumer[];
-} => ({
-    approvedFieldPaths: listTrustGraphApprovedFieldPaths(),
-    approvedConsumers: TRUST_GRAPH_APPROVED_PREDICATE_CONSUMERS,
-});

@@ -5,10 +5,9 @@
  * @footnote-risk: low - Formatting errors can truncate or mislabel embed details.
  * @footnote-ethics: low - Embeds present metadata without additional processing.
  */
-import { EmbedBuilder, type APIEmbedField } from 'discord.js';
+import { EmbedBuilder } from 'discord.js';
 import {
     CLOUDINARY_CONTEXT_VALUE_LIMIT,
-    EMBED_DESCRIPTION_LIMIT,
     EMBED_FIELD_VALUE_LIMIT,
     EMBED_FOOTER_TEXT_LIMIT,
     PROMPT_DISPLAY_LIMIT,
@@ -43,45 +42,6 @@ export function truncateForEmbed(
 
 export function setEmbedFooterText(embed: EmbedBuilder, text: string) {
     embed.setFooter({ text: truncateForEmbed(text, EMBED_FOOTER_TEXT_LIMIT) });
-}
-
-export function setEmbedDescription(embed: EmbedBuilder, description: string) {
-    embed.setDescription(
-        truncateForEmbed(description, EMBED_DESCRIPTION_LIMIT)
-    );
-}
-
-export function setOrAddEmbedField(
-    embed: EmbedBuilder,
-    name: string,
-    value: string,
-    {
-        inline = false,
-        includeTruncationNote = false,
-        maxLength = EMBED_FIELD_VALUE_LIMIT,
-    }: {
-        inline?: boolean;
-        includeTruncationNote?: boolean;
-        maxLength?: number;
-    } = {}
-) {
-    const formattedValue = truncateForEmbed(value, maxLength, {
-        includeTruncationNote,
-    });
-    const field: APIEmbedField = inline
-        ? { name, value: formattedValue, inline }
-        : { name, value: formattedValue };
-
-    const fields = embed.data.fields ?? [];
-    const index = fields.findIndex(
-        (existingField) => existingField.name === name
-    );
-
-    if (index >= 0) {
-        embed.spliceFields(index, 1, field);
-    } else {
-        embed.addFields(field);
-    }
 }
 
 export interface PromptFieldOptions {

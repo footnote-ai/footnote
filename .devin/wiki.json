@@ -748,7 +748,7 @@
             "parent": "Web",
             "entrypoints": [
                 "packages/web/src/components/AskMeAnything.tsx",
-                "packages/web/src/components/AskPanel.tsx",
+                "packages/web/src/App.tsx",
                 "packages/web/src/utils/api.ts"
             ],
             "page_notes": [

@@ -12,7 +12,6 @@ import type {
 } from '@footnote/contracts/policy';
 import {
     TRACE_ASSESS_FINAL_TEMPERAMENT_SIGNAL_KEYS,
-    TRACE_PLANNER_TARGET_TEMPERAMENT_SIGNAL_KEYS,
     TRACE_TEMPERAMENT_AXIS_KEYS,
     isTraceTemperamentEqual,
 } from '@footnote/contracts/policy';
@@ -27,25 +26,6 @@ export const hasDifferentTemperament = (
     before: PartialResponseTemperament | undefined,
     after: PartialResponseTemperament | undefined
 ): boolean => !isTraceTemperamentEqual(before, after);
-
-export const toPlannerTraceTargetSignals = (
-    temperament: PartialResponseTemperament | undefined
-): Record<string, TraceAxisScore> => {
-    const signals: Record<string, TraceAxisScore> = {};
-    if (temperament === undefined) {
-        return signals;
-    }
-
-    for (const axisKey of TRACE_TEMPERAMENT_AXIS_KEYS) {
-        const score = temperament[axisKey];
-        if (isTraceAxisScore(score)) {
-            signals[TRACE_PLANNER_TARGET_TEMPERAMENT_SIGNAL_KEYS[axisKey]] =
-                score;
-        }
-    }
-
-    return signals;
-};
 
 export const toAssessFinalTemperamentSignals = (
     temperament: PartialResponseTemperament | undefined

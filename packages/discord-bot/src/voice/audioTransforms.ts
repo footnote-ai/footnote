@@ -173,13 +173,6 @@ export const createPlaybackResampler = (): Transform =>
         toRate: AUDIO_CONSTANTS.DISCORD_SAMPLE_RATE,
     });
 
-export const downsampleToRealtime = (buffer: Buffer): Buffer =>
-    resamplePCM(
-        buffer,
-        AUDIO_CONSTANTS.DISCORD_SAMPLE_RATE,
-        AUDIO_CONSTANTS.REALTIME_SAMPLE_RATE
-    );
-
 export const upsampleToDiscord = (buffer: Buffer): Buffer =>
     resamplePCM(
         buffer,
