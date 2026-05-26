@@ -189,6 +189,7 @@ const SetupPage = (): JSX.Element => {
                     return;
                 }
                 const templateText = await templateResponse.text();
+                const templateEtag = templateResponse.headers.get('etag');
                 if (templateText.trim().length === 0) {
                     setYamlError(
                         'Settings template response was empty. Retry loading setup.'
@@ -196,7 +197,12 @@ const SetupPage = (): JSX.Element => {
                     return;
                 }
                 if (!cancelled) {
-                    setIfMatch(MISSING_SETTINGS_SENTINEL);
+                    setIfMatch(
+                        typeof templateEtag === 'string' &&
+                            templateEtag.length > 0
+                            ? templateEtag
+                            : MISSING_SETTINGS_SENTINEL
+                    );
                     setYamlText(templateText);
                     setYamlNotice({
                         message:
