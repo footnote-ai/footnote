@@ -1,58 +1,54 @@
 /**
- * @description: Renders the sticky site header, navigation actions, breadcrumbs, and theme toggle.
+ * @description: Renders the sticky site header, section navigation, and utility controls.
  * @footnote-scope: web
  * @footnote-module: SiteHeader
  * @footnote-risk: low - Header regressions mostly affect navigation and discoverability across the site.
  * @footnote-ethics: low - Navigation clarity supports transparency, but this component does not process sensitive content.
  */
 
-/**
- * Header component displays the site header with Footnote title, breadcrumb trail, navigation buttons, and theme toggle.
- * This header is sticky and follows the user as they scroll, providing consistent navigation.
- */
-import { useEffect, useRef } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import ThemeToggle from './ThemeToggle';
 
-interface NavItem {
+type SectionNavItem = {
+    id: 'about' | 'demo' | 'get-started';
     label: string;
-    to: string;
-    isActive: (pathname: string) => boolean;
-}
+};
 
-const NAV_ITEMS: NavItem[] = [
+const SECTION_NAV_ITEMS: SectionNavItem[] = [
     {
-        label: 'Home',
-        to: '/',
-        isActive: (pathname) => pathname === '/',
-    },
-    {
+        id: 'about',
         label: 'About',
-        to: '/about',
-        isActive: (pathname) => pathname.startsWith('/about'),
     },
     {
-        label: 'Download',
-        to: '/download',
-        isActive: (pathname) => pathname.startsWith('/download'),
+        id: 'demo',
+        label: 'Demo',
     },
     {
-        label: 'Contribute',
-        to: '/onboarding',
-        isActive: (pathname) => pathname.startsWith('/onboarding'),
+        id: 'get-started',
+        label: 'Get started',
     },
 ];
 
 const Header = (): JSX.Element => {
     const location = useLocation();
     const pathname = location.pathname;
+    const hash = location.hash;
     const headerRef = useRef<HTMLElement | null>(null);
+    const [activeSectionId, setActiveSectionId] = useState<string | null>(null);
 
-    const openInNewTab = pathname === '/embed';
+    const supportsSectionAnchors = pathname === '/' || pathname === '/embed';
 
-    const handleNavClick = (): void => {
-        window.scrollTo({ top: 0, left: 0, behavior: 'auto' });
-    };
+    const sectionHrefPrefix = supportsSectionAnchors ? '#' : '/#';
+
+    const sectionLinks = useMemo(
+        () =>
+            SECTION_NAV_ITEMS.map((item) => ({
+                ...item,
+                href: `${sectionHrefPrefix}${item.id}`,
+            })),
+        [sectionHrefPrefix]
+    );
 
     useEffect(() => {
         const headerElement = headerRef.current;
@@ -93,6 +89,57 @@ const Header = (): JSX.Element => {
         };
     }, []);
 
+    useEffect(() => {
+        if (!supportsSectionAnchors) {
+            setActiveSectionId(null);
+            return;
+        }
+
+        const hashId = decodeURIComponent(hash.replace(/^#/, '')).trim();
+        if (hashId.length > 0) {
+            setActiveSectionId(hashId);
+        }
+
+        const sectionElements = SECTION_NAV_ITEMS.map((item) =>
+            document.getElementById(item.id)
+        ).filter((element): element is HTMLElement => element !== null);
+
+        if (sectionElements.length === 0) {
+            return;
+        }
+
+        const observer = new IntersectionObserver(
+            (entries) => {
+                const visibleEntries = entries
+                    .filter((entry) => entry.isIntersecting)
+                    .sort(
+                        (entryA, entryB) =>
+                            entryB.intersectionRatio - entryA.intersectionRatio
+                    );
+
+                if (visibleEntries.length === 0) {
+                    return;
+                }
+
+                const topEntry = visibleEntries[0];
+                setActiveSectionId(topEntry.target.id);
+            },
+            {
+                root: null,
+                rootMargin: '-25% 0px -55% 0px',
+                threshold: [0.2, 0.5, 0.8],
+            }
+        );
+
+        sectionElements.forEach((sectionElement) => {
+            observer.observe(sectionElement);
+        });
+
+        return () => {
+            observer.disconnect();
+        };
+    }, [hash, supportsSectionAnchors]);
+
     return (
         <header
             ref={headerRef}
@@ -107,34 +154,19 @@ const Header = (): JSX.Element => {
                 </div>
                 <nav className="site-nav" aria-label="Primary">
                     <ul className="site-nav__list">
-                        {NAV_ITEMS.map((item) => {
-                            const isActive = item.isActive(pathname);
+                        {sectionLinks.map((item) => {
+                            const isActive = activeSectionId === item.id;
                             return (
-                                <li key={item.to} className="site-nav__item">
-                                    <Link
+                                <li key={item.id} className="site-nav__item">
+                                    <a
                                         className="site-nav__link"
-                                        to={item.to}
-                                        onClick={handleNavClick}
+                                        href={item.href}
                                         aria-current={
-                                            isActive ? 'page' : undefined
+                                            isActive ? 'location' : undefined
                                         }
-                                        {...(openInNewTab
-                                            ? {
-                                                  target: '_blank',
-                                                  rel: 'noopener noreferrer',
-                                              }
-                                            : {})}
                                     >
                                         {item.label}
-                                        {openInNewTab && (
-                                            <>
-                                                {' '}
-                                                <span aria-hidden="true">
-                                                    ↗
-                                                </span>
-                                            </>
-                                        )}
-                                    </Link>
+                                    </a>
                                 </li>
                             );
                         })}
@@ -146,7 +178,7 @@ const Header = (): JSX.Element => {
                         href="https://github.com/footnote-ai/footnote"
                         target="_blank"
                         rel="noreferrer"
-                        aria-label="Source on GitHub"
+                        aria-label="View source on GitHub"
                     >
                         <svg
                             aria-hidden="true"
@@ -162,7 +194,7 @@ const Header = (): JSX.Element => {
                     </a>
                     <div
                         className="site-header-theme-toggle"
-                        aria-label="Theme controls"
+                        aria-label="Theme settings"
                     >
                         <ThemeToggle />
                     </div>

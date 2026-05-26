@@ -8,6 +8,7 @@
 
 import { useEffect, useRef } from 'react';
 import Header from '@components/Header';
+import Footer from '@components/Footer';
 import AskMeAnything from '@components/AskMeAnything';
 import {
     createEmbedHeightMessenger,
@@ -15,10 +16,8 @@ import {
 } from '../utils/embedHeight';
 
 /**
- * EmbedPage component provides a minimal embeddable version of Footnote
- * that includes the header, title/subtitle, intro section, and AskMeAnything.
- * Designed for iframe embedding in external sites.
- * Automatically communicates height to parent window to eliminate scrollbars.
+ * EmbedPage component provides a compact embeddable Footnote experience that mirrors
+ * the main sections used on the primary SPA route.
  */
 const EmbedPage = (): JSX.Element => {
     const containerRef = useRef<HTMLElement | null>(null);
@@ -96,61 +95,86 @@ const EmbedPage = (): JSX.Element => {
     }, []);
 
     return (
-        <section
-            ref={containerRef}
-            className="hero"
-            aria-labelledby="hero-title"
-        >
+        <>
             <Header />
+            <main
+                ref={containerRef}
+                id="main-content"
+                className="page-content landing-page landing-page--embed"
+            >
+                <section
+                    id="about"
+                    className="landing-section landing-section--about"
+                    aria-labelledby="embed-about-title"
+                >
+                    <p className="landing-kicker">About</p>
+                    <h1 id="embed-about-title" className="landing-title">
+                        Footnote, anywhere you need it.
+                    </h1>
+                    <p className="landing-lede">
+                        Footnote is a transparency-first AI framework that helps
+                        keep answers inspectable, understandable, and easier to
+                        steer.
+                    </p>
+                    <p>
+                        It can show useful context around responses, including
+                        sources and trace links when available, while staying
+                        practical to self-host.
+                    </p>
+                </section>
 
-            <div className="hero-copy">
-                <h1 id="hero-title">AI you can inspect and steer.</h1>
-                <p className="hero-copy__subtitle">
-                    A transparency-first framework for people who want more than
-                    a black-box answer.
-                </p>
+                <section
+                    id="demo"
+                    className="landing-section landing-section--demo"
+                    aria-labelledby="embed-demo-title"
+                >
+                    <div className="hero-copy">
+                        <p className="landing-kicker">Demo</p>
+                        <h2 id="embed-demo-title" className="landing-title">
+                            Ask from your own page.
+                        </h2>
+                        <p className="hero-subheader">
+                            Run a live prompt and inspect the response details.
+                        </p>
+                        <AskMeAnything />
+                    </div>
+                </section>
 
-                <AskMeAnything />
-
-                <div className="intro-card" aria-labelledby="intro-card-title">
-                    <div className="intro-card-background" aria-hidden="true">
-                        {/* Symbolic constellation representing Footnote's ethical framework. */}
-                        <svg
-                            viewBox="0 0 320 120"
-                            role="presentation"
-                            focusable="false"
+                <section
+                    id="get-started"
+                    className="landing-section landing-section--get-started"
+                    aria-labelledby="embed-start-title"
+                >
+                    <p className="landing-kicker">Get started</p>
+                    <h2 id="embed-start-title" className="landing-title">
+                        Go from embed to local runtime.
+                    </h2>
+                    <p className="landing-lede">
+                        Install the CLI launcher from GitHub Releases to run
+                        Footnote with your own setup.
+                    </p>
+                    <div className="cta-group">
+                        <a
+                            className="cta-button primary"
+                            href="https://github.com/footnote-ai/footnote/releases"
+                            target="_blank"
+                            rel="noreferrer"
                         >
-                            <g className="intro-card-constellation">
-                                <circle cx="30" cy="60" r="4" />
-                                <circle cx="110" cy="30" r="3" />
-                                <circle cx="200" cy="65" r="4" />
-                                <circle cx="280" cy="40" r="3" />
-                                <path d="M30 60 L110 30 L200 65 L280 40" />
-                            </g>
-                        </svg>
+                            Download Footnote CLI
+                        </a>
+                        <a
+                            className="cta-button secondary"
+                            href="https://github.com/footnote-ai/footnote#quickstart"
+                            target="_blank"
+                            rel="noreferrer"
+                        >
+                            Read the Quickstart
+                        </a>
                     </div>
-                    <div className="intro-card-content">
-                        <div className="intro-card-logo">
-                            <img
-                                src="/assets/logo.jpg"
-                                alt="Footnote logo - A circle with 5 even-spaced solid color wedges. From top-left, clockwise: Teal, rose, amber, copper, emerald."
-                                className="intro-card-logo-image"
-                            />
-                        </div>
-                        <div className="intro-card-text">
-                            <h2 id="intro-card-title">Footnote, at a glance</h2>
-                            <p>
-                                Footnote pairs model output with inspectable
-                                metadata, including confidence, sources,
-                                trade-offs, and applied constraints. Run it
-                                locally, self-host it, or bring it into Discord
-                                while keeping human oversight in the loop.
-                            </p>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </section>
+                </section>
+            </main>
+            <Footer />
+        </>
     );
 };
 
