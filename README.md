@@ -17,6 +17,23 @@ Footnote is an AI framework that tries to show its work.
 
 [Deployment Guide](deploy/README.md)
 
+Source prerequisites (for `pnpm start` path only):
+
+- Node.js 22+
+- `pnpm` (repo uses `pnpm@10.27.0`)
+
+Install `pnpm` quickly:
+
+```bash
+corepack enable && corepack prepare pnpm@10.27.0 --activate
+```
+
+Fallback:
+
+```bash
+npm i -g pnpm@10.27.0
+```
+
 Run from source:
 
 ```bash

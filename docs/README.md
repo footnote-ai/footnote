@@ -9,6 +9,7 @@ For first-time setup:
 - Standalone user path: [README Standalone CLI](../README.md#standalone-cli-primary-user-path)
 - Developer source path: [README Quickstart](../README.md#quickstart)
 - Deployment path: [deploy README](../deploy/README.md)
+- Source runs use `pnpm`; quick install: `corepack enable && corepack prepare pnpm@10.27.0 --activate` (fallback: `npm i -g pnpm@10.27.0`)
 
 Standalone launcher note: running `footnote` with no command (or double-clicking
 the binary) opens the `footnote info` launcher menu. Use explicit commands like
