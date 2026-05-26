@@ -8,21 +8,16 @@ Footnote deploys as one server container.
 - Deployment compose path: use `deploy/compose.yml` (GHCR image default).
 - Developer repo path: `git clone` + `pnpm start`.
 
-## Source Prerequisites
-
-This section applies to source runs (`pnpm start`), not standalone binary runs.
+## Prerequisites
 
 - Node.js 22+
 - `pnpm` (repo uses `pnpm@10.27.0`)
 
-Install `pnpm` quickly:
+Install `pnpm` with one of:
 
 ```bash
 corepack enable && corepack prepare pnpm@10.27.0 --activate
 ```
-
-Fallback:
-
 ```bash
 npm i -g pnpm@10.27.0
 ```
