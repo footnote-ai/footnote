@@ -3120,25 +3120,6 @@ kbd {
     color: color-mix(in srgb, var(--subtle-text) 86%, var(--text) 14%);
 }
 
-.landing-command-block {
-    margin: 0.65rem 0 1.1rem;
-    max-width: 34rem;
-    border: 1px solid color-mix(in srgb, var(--accent) 33%, var(--border) 67%);
-    background: color-mix(in srgb, var(--bg-alt) 82%, #0b0f12 18%);
-    color: color-mix(in srgb, #dde5df 78%, #fff 22%);
-    border-radius: 10px;
-    padding: 0.85rem 1rem;
-    font-size: 0.95rem;
-}
-
-.landing-note {
-    margin-top: 1rem;
-    font-family: var(--mono-font);
-    font-size: 0.84rem;
-    line-height: 1.5;
-    color: var(--subtle-text);
-}
-
 .landing-section .hero-copy {
     gap: 0.42rem;
 }
@@ -3170,11 +3151,6 @@ kbd {
             rgba(255, 255, 255, 0.025) 0 1px,
             transparent 1px 10px
         );
-}
-
-[data-theme='dark'] .landing-command-block {
-    border-color: color-mix(in srgb, var(--accent-muted) 38%, var(--border) 62%);
-    background: color-mix(in srgb, var(--bg-alt) 78%, #12171b 22%);
 }
 
 @keyframes landing-section-reveal {

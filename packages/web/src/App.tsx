@@ -82,25 +82,6 @@ const HomePage = (): JSX.Element => {
                         what shaped the answer: What it knows, what it doesn't,
                         and where you can look next.
                     </p>
-                    <p>
-                        Want to help? Visit the project{' '}
-                        <a
-                            href="https://github.com/footnote-ai/footnote"
-                            target="_blank"
-                            rel="noreferrer"
-                        >
-                            repository
-                        </a>{' '}
-                        and{' '}
-                        <a
-                            href={PROJECT_DOCS_URL}
-                            target="_blank"
-                            rel="noreferrer"
-                        >
-                            docs
-                        </a>
-                        .
-                    </p>
                 </section>
 
                 <Hero sectionId="demo" />
@@ -112,16 +93,11 @@ const HomePage = (): JSX.Element => {
                 >
                     <p className="landing-kicker">Get started</p>
                     <h2 id="get-started-title" className="landing-title">
-                        Run Footnote locally in minutes.
+                        Run Footnote yourself in minutes.
                     </h2>
                     <p className="landing-lede">
-                        Install the launcher from GitHub Releases, then start
-                        Footnote with one command.
+                        Its as easy as double-clicking the file.
                     </p>
-
-                    <pre className="landing-command-block">
-                        <code>footnote start</code>
-                    </pre>
 
                     <div className="cta-group">
                         <a
@@ -130,7 +106,7 @@ const HomePage = (): JSX.Element => {
                             target="_blank"
                             rel="noreferrer"
                         >
-                            Download Footnote CLI
+                            Download
                         </a>
                         <a
                             className="cta-button secondary"
@@ -138,14 +114,29 @@ const HomePage = (): JSX.Element => {
                             target="_blank"
                             rel="noreferrer"
                         >
-                            Read the Quickstart
+                            Quickstart
                         </a>
-                    </div>
 
-                    <p className="landing-note">
-                        Footnote runs with Docker. Prefer working from source?
-                        Use <code>pnpm start</code>.
-                    </p>
+                        <p>
+                            Want to help? Visit the project{' '}
+                            <a
+                                href="https://github.com/footnote-ai/footnote"
+                                target="_blank"
+                                rel="noreferrer"
+                            >
+                                repository
+                            </a>{' '}
+                            and{' '}
+                            <a
+                                href={PROJECT_DOCS_URL}
+                                target="_blank"
+                                rel="noreferrer"
+                            >
+                                docs
+                            </a>
+                            .
+                        </p>
+                    </div>
                 </section>
             </main>
             <Footer />
