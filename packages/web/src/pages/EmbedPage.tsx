@@ -24,15 +24,16 @@ const EmbedPage = (): JSX.Element => {
 
     // Disable scrolling on the embed page itself and keep the host iframe sized to the content.
     useEffect(() => {
+        let injectedEmbedStyle = null;
         if (window.parent !== window) {
-            const style = document.createElement('style');
-            style.textContent = `
+            injectedEmbedStyle = document.createElement('style');
+            injectedEmbedStyle.textContent = `
         html, body {
           overflow: hidden !important;
           height: auto !important;
         }
       `;
-            document.head.appendChild(style);
+            document.head.appendChild(injectedEmbedStyle);
         }
 
         const messenger = createEmbedHeightMessenger({
@@ -80,6 +81,7 @@ const EmbedPage = (): JSX.Element => {
         ];
 
         return () => {
+            injectedEmbedStyle?.remove();
             resizeObserver.disconnect();
             window.removeEventListener('resize', scheduleHeightPost);
             window.removeEventListener('load', scheduleHeightPost);
@@ -92,6 +94,35 @@ const EmbedPage = (): JSX.Element => {
             );
             messenger.dispose();
         };
+    }, []);
+
+    useEffect(() => {
+        if (!containerRef.current || !window.location.hash) {
+            return;
+        }
+
+        const rawTargetId = window.location.hash.slice(1).trim();
+        if (rawTargetId.length === 0) {
+            return;
+        }
+
+        let targetId: string;
+        try {
+            targetId = decodeURIComponent(rawTargetId).trim();
+        } catch {
+            return;
+        }
+
+        if (targetId.length === 0) {
+            return;
+        }
+
+        const sectionElement = document.getElementById(targetId);
+        if (!sectionElement) {
+            return;
+        }
+
+        sectionElement.scrollIntoView({ block: 'start' });
     }, []);
 
     return (

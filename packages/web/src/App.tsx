@@ -36,7 +36,22 @@ const HomePage = (): JSX.Element => {
             return;
         }
 
-        const targetId = decodeURIComponent(location.hash.slice(1));
+        const rawTargetId = location.hash.slice(1).trim();
+        if (rawTargetId.length === 0) {
+            return;
+        }
+
+        let targetId: string;
+        try {
+            targetId = decodeURIComponent(rawTargetId).trim();
+        } catch {
+            return;
+        }
+
+        if (targetId.length === 0) {
+            return;
+        }
+
         const sectionElement = document.getElementById(targetId);
         if (!sectionElement) {
             return;
@@ -62,9 +77,10 @@ const HomePage = (): JSX.Element => {
                         Footnote helps make AI answers easier to check.
                     </p>
                     <p>
-                        Most chatbots rush to give you a polished answer, even when they're wrong. 
-                        Footnote gives you the tools to see what shaped the answer: 
-                        What it knows, what it doesn't, and where you can look next.
+                        Most chatbots rush to give you a polished answer, even
+                        when they're wrong. Footnote gives you the tools to see
+                        what shaped the answer: What it knows, what it doesn't,
+                        and where you can look next.
                     </p>
                     <p>
                         Want to help? Visit the project{' '}
@@ -127,8 +143,8 @@ const HomePage = (): JSX.Element => {
                     </div>
 
                     <p className="landing-note">
-                        Footnote runs with Docker. Prefer working from source? Use{' '}
-                        <code>pnpm start</code>.
+                        Footnote runs with Docker. Prefer working from source?
+                        Use <code>pnpm start</code>.
                     </p>
                 </section>
             </main>

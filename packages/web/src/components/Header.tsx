@@ -95,7 +95,14 @@ const Header = (): JSX.Element => {
             return;
         }
 
-        const hashId = decodeURIComponent(hash.replace(/^#/, '')).trim();
+        const rawHashId = hash.replace(/^#/, '').trim();
+        let hashId: string;
+        try {
+            hashId = decodeURIComponent(rawHashId).trim();
+        } catch {
+            hashId = rawHashId;
+        }
+
         if (hashId.length > 0) {
             setActiveSectionId(hashId);
         }
@@ -108,21 +115,32 @@ const Header = (): JSX.Element => {
             return;
         }
 
+        const sectionRatios = new Map<string, number>();
+        sectionElements.forEach((sectionElement) => {
+            sectionRatios.set(sectionElement.id, 0);
+        });
+
         const observer = new IntersectionObserver(
             (entries) => {
-                const visibleEntries = entries
-                    .filter((entry) => entry.isIntersecting)
-                    .sort(
-                        (entryA, entryB) =>
-                            entryB.intersectionRatio - entryA.intersectionRatio
+                entries.forEach((entry) => {
+                    sectionRatios.set(
+                        entry.target.id,
+                        entry.isIntersecting ? entry.intersectionRatio : 0
                     );
+                });
 
-                if (visibleEntries.length === 0) {
-                    return;
+                let nextActiveSectionId: string | null = null;
+                let highestRatio = 0;
+                sectionRatios.forEach((ratio, sectionId) => {
+                    if (ratio > highestRatio) {
+                        highestRatio = ratio;
+                        nextActiveSectionId = sectionId;
+                    }
+                });
+
+                if (nextActiveSectionId !== null) {
+                    setActiveSectionId(nextActiveSectionId);
                 }
-
-                const topEntry = visibleEntries[0];
-                setActiveSectionId(topEntry.target.id);
             },
             {
                 root: null,
