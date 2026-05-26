@@ -23,6 +23,7 @@ openapi: 3.1.0
 # - POST /api/setup/session: Exchange one-time setup bootstrap code for short-lived setup session
 # - DELETE /api/setup/session: Clear setup session cookie
 # - GET /api/admin/settings/schema: Admin editable settings schema metadata (AdminSettingsToken OR setup session during setup-required mode)
+# - GET /api/admin/settings/template: Canonical commented settings template YAML (AdminSettingsToken OR setup session during setup-required mode)
 # - GET /api/admin/settings.yaml: Admin canonical settings YAML read (AdminSettingsToken OR setup session during setup-required mode)
 # - POST /api/admin/settings/validate: Admin settings YAML validation (AdminSettingsToken OR setup session during setup-required mode)
 # - PUT /api/admin/settings.yaml: Admin settings YAML replace with If-Match concurrency (AdminSettingsToken OR setup session during setup-required mode)
@@ -887,6 +888,33 @@ paths:
             responses:
                 '200':
                     $ref: '#/components/responses/AdminSettingsSchemaOk'
+                '401':
+                    $ref: '#/components/responses/Unauthorized'
+                '403':
+                    $ref: '#/components/responses/Forbidden'
+                '405':
+                    $ref: '#/components/responses/MethodNotAllowed'
+                '503':
+                    $ref: '#/components/responses/ServiceUnavailable'
+
+    /api/admin/settings/template:
+        get:
+            operationId: getAdminSettingsTemplate
+            x-codeRefs:
+                - packages/backend/src/handlers/adminSettings.ts#createAdminSettingsHandlers
+            summary: Fetch canonical commented settings template YAML
+            description: |
+                Trusted admin endpoint that returns the canonical full commented `footnote.yaml` template.
+                Auth accepts either `x-admin-token`, or setup session cookie while setup is currently required.
+                When setup is not required and SETTINGS_ADMIN_TOKEN is unset, endpoint returns 503.
+            tags:
+                - Admin
+            security:
+                - AdminSettingsToken: []
+                - SetupSessionCookie: []
+            responses:
+                '200':
+                    $ref: '#/components/responses/AdminSettingsTemplateOk'
                 '401':
                     $ref: '#/components/responses/Unauthorized'
                 '403':
@@ -3538,6 +3566,12 @@ components:
                 application/json:
                     schema:
                         $ref: '#/components/schemas/AdminSettingsSchemaResponse'
+        AdminSettingsTemplateOk:
+            description: Canonical commented settings template YAML.
+            content:
+                text/yaml:
+                    schema:
+                        type: string
         AdminSettingsYamlOk:
             description: Canonical settings YAML.
             headers:

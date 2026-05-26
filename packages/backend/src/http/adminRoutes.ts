@@ -18,6 +18,7 @@ type RegisterAdminRoutesDeps = {
     app: express.Express;
     normalizePathname: (pathname: string) => string;
     handleAdminSettingsSchemaRequest: RequestHandler;
+    handleAdminSettingsTemplateRequest: RequestHandler;
     handleAdminSettingsYamlRequest: RequestHandler;
     handleAdminSettingsValidateRequest: RequestHandler;
     handleAdminSettingsYamlPutRequest: RequestHandler;
@@ -28,6 +29,7 @@ const registerAdminRoutes = ({
     app,
     normalizePathname,
     handleAdminSettingsSchemaRequest,
+    handleAdminSettingsTemplateRequest,
     handleAdminSettingsYamlRequest,
     handleAdminSettingsValidateRequest,
     handleAdminSettingsYamlPutRequest,
@@ -42,6 +44,11 @@ const registerAdminRoutes = ({
                 normalizedPathname === '/api/admin/settings/schema'
             ) {
                 await handleAdminSettingsSchemaRequest(req, res);
+                return;
+            }
+
+            if (normalizedPathname === '/api/admin/settings/template') {
+                await handleAdminSettingsTemplateRequest(req, res);
                 return;
             }
 

@@ -9,6 +9,7 @@
 import fs from 'node:fs';
 import { randomUUID, createHash } from 'node:crypto';
 import type { IncomingMessage, ServerResponse } from 'node:http';
+import { renderSettingsTemplateYaml } from '@footnote/config-spec';
 import type { SettingsSpecEntry } from '../config/settings-spec.js';
 import {
     parseServerSettingsYaml,
@@ -56,6 +57,7 @@ type RequestHandler = (
 
 type AdminSettingsHandlers = {
     handleAdminSettingsSchemaRequest: RequestHandler;
+    handleAdminSettingsTemplateRequest: RequestHandler;
     handleAdminSettingsYamlRequest: RequestHandler;
     handleAdminSettingsValidateRequest: RequestHandler;
     handleAdminSettingsYamlPutRequest: RequestHandler;
@@ -417,6 +419,58 @@ const createAdminSettingsHandlers = ({
     };
 
     /**
+     * @api.operationId: getAdminSettingsTemplate
+     * @api.path: GET /api/admin/settings/template
+     */
+    const handleAdminSettingsTemplateRequest: RequestHandler = async (
+        req,
+        res
+    ) => {
+        const authContext = await authorize(
+            req,
+            res,
+            'admin.settings.template'
+        );
+        if (!authContext) {
+            return;
+        }
+        if (req.method !== 'GET') {
+            sendJson(res, 405, { error: 'Method not allowed' });
+            logRequest(req, res, 'admin.settings.template method-not-allowed');
+            return;
+        }
+
+        const requestId = readRequestId(req);
+        try {
+            const yamlText = renderSettingsTemplateYaml({
+                target: 'auto',
+                env: process.env,
+                lineEnding: '\n',
+            });
+            res.statusCode = 200;
+            res.setHeader('Content-Type', 'text/yaml; charset=utf-8');
+            res.setHeader('Cache-Control', 'no-store');
+            res.end(yamlText);
+            logger.info('admin.settings.template.succeeded', {
+                requestId,
+                actorSource: authContext.actorSource,
+                settingsPath,
+            });
+            logRequest(req, res, 'admin.settings.template ok');
+        } catch (error) {
+            sendJson(res, 500, { error: 'Internal server error' });
+            logger.error('admin.settings.template.failed', {
+                requestId,
+                actorSource: authContext.actorSource,
+                settingsPath,
+                message:
+                    error instanceof Error ? error.message : 'unknown error',
+            });
+            logRequest(req, res, 'admin.settings.template failed');
+        }
+    };
+
+    /**
      * @api.operationId: getAdminSettingsYaml
      * @api.path: GET /api/admin/settings.yaml
      */
@@ -742,6 +796,7 @@ const createAdminSettingsHandlers = ({
 
     return {
         handleAdminSettingsSchemaRequest,
+        handleAdminSettingsTemplateRequest,
         handleAdminSettingsYamlRequest,
         handleAdminSettingsValidateRequest,
         handleAdminSettingsYamlPutRequest,

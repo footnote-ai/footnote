@@ -11,7 +11,9 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { renderSettingsTemplateYaml } from '@footnote/config-spec';
 import { buildRuntimeConfig } from '../src/config/buildRuntimeConfig.js';
+import { settingsSpecEntries } from '../src/config/settings-spec.js';
 import { parseServerSettingsYaml } from '../src/config/settings.js';
 
 const withSettingsFile = (contents: string): string => {
@@ -257,4 +259,24 @@ test('parseServerSettingsYaml helper stays aligned with startup settings parsing
     );
     assert.equal(parsed.yamlEnv.WEB_API_RATE_LIMIT_IP, '41');
     assert.equal(config.rateLimits.web.ip.limit, 41);
+});
+
+test('rendered canonical template parses through backend settings validator', () => {
+    const rawYaml = renderSettingsTemplateYaml({
+        target: 'local',
+        env: {},
+        lineEnding: '\n',
+    });
+    const settingsPath = withSettingsFile(rawYaml);
+    const parsed = parseServerSettingsYaml({
+        rawText: rawYaml,
+        settingsPath,
+    });
+
+    assert.equal(parsed.yamlSettings.version, 1);
+    assert.equal(parsed.yamlSettings['discord-bots'].length, 0);
+    assert.equal(
+        Object.keys(parsed.yamlSettings.settingsEnv).length,
+        settingsSpecEntries.length
+    );
 });

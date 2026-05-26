@@ -115,6 +115,10 @@ test('public routes are Express-owned and bypass central /api dispatch while pre
             res.statusCode = 200;
             res.end('admin-settings-schema');
         },
+        handleAdminSettingsTemplateRequest: async (_req, res) => {
+            res.statusCode = 200;
+            res.end('admin-settings-template');
+        },
         handleAdminSettingsYamlRequest: async (_req, res) => {
             res.statusCode = 200;
             res.end('admin-settings-yaml');

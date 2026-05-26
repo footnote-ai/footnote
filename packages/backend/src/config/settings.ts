@@ -107,7 +107,7 @@ const validateKebabCaseKeys = (value: unknown, pointer = 'root'): void => {
     }
 };
 
-const getNestedValue = (root: unknown, path: string[]): unknown => {
+const getNestedValue = (root: unknown, path: readonly string[]): unknown => {
     let current: unknown = root;
     for (const segment of path) {
         if (!isRecord(current)) {
@@ -404,13 +404,11 @@ const normalizeDiscordBots = (value: unknown, settingsPath: string) => {
                     ? credentialsRecord['discord-token-env']
                     : undefined,
             discordClientIdEnv:
-                typeof credentialsRecord?.['discord-client-id-env'] ===
-                'string'
+                typeof credentialsRecord?.['discord-client-id-env'] === 'string'
                     ? credentialsRecord['discord-client-id-env']
                     : undefined,
             discordGuildIdsEnv:
-                typeof credentialsRecord?.['discord-guild-ids-env'] ===
-                'string'
+                typeof credentialsRecord?.['discord-guild-ids-env'] === 'string'
                     ? credentialsRecord['discord-guild-ids-env']
                     : undefined,
             discordUserIdEnv:

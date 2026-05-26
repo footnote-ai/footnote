@@ -168,8 +168,8 @@ const printChecklist = () => {
 const main = () => {
     ensureEnvFileExists();
     ensureGeneratedSecrets();
-    ensureSettingsFileExists();
     run(pnpmBin, ['install']);
+    ensureSettingsFileExists();
     printChecklist();
 };
 

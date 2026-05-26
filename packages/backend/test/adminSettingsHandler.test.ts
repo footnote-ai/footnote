@@ -86,6 +86,10 @@ const createAdminSettingsTestServer = async (options?: {
             void handlers.handleAdminSettingsSchemaRequest(req, res);
             return;
         }
+        if ((req.url ?? '') === '/api/admin/settings/template') {
+            void handlers.handleAdminSettingsTemplateRequest(req, res);
+            return;
+        }
         if (
             (req.url ?? '') === '/api/admin/settings.yaml' &&
             req.method === 'GET'
@@ -199,6 +203,31 @@ test('admin settings schema returns editable settings metadata', async () => {
         assert.equal(payload.ok, true);
         assert.ok(payload.fields.length > 0);
         assert.ok(payload.fields.some((field) => field.envKey === 'HOST'));
+    } finally {
+        await server.close();
+        server.cleanup();
+    }
+});
+
+test('admin settings template returns canonical commented YAML', async () => {
+    const server = await createAdminSettingsTestServer();
+    try {
+        const response = await fetch(
+            `${server.url}/api/admin/settings/template`,
+            {
+                headers: {
+                    'x-admin-token': 'test-admin-token',
+                },
+            }
+        );
+        assert.equal(response.status, 200);
+        assert.equal(
+            response.headers.get('content-type'),
+            'text/yaml; charset=utf-8'
+        );
+        const body = await response.text();
+        assert.match(body, /version:\s*1/);
+        assert.match(body, /discord-bots:\s*\[\]/);
     } finally {
         await server.close();
         server.cleanup();
