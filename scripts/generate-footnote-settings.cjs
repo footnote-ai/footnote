@@ -91,7 +91,6 @@ const loadTemplateRenderer = async () => {
         !hasRetriedBuild
     ) {
         ensureConfigSpecBuild();
-        hasRetriedBuild = true;
         module = await loadModule();
     }
 
