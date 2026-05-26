@@ -7,10 +7,13 @@
  */
 
 import { Suspense, lazy, useEffect } from 'react';
-import { Routes, Route } from 'react-router-dom';
+import { Routes, Route, useLocation } from 'react-router-dom';
 import Header from '@components/Header';
 import Hero from '@components/Hero';
 import Footer from '@components/Footer';
+
+const PROJECT_DOCS_URL =
+    'https://github.com/footnote-ai/footnote/tree/main/docs';
 
 const NotFound = (): JSX.Element => (
     <>
@@ -18,32 +21,147 @@ const NotFound = (): JSX.Element => (
         <main id="main-content" className="page-content">
             <section className="page-hero" aria-labelledby="not-found-title">
                 <h1 id="not-found-title">Page not found</h1>
-                <p>The page you requested does not exist.</p>
+                <p>That page does not exist.</p>
             </section>
         </main>
         <Footer />
     </>
 );
 
+const HomePage = (): JSX.Element => {
+    const location = useLocation();
+
+    useEffect(() => {
+        if (!location.hash) {
+            return;
+        }
+
+        const rawTargetId = location.hash.slice(1).trim();
+        if (rawTargetId.length === 0) {
+            return;
+        }
+
+        let targetId: string;
+        try {
+            targetId = decodeURIComponent(rawTargetId).trim();
+        } catch {
+            return;
+        }
+
+        if (targetId.length === 0) {
+            return;
+        }
+
+        const sectionElement = document.getElementById(targetId);
+        if (!sectionElement) {
+            return;
+        }
+
+        sectionElement.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }, [location.hash]);
+
+    return (
+        <>
+            <Header />
+            <main id="main-content" className="page-content landing-page">
+                <section
+                    id="about"
+                    className="landing-section landing-section--about"
+                    aria-labelledby="about-title"
+                >
+                    <p className="landing-kicker">About</p>
+                    <h1 id="about-title" className="landing-title">
+                        AI that shows its work.
+                    </h1>
+                    <p className="landing-lede">
+                        Footnote helps make AI answers easier to check.
+                    </p>
+                    <p>
+                        Most chatbots rush to give you a polished answer, even
+                        when they're wrong. Footnote gives you the tools to see
+                        what shaped the answer: What it knows, what it doesn't,
+                        and where you can look next.
+                    </p>
+                    <p>
+                        Want to help? Visit the project{' '}
+                        <a
+                            href="https://github.com/footnote-ai/footnote"
+                            target="_blank"
+                            rel="noreferrer"
+                        >
+                            repository
+                        </a>{' '}
+                        and{' '}
+                        <a
+                            href={PROJECT_DOCS_URL}
+                            target="_blank"
+                            rel="noreferrer"
+                        >
+                            docs
+                        </a>
+                        .
+                    </p>
+                </section>
+
+                <Hero sectionId="demo" />
+
+                <section
+                    id="get-started"
+                    className="landing-section landing-section--get-started"
+                    aria-labelledby="get-started-title"
+                >
+                    <p className="landing-kicker">Get started</p>
+                    <h2 id="get-started-title" className="landing-title">
+                        Run Footnote locally in minutes.
+                    </h2>
+                    <p className="landing-lede">
+                        Install the launcher from GitHub Releases, then start
+                        Footnote with one command.
+                    </p>
+
+                    <pre className="landing-command-block">
+                        <code>footnote start</code>
+                    </pre>
+
+                    <div className="cta-group">
+                        <a
+                            className="cta-button primary"
+                            href="https://github.com/footnote-ai/footnote/releases"
+                            target="_blank"
+                            rel="noreferrer"
+                        >
+                            Download Footnote CLI
+                        </a>
+                        <a
+                            className="cta-button secondary"
+                            href="https://github.com/footnote-ai/footnote#quickstart"
+                            target="_blank"
+                            rel="noreferrer"
+                        >
+                            Read the Quickstart
+                        </a>
+                    </div>
+
+                    <p className="landing-note">
+                        Footnote runs with Docker. Prefer working from source?
+                        Use <code>pnpm start</code>.
+                    </p>
+                </section>
+            </main>
+            <Footer />
+        </>
+    );
+};
+
 const loadTracePage = (): Promise<typeof import('@pages/TracePage')> =>
     import('@pages/TracePage');
-const loadDownloadPage = (): Promise<typeof import('@pages/DownloadPage')> =>
-    import('@pages/DownloadPage');
 const loadEmbedPage = (): Promise<typeof import('@pages/EmbedPage')> =>
     import('@pages/EmbedPage');
-const loadAboutPage = (): Promise<typeof import('@pages/AboutPage')> =>
-    import('@pages/AboutPage');
-const loadOnboardingPage = (): Promise<
-    typeof import('@pages/OnboardingPage')
-> => import('@pages/OnboardingPage');
 const loadSetupPage = (): Promise<typeof import('@pages/SetupPage')> =>
     import('@pages/SetupPage');
 
 const TracePage = lazy(loadTracePage);
-const DownloadPage = lazy(loadDownloadPage);
 const EmbedPage = lazy(loadEmbedPage);
-const AboutPage = lazy(loadAboutPage);
-const OnboardingPage = lazy(loadOnboardingPage);
 const SetupPage = lazy(loadSetupPage);
 
 const routeFallback = (
@@ -55,7 +173,7 @@ const routeFallback = (
             aria-live="polite"
         >
             <div className="spinner route-loading-spinner" aria-hidden="true" />
-            <p className="route-loading-title">Loading page...</p>
+            <p className="route-loading-title">Loading page…</p>
         </section>
     </main>
 );
@@ -71,10 +189,7 @@ const App = (): JSX.Element => {
         const preloadRoutes = (): void => {
             void Promise.allSettled([
                 loadTracePage(),
-                loadDownloadPage(),
                 loadEmbedPage(),
-                loadAboutPage(),
-                loadOnboardingPage(),
                 loadSetupPage(),
             ]);
         };
@@ -104,42 +219,7 @@ const App = (): JSX.Element => {
                 Skip to main content
             </a>
             <Routes>
-                <Route
-                    path="/"
-                    element={
-                        <>
-                            <Header />
-                            <main id="main-content">
-                                <Hero />
-                            </main>
-                            <Footer />
-                        </>
-                    }
-                />
-                <Route
-                    path="/download/*"
-                    element={
-                        <Suspense fallback={routeFallback}>
-                            <DownloadPage />
-                        </Suspense>
-                    }
-                />
-                <Route
-                    path="/about/*"
-                    element={
-                        <Suspense fallback={routeFallback}>
-                            <AboutPage />
-                        </Suspense>
-                    }
-                />
-                <Route
-                    path="/onboarding/*"
-                    element={
-                        <Suspense fallback={routeFallback}>
-                            <OnboardingPage />
-                        </Suspense>
-                    }
-                />
+                <Route path="/" element={<HomePage />} />
                 <Route
                     path="/setup"
                     element={

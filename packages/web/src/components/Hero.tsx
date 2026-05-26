@@ -1,5 +1,5 @@
 /**
- * @description: Renders the landing page hero content and primary calls to action for the web site.
+ * @description: Renders the primary interactive demo section and call to ask a live question.
  * @footnote-scope: web
  * @footnote-module: HeroSection
  * @footnote-risk: low - Hero regressions affect first impressions and CTA flow but do not break backend state.
@@ -8,20 +8,29 @@
 
 import AskMeAnything from './AskMeAnything';
 
-// Hero banner introduces Footnote's tone and provides the primary calls to action.
-const Hero = (): JSX.Element => (
-    <section className="hero" aria-labelledby="hero-title">
+type HeroProps = {
+    sectionId?: string;
+};
+
+// Hero section introduces the live demo and keeps AskMeAnything as the primary interaction surface.
+const Hero = ({ sectionId }: HeroProps): JSX.Element => (
+    <section
+        id={sectionId}
+        className="hero landing-section landing-section--demo"
+        aria-labelledby="hero-title"
+    >
         <div className="hero-copy">
-            <h1 id="hero-title" className="hero-title">
+            <p className="landing-kicker">Demo</p>
+            <h2 id="hero-title" className="hero-title landing-title">
                 <span className="hero-title__line">Answers you can check.</span>
-            </h1>
+            </h2>
             <p className="hero-subheader">
-                Footnote is an AI framework that tries to show its work.
+                Ask a question and see how the answer is supported.
             </p>
             <p className="hero-subheader">
-                <span className="hero-subheader__line">Ask a question.</span>{' '}
                 <span className="hero-subheader__line">
-                    See the sources, choices, and limits behind the answer.
+                    Sources, safety notes, and trace links appear when they are
+                    available.
                 </span>
             </p>
             <AskMeAnything />
