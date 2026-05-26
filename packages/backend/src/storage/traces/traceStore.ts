@@ -73,8 +73,3 @@ export function createTraceStoreFromConfig(): TraceStore {
         throw error;
     }
 }
-
-/**
- * Eager default trace store used by the backend HTTP handlers.
- */
-export const defaultTraceStore = createTraceStoreFromConfig();

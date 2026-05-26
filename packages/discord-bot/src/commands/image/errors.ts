@@ -9,49 +9,6 @@ import { CombinedPropertyError } from '@sapphire/shapeshift';
 import { logger } from '../../utils/logger.js';
 import { CloudinaryConfigurationError } from './cloudinary.js';
 
-/**
- * Provider-neutral error payload used when an upstream image API returns a
- * structured error body.
- */
-export interface ImageProviderResponseError {
-    code?: string | null;
-    message: string;
-}
-
-export function mapResponseError(
-    error: ImageProviderResponseError,
-    providerName = 'image provider'
-): string {
-    const providerLabel = providerName.trim() || 'image provider';
-
-    switch (error.code) {
-        case 'image_content_policy_violation':
-            return `${providerLabel} safety filters blocked this prompt. Please modify your prompt and try again.`;
-        case 'rate_limit_exceeded':
-            return `${providerLabel} rate limit hit. Please wait a few moments and try again.`;
-        case 'invalid_prompt':
-            return `${providerLabel} could not process the prompt: ${error.message}`;
-        case 'server_error':
-            return `${providerLabel} had a temporary issue generating the image. Please try again.`;
-        case 'invalid_image':
-        case 'invalid_image_format':
-        case 'invalid_base64_image':
-        case 'invalid_image_url':
-        case 'image_too_large':
-        case 'image_too_small':
-        case 'image_parse_error':
-        case 'invalid_image_mode':
-        case 'image_file_too_large':
-        case 'unsupported_image_media_type':
-        case 'empty_image_file':
-        case 'failed_to_download_image':
-        case 'image_file_not_found':
-            return `Image processing error: ${error.message}`;
-        default:
-            return `${providerLabel} error: ${error.message}`;
-    }
-}
-
 export function resolveImageCommandError(error: unknown): string {
     if (error instanceof CloudinaryConfigurationError) {
         return 'Cloudinary is not configured. Please contact the administrator.';

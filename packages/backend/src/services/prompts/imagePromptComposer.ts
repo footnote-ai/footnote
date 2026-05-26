@@ -10,7 +10,7 @@ import type { BotProfileConfig } from '../../config/profile.js';
 import { promptRegistry, renderPrompt } from './promptRegistry.js';
 import { buildProfileOverlaySystemMessage } from './profilePromptOverlay.js';
 
-const ANNOTATION_MESSAGE_LIMIT = 2000;
+const IMAGE_PROMPT_MESSAGE_LIMIT = 2000;
 
 type ComposeImagePromptsInput = {
     prompt: string;
@@ -27,8 +27,8 @@ type ComposeImagePromptsInput = {
 };
 
 const calculateRemainingRatio = (prompt: string): number => {
-    const remaining = Math.max(0, ANNOTATION_MESSAGE_LIMIT - prompt.length);
-    return remaining / ANNOTATION_MESSAGE_LIMIT;
+    const remaining = Math.max(0, IMAGE_PROMPT_MESSAGE_LIMIT - prompt.length);
+    return remaining / IMAGE_PROMPT_MESSAGE_LIMIT;
 };
 
 const sanitize = (value: string | null | undefined): string | null => {

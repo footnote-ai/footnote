@@ -378,21 +378,6 @@ export const EXECUTION_CONTRACT_PRESETS: Readonly<
 };
 
 /**
- * Explicit list of concerns that stay outside the Execution Contract.
- *
- * Keep these boundaries visible so the contract does not become a mini framework.
- */
-export const EXECUTION_CONTRACT_OUTSIDE_SCOPE: ReadonlyArray<string> = [
-    'Transport-specific behavior (web/discord response shaping).',
-    'TrustGraph evidence retrieval and ingestion implementation.',
-    'Workflow profile registry and runtime hook assembly glue.',
-    'Operator incident workflows and alerting channels.',
-    'Provider-specific model invocation details.',
-    'Multi-search/evidence acquisition implementation strategy.',
-    'Prompt authoring and planner prompt wording.',
-];
-
-/**
  * Returns a safe numeric value for policy fields that must be finite and non-negative.
  */
 const sanitizeNonNegativeFiniteNumber = (

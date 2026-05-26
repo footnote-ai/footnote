@@ -8,10 +8,8 @@
 import {
     estimateOpenAITextCost,
     estimateOpenAIRealtimeCost,
-    estimateOpenAITtsCost,
     resolveOpenAITextPricingModel,
     resolveOpenAIRealtimePricingModel,
-    resolveOpenAITtsPricingModel,
 } from '@footnote/contracts/pricing';
 import { formatUsd, logger, type LLMCostTotals } from '../utils/logger.js';
 
@@ -71,38 +69,6 @@ export const estimateBackendTextCost = (
         promptTokens,
         completionTokens
     );
-    return {
-        inputCostUsd: estimatedCost.inputCost,
-        outputCostUsd: estimatedCost.outputCost,
-        totalCostUsd: estimatedCost.totalCost,
-    };
-};
-
-export const estimateBackendTtsCost = (
-    model: string,
-    promptTokens: number
-): Pick<
-    BackendLLMCostRecord,
-    'inputCostUsd' | 'outputCostUsd' | 'totalCostUsd'
-> => {
-    const pricingResolution = resolveOpenAITtsPricingModel(model);
-    if (!pricingResolution.matchedModel) {
-        logger.warn(
-            JSON.stringify({
-                event: 'backend_unpriced_model',
-                pricingKind: 'tts',
-                model,
-                canonicalModel: pricingResolution.canonicalModel,
-                matchedModel: pricingResolution.matchedModel,
-                wasCanonicalized: pricingResolution.wasCanonicalized,
-                appliedRules: pricingResolution.appliedRules,
-                message:
-                    'No backend TTS pricing configured for model. Recording zero estimated cost.',
-            })
-        );
-    }
-
-    const estimatedCost = estimateOpenAITtsCost(model, promptTokens);
     return {
         inputCostUsd: estimatedCost.inputCost,
         outputCostUsd: estimatedCost.outputCost,
@@ -170,10 +136,3 @@ export const recordBackendLLMUsage = (record: BackendLLMCostRecord): void => {
         })
     );
 };
-
-export const getBackendLLMCostTotals = (): LLMCostTotals => ({
-    totalCostUsd: backendCostTotals.totalCostUsd,
-    totalCalls: backendCostTotals.totalCalls,
-    totalTokensIn: backendCostTotals.totalTokensIn,
-    totalTokensOut: backendCostTotals.totalTokensOut,
-});

@@ -190,31 +190,3 @@ export interface LLMCostTotals {
     totalTokensIn: number;
     totalTokensOut: number;
 }
-
-/**
- * Callback that returns the latest aggregated LLM usage totals when available.
- */
-export type LLMCostSummaryProvider = () => LLMCostTotals | null | undefined;
-
-/**
- * Logs one operator-friendly cost summary line without forcing callers to know
- * the logger formatting rules.
- */
-export const logLLMCostSummary = (getTotals?: LLMCostSummaryProvider) => {
-    try {
-        const totals = getTotals?.();
-        if (!totals) {
-            logger.info('[LLM Cost] No cost data available yet.');
-            return;
-        }
-
-        logger.info(
-            `[LLM Cost] ${formatUsd(totals.totalCostUsd)} total across ${totals.totalCalls} calls ` +
-                `(tokens in: ${totals.totalTokensIn}, out: ${totals.totalTokensOut})`
-        );
-    } catch (error) {
-        logger.error(
-            `Failed to retrieve LLM cost summary: ${error instanceof Error ? error.message : String(error)}`
-        );
-    }
-};
