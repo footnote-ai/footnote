@@ -17,28 +17,31 @@ Footnote is an AI framework that tries to show its work.
 
 [Deployment Guide](deploy/README.md)
 
-Source prerequisites (for `pnpm start` path only):
+#### Run from source
+
+Prerequisites:
 
 - Node.js 22+
 - `pnpm` (repo uses `pnpm@10.27.0`)
 
-Install `pnpm` quickly:
+Install `pnpm` with one of:
 
 ```bash
 corepack enable && corepack prepare pnpm@10.27.0 --activate
 ```
-
-Fallback:
-
 ```bash
 npm i -g pnpm@10.27.0
 ```
 
-Run from source:
+Clone and start:
 
 ```bash
 git clone https://github.com/footnote-ai/footnote.git
+```
+```bash
 cd footnote
+```
+```bash
 pnpm start
 ```
 
