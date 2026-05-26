@@ -27,7 +27,7 @@ export type SettingsDefaultValue =
 export type SettingsSpecEntry = {
     envKey: string;
     section: string;
-    path: string[];
+    path: readonly string[];
     kind: SettingsValueKind;
     description: string;
     defaultValue?: SettingsDefaultValue;
@@ -39,7 +39,7 @@ export type SettingsSpecEntry = {
 
 export type EnvPathSourceEntry = {
     envKey: string;
-    path: string[];
+    path: readonly string[];
     source: 'secret_env' | 'settings_yaml' | 'bootstrap_env';
     kind: SettingsValueKind;
 };
@@ -75,52 +75,87 @@ const resolveConfigSource = (
     return source;
 };
 
-export const envPathSourceEntries: EnvPathSourceEntry[] = envEntries
-    .filter((entry) => !('isPattern' in entry && entry.isPattern === true))
-    .filter((entry) => entry.section !== 'discord-bot')
-    .map((entry) => {
-        return {
-            envKey: entry.key,
-            path: resolveEnvPath(entry),
-            source: resolveConfigSource(entry.key),
-            kind: entry.kind as SettingsValueKind,
-        };
-    });
+const freezeStringArray = (value: readonly string[]): readonly string[] =>
+    Object.freeze([...value]);
 
-export const settingsSpecEntries: SettingsSpecEntry[] = envEntries
-    .filter((entry) => !('isPattern' in entry && entry.isPattern === true))
-    .filter((entry) => entry.section !== 'discord-bot')
-    .filter((entry) => resolveConfigSource(entry.key) === 'settings_yaml')
-    .map((entry) => ({
-        envKey: entry.key,
-        section: toKebabCase(entry.section),
-        path: resolveEnvPath(entry),
-        kind: entry.kind as SettingsValueKind,
-        description: entry.description,
-        defaultValue:
-            entry.defaultValue.kind === 'literal'
-                ? Array.isArray(entry.defaultValue.value)
-                    ? (entry.defaultValue.value as readonly string[])
-                    : typeof entry.defaultValue.value === 'string' ||
-                        typeof entry.defaultValue.value === 'number' ||
-                        typeof entry.defaultValue.value === 'boolean'
-                      ? (entry.defaultValue.value as SettingsDefaultValue)
-                      : undefined
-                : undefined,
-        templateDefaultValue:
-            entry.defaultValue.kind === 'literal'
-                ? entry.defaultValue.value
-                : undefined,
-        defaultKind: entry.defaultValue.kind,
-        derivedDescription:
-            entry.defaultValue.kind === 'derived'
-                ? entry.defaultValue.description
-                : undefined,
-        allowedValues:
-            'allowedValues' in entry ? entry.allowedValues : undefined,
-    }))
-    .sort((left, right) =>
-        left.path.join('.').localeCompare(right.path.join('.'))
+const resolveFrozenDefaultValue = (
+    value: EnvLiteralValue
+): SettingsDefaultValue | undefined => {
+    if (Array.isArray(value)) {
+        return freezeStringArray(value);
+    }
+    if (
+        typeof value === 'string' ||
+        typeof value === 'number' ||
+        typeof value === 'boolean'
+    ) {
+        return value;
+    }
+    return undefined;
+};
+
+export const envPathSourceEntries: ReadonlyArray<EnvPathSourceEntry> =
+    Object.freeze(
+        envEntries
+            .filter(
+                (entry) => !('isPattern' in entry && entry.isPattern === true)
+            )
+            .filter((entry) => entry.section !== 'discord-bot')
+            .map((entry) => {
+                const path = freezeStringArray(resolveEnvPath(entry));
+                return Object.freeze({
+                    envKey: entry.key,
+                    path,
+                    source: resolveConfigSource(entry.key),
+                    kind: entry.kind as SettingsValueKind,
+                });
+            })
+    );
+
+export const settingsSpecEntries: ReadonlyArray<SettingsSpecEntry> =
+    Object.freeze(
+        envEntries
+            .filter(
+                (entry) => !('isPattern' in entry && entry.isPattern === true)
+            )
+            .filter((entry) => entry.section !== 'discord-bot')
+            .filter(
+                (entry) => resolveConfigSource(entry.key) === 'settings_yaml'
+            )
+            .map((entry) => {
+                const path = freezeStringArray(resolveEnvPath(entry));
+                const literalDefaultValue =
+                    entry.defaultValue.kind === 'literal'
+                        ? resolveFrozenDefaultValue(entry.defaultValue.value)
+                        : undefined;
+                const allowedValues =
+                    'allowedValues' in entry &&
+                    Array.isArray(entry.allowedValues)
+                        ? freezeStringArray(entry.allowedValues)
+                        : undefined;
+
+                return Object.freeze({
+                    envKey: entry.key,
+                    section: toKebabCase(entry.section),
+                    path,
+                    kind: entry.kind as SettingsValueKind,
+                    description: entry.description,
+                    defaultValue: literalDefaultValue,
+                    templateDefaultValue:
+                        entry.defaultValue.kind === 'literal'
+                            ? entry.defaultValue.value
+                            : undefined,
+                    defaultKind: entry.defaultValue.kind,
+                    derivedDescription:
+                        entry.defaultValue.kind === 'derived'
+                            ? entry.defaultValue.description
+                            : undefined,
+                    allowedValues,
+                });
+            })
+            .sort((left, right) =>
+                left.path.join('.').localeCompare(right.path.join('.'))
+            )
     );
 
 export { toKebabCase };

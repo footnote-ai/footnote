@@ -462,6 +462,16 @@ test('admin settings server contract: auth, YAML read/write ETag flow, and resta
     );
 
     await t.test(
+        'admin template read rejects unauthenticated requests',
+        async () => {
+            const response = await fetch(
+                `${harness.baseUrl}/api/admin/settings/template`
+            );
+            assert.equal(response.status, 401);
+        }
+    );
+
+    await t.test(
         'admin YAML read returns content-type and etag headers',
         async () => {
             const response = await fetch(

@@ -31,7 +31,7 @@ const parseYamlObject = (raw: string): Record<string, unknown> => {
 
 const getNestedValue = (
     root: Record<string, unknown>,
-    path: string[]
+    path: readonly string[]
 ): unknown => {
     let cursor: unknown = root;
     for (const segment of path) {
@@ -47,6 +47,9 @@ const getNestedValue = (
     }
     return cursor;
 };
+
+const escapeForRegex = (value: string): string =>
+    value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
 test('resolveTemplateTarget returns fly only when FLY_APP_NAME is non-empty', () => {
     assert.equal(resolveTemplateTarget({}), 'local');
@@ -145,8 +148,15 @@ test('every settings key has a one-line comment directly above it', () => {
         const key = entry.path[entry.path.length - 1] ?? '';
         const indent = ' '.repeat(Math.max(0, (entry.path.length - 1) * 4));
         const keyPrefix = `${indent}${key}:`;
-        const keyLineIndex = lines.findIndex((line) =>
-            line.startsWith(keyPrefix)
+        const keyLinePattern = new RegExp(
+            `^${escapeForRegex(indent)}${escapeForRegex(key)}:(?:\\s|$)`
+        );
+        const keyLineIndex = lines.findIndex(
+            (line) =>
+                line.startsWith(keyPrefix) &&
+                line.length >= indent.length &&
+                line.slice(0, indent.length) === indent &&
+                keyLinePattern.test(line)
         );
         if (keyLineIndex <= 0) {
             assert.fail(`Expected key line for path ${entry.path.join('.')}.`);

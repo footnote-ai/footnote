@@ -29,6 +29,11 @@ type LoadYamlState =
     | { status: 'ready' }
     | { status: 'error'; message: string };
 
+type YamlNoticeState = {
+    message: string;
+    kind: 'info' | 'warning';
+};
+
 const readErrorMessage = async (response: Response): Promise<string> => {
     try {
         const payload = (await response.json()) as {
@@ -61,6 +66,7 @@ const SetupPage = (): JSX.Element => {
     const [yamlText, setYamlText] = useState<string>('');
     const [ifMatch, setIfMatch] = useState<string>(MISSING_SETTINGS_SENTINEL);
     const [yamlRetryKey, setYamlRetryKey] = useState(0);
+    const [yamlNotice, setYamlNotice] = useState<YamlNoticeState | null>(null);
     const [validationErrors, setValidationErrors] = useState<
         AdminSettingsValidationError[]
     >([]);
@@ -130,6 +136,7 @@ const SetupPage = (): JSX.Element => {
         }
         let cancelled = false;
         setYamlState({ status: 'loading' });
+        setYamlNotice(null);
         const setYamlError = (message: string): void => {
             if (cancelled) {
                 return;
@@ -171,7 +178,33 @@ const SetupPage = (): JSX.Element => {
             }
             const body = await response.text();
             if (body.trim().length === 0) {
-                setYamlError('Settings file is empty. Retry loading setup.');
+                const templateResponse = await fetch(
+                    '/api/admin/settings/template',
+                    {
+                        method: 'GET',
+                    }
+                );
+                if (!templateResponse.ok) {
+                    setYamlError(await readErrorMessage(templateResponse));
+                    return;
+                }
+                const templateText = await templateResponse.text();
+                if (templateText.trim().length === 0) {
+                    setYamlError(
+                        'Settings template response was empty. Retry loading setup.'
+                    );
+                    return;
+                }
+                if (!cancelled) {
+                    setIfMatch(MISSING_SETTINGS_SENTINEL);
+                    setYamlText(templateText);
+                    setYamlNotice({
+                        message:
+                            'Settings file is empty. Loaded canonical template so you can edit and save.',
+                        kind: 'warning',
+                    });
+                    setYamlState({ status: 'ready' });
+                }
                 return;
             }
             const etag = response.headers.get('etag');
@@ -316,6 +349,9 @@ const SetupPage = (): JSX.Element => {
                             Setup session is active until{' '}
                             {exchangeState.expiresAt}.
                         </p>
+                    )}
+                    {yamlNotice && (
+                        <p className="setup-note">{yamlNotice.message}</p>
                     )}
                     {yamlState.status === 'loading' && (
                         <p>Loading settings...</p>

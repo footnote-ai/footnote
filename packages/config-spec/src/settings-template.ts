@@ -26,7 +26,7 @@ export type TemplateRenderedDefault =
 
 export type TemplateField = {
     envKey: string;
-    path: string[];
+    path: readonly string[];
     kind: SettingsValueKind;
     sourceSection: string;
     comment: string;

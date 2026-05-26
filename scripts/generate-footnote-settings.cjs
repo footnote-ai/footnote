@@ -76,6 +76,8 @@ const loadTemplateRenderer = async () => {
     const loadModule = async () =>
         import(pathToFileURL(configSpecDistIndexPath).href);
 
+    ensureConfigSpecBuild();
+
     let hasRetriedBuild = false;
     let module;
     try {
