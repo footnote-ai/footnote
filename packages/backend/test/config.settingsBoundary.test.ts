@@ -261,6 +261,45 @@ test('parseServerSettingsYaml helper stays aligned with startup settings parsing
     assert.equal(config.rateLimits.web.ip.limit, 41);
 });
 
+test('parseServerSettingsYaml allows dot-separated model ids in image-model-multipliers', () => {
+    const rawYaml = [
+        'version: 1',
+        'image:',
+        '  image-model-multipliers:',
+        '    gpt-image-1: 2',
+        '    gpt-image-1-mini: 1',
+        '    gpt-image-1.5: 2',
+        '',
+    ].join('\n');
+    const settingsPath = withSettingsFile(rawYaml);
+    const parsed = parseServerSettingsYaml({
+        rawText: rawYaml,
+        settingsPath,
+    });
+
+    const multipliersValue =
+        parsed.yamlSettings.settingsEnv['image.image-model-multipliers'];
+    assert.equal(typeof multipliersValue, 'string');
+    if (typeof multipliersValue !== 'string') {
+        assert.fail(
+            'image.image-model-multipliers should serialize as JSON string'
+        );
+    }
+    assert.deepEqual(JSON.parse(multipliersValue), {
+        'gpt-image-1': 2,
+        'gpt-image-1-mini': 1,
+        'gpt-image-1.5': 2,
+    });
+    assert.deepEqual(
+        JSON.parse(parsed.yamlEnv.IMAGE_MODEL_MULTIPLIERS ?? '{}'),
+        {
+            'gpt-image-1': 2,
+            'gpt-image-1-mini': 1,
+            'gpt-image-1.5': 2,
+        }
+    );
+});
+
 test('rendered canonical template parses through backend settings validator', () => {
     const rawYaml = renderSettingsTemplateYaml({
         target: 'local',

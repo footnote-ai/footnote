@@ -8,6 +8,7 @@
 
 import fs from 'node:fs';
 import { randomUUID, createHash } from 'node:crypto';
+import path from 'node:path';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { renderSettingsTemplateYaml } from '@footnote/config-spec';
 import type { SettingsSpecEntry } from '../config/settings-spec.js';
@@ -123,6 +124,7 @@ export const writeSettingsFileAtomically = async (
     filePath: string,
     yamlText: string
 ): Promise<void> => {
+    await fs.promises.mkdir(path.dirname(filePath), { recursive: true });
     const tempPath = `${filePath}.tmp-${process.pid}-${randomUUID()}`;
     let preservedMode: number | undefined;
     try {

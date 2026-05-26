@@ -22,6 +22,13 @@ const yaml = require('js-yaml') as YamlModule;
 
 const DEFAULT_SETTINGS_PATH = '/data/config/footnote.yaml';
 const KEBAB_KEY_PATTERN = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
+const JSON_SETTINGS_POINTERS = new Set(
+    envPathSourceEntries
+        .filter(
+            (entry) => entry.source === 'settings_yaml' && entry.kind === 'json'
+        )
+        .map((entry) => `root.${entry.path.join('.')}`)
+);
 
 type SettingsScalar = string | number | boolean | string[];
 type SettingsMap = Record<string, SettingsScalar>;
@@ -86,6 +93,9 @@ export const resolveSettingsPath = (value: string | undefined): string =>
     value?.trim() || DEFAULT_SETTINGS_PATH;
 
 const validateKebabCaseKeys = (value: unknown, pointer = 'root'): void => {
+    if (JSON_SETTINGS_POINTERS.has(pointer)) {
+        return;
+    }
     if (Array.isArray(value)) {
         value.forEach((entry, index) =>
             validateKebabCaseKeys(entry, `${pointer}[${index}]`)

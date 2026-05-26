@@ -871,3 +871,25 @@ test('writeSettingsFileAtomically preserves destination file permissions', async
         fs.rmSync(tempDir, { recursive: true, force: true });
     }
 });
+
+test('writeSettingsFileAtomically creates parent directory for first write', async () => {
+    const tempDir = fs.mkdtempSync(
+        path.join(os.tmpdir(), 'footnote-admin-settings-write-create-dir-')
+    );
+    const settingsPath = path.join(
+        tempDir,
+        'nested',
+        'config',
+        'footnote.yaml'
+    );
+    try {
+        await writeSettingsFileAtomically(
+            settingsPath,
+            'version: 1\nrate-limits:\n  web-api-rate-limit-ip: 101\n'
+        );
+        const written = fs.readFileSync(settingsPath, 'utf8');
+        assert.match(written, /web-api-rate-limit-ip:\s*101/);
+    } finally {
+        fs.rmSync(tempDir, { recursive: true, force: true });
+    }
+});
