@@ -40,6 +40,12 @@ const DEFAULT_STEP_CHAINS: StepRoutingChainsConfig = {
     },
 };
 
+const WORKFLOW_MODE_IDS: WorkflowModeProfileId[] = [
+    'express',
+    'balanced',
+    'grounded',
+];
+
 const resolveCatalogPath = (
     projectRoot: string,
     configuredPath: string | null
@@ -267,8 +273,7 @@ const pruneStepRoutingChains = (
     const resolved = JSON.parse(
         JSON.stringify(chains)
     ) as StepRoutingChainsConfig;
-    const modes: WorkflowModeProfileId[] = ['express', 'balanced', 'grounded'];
-    for (const mode of modes) {
+    for (const mode of WORKFLOW_MODE_IDS) {
         const steps: Array<'planner' | 'generate' | 'assess'> = [
             'planner',
             'generate',
@@ -345,8 +350,7 @@ const validateStepRoutingChains = (
         sourcePath,
         warn
     );
-    const modes: WorkflowModeProfileId[] = ['express', 'balanced', 'grounded'];
-    for (const mode of modes) {
+    for (const mode of WORKFLOW_MODE_IDS) {
         const steps: Array<'planner' | 'generate' | 'assess'> = [
             'planner',
             'generate',
