@@ -4,9 +4,9 @@ This doc defines the small user-facing control surface for chat.
 
 ## User-Facing Allowlist
 
-For now, users get three choices only:
+Users get three choices:
 
-- `fast`
+- `express`
 - `balanced`
 - `grounded`
 
@@ -14,9 +14,9 @@ Do not add aliases, advanced toggles, or secondary sub-controls in this phase.
 
 ## What These Choices Mean
 
-- `fast`: quickest path, with lighter checking and minimal evidence work
-- `balanced`: standard reviewed path, with moderate evidence and review
-- `grounded`: most careful path in this set, with stricter evidence posture and
+- `express`: quicker, lower-allowance route for straightforward requests
+- `balanced`: default reviewed path for general requests
+- `grounded`: richer context and review route, with stricter evidence posture and
   review expectations when sources are available
 
 These labels should be easy to understand. A user should not need to know
@@ -24,19 +24,18 @@ workflow internals, provider routing, or policy terms to pick one.
 
 ## Default Direction
 
-`grounded` should be the default.
+`balanced` is the default.
 
-This is a product choice, not an accidental fallback. Footnote's stance is that
-careful, reviewable, evidence-aware behavior should be the default posture
-unless a different bounded user choice is made.
+This keeps the default practical for general use while preserving clear options
+for faster or more evidence-heavy runs.
 
 ## How This Maps Internally
 
 These choices map to broad backend behavior, not direct control of internal
 knobs.
 
-- If the user chooses `fast`, the system should prefer a quicker execution path
-  with lighter review and evidence expectations.
+- If the user chooses `express`, the system should prefer a quicker
+  lower-allowance execution path.
 - If the user chooses `balanced`, the system should prefer the standard
   reviewed path.
 - If the user chooses `grounded`, the system should prefer a stricter reviewed
@@ -66,7 +65,7 @@ it should stay internal until Footnote has a stronger public control model.
 
 - If a user picks `grounded`, expose that choice as a stricter answer posture.
   Show actual evidence separately through citations or recorded trace details.
-- If a user picks `fast`, do not also surface provider or tool-routing choices
+- If a user picks `express`, do not also surface provider or tool-routing choices
   as if they are equal policy controls. Those remain backend-owned.
 
 ## Not In Scope

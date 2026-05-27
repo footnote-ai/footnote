@@ -454,7 +454,7 @@ export const createChatOrchestrator = ({
         // Pick the run mode first, then derive the contract from it. That keeps
         // later branches from inventing their own policy rules.
         // TODO(workflow-mode-escalation): Add optional runtime mode transitions
-        // (for example fast -> grounded) when later retrieval/sufficiency
+        // (for example express -> grounded) when later retrieval/sufficiency
         // signals justify escalation. This is future behavior only, and should
         // stay attached to centralized mode routing policy.
         const resolvedExecutionContract = resolveExecutionContract({

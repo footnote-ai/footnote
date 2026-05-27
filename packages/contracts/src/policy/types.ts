@@ -590,7 +590,7 @@ export type WorkflowRecord = {
 /**
  * Canonical high-level workflow mode ids.
  */
-export type WorkflowModeId = 'balanced' | 'grounded';
+export type WorkflowModeId = 'express' | 'balanced' | 'grounded';
 
 export type WorkflowModeSelectionSource =
     | 'requested_mode'

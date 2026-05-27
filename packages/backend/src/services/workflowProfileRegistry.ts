@@ -97,7 +97,7 @@ const BUILTIN_RUNTIME_WORKFLOW_PROFILES: Readonly<
 
 export const DEFAULT_RUNTIME_WORKFLOW_PROFILE_ID: BuiltinWorkflowProfileId =
     'reviewed';
-const DEFAULT_WORKFLOW_MODE_ID: BuiltinWorkflowModeId = 'grounded';
+const DEFAULT_WORKFLOW_MODE_ID: BuiltinWorkflowModeId = 'balanced';
 
 const isBuiltinWorkflowProfileId = (
     value: string
@@ -127,6 +127,19 @@ type WorkflowModeBehavior = WorkflowModeDecision['behavior'];
 const WORKFLOW_MODE_BEHAVIOR_MAP: Readonly<
     Record<BuiltinWorkflowModeId, WorkflowModeBehavior>
 > = {
+    express: {
+        executionContractPresetId: 'fast-direct',
+        workflowProfileClass: 'reviewed',
+        workflowProfileId: 'reviewed',
+        workflowExecution: 'policy_gated',
+        reviewPass: 'included',
+        reviseStep: 'allowed',
+        evidencePosture: 'minimal',
+        maxWorkflowSteps: 2,
+        maxPlanCycles: 1,
+        maxReviewCycles: 0,
+        maxDeliberationCalls: 1,
+    },
     balanced: {
         executionContractPresetId: 'balanced',
         workflowProfileClass: 'reviewed',
@@ -188,7 +201,11 @@ const normalizeWorkflowModeId = (
 ): {
     modeId: WorkflowModeId;
 } | null => {
-    if (modeId === 'balanced' || modeId === 'grounded') {
+    if (
+        modeId === 'express' ||
+        modeId === 'balanced' ||
+        modeId === 'grounded'
+    ) {
         return {
             modeId: modeId as WorkflowModeId,
         };
@@ -201,13 +218,13 @@ const inferWorkflowModeIdFromExecutionContract = (
     responseMode: ExecutionResponseMode | undefined
 ): BuiltinWorkflowModeId | undefined => {
     // ExecutionContract currently exposes `fast_direct|quality_grounded`.
-    // Workflow mode no longer includes `fast`, so map `fast_direct` to
-    // `balanced` as the nearest reviewed execution posture.
+    // Public workflow mode uses `express|balanced|grounded`, so map
+    // `fast_direct` to the lower-allowance `express` mode.
     if (responseMode === 'quality_grounded') {
         return 'grounded';
     }
     if (responseMode === 'fast_direct') {
-        return 'balanced';
+        return 'express';
     }
     return undefined;
 };
@@ -231,7 +248,7 @@ export type WorkflowModeEscalationRequest = {
  * metadata explanation.
  *
  * `modeDecision.modeId` is always the canonical high-level id
- * (`balanced|grounded`).
+ * (`express|balanced|grounded`).
  *
  * In v1, this initial mode decision is not revised later in runtime.
  */
@@ -324,10 +341,13 @@ const normalizeEscalationTargetModeId = (
 const deriveWorkflowBehaviorRestrictivenessRank = (
     behavior: WorkflowModeBehavior
 ): 0 | 1 | 2 => {
-    if (behavior.executionContractPresetId === 'balanced') {
+    if (behavior.executionContractPresetId === 'fast-direct') {
         return 0;
     }
-    return 1;
+    if (behavior.executionContractPresetId === 'balanced') {
+        return 1;
+    }
+    return 2;
 };
 
 const resolveEscalatedWorkflowModeDecision = (input: {

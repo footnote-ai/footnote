@@ -1544,8 +1544,8 @@ components:
                     description: Optional bot persona selector used for backend-owned persona overlays (discord).
                 modeId:
                     type: string
-                    enum: [balanced, grounded]
-                    description: Optional user-facing posture selector for workflow mode routing.
+                    enum: [express, balanced, grounded]
+                    description: Optional user-facing workflow mode selector (`express`, `balanced`, or `grounded`).
                 maxReviewCycles:
                     type: integer
                     minimum: 0
