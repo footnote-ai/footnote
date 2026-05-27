@@ -1,29 +1,28 @@
 # Documentation Map
 
-This folder holds the main project docs. The subfolders cover the working
-system. The top-level files cover project background, licensing posture, and
-philosophy.
+This folder holds the main project docs. The subfolders cover the working system. The top-level files cover project background, licensing posture, and philosophy.
 
 For first-time setup:
 
-- Standalone user path: [README Standalone CLI](../README.md#standalone-cli-primary-user-path)
-- Developer source path: [README Quickstart](../README.md#quickstart)
-- Deployment path: [deploy README](../deploy/README.md)
-- Source runs use `pnpm`; quick install: `corepack enable && corepack prepare pnpm@10.27.0 --activate` (fallback: `npm i -g pnpm@10.27.0`)
+- New users: [README Quickstart](../README.md#quickstart)
+- Deployment/operators: [deploy README](../deploy/README.md)
 
-Standalone launcher note: running `footnote` with no command (or double-clicking
-the binary) opens the `footnote info` launcher menu. Use explicit commands like
-`footnote start`, `footnote setup`, and `footnote update` for automation.
+For contributors:
+
+- Source setup: [Run from source](../README.md#run-from-source-developers-and-contributors)
+- [CI](./ci/README.md)
+- [Architecture](./architecture/README.md)
+- [Proposals](./proposals/)
+
+Source runs use `pnpm`; quick install: `corepack enable && corepack prepare pnpm@10.27.0 --activate` (fallback: `npm i -g pnpm@10.27.0`).
+
+Standalone launcher note: running `footnote` with no command (or double-clicking the binary) opens the `footnote info` launcher menu. Use explicit commands like `footnote start`, `footnote setup`, and `footnote update` for automation.
 
 ## Sections
 
-- [Architecture](./architecture/README.md): current system shape, boundaries,
-  and reading order.
-- [CI](./ci/README.md): workflow map, what checks run, and how to debug CI
-  failures.
+- [Architecture](./architecture/README.md): current system shape, boundaries, and reading order.
+- [CI](./ci/README.md): workflow map, what checks run, and how to debug CI failures.
 - [Decisions](./decisions/): durable technical choices and why they were made.
 - [Proposals](./proposals/): unadopted or exploratory ideas.
-- [Status](./status/): branch-level implementation tracking documents.
-- [API](./api/README.md): OpenAPI source, operation mapping, and code-linking
-  rules.
+- [API](./api/README.md): OpenAPI source, operation mapping, and code-linking rules.
 - [AI](./ai/README.md): contributor workflow for AI-assisted changes.

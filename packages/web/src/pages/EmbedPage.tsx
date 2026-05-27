@@ -199,7 +199,7 @@ const EmbedPage = (): JSX.Element => {
                             target="_blank"
                             rel="noreferrer"
                         >
-                            Read the Quickstart
+                            Quickstart
                         </a>
                     </div>
                 </section>

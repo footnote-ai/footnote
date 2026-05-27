@@ -106,7 +106,7 @@ const HomePage = (): JSX.Element => {
                             target="_blank"
                             rel="noreferrer"
                         >
-                            Download
+                            Download Footnote CLI
                         </a>
                         <a
                             className="cta-button secondary"
@@ -118,13 +118,13 @@ const HomePage = (): JSX.Element => {
                         </a>
 
                         <p>
-                            Want to help? Visit the project{' '}
+                            Contribute from source? Visit the{' '}
                             <a
                                 href="https://github.com/footnote-ai/footnote"
                                 target="_blank"
                                 rel="noreferrer"
                             >
-                                repository
+                                project source
                             </a>{' '}
                             and{' '}
                             <a
