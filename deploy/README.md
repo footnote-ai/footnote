@@ -86,25 +86,6 @@ For local source builds during development:
 docker compose -f deploy/compose.yml -f deploy/compose.dev-build.yml up --build
 ```
 
-## Volume Name Migration Note
-
-The compose volume identifier changed from `footnote-data` (old) to
-`footnote_data` (new). This is a breaking naming change for existing Docker
-hosts.
-
-If you already have data in `footnote-data`, choose one of these paths:
-
-1. Migrate data to `footnote_data`:
-   Create the new volume, then run a one-time copy using a temporary container
-   that mounts both volumes and copies all files from `footnote-data` into
-   `footnote_data`.
-2. Keep the old volume name for backwards compatibility:
-   Add a compose override that maps `/data` to `footnote-data` so existing data
-   continues to be used without migration.
-
-Use the exact identifiers `footnote_data` and `footnote-data` when updating
-compose files and operational runbooks.
-
 ## Settings vs Secrets
 
 - `footnote.yaml`: non-secret runtime behavior
@@ -137,12 +118,6 @@ discord-bots:
           display-name: 'Footnote'
           mention-aliases: []
 ```
-
-Behavior:
-
-- optional bot missing credentials: disabled with explicit log reason
-- required bot missing credentials: startup fails
-- no `discord-bots`: fail-open startup with zero bots
 
 ## Fly.io
 
