@@ -4,17 +4,18 @@
 [![Hippocratic License HL3-CORE](https://img.shields.io/static/v1?label=Hippocratic%20License&message=HL3-CORE&labelColor=5e2751&color=bc8c3d)](https://firstdonoharm.dev/version/3/0/core.html)
 [![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/footnote-ai/footnote)
 
-Footnote is a transparency- and provenance-focused AI framework that shows its work.
+Footnote is an AI framework that tries to show its work.
 
 ## Quickstart
 
-### 1) Download the CLI binary
+### 1) Download the app file
 
-Download the latest CLI assets from [GitHub Releases](https://github.com/footnote-ai/footnote/releases).
+Download the latest app files from
+[GitHub Releases](https://github.com/footnote-ai/footnote/releases).
 
-### 2) Choose your file
+### 2) Choose the file for your system
 
-Use the release asset that matches your OS and CPU:
+Choose the file that matches your system:
 
 - Windows x64: `footnote-win32-x64.exe`
 - macOS Apple Silicon (arm64): `footnote-darwin-arm64`
@@ -22,7 +23,11 @@ Use the release asset that matches your OS and CPU:
 
 ### 3) Verify the download (`.sha256`)
 
-Each asset includes a matching `.sha256` file. This file contains the SHA-256 checksum used to verify download integrity for that exact asset.
+Each download includes a matching `.sha256` file. `.sha256` files are
+checksums. A checksum is a short fingerprint for a file. It lets you check that
+the file you downloaded matches the file we released.
+
+Replace the example filenames below with the file you downloaded.
 
 Windows PowerShell:
 
@@ -38,23 +43,28 @@ shasum -a 256 ./footnote-darwin-arm64
 cat ./footnote-darwin-arm64.sha256
 ```
 
-Compare the hash output from your command to the value in the matching `.sha256` file for the same asset.
+Compare the hash output from your command to the value in the matching
+`.sha256` file.
 
-### 4) Open the binary
+### 4) Open the file
 
-Double-click the file (or run it from a terminal).
+Double-click the file, or run it from a terminal.
 
-### 5) Complete first setup
+macOS/Linux users may need to allow the file to run first:
 
-When setup is needed:
+```bash
+chmod +x ./footnote-linux-x64
+./footnote-linux-x64
+```
 
-- The launcher/runtime starts.
-- The setup page opens.
-- The setup page starts from the default config template for your environment.
+Use the filename you downloaded.
 
-### 6) Restart after saving settings
+### 5) First run and setup
 
-After saving settings, restart Footnote so the runtime applies your updated configuration.
+On first run, Footnote starts the local runtime and opens the setup page in
+your browser. The setup page starts with a default config for your environment,
+which you can review and save. After saving settings, restart Footnote so the
+runtime applies your updated configuration.
 
 ## Run from source (Developers and contributors)
 

@@ -13,7 +13,7 @@ import Hero from '@components/Hero';
 import Footer from '@components/Footer';
 
 const PROJECT_DOCS_URL =
-    'https://github.com/footnote-ai/footnote/tree/main/docs';
+    'https://github.com/footnote-ai/footnote/blob/main/docs/README.md';
 
 const NotFound = (): JSX.Element => (
     <>
@@ -106,7 +106,7 @@ const HomePage = (): JSX.Element => {
                             target="_blank"
                             rel="noreferrer"
                         >
-                            Download Footnote CLI
+                            Download Footnote
                         </a>
                         <a
                             className="cta-button secondary"
@@ -118,13 +118,13 @@ const HomePage = (): JSX.Element => {
                         </a>
 
                         <p>
-                            Contribute from source? Visit the{' '}
+                            Want to contribute?{' '}
                             <a
                                 href="https://github.com/footnote-ai/footnote"
                                 target="_blank"
                                 rel="noreferrer"
                             >
-                                project source
+                                View on GitHub
                             </a>{' '}
                             and{' '}
                             <a
@@ -132,7 +132,7 @@ const HomePage = (): JSX.Element => {
                                 target="_blank"
                                 rel="noreferrer"
                             >
-                                docs
+                                read the docs
                             </a>
                             .
                         </p>
