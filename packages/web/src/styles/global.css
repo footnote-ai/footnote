@@ -2971,13 +2971,44 @@ kbd {
 
 .setup-panel,
 .setup-editor {
-    max-width: min(1320px, 97vw);
+    width: 100%;
     margin: 0 auto 1.4rem auto;
 }
 
+.setup-panel {
+    max-width: min(74rem, 97vw);
+}
+
 .setup-editor {
+    max-width: min(100%, clamp(44rem, 82vw, 66rem));
     display: grid;
     gap: 0.8rem;
+}
+
+.setup-editor-disclosure {
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    background: color-mix(in srgb, var(--bg-soft) 78%, var(--bg) 22%);
+    padding: 0.25rem 0.8rem 0.8rem;
+}
+
+.setup-editor-disclosure summary {
+    cursor: pointer;
+    font-family: var(--mono-font);
+    font-size: 0.92rem;
+    font-weight: 600;
+    padding: 0.52rem 0 0.44rem;
+    color: var(--text);
+}
+
+.setup-editor-disclosure__content {
+    display: grid;
+    gap: 0.8rem;
+    padding-top: 0.2rem;
+}
+
+.setup-editor-disclosure:not([open]) {
+    padding-bottom: 0.3rem;
 }
 
 .setup-textarea {
@@ -3022,9 +3053,31 @@ kbd {
     color: var(--subtle-text);
 }
 
+.setup-submit-feedback {
+    display: grid;
+    gap: 0.55rem;
+}
+
 .setup-errors {
     margin: 0;
     padding-left: 1.2rem;
+    color: #b02a37;
+}
+
+.setup-warnings {
+    margin: 0;
+    padding-left: 1.2rem;
+    color: color-mix(in srgb, var(--highlight) 72%, var(--text) 28%);
+}
+
+@media (max-width: 768px) {
+    .setup-editor {
+        max-width: 100%;
+    }
+
+    .setup-textarea {
+        min-height: 460px;
+    }
 }
 
 /* ===== LANDING SPA (Reading Room Noir) ===== */
