@@ -243,7 +243,7 @@ If you see scrollbars in the iframe:
 
 ## Embed-Specific Considerations
 
-- **Mobile responsiveness**: Shared `global.css` applies additional padding and stacking below ~560px and ~480px. At 320–414px, the Footnote intro and AMA form stack vertically; keep the iframe container at `width: 100%` with no CSS transforms to avoid forced zoom/scroll.
+- **Mobile responsiveness**: Shared layered web styles (imported from `packages/web/src/styles/index.css`) apply additional padding and stacking below ~560px and ~480px. At 320–414px, the Footnote intro and AMA form stack vertically; keep the iframe container at `width: 100%` with no CSS transforms to avoid forced zoom/scroll.
 - **Header links**: On `/embed`, `Setup` and `Blog` buttons automatically open in a new tab with `target="_blank"`/`rel="noopener noreferrer"`. GitHub always opens in a new tab.
 - **Height messaging**: The embed posts `footnote-embed-height` messages on load, resize, mutations, and a 500ms interval. Ensure the parent listener stays attached and validates origin as needed.
 - **Trimmed UI**: The embed shows only the header, hero copy, Footnote intro, and Ask Me Anything. No blog grid or other site sections render.

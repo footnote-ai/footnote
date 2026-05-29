@@ -1,0 +1,119 @@
+.provenance-footer {
+    margin-top: 0.75rem;
+    border: 1px solid
+        color-mix(
+            in srgb,
+            var(--fn-border-default) 72%,
+            rgba(255, 255, 255, 0.12) 28%
+        );
+    border-radius: 10px;
+    padding: 0.8rem 0.95rem;
+    background: color-mix(
+        in srgb,
+        var(--fn-surface-soft) 95%,
+        var(--fn-brand-accent-soft) 5%
+    );
+    transition:
+        background-color var(--fn-duration-fast) var(--fn-ease-standard),
+        color var(--fn-duration-fast) var(--fn-ease-standard);
+}
+
+.provenance-header {
+    margin-bottom: 0.35rem;
+    font-family: var(--fn-font-mono);
+    font-size: 0.78rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: color-mix(
+        in srgb,
+        var(--fn-text-muted) 80%,
+        var(--fn-brand-accent) 20%
+    );
+}
+
+.provenance-workflow-receipt {
+    margin-bottom: 0.4rem;
+    font-size: 0.88rem;
+    color: color-mix(
+        in srgb,
+        var(--fn-text-muted) 92%,
+        var(--fn-brand-accent) 8%
+    );
+}
+
+.provenance-main,
+.provenance-meta {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.35rem;
+    font-size: 0.9rem;
+}
+
+.provenance-meta {
+    margin-top: 0.55rem;
+    border-top: 1px solid var(--fn-border-default);
+    padding-top: 0.55rem;
+}
+
+.provenance-separator {
+    color: color-mix(in srgb, var(--fn-text-muted) 75%, transparent 25%);
+}
+
+.provenance-citation-link,
+.provenance-link {
+    color: var(--fn-link);
+    text-decoration: underline;
+    text-decoration-color: color-mix(
+        in srgb,
+        var(--fn-link) 60%,
+        transparent 40%
+    );
+    transition:
+        color var(--fn-duration-fast) var(--fn-ease-standard),
+        text-decoration-color var(--fn-duration-fast) var(--fn-ease-standard);
+}
+
+.provenance-citation-link:hover,
+.provenance-citation-link:focus,
+.provenance-link:hover,
+.provenance-link:focus {
+    color: var(--fn-link-hover);
+    text-decoration-color: var(--fn-link-hover);
+}
+
+.provenance-risktier,
+.provenance-tradeoffs,
+.provenance-citations-label,
+.provenance-model,
+.provenance-hash,
+.provenance-duration,
+.provenance-id,
+.provenance-license {
+    font-family: var(--fn-font-mono);
+    font-size: 0.82rem;
+}
+
+@media (max-width: 600px) {
+    .provenance-footer {
+        padding: 0.8rem 1rem;
+        font-size: 0.85rem;
+    }
+
+    .provenance-main {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 0.3rem;
+    }
+
+    .provenance-citations {
+        margin-top: 0.3rem;
+    }
+
+    .provenance-link {
+        width: 100%;
+        justify-content: center;
+        margin-left: 0;
+        margin-top: 0.5rem;
+    }
+}

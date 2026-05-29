@@ -1,0 +1,289 @@
+.interaction {
+    display: grid;
+    gap: 0.72rem;
+    margin-top: 0.5rem;
+}
+
+.interaction-form {
+    margin: 0;
+}
+
+.interaction-input-group {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.45rem;
+}
+
+.interaction-input-wrapper {
+    position: relative;
+    flex: 1 1 auto;
+}
+
+.interaction-input {
+    width: 100%;
+    min-height: 2.9rem;
+    max-height: 20rem;
+    padding: 0.72rem 2.6rem 0.72rem 0.88rem;
+    border: 1px solid var(--fn-border-default);
+    border-radius: 14px;
+    font-family: var(--fn-font-body);
+    font-size: 1rem;
+    line-height: 1.45;
+    resize: none;
+    overflow-y: hidden;
+    background-color: var(--fn-surface-bg);
+    color: var(--fn-text-primary);
+    transition:
+        border-color var(--fn-duration-fast) var(--fn-ease-standard),
+        box-shadow var(--fn-duration-fast) var(--fn-ease-standard);
+}
+
+.interaction-input:focus {
+    outline: none;
+    border-color: color-mix(
+        in srgb,
+        var(--fn-brand-accent) 60%,
+        var(--fn-border-default) 40%
+    );
+    box-shadow: 0 0 0 3px
+        color-mix(in srgb, var(--fn-brand-accent) 25%, transparent 75%);
+}
+
+.interaction-input::placeholder {
+    color: color-mix(in srgb, var(--fn-text-muted) 78%, transparent 22%);
+}
+
+.interaction-clear-button {
+    position: absolute;
+    top: 0.42rem;
+    right: 0.42rem;
+    border: none;
+    background: transparent;
+    color: color-mix(in srgb, var(--fn-text-primary) 50%, transparent 50%);
+    width: 1.9rem;
+    height: 1.9rem;
+    border-radius: 999px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: background-color var(--fn-duration-fast) var(--fn-ease-standard);
+}
+
+.interaction-clear-button:hover {
+    background-color: color-mix(
+        in srgb,
+        var(--fn-border-default) 30%,
+        transparent 70%
+    );
+}
+
+.interaction-submit {
+    min-width: 3rem;
+    min-height: 2.9rem;
+    border-radius: 14px;
+    border: 1px solid
+        color-mix(
+            in srgb,
+            var(--fn-brand-accent) 80%,
+            var(--fn-brand-highlight) 20%
+        );
+    background-color: var(--fn-brand-accent);
+    color: var(--fn-text-inverse);
+    font-family: var(--fn-font-mono);
+    font-size: 0.92rem;
+    cursor: pointer;
+    transition: all var(--fn-duration-fast) var(--fn-ease-standard);
+}
+
+.interaction-submit:hover,
+.interaction-submit:focus {
+    background-color: color-mix(
+        in srgb,
+        var(--fn-brand-accent) 85%,
+        #ffffff 15%
+    );
+    border-color: color-mix(
+        in srgb,
+        var(--fn-brand-accent) 75%,
+        var(--fn-border-default) 25%
+    );
+}
+
+.interaction-submit:disabled {
+    opacity: 0.65;
+    cursor: not-allowed;
+}
+
+.interaction-prompt-buttons-row {
+    display: flex;
+    align-items: stretch;
+    gap: 0.4rem;
+}
+
+.interaction-prompt-text-button-wrapper {
+    flex: 1 1 auto;
+}
+
+.interaction-prompt-text-button,
+.interaction-prompt-shuffle-button {
+    border: 1px solid
+        color-mix(in srgb, var(--fn-border-default) 60%, transparent 40%);
+    background: color-mix(
+        in srgb,
+        var(--fn-surface-soft) 85%,
+        var(--fn-surface-accent) 15%
+    );
+    border-radius: 10px;
+    color: var(--fn-text-primary);
+    cursor: pointer;
+    transition: all var(--fn-duration-fast) var(--fn-ease-standard);
+}
+
+.interaction-prompt-text-button {
+    width: 100%;
+    text-align: left;
+    padding: 0.6rem 0.7rem;
+}
+
+.interaction-prompt-shuffle-button {
+    width: 2.55rem;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.interaction-prompt-text-button:hover,
+.interaction-prompt-shuffle-button:hover {
+    background: color-mix(
+        in srgb,
+        var(--fn-surface-soft) 90%,
+        var(--fn-surface-hover) 10%
+    );
+    border-color: color-mix(
+        in srgb,
+        var(--fn-border-default) 80%,
+        var(--fn-brand-accent) 20%
+    );
+}
+
+.interaction-prompt-text-button:focus-visible,
+.interaction-prompt-shuffle-button:focus-visible {
+    outline: 2px solid
+        color-mix(in srgb, var(--fn-brand-accent) 60%, transparent 40%);
+    outline-offset: 2px;
+}
+
+.interaction-prompt-text {
+    font-size: 0.9rem;
+}
+
+.interaction-prompt-shuffle-icon {
+    display: inline-flex;
+    transition: transform var(--fn-duration-fast) var(--fn-ease-standard);
+}
+
+.interaction-prompt-shuffle-button:hover .interaction-prompt-shuffle-icon {
+    transform: rotate(18deg);
+}
+
+.interaction-status {
+    display: none;
+}
+
+.interaction-status.interaction-status-visible {
+    display: flex !important;
+    align-items: center;
+    gap: 0.45rem;
+    border-left: 3px solid var(--fn-brand-accent);
+    padding: 0.55rem 0.75rem;
+    border-radius: 8px;
+    background: color-mix(
+        in srgb,
+        var(--fn-surface-soft) 92%,
+        var(--fn-brand-accent-soft) 8%
+    );
+}
+
+.interaction-output {
+    border-left: 3px solid var(--fn-brand-accent);
+    border-radius: 8px;
+    padding: 0.7rem 0.9rem;
+    background: color-mix(
+        in srgb,
+        var(--fn-surface-soft) 95%,
+        var(--fn-brand-accent-soft) 5%
+    );
+}
+
+.interaction-captcha {
+    min-height: 0;
+}
+
+.interaction-captcha.interaction-captcha-visible {
+    display: flex !important;
+    flex-direction: column;
+    gap: 0.5rem;
+}
+
+.interaction-error {
+    margin: 0;
+    color: var(--fn-status-error);
+    background-color: var(--fn-status-error-soft-bg);
+    border: 1px solid var(--fn-status-error-soft-border);
+    border-radius: var(--fn-radius-md);
+    padding: 0.55rem 0.7rem;
+    font-family: var(--fn-font-mono);
+    font-size: 0.85rem;
+}
+
+.spinner {
+    width: 1rem;
+    height: 1rem;
+    border: 2px solid
+        color-mix(in srgb, var(--fn-text-primary) 20%, transparent 80%);
+    border-top-color: var(--fn-text-primary);
+    border-radius: 50%;
+    animation: spin 0.85s linear infinite;
+}
+
+.hourglass {
+    display: inline-block;
+    animation: hourglass-flip 1.2s ease-in-out infinite;
+}
+
+@keyframes spin {
+    to {
+        transform: rotate(360deg);
+    }
+}
+
+@keyframes hourglass-flip {
+    0%,
+    42% {
+        transform: rotate(0deg);
+    }
+
+    48%,
+    90% {
+        transform: rotate(180deg);
+    }
+
+    96%,
+    100% {
+        transform: rotate(360deg);
+    }
+}
+
+@media (max-width: 600px) {
+    .interaction-input-group {
+        flex-direction: column;
+        align-items: stretch;
+        gap: clamp(0.4rem, 2vw, 0.6rem);
+    }
+
+    .interaction-input,
+    .interaction-submit {
+        width: 100%;
+    }
+}

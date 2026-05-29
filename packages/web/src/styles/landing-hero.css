@@ -1,0 +1,272 @@
+.hero,
+.page-hero {
+    width: 100%;
+}
+
+.page-hero h1 {
+    font-size: clamp(1.5rem, 3vw, 2.1rem);
+    margin-bottom: 0.75rem;
+}
+
+.page-hero__summary {
+    font-size: 1.08rem;
+    color: var(--fn-text-muted);
+    max-width: 70ch;
+    margin: 0;
+}
+
+.hero-copy {
+    display: grid;
+    gap: 0.42rem;
+}
+
+.hero-title {
+    margin: 0;
+}
+
+.hero-title__line,
+.hero-subheader__line {
+    display: inline;
+}
+
+.hero-subheader {
+    margin: 0;
+    color: color-mix(
+        in srgb,
+        var(--fn-text-muted) 86%,
+        var(--fn-text-primary) 14%
+    );
+}
+
+.cta-group {
+    display: flex;
+    align-items: center;
+    gap: 0.65rem;
+    flex-wrap: wrap;
+}
+
+.cta-button {
+    border: 1px solid var(--fn-border-default);
+    border-radius: 999px;
+    padding: 0.56rem 1rem;
+    font-family: var(--fn-font-mono);
+    font-size: 0.9rem;
+    text-decoration: none;
+    color: var(--fn-text-primary);
+    transition: all var(--fn-duration-fast) var(--fn-ease-standard);
+}
+
+.cta-button.primary {
+    background-color: var(--fn-brand-accent);
+    border-color: var(--fn-brand-accent);
+    color: var(--fn-text-inverse);
+}
+
+.cta-button.secondary {
+    background-color: transparent;
+}
+
+.cta-button:not(:disabled):not([aria-disabled='true']):hover,
+.cta-button:not(:disabled):not([aria-disabled='true']):focus {
+    background-color: var(--fn-surface-hover);
+    border-color: var(--fn-border-default);
+    color: var(--fn-text-primary);
+}
+
+.cta-button.primary:not(:disabled):not([aria-disabled='true']):hover,
+.cta-button.primary:not(:disabled):not([aria-disabled='true']):focus {
+    background-color: var(--fn-brand-accent-hover);
+    border-color: var(--fn-brand-accent-hover);
+    color: var(--fn-text-inverse);
+}
+
+.cta-button:disabled,
+.cta-button[aria-disabled='true'] {
+    cursor: not-allowed;
+    opacity: 0.6;
+}
+
+.cta-button:focus-visible {
+    outline: 2px solid
+        color-mix(in srgb, var(--fn-brand-accent-hover) 55%, transparent 45%);
+    outline-offset: 2px;
+}
+
+.landing-page {
+    display: grid;
+    gap: clamp(1.2rem, 2.7vw, 2rem);
+    padding-bottom: clamp(2rem, 4vw, 3rem);
+}
+
+.landing-page--embed {
+    padding-top: 0.75rem;
+}
+
+.landing-section {
+    position: relative;
+    border: 1px solid
+        color-mix(
+            in srgb,
+            var(--fn-border-default) 70%,
+            var(--fn-brand-accent) 30%
+        );
+    background: linear-gradient(
+        160deg,
+        color-mix(
+                in srgb,
+                var(--fn-surface-accent) 84%,
+                var(--fn-surface-bg) 16%
+            )
+            0%,
+        color-mix(in srgb, var(--fn-surface-soft) 86%, var(--fn-surface-bg) 14%)
+            100%
+    );
+    box-shadow: 0 14px 30px
+        color-mix(in srgb, var(--fn-shadow-color) 55%, transparent 45%);
+    border-radius: var(--fn-radius-xl);
+    padding: clamp(1.25rem, 2.5vw, 2.2rem);
+    overflow: hidden;
+    scroll-margin-top: calc(var(--fn-layout-site-header-height) + 1.25rem);
+    animation: landing-section-reveal var(--fn-duration-reveal) ease both;
+}
+
+.landing-section::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    opacity: 0.46;
+    background:
+        linear-gradient(
+            to bottom,
+            rgba(255, 255, 255, 0.05) 0%,
+            transparent 28%
+        ),
+        repeating-linear-gradient(
+            0deg,
+            rgba(42, 38, 34, 0.03) 0 1px,
+            transparent 1px 10px
+        );
+}
+
+.landing-section > * {
+    position: relative;
+    z-index: 1;
+}
+
+.landing-page > .landing-section:nth-of-type(1) {
+    animation-delay: 100ms;
+}
+
+.landing-page > .landing-section:nth-of-type(2) {
+    animation-delay: 220ms;
+}
+
+.landing-page > .landing-section:nth-of-type(3) {
+    animation-delay: 340ms;
+}
+
+.landing-section:target {
+    border-color: color-mix(
+        in srgb,
+        var(--fn-brand-highlight) 65%,
+        var(--fn-border-default) 35%
+    );
+    box-shadow: 0 18px 36px
+        color-mix(in srgb, var(--fn-shadow-color) 64%, transparent 36%);
+}
+
+.landing-kicker {
+    margin: 0 0 0.5rem;
+    font-family: var(--fn-font-mono);
+    font-size: 0.74rem;
+    letter-spacing: 0.11em;
+    text-transform: uppercase;
+    color: color-mix(
+        in srgb,
+        var(--fn-brand-accent) 62%,
+        var(--fn-text-primary) 38%
+    );
+}
+
+.landing-title {
+    margin: 0 0 0.75rem;
+    font-family: var(--fn-font-display);
+    font-weight: 520;
+    letter-spacing: 0.018em;
+    line-height: 1.12;
+    font-size: clamp(1.45rem, 3.1vw, 2.25rem);
+}
+
+.landing-lede {
+    font-size: clamp(1.03rem, 1.8vw, 1.22rem);
+    line-height: 1.66;
+    color: color-mix(
+        in srgb,
+        var(--fn-text-muted) 86%,
+        var(--fn-text-primary) 14%
+    );
+}
+
+[data-theme='dark'] .landing-section {
+    border-color: color-mix(
+        in srgb,
+        var(--fn-brand-accent-soft) 38%,
+        var(--fn-border-default) 62%
+    );
+    background: linear-gradient(
+        160deg,
+        color-mix(
+                in srgb,
+                var(--fn-surface-alt) 76%,
+                rgba(255, 255, 255, 0.04) 24%
+            )
+            0%,
+        color-mix(
+                in srgb,
+                var(--fn-surface-soft) 82%,
+                rgba(255, 255, 255, 0.03) 18%
+            )
+            100%
+    );
+}
+
+[data-theme='dark'] .landing-section::before {
+    opacity: 0.3;
+    background:
+        linear-gradient(
+            to bottom,
+            rgba(255, 255, 255, 0.03) 0%,
+            transparent 26%
+        ),
+        repeating-linear-gradient(
+            0deg,
+            rgba(255, 255, 255, 0.025) 0 1px,
+            transparent 1px 10px
+        );
+}
+
+@media (max-width: 620px) {
+    .landing-page {
+        gap: 1rem;
+    }
+
+    .landing-section {
+        border-radius: var(--fn-radius-lg);
+        padding: 1rem;
+    }
+
+    .landing-title {
+        font-size: clamp(1.3rem, 6vw, 1.7rem);
+    }
+
+    .cta-group {
+        flex-direction: column;
+        align-items: stretch;
+    }
+
+    .cta-button {
+        width: 100%;
+        text-align: center;
+    }
+}
