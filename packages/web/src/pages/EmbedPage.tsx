@@ -135,7 +135,7 @@ const EmbedPage = (): JSX.Element => {
             >
                 <section
                     id="about"
-                    className="landing-section landing-section--about"
+                    className="landing-section"
                     aria-labelledby="embed-about-title"
                 >
                     <p className="landing-kicker">About</p>
@@ -156,7 +156,7 @@ const EmbedPage = (): JSX.Element => {
 
                 <section
                     id="demo"
-                    className="landing-section landing-section--demo"
+                    className="landing-section"
                     aria-labelledby="embed-demo-title"
                 >
                     <div className="hero-copy">
@@ -173,7 +173,7 @@ const EmbedPage = (): JSX.Element => {
 
                 <section
                     id="get-started"
-                    className="landing-section landing-section--get-started"
+                    className="landing-section"
                     aria-labelledby="embed-start-title"
                 >
                     <p className="landing-kicker">Get started</p>

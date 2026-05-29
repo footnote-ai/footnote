@@ -1,0 +1,47 @@
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
+    margin-top: 0;
+    margin-bottom: 0.75rem;
+    font-family: var(--fn-font-sans);
+    line-height: 1.2;
+    color: var(--fn-text-primary);
+}
+
+h1 {
+    font-size: clamp(1.8rem, 3.2vw, 2.3rem);
+}
+
+h2 {
+    font-size: clamp(1.35rem, 2.4vw, 1.8rem);
+}
+
+p,
+ul,
+ol,
+dl,
+blockquote {
+    margin-top: 0;
+    margin-bottom: 1rem;
+}
+
+a {
+    color: var(--fn-link);
+    transition:
+        color var(--fn-duration-fast) var(--fn-ease-standard),
+        text-decoration-color var(--fn-duration-fast) var(--fn-ease-standard);
+    text-decoration-color: color-mix(
+        in srgb,
+        var(--fn-link) 60%,
+        transparent 40%
+    );
+}
+
+a:hover,
+a:focus {
+    color: var(--fn-link-hover);
+    text-decoration-color: var(--fn-link-hover);
+}

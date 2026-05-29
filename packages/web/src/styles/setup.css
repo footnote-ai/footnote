@@ -1,0 +1,120 @@
+.setup-panel,
+.setup-editor {
+    width: 100%;
+    margin: 0 auto 1.4rem;
+}
+
+.setup-panel {
+    max-width: min(74rem, 97vw);
+}
+
+.setup-editor {
+    max-width: min(100%, clamp(44rem, 82vw, 66rem));
+    display: grid;
+    gap: 0.8rem;
+}
+
+.setup-editor-disclosure {
+    border: 1px solid var(--fn-border-default);
+    border-radius: 10px;
+    background: color-mix(
+        in srgb,
+        var(--fn-surface-soft) 78%,
+        var(--fn-surface-bg) 22%
+    );
+    padding: 0.25rem 0.8rem 0.8rem;
+}
+
+.setup-editor-disclosure summary {
+    cursor: pointer;
+    font-family: var(--fn-font-mono);
+    font-size: 0.92rem;
+    font-weight: 600;
+    padding: 0.52rem 0 0.44rem;
+    color: var(--fn-text-primary);
+}
+
+.setup-editor-disclosure__content {
+    display: grid;
+    gap: 0.8rem;
+    padding-top: 0.2rem;
+}
+
+.setup-editor-disclosure:not([open]) {
+    padding-bottom: 0.3rem;
+}
+
+.setup-textarea {
+    width: 100%;
+    min-height: 560px;
+    resize: vertical;
+    border: 1px solid var(--fn-border-default);
+    border-radius: 10px;
+    padding: 0.9rem;
+    font-family: var(--fn-font-mono);
+    font-size: 0.88rem;
+    line-height: 1.55;
+    color: var(--fn-text-primary);
+    background: var(--fn-surface-alt);
+}
+
+.setup-actions {
+    display: flex;
+    gap: 0.6rem;
+    flex-wrap: wrap;
+}
+
+.setup-actions button {
+    border: 1px solid var(--fn-border-default);
+    border-radius: var(--fn-radius-md);
+    padding: 0.52rem 0.84rem;
+    background: var(--fn-surface-soft);
+    color: var(--fn-text-primary);
+    cursor: pointer;
+}
+
+.setup-actions button:disabled {
+    opacity: 0.65;
+    cursor: not-allowed;
+}
+
+.setup-error {
+    color: var(--fn-status-error);
+}
+
+.setup-note {
+    color: var(--fn-text-muted);
+}
+
+.setup-submit-feedback {
+    display: grid;
+    gap: 0.55rem;
+}
+
+.setup-errors,
+.setup-warnings {
+    margin: 0;
+    padding-left: 1.2rem;
+}
+
+.setup-errors {
+    color: var(--fn-status-error);
+}
+
+.setup-warnings {
+    color: color-mix(
+        in srgb,
+        var(--fn-brand-highlight) 72%,
+        var(--fn-text-primary) 28%
+    );
+}
+
+@media (max-width: 768px) {
+    .setup-editor {
+        max-width: 100%;
+    }
+
+    .setup-textarea {
+        min-height: 420px;
+    }
+}

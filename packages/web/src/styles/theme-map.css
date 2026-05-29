@@ -1,0 +1,66 @@
+:root {
+    --fn-surface-bg: var(--fn-color-ivory-100);
+    --fn-surface-soft: var(--fn-color-ivory-300);
+    --fn-surface-alt: var(--fn-color-ivory-400);
+    --fn-surface-accent: var(--fn-color-ivory-200);
+
+    --fn-text-primary: var(--fn-color-ink-900);
+    --fn-text-muted: var(--fn-color-ink-700);
+    --fn-text-inverse: #f0ede6;
+
+    --fn-brand-accent: var(--fn-color-sage-600);
+    --fn-brand-accent-hover: var(--fn-color-sage-500);
+    --fn-brand-accent-soft: var(--fn-color-sage-400);
+    --fn-brand-highlight: var(--fn-color-bronze-500);
+    --fn-brand-rust: var(--fn-color-rust-500);
+
+    --fn-link: var(--fn-color-blue-600);
+    --fn-link-hover: var(--fn-color-blue-500);
+
+    --fn-border-default: var(--fn-color-stone-300);
+    --fn-surface-hover: var(--fn-color-stone-250);
+    --fn-shadow-color: rgba(52, 52, 52, 0.08);
+
+    --fn-status-error: var(--fn-color-error-700);
+    --fn-status-error-soft-bg: color-mix(in srgb, #fef2f2 80%, transparent 20%);
+    --fn-status-error-soft-border: color-mix(
+        in srgb,
+        #fecaca 60%,
+        transparent 40%
+    );
+
+    --fn-backdrop-pattern: var(--fn-backdrop-light);
+}
+
+[data-theme='dark'] {
+    --fn-surface-bg: var(--fn-color-dark-900);
+    --fn-surface-soft: var(--fn-color-dark-800);
+    --fn-surface-alt: var(--fn-color-dark-700);
+    --fn-surface-accent: var(--fn-color-dark-650);
+
+    --fn-text-primary: var(--fn-color-dark-text);
+    --fn-text-muted: var(--fn-color-dark-text-muted);
+
+    --fn-brand-accent: var(--fn-color-dark-accent);
+    --fn-brand-accent-hover: #9fcab1;
+    --fn-brand-accent-soft: var(--fn-color-dark-accent-soft);
+    --fn-brand-highlight: var(--fn-color-dark-highlight);
+    --fn-brand-rust: var(--fn-color-dark-rust);
+
+    --fn-link: var(--fn-color-dark-link);
+    --fn-link-hover: var(--fn-color-dark-link-hover);
+
+    --fn-border-default: var(--fn-color-dark-500);
+    --fn-surface-hover: var(--fn-color-dark-450);
+    --fn-shadow-color: rgba(0, 0, 0, 0.3);
+
+    --fn-status-error: #fca5a5;
+    --fn-status-error-soft-bg: color-mix(in srgb, #7f1d1d 20%, transparent 80%);
+    --fn-status-error-soft-border: color-mix(
+        in srgb,
+        #991b1b 40%,
+        transparent 60%
+    );
+
+    --fn-backdrop-pattern: var(--fn-backdrop-dark);
+}
