@@ -1,6 +1,6 @@
 # Explicit Domain Modeling for Trust Boundaries
 
-**Decision:** Keep TypeScript as Footnote’s project language, and use more explicit types for workflow, review, failure, and provenance paths where loose shapes would make runs harder to inspect.
+**Decision:** Use more explicit types for workflow, review, failure, and provenance paths where loose shapes would make runs harder to inspect.
 **Date:** 2026-05-30
 
 ---
@@ -11,7 +11,7 @@ Footnote’s backend does more than pass a prompt to a model and return text. It
 
 Those are the places where loose code shapes matter most. A `null` parse result, a broad object with several optional fields, or a thrown string that means “routing was exhausted” can work technically while still hiding useful meaning from the next person reading the code or the trace.
 
-This discussion came partly from looking at functional programming. Some of those habits are useful here: make the possible cases visible, make expected failure explicit, and avoid representing states that should not exist. The goal is not to turn Footnote into a functional-programming project. The goal is to use TypeScript in a way that better matches Footnote’s own promises.
+This discussion came partly from looking at functional programming. Some of those habits are useful here: make the possible cases visible, make expected failure explicit, and avoid representing states that should not exist. We don't need to turn this into a functional-programming project, but we can adopt some of the concepts to in TypeScript to align with our goals.
 
 ## 2. Constraints
 
