@@ -1,0 +1,87 @@
+# Trust Boundary Work Status
+
+This file tracks the planned branches for making trust-boundary code easier to
+inspect. Use explicit TypeScript shapes first. Use `neverthrow` for expected
+failures that callers need to handle with a concrete reason.
+
+### 1) review-routing
+
+Branch: `chore/trust-boundary-neverthrow-review-routing`  
+Status: `todo`
+
+Start here. This branch should clean up the review path where expected failures
+are still a little too implicit.
+
+The important cases are review decision parsing and routing-chain exhaustion.
+Right now, review parsing can collapse to `null`, and some routing failures move
+through `throw new Error(reasonCode)` before being mapped back into workflow
+metadata. That works, but it hides useful meaning from the type system and makes
+the reader chase string comparisons.
+
+Use `neverthrow` to return those outcomes directly. A parse failure should carry
+the parse reason. A routing-chain failure should carry its reason code as data,
+not as an exception message. The workflow must still fail open in the same
+situations it does today.
+
+Keep this branch small. It should touch review parsing, the review loop, initial
+generation routing, and only the profile wiring needed to support the new return
+types.
+
+### 2) context-step-outcomes
+
+Branch: `chore/trust-boundary-neverthrow-context-step-outcomes`  
+Status: `todo`
+
+This branch is about context steps: web search, weather, reverse image search,
+and similar tool-backed work.
+
+Make the outcome shape state the actual result: executed, failed, skipped, or
+needs user clarification. Do not leave these states as loose objects where
+unrelated fields can appear together by accident.
+
+Keep the current behavior. Tool failures should still be non-blocking. If a tool
+needs clarification, the workflow should still stop before generation and return
+that clarification to the caller. This change should make those states harder to
+misuse and easier to inspect.
+
+Keep public contracts serializable. Anything crossing package boundaries must
+remain plain data.
+
+### 3) metadata-normalization
+
+Branch: `chore/trust-boundary-metadata-domain-normalization`  
+Status: `todo`
+
+This branch should make response metadata easier to reason about.
+
+The metadata builder currently does several things at once: it classifies
+provenance, normalizes execution reason codes, derives TRACE fields, logs missing
+data, and fills defaults. That makes the function harder to test and harder to
+audit.
+
+Pull out pure helpers for the parts that are real domain decisions. For example:
+given this execution status and reason code, what generation reason should be
+recorded? Given this TRACE target and final value, should a finalization reason
+be stored?
+
+Do not change the meaning of provenance, TRACE, review labels, or cost fields in
+this branch. Keep the same behavior and move each decision into a smaller typed
+function.
+
+### 4) step-signal-typing
+
+Branch: `chore/trust-boundary-step-signal-typing`  
+Status: `todo`
+
+This branch should reduce the places where workflow step data is stored as a
+generic signal bag.
+
+Signals are useful because they keep workflow records flexible, but some of them
+have become important enough that they deserve names and types. Assess decisions,
+routing-chain details, clarification signals, and receipt-facing values are good
+places to look first.
+
+Do this gradually. This is not a redesign of every workflow record. Type the
+fields that readers and UI code already depend on, so future changes cannot
+drift silently.
+

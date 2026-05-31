@@ -33,7 +33,7 @@ The web package uses a layered stylesheet entrypoint at
   failures.
 - [Decisions](./decisions/): durable technical choices and why they were made.
 - [Proposals](./proposals/): unadopted or exploratory ideas.
-- [Status](./status/): branch-level implementation tracking documents.
+- [Status](./status.md): branch-level implementation tracking document.
 - [API](./api/README.md): OpenAPI source, operation mapping, and code-linking
   rules.
 - [AI](./ai/README.md): contributor workflow for AI-assisted changes.
