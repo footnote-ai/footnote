@@ -4,7 +4,7 @@ This file tracks the planned branches for making trust-boundary code easier to
 inspect. Use explicit TypeScript shapes first. Use `neverthrow` for expected
 failures that callers need to handle with a concrete reason.
 
-### 1) review-routing
+## 1) review-routing
 
 Branch: `chore/trust-boundary-neverthrow-review-routing`  
 Status: `done`
@@ -27,7 +27,7 @@ Keep this branch small. It should touch review parsing, the review loop, initial
 generation routing, and only the profile wiring needed to support the new return
 types.
 
-### 2) context-step-outcomes
+## 2) context-step-outcomes
 
 Branch: `chore/trust-boundary-neverthrow-context-step-outcomes`  
 Status: `todo`
@@ -47,7 +47,7 @@ misuse and easier to inspect.
 Keep public contracts serializable. Anything crossing package boundaries must
 remain plain data.
 
-### 3) metadata-normalization
+## 3) metadata-normalization
 
 Branch: `chore/trust-boundary-metadata-domain-normalization`  
 Status: `todo`
@@ -68,7 +68,7 @@ Do not change the meaning of provenance, TRACE, review labels, or cost fields in
 this branch. Keep the same behavior and move each decision into a smaller typed
 function.
 
-### 4) step-signal-typing
+## 4) step-signal-typing
 
 Branch: `chore/trust-boundary-step-signal-typing`  
 Status: `todo`

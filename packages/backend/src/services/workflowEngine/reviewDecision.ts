@@ -104,7 +104,9 @@ const PartialResponseTemperamentSchema = z
 const ReviewDecisionSchema = z
     .object({
         reviewDecision: z.enum(['finalize', 'revise']),
-        reviewReason: z.string().min(1),
+        reviewReason: z.string().refine((value) => value.trim().length > 0, {
+            message: 'reviewReason must be non-empty after trimming.',
+        }),
         revisionInstruction: z.string().optional(),
         traceAlignment: z.enum(['aligned', 'misaligned']).optional(),
         traceAlignmentReason: z.string().optional(),

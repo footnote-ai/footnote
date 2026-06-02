@@ -2244,6 +2244,12 @@ test('runChatMessages preserves no-generation lineage when fallback routing chai
         traceMetadata?.workflow?.terminationReason,
         'budget_exhausted_steps'
     );
+    const fallbackExecution = response.metadata.execution?.find(
+        (event) =>
+            event.kind === 'generation' &&
+            event.profileId === 'workflow_internal_fallback'
+    );
+    assert.equal(fallbackExecution, undefined);
 });
 
 test('runChatMessages keeps no-generation surfaced when execution policy disables fallback generation', async () => {

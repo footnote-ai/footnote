@@ -94,6 +94,22 @@ test('parseReviewDecisionOutputResult reports missing revise instruction', () =>
     }
 });
 
+test('parseReviewDecisionOutputResult rejects whitespace review reasons', () => {
+    const result = parseReviewDecisionOutputResult(
+        '{"reviewDecision":"finalize","reviewReason":"   "}'
+    );
+
+    assert.equal(result.isErr(), true);
+    if (result.isErr()) {
+        assert.equal(result.error.reason, 'schema_invalid');
+        assert.equal(result.error.firstIssuePath, 'reviewReason');
+        assert.equal(
+            result.error.message,
+            'reviewReason must be non-empty after trimming.'
+        );
+    }
+});
+
 test('parseReviewDecisionOutputResult reports incomplete trace misalignment fields', () => {
     const result = parseReviewDecisionOutputResult(
         '{"reviewDecision":"finalize","reviewReason":"Ready.","traceAlignment":"misaligned"}'

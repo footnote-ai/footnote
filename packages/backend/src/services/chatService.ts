@@ -1388,6 +1388,7 @@ export const createChatService = ({
                                     generationResult =
                                         chainGenerationResult.value
                                             .generationResult;
+                                    fallbackAfterInternalNoGeneration = true;
                                     routedGenerationSelectedProfile =
                                         chainGenerationResult.value
                                             .selectedProfile;
@@ -1420,7 +1421,6 @@ export const createChatService = ({
                                     citations: [],
                                 };
                             }
-                            fallbackAfterInternalNoGeneration = true;
                             break;
                         }
                         if (
