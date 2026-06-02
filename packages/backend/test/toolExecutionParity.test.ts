@@ -134,6 +134,7 @@ test('weather success flows through workflow context-step: tool step recorded in
                 }
             );
             return {
+                outcome: 'executed',
                 executionContext: {
                     toolName: 'weather_forecast',
                     status: 'executed',
@@ -233,6 +234,7 @@ test('weather failure preserves fail-open: generation runs, tool step recorded a
                     location: 'Indianapolis',
                 } as never);
                 return {
+                    outcome: 'executed',
                     executionContext: {
                         toolName: 'weather_forecast',
                         status: 'executed',
@@ -240,6 +242,7 @@ test('weather failure preserves fail-open: generation runs, tool step recorded a
                 };
             } catch {
                 return {
+                    outcome: 'failed',
                     executionContext: {
                         toolName: 'weather_forecast',
                         status: 'failed',
@@ -333,9 +336,24 @@ test('weather clarification short-circuits: no generation, clarification respons
             },
         ],
         contextStepExecutor: async () => ({
+            outcome: 'needs_clarification',
             executionContext: {
                 toolName: 'weather_forecast',
                 status: 'executed',
+                clarification: {
+                    reasonCode: 'ambiguous_location',
+                    question: 'Which New York did you mean?',
+                    options: [
+                        {
+                            id: 'nyc',
+                            label: 'New York City, New York, United States',
+                        },
+                        {
+                            id: 'albany',
+                            label: 'Albany, New York, United States',
+                        },
+                    ],
+                },
             },
             clarification: {
                 reasonCode: 'ambiguous_location',
@@ -387,7 +405,9 @@ test('weather clarification short-circuits: no generation, clarification respons
         'Tool step should have clarification reason'
     );
     assert.equal(
-        result.contextStepResult?.clarification?.reasonCode,
+        result.contextStepResult?.outcome === 'needs_clarification'
+            ? result.contextStepResult.clarification.reasonCode
+            : undefined,
         'ambiguous_location',
         'Context result should have clarification'
     );

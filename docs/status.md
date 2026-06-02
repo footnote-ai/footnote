@@ -30,7 +30,7 @@ types.
 ## 2) context-step-outcomes
 
 Branch: `chore/trust-boundary-neverthrow-context-step-outcomes`  
-Status: `todo`
+Status: `done`
 
 This branch is about context steps: web search, weather, reverse image search,
 and similar tool-backed work.
@@ -46,6 +46,12 @@ misuse and easier to inspect.
 
 Keep public contracts serializable. Anything crossing package boundaries must
 remain plain data.
+
+Completed by adding a serializable context-step outcome union for executed,
+failed, skipped, and needs-clarification results. Workflow and chat consumers
+now branch on that outcome instead of inferring control flow from optional
+fields, while fail-open failures and clarification short-circuit behavior stay
+unchanged.
 
 ## 3) metadata-normalization
 

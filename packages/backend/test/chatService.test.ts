@@ -405,6 +405,7 @@ test('runChatMessages preserves planner temperament for context-step short-circu
                 },
                 contextStepResults: [
                     {
+                        outcome: 'needs_clarification',
                         executionContext: {
                             toolName: 'weather_forecast',
                             status: 'executed',
@@ -422,6 +423,20 @@ test('runChatMessages preserves planner temperament for context-step short-circu
                                     },
                                 ],
                             },
+                        },
+                        clarification: {
+                            reasonCode: 'ambiguous_location',
+                            question: 'Which Springfield?',
+                            options: [
+                                {
+                                    id: 'springfield_il',
+                                    label: 'Springfield, IL',
+                                },
+                                {
+                                    id: 'springfield_mo',
+                                    label: 'Springfield, MO',
+                                },
+                            ],
                         },
                     },
                 ],

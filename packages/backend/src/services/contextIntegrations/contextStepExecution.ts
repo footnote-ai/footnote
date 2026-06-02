@@ -11,7 +11,13 @@ import type {
     ContextStepResult,
     ContextStepExecutorInput,
 } from '../workflowEngine.js';
-import type { ToolInvocationReasonCode } from '@footnote/contracts/policy';
+import type {
+    Citation,
+    ContextStepIntegrationContext,
+    ToolClarification,
+    ToolInvocationName,
+    ToolInvocationReasonCode,
+} from '@footnote/contracts/policy';
 
 type NonBlockingExecutionLogger = {
     warn: (message: string, meta?: Record<string, unknown>) => void;
@@ -22,14 +28,21 @@ type NonBlockingExecutionLogger = {
  * Used when a step is not requested/eligible or intentionally bypassed.
  */
 export const buildSkippedContextStepResult = (input: {
-    toolName: string;
+    toolName: ToolInvocationName;
     reasonCode: ToolInvocationReasonCode;
+    durationMs?: number;
+    integrationContext?: ContextStepIntegrationContext;
 }): ContextStepResult => ({
+    outcome: 'skipped',
     executionContext: {
         toolName: input.toolName,
         status: 'skipped',
         reasonCode: input.reasonCode,
+        ...(input.durationMs !== undefined && { durationMs: input.durationMs }),
     },
+    ...(input.integrationContext !== undefined && {
+        integrationContext: input.integrationContext,
+    }),
 });
 
 /**
@@ -37,19 +50,16 @@ export const buildSkippedContextStepResult = (input: {
  * Use for successful or non-blocking-complete executions that still continue flow.
  */
 export const buildExecutedContextStepResult = (input: {
-    toolName: string;
-    clarification?: ContextStepResult['clarification'];
+    toolName: ToolInvocationName;
     durationMs?: number;
     contextMessages?: string[];
-    sources?: ContextStepResult['sources'];
-    integrationContext?: ContextStepResult['integrationContext'];
+    sources?: Citation[];
+    integrationContext?: ContextStepIntegrationContext;
 }): ContextStepResult => ({
+    outcome: 'executed',
     executionContext: {
         toolName: input.toolName,
         status: 'executed',
-        ...(input.clarification !== undefined && {
-            clarification: input.clarification,
-        }),
         ...(input.durationMs !== undefined && { durationMs: input.durationMs }),
     },
     ...(input.contextMessages !== undefined &&
@@ -63,8 +73,28 @@ export const buildExecutedContextStepResult = (input: {
     ...(input.integrationContext !== undefined && {
         integrationContext: input.integrationContext,
     }),
-    ...(input.clarification !== undefined && {
+});
+
+/**
+ * Builds a context-step result for tool requests that need user clarification.
+ * Clarification is a stop condition before generation, not successful context.
+ */
+export const buildNeedsClarificationContextStepResult = (input: {
+    toolName: ToolInvocationName;
+    clarification: ToolClarification;
+    durationMs?: number;
+    integrationContext?: ContextStepIntegrationContext;
+}): ContextStepResult => ({
+    outcome: 'needs_clarification',
+    executionContext: {
+        toolName: input.toolName,
+        status: 'executed',
         clarification: input.clarification,
+        ...(input.durationMs !== undefined && { durationMs: input.durationMs }),
+    },
+    clarification: input.clarification,
+    ...(input.integrationContext !== undefined && {
+        integrationContext: input.integrationContext,
     }),
 });
 
@@ -73,23 +103,19 @@ export const buildExecutedContextStepResult = (input: {
  * Fail-open behavior is decided by callers; this helper only shapes failure status.
  */
 export const buildFailedContextStepResult = (input: {
-    toolName: string;
+    toolName: ToolInvocationName;
     reasonCode: ToolInvocationReasonCode;
     durationMs?: number;
-    contextMessages?: string[];
-    sources?: ContextStepResult['sources'];
-    integrationContext?: ContextStepResult['integrationContext'];
+    sources?: Citation[];
+    integrationContext?: ContextStepIntegrationContext;
 }): ContextStepResult => ({
+    outcome: 'failed',
     executionContext: {
         toolName: input.toolName,
         status: 'failed',
         reasonCode: input.reasonCode,
         ...(input.durationMs !== undefined && { durationMs: input.durationMs }),
     },
-    ...(input.contextMessages !== undefined &&
-        input.contextMessages.length > 0 && {
-            contextMessages: input.contextMessages,
-        }),
     ...(input.sources !== undefined &&
         input.sources.length > 0 && {
             sources: input.sources,

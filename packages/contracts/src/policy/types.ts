@@ -854,19 +854,65 @@ export type ContextStepIntegrationContext = {
     payload: unknown;
 };
 
+type ContextStepBaseResult = {
+    integrationContext?: ContextStepIntegrationContext;
+};
+
+export type ContextStepExecutedResult = ContextStepBaseResult & {
+    outcome: 'executed';
+    executionContext: ToolExecutionContext & {
+        status: 'executed';
+        clarification?: never;
+        reasonCode?: never;
+    };
+    contextMessages?: string[];
+    sources?: Citation[];
+};
+
+export type ContextStepFailedResult = ContextStepBaseResult & {
+    outcome: 'failed';
+    executionContext: ToolExecutionContext & {
+        status: 'failed';
+        reasonCode: ToolInvocationReasonCode;
+        clarification?: never;
+    };
+    sources?: Citation[];
+};
+
+export type ContextStepSkippedResult = ContextStepBaseResult & {
+    outcome: 'skipped';
+    executionContext: ToolExecutionContext & {
+        status: 'skipped';
+        reasonCode: ToolInvocationReasonCode;
+        clarification?: never;
+    };
+};
+
+export type ContextStepNeedsClarificationResult = ContextStepBaseResult & {
+    outcome: 'needs_clarification';
+    executionContext: ToolExecutionContext & {
+        status: 'executed';
+        clarification: ToolClarification;
+        reasonCode?: never;
+    };
+    clarification: ToolClarification;
+};
+
 /**
  * Context Step result envelope.
  *
- * `integrationContext` stays serializable and integration-scoped. Callers
- * should narrow by `kind` before consuming payload fields.
+ * `outcome` is the canonical branch for context-step control flow. The nested
+ * execution context stays serializable and mirrors legacy execution metadata
+ * for response telemetry.
+ *
+ * `integrationContext` stays serializable and integration-scoped. Callers should
+ * narrow by `kind` before consuming payload fields.
  */
-export type ContextStepResult = {
-    executionContext: ToolExecutionContext;
-    contextMessages?: string[];
-    clarification?: ToolClarification;
-    sources?: Citation[];
-    integrationContext?: ContextStepIntegrationContext;
-};
+export type ContextStepResult =
+    | ContextStepExecutedResult
+    | ContextStepFailedResult
+    | ContextStepSkippedResult
+    | ContextStepNeedsClarificationResult;
 
 /**
  * One backend-owned execution timeline entry for this response.

@@ -52,6 +52,7 @@ test('reverse image executor skips when no image attachments are present', async
         },
     });
 
+    assert.equal(result.outcome, 'skipped');
     assert.equal(result.executionContext.status, 'skipped');
     assert.equal(result.executionContext.reasonCode, 'tool_not_used');
 });
@@ -76,6 +77,9 @@ test('reverse image executor returns executed with provider matches', async () =
     });
     const result = await executor(createBaseInput());
 
+    if (result.outcome !== 'executed') {
+        assert.fail(`Expected executed outcome, got ${result.outcome}`);
+    }
     assert.equal(result.executionContext.status, 'executed');
     assert.equal(result.sources?.[0]?.url, 'https://source.example/match-1');
     assert.ok(
@@ -91,6 +95,7 @@ test('reverse image executor skips when provider is unavailable', async () => {
     });
     const result = await executor(createBaseInput());
 
+    assert.equal(result.outcome, 'skipped');
     assert.equal(result.executionContext.status, 'skipped');
     assert.equal(result.executionContext.reasonCode, 'tool_unavailable');
 });
@@ -111,6 +116,9 @@ test('reverse image executor degrades gracefully on provider failure', async () 
     });
     const result = await executor(createBaseInput());
 
+    if (result.outcome !== 'executed') {
+        assert.fail(`Expected executed outcome, got ${result.outcome}`);
+    }
     assert.equal(result.executionContext.status, 'executed');
     assert.equal(warned, true);
     assert.ok(

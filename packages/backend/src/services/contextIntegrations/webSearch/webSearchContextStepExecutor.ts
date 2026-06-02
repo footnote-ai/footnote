@@ -196,13 +196,10 @@ export const createWebSearchContextStepExecutor = ({
                 query: input.query,
             });
             if (attempts.every((attempt) => attempt.status === 'skipped')) {
-                return {
-                    executionContext: {
-                        toolName: request.integrationName,
-                        status: 'skipped',
-                        reasonCode: 'tool_unavailable',
-                        durationMs,
-                    },
+                return buildSkippedContextStepResult({
+                    toolName: request.integrationName,
+                    reasonCode: 'tool_unavailable',
+                    durationMs,
                     integrationContext: {
                         kind: 'web_search',
                         version: 'v1',
@@ -211,7 +208,7 @@ export const createWebSearchContextStepExecutor = ({
                             searchHints,
                         } satisfies WebSearchContextStepIntegrationPayload,
                     },
-                };
+                });
             }
             if (attempts.some((attempt) => attempt.status === 'failed')) {
                 return buildFailedContextStepResult({
@@ -228,13 +225,10 @@ export const createWebSearchContextStepExecutor = ({
                     },
                 });
             }
-            return {
-                executionContext: {
-                    toolName: request.integrationName,
-                    status: 'skipped',
-                    reasonCode: 'tool_not_used',
-                    durationMs,
-                },
+            return buildSkippedContextStepResult({
+                toolName: request.integrationName,
+                reasonCode: 'tool_not_used',
+                durationMs,
                 integrationContext: {
                     kind: 'web_search',
                     version: 'v1',
@@ -243,7 +237,7 @@ export const createWebSearchContextStepExecutor = ({
                         searchHints,
                     } satisfies WebSearchContextStepIntegrationPayload,
                 },
-            };
+            });
         }
 
         return buildExecutedContextStepResult({
