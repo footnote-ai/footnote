@@ -1,8 +1,8 @@
 /**
- * @description: Canonical backend response metadata assembly from assistant
- * output metadata plus runtime execution context.
+ * @description: Canonical backend response metadata assembly from generation
+ * facts plus runtime execution context.
  * @footnote-scope: utility
- * @footnote-module: OpenAIServiceMetadata
+ * @footnote-module: ResponseMetadataAssembly
  * @footnote-risk: high - Metadata mistakes can misclassify provenance, TRACE chips, and execution timeline.
  * @footnote-ethics: high - Users depend on this metadata for transparency and governance trust.
  */
@@ -20,7 +20,7 @@ import {
     resolveTracePostureDecision,
 } from './metadataDecisions.js';
 import type {
-    AssistantResponseMetadata,
+    ResponseMetadataGenerationInput,
     ResponseMetadataRuntimeContext,
 } from './types.js';
 
@@ -40,7 +40,7 @@ import type {
  *   metadata and may include deterministic heuristic derivation.
  */
 const buildResponseMetadata = (
-    assistantMetadata: AssistantResponseMetadata,
+    generationMetadata: ResponseMetadataGenerationInput,
     runtimeContext: ResponseMetadataRuntimeContext
 ): ResponseMetadata => {
     const responseId = crypto.randomBytes(6).toString('base64url').slice(0, 8);
@@ -51,12 +51,12 @@ const buildResponseMetadata = (
         .substring(0, 16);
     const ninetyDaysMs = 90 * 24 * 60 * 60 * 1000;
 
-    const citations = Array.isArray(assistantMetadata.citations)
-        ? assistantMetadata.citations
+    const citations = Array.isArray(generationMetadata.citations)
+        ? generationMetadata.citations
         : [];
     const retrieval = runtimeContext.retrieval;
     const provenanceClassification = resolveProvenanceDecision(
-        assistantMetadata,
+        generationMetadata,
         runtimeContext,
         citations.length
     );
@@ -66,7 +66,7 @@ const buildResponseMetadata = (
     const provenance = provenanceClassification.provenance;
     const provenanceAssessment = provenanceClassification.assessment;
     const tradeoffCount = resolveTradeoffCount(
-        assistantMetadata.tradeoffCount,
+        generationMetadata.tradeoffCount,
         runtimeContext.plannerTemperament
     );
     // TODO(trace-lifecycle): TRACE may eventually evolve through planning /
@@ -86,8 +86,8 @@ const buildResponseMetadata = (
     // derived from retrieval-context signals.
     const retrievedChipDecision = resolveRetrievedChipDecision({
         provenance,
-        assistantEvidenceScore: assistantMetadata.evidenceScore,
-        assistantFreshnessScore: assistantMetadata.freshnessScore,
+        generationEvidenceScore: generationMetadata.evidenceScore,
+        generationFreshnessScore: generationMetadata.freshnessScore,
         citationCount: citations.length,
         retrieval,
     });

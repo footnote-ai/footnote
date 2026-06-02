@@ -35,10 +35,10 @@ import type {
 } from '@footnote/contracts/web';
 import type { Result } from 'neverthrow';
 import type {
-    AssistantResponseMetadata,
-    AssistantUsage,
+    GenerationMetadataUsage,
+    ResponseMetadataGenerationInput,
     ResponseMetadataRuntimeContext,
-} from './openaiService.js';
+} from './responseMetadata.js';
 import {
     estimateBackendTextCost,
     recordBackendLLMUsage,
@@ -133,7 +133,7 @@ const getEffectiveContextStepResults = (
  * falls back to single-result shape when only that field is present.
  *
  * Citation rule: when generation continues, citations from all executed context
- * integrations are merged later into assistant metadata. This helper does not
+ * integrations are merged later into generation metadata. This helper does not
  * own that merge.
  *
  */
@@ -159,7 +159,7 @@ const buildContextStepShortCircuit = ({
     conversationSnapshot: string;
     latestUserInput: string | undefined;
     buildResponseMetadata: (
-        assistantMetadata: AssistantResponseMetadata,
+        generationMetadata: ResponseMetadataGenerationInput,
         runtimeContext: ResponseMetadataRuntimeContext
     ) => ResponseMetadata;
 }):
@@ -673,7 +673,7 @@ export type CreateChatServiceOptions = {
     generationRuntime: GenerationRuntime;
     storeTrace: (metadata: ResponseMetadata) => Promise<void>;
     buildResponseMetadata: (
-        assistantMetadata: AssistantResponseMetadata,
+        generationMetadata: ResponseMetadataGenerationInput,
         runtimeContext: ResponseMetadataRuntimeContext
     ) => ResponseMetadata;
     // Fallback model used when callers do not specify one and runtime output
@@ -803,19 +803,20 @@ export const createChatService = ({
      * Normalizes one runtime result into the metadata shape backend already
      * uses for provenance, trace storage, and cost accounting.
      */
-    const buildAssistantMetadata = (
+    const buildGenerationMetadata = (
         generationResult: GenerationResult,
         generation: ChatGenerationPlan | undefined,
         requestedModel: string | undefined,
         contextStepSources?: Citation[]
-    ): AssistantResponseMetadata => {
-        const usage: AssistantUsage | undefined = generationResult.usage
-            ? {
-                  promptTokens: generationResult.usage.promptTokens,
-                  completionTokens: generationResult.usage.completionTokens,
-                  totalTokens: generationResult.usage.totalTokens,
-              }
-            : undefined;
+    ): ResponseMetadataGenerationInput => {
+        const usage: GenerationMetadataUsage | undefined =
+            generationResult.usage
+                ? {
+                      promptTokens: generationResult.usage.promptTokens,
+                      completionTokens: generationResult.usage.completionTokens,
+                      totalTokens: generationResult.usage.totalTokens,
+                  }
+                : undefined;
 
         const generationCitations = generationResult.citations ?? [];
         const mergedCitations =
@@ -1561,7 +1562,7 @@ export const createChatService = ({
             (workflowContextStepResult !== undefined
                 ? getContextStepSources(workflowContextStepResult)
                 : undefined);
-        const assistantMetadata = buildAssistantMetadata(
+        const generationMetadata = buildGenerationMetadata(
             generationResult,
             effectiveNormalizedGeneration,
             effectiveGenerationRequest.model,
@@ -1569,10 +1570,10 @@ export const createChatService = ({
         );
         if (
             trustGraphResult?.adapterStatus === 'success' &&
-            assistantMetadata.evidenceScore === undefined &&
+            generationMetadata.evidenceScore === undefined &&
             trustGraphResult.predicateViews.P_SUFF.coverageValue !== undefined
         ) {
-            assistantMetadata.evidenceScore = mapCoverageToTraceAxisScore(
+            generationMetadata.evidenceScore = mapCoverageToTraceAxisScore(
                 trustGraphResult.predicateViews.P_SUFF.coverageValue,
                 trustGraphResult.predicateViews.P_SUFF.conflictSignals.length
             );
@@ -1637,7 +1638,7 @@ export const createChatService = ({
                       } satisfies ToolExecutionContext)
                     : undefined;
 
-        const usageModel = assistantMetadata.model || defaultModel;
+        const usageModel = generationMetadata.model || defaultModel;
         type GenerationExecutionContext = NonNullable<
             NonNullable<
                 ResponseMetadataRuntimeContext['executionContext']
@@ -1826,7 +1827,7 @@ export const createChatService = ({
 
         // Metadata is the contract that downstream UIs and trace storage rely on.
         const responseMetadata = buildResponseMetadata(
-            assistantMetadata,
+            generationMetadata,
             runtimeContext
         );
         const safetyTierRank: Record<SafetyTier, number> = {

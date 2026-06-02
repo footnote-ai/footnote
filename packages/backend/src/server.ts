@@ -23,7 +23,7 @@ import {
 import type { ResponseMetadata } from '@footnote/contracts/policy';
 
 import { runtimeConfig } from './config.js';
-import { buildResponseMetadata } from './services/openaiService.js';
+import { buildResponseMetadata } from './services/responseMetadata.js';
 import { SimpleRateLimiter } from './services/rateLimiter.js';
 import {
     configureTraceMetadataMirror,

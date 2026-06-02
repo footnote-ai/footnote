@@ -2,7 +2,7 @@
  * @description: Pure domain decisions used by backend response metadata
  * assembly.
  * @footnote-scope: utility
- * @footnote-module: OpenAIServiceMetadataDecisions
+ * @footnote-module: ResponseMetadataDecisions
  * @footnote-risk: high - Decision drift can misclassify provenance, TRACE chips, or execution records.
  * @footnote-ethics: high - Metadata decisions shape user-visible transparency and governance records.
  */
@@ -29,7 +29,7 @@ import {
     deriveRetrievedChips,
 } from '../responseMetadataHeuristics.js';
 import type {
-    AssistantResponseMetadata,
+    ResponseMetadataGenerationInput,
     ResponseMetadataRuntimeContext,
 } from './types.js';
 
@@ -146,7 +146,7 @@ export const normalizeToolReasonCode = (
 };
 
 export const resolveProvenanceDecision = (
-    assistantMetadata: AssistantResponseMetadata,
+    generationMetadata: ResponseMetadataGenerationInput,
     runtimeContext: ResponseMetadataRuntimeContext,
     citationCount: number
 ): ProvenanceDecision => {
@@ -157,7 +157,7 @@ export const resolveProvenanceDecision = (
         classificationToolExecution.toolName === 'web_search';
 
     return classifyProvenanceWithSignals({
-        assistantProvenance: assistantMetadata.provenance,
+        assistantProvenance: generationMetadata.provenance,
         citationCount,
         retrievalRequested: retrieval?.requested ?? false,
         retrievalUsed: retrieval?.used ?? false,
@@ -198,16 +198,16 @@ export const resolveTracePostureDecision = (
 
 export const resolveRetrievedChipDecision = (input: {
     provenance: Provenance;
-    assistantEvidenceScore: unknown;
-    assistantFreshnessScore: unknown;
+    generationEvidenceScore: unknown;
+    generationFreshnessScore: unknown;
     citationCount: number;
     retrieval: ResponseMetadataRuntimeContext['retrieval'];
 }): RetrievedChipDecision => {
-    const evidenceScore = isTraceAxisScore(input.assistantEvidenceScore)
-        ? input.assistantEvidenceScore
+    const evidenceScore = isTraceAxisScore(input.generationEvidenceScore)
+        ? input.generationEvidenceScore
         : undefined;
-    const freshnessScore = isTraceAxisScore(input.assistantFreshnessScore)
-        ? input.assistantFreshnessScore
+    const freshnessScore = isTraceAxisScore(input.generationFreshnessScore)
+        ? input.generationFreshnessScore
         : undefined;
     const shouldDeriveRetrievedChips =
         input.provenance === 'Retrieved' &&

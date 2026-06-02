@@ -11,9 +11,9 @@ import type { GenerationRuntime } from '@footnote/agent-runtime';
 import type { ResponseMetadata } from '@footnote/contracts/policy';
 import { SimpleRateLimiter } from '../services/rateLimiter.js';
 import type {
-    AssistantResponseMetadata,
+    ResponseMetadataGenerationInput,
     ResponseMetadataRuntimeContext,
-} from '../services/openaiService.js';
+} from '../services/responseMetadata.js';
 import type { CreateChatServiceOptions } from '../services/chatService.js';
 import { runtimeConfig } from '../config.js';
 import { createChatOrchestrator } from '../services/chatOrchestrator.js';
@@ -38,7 +38,7 @@ type LogRequest = (
 ) => void;
 
 type BuildResponseMetadata = (
-    assistantMetadata: AssistantResponseMetadata,
+    generationMetadata: ResponseMetadataGenerationInput,
     runtimeContext: ResponseMetadataRuntimeContext
 ) => ResponseMetadata;
 

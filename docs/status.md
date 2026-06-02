@@ -102,7 +102,7 @@ drift silently.
 ## 5) runtime-boundary-service-reduction
 
 Branch: `chore/trust-boundary-runtime-boundary-service-reduction`  
-Status: `todo`
+Status: `done`
 
 This branch should reduce the stale `openaiService` naming and provider-specific
 surface now that normal text generation runs through the selected
@@ -119,13 +119,20 @@ Prefer renaming and boundary cleanup over behavior changes:
   `openaiService` namespace into a provider-neutral metadata module
 - rename assistant/provider metadata input types so they no longer imply OpenAI
   ownership
-- quarantine or remove the legacy direct `SimpleOpenAIService` adapter if it has
-  no production caller
-- deduplicate citation fallback normalization between the old OpenAI request
-  path and the VoltAgent runtime path
+- remove the old direct text-provider adapter if it has no production caller
+- keep markdown-link citation recovery owned by the selected runtime path
 - keep public contracts serializable and preserve existing response metadata
   output
 
 This branch should not change the selected runtime behavior. It should make the
 module layout match the architecture: runtime adapters execute generation;
 backend-owned metadata builders interpret generation facts.
+
+Completed by moving response metadata assembly into a provider-neutral
+`responseMetadata` namespace, renaming metadata input types around generation
+facts instead of OpenAI/assistant ownership, and deleting the stale
+`openaiService` facade. The old direct text-provider adapter and its tests were
+removed as a hard cutover. Markdown-link citation recovery now lives in
+`@footnote/agent-runtime` and is used by the selected VoltAgent runtime path,
+while backend metadata remains the authority for provenance, TRACE, review,
+cost, and trace output.

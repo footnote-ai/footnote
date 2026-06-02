@@ -20,7 +20,7 @@ import {
     buildResponseMetadata,
     type ResponseMetadataRetrievalContext,
     type ResponseMetadataRuntimeContext,
-} from '../src/services/openaiService.js';
+} from '../src/services/responseMetadata.js';
 import { createChatService } from '../src/services/chatService.js';
 import { resolveExecutionContract } from '../src/services/executionContractResolver.js';
 import {
@@ -114,7 +114,7 @@ test('createChatService passes the effective model to response metadata building
             },
         }),
         storeTrace: async () => undefined,
-        buildResponseMetadata: (_assistantMetadata, runtimeContext) => {
+        buildResponseMetadata: (_generationMetadata, runtimeContext) => {
             capturedRuntimeContextModelVersion = runtimeContext.modelVersion;
             return createMetadata();
         },
@@ -143,7 +143,7 @@ test('createChatService preserves the caller-requested model when the runtime om
             },
         }),
         storeTrace: async () => undefined,
-        buildResponseMetadata: (_assistantMetadata, runtimeContext) => {
+        buildResponseMetadata: (_generationMetadata, runtimeContext) => {
             capturedRuntimeContextModelVersion = runtimeContext.modelVersion;
             return createMetadata();
         },
@@ -184,7 +184,7 @@ test('runChatMessages passes planner temperament into response metadata runtime 
             },
         }),
         storeTrace: async () => undefined,
-        buildResponseMetadata: (_assistantMetadata, runtimeContext) => {
+        buildResponseMetadata: (_generationMetadata, runtimeContext) => {
             capturedPlannerTemperament = runtimeContext.plannerTemperament;
             return createMetadata();
         },
@@ -224,7 +224,7 @@ test('runChatMessages derives finalTemperament and assess TRACE divergence reaso
             },
         }),
         storeTrace: async () => undefined,
-        buildResponseMetadata: (_assistantMetadata, runtimeContext) => {
+        buildResponseMetadata: (_generationMetadata, runtimeContext) => {
             capturedFinalTemperament = runtimeContext.finalTemperament;
             capturedReasonCode =
                 runtimeContext.temperamentFinalizationReasonCode;
@@ -317,7 +317,7 @@ test('runChatMessages omits assess TRACE divergence reason when final posture ma
     const chatService = createChatService({
         generationRuntime: createRuntime(),
         storeTrace: async () => undefined,
-        buildResponseMetadata: (_assistantMetadata, runtimeContext) => {
+        buildResponseMetadata: (_generationMetadata, runtimeContext) => {
             capturedReasonCode =
                 runtimeContext.temperamentFinalizationReasonCode;
             return createMetadata();
@@ -384,7 +384,7 @@ test('runChatMessages preserves planner temperament for context-step short-circu
     const chatService = createChatService({
         generationRuntime: createRuntime(),
         storeTrace: async () => undefined,
-        buildResponseMetadata: (_assistantMetadata, runtimeContext) => {
+        buildResponseMetadata: (_generationMetadata, runtimeContext) => {
             capturedPlannerTemperament = runtimeContext.plannerTemperament;
             return createMetadata();
         },
@@ -645,7 +645,7 @@ test('runChatMessages passes structured retrieval facts into response metadata r
             provenance: 'Retrieved',
         }),
         storeTrace: async () => undefined,
-        buildResponseMetadata: (_assistantMetadata, runtimeContext) => {
+        buildResponseMetadata: (_generationMetadata, runtimeContext) => {
             capturedRetrieval = runtimeContext.retrieval;
             return createMetadata();
         },
@@ -695,7 +695,7 @@ test('runChatMessages passes non-retrieval facts for plain VoltAgent-backed runs
             citations: [],
         }),
         storeTrace: async () => undefined,
-        buildResponseMetadata: (_assistantMetadata, runtimeContext) => {
+        buildResponseMetadata: (_generationMetadata, runtimeContext) => {
             capturedRetrieval = runtimeContext.retrieval;
             return createMetadata();
         },
@@ -728,7 +728,7 @@ test('runChatMessages forwards execution context into metadata runtime context (
     const chatService = createChatService({
         generationRuntime: createRuntime(),
         storeTrace: async () => undefined,
-        buildResponseMetadata: (_assistantMetadata, runtimeContext) => {
+        buildResponseMetadata: (_generationMetadata, runtimeContext) => {
             capturedExecutionContext = runtimeContext.executionContext;
             return createMetadata();
         },
@@ -904,7 +904,7 @@ test('runChatMessages marks tool execution as executed when retrieval was used',
             provenance: 'Retrieved',
         }),
         storeTrace: async () => undefined,
-        buildResponseMetadata: (_assistantMetadata, runtimeContext) => {
+        buildResponseMetadata: (_generationMetadata, runtimeContext) => {
             capturedExecutionContext = runtimeContext.executionContext;
             return createMetadata();
         },
@@ -942,7 +942,7 @@ test('runChatMessages preserves non-search tool execution context when search is
             provenance: 'Inferred',
         }),
         storeTrace: async () => undefined,
-        buildResponseMetadata: (_assistantMetadata, runtimeContext) => {
+        buildResponseMetadata: (_generationMetadata, runtimeContext) => {
             capturedExecutionContext = runtimeContext.executionContext;
             return createMetadata();
         },
@@ -991,7 +991,7 @@ test('runChatMessages preserves explicit failed web_search tool context when cit
             ],
         }),
         storeTrace: async () => undefined,
-        buildResponseMetadata: (_assistantMetadata, runtimeContext) => {
+        buildResponseMetadata: (_generationMetadata, runtimeContext) => {
             capturedRuntimeContext = runtimeContext;
             capturedExecutionContext = runtimeContext.executionContext;
             return createMetadata();
@@ -1032,7 +1032,7 @@ test('runChatMessages forwards total orchestration duration when provided', asyn
     const chatService = createChatService({
         generationRuntime: createRuntime(),
         storeTrace: async () => undefined,
-        buildResponseMetadata: (_assistantMetadata, runtimeContext) => {
+        buildResponseMetadata: (_generationMetadata, runtimeContext) => {
             capturedTotalDurationMs = runtimeContext.totalDurationMs;
             return createMetadata();
         },
@@ -1250,7 +1250,7 @@ test('runChatMessages drops blank search queries before building the runtime req
     const chatService = createChatService({
         generationRuntime,
         storeTrace: async () => undefined,
-        buildResponseMetadata: (_assistantMetadata, runtimeContext) => {
+        buildResponseMetadata: (_generationMetadata, runtimeContext) => {
             capturedRetrieval = runtimeContext.retrieval;
             return createMetadata();
         },
@@ -1455,7 +1455,7 @@ test('runChatMessages executes Reviewed loop and forwards workflow lineage', asy
     const chatService = createChatService({
         generationRuntime,
         storeTrace: async () => undefined,
-        buildResponseMetadata: (_assistantMetadata, runtimeContext) => {
+        buildResponseMetadata: (_generationMetadata, runtimeContext) => {
             capturedWorkflow = runtimeContext.workflow;
             return createMetadata();
         },
@@ -1537,7 +1537,7 @@ test('runChatMessages fails open when review output is invalid', async () => {
     const chatService = createChatService({
         generationRuntime,
         storeTrace: async () => undefined,
-        buildResponseMetadata: (_assistantMetadata, runtimeContext) => {
+        buildResponseMetadata: (_generationMetadata, runtimeContext) => {
             capturedWorkflow = runtimeContext.workflow;
             return createMetadata();
         },
@@ -1625,7 +1625,7 @@ test('runChatMessages falls back to reviewed workflow behavior for unknown workf
     const chatService = createChatService({
         generationRuntime: createRuntime(),
         storeTrace: async () => undefined,
-        buildResponseMetadata: (_assistantMetadata, runtimeContext) => {
+        buildResponseMetadata: (_generationMetadata, runtimeContext) => {
             capturedWorkflow = runtimeContext.workflow;
             return createMetadata();
         },
@@ -1952,7 +1952,7 @@ test('runChatMessages executes fast workflow mode as minimal workflow with one g
     const chatService = createChatService({
         generationRuntime,
         storeTrace: async () => undefined,
-        buildResponseMetadata: (_assistantMetadata, runtimeContext) => {
+        buildResponseMetadata: (_generationMetadata, runtimeContext) => {
             capturedWorkflow = runtimeContext.workflow;
             return createMetadata();
         },
