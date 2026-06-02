@@ -7,7 +7,10 @@
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import type { ToolInvocationReasonCode } from '@footnote/contracts/policy';
+import type {
+    ToolInvocationReasonCode,
+    TraceAxisScore,
+} from '@footnote/contracts/policy';
 
 import {
     type AssistantResponseMetadata,
@@ -148,6 +151,26 @@ test('buildResponseMetadata preserves explicit chip values when present', () => 
     assert.equal(metadata.freshnessScore, 2);
 });
 
+test('buildResponseMetadata preserves explicit evidence while deriving missing freshness chip', () => {
+    const metadata = buildResponseMetadata(
+        baseAssistantMetadata({
+            evidenceScore: 5,
+            freshnessScore: undefined,
+        }),
+        baseRuntimeContext({
+            retrieval: {
+                requested: true,
+                used: true,
+                intent: 'current_facts',
+                contextSize: 'low',
+            },
+        })
+    );
+
+    assert.equal(metadata.evidenceScore, 5);
+    assert.equal(metadata.freshnessScore, 4);
+});
+
 test('buildResponseMetadata does not add chips for non-retrieved responses', () => {
     const metadata = buildResponseMetadata(
         baseAssistantMetadata({ provenance: 'Speculative', citations: [] }),
@@ -273,6 +296,29 @@ test('buildResponseMetadata emits canonical trace_target and trace_final fields'
     assert.deepEqual(metadata.trace_final, {
         tightness: 4,
         rationale: 3,
+    });
+    assert.equal(metadata.trace_final_reason_code, undefined);
+});
+
+test('buildResponseMetadata drops invalid TRACE axes before comparing target and final posture', () => {
+    const metadata = buildResponseMetadata(
+        baseAssistantMetadata(),
+        baseRuntimeContext({
+            plannerTemperament: {
+                tightness: 2,
+                rationale: 8 as unknown as TraceAxisScore,
+            },
+            finalTemperament: {
+                tightness: 2,
+            },
+        })
+    );
+
+    assert.deepEqual(metadata.trace_target, {
+        tightness: 2,
+    });
+    assert.deepEqual(metadata.trace_final, {
+        tightness: 2,
     });
     assert.equal(metadata.trace_final_reason_code, undefined);
 });
