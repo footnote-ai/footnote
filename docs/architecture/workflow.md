@@ -169,6 +169,12 @@ Assess may also emit TRACE alignment outputs:
 These assess outputs are used for lineage and metadata finalization. They stay
 inside workflow policy and limits.
 
+Review decision parsing uses explicit expected-failure results. If assess
+output is empty, not a JSON object, invalid JSON, or schema-invalid, the engine
+records a failed `assess` step and fails open to the latest successful draft.
+The failed step records the parse reason as serializable signals, not raw assess
+output.
+
 If the decision is `revise`, the engine may run planner re-entry and then a
 follow-up `generate` step for refinement.
 
@@ -211,6 +217,10 @@ Routing is fail-open where possible:
 - transient provider or upstream failures advance to the next chain entry
 - non-transient errors stop chain advancement for that step
 
+Routing-chain exhaustion is expected workflow data. Review and initial
+generation paths carry the exhausted reason code and attempts directly instead
+of converting those outcomes through exception-message control flow.
+
 Execution metadata and step signals record selected profile lineage, fallback
 attempts, and routing reason codes for trace inspection.
 
@@ -238,6 +248,17 @@ For `assess` steps, use `reviewDecision` and `reviewReason`. When
 `reviewDecision` is `revise`, `signals` may also include
 `revisionInstruction`. Assess signals may also include TRACE alignment and
 flattened final posture axes.
+
+Failed assess steps caused by invalid review parser output do not emit
+`reviewDecision`, `reviewReason`, or `revisionInstruction`. They may emit:
+
+- `reviewParseStatus`
+- `reviewParseFailureReason`
+- `reviewParseFailureMessage`
+- `reviewParseOutputLength`
+- `reviewParseIssueCount`
+- `reviewParseFirstIssuePath`
+- `reviewParseFirstIssueCode`
 
 Example assess signals:
 

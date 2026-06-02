@@ -2181,6 +2181,71 @@ test('runChatMessages handles internal no-generation reasons with fallback gener
     }
 });
 
+test('runChatMessages preserves no-generation lineage when fallback routing chain exhausts', async () => {
+    let generationCalls = 0;
+    const usageRecords: BackendLLMCostRecord[] = [];
+    let traceMetadata: ResponseMetadata | undefined;
+    const generationRuntime: GenerationRuntime = {
+        kind: 'test-runtime',
+        async generate() {
+            generationCalls += 1;
+            throw new Error('401 unauthorized');
+        },
+    };
+
+    const chatService = createChatService({
+        generationRuntime,
+        storeTrace: async (metadata) => {
+            traceMetadata = metadata;
+        },
+        buildResponseMetadata,
+        defaultModel: 'gpt-5-mini',
+        recordUsage: (record) => {
+            usageRecords.push(record);
+        },
+        chatWorkflowConfig: {
+            modeId: 'grounded',
+            reviewLoopEnabled: true,
+            maxIterations: 1,
+            maxDurationMs: 15000,
+        },
+        runReviewWorkflow: async () =>
+            ({
+                outcome: 'no_generation',
+                workflowLineage: {
+                    workflowId: 'wf_internal_routing_exhausted',
+                    workflowName: 'message_reviewed',
+                    status: 'degraded',
+                    terminationReason: 'budget_exhausted_steps',
+                    stepCount: 0,
+                    maxSteps: 3,
+                    maxDurationMs: 15000,
+                    steps: [],
+                },
+            }) satisfies RunBoundedReviewWorkflowResult,
+    });
+
+    const response = await chatService.runChatMessages({
+        messages: [{ role: 'user', content: 'Summarize this.' }],
+        conversationSnapshot: 'Summarize this.',
+    });
+
+    assert.equal(generationCalls, 1);
+    assert.equal(usageRecords.length, 0);
+    assert.equal(
+        response.message,
+        'I could not generate a response for this request.'
+    );
+    assert.equal(
+        response.metadata.workflow?.terminationReason,
+        'budget_exhausted_steps'
+    );
+    assert.equal(
+        traceMetadata?.workflow?.terminationReason,
+        'budget_exhausted_steps'
+    );
+});
+
 test('runChatMessages keeps no-generation surfaced when execution policy disables fallback generation', async () => {
     let generationCalls = 0;
     let traceMetadata: ResponseMetadata | undefined;
@@ -2271,6 +2336,50 @@ test('runChatMessages keeps no-generation surfaced when execution policy disable
             event.profileId === 'workflow_internal_fallback'
     );
     assert.equal(fallbackExecution, undefined);
+});
+
+test('runChatMessages surfaces no-generation when direct generation routing chain exhausts', async () => {
+    let generationCalls = 0;
+    const usageRecords: BackendLLMCostRecord[] = [];
+    let traceMetadata: ResponseMetadata | undefined;
+    const generationRuntime: GenerationRuntime = {
+        kind: 'test-runtime',
+        async generate() {
+            generationCalls += 1;
+            throw new Error('401 unauthorized');
+        },
+    };
+
+    const chatService = createChatService({
+        generationRuntime,
+        storeTrace: async (metadata) => {
+            traceMetadata = metadata;
+        },
+        buildResponseMetadata,
+        defaultModel: 'gpt-5-mini',
+        recordUsage: (record) => {
+            usageRecords.push(record);
+        },
+        chatWorkflowConfig: {
+            modeId: 'grounded',
+            reviewLoopEnabled: false,
+            maxIterations: 1,
+            maxDurationMs: 15000,
+        },
+    });
+
+    const response = await chatService.runChatMessages({
+        messages: [{ role: 'user', content: 'Summarize this.' }],
+        conversationSnapshot: 'Summarize this.',
+    });
+
+    assert.equal(generationCalls, 1);
+    assert.equal(usageRecords.length, 0);
+    assert.equal(
+        response.message,
+        'I could not generate a response for this request.'
+    );
+    assert.equal(traceMetadata?.workflow, undefined);
 });
 
 test('runChatMessages keeps workflow execution policy gated by the execution contract response mode', async () => {

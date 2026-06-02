@@ -7,21 +7,21 @@ failures that callers need to handle with a concrete reason.
 ### 1) review-routing
 
 Branch: `chore/trust-boundary-neverthrow-review-routing`  
-Status: `todo`
+Status: `done`
 
-Start here. This branch should clean up the review path where expected failures
-are still a little too implicit.
+This branch cleaned up the review path where expected failures were still a
+little too implicit.
 
 The important cases are review decision parsing and routing-chain exhaustion.
-Right now, review parsing can collapse to `null`, and some routing failures move
-through `throw new Error(reasonCode)` before being mapped back into workflow
-metadata. That works, but it hides useful meaning from the type system and makes
-the reader chase string comparisons.
+Before this branch, review parsing could collapse to `null`, and some routing
+failures moved through `throw new Error(reasonCode)` before being mapped back
+into workflow metadata. That worked, but it hid useful meaning from the type
+system and made the reader chase string comparisons.
 
-Use `neverthrow` to return those outcomes directly. A parse failure should carry
-the parse reason. A routing-chain failure should carry its reason code as data,
-not as an exception message. The workflow must still fail open in the same
-situations it does today.
+`neverthrow` now returns those outcomes directly. A parse failure carries the
+parse reason. A routing-chain failure carries its reason code as data, not as an
+exception message. The workflow still fails open in the same situations it did
+before.
 
 Keep this branch small. It should touch review parsing, the review loop, initial
 generation routing, and only the profile wiring needed to support the new return
@@ -84,4 +84,3 @@ places to look first.
 Do this gradually. This is not a redesign of every workflow record. Type the
 fields that readers and UI code already depend on, so future changes cannot
 drift silently.
-

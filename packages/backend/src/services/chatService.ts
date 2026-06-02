@@ -33,6 +33,7 @@ import type {
     PostChatRequest,
     PostChatResponse,
 } from '@footnote/contracts/web';
+import type { Result } from 'neverthrow';
 import type {
     AssistantResponseMetadata,
     AssistantUsage,
@@ -83,16 +84,29 @@ import { runtimeConfig } from '../config.js';
 import { buildToolClarificationResponse } from './tools/toolClarificationResponse.js';
 import { buildWeatherToolFailureResponse } from './tools/weatherToolFailureResponse.js';
 import { resolveStepRoutingChain } from './stepRoutingChains.js';
-import { executeStepRoutingChain } from './stepRoutingExecutor.js';
+import {
+    executeStepRoutingChain,
+    type RoutingChainAttemptLog,
+} from './stepRoutingExecutor.js';
 import type { ConversationContextEnvelope } from './conversationContextService.js';
 import { sanitizeReviewModuleIds } from './reviewModules.js';
 import {
     fromAssessSignalsToFinalTemperament,
     hasDifferentTemperament,
 } from './traceAlignmentSignals.js';
+import {
+    toRoutingChainResult,
+    type RoutingChainFailure,
+} from './routingChainResult.js';
 
 const SURFACED_NO_GENERATION_MESSAGE =
     'I could not generate a response for this request.';
+
+type GenerateWithChainSuccess = {
+    generationResult: GenerationResult;
+    selectedProfile: ModelProfile;
+    attempts: RoutingChainAttemptLog[];
+};
 
 /**
  * Returns context-step results in canonical order for downstream consumers.
@@ -1025,24 +1039,9 @@ export const createChatService = ({
             );
             const runGenerateWithChain = async (
                 request: GenerationRequest
-            ): Promise<{
-                generationResult: GenerationResult;
-                selectedProfile: ModelProfile;
-                attempts: Array<{
-                    index: number;
-                    step: string;
-                    profileId: string;
-                    provider?: string;
-                    model?: string;
-                    status: string;
-                    reasonCode?: string;
-                    errorMessage?: string;
-                    chooseOneUsed: boolean;
-                    chooseOneCandidates?: string[];
-                    chooseOneSelectedIndex?: number;
-                    seedKeyType?: 'session_id' | 'correlation_id';
-                }>;
-            }> => {
+            ): Promise<
+                Result<GenerateWithChainSuccess, RoutingChainFailure>
+            > => {
                 const chainResult = await executeStepRoutingChain({
                     step: 'generate',
                     candidates: generateProfileCandidates,
@@ -1056,14 +1055,12 @@ export const createChatService = ({
                             capabilities: profile.capabilities,
                         }),
                 });
-                if (chainResult.status !== 'executed') {
-                    throw new Error(chainResult.reasonCode);
-                }
-                return {
-                    generationResult: chainResult.value,
-                    selectedProfile: chainResult.selected.profile,
-                    attempts: chainResult.attempts,
-                };
+                const routingResult = toRoutingChainResult(chainResult);
+                return routingResult.map((executedResult) => ({
+                    generationResult: executedResult.value,
+                    selectedProfile: executedResult.selected.profile,
+                    attempts: executedResult.attempts,
+                }));
             };
 
             return {
@@ -1364,14 +1361,41 @@ export const createChatService = ({
                                     await runGenerateWithChain(
                                         effectiveGenerationRequest
                                     );
-                                generationResult =
-                                    chainGenerationResult.generationResult;
-                                routedGenerationSelectedProfile =
-                                    chainGenerationResult.selectedProfile;
-                                recordUsageForStep(
-                                    generationResult,
-                                    effectiveGenerationRequest.model
-                                );
+                                if (chainGenerationResult.isErr()) {
+                                    logger.warn(
+                                        'Fallback generation after internal no-generation exhausted routing chain; preserving no-generation lineage.',
+                                        {
+                                            workflowName:
+                                                workflowProfile.workflowName,
+                                            reasonCode:
+                                                chainGenerationResult.error
+                                                    .reasonCode,
+                                            terminationReason:
+                                                workflowResult.workflowLineage
+                                                    .terminationReason,
+                                            routingChainAttemptCount:
+                                                chainGenerationResult.error
+                                                    .attempts.length,
+                                        }
+                                    );
+                                    generationResult = {
+                                        text: SURFACED_NO_GENERATION_MESSAGE,
+                                        model: effectiveGenerationRequest.model,
+                                        provenance: 'Inferred',
+                                        citations: [],
+                                    };
+                                } else {
+                                    generationResult =
+                                        chainGenerationResult.value
+                                            .generationResult;
+                                    routedGenerationSelectedProfile =
+                                        chainGenerationResult.value
+                                            .selectedProfile;
+                                    recordUsageForStep(
+                                        generationResult,
+                                        effectiveGenerationRequest.model
+                                    );
+                                }
                             } catch (error) {
                                 logger.warn(
                                     'Fallback generation after internal no-generation failed; preserving no-generation lineage.',
@@ -1439,13 +1463,31 @@ export const createChatService = ({
                 const chainGenerationResult = await runGenerateWithChain(
                     effectiveGenerationRequest
                 );
-                generationResult = chainGenerationResult.generationResult;
-                routedGenerationSelectedProfile =
-                    chainGenerationResult.selectedProfile;
-                recordUsageForStep(
-                    generationResult,
-                    effectiveGenerationRequest.model
-                );
+                if (chainGenerationResult.isErr()) {
+                    logger.warn(
+                        'Initial generation routing chain failed; surfacing no-generation response.',
+                        {
+                            reasonCode: chainGenerationResult.error.reasonCode,
+                            routingChainAttemptCount:
+                                chainGenerationResult.error.attempts.length,
+                        }
+                    );
+                    generationResult = {
+                        text: SURFACED_NO_GENERATION_MESSAGE,
+                        model: effectiveGenerationRequest.model,
+                        provenance: 'Inferred',
+                        citations: [],
+                    };
+                } else {
+                    generationResult =
+                        chainGenerationResult.value.generationResult;
+                    routedGenerationSelectedProfile =
+                        chainGenerationResult.value.selectedProfile;
+                    recordUsageForStep(
+                        generationResult,
+                        effectiveGenerationRequest.model
+                    );
+                }
             }
 
             return {

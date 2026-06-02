@@ -10,6 +10,7 @@ import type {
     PartialResponseTemperament,
     TraceAxisScore,
 } from '@footnote/contracts/policy';
+import { err, ok, type Result } from 'neverthrow';
 import { z } from 'zod';
 import { sanitizeReviewModuleIds } from '../reviewModules.js';
 
@@ -28,6 +29,26 @@ export type ReviewDecision = {
     };
     routingHints?: string[];
 };
+
+export type ReviewDecisionParseFailureReason =
+    | 'empty_output'
+    | 'non_json_object'
+    | 'invalid_json'
+    | 'schema_invalid';
+
+export type ReviewDecisionParseFailure = {
+    reason: ReviewDecisionParseFailureReason;
+    message: string;
+    outputLength: number;
+    issueCount?: number;
+    firstIssuePath?: string;
+    firstIssueCode?: string;
+};
+
+export type ReviewDecisionParseResult = Result<
+    ReviewDecision,
+    ReviewDecisionParseFailure
+>;
 
 export const DEFAULT_REVIEW_DECISION_PROMPT = `Return plain JSON only.
 Schema:
@@ -143,63 +164,109 @@ const ReviewDecisionSchema = z
         }
     });
 
-export const parseReviewDecisionOutput = (
+const normalizeReviewDecision = (
+    parsedDecision: z.infer<typeof ReviewDecisionSchema>
+): ReviewDecision => {
+    const normalizedRevisionInstruction =
+        parsedDecision.revisionInstruction?.trim();
+    const moduleHints = parsedDecision.moduleHints
+        ? sanitizeReviewModuleIds(parsedDecision.moduleHints)
+        : undefined;
+    const normalizedConcerns: NonNullable<ReviewDecision['concerns']> = {
+        ...(parsedDecision.concerns?.length !== undefined && {
+            length: parsedDecision.concerns.length,
+        }),
+        ...(parsedDecision.concerns?.style !== undefined && {
+            style: parsedDecision.concerns.style,
+        }),
+        ...(parsedDecision.concerns?.evidence !== undefined && {
+            evidence: parsedDecision.concerns.evidence,
+        }),
+    };
+
+    return {
+        reviewDecision: parsedDecision.reviewDecision,
+        reviewReason: parsedDecision.reviewReason.trim(),
+        ...(normalizedRevisionInstruction !== undefined && {
+            revisionInstruction: normalizedRevisionInstruction,
+        }),
+        ...(parsedDecision.traceAlignment !== undefined && {
+            traceAlignment: parsedDecision.traceAlignment,
+        }),
+        ...(parsedDecision.traceAlignmentReason !== undefined && {
+            traceAlignmentReason: parsedDecision.traceAlignmentReason.trim(),
+        }),
+        ...(parsedDecision.finalTemperament !== undefined && {
+            finalTemperament: parsedDecision.finalTemperament,
+        }),
+        ...(moduleHints !== undefined && { moduleHints }),
+        ...(Object.keys(normalizedConcerns).length > 0 && {
+            concerns: normalizedConcerns,
+        }),
+        ...(parsedDecision.routingHints !== undefined && {
+            routingHints: parsedDecision.routingHints,
+        }),
+    };
+};
+
+export const parseReviewDecisionOutputResult = (
     text: string
-): ReviewDecision | null => {
+): ReviewDecisionParseResult => {
     const trimmed = text.trim();
+    if (trimmed.length === 0) {
+        return err({
+            reason: 'empty_output',
+            message: 'Review decision output was empty.',
+            outputLength: text.length,
+        });
+    }
+
     if (!trimmed.startsWith('{') || !trimmed.endsWith('}')) {
-        return null;
+        return err({
+            reason: 'non_json_object',
+            message: 'Review decision output must be a JSON object.',
+            outputLength: text.length,
+        });
     }
 
     try {
         const parsedPayload = JSON.parse(trimmed) as unknown;
         const parsedDecision = ReviewDecisionSchema.safeParse(parsedPayload);
         if (!parsedDecision.success) {
-            return null;
+            const firstIssue = parsedDecision.error.issues.at(0);
+            const firstIssuePath = firstIssue?.path
+                .map((pathSegment) => String(pathSegment))
+                .join('.');
+            return err({
+                reason: 'schema_invalid',
+                message:
+                    firstIssue?.message ??
+                    'Review decision output did not match the required schema.',
+                outputLength: text.length,
+                issueCount: parsedDecision.error.issues.length,
+                ...(firstIssuePath !== undefined &&
+                    firstIssuePath.length > 0 && {
+                        firstIssuePath,
+                    }),
+                ...(firstIssue?.code !== undefined && {
+                    firstIssueCode: firstIssue.code,
+                }),
+            });
         }
 
-        const normalizedRevisionInstruction =
-            parsedDecision.data.revisionInstruction?.trim();
-        const moduleHints = parsedDecision.data.moduleHints
-            ? sanitizeReviewModuleIds(parsedDecision.data.moduleHints)
-            : undefined;
-        const normalizedConcerns: NonNullable<ReviewDecision['concerns']> = {
-            ...(parsedDecision.data.concerns?.length !== undefined && {
-                length: parsedDecision.data.concerns.length,
-            }),
-            ...(parsedDecision.data.concerns?.style !== undefined && {
-                style: parsedDecision.data.concerns.style,
-            }),
-            ...(parsedDecision.data.concerns?.evidence !== undefined && {
-                evidence: parsedDecision.data.concerns.evidence,
-            }),
-        };
-
-        return {
-            reviewDecision: parsedDecision.data.reviewDecision,
-            reviewReason: parsedDecision.data.reviewReason.trim(),
-            ...(normalizedRevisionInstruction !== undefined && {
-                revisionInstruction: normalizedRevisionInstruction,
-            }),
-            ...(parsedDecision.data.traceAlignment !== undefined && {
-                traceAlignment: parsedDecision.data.traceAlignment,
-            }),
-            ...(parsedDecision.data.traceAlignmentReason !== undefined && {
-                traceAlignmentReason:
-                    parsedDecision.data.traceAlignmentReason.trim(),
-            }),
-            ...(parsedDecision.data.finalTemperament !== undefined && {
-                finalTemperament: parsedDecision.data.finalTemperament,
-            }),
-            ...(moduleHints !== undefined && { moduleHints }),
-            ...(Object.keys(normalizedConcerns).length > 0 && {
-                concerns: normalizedConcerns,
-            }),
-            ...(parsedDecision.data.routingHints !== undefined && {
-                routingHints: parsedDecision.data.routingHints,
-            }),
-        };
+        return ok(normalizeReviewDecision(parsedDecision.data));
     } catch {
-        return null;
+        return err({
+            reason: 'invalid_json',
+            message: 'Review decision output was not valid JSON.',
+            outputLength: text.length,
+        });
     }
+};
+
+export const parseReviewDecisionOutput = (
+    text: string
+): ReviewDecision | null => {
+    const result = parseReviewDecisionOutputResult(text);
+    return result.isOk() ? result.value : null;
 };
