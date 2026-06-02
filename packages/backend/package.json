@@ -17,6 +17,7 @@
         "express": "catalog:",
         "express-rate-limit": "catalog:",
         "js-yaml": "catalog:",
+        "neverthrow": "catalog:",
         "nodemailer": "catalog:",
         "winston": "catalog:",
         "winston-daily-rotate-file": "catalog:",

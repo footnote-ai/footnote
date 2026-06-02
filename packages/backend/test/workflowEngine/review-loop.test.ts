@@ -9,7 +9,24 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import type { GenerationRuntime } from '@footnote/agent-runtime';
 import type { ModelProfile } from '@footnote/contracts';
+import { ok } from 'neverthrow';
 import { runBoundedReviewWorkflowForTest } from './helpers.js';
+
+const makeWorkflowTestProfile = (input: {
+    id: string;
+    provider: 'openai' | 'ollama';
+    providerModel: string;
+    enabled?: boolean;
+    canUseSearch?: boolean;
+}): ModelProfile => ({
+    id: input.id,
+    description: input.id,
+    provider: input.provider,
+    providerModel: input.providerModel,
+    enabled: input.enabled ?? true,
+    tierBindings: [],
+    capabilities: { canUseSearch: input.canUseSearch ?? true },
+});
 
 test('runBoundedReviewWorkflow enforces legality before initial generate execution', async () => {
     let generationCalls = 0;
@@ -55,10 +72,11 @@ test('runBoundedReviewWorkflow enforces legality before initial generate executi
         },
         reviewDecisionPrompt: 'json',
         revisionPromptPrefix: 'revise',
-        parseReviewDecision: () => ({
-            reviewDecision: 'finalize',
-            reviewReason: 'done',
-        }),
+        parseReviewDecision: () =>
+            ok({
+                reviewDecision: 'finalize',
+                reviewReason: 'done',
+            }),
         captureUsage: () => {
             usageCaptures += 1;
             return {
@@ -288,11 +306,12 @@ test('runBoundedReviewWorkflow records explicit limit stop attribution for exhau
                 totalCostUsd: 0,
             },
         }),
-        parseReviewDecision: () => ({
-            reviewDecision: 'revise',
-            reviewReason: 'One revision pass is required.',
-            revisionInstruction: 'Tighten wording and remove redundancy.',
-        }),
+        parseReviewDecision: () =>
+            ok({
+                reviewDecision: 'revise',
+                reviewReason: 'One revision pass is required.',
+                revisionInstruction: 'Tighten wording and remove redundancy.',
+            }),
     });
 
     assert.equal(result.outcome, 'generated');
@@ -376,6 +395,97 @@ test('runBoundedReviewWorkflow classifies initial generate runtime failure as no
     assert.equal(
         result.workflowLineage.steps[0].reasonCode,
         'generation_runtime_error'
+    );
+});
+
+test('runBoundedReviewWorkflow records initial generation routing exhaustion without exception-message control flow', async () => {
+    let generationCalls = 0;
+    const ineligibleProfile = makeWorkflowTestProfile({
+        id: 'openai-text-medium',
+        provider: 'openai',
+        providerModel: 'gpt-5.4-mini',
+        enabled: false,
+    });
+    const generationRuntime: GenerationRuntime = {
+        kind: 'test-runtime',
+        async generate() {
+            generationCalls += 1;
+            return {
+                text: 'should not run',
+                model: 'gpt-5-mini',
+                usage: {
+                    promptTokens: 10,
+                    completionTokens: 5,
+                    totalTokens: 15,
+                },
+                provenance: 'Inferred',
+                citations: [],
+            };
+        },
+    };
+
+    const result = await runBoundedReviewWorkflowForTest({
+        generationRuntime,
+        generationRequest: {
+            model: 'gpt-5-mini',
+            messages: [{ role: 'user', content: 'hi' }],
+        },
+        messagesWithHints: [{ role: 'user', content: 'hi' }],
+        generationStartedAtMs: Date.now(),
+        workflowConfig: {
+            workflowName: 'message_reviewed',
+            maxIterations: 2,
+            maxDurationMs: 15000,
+        },
+        workflowPolicy: {
+            enablePlanning: false,
+            enableToolUse: false,
+            enableReplanning: false,
+            enableGeneration: true,
+            enableAssessment: true,
+            enableRevision: true,
+        },
+        captureUsage: () => ({
+            model: 'gpt-5-mini',
+            promptTokens: 0,
+            completionTokens: 0,
+            totalTokens: 0,
+            estimatedCost: {
+                inputCostUsd: 0,
+                outputCostUsd: 0,
+                totalCostUsd: 0,
+            },
+        }),
+        stepRoutingChainSet: {
+            enabledProfilesById: new Map([
+                [ineligibleProfile.id, ineligibleProfile],
+            ]),
+            generateCandidates: [
+                { profileId: ineligibleProfile.id, chooseOneUsed: false },
+            ],
+            assessCandidates: [],
+        },
+    });
+
+    assert.equal(generationCalls, 0);
+    assert.equal(result.outcome, 'no_generation');
+    assert.equal(
+        result.workflowLineage.terminationReason,
+        'executor_error_fail_open'
+    );
+    const failedGenerateStep = result.workflowLineage.steps.find(
+        (step) =>
+            step.stepKind === 'generate' && step.outcome.status === 'failed'
+    );
+    assert.ok(failedGenerateStep);
+    assert.equal(failedGenerateStep.reasonCode, 'routing_chain_exhausted');
+    assert.equal(
+        failedGenerateStep.outcome.signals?.routingChainAttemptCount,
+        1
+    );
+    assert.match(
+        String(failedGenerateStep.outcome.signals?.routingChainAttemptsJson),
+        /skipped_ineligible/
     );
 });
 
@@ -785,6 +895,20 @@ test('runBoundedReviewWorkflow fail-opens when assess revise omits required revi
         ),
         false
     );
+    const failedAssessStep = result.workflowLineage.steps.find(
+        (step) => step.stepKind === 'assess' && step.outcome.status === 'failed'
+    );
+    assert.ok(failedAssessStep);
+    assert.equal(failedAssessStep.reasonCode, 'generation_runtime_error');
+    assert.equal(failedAssessStep.outcome.signals?.reviewParseStatus, 'failed');
+    assert.equal(
+        failedAssessStep.outcome.signals?.reviewParseFailureReason,
+        'schema_invalid'
+    );
+    assert.equal(
+        failedAssessStep.outcome.signals?.reviewParseFirstIssuePath,
+        'revisionInstruction'
+    );
 });
 
 test('runBoundedReviewWorkflow persists assess TRACE alignment signals when provided', async () => {
@@ -867,6 +991,302 @@ test('runBoundedReviewWorkflow persists assess TRACE alignment signals when prov
         'Need tighter caution tone.'
     );
     assert.equal(assessStep.outcome.signals?.finalTemperamentCaution, 4);
+});
+
+test('runBoundedReviewWorkflow records invalid JSON assess parse failure signals', async () => {
+    let generationCalls = 0;
+    const generationRuntime: GenerationRuntime = {
+        kind: 'test-runtime',
+        async generate() {
+            generationCalls += 1;
+            if (generationCalls === 1) {
+                return {
+                    text: 'initial draft',
+                    model: 'gpt-5-mini',
+                    usage: {
+                        promptTokens: 10,
+                        completionTokens: 10,
+                        totalTokens: 20,
+                    },
+                    provenance: 'Inferred',
+                    citations: [],
+                };
+            }
+            return {
+                text: '{"reviewDecision":"finalize",}',
+                model: 'gpt-5-mini',
+                usage: {
+                    promptTokens: 5,
+                    completionTokens: 5,
+                    totalTokens: 10,
+                },
+                provenance: 'Inferred',
+                citations: [],
+            };
+        },
+    };
+
+    const result = await runBoundedReviewWorkflowForTest({
+        generationRuntime,
+        generationRequest: {
+            model: 'gpt-5-mini',
+            messages: [{ role: 'user', content: 'Draft answer' }],
+        },
+        messagesWithHints: [{ role: 'user', content: 'Draft answer' }],
+        generationStartedAtMs: Date.now(),
+        workflowConfig: {
+            workflowName: 'message_reviewed',
+            maxIterations: 2,
+            maxDurationMs: 15000,
+        },
+        workflowPolicy: {
+            enablePlanning: false,
+            enableToolUse: false,
+            enableReplanning: false,
+            enableGeneration: true,
+            enableAssessment: true,
+            enableRevision: true,
+        },
+        captureUsage: (generationResult) => ({
+            model: generationResult.model ?? 'gpt-5-mini',
+            promptTokens: generationResult.usage?.promptTokens ?? 0,
+            completionTokens: generationResult.usage?.completionTokens ?? 0,
+            totalTokens: generationResult.usage?.totalTokens ?? 0,
+            estimatedCost: {
+                inputCostUsd: 0,
+                outputCostUsd: 0,
+                totalCostUsd: 0,
+            },
+        }),
+    });
+
+    assert.equal(result.outcome, 'generated');
+    assert.equal(result.generationResult.text, 'initial draft');
+    assert.equal(result.workflowLineage.status, 'degraded');
+    assert.equal(
+        result.workflowLineage.terminationReason,
+        'executor_error_fail_open'
+    );
+    const failedAssessStep = result.workflowLineage.steps.find(
+        (step) => step.stepKind === 'assess' && step.outcome.status === 'failed'
+    );
+    assert.ok(failedAssessStep);
+    assert.equal(
+        failedAssessStep.outcome.signals?.reviewParseFailureReason,
+        'invalid_json'
+    );
+});
+
+test('runBoundedReviewWorkflow records assess routing-chain exhaustion as data', async () => {
+    let generationCalls = 0;
+    const generateProfile = makeWorkflowTestProfile({
+        id: 'openai-text-medium',
+        provider: 'openai',
+        providerModel: 'gpt-5.4-mini',
+    });
+    const assessProfile = makeWorkflowTestProfile({
+        id: 'openai-json-optimized',
+        provider: 'openai',
+        providerModel: 'gpt-5.4-nano',
+    });
+    const generationRuntime: GenerationRuntime = {
+        kind: 'test-runtime',
+        async generate(input) {
+            generationCalls += 1;
+            if (input.model === assessProfile.providerModel) {
+                throw new Error('401 unauthorized');
+            }
+            return {
+                text: 'initial draft',
+                model: input.model,
+                usage: {
+                    promptTokens: 10,
+                    completionTokens: 10,
+                    totalTokens: 20,
+                },
+                provenance: 'Inferred',
+                citations: [],
+            };
+        },
+    };
+
+    const result = await runBoundedReviewWorkflowForTest({
+        generationRuntime,
+        generationRequest: {
+            model: 'gpt-5-mini',
+            messages: [{ role: 'user', content: 'Draft answer' }],
+        },
+        messagesWithHints: [{ role: 'user', content: 'Draft answer' }],
+        generationStartedAtMs: Date.now(),
+        workflowConfig: {
+            workflowName: 'message_reviewed',
+            maxIterations: 2,
+            maxDurationMs: 15000,
+        },
+        workflowPolicy: {
+            enablePlanning: false,
+            enableToolUse: false,
+            enableReplanning: false,
+            enableGeneration: true,
+            enableAssessment: true,
+            enableRevision: true,
+        },
+        captureUsage: (generationResult) => ({
+            model: generationResult.model ?? 'gpt-5-mini',
+            promptTokens: generationResult.usage?.promptTokens ?? 0,
+            completionTokens: generationResult.usage?.completionTokens ?? 0,
+            totalTokens: generationResult.usage?.totalTokens ?? 0,
+            estimatedCost: {
+                inputCostUsd: 0,
+                outputCostUsd: 0,
+                totalCostUsd: 0,
+            },
+        }),
+        stepRoutingChainSet: {
+            enabledProfilesById: new Map([
+                [generateProfile.id, generateProfile],
+                [assessProfile.id, assessProfile],
+            ]),
+            generateCandidates: [
+                { profileId: generateProfile.id, chooseOneUsed: false },
+            ],
+            assessCandidates: [
+                { profileId: assessProfile.id, chooseOneUsed: false },
+            ],
+        },
+    });
+
+    assert.equal(result.outcome, 'generated');
+    assert.equal(result.generationResult.text, 'initial draft');
+    assert.equal(generationCalls, 2);
+    const failedAssessStep = result.workflowLineage.steps.find(
+        (step) => step.stepKind === 'assess' && step.outcome.status === 'failed'
+    );
+    assert.ok(failedAssessStep);
+    assert.equal(
+        failedAssessStep.reasonCode,
+        'routing_chain_non_transient_error'
+    );
+    assert.equal(failedAssessStep.outcome.signals?.routingChainAttemptCount, 1);
+    assert.match(
+        String(failedAssessStep.outcome.signals?.routingChainAttemptsJson),
+        /failed_non_transient_stopped/
+    );
+});
+
+test('runBoundedReviewWorkflow records revision routing-chain exhaustion as data', async () => {
+    let generationCalls = 0;
+    const generateProfile = makeWorkflowTestProfile({
+        id: 'openai-text-medium',
+        provider: 'openai',
+        providerModel: 'gpt-5.4-mini',
+    });
+    const assessProfile = makeWorkflowTestProfile({
+        id: 'openai-json-optimized',
+        provider: 'openai',
+        providerModel: 'gpt-5.4-nano',
+    });
+    const generationRuntime: GenerationRuntime = {
+        kind: 'test-runtime',
+        async generate(input) {
+            generationCalls += 1;
+            if (generationCalls === 1) {
+                return {
+                    text: 'initial draft',
+                    model: input.model,
+                    usage: {
+                        promptTokens: 10,
+                        completionTokens: 10,
+                        totalTokens: 20,
+                    },
+                    provenance: 'Inferred',
+                    citations: [],
+                };
+            }
+            if (input.model === assessProfile.providerModel) {
+                return {
+                    text: '{"reviewDecision":"revise","reviewReason":"Need precision.","revisionInstruction":"Tighten the logic.","routingHints":["logic.precision_up"]}',
+                    model: input.model,
+                    usage: {
+                        promptTokens: 5,
+                        completionTokens: 5,
+                        totalTokens: 10,
+                    },
+                    provenance: 'Inferred',
+                    citations: [],
+                };
+            }
+            throw new Error('401 unauthorized');
+        },
+    };
+
+    const result = await runBoundedReviewWorkflowForTest({
+        generationRuntime,
+        generationRequest: {
+            model: 'gpt-5-mini',
+            messages: [{ role: 'user', content: 'Draft answer' }],
+        },
+        messagesWithHints: [{ role: 'user', content: 'Draft answer' }],
+        generationStartedAtMs: Date.now(),
+        workflowConfig: {
+            workflowName: 'message_reviewed',
+            maxIterations: 2,
+            maxDurationMs: 15000,
+        },
+        workflowPolicy: {
+            enablePlanning: false,
+            enableToolUse: false,
+            enableReplanning: false,
+            enableGeneration: true,
+            enableAssessment: true,
+            enableRevision: true,
+        },
+        captureUsage: (generationResult) => ({
+            model: generationResult.model ?? 'gpt-5-mini',
+            promptTokens: generationResult.usage?.promptTokens ?? 0,
+            completionTokens: generationResult.usage?.completionTokens ?? 0,
+            totalTokens: generationResult.usage?.totalTokens ?? 0,
+            estimatedCost: {
+                inputCostUsd: 0,
+                outputCostUsd: 0,
+                totalCostUsd: 0,
+            },
+        }),
+        stepRoutingChainSet: {
+            enabledProfilesById: new Map([
+                [generateProfile.id, generateProfile],
+                [assessProfile.id, assessProfile],
+            ]),
+            generateCandidates: [
+                { profileId: generateProfile.id, chooseOneUsed: false },
+            ],
+            assessCandidates: [
+                { profileId: assessProfile.id, chooseOneUsed: false },
+            ],
+        },
+    });
+
+    assert.equal(result.outcome, 'generated');
+    assert.equal(result.generationResult.text, 'initial draft');
+    const failedRevisionStep = result.workflowLineage.steps.find(
+        (step) =>
+            step.stepKind === 'generate' &&
+            step.outcome.status === 'failed' &&
+            step.attempt === 1
+    );
+    assert.ok(failedRevisionStep);
+    assert.equal(
+        failedRevisionStep.reasonCode,
+        'routing_chain_non_transient_error'
+    );
+    assert.equal(
+        failedRevisionStep.outcome.signals?.routingHintApplied,
+        'openai_first_logic'
+    );
+    assert.equal(
+        failedRevisionStep.outcome.signals?.routingChainAttemptCount,
+        1
+    );
 });
 
 test('runBoundedReviewWorkflow can use independent generate and assess model chains', async () => {

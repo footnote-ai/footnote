@@ -41,8 +41,8 @@ import {
 import {
     DEFAULT_REVIEW_DECISION_PROMPT,
     DEFAULT_REVISION_PROMPT_PREFIX,
-    parseReviewDecisionOutput,
-    type ReviewDecision,
+    parseReviewDecisionOutputResult,
+    type ReviewDecisionParseResult,
 } from './workflowEngine/reviewDecision.js';
 import { isWorkflowTransitionAllowed } from './workflowEngine/transitions.js';
 import {
@@ -70,6 +70,7 @@ import {
 } from './stepRoutingExecutor.js';
 import type { ResolvedStepRoutingCandidate } from './stepRoutingChains.js';
 import { buildRoutingChainSignals } from './workflowEngine/routingSignals.js';
+import { toRoutingChainResult } from './routingChainResult.js';
 
 /**
  * Canonical Execution Contract workflow-policy surface.
@@ -92,18 +93,19 @@ export {
     DEFAULT_REVIEW_DECISION_PROMPT,
     DEFAULT_REVISION_PROMPT_PREFIX,
     parseReviewDecisionOutput,
+    parseReviewDecisionOutputResult,
 } from './workflowEngine/reviewDecision.js';
 
 export type BoundedReviewProfileStrategy = {
     reviewDecisionPrompt: string;
     revisionPromptPrefix: string;
-    parseReviewDecision: (text: string) => ReviewDecision | null;
+    parseReviewDecision: (text: string) => ReviewDecisionParseResult;
 };
 
 export const BOUNDED_REVIEW_PROFILE_STRATEGY: BoundedReviewProfileStrategy = {
     reviewDecisionPrompt: DEFAULT_REVIEW_DECISION_PROMPT,
     revisionPromptPrefix: DEFAULT_REVISION_PROMPT_PREFIX,
-    parseReviewDecision: parseReviewDecisionOutput,
+    parseReviewDecision: parseReviewDecisionOutputResult,
 };
 
 export type ReviewWorkflowRuntimeConfig = {
@@ -137,7 +139,7 @@ export type RunBoundedReviewWorkflowInput = {
     reviewDecisionPrompt?: string;
     revisionPromptPrefix?: string;
     reviewModuleIds?: ReviewModuleId[];
-    parseReviewDecision?: (text: string) => ReviewDecision | null;
+    parseReviewDecision?: (text: string) => ReviewDecisionParseResult;
     captureUsage: (
         result: GenerationResult,
         requestedModel: string | undefined
@@ -221,6 +223,7 @@ type LimitStopEvaluation = {
     workflowStatus: WorkflowRecord['status'];
     exhaustedLimitKey?: WorkflowLimitKey;
 };
+
 export { isWorkflowTransitionAllowed } from './workflowEngine/transitions.js';
 export {
     applyStepExecutionToState,
@@ -918,77 +921,125 @@ export const runBoundedReviewWorkflow = async ({
                                 capabilities: profile.capabilities,
                             }),
                     });
-                    if (chainResult.status !== 'executed') {
-                        throw new Error(chainResult.reasonCode);
-                    }
-                    initialRoutingChainAttempts = chainResult.attempts;
-                    initialRoutedProfile = {
-                        profileId: chainResult.selected.profile.id,
-                        provider: chainResult.selected.profile.provider,
-                        model: chainResult.selected.profile.providerModel,
-                    };
-                    draftResult = chainResult.value;
-                } else {
-                    draftResult = await generationRuntime.generate(
-                        generationRequestForAttempt
-                    );
-                }
-                const initialDraftFinishedAt = Date.now();
-                const initialDraftUsage = captureUsage(
-                    draftResult,
-                    effectiveGenerationRequest.model
-                );
-                const initialDraftStepId = captureStep({
-                    stepKind: 'generate',
-                    status: 'executed',
-                    summary: 'Generated initial draft response.',
-                    startedAtMs: initialDraftStartedAt,
-                    finishedAtMs: initialDraftFinishedAt,
-                    model: initialDraftUsage.model,
-                    usage: draftResult.usage,
-                    estimatedCost: initialDraftUsage.estimatedCost,
-                    parentStepId: plannerRootStepId,
-                    attempt: 1,
-                    ...(initialRoutingChainAttempts !== undefined && {
-                        signals: {
-                            ...buildRoutingChainSignals({
-                                attempts: initialRoutingChainAttempts,
-                                selectedProfileId:
-                                    initialRoutedProfile?.profileId,
-                                selectedProvider:
-                                    initialRoutedProfile?.provider,
-                                selectedModel: initialRoutedProfile?.model,
+                    const routingResult = toRoutingChainResult(chainResult);
+                    if (routingResult.isErr()) {
+                        const routingFailure = routingResult.error;
+                        const initialDraftFinishedAt = Date.now();
+                        logger.error(
+                            'Initial workflow generation routing failed; returning classified no-generation outcome.',
+                            {
+                                stepKind: 'generate',
+                                reasonCode: routingFailure.reasonCode,
+                                startedAtMs: initialDraftStartedAt,
+                                finishedAtMs: initialDraftFinishedAt,
+                                workflowName: workflowState.workflowName,
+                                workflowId: workflowState.workflowId,
+                                routingChainAttemptCount:
+                                    routingFailure.attempts.length,
+                            }
+                        );
+                        captureStep({
+                            stepKind: 'generate',
+                            status: 'failed',
+                            summary:
+                                'Initial generation routing failed; workflow returned classified no-generation outcome.',
+                            reasonCode: routingFailure.reasonCode,
+                            startedAtMs: initialDraftStartedAt,
+                            finishedAtMs: initialDraftFinishedAt,
+                            parentStepId: plannerRootStepId,
+                            attempt: 1,
+                            signals: buildRoutingChainSignals({
+                                attempts: routingFailure.attempts,
+                                selectedProfileId: null,
                                 signalKeys: {
                                     profileId: 'routedProfileId',
                                     provider: 'routedProvider',
                                     model: 'routedModel',
                                 },
                             }),
-                        },
-                    }),
-                });
-                draftParentStepId = initialDraftStepId;
-                workflowState = applyStepExecutionToState(
-                    workflowState,
-                    'generate',
-                    initialDraftUsage.totalTokens,
-                    0,
-                    0
-                );
+                        });
+                        workflowState = applyStepExecutionToState(
+                            workflowState,
+                            'generate',
+                            0,
+                            0,
+                            0
+                        );
+                        terminationReason = 'executor_error_fail_open';
+                        workflowStatus = 'degraded';
+                        shouldStop = true;
+                    } else {
+                        initialRoutingChainAttempts =
+                            routingResult.value.attempts;
+                        initialRoutedProfile = {
+                            profileId: routingResult.value.selected.profile.id,
+                            provider:
+                                routingResult.value.selected.profile.provider,
+                            model: routingResult.value.selected.profile
+                                .providerModel,
+                        };
+                        draftResult = routingResult.value.value;
+                    }
+                } else {
+                    draftResult = await generationRuntime.generate(
+                        generationRequestForAttempt
+                    );
+                }
+                if (!shouldStop && draftResult !== null) {
+                    const initialDraftFinishedAt = Date.now();
+                    const initialDraftUsage = captureUsage(
+                        draftResult,
+                        effectiveGenerationRequest.model
+                    );
+                    const initialDraftStepId = captureStep({
+                        stepKind: 'generate',
+                        status: 'executed',
+                        summary: 'Generated initial draft response.',
+                        startedAtMs: initialDraftStartedAt,
+                        finishedAtMs: initialDraftFinishedAt,
+                        model: initialDraftUsage.model,
+                        usage: draftResult.usage,
+                        estimatedCost: initialDraftUsage.estimatedCost,
+                        parentStepId: plannerRootStepId,
+                        attempt: 1,
+                        ...(initialRoutingChainAttempts !== undefined && {
+                            signals: {
+                                ...buildRoutingChainSignals({
+                                    attempts: initialRoutingChainAttempts,
+                                    selectedProfileId:
+                                        initialRoutedProfile?.profileId,
+                                    selectedProvider:
+                                        initialRoutedProfile?.provider,
+                                    selectedModel: initialRoutedProfile?.model,
+                                    signalKeys: {
+                                        profileId: 'routedProfileId',
+                                        provider: 'routedProvider',
+                                        model: 'routedModel',
+                                    },
+                                }),
+                            },
+                        }),
+                    });
+                    draftParentStepId = initialDraftStepId;
+                    workflowState = applyStepExecutionToState(
+                        workflowState,
+                        'generate',
+                        initialDraftUsage.totalTokens,
+                        0,
+                        0
+                    );
+                } else if (!shouldStop) {
+                    throw new Error(
+                        'Initial generation completed without a draft result.'
+                    );
+                }
             } catch (error) {
                 const initialDraftFinishedAt = Date.now();
-                const errorMessage =
-                    error instanceof Error ? error.message : String(error);
-                const reasonCode: ExecutionReasonCode =
-                    errorMessage === 'routing_chain_exhausted' ||
-                    errorMessage === 'routing_chain_non_transient_error'
-                        ? (errorMessage as ExecutionReasonCode)
-                        : 'generation_runtime_error';
                 logger.error(
                     'Initial workflow generation failed; returning classified no-generation outcome.',
                     {
                         stepKind: 'generate',
-                        reasonCode,
+                        reasonCode: 'generation_runtime_error',
                         startedAtMs: initialDraftStartedAt,
                         finishedAtMs: initialDraftFinishedAt,
                         workflowName: workflowState.workflowName,
@@ -1004,7 +1055,7 @@ export const runBoundedReviewWorkflow = async ({
                     status: 'failed',
                     summary:
                         'Initial generation failed; workflow returned classified no-generation outcome.',
-                    reasonCode,
+                    reasonCode: 'generation_runtime_error',
                     startedAtMs: initialDraftStartedAt,
                     finishedAtMs: initialDraftFinishedAt,
                     parentStepId: plannerRootStepId,

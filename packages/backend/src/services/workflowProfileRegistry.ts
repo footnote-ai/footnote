@@ -11,7 +11,7 @@
 import {
     DEFAULT_REVIEW_DECISION_PROMPT,
     DEFAULT_REVISION_PROMPT_PREFIX,
-    parseReviewDecisionOutput,
+    parseReviewDecisionOutputResult,
 } from './workflowEngine.js';
 import type {
     ExecutionContract,
@@ -82,7 +82,7 @@ const REVIEWED_WORKFLOW_PROFILE: WorkflowProfileRuntime = {
         canEmitGeneration: () => true,
         classifyNoGeneration: (reasonCode) => reasonCode,
     },
-    parseReviewDecision: parseReviewDecisionOutput,
+    parseReviewDecision: parseReviewDecisionOutputResult,
 };
 
 // Extension checklist (workflow profiles):
