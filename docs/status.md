@@ -56,7 +56,7 @@ unchanged.
 ## 3) metadata-normalization
 
 Branch: `chore/trust-boundary-metadata-domain-normalization`  
-Status: `todo`
+Status: `done`
 
 This branch should make response metadata easier to reason about.
 
@@ -74,6 +74,14 @@ Do not change the meaning of provenance, TRACE, review labels, or cost fields in
 this branch. Keep the same behavior and move each decision into a smaller typed
 function.
 
+Completed by extracting pure response-metadata decisions into a dedicated helper
+module. Provenance input shaping, TRACE target/final normalization,
+finalization-reason selection, retrieved chip derivation, and execution-event
+construction now have named typed helpers. The metadata builder still owns
+response ids, timestamps, structured logging, review-runtime summary wiring, and
+the final public metadata shape. Behavior stayed unchanged, with regression tests
+added for partial retrieved chip derivation and invalid TRACE axis normalization.
+
 ## 4) step-signal-typing
 
 Branch: `chore/trust-boundary-step-signal-typing`  
@@ -90,3 +98,34 @@ places to look first.
 Do this gradually. This is not a redesign of every workflow record. Type the
 fields that readers and UI code already depend on, so future changes cannot
 drift silently.
+
+## 5) runtime-boundary-service-reduction
+
+Branch: `chore/trust-boundary-runtime-boundary-service-reduction`  
+Status: `todo`
+
+This branch should reduce the stale `openaiService` naming and provider-specific
+surface now that normal text generation runs through the selected
+`GenerationRuntime` seam, currently VoltAgent.
+
+Do not move Footnote metadata authority into VoltAgent. VoltAgent should provide
+generation facts: text, model, usage, citations, retrieval facts, and optional
+tool execution facts. Backend remains the authority for provenance, TRACE,
+review, cost, trace storage, incident, and final response metadata semantics.
+
+Prefer renaming and boundary cleanup over behavior changes:
+
+- move response metadata assembly and decision helpers out of the
+  `openaiService` namespace into a provider-neutral metadata module
+- rename assistant/provider metadata input types so they no longer imply OpenAI
+  ownership
+- quarantine or remove the legacy direct `SimpleOpenAIService` adapter if it has
+  no production caller
+- deduplicate citation fallback normalization between the old OpenAI request
+  path and the VoltAgent runtime path
+- keep public contracts serializable and preserve existing response metadata
+  output
+
+This branch should not change the selected runtime behavior. It should make the
+module layout match the architecture: runtime adapters execute generation;
+backend-owned metadata builders interpret generation facts.
