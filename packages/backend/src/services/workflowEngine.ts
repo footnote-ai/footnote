@@ -11,7 +11,6 @@ import type {
     ContextStepRequest as ContractContextStepRequest,
     ContextStepResult as ContractContextStepResult,
     ExecutionReasonCode,
-    ToolExecutionContext,
     StepRecord,
     WorkflowLimitKey,
     WorkflowRecord,
@@ -768,53 +767,21 @@ export const runBoundedReviewWorkflow = async ({
                 if (contextStepOutcome.result === undefined) {
                     continue;
                 }
-                const normalizedExecutionContext: ToolExecutionContext = {
-                    ...contextStepOutcome.result.executionContext,
-                    toolName:
-                        contextStepOutcome.result.executionContext.toolName,
-                    ...(contextStepOutcome.result.executionContext
-                        .clarification === undefined &&
-                        contextStepOutcome.result.clarification !==
-                            undefined && {
-                            clarification:
-                                contextStepOutcome.result.clarification,
-                        }),
-                };
-                const normalizedResult: ContextStepResult = {
-                    executionContext: normalizedExecutionContext,
-                    ...(contextStepOutcome.result.contextMessages !==
-                        undefined && {
-                        contextMessages:
-                            contextStepOutcome.result.contextMessages,
-                    }),
-                    ...(normalizedExecutionContext.clarification !==
-                        undefined && {
-                        clarification: normalizedExecutionContext.clarification,
-                    }),
-                    ...(contextStepOutcome.result.sources !== undefined && {
-                        sources: contextStepOutcome.result.sources,
-                    }),
-                    ...(contextStepOutcome.result.integrationContext !==
-                        undefined && {
-                        integrationContext:
-                            contextStepOutcome.result.integrationContext,
-                    }),
-                };
+                const normalizedResult = contextStepOutcome.result;
+                const normalizedExecutionContext =
+                    normalizedResult.executionContext;
                 executedContextStepResults.push(normalizedResult);
-                const status =
-                    normalizedExecutionContext.status === 'failed'
-                        ? 'failed'
-                        : 'executed';
                 captureStep({
                     stepKind: 'tool',
-                    status,
+                    status: normalizedExecutionContext.status,
                     summary:
-                        status === 'failed'
+                        normalizedResult.outcome === 'failed'
                             ? 'Context step failed; workflow continued fail-open without context.'
-                            : normalizedExecutionContext.clarification !==
-                                undefined
+                            : normalizedResult.outcome === 'needs_clarification'
                               ? 'Context step requires user clarification before generation.'
-                              : 'Context step executed and emitted bounded context messages.',
+                              : normalizedResult.outcome === 'skipped'
+                                ? 'Context step skipped without context.'
+                                : 'Context step executed and emitted bounded context messages.',
                     ...(normalizedExecutionContext.reasonCode !== undefined && {
                         reasonCode: normalizedExecutionContext.reasonCode,
                     }),
@@ -822,18 +789,16 @@ export const runBoundedReviewWorkflow = async ({
                     finishedAtMs: contextStepOutcome.finishedAtMs,
                     parentStepId: plannerRootStepId,
                     attempt: 1,
-                    ...(normalizedResult.contextMessages !== undefined && {
-                        artifacts: normalizedResult.contextMessages,
-                    }),
-                    ...(normalizedExecutionContext.clarification !==
-                        undefined && {
+                    ...(normalizedResult.outcome === 'executed' &&
+                        normalizedResult.contextMessages !== undefined && {
+                            artifacts: normalizedResult.contextMessages,
+                        }),
+                    ...(normalizedResult.outcome === 'needs_clarification' && {
                         signals: {
                             clarificationReasonCode:
-                                normalizedExecutionContext.clarification
-                                    .reasonCode,
+                                normalizedResult.clarification.reasonCode,
                             clarificationOptionCount:
-                                normalizedExecutionContext.clarification.options
-                                    .length,
+                                normalizedResult.clarification.options.length,
                         },
                     }),
                 });
@@ -844,7 +809,7 @@ export const runBoundedReviewWorkflow = async ({
                     1,
                     0
                 );
-                if (normalizedExecutionContext.clarification !== undefined) {
+                if (normalizedResult.outcome === 'needs_clarification') {
                     terminationReason = 'goal_satisfied';
                     workflowStatus = 'completed';
                     shouldStop = true;
@@ -869,9 +834,10 @@ export const runBoundedReviewWorkflow = async ({
             messagesWithContext = injectContextMessagesIntoPrompt(
                 effectiveMessagesWithHints,
                 // Preserve deterministic context ordering by request list order.
-                executedContextStepResults.flatMap(
-                    (contextStepResult) =>
-                        contextStepResult.contextMessages ?? []
+                executedContextStepResults.flatMap((contextStepResult) =>
+                    contextStepResult.outcome === 'executed'
+                        ? (contextStepResult.contextMessages ?? [])
+                        : []
                 )
             );
             const selectedFollowUpSearchHint = selectFollowUpSearchHint({

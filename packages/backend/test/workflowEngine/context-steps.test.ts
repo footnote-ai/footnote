@@ -143,6 +143,7 @@ test('runBoundedReviewWorkflow executes injected context step and records contex
             },
         ],
         contextStepExecutor: async () => ({
+            outcome: 'executed',
             executionContext: {
                 toolName: 'weather_forecast',
                 status: 'executed',
@@ -244,6 +245,7 @@ test('runBoundedReviewWorkflow executes eligible context steps in parallel and m
                 await new Promise((resolve) => setTimeout(resolve, 40));
                 weatherFinishedAt = Date.now();
                 return {
+                    outcome: 'executed',
                     executionContext: {
                         toolName: 'weather_forecast',
                         status: 'executed',
@@ -256,6 +258,7 @@ test('runBoundedReviewWorkflow executes eligible context steps in parallel and m
                 await new Promise((resolve) => setTimeout(resolve, 40));
                 webSearchFinishedAt = Date.now();
                 return {
+                    outcome: 'executed',
                     executionContext: {
                         toolName: 'web_search',
                         status: 'executed',
@@ -345,6 +348,7 @@ test('runBoundedReviewWorkflow records failed injected context step with reason 
             },
         ],
         contextStepExecutor: async () => ({
+            outcome: 'failed',
             executionContext: {
                 toolName: 'weather_forecast',
                 status: 'failed',
@@ -424,9 +428,18 @@ test('runBoundedReviewWorkflow stops before generation when injected context ste
             },
         ],
         contextStepExecutor: async () => ({
+            outcome: 'needs_clarification',
             executionContext: {
                 toolName: 'weather_forecast',
                 status: 'executed',
+                clarification: {
+                    reasonCode: 'ambiguous_location',
+                    question: 'Which Springfield did you mean?',
+                    options: [
+                        { id: '1', label: 'Springfield, Illinois' },
+                        { id: '2', label: 'Springfield, Missouri' },
+                    ],
+                },
             },
             clarification: {
                 reasonCode: 'ambiguous_location',
@@ -669,6 +682,7 @@ test('runBoundedReviewWorkflow uses web_search hints for one OpenAI native follo
         ],
         contextStepExecutorRegistry: {
             web_search: async () => ({
+                outcome: 'executed',
                 executionContext: {
                     toolName: 'web_search',
                     status: 'executed',

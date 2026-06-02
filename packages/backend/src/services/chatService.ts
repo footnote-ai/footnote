@@ -215,8 +215,7 @@ const buildContextStepShortCircuit = ({
     }> = [
         {
             policyId: 'clarification_required',
-            matches: (result) =>
-                result.executionContext.clarification !== undefined,
+            matches: (result) => result.outcome === 'needs_clarification',
             buildResponse: (result) =>
                 buildToolClarificationResponse({
                     toolContext: result.executionContext,
@@ -230,7 +229,7 @@ const buildContextStepShortCircuit = ({
             policyId: 'weather_failure_message',
             matches: (result) =>
                 result.executionContext.toolName === 'weather_forecast' &&
-                result.executionContext.status === 'failed',
+                result.outcome === 'failed',
             buildResponse: (result) =>
                 buildWeatherToolFailureResponse({
                     toolContext: result.executionContext,
@@ -1550,10 +1549,18 @@ export const createChatService = ({
 
         // Backend authority merges all context-integration citations so callers
         // consume one canonical metadata citation surface.
+        const getContextStepSources = (contextStepResult: ContextStepResult) =>
+            contextStepResult.outcome === 'executed' ||
+            contextStepResult.outcome === 'failed'
+                ? (contextStepResult.sources ?? [])
+                : [];
         const contextStepSources =
-            workflowContextStepResults?.flatMap(
-                (contextStepResult) => contextStepResult.sources ?? []
-            ) ?? workflowContextStepResult?.sources;
+            workflowContextStepResults?.flatMap((contextStepResult) =>
+                getContextStepSources(contextStepResult)
+            ) ??
+            (workflowContextStepResult !== undefined
+                ? getContextStepSources(workflowContextStepResult)
+                : undefined);
         const assistantMetadata = buildAssistantMetadata(
             generationResult,
             effectiveNormalizedGeneration,
