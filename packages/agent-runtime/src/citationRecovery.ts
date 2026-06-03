@@ -42,9 +42,25 @@ export const extractMarkdownLinkCitations = (
         if (labelStart === -1) {
             break;
         }
-        const labelEnd = text.indexOf(']', labelStart + 1);
+        let bracketDepth = 1;
+        let labelEnd = -1;
+        for (let index = labelStart + 1; index < text.length; index += 1) {
+            const character = text[index];
+            if (character === '[') {
+                bracketDepth += 1;
+                continue;
+            }
+            if (character === ']') {
+                bracketDepth -= 1;
+                if (bracketDepth === 0) {
+                    labelEnd = index;
+                    break;
+                }
+            }
+        }
         if (labelEnd === -1) {
-            break;
+            cursor = labelStart + 1;
+            continue;
         }
         const urlStart = labelEnd + 1;
         if (text[urlStart] !== '(') {

@@ -123,6 +123,21 @@ const getEffectiveContextStepResults = (
         ? [workflowContextStepResult]
         : []);
 
+const getContextStepSources = (
+    contextStepResult: ContextStepResult
+): Citation[] =>
+    contextStepResult.outcome === 'executed' ||
+    contextStepResult.outcome === 'failed'
+        ? (contextStepResult.sources ?? [])
+        : [];
+
+const collectContextStepSources = (
+    contextStepResults: ContextStepResult[]
+): Citation[] =>
+    contextStepResults.flatMap((contextStepResult) =>
+        getContextStepSources(contextStepResult)
+    );
+
 /**
  * Builds the fail-open short-circuit response surface for context-step outcomes.
  *
@@ -132,9 +147,8 @@ const getEffectiveContextStepResults = (
  * This branch consumes the full context-step result list when available and
  * falls back to single-result shape when only that field is present.
  *
- * Citation rule: when generation continues, citations from all executed context
- * integrations are merged later into generation metadata. This helper does not
- * own that merge.
+ * Citation rule: short-circuit responses still preserve citations produced by
+ * executed or failed sibling context integrations.
  *
  */
 const buildContextStepShortCircuit = ({
@@ -207,6 +221,28 @@ const buildContextStepShortCircuit = ({
     });
 
     const generationMetadataContext = buildGenerationMetadataContext();
+    const contextStepSources = collectContextStepSources(
+        effectiveContextStepResults
+    );
+    const buildResponseMetadataWithContextSources = (
+        generationMetadata: ResponseMetadataGenerationInput,
+        runtimeContext: ResponseMetadataRuntimeContext
+    ): ResponseMetadata => {
+        if (contextStepSources.length === 0) {
+            return buildResponseMetadata(generationMetadata, runtimeContext);
+        }
+
+        return buildResponseMetadata(
+            {
+                ...generationMetadata,
+                citations: [
+                    ...(generationMetadata.citations ?? []),
+                    ...contextStepSources,
+                ],
+            },
+            runtimeContext
+        );
+    };
 
     const contextStepShortCircuitPolicies: Array<{
         policyId: 'clarification_required' | 'weather_failure_message';
@@ -222,7 +258,8 @@ const buildContextStepShortCircuit = ({
                     metadataContext: generationMetadataContext as Parameters<
                         typeof buildToolClarificationResponse
                     >[0]['metadataContext'],
-                    buildResponseMetadata,
+                    buildResponseMetadata:
+                        buildResponseMetadataWithContextSources,
                 }),
         },
         {
@@ -237,7 +274,8 @@ const buildContextStepShortCircuit = ({
                         typeof buildWeatherToolFailureResponse
                     >[0]['metadataContext'],
                     latestUserInput: latestUserInput ?? conversationSnapshot,
-                    buildResponseMetadata,
+                    buildResponseMetadata:
+                        buildResponseMetadataWithContextSources,
                 }),
         },
     ];
@@ -1550,18 +1588,12 @@ export const createChatService = ({
 
         // Backend authority merges all context-integration citations so callers
         // consume one canonical metadata citation surface.
-        const getContextStepSources = (contextStepResult: ContextStepResult) =>
-            contextStepResult.outcome === 'executed' ||
-            contextStepResult.outcome === 'failed'
-                ? (contextStepResult.sources ?? [])
-                : [];
         const contextStepSources =
-            workflowContextStepResults?.flatMap((contextStepResult) =>
-                getContextStepSources(contextStepResult)
-            ) ??
-            (workflowContextStepResult !== undefined
-                ? getContextStepSources(workflowContextStepResult)
-                : undefined);
+            workflowContextStepResults !== undefined
+                ? collectContextStepSources(workflowContextStepResults)
+                : workflowContextStepResult !== undefined
+                  ? getContextStepSources(workflowContextStepResult)
+                  : undefined;
         const generationMetadata = buildGenerationMetadata(
             generationResult,
             effectiveNormalizedGeneration,
@@ -1638,7 +1670,11 @@ export const createChatService = ({
                       } satisfies ToolExecutionContext)
                     : undefined;
 
-        const usageModel = generationMetadata.model || defaultModel;
+        const usageModel =
+            generationMetadata.model ??
+            generationResult.model ??
+            effectiveGenerationRequest.model ??
+            defaultModel;
         type GenerationExecutionContext = NonNullable<
             NonNullable<
                 ResponseMetadataRuntimeContext['executionContext']
@@ -1695,9 +1731,7 @@ export const createChatService = ({
                           workflowSelectedGenerationProfile?.provider ??
                           effectiveGenerationRequest.provider ??
                           'internal',
-                      model:
-                          workflowSelectedGenerationProfile?.providerModel ??
-                          usageModel,
+                      model: usageModel,
                       durationMs: generationDurationMs,
                   } satisfies GenerationExecutionContext)
                 : routedGenerationSelectedProfile !== undefined
@@ -1706,7 +1740,7 @@ export const createChatService = ({
                         profileId: routedGenerationSelectedProfile.id,
                         effectiveProfileId: routedGenerationSelectedProfile.id,
                         provider: routedGenerationSelectedProfile.provider,
-                        model: routedGenerationSelectedProfile.providerModel,
+                        model: usageModel,
                         durationMs: generationDurationMs,
                     } satisfies GenerationExecutionContext)
                   : undefined;

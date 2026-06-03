@@ -609,6 +609,45 @@ test('voltagent runtime recovers markdown-link citations when retrieved output l
     assert.equal(result.provenance, 'Retrieved');
 });
 
+test('voltagent runtime recovers citations from nested markdown link labels', async () => {
+    const runtime = createVoltAgentRuntime({
+        defaultModel: 'gpt-5-mini',
+        createExecutor: () => ({
+            async generateText() {
+                return {
+                    text: 'Build status: [![build](https://img.example.com/status.svg)](https://example.com/build)',
+                    response: {
+                        modelId: 'openai/gpt-5-mini',
+                        body: {
+                            output: [{ type: 'web_search_call' }],
+                        },
+                    },
+                };
+            },
+        }),
+    });
+
+    const result = await runtime.generate({
+        messages: [{ role: 'user', content: 'What changed today?' }],
+        capabilities: {
+            canUseSearch: true,
+        },
+        search: {
+            query: 'latest changes today',
+            contextSize: 'low',
+            intent: 'current_facts',
+        },
+    });
+
+    assert.deepEqual(result.citations, [
+        {
+            title: '![build](https://img.example.com/status.svg)',
+            url: 'https://example.com/build',
+        },
+    ]);
+    assert.equal(result.provenance, 'Retrieved');
+});
+
 test('voltagent runtime ignores malformed bracket-heavy markdown without falling back or hanging', async () => {
     const runtime = createVoltAgentRuntime({
         defaultModel: 'gpt-5-mini',

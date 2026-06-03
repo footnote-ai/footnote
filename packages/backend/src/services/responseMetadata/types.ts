@@ -10,6 +10,8 @@
 import type {
     GenerationSearchContextSize,
     GenerationSearchIntent,
+    GenerationReasoningEffort,
+    GenerationVerbosity,
 } from '@footnote/agent-runtime';
 import type {
     Citation,
@@ -40,8 +42,8 @@ export type ResponseMetadataGenerationInput = {
     model: string;
     usage?: GenerationMetadataUsage;
     finishReason?: string;
-    reasoningEffort?: string;
-    verbosity?: string;
+    reasoningEffort?: GenerationReasoningEffort;
+    verbosity?: GenerationVerbosity;
     provenance?: Provenance;
     tradeoffCount?: number;
     citations?: Citation[];
