@@ -453,6 +453,12 @@ export interface RealtimeVoiceRuntime {
     ): Promise<RealtimeVoiceSession>;
 }
 
+export {
+    extractMarkdownLinkCitations,
+    normalizeRecoveredCitationTitle,
+    type RuntimeCitation,
+} from './citationRecovery.js';
+
 import {
     createVoltAgentRuntime,
     type CreateVoltAgentRuntimeOptions,

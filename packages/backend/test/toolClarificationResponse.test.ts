@@ -12,7 +12,7 @@ import type {
     ResponseMetadata,
     ToolExecutionContext,
 } from '@footnote/contracts/policy';
-import type { ResponseMetadataRuntimeContext } from '../src/services/openaiService.js';
+import type { ResponseMetadataRuntimeContext } from '../src/services/responseMetadata.js';
 import { createMetadata } from './fixtures/responseMetadataFixture.js';
 import { buildToolClarificationResponse } from '../src/services/tools/toolClarificationResponse.js';
 
@@ -76,7 +76,7 @@ test('buildToolClarificationResponse formats numbered options and preserves exec
                 },
             },
         },
-        buildResponseMetadata: (_assistantMetadata, runtimeContext) => {
+        buildResponseMetadata: (_generationMetadata, runtimeContext) => {
             capturedRuntimeContext = runtimeContext;
             return {
                 ...createMetadata(),

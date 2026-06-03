@@ -12,9 +12,9 @@ import type {
     ToolExecutionContext,
 } from '@footnote/contracts/policy';
 import type {
-    AssistantResponseMetadata,
+    ResponseMetadataGenerationInput,
     ResponseMetadataRuntimeContext,
-} from '../openaiService.js';
+} from '../responseMetadata.js';
 import { buildToolExecutionEvent } from './toolExecutionEvents.js';
 
 type ToolClarificationMetadataContext = Omit<
@@ -40,7 +40,7 @@ export const buildToolClarificationResponse = ({
     toolContext: ToolExecutionContext;
     metadataContext: ToolClarificationMetadataContext;
     buildResponseMetadata: (
-        assistantMetadata: AssistantResponseMetadata,
+        generationMetadata: ResponseMetadataGenerationInput,
         runtimeContext: ResponseMetadataRuntimeContext
     ) => ResponseMetadata;
 }): PostChatResponse => {

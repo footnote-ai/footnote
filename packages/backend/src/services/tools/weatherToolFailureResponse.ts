@@ -13,9 +13,9 @@ import type {
     ToolExecutionEvent,
 } from '@footnote/contracts/policy';
 import type {
-    AssistantResponseMetadata,
+    ResponseMetadataGenerationInput,
     ResponseMetadataRuntimeContext,
-} from '../openaiService.js';
+} from '../responseMetadata.js';
 
 type ToolFailureMetadataContext = Omit<
     ResponseMetadataRuntimeContext,
@@ -42,7 +42,7 @@ export const buildWeatherToolFailureResponse = ({
     metadataContext: ToolFailureMetadataContext;
     latestUserInput: string;
     buildResponseMetadata: (
-        assistantMetadata: AssistantResponseMetadata,
+        generationMetadata: ResponseMetadataGenerationInput,
         runtimeContext: ResponseMetadataRuntimeContext
     ) => ResponseMetadata;
 }): PostChatResponse => {

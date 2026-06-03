@@ -19,7 +19,7 @@ import { resolveExecutionContract } from '../src/services/executionContractResol
 import {
     buildResponseMetadata,
     type ResponseMetadataRuntimeContext,
-} from '../src/services/openaiService.js';
+} from '../src/services/responseMetadata.js';
 import { renderConversationPromptLayers } from '../src/services/prompts/conversationPromptLayers.js';
 import type { WeatherForecastTool } from '../src/services/contextIntegrations/weather/index.js';
 import { logger } from '../src/utils/logger.js';
@@ -430,7 +430,7 @@ test('orchestrator carries resolved Execution Contract policy payload through se
             };
         }),
         storeTrace: async () => undefined,
-        buildResponseMetadata: (_assistantMetadata, runtimeContext) => {
+        buildResponseMetadata: (_generationMetadata, runtimeContext) => {
             capturedConversationSnapshot = runtimeContext.conversationSnapshot;
             return createMetadata();
         },
@@ -571,7 +571,7 @@ test('planner-selected capability profile controls response model selection', as
             };
         }),
         storeTrace: async () => undefined,
-        buildResponseMetadata: (_assistantMetadata, runtimeContext) => {
+        buildResponseMetadata: (_generationMetadata, runtimeContext) => {
             capturedExecutionContext = runtimeContext.executionContext;
             return createMetadata();
         },
@@ -653,7 +653,7 @@ test('deterministic evaluator emits non-allow breaker metadata with rule and rea
             };
         }),
         storeTrace: async () => undefined,
-        buildResponseMetadata: (_assistantMetadata, runtimeContext) => {
+        buildResponseMetadata: (_generationMetadata, runtimeContext) => {
             capturedExecutionContext = runtimeContext.executionContext;
             return createMetadata();
         },
@@ -1182,7 +1182,7 @@ test('planner capability selection chooses search-capable profile without rerout
                 };
             }),
             storeTrace: async () => undefined,
-            buildResponseMetadata: (_assistantMetadata, runtimeContext) => {
+            buildResponseMetadata: (_generationMetadata, runtimeContext) => {
                 capturedExecutionContext = runtimeContext.executionContext;
                 return createMetadata();
             },
@@ -1274,7 +1274,7 @@ test('planner-selected non-search profile reports no tool-capable fallback when 
                 };
             }),
             storeTrace: async () => undefined,
-            buildResponseMetadata: (_assistantMetadata, runtimeContext) => {
+            buildResponseMetadata: (_generationMetadata, runtimeContext) => {
                 capturedExecutionContext = runtimeContext.executionContext;
                 return createMetadata();
             },
@@ -1367,7 +1367,7 @@ test('request-selected non-search profile can still reroute when planner confirm
                 };
             }),
             storeTrace: async () => undefined,
-            buildResponseMetadata: (_assistantMetadata, runtimeContext) => {
+            buildResponseMetadata: (_generationMetadata, runtimeContext) => {
                 capturedExecutionContext = runtimeContext.executionContext;
                 return createMetadata();
             },
@@ -1505,7 +1505,7 @@ test('search drop path exposes reason codes in response execution metadata', asy
                 };
             }),
             storeTrace: async () => undefined,
-            buildResponseMetadata: (_assistantMetadata, runtimeContext) => {
+            buildResponseMetadata: (_generationMetadata, runtimeContext) => {
                 capturedExecutionContext = runtimeContext.executionContext;
                 return createMetadata();
             },
@@ -1625,7 +1625,7 @@ test('orchestrator injects backend weather tool context and records executed too
         }),
         weatherForecastTool,
         storeTrace: async () => undefined,
-        buildResponseMetadata: (_assistantMetadata, runtimeContext) => {
+        buildResponseMetadata: (_generationMetadata, runtimeContext) => {
             capturedExecutionContext = runtimeContext.executionContext;
             return createMetadata();
         },
@@ -1847,7 +1847,7 @@ test('orchestrator fails open when weather tool throws and still generates a res
         }),
         weatherForecastTool,
         storeTrace: async () => undefined,
-        buildResponseMetadata: (_assistantMetadata, runtimeContext) => {
+        buildResponseMetadata: (_generationMetadata, runtimeContext) => {
             capturedExecutionContext = runtimeContext.executionContext;
             return createMetadata();
         },
@@ -2186,7 +2186,7 @@ test('planner runtime failures emit failed planner execution metadata and still 
             };
         }),
         storeTrace: async () => undefined,
-        buildResponseMetadata: (_assistantMetadata, runtimeContext) => {
+        buildResponseMetadata: (_generationMetadata, runtimeContext) => {
             capturedExecutionContext = runtimeContext.executionContext;
             return createMetadata();
         },
@@ -2625,9 +2625,9 @@ test('orchestrator continues normal weather path when tool returns status ok', a
             };
         }),
         storeTrace: async () => undefined,
-        buildResponseMetadata: (assistantMetadata, runtimeContext) => {
+        buildResponseMetadata: (generationMetadata, runtimeContext) => {
             capturedExecutionContext = runtimeContext.executionContext;
-            return buildResponseMetadata(assistantMetadata, runtimeContext);
+            return buildResponseMetadata(generationMetadata, runtimeContext);
         },
         defaultModel: runtimeConfig.modelProfiles.defaultProfileId,
         recordUsage: () => undefined,

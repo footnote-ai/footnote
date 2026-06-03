@@ -35,10 +35,10 @@ import type {
 } from '@footnote/contracts/web';
 import type { Result } from 'neverthrow';
 import type {
-    AssistantResponseMetadata,
-    AssistantUsage,
+    GenerationMetadataUsage,
+    ResponseMetadataGenerationInput,
     ResponseMetadataRuntimeContext,
-} from './openaiService.js';
+} from './responseMetadata.js';
 import {
     estimateBackendTextCost,
     recordBackendLLMUsage,
@@ -123,6 +123,21 @@ const getEffectiveContextStepResults = (
         ? [workflowContextStepResult]
         : []);
 
+const getContextStepSources = (
+    contextStepResult: ContextStepResult
+): Citation[] =>
+    contextStepResult.outcome === 'executed' ||
+    contextStepResult.outcome === 'failed'
+        ? (contextStepResult.sources ?? [])
+        : [];
+
+const collectContextStepSources = (
+    contextStepResults: ContextStepResult[]
+): Citation[] =>
+    contextStepResults.flatMap((contextStepResult) =>
+        getContextStepSources(contextStepResult)
+    );
+
 /**
  * Builds the fail-open short-circuit response surface for context-step outcomes.
  *
@@ -132,9 +147,8 @@ const getEffectiveContextStepResults = (
  * This branch consumes the full context-step result list when available and
  * falls back to single-result shape when only that field is present.
  *
- * Citation rule: when generation continues, citations from all executed context
- * integrations are merged later into assistant metadata. This helper does not
- * own that merge.
+ * Citation rule: short-circuit responses still preserve citations produced by
+ * executed or failed sibling context integrations.
  *
  */
 const buildContextStepShortCircuit = ({
@@ -159,7 +173,7 @@ const buildContextStepShortCircuit = ({
     conversationSnapshot: string;
     latestUserInput: string | undefined;
     buildResponseMetadata: (
-        assistantMetadata: AssistantResponseMetadata,
+        generationMetadata: ResponseMetadataGenerationInput,
         runtimeContext: ResponseMetadataRuntimeContext
     ) => ResponseMetadata;
 }):
@@ -207,6 +221,28 @@ const buildContextStepShortCircuit = ({
     });
 
     const generationMetadataContext = buildGenerationMetadataContext();
+    const contextStepSources = collectContextStepSources(
+        effectiveContextStepResults
+    );
+    const buildResponseMetadataWithContextSources = (
+        generationMetadata: ResponseMetadataGenerationInput,
+        runtimeContext: ResponseMetadataRuntimeContext
+    ): ResponseMetadata => {
+        if (contextStepSources.length === 0) {
+            return buildResponseMetadata(generationMetadata, runtimeContext);
+        }
+
+        return buildResponseMetadata(
+            {
+                ...generationMetadata,
+                citations: [
+                    ...(generationMetadata.citations ?? []),
+                    ...contextStepSources,
+                ],
+            },
+            runtimeContext
+        );
+    };
 
     const contextStepShortCircuitPolicies: Array<{
         policyId: 'clarification_required' | 'weather_failure_message';
@@ -222,7 +258,8 @@ const buildContextStepShortCircuit = ({
                     metadataContext: generationMetadataContext as Parameters<
                         typeof buildToolClarificationResponse
                     >[0]['metadataContext'],
-                    buildResponseMetadata,
+                    buildResponseMetadata:
+                        buildResponseMetadataWithContextSources,
                 }),
         },
         {
@@ -237,7 +274,8 @@ const buildContextStepShortCircuit = ({
                         typeof buildWeatherToolFailureResponse
                     >[0]['metadataContext'],
                     latestUserInput: latestUserInput ?? conversationSnapshot,
-                    buildResponseMetadata,
+                    buildResponseMetadata:
+                        buildResponseMetadataWithContextSources,
                 }),
         },
     ];
@@ -673,7 +711,7 @@ export type CreateChatServiceOptions = {
     generationRuntime: GenerationRuntime;
     storeTrace: (metadata: ResponseMetadata) => Promise<void>;
     buildResponseMetadata: (
-        assistantMetadata: AssistantResponseMetadata,
+        generationMetadata: ResponseMetadataGenerationInput,
         runtimeContext: ResponseMetadataRuntimeContext
     ) => ResponseMetadata;
     // Fallback model used when callers do not specify one and runtime output
@@ -803,19 +841,20 @@ export const createChatService = ({
      * Normalizes one runtime result into the metadata shape backend already
      * uses for provenance, trace storage, and cost accounting.
      */
-    const buildAssistantMetadata = (
+    const buildGenerationMetadata = (
         generationResult: GenerationResult,
         generation: ChatGenerationPlan | undefined,
         requestedModel: string | undefined,
         contextStepSources?: Citation[]
-    ): AssistantResponseMetadata => {
-        const usage: AssistantUsage | undefined = generationResult.usage
-            ? {
-                  promptTokens: generationResult.usage.promptTokens,
-                  completionTokens: generationResult.usage.completionTokens,
-                  totalTokens: generationResult.usage.totalTokens,
-              }
-            : undefined;
+    ): ResponseMetadataGenerationInput => {
+        const usage: GenerationMetadataUsage | undefined =
+            generationResult.usage
+                ? {
+                      promptTokens: generationResult.usage.promptTokens,
+                      completionTokens: generationResult.usage.completionTokens,
+                      totalTokens: generationResult.usage.totalTokens,
+                  }
+                : undefined;
 
         const generationCitations = generationResult.citations ?? [];
         const mergedCitations =
@@ -1549,19 +1588,13 @@ export const createChatService = ({
 
         // Backend authority merges all context-integration citations so callers
         // consume one canonical metadata citation surface.
-        const getContextStepSources = (contextStepResult: ContextStepResult) =>
-            contextStepResult.outcome === 'executed' ||
-            contextStepResult.outcome === 'failed'
-                ? (contextStepResult.sources ?? [])
-                : [];
         const contextStepSources =
-            workflowContextStepResults?.flatMap((contextStepResult) =>
-                getContextStepSources(contextStepResult)
-            ) ??
-            (workflowContextStepResult !== undefined
-                ? getContextStepSources(workflowContextStepResult)
-                : undefined);
-        const assistantMetadata = buildAssistantMetadata(
+            workflowContextStepResults !== undefined
+                ? collectContextStepSources(workflowContextStepResults)
+                : workflowContextStepResult !== undefined
+                  ? getContextStepSources(workflowContextStepResult)
+                  : undefined;
+        const generationMetadata = buildGenerationMetadata(
             generationResult,
             effectiveNormalizedGeneration,
             effectiveGenerationRequest.model,
@@ -1569,10 +1602,10 @@ export const createChatService = ({
         );
         if (
             trustGraphResult?.adapterStatus === 'success' &&
-            assistantMetadata.evidenceScore === undefined &&
+            generationMetadata.evidenceScore === undefined &&
             trustGraphResult.predicateViews.P_SUFF.coverageValue !== undefined
         ) {
-            assistantMetadata.evidenceScore = mapCoverageToTraceAxisScore(
+            generationMetadata.evidenceScore = mapCoverageToTraceAxisScore(
                 trustGraphResult.predicateViews.P_SUFF.coverageValue,
                 trustGraphResult.predicateViews.P_SUFF.conflictSignals.length
             );
@@ -1637,7 +1670,11 @@ export const createChatService = ({
                       } satisfies ToolExecutionContext)
                     : undefined;
 
-        const usageModel = assistantMetadata.model || defaultModel;
+        const usageModel =
+            generationMetadata.model ??
+            generationResult.model ??
+            effectiveGenerationRequest.model ??
+            defaultModel;
         type GenerationExecutionContext = NonNullable<
             NonNullable<
                 ResponseMetadataRuntimeContext['executionContext']
@@ -1694,9 +1731,7 @@ export const createChatService = ({
                           workflowSelectedGenerationProfile?.provider ??
                           effectiveGenerationRequest.provider ??
                           'internal',
-                      model:
-                          workflowSelectedGenerationProfile?.providerModel ??
-                          usageModel,
+                      model: usageModel,
                       durationMs: generationDurationMs,
                   } satisfies GenerationExecutionContext)
                 : routedGenerationSelectedProfile !== undefined
@@ -1705,7 +1740,7 @@ export const createChatService = ({
                         profileId: routedGenerationSelectedProfile.id,
                         effectiveProfileId: routedGenerationSelectedProfile.id,
                         provider: routedGenerationSelectedProfile.provider,
-                        model: routedGenerationSelectedProfile.providerModel,
+                        model: usageModel,
                         durationMs: generationDurationMs,
                     } satisfies GenerationExecutionContext)
                   : undefined;
@@ -1826,7 +1861,7 @@ export const createChatService = ({
 
         // Metadata is the contract that downstream UIs and trace storage rely on.
         const responseMetadata = buildResponseMetadata(
-            assistantMetadata,
+            generationMetadata,
             runtimeContext
         );
         const safetyTierRank: Record<SafetyTier, number> = {
