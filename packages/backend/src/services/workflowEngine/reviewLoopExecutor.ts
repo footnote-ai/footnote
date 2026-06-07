@@ -7,9 +7,12 @@
  */
 import type {
     ExecutionReasonCode,
+    StepSignals,
     StepRecord,
+    WorkflowAssessRoutingHintSignals,
     WorkflowTerminationReason,
 } from '@footnote/contracts/policy';
+import { buildWorkflowReviewParseFailureSignals } from '@footnote/contracts/policy';
 import type {
     GenerationRequest,
     GenerationResult,
@@ -31,7 +34,6 @@ import type {
 import type { ConversationContextEnvelope } from '../conversationContextService.js';
 import type {
     ReviewDecision,
-    ReviewDecisionParseFailure,
     ReviewDecisionParseResult,
 } from './reviewDecision.js';
 import { isWorkflowTransitionAllowed } from './transitions.js';
@@ -68,7 +70,7 @@ type CaptureStep = (input: {
     reasonCode?: ExecutionReasonCode;
     parentStepId?: string;
     attempt: number;
-    signals?: Record<string, string | number | boolean | null>;
+    signals?: StepSignals;
     recommendations?: string[];
 }) => string;
 
@@ -84,24 +86,6 @@ type LimitStopEvaluation = {
         | 'maxTokensTotal'
         | 'maxDurationMs';
 };
-
-const buildReviewParseFailureSignals = (
-    failure: ReviewDecisionParseFailure
-): Record<string, string | number | boolean | null> => ({
-    reviewParseStatus: 'failed',
-    reviewParseFailureReason: failure.reason,
-    reviewParseFailureMessage: failure.message,
-    reviewParseOutputLength: failure.outputLength,
-    ...(failure.issueCount !== undefined && {
-        reviewParseIssueCount: failure.issueCount,
-    }),
-    ...(failure.firstIssuePath !== undefined && {
-        reviewParseFirstIssuePath: failure.firstIssuePath,
-    }),
-    ...(failure.firstIssueCode !== undefined && {
-        reviewParseFirstIssueCode: failure.firstIssueCode,
-    }),
-});
 
 /**
  * Executes the assess/revise loop and returns the updated workflow state bag.
@@ -222,10 +206,7 @@ export const executeReviewLoop = async (ctx: {
         exhaustedLimitKey = evaluation.exhaustedLimitKey;
         return true;
     };
-    const toLatestRoutingHintSignals = (): Record<
-        string,
-        string | number | boolean | null
-    > =>
+    const toLatestRoutingHintSignals = (): WorkflowAssessRoutingHintSignals =>
         buildAssessRoutingHintSignals({
             assessRoutingHintsCsv: latestAssessRoutingHintsCsv,
             routingHintApplied: latestRoutingHintApplied,
@@ -358,7 +339,7 @@ export const executeReviewLoop = async (ctx: {
                     parentStepId: draftParentStepId,
                     attempt: iteration,
                     signals: {
-                        ...buildReviewParseFailureSignals(failure),
+                        ...buildWorkflowReviewParseFailureSignals(failure),
                         ...toLatestRoutingHintSignals(),
                     },
                 });

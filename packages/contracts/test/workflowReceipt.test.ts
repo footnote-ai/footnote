@@ -12,6 +12,7 @@ import assert from 'node:assert/strict';
 import {
     buildWorkflowReceiptItems,
     buildWorkflowReceiptSummary,
+    resolvePlannerFallbackReceipt,
     summarizeGroundingEvidence,
     type ResponseMetadata,
 } from '../src/policy';
@@ -86,6 +87,78 @@ test('buildWorkflowReceiptItems renders mode, review, and planner fallback signa
     assert.equal(
         buildWorkflowReceiptSummary(metadata as ResponseMetadata),
         'Review fallback • Planner fallback'
+    );
+});
+
+test('resolvePlannerFallbackReceipt detects workflow plan fallback reason code', () => {
+    const metadata = {
+        ...createBaseMetadata(),
+        workflow: {
+            workflowId: 'wf_1',
+            workflowName: 'message_reviewed',
+            status: 'degraded',
+            terminationReason: 'executor_error_fail_open',
+            stepCount: 1,
+            maxSteps: 4,
+            maxDurationMs: 15000,
+            steps: [
+                {
+                    stepId: 'step_plan_1',
+                    attempt: 1,
+                    stepKind: 'plan',
+                    reasonCode: 'planner_runtime_error',
+                    startedAt: '2026-04-22T00:00:00.000Z',
+                    finishedAt: '2026-04-22T00:00:00.010Z',
+                    durationMs: 10,
+                    outcome: {
+                        status: 'failed',
+                        summary: 'Planner failed.',
+                    },
+                },
+            ],
+        },
+    };
+
+    assert.equal(
+        resolvePlannerFallbackReceipt(metadata as ResponseMetadata),
+        'Planner fallback'
+    );
+});
+
+test('resolvePlannerFallbackReceipt detects workflow plan fallback contract type', () => {
+    const metadata = {
+        ...createBaseMetadata(),
+        workflow: {
+            workflowId: 'wf_1',
+            workflowName: 'message_reviewed',
+            status: 'completed',
+            terminationReason: 'goal_satisfied',
+            stepCount: 1,
+            maxSteps: 4,
+            maxDurationMs: 15000,
+            steps: [
+                {
+                    stepId: 'step_plan_1',
+                    attempt: 1,
+                    stepKind: 'plan',
+                    startedAt: '2026-04-22T00:00:00.000Z',
+                    finishedAt: '2026-04-22T00:00:00.010Z',
+                    durationMs: 10,
+                    outcome: {
+                        status: 'executed',
+                        summary: 'Planner emitted fallback summary.',
+                        signals: {
+                            contractType: 'fallback',
+                        },
+                    },
+                },
+            ],
+        },
+    };
+
+    assert.equal(
+        resolvePlannerFallbackReceipt(metadata as ResponseMetadata),
+        'Planner fallback'
     );
 });
 
@@ -278,7 +351,7 @@ test('buildWorkflowReceiptItems falls back to deterministic review derivation fo
             workflowName: 'message_reviewed',
             status: 'degraded',
             terminationReason: 'budget_exhausted_steps',
-            stepCount: 1,
+            stepCount: 2,
             maxSteps: 2,
             maxDurationMs: 5000,
             steps: [
@@ -292,6 +365,19 @@ test('buildWorkflowReceiptItems falls back to deterministic review derivation fo
                     outcome: {
                         status: 'executed',
                         summary: 'Generated initial draft response.',
+                    },
+                },
+                {
+                    stepId: 'step_assess_1',
+                    parentStepId: 'step_generate_1',
+                    attempt: 1,
+                    stepKind: 'assess',
+                    startedAt: '2026-04-22T00:00:00.010Z',
+                    finishedAt: '2026-04-22T00:00:00.010Z',
+                    durationMs: 0,
+                    outcome: {
+                        status: 'skipped',
+                        summary: 'Assessment skipped before execution.',
                     },
                 },
             ],

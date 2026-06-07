@@ -1992,21 +1992,69 @@ components:
                     type: string
                     enum:
                         [
-                            gpt-5.2,
+                            gpt-5.4,
+                            gpt-5.4-pro,
                             gpt-5.4-mini,
-                            gpt-5.1,
-                            gpt-5,
+                            gpt-5.4-nano,
                             gpt-5-mini,
                             gpt-5-nano,
+                            gpt-5,
+                            gpt-4.1,
+                            gpt-5-codex,
+                            gpt-5.3-codex,
+                            gpt-5.2,
+                            gpt-5.2-codex,
+                            gpt-5.1,
+                            gpt-5.1-codex,
+                            gpt-5.1-codex-max,
+                            gpt-5.1-codex-mini,
+                            codex-mini-latest,
+                            o3-deep-research,
+                            o4-mini-deep-research,
+                            gpt-oss-120b,
+                            gpt-oss-20b,
+                            gpt-5.2-pro,
+                            gpt-5-pro,
+                            o3-pro,
+                            o3,
+                            o4-mini,
+                            o1-pro,
+                            computer-use-preview,
+                            gpt-4o-mini-search-preview,
+                            gpt-4o-search-preview,
+                            gpt-4.5-preview,
+                            o3-mini,
+                            o1,
+                            o1-mini,
+                            o1-preview,
                             gpt-4o,
                             gpt-4o-mini,
-                            gpt-4.1,
                             gpt-4.1-mini,
                             gpt-4.1-nano,
+                            gpt-4-turbo,
+                            babbage-002,
+                            chatgpt-4o-latest,
+                            davinci-002,
+                            gpt-3.5-turbo,
+                            gpt-4,
+                            gpt-4-turbo-preview,
+                            gpt-5.3-chat-latest,
+                            gpt-5.2-chat-latest,
+                            gpt-5.1-chat-latest,
+                            gpt-5-chat-latest,
                         ]
                 imageModel:
                     type: string
-                    enum: [gpt-image-1.5, gpt-image-1, gpt-image-1-mini]
+                    enum:
+                        [
+                            gpt-image-2,
+                            gpt-image-1.5,
+                            chatgpt-image-latest,
+                            gpt-image-1,
+                            gpt-image-1-mini,
+                            dall-e-3,
+                            dall-e-2,
+                        ]
                 revisedPrompt:
                     type: [string, 'null']
                 finalStyle:
@@ -2058,21 +2106,69 @@ components:
                     type: string
                     enum:
                         [
-                            gpt-5.2,
+                            gpt-5.4,
+                            gpt-5.4-pro,
                             gpt-5.4-mini,
-                            gpt-5.1,
-                            gpt-5,
+                            gpt-5.4-nano,
                             gpt-5-mini,
                             gpt-5-nano,
+                            gpt-5,
+                            gpt-4.1,
+                            gpt-5-codex,
+                            gpt-5.3-codex,
+                            gpt-5.2,
+                            gpt-5.2-codex,
+                            gpt-5.1,
+                            gpt-5.1-codex,
+                            gpt-5.1-codex-max,
+                            gpt-5.1-codex-mini,
+                            codex-mini-latest,
+                            o3-deep-research,
+                            o4-mini-deep-research,
+                            gpt-oss-120b,
+                            gpt-oss-20b,
+                            gpt-5.2-pro,
+                            gpt-5-pro,
+                            o3-pro,
+                            o3,
+                            o4-mini,
+                            o1-pro,
+                            computer-use-preview,
+                            gpt-4o-mini-search-preview,
+                            gpt-4o-search-preview,
+                            gpt-4.5-preview,
+                            o3-mini,
+                            o1,
+                            o1-mini,
+                            o1-preview,
                             gpt-4o,
                             gpt-4o-mini,
-                            gpt-4.1,
                             gpt-4.1-mini,
                             gpt-4.1-nano,
+                            gpt-4-turbo,
+                            babbage-002,
+                            chatgpt-4o-latest,
+                            davinci-002,
+                            gpt-3.5-turbo,
+                            gpt-4,
+                            gpt-4-turbo-preview,
+                            gpt-5.3-chat-latest,
+                            gpt-5.2-chat-latest,
+                            gpt-5.1-chat-latest,
+                            gpt-5-chat-latest,
                         ]
                 imageModel:
                     type: string
-                    enum: [gpt-image-1.5, gpt-image-1, gpt-image-1-mini]
+                    enum:
+                        [
+                            gpt-image-2,
+                            gpt-image-1.5,
+                            chatgpt-image-latest,
+                            gpt-image-1,
+                            gpt-image-1-mini,
+                            dall-e-3,
+                            dall-e-2,
+                        ]
                 size:
                     type: string
                     enum: [auto, 1024x1024, 1024x1536, 1536x1024]
@@ -2558,6 +2654,425 @@ components:
 
         # Traces + provenance.
         # Trace metadata payloads.
+        WorkflowStepSignals:
+            type: object
+            description: Primitive workflow step signal bag with documented canonical keys for known workflow step outputs.
+            properties:
+                purpose:
+                    type: string
+                    enum: [chat_orchestrator_action_selection]
+                contractType:
+                    type: string
+                    enum: [structured, text_json, fallback]
+                applyOutcome:
+                    type: string
+                    enum: [applied, adjusted_by_policy, not_applied]
+                action:
+                    type: string
+                    enum: [message, react, ignore, image]
+                modality:
+                    type: string
+                    enum: [text, tts]
+                requestedCapabilityProfile:
+                    type: string
+                selectedCapabilityProfile:
+                    type: string
+                profileId:
+                    type: string
+                originalProfileId:
+                    type: string
+                effectiveProfileId:
+                    type: string
+                provider:
+                    type: string
+                mattered:
+                    type: boolean
+                matteredControlCount:
+                    type: integer
+                    minimum: 0
+                routingChainAttemptCount:
+                    type: integer
+                    minimum: 0
+                routingChainAttemptsJson:
+                    type: string
+                    description: JSON array string containing bounded routing-chain attempt telemetry.
+                selectedProfileId:
+                    type: string
+                    nullable: true
+                selectedProvider:
+                    type: string
+                    nullable: true
+                selectedModel:
+                    type: string
+                    nullable: true
+                routedProfileId:
+                    type: string
+                    nullable: true
+                routedProvider:
+                    type: string
+                    nullable: true
+                routedModel:
+                    type: string
+                    nullable: true
+                assessRoutingHintsCsv:
+                    type: string
+                routingHintApplied:
+                    type: string
+                    enum:
+                        [
+                            openai_first_logic,
+                            ollama_first_style,
+                            cheaper_first,
+                            none,
+                        ]
+                routingHintConflictResolved:
+                    type: string
+                    enum: [logic_over_style]
+                clarificationReasonCode:
+                    type: string
+                clarificationOptionCount:
+                    type: integer
+                    minimum: 0
+                terminalAction:
+                    type: string
+                    enum: [react, ignore, image]
+                refinementApplied:
+                    type: boolean
+                    enum: [true]
+                refinementSourceStepId:
+                    type: string
+                appliedModuleCount:
+                    type: integer
+                    minimum: 0
+                appliedModuleIdsCsv:
+                    type: string
+                reentryAttempt:
+                    type: integer
+                    minimum: 0
+                reviewParseStatus:
+                    type: string
+                    enum: [failed]
+                reviewParseFailureReason:
+                    type: string
+                    enum:
+                        [
+                            empty_output,
+                            non_json_object,
+                            invalid_json,
+                            schema_invalid,
+                        ]
+                reviewParseFailureMessage:
+                    type: string
+                reviewParseOutputLength:
+                    type: integer
+                    minimum: 0
+                reviewParseIssueCount:
+                    type: integer
+                    minimum: 0
+                reviewParseFirstIssuePath:
+                    type: string
+                reviewParseFirstIssueCode:
+                    type: string
+                reviewDecision:
+                    type: string
+                    enum: [finalize, revise]
+                reviewReason:
+                    type: string
+                revisionInstruction:
+                    type: string
+                refinementRequested:
+                    type: boolean
+                moduleHintCount:
+                    type: integer
+                    minimum: 0
+                moduleHintIdsCsv:
+                    type: string
+                lengthConcern:
+                    type: string
+                    enum: [too_long, ok]
+                styleConcern:
+                    type: string
+                    enum: [too_stiff, ok]
+                evidenceConcern:
+                    type: string
+                    enum: [needs_caution, ok]
+                traceAlignment:
+                    type: string
+                    enum: [aligned, misaligned]
+                traceAlignmentReason:
+                    type: string
+                finalTemperamentTightness:
+                    type: integer
+                    minimum: 1
+                    maximum: 5
+                finalTemperamentRationale:
+                    type: integer
+                    minimum: 1
+                    maximum: 5
+                finalTemperamentAttribution:
+                    type: integer
+                    minimum: 1
+                    maximum: 5
+                finalTemperamentCaution:
+                    type: integer
+                    minimum: 1
+                    maximum: 5
+                finalTemperamentExtent:
+                    type: integer
+                    minimum: 1
+                    maximum: 5
+            additionalProperties:
+                oneOf:
+                    - type: string
+                    - type: number
+                    - type: boolean
+                    - type: 'null'
+
+        WorkflowStepOutcome:
+            type: object
+            properties:
+                status:
+                    type: string
+                    enum: [executed, skipped, failed]
+                summary:
+                    type: string
+                    minLength: 1
+                artifacts:
+                    type: array
+                    items:
+                        type: string
+                signals:
+                    $ref: '#/components/schemas/WorkflowStepSignals'
+                recommendations:
+                    type: array
+                    items:
+                        type: string
+            required:
+                - status
+                - summary
+            additionalProperties: false
+
+        WorkflowStepRecord:
+            type: object
+            properties:
+                stepId:
+                    type: string
+                    minLength: 1
+                parentStepId:
+                    type: string
+                    minLength: 1
+                attempt:
+                    type: integer
+                    minimum: 1
+                stepKind:
+                    type: string
+                    enum: [plan, tool, generate, assess, revise, finalize]
+                reasonCode:
+                    type: string
+                    enum:
+                        [
+                            planner_runtime_error,
+                            planner_invalid_output,
+                            evaluator_runtime_error,
+                            generation_runtime_error,
+                            tool_not_requested,
+                            tool_not_used,
+                            search_rerouted_to_fallback_profile,
+                            search_reroute_not_permitted_by_selection_source,
+                            search_reroute_no_tool_capable_fallback_available,
+                            tool_unavailable,
+                            tool_execution_error,
+                            tool_timeout,
+                            tool_http_error,
+                            tool_network_error,
+                            tool_invalid_response,
+                            search_not_supported_by_selected_profile,
+                            unspecified_tool_outcome,
+                            routing_chain_exhausted,
+                            routing_chain_entry_ineligible,
+                            routing_chain_transient_error,
+                            routing_chain_non_transient_error,
+                        ]
+                startedAt:
+                    type: string
+                    format: date-time
+                finishedAt:
+                    type: string
+                    format: date-time
+                durationMs:
+                    type: integer
+                    minimum: 0
+                model:
+                    type: string
+                usage:
+                    type: object
+                    properties:
+                        promptTokens:
+                            type: integer
+                            minimum: 0
+                        completionTokens:
+                            type: integer
+                            minimum: 0
+                        totalTokens:
+                            type: integer
+                            minimum: 0
+                    additionalProperties: false
+                cost:
+                    type: object
+                    properties:
+                        inputCostUsd:
+                            type: number
+                            minimum: 0
+                        outputCostUsd:
+                            type: number
+                            minimum: 0
+                        totalCostUsd:
+                            type: number
+                            minimum: 0
+                    required:
+                        - inputCostUsd
+                        - outputCostUsd
+                        - totalCostUsd
+                    additionalProperties: false
+                outcome:
+                    $ref: '#/components/schemas/WorkflowStepOutcome'
+            required:
+                - stepId
+                - attempt
+                - stepKind
+                - startedAt
+                - finishedAt
+                - durationMs
+                - outcome
+            additionalProperties: false
+
+        WorkflowRecord:
+            type: object
+            properties:
+                workflowId:
+                    type: string
+                    minLength: 1
+                workflowName:
+                    type: string
+                    minLength: 1
+                status:
+                    type: string
+                    enum: [completed, degraded]
+                stepCount:
+                    type: integer
+                    minimum: 0
+                maxSteps:
+                    type: integer
+                    minimum: 1
+                maxDurationMs:
+                    type: integer
+                    minimum: 1
+                effectiveLimits:
+                    type: array
+                    items:
+                        type: object
+                        properties:
+                            key:
+                                type: string
+                                enum:
+                                    [
+                                        maxWorkflowSteps,
+                                        maxToolCalls,
+                                        maxDeliberationCalls,
+                                        maxTokensTotal,
+                                        maxDurationMs,
+                                    ]
+                            state:
+                                type: string
+                                enum:
+                                    [enforced, configured_inactive, unavailable]
+                            value:
+                                type: integer
+                                minimum: 0
+                            stoppedRun:
+                                type: boolean
+                        required:
+                            - key
+                            - state
+                            - stoppedRun
+                        additionalProperties: false
+                limitStop:
+                    type: object
+                    properties:
+                        stoppedByLimit:
+                            type: boolean
+                        terminationReason:
+                            type: string
+                            enum:
+                                [
+                                    goal_satisfied,
+                                    budget_exhausted_steps,
+                                    budget_exhausted_tokens,
+                                    budget_exhausted_time,
+                                    transition_blocked_by_policy,
+                                    max_tool_calls_reached,
+                                    max_deliberation_calls_reached,
+                                    executor_error_fail_open,
+                                ]
+                        exhaustedLimitKey:
+                            type: string
+                            enum:
+                                [
+                                    maxWorkflowSteps,
+                                    maxToolCalls,
+                                    maxDeliberationCalls,
+                                    maxTokensTotal,
+                                    maxDurationMs,
+                                ]
+                    required:
+                        - stoppedByLimit
+                        - terminationReason
+                    additionalProperties: false
+                terminationReason:
+                    type: string
+                    enum:
+                        [
+                            goal_satisfied,
+                            budget_exhausted_steps,
+                            budget_exhausted_tokens,
+                            budget_exhausted_time,
+                            transition_blocked_by_policy,
+                            max_tool_calls_reached,
+                            max_deliberation_calls_reached,
+                            executor_error_fail_open,
+                        ]
+                steps:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/WorkflowStepRecord'
+            required:
+                - workflowId
+                - workflowName
+                - status
+                - stepCount
+                - maxSteps
+                - maxDurationMs
+                - terminationReason
+                - steps
+            additionalProperties: false
+
+        ReviewRuntimeSummary:
+            type: object
+            properties:
+                label:
+                    type: string
+                    enum:
+                        [
+                            not_reviewed,
+                            reviewed_no_revision,
+                            revised,
+                            skipped,
+                            fallback,
+                        ]
+            required:
+                - label
+            additionalProperties: false
+
         ResponseMetadataBase:
             type: object
             properties:
@@ -2701,6 +3216,10 @@ components:
                                 type: integer
                                 minimum: 0
                         additionalProperties: false
+                workflow:
+                    $ref: '#/components/schemas/WorkflowRecord'
+                reviewRuntime:
+                    $ref: '#/components/schemas/ReviewRuntimeSummary'
                 imageDescriptions:
                     type: array
                     items:

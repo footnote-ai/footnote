@@ -13,6 +13,7 @@ import type {
     ToolExecutionEvent,
 } from './types.js';
 import { deriveReviewRuntimeSummary } from './reviewRuntime.js';
+import { isPlannerFallbackStep } from './workflowStepSignals.js';
 
 export type GroundingEvidenceSummary = {
     status: GroundingEvidenceStatus;
@@ -83,18 +84,7 @@ export const resolvePlannerFallbackReceipt = (
     metadata: ResponseMetadata
 ): string | null => {
     const plannerFallbackInWorkflow =
-        metadata.workflow?.steps?.some((step) => {
-            if (step.stepKind !== 'plan') {
-                return false;
-            }
-            if (
-                step.reasonCode === 'planner_runtime_error' ||
-                step.reasonCode === 'planner_invalid_output'
-            ) {
-                return true;
-            }
-            return step.outcome.signals?.contractType === 'fallback';
-        }) ?? false;
+        metadata.workflow?.steps?.some(isPlannerFallbackStep) ?? false;
 
     const plannerFallbackInExecution =
         metadata.execution?.some((event) => {

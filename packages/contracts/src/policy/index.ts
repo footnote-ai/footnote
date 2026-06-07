@@ -57,6 +57,22 @@ export type {
     WorkflowLimitState,
     WorkflowEffectiveLimit,
     WorkflowLimitStop,
+    StepSignalValue,
+    StepSignals,
+    WorkflowPlannerAction,
+    WorkflowPlannerModality,
+    WorkflowTerminalAction,
+    WorkflowRoutingHintLane,
+    WorkflowRoutingHintConflictResolution,
+    WorkflowReviewParseFailureReason,
+    WorkflowRoutingChainAttemptSignal,
+    WorkflowRoutingChainSignals,
+    WorkflowPlannerStepSignals,
+    WorkflowAssessRoutingHintSignals,
+    WorkflowToolClarificationSignals,
+    WorkflowTerminalActionSignals,
+    WorkflowRefinementSignals,
+    WorkflowReviewParseFailureSignals,
     BoundedReviewAssessDecision,
     BoundedReviewAssessCoreSignals,
     AssessTraceAlignmentSignals,
@@ -127,6 +143,15 @@ export { CONTEXT_INTEGRATION_NAMES } from './contextIntegrations.js';
 export type { ContextIntegrationName } from './contextIntegrations.js';
 export { formatExecutionTimelineSummary } from './executionFormatting.js';
 export { deriveReviewRuntimeSummary } from './reviewRuntime.js';
+export {
+    buildWorkflowRoutingChainSignals,
+    buildWorkflowAssessRoutingHintSignals,
+    buildWorkflowReviewParseFailureSignals,
+    isPlannerFallbackStep,
+    isRefinementGenerateStep,
+    getWorkflowStepProfileIdSignal,
+    getPlannerStepContractType,
+} from './workflowStepSignals.js';
 export {
     resolveReviewReceipt,
     resolvePlannerFallbackReceipt,

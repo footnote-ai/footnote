@@ -13,7 +13,14 @@ import type {
     PlannerExecutionContractType,
     PlannerExecutionPurpose,
     StepRecord,
+    StepSignals,
+    WorkflowPlannerAction,
+    WorkflowPlannerModality,
+    WorkflowPlannerStepSignals,
+    WorkflowRoutingChainAttemptSignal,
+    WorkflowRoutingChainSignals,
 } from '@footnote/contracts/policy';
+import { buildWorkflowRoutingChainSignals } from '@footnote/contracts/policy';
 
 type PlannerStepRecordSummary = {
     status: ExecutionStatus;
@@ -22,8 +29,8 @@ type PlannerStepRecordSummary = {
     contractType: PlannerExecutionContractType;
     applyOutcome: PlannerExecutionApplyOutcome;
     durationMs?: number;
-    action?: 'message' | 'react' | 'ignore' | 'image';
-    modality?: 'text' | 'tts';
+    action?: WorkflowPlannerAction;
+    modality?: WorkflowPlannerModality;
     requestedCapabilityProfile?: string;
     selectedCapabilityProfile?: string;
     profileId?: string;
@@ -35,17 +42,7 @@ type PlannerStepRecordSummary = {
     cost?: StepRecord['cost'];
     mattered?: boolean;
     matteredControlIds?: string[];
-    routingChainAttempts?: Array<{
-        index: number;
-        profileId: string;
-        provider?: string;
-        model?: string;
-        status: string;
-        reasonCode?: string;
-        chooseOneUsed: boolean;
-        chooseOneSelectedIndex?: number;
-        seedKeyType?: string;
-    }>;
+    routingChainAttempts?: WorkflowRoutingChainAttemptSignal[];
 };
 
 export type BuildPlannerStepRecordInput = {
@@ -109,7 +106,9 @@ export const buildPlannerStepRecord = ({
         ? summary.reasonCode
         : undefined;
 
-    const signals: NonNullable<StepRecord['outcome']['signals']> = {
+    const signals: WorkflowPlannerStepSignals &
+        StepSignals &
+        Partial<WorkflowRoutingChainSignals> = {
         applyOutcome: summary.applyOutcome,
         purpose: summary.purpose,
         contractType: summary.contractType,
@@ -135,11 +134,8 @@ export const buildPlannerStepRecord = ({
         ...(Array.isArray(summary.matteredControlIds) && {
             matteredControlCount: summary.matteredControlIds.length,
         }),
-        ...(Array.isArray(summary.routingChainAttempts) && {
-            routingChainAttemptCount: summary.routingChainAttempts.length,
-            routingChainAttemptsJson: JSON.stringify(
-                summary.routingChainAttempts
-            ),
+        ...buildWorkflowRoutingChainSignals({
+            attempts: summary.routingChainAttempts,
         }),
     };
 

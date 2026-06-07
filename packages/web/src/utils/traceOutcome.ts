@@ -12,6 +12,7 @@ import type {
     WorkflowRecord,
     WorkflowTerminationReason,
 } from '@footnote/contracts/policy';
+import { isPlannerFallbackStep } from '@footnote/contracts/policy';
 
 type RunOutcomeCategory =
     | 'completed'
@@ -85,11 +86,7 @@ const isFallbackPlannerEvent = (event: ExecutionEvent): boolean =>
     event.kind === 'planner' && event.contractType === 'fallback';
 
 const isFallbackPlanStep = (workflow: WorkflowRecord | undefined): boolean =>
-    (workflow?.steps ?? []).some(
-        (step) =>
-            step.stepKind === 'plan' &&
-            step.outcome?.signals?.contractType === 'fallback'
-    );
+    (workflow?.steps ?? []).some(isPlannerFallbackStep);
 
 const isKnownFallbackReason = (reasonCode: string): boolean =>
     reasonCode === 'search_rerouted_to_fallback_profile';

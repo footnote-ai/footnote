@@ -11,7 +11,10 @@ import type {
     ContextStepRequest as ContractContextStepRequest,
     ContextStepResult as ContractContextStepResult,
     ExecutionReasonCode,
+    StepSignals,
     StepRecord,
+    WorkflowTerminalActionSignals,
+    WorkflowToolClarificationSignals,
     WorkflowLimitKey,
     WorkflowRecord,
 } from '@footnote/contracts/policy';
@@ -412,7 +415,7 @@ export const runBoundedReviewWorkflow = async ({
         reasonCode?: ExecutionReasonCode;
         parentStepId?: string;
         attempt: number;
-        signals?: Record<string, string | number | boolean | null>;
+        signals?: StepSignals;
         recommendations?: string[];
     }): string => {
         stepCounter += 1;
@@ -603,6 +606,9 @@ export const runBoundedReviewWorkflow = async ({
     if (workflowTerminalAction !== undefined) {
         const terminalStartedAt = Date.now();
         const terminalFinishedAt = Date.now();
+        const terminalSignals: WorkflowTerminalActionSignals = {
+            terminalAction: workflowTerminalAction.responseAction,
+        };
         captureStep({
             stepKind: 'finalize',
             status: 'executed',
@@ -616,9 +622,7 @@ export const runBoundedReviewWorkflow = async ({
             finishedAtMs: terminalFinishedAt,
             parentStepId: plannerRootStepId,
             attempt: 1,
-            signals: {
-                terminalAction: workflowTerminalAction.responseAction,
-            },
+            signals: terminalSignals,
         });
         workflowState = applyStepExecutionToState(
             workflowState,
@@ -770,6 +774,17 @@ export const runBoundedReviewWorkflow = async ({
                 const normalizedResult = contextStepOutcome.result;
                 const normalizedExecutionContext =
                     normalizedResult.executionContext;
+                const clarificationSignals:
+                    | WorkflowToolClarificationSignals
+                    | undefined =
+                    normalizedResult.outcome === 'needs_clarification'
+                        ? {
+                              clarificationReasonCode:
+                                  normalizedResult.clarification.reasonCode,
+                              clarificationOptionCount:
+                                  normalizedResult.clarification.options.length,
+                          }
+                        : undefined;
                 executedContextStepResults.push(normalizedResult);
                 captureStep({
                     stepKind: 'tool',
@@ -794,12 +809,7 @@ export const runBoundedReviewWorkflow = async ({
                             artifacts: normalizedResult.contextMessages,
                         }),
                     ...(normalizedResult.outcome === 'needs_clarification' && {
-                        signals: {
-                            clarificationReasonCode:
-                                normalizedResult.clarification.reasonCode,
-                            clarificationOptionCount:
-                                normalizedResult.clarification.options.length,
-                        },
+                        signals: clarificationSignals,
                     }),
                 });
                 workflowState = applyStepExecutionToState(
