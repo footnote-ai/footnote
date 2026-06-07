@@ -4,6 +4,7 @@ Footnote deploys as one server container.
 
 ## Runtime Paths
 
+- Root quickstart: [README Quickstart](../README.md#quickstart)
 - User CLI path (primary): download `footnote` binary, run `footnote start`.
 - Deployment compose path: use `deploy/compose.yml` (GHCR image default).
 - Developer repo path: `git clone` + `pnpm start`.
@@ -18,6 +19,7 @@ Install `pnpm` with one of:
 ```bash
 corepack enable && corepack prepare pnpm@10.27.0 --activate
 ```
+
 ```bash
 npm i -g pnpm@10.27.0
 ```

@@ -1,5 +1,5 @@
 /**
- * @description: Adds a slash-only one-shot chat command for fast profile/model switching.
+ * @description: Adds a slash-only one-shot chat command for mode and profile switching.
  * @footnote-scope: interface
  * @footnote-module: ChatCommand
  * @footnote-risk: medium - Command wiring errors can misroute requests or hide backend chat failures.
@@ -55,6 +55,7 @@ const buildChatCommandData = (): SlashCommand => {
                 .setName('mode')
                 .setDescription('Optional answer posture for this request')
                 .addChoices(
+                    { name: 'Express', value: 'express' },
                     { name: 'Grounded', value: 'grounded' },
                     { name: 'Balanced', value: 'balanced' }
                 )

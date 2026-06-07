@@ -69,11 +69,11 @@ For routes with runtime validation:
   to validate client responses
 - Validate backend request payloads before the route does its main work
 
-Current scope:
+Scope rule:
 
-- `POST /api/chat`
-- `POST /api/traces`
-- `GET /api/traces/{responseId}`
+- Add runtime schemas for every endpoint with structured JSON request or response bodies.
+- Keep schema names aligned with operationId-derived type names where possible.
+- For endpoints without shared runtime schemas (for example empty responses or plain-text YAML reads), keep `@api.*` tags and `x-codeRefs` aligned so link validation still covers them.
 
 In plain English:
 

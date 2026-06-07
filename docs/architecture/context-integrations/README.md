@@ -108,7 +108,8 @@ reviewed workflow modes.
 
 `weather_forecast`, `file_scan`, `web_search`, `trustgraph`, and
 `reverse_image_search` use the workflow context-step execution path for
-bounded-review modes (`balanced` and `grounded`). In this pattern:
+workflow modes (`express`, `balanced`, and `grounded`) when workflow execution
+is active. In this pattern:
 
 - Executes through `workflowEngine` with an injected `ContextStepExecutor`
 - Executes before the `generate` step in bounded-review workflows

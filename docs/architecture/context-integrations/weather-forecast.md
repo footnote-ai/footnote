@@ -45,7 +45,7 @@ Provider ownership:
 ## Behavior Preset Coverage
 
 Weather context-step execution applies to the reviewed workflow path used by
-both `balanced` and `grounded`.
+`express`, `balanced`, and `grounded`.
 
 Those presets share the same workflow step shape, including context injection
 before generation. Differences between presets come from limits and evidence
@@ -99,7 +99,7 @@ response metadata assembly.
 
 ## Integration Surfaces
 
-- `packages/backend/src/services/openMeteoForecastTool.ts`
+- `packages/backend/src/services/contextIntegrations/weather/openMeteoForecastTool.ts`
 - `packages/backend/src/services/tools/weatherForecastToolAdapter.ts`
 - `packages/backend/src/services/tools/toolRegistry.ts`
 - `packages/backend/src/services/chatOrchestrator.ts`

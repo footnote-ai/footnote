@@ -23,6 +23,11 @@ const DEFAULT_CATALOG_RELATIVE_PATH =
     'packages/backend/src/config/model-profiles.defaults.yaml';
 
 const DEFAULT_STEP_CHAINS: StepRoutingChainsConfig = {
+    express: {
+        planner: ['openai-json-optimized', 'ollama-text-gptoss'],
+        generate: ['openai-text-fast', { chooseOne: ['free-ollama-style'] }],
+        assess: ['openai-json-optimized', 'ollama-text-gptoss'],
+    },
     balanced: {
         planner: ['openai-json-optimized', 'ollama-text-gptoss'],
         generate: [{ chooseOne: ['free-ollama-style'] }, 'openai-text-medium'],
@@ -34,6 +39,12 @@ const DEFAULT_STEP_CHAINS: StepRoutingChainsConfig = {
         assess: ['openai-json-optimized', 'ollama-text-gptoss'],
     },
 };
+
+const WORKFLOW_MODE_IDS: WorkflowModeProfileId[] = [
+    'express',
+    'balanced',
+    'grounded',
+];
 
 const resolveCatalogPath = (
     projectRoot: string,
@@ -262,8 +273,7 @@ const pruneStepRoutingChains = (
     const resolved = JSON.parse(
         JSON.stringify(chains)
     ) as StepRoutingChainsConfig;
-    const modes: WorkflowModeProfileId[] = ['balanced', 'grounded'];
-    for (const mode of modes) {
+    for (const mode of WORKFLOW_MODE_IDS) {
         const steps: Array<'planner' | 'generate' | 'assess'> = [
             'planner',
             'generate',
@@ -340,8 +350,7 @@ const validateStepRoutingChains = (
         sourcePath,
         warn
     );
-    const modes: WorkflowModeProfileId[] = ['balanced', 'grounded'];
-    for (const mode of modes) {
+    for (const mode of WORKFLOW_MODE_IDS) {
         const steps: Array<'planner' | 'generate' | 'assess'> = [
             'planner',
             'generate',

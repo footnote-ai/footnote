@@ -6,18 +6,67 @@
 
 Footnote is an AI framework that tries to show its work.
 
-## Start Here
+## Quickstart
 
-### Run the app
+### 1) Download the app file
 
-- Download the binary from [Releases](https://github.com/footnote-ai/footnote/releases)
-- Double-click the binary to open the launcher menu.
+Download the latest app files from
+[GitHub Releases](https://github.com/footnote-ai/footnote/releases).
 
-### Advanced Setup
+### 2) Choose the file for your system
 
-[Deployment Guide](deploy/README.md)
+Choose the file that matches your system:
 
-#### Run from source
+- Windows x64: `footnote-win32-x64.exe`
+- macOS Apple Silicon (arm64): `footnote-darwin-arm64`
+- Linux x64: `footnote-linux-x64`
+
+### 3) Verify the download (`.sha256`)
+
+Each download includes a matching `.sha256` file. `.sha256` files are
+checksums. A checksum is a short fingerprint for a file. It lets you check that
+the file you downloaded matches the file we released.
+
+Replace the example filenames below with the file you downloaded.
+
+Windows PowerShell:
+
+```powershell
+Get-FileHash -Algorithm SHA256 .\footnote-win32-x64.exe
+Get-Content .\footnote-win32-x64.exe.sha256
+```
+
+macOS/Linux:
+
+```bash
+shasum -a 256 ./footnote-darwin-arm64
+cat ./footnote-darwin-arm64.sha256
+```
+
+Compare the hash output from your command to the value in the matching
+`.sha256` file.
+
+### 4) Open the file
+
+Double-click the file, or run it from a terminal.
+
+macOS/Linux users may need to allow the file to run first:
+
+```bash
+chmod +x ./footnote-linux-x64
+./footnote-linux-x64
+```
+
+Use the filename you downloaded.
+
+### 5) First run and setup
+
+On first run, Footnote starts the local runtime and opens the setup page in
+your browser. The setup page starts with a default config for your environment,
+which you can review and save. After saving settings, restart Footnote so the
+runtime applies your updated configuration.
+
+## Run from source (Developers and contributors)
 
 Prerequisites:
 
@@ -29,6 +78,7 @@ Install `pnpm` with one of:
 ```bash
 corepack enable && corepack prepare pnpm@10.27.0 --activate
 ```
+
 ```bash
 npm i -g pnpm@10.27.0
 ```
@@ -37,15 +87,15 @@ Clone and start:
 
 ```bash
 git clone https://github.com/footnote-ai/footnote.git
-```
-```bash
 cd footnote
-```
-```bash
 pnpm start
 ```
 
-## Need Help?
+## Deployment and advanced setup
+
+For container and operator paths, use the [Deployment Guide](deploy/README.md).
+
+## Need help?
 
 - [Docs map](docs/README.md)
 - [GitHub issues](https://github.com/footnote-ai/footnote/issues)

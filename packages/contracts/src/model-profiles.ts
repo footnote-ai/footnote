@@ -64,7 +64,7 @@ export type WorkflowModelStepKind = 'planner' | 'generate' | 'assess';
 /**
  * Built-in workflow modes that own default routing posture.
  */
-export type WorkflowModeProfileId = 'balanced' | 'grounded';
+export type WorkflowModeProfileId = 'express' | 'balanced' | 'grounded';
 
 /**
  * One routing-chain entry.
@@ -158,7 +158,11 @@ export const WorkflowModelStepKindSchema = z.enum([
     'generate',
     'assess',
 ]);
-export const WorkflowModeProfileIdSchema = z.enum(['balanced', 'grounded']);
+export const WorkflowModeProfileIdSchema = z.enum([
+    'express',
+    'balanced',
+    'grounded',
+]);
 export const StepRoutingEntrySchema = z.union([
     z.string().min(1),
     z
@@ -177,6 +181,7 @@ export const StepRoutingModeMapSchema: z.ZodType<StepRoutingModeMap> = z
 export const StepRoutingChainsConfigSchema: z.ZodType<StepRoutingChainsConfig> =
     z
         .object({
+            express: StepRoutingModeMapSchema,
             balanced: StepRoutingModeMapSchema,
             grounded: StepRoutingModeMapSchema,
         })

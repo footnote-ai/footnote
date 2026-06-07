@@ -5,7 +5,7 @@
 
 **Relationship to prior decisions:** This decision extends, but does not replace, [VoltAgent Runtime Adoption (Behind the Existing Backend)](./2026-03-voltagent-runtime-adoption.md). The earlier record established the backend-owned boundary and the first migrated runtime slice. This record defines the broader end-state needed to remove the remaining legacy OpenAI system from product flows.
 
-**How to read this document:** This is an architectural decision record. The context section explains the mixed state that motivated the decision, while the latest branch outcomes live in `docs/status/`.
+**How to read this document:** This is an architectural decision record. The context section explains the mixed state that motivated the decision. For current runtime shape, read `docs/architecture/workflow.md` and `docs/architecture/README.md`.
 
 **Implementation context:** The motivating mixed state is summarized below.
 
@@ -181,7 +181,7 @@ This branch remains separate because speech synthesis and realtime audio transpo
 
 ## 7. Recommended Migration Order
 
-This section is intentionally high-level. Branch-specific execution details should live in separate status docs.
+This section is intentionally high-level. Branch-specific execution details should live in branch notes, pull requests, and tests.
 
 ### 7.1 First: finish text migration
 
@@ -258,7 +258,7 @@ This decision intentionally separates "remove legacy OpenAI architecture" from "
 
 ## 10. Tracking and Validation
 
-This decision record is architectural. Branch-level inventories, code hotspots, and rollout tracking should live in status docs when active.
+This decision record is architectural. Branch-level inventories, code hotspots, and rollout tracking should live in branch notes and pull requests.
 
 The decision itself should remain aligned with:
 

@@ -13,7 +13,7 @@ Use it like this:
 
 ## Quick Crosswalk
 
-- Routing -> workflow behavior preset selection and workflow resolution
+- Routing -> workflow mode selection and workflow resolution
 - Planning -> bounded planner step
 - Reflection -> review / refinement path, plus future bounded TRACE refinement
 - Tool use -> Execution Contract-limited tool execution
@@ -29,18 +29,18 @@ That may mean a balanced path, a grounded path, or a tool-assisted path.
 
 **What Footnote calls it**
 
-Footnote uses a workflow behavior preset for the high-level run choice and a
+Footnote uses a workflow mode for the high-level run choice and a
 shared reviewed workflow shape for concrete execution.
 
 Current examples:
 
-- behavior preset: `balanced`, `grounded`
+- workflow mode: `express`, `balanced`, `grounded`
 - workflow shape: reviewed (`generate -> assess -> planner re-entry -> generate`)
 
 **What constraints Footnote adds**
 
 - Routing stays inside Execution Contract guardrails.
-- Preset and workflow shape are related, but not the same thing.
+- Workflow mode and workflow shape are related, but not the same thing.
 - Backend owns the final routing decision.
 - Missing or unknown routing input falls back fail-open.
 
@@ -196,6 +196,6 @@ and constraints.
 The semantic center stays the same:
 
 - Execution Contract governs authority
-- workflow behavior presets and workflow shape govern run shape
+- workflow modes and workflow shape govern run shape
 - TRACE, provenance, and steerability stay Footnote-native
 - backend remains the control-plane boundary

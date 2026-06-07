@@ -1,12 +1,14 @@
 # Workflows
 
 A workflow is the path Footnote uses to answer a chat request. It covers the
-selected preset, planning, optional context, generation, review, fallback
+selected mode, planning, optional context, generation, review, fallback
 behavior, and the metadata saved for trace and provenance.
 
-The current chat path uses the reviewed workflow shape for both `balanced` and
-`grounded`. The two presets share the same basic step pattern and differ in
-contract preset, limits, model routing, and evidence posture.
+The current chat path supports three public modes: `express`, `balanced`, and
+`grounded`.
+
+All three map to the reviewed workflow profile, but they run with different
+contract presets, limits, model routing, and evidence posture.
 
 ## How a chat request runs
 
@@ -15,17 +17,17 @@ backend workflow runtime.
 
 1. `chatOrchestrator` receives and normalizes the request.
 2. The Execution Contract sets the allowed behavior and limits.
-3. The backend resolves the workflow preset and runtime config.
+3. The backend resolves the workflow mode and runtime config.
 4. `chatOrchestrator` provides the planner and context-step dependencies used
    during workflow execution.
 5. `chatService` runs `workflowEngine` with the reviewed workflow shape.
-6. Response metadata records the preset outcome, planner influence, workflow
+6. Response metadata records the mode outcome, planner influence, workflow
    lineage, cost, trace fields, and provenance fields.
 
 The main runtime pieces are:
 
 - the Execution Contract, which sets the run rules and limits
-- the preset, which selects the run posture
+- the mode, which selects the run posture
 - the workflow shape, which defines the step pattern
 - the planner, which can suggest how to handle the request within the run rules
 - workflow metadata, which records what happened
@@ -42,45 +44,47 @@ Workflow logic is split across backend layers:
 The engine is the source for step legality and workflow lineage. Profiles
 describe the intended workflow. Adapters connect that workflow to the app.
 
-## Presets and workflow shape
+## Modes and workflow shape
 
-The backend currently resolves two presets:
+The backend resolves three public modes:
 
+- `express`
 - `balanced`
 - `grounded`
 
-Preset ids are user-facing enough to appear in product copy with normal casing:
-`Balanced` and `Grounded`. Internal profile ids are not useful as primary labels
-under an answer.
+Mode ids are user-facing enough to appear in product copy with normal casing:
+`Express`, `Balanced`, and `Grounded`. Internal profile ids are not useful as
+primary labels under an answer.
 
-Both presets use the reviewed workflow shape:
+All three modes use the reviewed workflow shape:
 
 | Workflow shape | Purpose                     | Main steps                                           |
 | -------------- | --------------------------- | ---------------------------------------------------- |
 | `reviewed`     | reviewed message generation | `generate -> assess -> planner re-entry -> generate` |
 
-Preset details:
+Mode details:
 
-| Preset     | Contract preset    | Workflow shape | Flow                | Review | Evidence posture |
+| Mode       | Contract preset    | Workflow shape | Flow                | Review | Evidence posture |
 | ---------- | ------------------ | -------------- | ------------------- | ------ | ---------------- |
+| `express`  | `fast-direct`      | `reviewed`     | lower-allowance run | gated  | minimal          |
 | `balanced` | `balanced`         | `reviewed`     | reviewed generation | yes    | balanced         |
 | `grounded` | `quality-grounded` | `reviewed`     | reviewed generation | yes    | stricter         |
 
 `Grounded` and `reviewed` describe the path Footnote took. They are not claims
 that the answer is true.
 
-Preset selection happens during initial routing:
+Mode selection happens during initial routing:
 
 1. Use the requested mode when it is recognized.
-2. If the Execution Contract provides a response mode, map it to the preset:
-   `quality_grounded` maps to `grounded`, and `fast_direct` maps to `balanced`.
-3. If no mode is available, use `grounded`.
+2. If the Execution Contract provides a response mode, map it to the mode:
+   `quality_grounded` maps to `grounded`, and `fast_direct` maps to `express`.
+3. If no mode is available, use `balanced`.
 
-That fallback keeps the system available while preferring the more careful
-default. These fallback steps happen during initial routing only. Runtime preset
-escalation is handled separately.
+That fallback keeps the system available with the general default. These
+fallback steps happen during initial routing only. Runtime mode escalation is
+handled separately.
 
-Preset escalation lives in `resolveWorkflowRuntimeConfig`:
+Mode escalation lives in `resolveWorkflowRuntimeConfig`:
 
 ```text
 packages/backend/src/services/workflowProfileRegistry.ts
@@ -206,9 +210,10 @@ reproducible while still spreading traffic across the pool.
 
 Current default routing intent:
 
+- `express` generate favors the lower-allowance OpenAI fast profile first
 - `balanced` generate favors Ollama first, then OpenAI fallback
 - `grounded` generate favors OpenAI first, then Ollama fallback
-- `planner` and `assess` favor `openai-json-optimized` first in both modes
+- `planner` and `assess` favor `openai-json-optimized` first in all modes
 
 Routing is fail-open where possible:
 
@@ -318,7 +323,7 @@ lists belong in the trace.
 
 Short receipt text examples:
 
-- `Answered in Balanced preset`
+- `Answered in Balanced mode`
 - `Reviewed before final answer`
 - `Review skipped`
 - `Planner fallback`

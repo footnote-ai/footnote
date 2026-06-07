@@ -394,6 +394,20 @@ pools:
 # - chooseOne: deterministic equal-chance pick keyed by session/correlation seed.
 # - invalid ids/entries are skipped fail-open at runtime config load.
 stepRoutingChains:
+    express:
+        planner:
+            # Intent: keep quick-mode planning structured with a low-cost fallback.
+            - openai-json-optimized
+            - ollama-text-gptoss
+        generate:
+            # Intent: prefer the lower-allowance express lane first.
+            - openai-text-fast
+            # Fallback: keep one low-cost pooled option available.
+            - chooseOne: [free-ollama-style]
+        assess:
+            # Intent: keep assess deterministic when a reviewed path is active.
+            - openai-json-optimized
+            - ollama-text-gptoss
     balanced:
         planner:
             # Intent: prefer low-cost structured planning; fail-open to ollama.

@@ -191,7 +191,7 @@ const EmbedPage = (): JSX.Element => {
                             target="_blank"
                             rel="noreferrer"
                         >
-                            Download Footnote CLI
+                            Download Footnote
                         </a>
                         <a
                             className="cta-button secondary"
@@ -199,7 +199,7 @@ const EmbedPage = (): JSX.Element => {
                             target="_blank"
                             rel="noreferrer"
                         >
-                            Read the Quickstart
+                            Quickstart
                         </a>
                     </div>
                 </section>

@@ -69,7 +69,7 @@ const ChatTriggerKindSchema = z.enum([
     'catchup',
 ]);
 const ChatPersonaIdSchema = z.string().regex(/^[a-z0-9][a-z0-9-]{0,31}$/);
-const ChatModeIdSchema = z.enum(['balanced', 'grounded']);
+const ChatModeIdSchema = z.enum(['express', 'balanced', 'grounded']);
 const ChatConversationMessageSchema = z
     .object({
         role: z.enum(['system', 'user', 'assistant']),

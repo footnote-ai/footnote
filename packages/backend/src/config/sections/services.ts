@@ -18,6 +18,7 @@ import {
 import type { RuntimeConfig, WarningSink } from '../types.js';
 
 const CHAT_WORKFLOW_MODE_IDS: ReadonlySet<WorkflowModeId> = new Set([
+    'express',
     'balanced',
     'grounded',
 ]);
@@ -140,7 +141,7 @@ export const buildServiceSections = (
     chatWorkflow: {
         modeId: parseStringUnionEnv<WorkflowModeId>(
             env.CHAT_WORKFLOW_MODE_ID,
-            'grounded',
+            'balanced',
             'CHAT_WORKFLOW_MODE_ID',
             CHAT_WORKFLOW_MODE_IDS,
             warn

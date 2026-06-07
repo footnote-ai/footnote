@@ -52,6 +52,7 @@ detail once you have the main runtime shape in mind.
 - [Footnote Annotations](./footnote-annotations.md): code annotation conventions.
 - [Tool Invocation Contract v1](./tool-invocation-contract-v1.md): tool-call
   contract details.
-- [Embedding Footnote](./embedding.md): embedding-specific notes.
+- [Embedding Footnote](./embedding.md): maintained `/embed` route behavior,
+  host integration contract, and height-messaging expectations.
 - [Realtime Voice System](./realtime-voice.md): implementation-oriented
   walkthrough of the current backend-owned realtime voice boundary.

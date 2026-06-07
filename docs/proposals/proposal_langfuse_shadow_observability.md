@@ -6,6 +6,8 @@
 
 ## Overview
 
+This document is a proposal. It describes possible future work, not shipped behavior.
+
 We should try Langfuse as optional shadow observability for Footnote.
 
 Footnote already records enough information to explain one response: the
@@ -210,14 +212,12 @@ replacement of Footnote trace/provenance semantics.
 
 ## References And Notes
 
-- Footnote Workflow Engine And Provenance:
-  `docs/architecture/workflow-engine-and-provenance.md`
-- Footnote Workflow Mode Routing:
-  `docs/architecture/workflow-mode-routing.md`
-- Footnote Context Integrations:
-  `docs/architecture/context-integrations/README.md`
+- Footnote Workflow:
+  `docs/architecture/workflow.md`
 - Footnote Answer Posture And Control Influence:
   `docs/architecture/answer-posture-and-control-influence.md`
+- Footnote Context Integrations:
+  `docs/architecture/context-integrations/README.md`
 - Footnote Incident Handling:
   `docs/architecture/incident-handling.md`
 - Footnote Prompt Resolution:

@@ -1840,10 +1840,10 @@ export const envEntries = [
         required: false,
         secret: false,
         kind: 'enum',
-        allowedValues: ['balanced', 'grounded'] as const,
+        allowedValues: ['express', 'balanced', 'grounded'] as const,
         description:
             'Chat workflow mode selection used by backend orchestration.',
-        defaultValue: literal('grounded'),
+        defaultValue: literal('balanced'),
         usedBy: ['packages/backend/src/config.ts'],
     }),
     defineEnv({
