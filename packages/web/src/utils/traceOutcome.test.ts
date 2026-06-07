@@ -148,6 +148,40 @@ test('buildRunOutcomeSummary returns fallback without synthetic reason code for 
     );
 });
 
+test('buildRunOutcomeSummary returns fallback for workflow plan contract fallback', () => {
+    const workflow = createWorkflow('goal_satisfied');
+    workflow.stepCount = 1;
+    workflow.steps = [
+        {
+            stepId: 'step_plan_1',
+            attempt: 1,
+            stepKind: 'plan',
+            startedAt: '2026-04-22T00:00:00.000Z',
+            finishedAt: '2026-04-22T00:00:00.010Z',
+            durationMs: 10,
+            outcome: {
+                status: 'executed',
+                summary: 'Planner emitted fallback summary.',
+                signals: {
+                    contractType: 'fallback',
+                },
+            },
+        },
+    ];
+    const summary = buildRunOutcomeSummary(
+        createSource({
+            workflow,
+        })
+    );
+    assert.equal(summary?.category, 'fell_back');
+    assert.equal(summary?.reasonCode, undefined);
+    assert.equal(summary?.headline, 'Fell back');
+    assert.equal(
+        summary?.explanation,
+        'Fallback planner-contract metadata is present in this trace.'
+    );
+});
+
 test('buildRunOutcomeSummary returns skipped for explicit skipped reason', () => {
     const execution: ExecutionEvent[] = [
         {

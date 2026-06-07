@@ -497,6 +497,172 @@ export type WorkflowLimitStop = {
 };
 
 /**
+ * Primitive workflow step signal values.
+ *
+ * Keep this wire shape simple and serializable. Named signal groups below
+ * document the stable keys readers may depend on without turning the whole
+ * signal bag into a closed union.
+ */
+export type StepSignalValue = string | number | boolean | null;
+
+export type StepSignals = Record<string, StepSignalValue>;
+
+/**
+ * Planner-emitted terminal/action vocabulary as recorded in workflow lineage.
+ *
+ * These values describe observed planner output. Backend workflow policy still
+ * decides whether and how that output is applied.
+ */
+export type WorkflowPlannerAction = 'message' | 'react' | 'ignore' | 'image';
+
+export type WorkflowPlannerModality = 'text' | 'tts';
+
+/**
+ * Terminal non-message actions recorded by the workflow finalization step.
+ */
+export type WorkflowTerminalAction = 'react' | 'ignore' | 'image';
+
+/**
+ * Advisory routing hint lanes derived from assess output.
+ *
+ * These hints may reorder candidate profiles for a revision attempt. They do
+ * not override backend routing policy, capability checks, or fail-open limits.
+ */
+export type WorkflowRoutingHintLane =
+    | 'openai_first_logic'
+    | 'ollama_first_style'
+    | 'cheaper_first'
+    | 'none';
+
+export type WorkflowRoutingHintConflictResolution = 'logic_over_style';
+
+/**
+ * Normalized review-decision parse failure reasons.
+ *
+ * This mirrors backend parser outcomes so lineage can explain fail-open review
+ * termination without storing raw model output.
+ */
+export type WorkflowReviewParseFailureReason =
+    | 'empty_output'
+    | 'non_json_object'
+    | 'invalid_json'
+    | 'schema_invalid';
+
+/**
+ * Bounded routing-chain attempt telemetry stored as JSON in step signals.
+ *
+ * The public signal bag only carries `routingChainAttemptsJson`, so this type
+ * documents the array shape encoded there. It is diagnostic metadata, not a
+ * routing API for clients.
+ */
+export type WorkflowRoutingChainAttemptSignal = {
+    index: number;
+    profileId: string;
+    provider?: string;
+    model?: string;
+    status: string;
+    reasonCode?: string;
+    chooseOneUsed: boolean;
+    chooseOneSelectedIndex?: number;
+    seedKeyType?: string;
+};
+
+/**
+ * Canonical routing-chain signal keys emitted by plan/generate/assess steps.
+ *
+ * Selected profile keys are nullable because exhausted chains intentionally
+ * record "no selected profile" while preserving fail-open lineage.
+ */
+export type WorkflowRoutingChainSignals = StepSignals & {
+    routingChainAttemptCount: number;
+    routingChainAttemptsJson: string;
+    selectedProfileId?: string | null;
+    selectedProvider?: string | null;
+    selectedModel?: string | null;
+    routedProfileId?: string | null;
+    routedProvider?: string | null;
+    routedModel?: string | null;
+};
+
+/**
+ * Canonical signal keys for workflow `plan` steps.
+ *
+ * These fields mirror planner execution metadata in workflow lineage. They
+ * remain backend-authored facts and should not be treated as planner authority.
+ */
+export type WorkflowPlannerStepSignals = StepSignals & {
+    applyOutcome: PlannerExecutionApplyOutcome;
+    purpose: PlannerExecutionPurpose;
+    contractType: PlannerExecutionContractType;
+    action?: WorkflowPlannerAction;
+    modality?: WorkflowPlannerModality;
+    requestedCapabilityProfile?: string;
+    selectedCapabilityProfile?: string;
+    profileId?: string;
+    originalProfileId?: string;
+    effectiveProfileId?: string;
+    provider?: string;
+    mattered?: boolean;
+    matteredControlCount?: number;
+};
+
+/**
+ * Assess-step routing hint signals carried forward into later review-loop
+ * steps so operators can see why a revision candidate order changed.
+ */
+export type WorkflowAssessRoutingHintSignals = StepSignals & {
+    assessRoutingHintsCsv?: string;
+    routingHintApplied: WorkflowRoutingHintLane;
+    routingHintConflictResolved?: WorkflowRoutingHintConflictResolution;
+};
+
+/**
+ * Tool clarification signals.
+ *
+ * Clarification is a stop-before-generation outcome. These keys summarize the
+ * user prompt needed to continue without embedding the full option payload in
+ * workflow lineage.
+ */
+export type WorkflowToolClarificationSignals = StepSignals & {
+    clarificationReasonCode: string;
+    clarificationOptionCount: number;
+};
+
+export type WorkflowTerminalActionSignals = StepSignals & {
+    terminalAction: WorkflowTerminalAction;
+};
+
+/**
+ * Generate-step refinement signals.
+ *
+ * `refinementApplied` is intentionally true-only so readers can distinguish an
+ * executed revision draft from failed or merely requested refinement paths.
+ */
+export type WorkflowRefinementSignals = StepSignals & {
+    refinementApplied: true;
+    refinementSourceStepId: string;
+    appliedModuleCount: number;
+    appliedModuleIdsCsv?: string;
+    reentryAttempt?: number;
+};
+
+/**
+ * Assess parse-failure signals.
+ *
+ * These explain why review failed open while keeping raw assess output out of
+ * the public workflow record.
+ */
+export type WorkflowReviewParseFailureSignals = StepSignals & {
+    reviewParseStatus: 'failed';
+    reviewParseFailureReason: WorkflowReviewParseFailureReason;
+    reviewParseFailureMessage: string;
+    reviewParseOutputLength: number;
+    reviewParseIssueCount?: number;
+    reviewParseFirstIssuePath?: string;
+    reviewParseFirstIssueCode?: string;
+};
+
+/**
  * Canonical assess-step decisions emitted by Reviewed profiles.
  * These are advisory outputs used by workflow transitions, not policy authority.
  */
@@ -547,7 +713,7 @@ export type StepOutcome = {
      * `reviewDecision` + `reviewReason` as the canonical decision seam and
      * emit non-empty `revisionInstruction` when `reviewDecision === "revise"`.
      */
-    signals?: Record<string, string | number | boolean | null>;
+    signals?: StepSignals;
     recommendations?: string[];
 };
 

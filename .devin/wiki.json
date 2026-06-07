@@ -243,6 +243,11 @@
                 "packages/backend/src/services/chatService/planGenerationInput.ts",
                 "packages/backend/src/services/workflowProfileRegistry.ts",
                 "packages/backend/src/services/workflowProfileContract.ts",
+                "packages/contracts/src/policy/types.ts",
+                "packages/contracts/src/policy/workflowStepSignals.ts",
+                "packages/contracts/src/policy/workflowReceipt.ts",
+                "packages/contracts/src/policy/executionFormatting.ts",
+                "packages/web/src/utils/traceOutcome.ts",
                 "packages/backend/test/workflowEngine.test.ts",
                 "packages/backend/test/workflowProfileRegistry.test.ts",
                 "packages/backend/test/chatService.test.ts",
@@ -280,6 +285,22 @@
                 {
                     "author": "Maintainer",
                     "content": "TRACE alignment flows through assess lineage signals and runtime finalization, with target/final comparison semantics normalized via shared contracts helpers and canonical axis keys."
+                },
+                {
+                    "author": "Maintainer",
+                    "content": "Explain workflow step signals as small public clues attached to step records. They are for lineage and receipts, not a place to dump raw prompts, raw model output, or broad telemetry."
+                },
+                {
+                    "author": "Maintainer",
+                    "content": "Known signal groups now live in shared contracts: planner, routing chain, assess routing hint, tool clarification, terminal action, refinement, and review parse failure."
+                },
+                {
+                    "author": "Maintainer",
+                    "content": "Backend code should emit known workflow signals through shared builders, and UI or receipt code should read them through shared helpers instead of checking magic signal keys directly."
+                },
+                {
+                    "author": "Maintainer",
+                    "content": "Signal readers are intentionally cautious. Missing or malformed values should produce simple answers like false or null, while the public signal bag remains open for future primitive fields."
                 }
             ]
         },
@@ -602,9 +623,14 @@
             "parent": "Packages",
             "entrypoints": [
                 "packages/contracts/src/policy",
+                "packages/contracts/src/policy/types.ts",
+                "packages/contracts/src/policy/workflowStepSignals.ts",
                 "packages/contracts/src/web/types.ts",
                 "packages/contracts/src/web/schemas.ts",
-                "docs/api/openapi.yaml"
+                "docs/api/openapi.yaml",
+                "packages/contracts/test/webSchemas.test.ts",
+                "packages/contracts/test/workflowReceipt.test.ts",
+                "packages/contracts/test/executionFormatting.test.ts"
             ],
             "page_notes": [
                 {
@@ -613,6 +639,22 @@
                 },
                 {
                     "content": "Be explicit about the ownership split: OpenAPI defines the wire contract, shared TypeScript types document usage, and runtime schemas enforce data at runtime.",
+                    "author": "Maintainer"
+                },
+                {
+                    "content": "Cover response metadata as a public contract. Important fields include workflow lineage, reviewRuntime, execution events, TRACE fields, provenance fields, and steerability controls.",
+                    "author": "Maintainer"
+                },
+                {
+                    "content": "For workflow step signals, explain the compromise plainly: the wire shape stays a primitive map, but known groups have named TypeScript types, builders, reader helpers, schema checks, OpenAPI docs, and focused tests.",
+                    "author": "Maintainer"
+                },
+                {
+                    "content": "ResponseMetadataSchema should stay tolerant of additive metadata, but it should still catch drift for known workflow signal groups such as plan signals, routing-chain pairs, clarification pairs, refinement markers, and assess decisions.",
+                    "author": "Maintainer"
+                },
+                {
+                    "content": "Point readers to OpenAPI for the external shape of WorkflowRecord, WorkflowStepRecord, WorkflowStepOutcome, WorkflowStepSignals, and ReviewRuntimeSummary.",
                     "author": "Maintainer"
                 }
             ]

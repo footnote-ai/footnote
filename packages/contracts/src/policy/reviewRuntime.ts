@@ -8,6 +8,10 @@
  */
 
 import type { ResponseMetadata, ReviewRuntimeSummary } from './types.js';
+import {
+    isPlannerFallbackStep,
+    isRefinementGenerateStep,
+} from './workflowStepSignals.js';
 
 /**
  * Returns true when planner fallback was explicitly recorded in workflow
@@ -17,18 +21,7 @@ const hasPlannerFallbackSignal = (
     metadata: Pick<ResponseMetadata, 'workflow' | 'execution'>
 ): boolean => {
     const plannerFallbackInWorkflow =
-        metadata.workflow?.steps?.some((step) => {
-            if (step.stepKind !== 'plan') {
-                return false;
-            }
-            if (
-                step.reasonCode === 'planner_runtime_error' ||
-                step.reasonCode === 'planner_invalid_output'
-            ) {
-                return true;
-            }
-            return step.outcome.signals?.contractType === 'fallback';
-        }) ?? false;
+        metadata.workflow?.steps?.some(isPlannerFallbackStep) ?? false;
 
     const plannerFallbackInExecution =
         metadata.execution?.some((event) => {
@@ -84,12 +77,7 @@ export const deriveReviewRuntimeSummary = (
                 step.stepKind === 'assess' && step.outcome.status === 'skipped'
         ) ?? false;
     const refinementGenerateExecuted =
-        metadata.workflow?.steps?.some(
-            (step) =>
-                step.stepKind === 'generate' &&
-                step.outcome.status === 'executed' &&
-                step.outcome.signals?.refinementApplied === true
-        ) ?? false;
+        metadata.workflow?.steps?.some(isRefinementGenerateStep) ?? false;
     const fallbackObserved =
         metadata.workflow?.terminationReason === 'executor_error_fail_open' ||
         hasPlannerFallbackSignal(metadata) ||

@@ -342,12 +342,13 @@ test('formatExecutionTimelineSummary appends workflow assess and refinement step
                     startedAt: '2026-04-01T00:00:00.150Z',
                     finishedAt: '2026-04-01T00:00:00.190Z',
                     durationMs: 40,
-                    reasonCode: 'generation_runtime_error',
                     outcome: {
-                        status: 'failed',
-                        summary: 'Refinement generation failed.',
+                        status: 'executed',
+                        summary: 'Generated refinement draft.',
                         signals: {
                             refinementApplied: true,
+                            refinementSourceStepId: 'step_assess_1',
+                            appliedModuleCount: 0,
                         },
                     },
                 },
@@ -357,6 +358,6 @@ test('formatExecutionTimelineSummary appends workflow assess and refinement step
 
     assert.equal(
         summary,
-        'planner:workflow(executed, 10ms) -> generation:gpt-5-mini(executed, 120ms) -> assess:workflow(executed, 20ms) -> generate:workflow(failed, generation_runtime_error, 40ms)'
+        'planner:workflow(executed, 10ms) -> generation:gpt-5-mini(executed, 120ms) -> assess:workflow(executed, 20ms) -> generate:workflow(executed, 40ms)'
     );
 });
