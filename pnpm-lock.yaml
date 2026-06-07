@@ -130,6 +130,9 @@ catalogs:
         mime-types:
             specifier: ^3.0.2
             version: 3.0.2
+        neverthrow:
+            specifier: ^8.2.0
+            version: 8.2.0
         node-fetch:
             specifier: ^3.3.2
             version: 3.3.2
@@ -348,6 +351,9 @@ importers:
             js-yaml:
                 specifier: 'catalog:'
                 version: 4.1.1
+            neverthrow:
+                specifier: 'catalog:'
+                version: 8.2.0
             nodemailer:
                 specifier: 'catalog:'
                 version: 8.0.7
@@ -2489,6 +2495,14 @@ packages:
             {
                 integrity: sha512-qujRfC8sFVInYSPPMLQByRh7zhwkGFS4+tyMQ83srV1qrxL4g8E2tyxVVyxd0+8QeBM1mIk9KbWxkegRr76XzA==,
             }
+
+    '@rollup/rollup-linux-x64-gnu@4.61.0':
+        resolution:
+            {
+                integrity: sha512-0uMOcf3eZ5K+K4cYHkdxShFMPlPXCOdfDFEFn9dNYAEEd2cVvmOfH7zFgRVoDgmtQ1m9k5q7qfrHzyMAubKYUA==,
+            }
+        cpu: [x64]
+        os: [linux]
 
     '@sap-ai-sdk/ai-api@2.10.0':
         resolution:
@@ -6008,6 +6022,13 @@ packages:
                 integrity: sha512-Yd3UES5mWCSqR+qNT93S3UoYUkqAZ9lLg8a7g9rimsWmYGK8cVToA4/sF3RrshdyV3sAGMXVUmpMYOw+dLpOuw==,
             }
 
+    neverthrow@8.2.0:
+        resolution:
+            {
+                integrity: sha512-kOCT/1MCPAxY5iUV3wytNFUMUolzuwd/VF/1KCx7kf6CutrOsTie+84zTGTpgQycjvfLdBBdvBvFLqFD2c0wkQ==,
+            }
+        engines: { node: '>=18' }
+
     node-abi@3.85.0:
         resolution:
             {
@@ -8853,6 +8874,9 @@ snapshots:
 
     '@rolldown/pluginutils@1.0.0-rc.7': {}
 
+    '@rollup/rollup-linux-x64-gnu@4.61.0':
+        optional: true
+
     '@sap-ai-sdk/ai-api@2.10.0':
         dependencies:
             '@sap-ai-sdk/core': 2.10.0
@@ -11192,6 +11216,10 @@ snapshots:
     negotiator@1.0.0: {}
 
     neo-async@2.6.2: {}
+
+    neverthrow@8.2.0:
+        optionalDependencies:
+            '@rollup/rollup-linux-x64-gnu': 4.61.0
 
     node-abi@3.85.0:
         dependencies:

@@ -21,6 +21,7 @@ import type {
     GenerationUsage,
     RuntimeMessage,
 } from './index.js';
+import { extractMarkdownLinkCitations } from './citationRecovery.js';
 import type { ToolExecutionContext } from '@footnote/contracts/policy';
 
 type VoltAgentOpenAiProviderOptions = {
@@ -541,80 +542,6 @@ const toVoltAgentCallProviderOptions = (
     return Object.keys(normalizedProviderOptions).length > 0
         ? normalizedProviderOptions
         : undefined;
-};
-
-const normalizeFallbackCitationTitle = (label: string): string => {
-    const normalizedLabel = label.trim();
-
-    return /^\d+$/.test(normalizedLabel) ? 'Source' : normalizedLabel;
-};
-
-const normalizeCitationUrl = (rawUrl: string): string | null => {
-    try {
-        const parsedUrl = new URL(rawUrl);
-        if (parsedUrl.protocol !== 'http:' && parsedUrl.protocol !== 'https:') {
-            return null;
-        }
-
-        return parsedUrl.toString();
-    } catch {
-        return null;
-    }
-};
-
-const extractMarkdownLinkCitations = (text: string): GenerationCitation[] => {
-    const citations: GenerationCitation[] = [];
-    const seenUrls = new Set<string>();
-    let index = 0;
-
-    while (index < text.length) {
-        const labelStart = text.indexOf('[', index);
-        if (labelStart === -1) {
-            break;
-        }
-
-        const labelEnd = text.indexOf(']', labelStart + 1);
-        if (labelEnd === -1) {
-            break;
-        }
-
-        if (labelEnd + 1 >= text.length || text[labelEnd + 1] !== '(') {
-            index = labelEnd + 1;
-            continue;
-        }
-
-        const urlStart = labelEnd + 2;
-        const urlEnd = text.indexOf(')', urlStart);
-        if (urlEnd === -1) {
-            break;
-        }
-
-        const rawLabel = text.slice(labelStart + 1, labelEnd);
-        const rawUrl = text.slice(urlStart, urlEnd);
-        index = urlEnd + 1;
-
-        if (
-            rawLabel.trim().length === 0 ||
-            rawUrl.length === 0 ||
-            /\s/.test(rawUrl) ||
-            (!rawUrl.startsWith('http://') && !rawUrl.startsWith('https://'))
-        ) {
-            continue;
-        }
-
-        const normalizedUrl = normalizeCitationUrl(rawUrl);
-        if (!normalizedUrl || seenUrls.has(normalizedUrl)) {
-            continue;
-        }
-
-        seenUrls.add(normalizedUrl);
-        citations.push({
-            title: normalizeFallbackCitationTitle(rawLabel),
-            url: normalizedUrl,
-        });
-    }
-
-    return citations;
 };
 
 const buildRepoExplainerQuery = (search: GenerationSearchRequest): string => {

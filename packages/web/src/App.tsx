@@ -66,7 +66,7 @@ const HomePage = (): JSX.Element => {
             <main id="main-content" className="page-content landing-page">
                 <section
                     id="about"
-                    className="landing-section landing-section--about"
+                    className="landing-section"
                     aria-labelledby="about-title"
                 >
                     <p className="landing-kicker">About</p>
@@ -88,7 +88,7 @@ const HomePage = (): JSX.Element => {
 
                 <section
                     id="get-started"
-                    className="landing-section landing-section--get-started"
+                    className="landing-section"
                     aria-labelledby="get-started-title"
                 >
                     <p className="landing-kicker">Get started</p>

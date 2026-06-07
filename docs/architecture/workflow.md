@@ -158,13 +158,13 @@ The `generate` step produces the current draft. The `assess` step returns
 `reviewDecision` and `reviewReason`.
 
 `reviewDecision` is either `finalize` or `revise`. When the decision is
-`revise`, `assess` may also emit `revisionInstruction`. `reviewReason` explains
+`revise`, `assess` may also return `revisionInstruction`. `reviewReason` explains
 why revision is needed. `revisionInstruction` gives concrete guidance for the
 follow-up refinement `generate` step.
 
-`revisionInstruction` is revise-only and is not emitted for `finalize`.
+`revisionInstruction` is revise-only and is not recorded for `finalize`.
 
-Assess may also emit TRACE alignment outputs:
+Assess may also return TRACE alignment outputs:
 
 - `traceAlignment`: `aligned` or `misaligned`
 - `traceAlignmentReason`: short reason when `traceAlignment` is `misaligned`
@@ -172,6 +172,12 @@ Assess may also emit TRACE alignment outputs:
 
 These assess outputs are used for lineage and metadata finalization. They stay
 inside workflow policy and limits.
+
+Review decision parsing uses explicit expected-failure results. If assess
+output is empty, not a JSON object, invalid JSON, or schema-invalid, the engine
+records a failed `assess` step and fails open to the latest successful draft.
+The failed step records the parse reason as serializable signals, not raw assess
+output.
 
 If the decision is `revise`, the engine may run planner re-entry and then a
 follow-up `generate` step for refinement.
@@ -216,6 +222,10 @@ Routing is fail-open where possible:
 - transient provider or upstream failures advance to the next chain entry
 - non-transient errors stop chain advancement for that step
 
+Routing-chain exhaustion is expected workflow data. Review and initial
+generation paths carry the exhausted reason code and attempts directly instead
+of converting those outcomes through exception-message control flow.
+
 Execution metadata and step signals record selected profile lineage, fallback
 attempts, and routing reason codes for trace inspection.
 
@@ -243,6 +253,17 @@ For `assess` steps, use `reviewDecision` and `reviewReason`. When
 `reviewDecision` is `revise`, `signals` may also include
 `revisionInstruction`. Assess signals may also include TRACE alignment and
 flattened final posture axes.
+
+Failed assess steps caused by invalid review parser output do not include
+`reviewDecision`, `reviewReason`, or `revisionInstruction`. They may include:
+
+- `reviewParseStatus`
+- `reviewParseFailureReason`
+- `reviewParseFailureMessage`
+- `reviewParseOutputLength`
+- `reviewParseIssueCount`
+- `reviewParseFirstIssuePath`
+- `reviewParseFirstIssueCode`
 
 Example assess signals:
 
@@ -285,7 +306,7 @@ When generation never occurred:
 
 - `steps` may be empty when termination happens before the first executable
   step
-- if any step executed before termination, emitted steps stay chronologically
+- if any step executed before termination, recorded steps stay chronologically
   ordered with valid parent references
 
 Profiles use the shared termination reason vocabulary rather than ad hoc
@@ -366,14 +387,14 @@ make a run look cleaner.
 
 Use this split when ownership is unclear:
 
-| Concern             | Engine core                                                                                    | Workflow profile                                                        | Adapters and callers                                       |
-| ------------------- | ---------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------- | ---------------------------------------------------------- |
-| Step legality       | handles the legality check before execution                                                    | declares intended flow and policy toggles                               | supplies policy and uses engine legality results           |
-| Limits              | handles hard-stop checks and stop-reason mapping                                               | declares default budgets within the shared limits model                 | passes config and surfaces the final result                |
-| Workflow state      | tracks step count, token totals, current step, and lineage progression                         | declares expected step shape                                            | treats engine-produced workflow state as the runtime state |
-| Step execution      | runs concrete steps today (`generate`, `assess`, refinement `generate`) and emits step records | defines step-specific behavior such as review parsing                   | builds requests and calls runtimes or providers            |
-| Termination reasons | assigns shared termination reasons                                                             | can request stop using shared reason handling                           | persists and returns engine-assigned reasons unchanged     |
-| Fail-open behavior  | handles degraded fail-open workflow behavior                                                   | can define recoverable profile behavior within shared fail-open meaning | keeps telemetry or persistence failures out of user blocks |
+| Concern             | Engine core                                                                                       | Workflow profile                                                        | Adapters and callers                                       |
+| ------------------- | ------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------- | ---------------------------------------------------------- |
+| Step legality       | handles the legality check before execution                                                       | declares intended flow and policy toggles                               | supplies policy and uses engine legality results           |
+| Limits              | handles hard-stop checks and stop-reason mapping                                                  | declares default budgets within the shared limits model                 | passes config and surfaces the final result                |
+| Workflow state      | tracks step count, token totals, current step, and lineage progression                            | declares expected step shape                                            | treats engine-produced workflow state as the runtime state |
+| Step execution      | runs concrete steps today (`generate`, `assess`, refinement `generate`) and records step outcomes | defines step-specific behavior such as review parsing                   | builds requests and calls runtimes or providers            |
+| Termination reasons | assigns shared termination reasons                                                                | can request stop using shared reason handling                           | persists and returns engine-assigned reasons unchanged     |
+| Fail-open behavior  | handles degraded fail-open workflow behavior                                                      | can define recoverable profile behavior within shared fail-open meaning | keeps telemetry or persistence failures out of user blocks |
 
 These rules stay stable as profiles expand:
 

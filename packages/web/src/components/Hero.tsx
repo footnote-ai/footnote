@@ -16,7 +16,7 @@ type HeroProps = {
 const Hero = ({ sectionId }: HeroProps): JSX.Element => (
     <section
         id={sectionId}
-        className="hero landing-section landing-section--demo"
+        className="hero landing-section"
         aria-labelledby="hero-title"
     >
         <div className="hero-copy">

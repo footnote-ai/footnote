@@ -1,23 +1,26 @@
 /**
  * @description: Verifies backend response metadata construction for TRACE chips.
  * @footnote-scope: test
- * @footnote-module: OpenAIServiceMetadataTests
+ * @footnote-module: ResponseMetadataTests
  * @footnote-risk: medium - Regressions here can silently drop or misstate provenance chip values.
  * @footnote-ethics: high - Incorrect chip defaults can mislead users about evidence and freshness.
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import type { ToolInvocationReasonCode } from '@footnote/contracts/policy';
+import type {
+    ToolInvocationReasonCode,
+    TraceAxisScore,
+} from '@footnote/contracts/policy';
 
 import {
-    type AssistantResponseMetadata,
+    type ResponseMetadataGenerationInput,
     buildResponseMetadata,
     type ResponseMetadataRuntimeContext,
-} from '../src/services/openaiService.js';
+} from '../src/services/responseMetadata.js';
 
-const baseAssistantMetadata = (
-    overrides: Partial<AssistantResponseMetadata> = {}
-): AssistantResponseMetadata => ({
+const baseGenerationMetadata = (
+    overrides: Partial<ResponseMetadataGenerationInput> = {}
+): ResponseMetadataGenerationInput => ({
     model: 'gpt-5-mini',
     provenance: 'Retrieved',
     tradeoffCount: 1,
@@ -35,7 +38,7 @@ const baseRuntimeContext = (
 
 test('buildResponseMetadata derives conservative chips for retrieved current-facts responses with no citations', () => {
     const metadata = buildResponseMetadata(
-        baseAssistantMetadata({ citations: [] }),
+        baseGenerationMetadata({ citations: [] }),
         baseRuntimeContext({
             retrieval: {
                 requested: true,
@@ -66,7 +69,7 @@ test('buildResponseMetadata derives conservative chips for retrieved current-fac
 
 test('buildResponseMetadata derives chips for retrieved current-facts responses with one citation', () => {
     const metadata = buildResponseMetadata(
-        baseAssistantMetadata(),
+        baseGenerationMetadata(),
         baseRuntimeContext({
             retrieval: {
                 requested: true,
@@ -83,7 +86,7 @@ test('buildResponseMetadata derives chips for retrieved current-facts responses 
 
 test('buildResponseMetadata derives stronger evidence for retrieved current-facts responses with multiple citations', () => {
     const metadata = buildResponseMetadata(
-        baseAssistantMetadata({
+        baseGenerationMetadata({
             citations: [
                 { title: 'One', url: 'https://example.com/1' },
                 { title: 'Two', url: 'https://example.com/2' },
@@ -106,7 +109,7 @@ test('buildResponseMetadata derives stronger evidence for retrieved current-fact
 
 test('buildResponseMetadata derives repo-explainer freshness more conservatively', () => {
     const metadata = buildResponseMetadata(
-        baseAssistantMetadata({
+        baseGenerationMetadata({
             citations: [
                 { title: 'One', url: 'https://example.com/1' },
                 { title: 'Two', url: 'https://example.com/2' },
@@ -130,7 +133,7 @@ test('buildResponseMetadata derives repo-explainer freshness more conservatively
 
 test('buildResponseMetadata preserves explicit chip values when present', () => {
     const metadata = buildResponseMetadata(
-        baseAssistantMetadata({
+        baseGenerationMetadata({
             evidenceScore: 5,
             freshnessScore: 2,
         }),
@@ -148,9 +151,29 @@ test('buildResponseMetadata preserves explicit chip values when present', () => 
     assert.equal(metadata.freshnessScore, 2);
 });
 
+test('buildResponseMetadata preserves explicit evidence while deriving missing freshness chip', () => {
+    const metadata = buildResponseMetadata(
+        baseGenerationMetadata({
+            evidenceScore: 5,
+            freshnessScore: undefined,
+        }),
+        baseRuntimeContext({
+            retrieval: {
+                requested: true,
+                used: true,
+                intent: 'current_facts',
+                contextSize: 'low',
+            },
+        })
+    );
+
+    assert.equal(metadata.evidenceScore, 5);
+    assert.equal(metadata.freshnessScore, 4);
+});
+
 test('buildResponseMetadata does not add chips for non-retrieved responses', () => {
     const metadata = buildResponseMetadata(
-        baseAssistantMetadata({ provenance: 'Speculative', citations: [] }),
+        baseGenerationMetadata({ provenance: 'Speculative', citations: [] }),
         baseRuntimeContext({
             retrieval: {
                 requested: true,
@@ -168,7 +191,7 @@ test('buildResponseMetadata does not add chips for non-retrieved responses', () 
 
 test('buildResponseMetadata can classify as retrieved from execution-derived signals without citations', () => {
     const metadata = buildResponseMetadata(
-        baseAssistantMetadata({
+        baseGenerationMetadata({
             provenance: 'Inferred',
             citations: [],
         }),
@@ -199,7 +222,7 @@ test('buildResponseMetadata can classify as retrieved from execution-derived sig
 
 test('buildResponseMetadata does not classify as retrieved when TrustGraph evidence is available but unused and uncorroborated', () => {
     const metadata = buildResponseMetadata(
-        baseAssistantMetadata({
+        baseGenerationMetadata({
             provenance: 'Inferred',
             citations: [],
         }),
@@ -226,7 +249,7 @@ test('buildResponseMetadata does not classify as retrieved when TrustGraph evide
 
 test('buildResponseMetadata uses planner fallback tradeoffCount when assistant metadata omits count', () => {
     const metadata = buildResponseMetadata(
-        baseAssistantMetadata({ tradeoffCount: undefined }),
+        baseGenerationMetadata({ tradeoffCount: undefined }),
         baseRuntimeContext({
             plannerTemperament: { extent: 4 },
         })
@@ -237,7 +260,7 @@ test('buildResponseMetadata uses planner fallback tradeoffCount when assistant m
 
 test('buildResponseMetadata keeps explicit assistant tradeoffCount over planner fallback', () => {
     const metadata = buildResponseMetadata(
-        baseAssistantMetadata({ tradeoffCount: 3 }),
+        baseGenerationMetadata({ tradeoffCount: 3 }),
         baseRuntimeContext({
             plannerTemperament: { extent: 5 },
         })
@@ -248,7 +271,7 @@ test('buildResponseMetadata keeps explicit assistant tradeoffCount over planner 
 
 test('buildResponseMetadata defaults tradeoffCount to 0 when assistant and planner fallback are absent', () => {
     const metadata = buildResponseMetadata(
-        baseAssistantMetadata({ tradeoffCount: undefined }),
+        baseGenerationMetadata({ tradeoffCount: undefined }),
         baseRuntimeContext()
     );
 
@@ -257,7 +280,7 @@ test('buildResponseMetadata defaults tradeoffCount to 0 when assistant and plann
 
 test('buildResponseMetadata emits canonical trace_target and trace_final fields', () => {
     const metadata = buildResponseMetadata(
-        baseAssistantMetadata(),
+        baseGenerationMetadata(),
         baseRuntimeContext({
             plannerTemperament: {
                 tightness: 4,
@@ -277,9 +300,32 @@ test('buildResponseMetadata emits canonical trace_target and trace_final fields'
     assert.equal(metadata.trace_final_reason_code, undefined);
 });
 
+test('buildResponseMetadata drops invalid TRACE axes before comparing target and final posture', () => {
+    const metadata = buildResponseMetadata(
+        baseGenerationMetadata(),
+        baseRuntimeContext({
+            plannerTemperament: {
+                tightness: 2,
+                rationale: 8 as unknown as TraceAxisScore,
+            },
+            finalTemperament: {
+                tightness: 2,
+            },
+        })
+    );
+
+    assert.deepEqual(metadata.trace_target, {
+        tightness: 2,
+    });
+    assert.deepEqual(metadata.trace_final, {
+        tightness: 2,
+    });
+    assert.equal(metadata.trace_final_reason_code, undefined);
+});
+
 test('buildResponseMetadata emits trace_final_reason_code when final posture differs', () => {
     const metadata = buildResponseMetadata(
-        baseAssistantMetadata(),
+        baseGenerationMetadata(),
         baseRuntimeContext({
             plannerTemperament: {
                 tightness: 2,
@@ -305,7 +351,7 @@ test('buildResponseMetadata emits trace_final_reason_code when final posture dif
 
 test('buildResponseMetadata accepts assess_trace_misalignment as explicit divergence reason', () => {
     const metadata = buildResponseMetadata(
-        baseAssistantMetadata(),
+        baseGenerationMetadata(),
         baseRuntimeContext({
             plannerTemperament: {
                 tightness: 2,
@@ -322,7 +368,7 @@ test('buildResponseMetadata accepts assess_trace_misalignment as explicit diverg
 
 test('buildResponseMetadata defaults trace_final_reason_code when final posture differs without explicit code', () => {
     const metadata = buildResponseMetadata(
-        baseAssistantMetadata(),
+        baseGenerationMetadata(),
         baseRuntimeContext({
             plannerTemperament: {
                 tightness: 2,
@@ -347,7 +393,7 @@ test('buildResponseMetadata defaults trace_final_reason_code when final posture 
 
 test('buildResponseMetadata includes steerability controls when provided by runtime context', () => {
     const metadata = buildResponseMetadata(
-        baseAssistantMetadata(),
+        baseGenerationMetadata(),
         baseRuntimeContext({
             steerabilityControls: {
                 version: 'v1',
@@ -382,7 +428,7 @@ test('buildResponseMetadata includes steerability controls when provided by runt
 
 test('buildResponseMetadata writes execution timeline from runtime context', () => {
     const metadata = buildResponseMetadata(
-        baseAssistantMetadata(),
+        baseGenerationMetadata(),
         baseRuntimeContext({
             executionContext: {
                 planner: {
@@ -472,7 +518,7 @@ test('buildResponseMetadata writes execution timeline from runtime context', () 
 
 test('buildResponseMetadata ignores planner execution bridge fields and keeps execution timeline non-planner only', () => {
     const metadata = buildResponseMetadata(
-        baseAssistantMetadata(),
+        baseGenerationMetadata(),
         baseRuntimeContext({
             workflow: {
                 workflowId: 'wf_123',
@@ -546,7 +592,7 @@ test('buildResponseMetadata ignores planner execution bridge fields and keeps ex
 
 test('buildResponseMetadata mirrors modelVersion from final generation execution model', () => {
     const metadata = buildResponseMetadata(
-        baseAssistantMetadata({ model: 'fallback-model' }),
+        baseGenerationMetadata({ model: 'fallback-model' }),
         baseRuntimeContext({
             modelVersion: 'runtime-fallback-model',
             executionContext: {
@@ -565,7 +611,7 @@ test('buildResponseMetadata mirrors modelVersion from final generation execution
 
 test('buildResponseMetadata normalizes skipped tool event with fallback reasonCode', () => {
     const metadata = buildResponseMetadata(
-        baseAssistantMetadata(),
+        baseGenerationMetadata(),
         baseRuntimeContext({
             executionContext: {
                 tool: {
@@ -588,7 +634,7 @@ test('buildResponseMetadata normalizes skipped tool event with fallback reasonCo
 
 test('buildResponseMetadata preserves executed tool reasonCode for reroute auditability', () => {
     const metadata = buildResponseMetadata(
-        baseAssistantMetadata(),
+        baseGenerationMetadata(),
         baseRuntimeContext({
             executionContext: {
                 tool: {
@@ -612,7 +658,7 @@ test('buildResponseMetadata preserves executed tool reasonCode for reroute audit
 
 test('buildResponseMetadata preserves tool_unavailable reasonCode for skipped tool outcomes and JSON serialization', () => {
     const metadata = buildResponseMetadata(
-        baseAssistantMetadata(),
+        baseGenerationMetadata(),
         baseRuntimeContext({
             executionContext: {
                 tool: {
@@ -640,7 +686,7 @@ test('buildResponseMetadata preserves tool_unavailable reasonCode for skipped to
 
 test('buildResponseMetadata normalizes failed tool event with fallback reasonCode', () => {
     const metadata = buildResponseMetadata(
-        baseAssistantMetadata(),
+        baseGenerationMetadata(),
         baseRuntimeContext({
             executionContext: {
                 tool: {
@@ -663,7 +709,7 @@ test('buildResponseMetadata normalizes failed tool event with fallback reasonCod
 
 test('buildResponseMetadata ignores failed planner execution bridge fields', () => {
     const metadata = buildResponseMetadata(
-        baseAssistantMetadata(),
+        baseGenerationMetadata(),
         baseRuntimeContext({
             executionContext: {
                 planner: {
@@ -687,7 +733,7 @@ test('buildResponseMetadata ignores failed planner execution bridge fields', () 
 
 test('buildResponseMetadata ignores planner execution bridge fields regardless of planner reasonCode validity', () => {
     const metadata = buildResponseMetadata(
-        baseAssistantMetadata(),
+        baseGenerationMetadata(),
         baseRuntimeContext({
             executionContext: {
                 planner: {
@@ -711,7 +757,7 @@ test('buildResponseMetadata ignores planner execution bridge fields regardless o
 
 test('buildResponseMetadata does not emit evaluator/generation reasonCode for skipped status and ignores planner bridge', () => {
     const metadata = buildResponseMetadata(
-        baseAssistantMetadata(),
+        baseGenerationMetadata(),
         baseRuntimeContext({
             executionContext: {
                 planner: {
@@ -758,7 +804,7 @@ test('buildResponseMetadata does not emit evaluator/generation reasonCode for sk
 
 test('buildResponseMetadata drops invalid generation reasonCode instead of rewriting it', () => {
     const metadata = buildResponseMetadata(
-        baseAssistantMetadata(),
+        baseGenerationMetadata(),
         baseRuntimeContext({
             executionContext: {
                 generation: {
@@ -785,7 +831,7 @@ test('buildResponseMetadata drops invalid generation reasonCode instead of rewri
 
 test('buildResponseMetadata normalizes invalid tool reasonCode by status defaults', () => {
     const skippedMetadata = buildResponseMetadata(
-        baseAssistantMetadata(),
+        baseGenerationMetadata(),
         baseRuntimeContext({
             executionContext: {
                 tool: {
@@ -808,7 +854,7 @@ test('buildResponseMetadata normalizes invalid tool reasonCode by status default
     ]);
 
     const failedMetadata = buildResponseMetadata(
-        baseAssistantMetadata(),
+        baseGenerationMetadata(),
         baseRuntimeContext({
             executionContext: {
                 tool: {
@@ -833,7 +879,7 @@ test('buildResponseMetadata normalizes invalid tool reasonCode by status default
 
 test('buildResponseMetadata keeps failed evaluator event without a reasonCode when unavailable', () => {
     const metadata = buildResponseMetadata(
-        baseAssistantMetadata(),
+        baseGenerationMetadata(),
         baseRuntimeContext({
             executionContext: {
                 evaluator: {
@@ -854,7 +900,7 @@ test('buildResponseMetadata keeps failed evaluator event without a reasonCode wh
 
 test('buildResponseMetadata includes totalDurationMs when runtime context provides it', () => {
     const metadata = buildResponseMetadata(
-        baseAssistantMetadata(),
+        baseGenerationMetadata(),
         baseRuntimeContext({
             totalDurationMs: 1234,
         })
@@ -865,7 +911,7 @@ test('buildResponseMetadata includes totalDurationMs when runtime context provid
 
 test('buildResponseMetadata defaults reviewRuntime to not_reviewed when no review path metadata exists', () => {
     const metadata = buildResponseMetadata(
-        baseAssistantMetadata(),
+        baseGenerationMetadata(),
         baseRuntimeContext()
     );
 
@@ -876,7 +922,7 @@ test('buildResponseMetadata defaults reviewRuntime to not_reviewed when no revie
 
 test('buildResponseMetadata sets reviewRuntime to reviewed_no_revision when assess executed without refinement-applied generate', () => {
     const metadata = buildResponseMetadata(
-        baseAssistantMetadata(),
+        baseGenerationMetadata(),
         baseRuntimeContext({
             workflow: {
                 workflowId: 'wf_1',
@@ -928,7 +974,7 @@ test('buildResponseMetadata sets reviewRuntime to reviewed_no_revision when asse
 
 test('buildResponseMetadata sets reviewRuntime to revised when refinement-applied generate step executed', () => {
     const metadata = buildResponseMetadata(
-        baseAssistantMetadata(),
+        baseGenerationMetadata(),
         baseRuntimeContext({
             workflow: {
                 workflowId: 'wf_2',
@@ -998,7 +1044,7 @@ test('buildResponseMetadata sets reviewRuntime to revised when refinement-applie
 
 test('buildResponseMetadata does not mark revised when assess requested refinement without refinement-applied generate', () => {
     const metadata = buildResponseMetadata(
-        baseAssistantMetadata(),
+        baseGenerationMetadata(),
         baseRuntimeContext({
             workflow: {
                 workflowId: 'wf_2b',
@@ -1053,7 +1099,7 @@ test('buildResponseMetadata does not mark revised when assess requested refineme
 
 test('buildResponseMetadata sets reviewRuntime to skipped when assess step is explicitly skipped', () => {
     const metadata = buildResponseMetadata(
-        baseAssistantMetadata(),
+        baseGenerationMetadata(),
         baseRuntimeContext({
             workflow: {
                 workflowId: 'wf_3',
@@ -1100,7 +1146,7 @@ test('buildResponseMetadata sets reviewRuntime to skipped when assess step is ex
 
 test('buildResponseMetadata sets reviewRuntime to fallback when fail-open fallback path was recorded', () => {
     const metadata = buildResponseMetadata(
-        baseAssistantMetadata(),
+        baseGenerationMetadata(),
         baseRuntimeContext({
             workflow: {
                 workflowId: 'wf_4',

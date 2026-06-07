@@ -33,11 +33,12 @@ import type {
     PostChatRequest,
     PostChatResponse,
 } from '@footnote/contracts/web';
+import type { Result } from 'neverthrow';
 import type {
-    AssistantResponseMetadata,
-    AssistantUsage,
+    GenerationMetadataUsage,
+    ResponseMetadataGenerationInput,
     ResponseMetadataRuntimeContext,
-} from './openaiService.js';
+} from './responseMetadata.js';
 import {
     estimateBackendTextCost,
     recordBackendLLMUsage,
@@ -83,16 +84,29 @@ import { runtimeConfig } from '../config.js';
 import { buildToolClarificationResponse } from './tools/toolClarificationResponse.js';
 import { buildWeatherToolFailureResponse } from './tools/weatherToolFailureResponse.js';
 import { resolveStepRoutingChain } from './stepRoutingChains.js';
-import { executeStepRoutingChain } from './stepRoutingExecutor.js';
+import {
+    executeStepRoutingChain,
+    type RoutingChainAttemptLog,
+} from './stepRoutingExecutor.js';
 import type { ConversationContextEnvelope } from './conversationContextService.js';
 import { sanitizeReviewModuleIds } from './reviewModules.js';
 import {
     fromAssessSignalsToFinalTemperament,
     hasDifferentTemperament,
 } from './traceAlignmentSignals.js';
+import {
+    toRoutingChainResult,
+    type RoutingChainFailure,
+} from './routingChainResult.js';
 
 const SURFACED_NO_GENERATION_MESSAGE =
     'I could not generate a response for this request.';
+
+type GenerateWithChainSuccess = {
+    generationResult: GenerationResult;
+    selectedProfile: ModelProfile;
+    attempts: RoutingChainAttemptLog[];
+};
 
 /**
  * Returns context-step results in canonical order for downstream consumers.
@@ -109,6 +123,21 @@ const getEffectiveContextStepResults = (
         ? [workflowContextStepResult]
         : []);
 
+const getContextStepSources = (
+    contextStepResult: ContextStepResult
+): Citation[] =>
+    contextStepResult.outcome === 'executed' ||
+    contextStepResult.outcome === 'failed'
+        ? (contextStepResult.sources ?? [])
+        : [];
+
+const collectContextStepSources = (
+    contextStepResults: ContextStepResult[]
+): Citation[] =>
+    contextStepResults.flatMap((contextStepResult) =>
+        getContextStepSources(contextStepResult)
+    );
+
 /**
  * Builds the fail-open short-circuit response surface for context-step outcomes.
  *
@@ -118,9 +147,8 @@ const getEffectiveContextStepResults = (
  * This branch consumes the full context-step result list when available and
  * falls back to single-result shape when only that field is present.
  *
- * Citation rule: when generation continues, citations from all executed context
- * integrations are merged later into assistant metadata. This helper does not
- * own that merge.
+ * Citation rule: short-circuit responses still preserve citations produced by
+ * executed or failed sibling context integrations.
  *
  */
 const buildContextStepShortCircuit = ({
@@ -145,7 +173,7 @@ const buildContextStepShortCircuit = ({
     conversationSnapshot: string;
     latestUserInput: string | undefined;
     buildResponseMetadata: (
-        assistantMetadata: AssistantResponseMetadata,
+        generationMetadata: ResponseMetadataGenerationInput,
         runtimeContext: ResponseMetadataRuntimeContext
     ) => ResponseMetadata;
 }):
@@ -193,6 +221,28 @@ const buildContextStepShortCircuit = ({
     });
 
     const generationMetadataContext = buildGenerationMetadataContext();
+    const contextStepSources = collectContextStepSources(
+        effectiveContextStepResults
+    );
+    const buildResponseMetadataWithContextSources = (
+        generationMetadata: ResponseMetadataGenerationInput,
+        runtimeContext: ResponseMetadataRuntimeContext
+    ): ResponseMetadata => {
+        if (contextStepSources.length === 0) {
+            return buildResponseMetadata(generationMetadata, runtimeContext);
+        }
+
+        return buildResponseMetadata(
+            {
+                ...generationMetadata,
+                citations: [
+                    ...(generationMetadata.citations ?? []),
+                    ...contextStepSources,
+                ],
+            },
+            runtimeContext
+        );
+    };
 
     const contextStepShortCircuitPolicies: Array<{
         policyId: 'clarification_required' | 'weather_failure_message';
@@ -201,22 +251,22 @@ const buildContextStepShortCircuit = ({
     }> = [
         {
             policyId: 'clarification_required',
-            matches: (result) =>
-                result.executionContext.clarification !== undefined,
+            matches: (result) => result.outcome === 'needs_clarification',
             buildResponse: (result) =>
                 buildToolClarificationResponse({
                     toolContext: result.executionContext,
                     metadataContext: generationMetadataContext as Parameters<
                         typeof buildToolClarificationResponse
                     >[0]['metadataContext'],
-                    buildResponseMetadata,
+                    buildResponseMetadata:
+                        buildResponseMetadataWithContextSources,
                 }),
         },
         {
             policyId: 'weather_failure_message',
             matches: (result) =>
                 result.executionContext.toolName === 'weather_forecast' &&
-                result.executionContext.status === 'failed',
+                result.outcome === 'failed',
             buildResponse: (result) =>
                 buildWeatherToolFailureResponse({
                     toolContext: result.executionContext,
@@ -224,7 +274,8 @@ const buildContextStepShortCircuit = ({
                         typeof buildWeatherToolFailureResponse
                     >[0]['metadataContext'],
                     latestUserInput: latestUserInput ?? conversationSnapshot,
-                    buildResponseMetadata,
+                    buildResponseMetadata:
+                        buildResponseMetadataWithContextSources,
                 }),
         },
     ];
@@ -660,7 +711,7 @@ export type CreateChatServiceOptions = {
     generationRuntime: GenerationRuntime;
     storeTrace: (metadata: ResponseMetadata) => Promise<void>;
     buildResponseMetadata: (
-        assistantMetadata: AssistantResponseMetadata,
+        generationMetadata: ResponseMetadataGenerationInput,
         runtimeContext: ResponseMetadataRuntimeContext
     ) => ResponseMetadata;
     // Fallback model used when callers do not specify one and runtime output
@@ -790,19 +841,20 @@ export const createChatService = ({
      * Normalizes one runtime result into the metadata shape backend already
      * uses for provenance, trace storage, and cost accounting.
      */
-    const buildAssistantMetadata = (
+    const buildGenerationMetadata = (
         generationResult: GenerationResult,
         generation: ChatGenerationPlan | undefined,
         requestedModel: string | undefined,
         contextStepSources?: Citation[]
-    ): AssistantResponseMetadata => {
-        const usage: AssistantUsage | undefined = generationResult.usage
-            ? {
-                  promptTokens: generationResult.usage.promptTokens,
-                  completionTokens: generationResult.usage.completionTokens,
-                  totalTokens: generationResult.usage.totalTokens,
-              }
-            : undefined;
+    ): ResponseMetadataGenerationInput => {
+        const usage: GenerationMetadataUsage | undefined =
+            generationResult.usage
+                ? {
+                      promptTokens: generationResult.usage.promptTokens,
+                      completionTokens: generationResult.usage.completionTokens,
+                      totalTokens: generationResult.usage.totalTokens,
+                  }
+                : undefined;
 
         const generationCitations = generationResult.citations ?? [];
         const mergedCitations =
@@ -1025,24 +1077,9 @@ export const createChatService = ({
             );
             const runGenerateWithChain = async (
                 request: GenerationRequest
-            ): Promise<{
-                generationResult: GenerationResult;
-                selectedProfile: ModelProfile;
-                attempts: Array<{
-                    index: number;
-                    step: string;
-                    profileId: string;
-                    provider?: string;
-                    model?: string;
-                    status: string;
-                    reasonCode?: string;
-                    errorMessage?: string;
-                    chooseOneUsed: boolean;
-                    chooseOneCandidates?: string[];
-                    chooseOneSelectedIndex?: number;
-                    seedKeyType?: 'session_id' | 'correlation_id';
-                }>;
-            }> => {
+            ): Promise<
+                Result<GenerateWithChainSuccess, RoutingChainFailure>
+            > => {
                 const chainResult = await executeStepRoutingChain({
                     step: 'generate',
                     candidates: generateProfileCandidates,
@@ -1056,14 +1093,12 @@ export const createChatService = ({
                             capabilities: profile.capabilities,
                         }),
                 });
-                if (chainResult.status !== 'executed') {
-                    throw new Error(chainResult.reasonCode);
-                }
-                return {
-                    generationResult: chainResult.value,
-                    selectedProfile: chainResult.selected.profile,
-                    attempts: chainResult.attempts,
-                };
+                const routingResult = toRoutingChainResult(chainResult);
+                return routingResult.map((executedResult) => ({
+                    generationResult: executedResult.value,
+                    selectedProfile: executedResult.selected.profile,
+                    attempts: executedResult.attempts,
+                }));
             };
 
             return {
@@ -1364,14 +1399,42 @@ export const createChatService = ({
                                     await runGenerateWithChain(
                                         effectiveGenerationRequest
                                     );
-                                generationResult =
-                                    chainGenerationResult.generationResult;
-                                routedGenerationSelectedProfile =
-                                    chainGenerationResult.selectedProfile;
-                                recordUsageForStep(
-                                    generationResult,
-                                    effectiveGenerationRequest.model
-                                );
+                                if (chainGenerationResult.isErr()) {
+                                    logger.warn(
+                                        'Fallback generation after internal no-generation exhausted routing chain; preserving no-generation lineage.',
+                                        {
+                                            workflowName:
+                                                workflowProfile.workflowName,
+                                            reasonCode:
+                                                chainGenerationResult.error
+                                                    .reasonCode,
+                                            terminationReason:
+                                                workflowResult.workflowLineage
+                                                    .terminationReason,
+                                            routingChainAttemptCount:
+                                                chainGenerationResult.error
+                                                    .attempts.length,
+                                        }
+                                    );
+                                    generationResult = {
+                                        text: SURFACED_NO_GENERATION_MESSAGE,
+                                        model: effectiveGenerationRequest.model,
+                                        provenance: 'Inferred',
+                                        citations: [],
+                                    };
+                                } else {
+                                    generationResult =
+                                        chainGenerationResult.value
+                                            .generationResult;
+                                    fallbackAfterInternalNoGeneration = true;
+                                    routedGenerationSelectedProfile =
+                                        chainGenerationResult.value
+                                            .selectedProfile;
+                                    recordUsageForStep(
+                                        generationResult,
+                                        effectiveGenerationRequest.model
+                                    );
+                                }
                             } catch (error) {
                                 logger.warn(
                                     'Fallback generation after internal no-generation failed; preserving no-generation lineage.',
@@ -1396,7 +1459,6 @@ export const createChatService = ({
                                     citations: [],
                                 };
                             }
-                            fallbackAfterInternalNoGeneration = true;
                             break;
                         }
                         if (
@@ -1439,13 +1501,31 @@ export const createChatService = ({
                 const chainGenerationResult = await runGenerateWithChain(
                     effectiveGenerationRequest
                 );
-                generationResult = chainGenerationResult.generationResult;
-                routedGenerationSelectedProfile =
-                    chainGenerationResult.selectedProfile;
-                recordUsageForStep(
-                    generationResult,
-                    effectiveGenerationRequest.model
-                );
+                if (chainGenerationResult.isErr()) {
+                    logger.warn(
+                        'Initial generation routing chain failed; surfacing no-generation response.',
+                        {
+                            reasonCode: chainGenerationResult.error.reasonCode,
+                            routingChainAttemptCount:
+                                chainGenerationResult.error.attempts.length,
+                        }
+                    );
+                    generationResult = {
+                        text: SURFACED_NO_GENERATION_MESSAGE,
+                        model: effectiveGenerationRequest.model,
+                        provenance: 'Inferred',
+                        citations: [],
+                    };
+                } else {
+                    generationResult =
+                        chainGenerationResult.value.generationResult;
+                    routedGenerationSelectedProfile =
+                        chainGenerationResult.value.selectedProfile;
+                    recordUsageForStep(
+                        generationResult,
+                        effectiveGenerationRequest.model
+                    );
+                }
             }
 
             return {
@@ -1509,10 +1589,12 @@ export const createChatService = ({
         // Backend authority merges all context-integration citations so callers
         // consume one canonical metadata citation surface.
         const contextStepSources =
-            workflowContextStepResults?.flatMap(
-                (contextStepResult) => contextStepResult.sources ?? []
-            ) ?? workflowContextStepResult?.sources;
-        const assistantMetadata = buildAssistantMetadata(
+            workflowContextStepResults !== undefined
+                ? collectContextStepSources(workflowContextStepResults)
+                : workflowContextStepResult !== undefined
+                  ? getContextStepSources(workflowContextStepResult)
+                  : undefined;
+        const generationMetadata = buildGenerationMetadata(
             generationResult,
             effectiveNormalizedGeneration,
             effectiveGenerationRequest.model,
@@ -1520,10 +1602,10 @@ export const createChatService = ({
         );
         if (
             trustGraphResult?.adapterStatus === 'success' &&
-            assistantMetadata.evidenceScore === undefined &&
+            generationMetadata.evidenceScore === undefined &&
             trustGraphResult.predicateViews.P_SUFF.coverageValue !== undefined
         ) {
-            assistantMetadata.evidenceScore = mapCoverageToTraceAxisScore(
+            generationMetadata.evidenceScore = mapCoverageToTraceAxisScore(
                 trustGraphResult.predicateViews.P_SUFF.coverageValue,
                 trustGraphResult.predicateViews.P_SUFF.conflictSignals.length
             );
@@ -1588,7 +1670,11 @@ export const createChatService = ({
                       } satisfies ToolExecutionContext)
                     : undefined;
 
-        const usageModel = assistantMetadata.model || defaultModel;
+        const usageModel =
+            generationMetadata.model ??
+            generationResult.model ??
+            effectiveGenerationRequest.model ??
+            defaultModel;
         type GenerationExecutionContext = NonNullable<
             NonNullable<
                 ResponseMetadataRuntimeContext['executionContext']
@@ -1645,9 +1731,7 @@ export const createChatService = ({
                           workflowSelectedGenerationProfile?.provider ??
                           effectiveGenerationRequest.provider ??
                           'internal',
-                      model:
-                          workflowSelectedGenerationProfile?.providerModel ??
-                          usageModel,
+                      model: usageModel,
                       durationMs: generationDurationMs,
                   } satisfies GenerationExecutionContext)
                 : routedGenerationSelectedProfile !== undefined
@@ -1656,7 +1740,7 @@ export const createChatService = ({
                         profileId: routedGenerationSelectedProfile.id,
                         effectiveProfileId: routedGenerationSelectedProfile.id,
                         provider: routedGenerationSelectedProfile.provider,
-                        model: routedGenerationSelectedProfile.providerModel,
+                        model: usageModel,
                         durationMs: generationDurationMs,
                     } satisfies GenerationExecutionContext)
                   : undefined;
@@ -1777,7 +1861,7 @@ export const createChatService = ({
 
         // Metadata is the contract that downstream UIs and trace storage rely on.
         const responseMetadata = buildResponseMetadata(
-            assistantMetadata,
+            generationMetadata,
             runtimeContext
         );
         const safetyTierRank: Record<SafetyTier, number> = {

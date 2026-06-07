@@ -377,6 +377,184 @@ const StepOutcomeSchema = z
     })
     .strict();
 
+type StepSignalRecord = Record<string, string | number | boolean | null>;
+
+const hasSignalKey = (
+    signals: StepSignalRecord | undefined,
+    key: string
+): boolean =>
+    signals !== undefined && Object.prototype.hasOwnProperty.call(signals, key);
+
+const addSignalIssue = (
+    context: z.RefinementCtx,
+    key: string,
+    message: string
+): void => {
+    context.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['outcome', 'signals', key],
+        message,
+    });
+};
+
+const validatePlannerStepSignals = (
+    signals: StepSignalRecord | undefined,
+    context: z.RefinementCtx
+): void => {
+    if (!PlannerExecutionPurposeSchema.safeParse(signals?.purpose).success) {
+        addSignalIssue(
+            context,
+            'purpose',
+            'plan steps must include a valid purpose signal.'
+        );
+    }
+
+    if (
+        !PlannerExecutionContractTypeSchema.safeParse(signals?.contractType)
+            .success
+    ) {
+        addSignalIssue(
+            context,
+            'contractType',
+            'plan steps must include a valid contractType signal.'
+        );
+    }
+
+    if (
+        !PlannerExecutionApplyOutcomeSchema.safeParse(signals?.applyOutcome)
+            .success
+    ) {
+        addSignalIssue(
+            context,
+            'applyOutcome',
+            'plan steps must include a valid applyOutcome signal.'
+        );
+    }
+};
+
+const validateRoutingChainSignals = (
+    signals: StepSignalRecord | undefined,
+    context: z.RefinementCtx
+): void => {
+    const hasAttemptCount = hasSignalKey(signals, 'routingChainAttemptCount');
+    const hasAttemptsJson = hasSignalKey(signals, 'routingChainAttemptsJson');
+
+    if (!hasAttemptCount && !hasAttemptsJson) {
+        return;
+    }
+
+    const attemptCount = signals?.routingChainAttemptCount;
+    const attemptsJson = signals?.routingChainAttemptsJson;
+
+    if (
+        typeof attemptCount !== 'number' ||
+        !Number.isInteger(attemptCount) ||
+        attemptCount < 0
+    ) {
+        addSignalIssue(
+            context,
+            'routingChainAttemptCount',
+            'routingChainAttemptCount must be a nonnegative integer when routing chain signals are present.'
+        );
+    }
+
+    if (typeof attemptsJson !== 'string' || attemptsJson.trim().length === 0) {
+        addSignalIssue(
+            context,
+            'routingChainAttemptsJson',
+            'routingChainAttemptsJson must be a non-empty JSON array string when routing chain signals are present.'
+        );
+        return;
+    }
+
+    try {
+        const parsedAttempts = JSON.parse(attemptsJson);
+        if (!Array.isArray(parsedAttempts)) {
+            addSignalIssue(
+                context,
+                'routingChainAttemptsJson',
+                'routingChainAttemptsJson must parse to an array.'
+            );
+        }
+    } catch {
+        addSignalIssue(
+            context,
+            'routingChainAttemptsJson',
+            'routingChainAttemptsJson must parse to an array.'
+        );
+    }
+};
+
+const validateClarificationSignals = (
+    signals: StepSignalRecord | undefined,
+    context: z.RefinementCtx
+): void => {
+    const hasReasonCode = hasSignalKey(signals, 'clarificationReasonCode');
+    const hasOptionCount = hasSignalKey(signals, 'clarificationOptionCount');
+
+    if (!hasReasonCode && !hasOptionCount) {
+        return;
+    }
+
+    const reasonCode = signals?.clarificationReasonCode;
+    const optionCount = signals?.clarificationOptionCount;
+
+    if (typeof reasonCode !== 'string' || reasonCode.trim().length === 0) {
+        addSignalIssue(
+            context,
+            'clarificationReasonCode',
+            'clarificationReasonCode must be non-empty when clarification signals are present.'
+        );
+    }
+
+    if (
+        typeof optionCount !== 'number' ||
+        !Number.isInteger(optionCount) ||
+        optionCount < 0
+    ) {
+        addSignalIssue(
+            context,
+            'clarificationOptionCount',
+            'clarificationOptionCount must be a nonnegative integer when clarification signals are present.'
+        );
+    }
+};
+
+const validateRefinementSignals = (
+    signals: StepSignalRecord | undefined,
+    context: z.RefinementCtx
+): void => {
+    if (signals?.refinementApplied !== true) {
+        return;
+    }
+
+    const refinementSourceStepId = signals.refinementSourceStepId;
+    const appliedModuleCount = signals.appliedModuleCount;
+
+    if (
+        typeof refinementSourceStepId !== 'string' ||
+        refinementSourceStepId.trim().length === 0
+    ) {
+        addSignalIssue(
+            context,
+            'refinementSourceStepId',
+            'refinementSourceStepId must be non-empty when refinementApplied is true.'
+        );
+    }
+
+    if (
+        typeof appliedModuleCount !== 'number' ||
+        !Number.isInteger(appliedModuleCount) ||
+        appliedModuleCount < 0
+    ) {
+        addSignalIssue(
+            context,
+            'appliedModuleCount',
+            'appliedModuleCount must be a nonnegative integer when refinementApplied is true.'
+        );
+    }
+};
+
 const StepRecordSchema = z
     .object({
         stepId: z.string().min(1),
@@ -407,6 +585,14 @@ const StepRecordSchema = z
         outcome: StepOutcomeSchema,
     })
     .superRefine((value, context) => {
+        const signals = value.outcome.signals;
+        if (value.stepKind === 'plan') {
+            validatePlannerStepSignals(signals, context);
+        }
+        validateRoutingChainSignals(signals, context);
+        validateClarificationSignals(signals, context);
+        validateRefinementSignals(signals, context);
+
         if (
             value.stepKind !== 'assess' ||
             value.outcome.status !== 'executed'
@@ -414,7 +600,7 @@ const StepRecordSchema = z
             return;
         }
 
-        const assessSignals = value.outcome.signals;
+        const assessSignals = signals;
         const reviewDecision =
             assessSignals !== undefined
                 ? assessSignals.reviewDecision

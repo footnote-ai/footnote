@@ -5,19 +5,22 @@
  * @footnote-risk: low - Signal mapping drift affects observability metadata only.
  * @footnote-ethics: medium - Routing and hint signals support governance interpretation.
  */
+import {
+    buildWorkflowAssessRoutingHintSignals,
+    buildWorkflowRoutingChainSignals,
+} from '@footnote/contracts/policy';
+import type {
+    StepSignals,
+    WorkflowAssessRoutingHintSignals,
+    WorkflowRoutingHintConflictResolution,
+    WorkflowRoutingHintLane,
+} from '@footnote/contracts/policy';
 import type { RoutingChainAttemptLog } from '../stepRoutingExecutor.js';
 
-export type WorkflowRoutingHintLane =
-    | 'openai_first_logic'
-    | 'ollama_first_style'
-    | 'cheaper_first'
-    | 'none';
-
-export type WorkflowRoutingHintConflictResolution = 'logic_over_style';
-
-type StepSignalValue = string | number | boolean | null;
-
-type StepSignals = Record<string, StepSignalValue>;
+export type {
+    WorkflowRoutingHintConflictResolution,
+    WorkflowRoutingHintLane,
+} from '@footnote/contracts/policy';
 
 export const buildRoutingChainSignals = (input: {
     attempts?: RoutingChainAttemptLog[];
@@ -29,42 +32,11 @@ export const buildRoutingChainSignals = (input: {
         provider?: string;
         model?: string;
     };
-}): StepSignals => {
-    if (!Array.isArray(input.attempts)) {
-        return {};
-    }
-
-    const profileIdKey = input.signalKeys?.profileId ?? 'selectedProfileId';
-    const providerKey = input.signalKeys?.provider ?? 'selectedProvider';
-    const modelKey = input.signalKeys?.model ?? 'selectedModel';
-    const signals: StepSignals = {
-        routingChainAttemptCount: input.attempts.length,
-        routingChainAttemptsJson: JSON.stringify(input.attempts),
-    };
-
-    if (input.selectedProfileId !== undefined) {
-        signals[profileIdKey] = input.selectedProfileId;
-    }
-    if (input.selectedProvider !== undefined) {
-        signals[providerKey] = input.selectedProvider;
-    }
-    if (input.selectedModel !== undefined) {
-        signals[modelKey] = input.selectedModel;
-    }
-
-    return signals;
-};
+}): StepSignals => buildWorkflowRoutingChainSignals(input);
 
 export const buildAssessRoutingHintSignals = (input: {
     assessRoutingHintsCsv?: string;
     routingHintApplied?: WorkflowRoutingHintLane;
     routingHintConflictResolved?: WorkflowRoutingHintConflictResolution;
-}): StepSignals => ({
-    ...(input.assessRoutingHintsCsv !== undefined && {
-        assessRoutingHintsCsv: input.assessRoutingHintsCsv,
-    }),
-    routingHintApplied: input.routingHintApplied ?? 'none',
-    ...(input.routingHintConflictResolved !== undefined && {
-        routingHintConflictResolved: input.routingHintConflictResolved,
-    }),
-});
+}): WorkflowAssessRoutingHintSignals =>
+    buildWorkflowAssessRoutingHintSignals(input);

@@ -15,7 +15,7 @@ import type {
     WorkflowTerminationReason,
     WorkflowStepKind,
 } from '@footnote/contracts/policy';
-import type { ReviewDecision } from './workflowEngine/reviewDecision.js';
+import type { ReviewDecisionParseResult } from './workflowEngine/reviewDecision.js';
 
 /**
  * Stable workflow profile identifier.
@@ -289,7 +289,7 @@ type WorkflowProfileRuntimeHooks = {
             reasonCode: WorkflowNoGenerationReasonCode
         ) => WorkflowNoGenerationReasonCode;
     };
-    parseReviewDecision?: (text: string) => ReviewDecision | null;
+    parseReviewDecision?: (text: string) => ReviewDecisionParseResult;
 };
 
 export type WorkflowProfileRuntime = WorkflowProfileContract &

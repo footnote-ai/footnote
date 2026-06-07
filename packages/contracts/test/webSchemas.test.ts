@@ -71,6 +71,7 @@ import type {
     PostChatResponse,
 } from '../src/web/types';
 import type { ApiResponseValidationResult } from '../src/web/client-core';
+import type { ResponseMetadata } from '../src/policy';
 
 const testDir = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(testDir, '../../..');
@@ -79,7 +80,7 @@ const openApiSource = fs.readFileSync(
     'utf-8'
 );
 
-const baseMetadata = {
+const baseMetadata: ResponseMetadata = {
     responseId: 'response_123',
     provenance: 'Retrieved',
     safetyTier: 'Low',
@@ -108,7 +109,11 @@ const baseMetadata = {
         caution: 3,
         extent: 4,
     },
-} as const;
+};
+
+type WorkflowMetadataPayload = ResponseMetadata & {
+    workflow: NonNullable<ResponseMetadata['workflow']>;
+};
 
 const baseIncidentDetail = {
     incident: {
@@ -386,7 +391,9 @@ test('ResponseMetadataSchema accepts one payload with distinct mode, TRACE, plan
     assert.equal(parsed.success, true);
 });
 
-const createValidWorkflowMetadataPayload = (now: string) => ({
+const createValidWorkflowMetadataPayload = (
+    now: string
+): WorkflowMetadataPayload => ({
     ...baseMetadata,
     workflow: {
         workflowId: 'wf_123',
@@ -470,6 +477,7 @@ const createValidWorkflowMetadataPayload = (now: string) => ({
                         reviewDecision: 'finalize',
                         reviewReason:
                             'Draft answers the request with sufficient clarity.',
+                        traceAlignment: 'aligned',
                     },
                 },
             },
@@ -687,6 +695,176 @@ test('ResponseMetadataSchema rejects workflow lineage with duplicate effective l
     });
 
     const parsed = ResponseMetadataSchema.safeParse(payload);
+    assert.equal(parsed.success, false);
+});
+
+test('ResponseMetadataSchema accepts plan step with valid planner signals', () => {
+    const now = new Date().toISOString();
+    const payload = createValidWorkflowMetadataPayload(now);
+    payload.workflow = {
+        workflowId: 'wf_plan',
+        workflowName: 'message_reviewed',
+        status: 'completed',
+        stepCount: 1,
+        maxSteps: 3,
+        maxDurationMs: 15000,
+        terminationReason: 'goal_satisfied',
+        steps: [
+            {
+                stepId: 'step_plan_1',
+                attempt: 1,
+                stepKind: 'plan',
+                startedAt: now,
+                finishedAt: now,
+                durationMs: 5,
+                outcome: {
+                    status: 'executed',
+                    summary:
+                        'Planner step emitted bounded action-selection summary.',
+                    signals: {
+                        purpose: 'chat_orchestrator_action_selection',
+                        contractType: 'text_json',
+                        applyOutcome: 'applied',
+                        action: 'message',
+                    },
+                },
+            },
+        ],
+    };
+
+    const parsed = ResponseMetadataSchema.safeParse(payload);
+
+    assert.equal(parsed.success, true);
+});
+
+test('ResponseMetadataSchema rejects plan step missing contractType', () => {
+    const now = new Date().toISOString();
+    const payload = createValidWorkflowMetadataPayload(now);
+    payload.workflow = {
+        workflowId: 'wf_plan',
+        workflowName: 'message_reviewed',
+        status: 'completed',
+        stepCount: 1,
+        maxSteps: 3,
+        maxDurationMs: 15000,
+        terminationReason: 'goal_satisfied',
+        steps: [
+            {
+                stepId: 'step_plan_1',
+                attempt: 1,
+                stepKind: 'plan',
+                startedAt: now,
+                finishedAt: now,
+                durationMs: 5,
+                outcome: {
+                    status: 'executed',
+                    summary:
+                        'Planner step emitted bounded action-selection summary.',
+                    signals: {
+                        purpose: 'chat_orchestrator_action_selection',
+                        applyOutcome: 'applied',
+                    },
+                },
+            },
+        ],
+    };
+
+    const parsed = ResponseMetadataSchema.safeParse(payload);
+
+    assert.equal(parsed.success, false);
+});
+
+test('ResponseMetadataSchema rejects malformed routing-chain signal pairs', () => {
+    const now = new Date().toISOString();
+    const payload = createValidWorkflowMetadataPayload(now);
+    payload.workflow.steps[0].outcome.signals = {
+        routingChainAttemptCount: 1,
+    };
+
+    const parsedMissingJson = ResponseMetadataSchema.safeParse(payload);
+    assert.equal(parsedMissingJson.success, false);
+
+    payload.workflow.steps[0].outcome.signals = {
+        routingChainAttemptCount: 1,
+        routingChainAttemptsJson: '{"not":"array"}',
+    };
+
+    const parsedInvalidJson = ResponseMetadataSchema.safeParse(payload);
+    assert.equal(parsedInvalidJson.success, false);
+});
+
+test('ResponseMetadataSchema accepts tool clarification signals', () => {
+    const now = new Date().toISOString();
+    const payload = createValidWorkflowMetadataPayload(now);
+    payload.workflow = {
+        workflowId: 'wf_tool',
+        workflowName: 'message_reviewed',
+        status: 'completed',
+        stepCount: 1,
+        maxSteps: 3,
+        maxDurationMs: 15000,
+        terminationReason: 'goal_satisfied',
+        steps: [
+            {
+                stepId: 'step_tool_1',
+                attempt: 1,
+                stepKind: 'tool',
+                startedAt: now,
+                finishedAt: now,
+                durationMs: 4,
+                outcome: {
+                    status: 'executed',
+                    summary: 'Context step requires user clarification.',
+                    signals: {
+                        clarificationReasonCode: 'ambiguous_location',
+                        clarificationOptionCount: 2,
+                    },
+                },
+            },
+        ],
+    };
+
+    const parsed = ResponseMetadataSchema.safeParse(payload);
+
+    assert.equal(parsed.success, true);
+});
+
+test('ResponseMetadataSchema rejects partial clarification signals', () => {
+    const now = new Date().toISOString();
+    const payload = createValidWorkflowMetadataPayload(now);
+    payload.workflow.steps[0].outcome.signals = {
+        clarificationReasonCode: 'ambiguous_location',
+    };
+
+    const parsed = ResponseMetadataSchema.safeParse(payload);
+
+    assert.equal(parsed.success, false);
+});
+
+test('ResponseMetadataSchema accepts refinement generate signals', () => {
+    const now = new Date().toISOString();
+    const payload = createValidWorkflowMetadataPayload(now);
+    payload.workflow.steps[0].outcome.signals = {
+        refinementApplied: true,
+        refinementSourceStepId: 'step_2',
+        appliedModuleCount: 1,
+    };
+
+    const parsed = ResponseMetadataSchema.safeParse(payload);
+
+    assert.equal(parsed.success, true);
+});
+
+test('ResponseMetadataSchema rejects refinement without refinementSourceStepId', () => {
+    const now = new Date().toISOString();
+    const payload = createValidWorkflowMetadataPayload(now);
+    payload.workflow.steps[0].outcome.signals = {
+        refinementApplied: true,
+        appliedModuleCount: 1,
+    };
+
+    const parsed = ResponseMetadataSchema.safeParse(payload);
+
     assert.equal(parsed.success, false);
 });
 

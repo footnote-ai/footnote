@@ -6,6 +6,10 @@
  * @footnote-ethics: medium - Clear execution rendering supports transparency across user-facing surfaces.
  */
 import type { ExecutionEvent, StepRecord, WorkflowRecord } from './types.js';
+import {
+    getWorkflowStepProfileIdSignal,
+    isRefinementGenerateStep,
+} from './workflowStepSignals.js';
 
 type TimelineEntry = {
     segment: string;
@@ -104,21 +108,16 @@ const formatWorkflowStep = (
         step.outcome.status === 'executed' || !step.reasonCode
             ? ''
             : `, ${step.reasonCode}`;
-    const profileIdSignal = step.outcome.signals?.profileId;
+    const profileIdSignal = getWorkflowStepProfileIdSignal(step);
     const modelOrProfile =
-        step.model ??
-        (typeof profileIdSignal === 'string' &&
-        profileIdSignal.trim().length > 0
-            ? profileIdSignal
-            : defaultModelOrProfile);
+        step.model ?? profileIdSignal ?? defaultModelOrProfile;
     return `${label}:${modelOrProfile}(${step.outcome.status}${reasonSuffix}${durationSuffix})`;
 };
 
 const isIncludedWorkflowStep = (step: StepRecord): boolean =>
     step.stepKind === 'plan' ||
     step.stepKind === 'assess' ||
-    (step.stepKind === 'generate' &&
-        step.outcome.signals?.refinementApplied === true);
+    isRefinementGenerateStep(step);
 
 const normalizeWorkflowStepEntry = (
     step: StepRecord,

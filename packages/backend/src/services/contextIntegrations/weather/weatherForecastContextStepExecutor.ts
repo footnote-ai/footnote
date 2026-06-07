@@ -7,13 +7,12 @@
  */
 import type {
     Citation,
-    ExecutionStatus,
     ToolInvocationReasonCode,
-    ToolClarification,
 } from '@footnote/contracts/policy';
 import {
     buildExecutedContextStepResult,
     buildFailedContextStepResult,
+    buildNeedsClarificationContextStepResult,
     buildSkippedContextStepResult,
 } from '../contextStepExecution.js';
 import type {
@@ -244,52 +243,28 @@ export const createWeatherForecastContextStepExecutor = ({
             ];
         }
 
-        const executionContext: {
-            toolName: string;
-            status: ExecutionStatus;
-            reasonCode?: ToolInvocationReasonCode;
-            clarification?: ToolClarification;
-            durationMs: number;
-        } = {
-            toolName: request.integrationName,
-            status:
-                weatherToolResult.status === 'ok' ||
-                weatherToolResult.status === 'needs_clarification'
-                    ? 'executed'
-                    : 'failed',
-            durationMs: weatherToolDurationMs,
-        };
-
         if (weatherToolResult.status === 'needs_clarification') {
-            executionContext.clarification = weatherToolResult.clarification;
-        } else if (weatherToolResult.status === 'error') {
-            executionContext.reasonCode = mapWeatherErrorCodeToReasonCode(
-                weatherToolResult.error.code
-            );
+            return buildNeedsClarificationContextStepResult({
+                toolName: request.integrationName,
+                durationMs: weatherToolDurationMs,
+                clarification: weatherToolResult.clarification,
+            });
         }
 
-        const clarification =
-            'clarification' in executionContext
-                ? executionContext.clarification
-                : undefined;
-
-        if (executionContext.status === 'failed') {
+        if (weatherToolResult.status === 'error') {
             return buildFailedContextStepResult({
-                toolName: executionContext.toolName,
-                reasonCode:
-                    executionContext.reasonCode ?? 'tool_execution_error',
-                durationMs: executionContext.durationMs,
-                contextMessages: [
-                    formatWeatherToolResultMessage(weatherToolResult),
-                ],
+                toolName: request.integrationName,
+                reasonCode: mapWeatherErrorCodeToReasonCode(
+                    weatherToolResult.error.code
+                ),
+                durationMs: weatherToolDurationMs,
                 ...(sources !== undefined && { sources }),
             });
         }
 
         return buildExecutedContextStepResult({
-            toolName: executionContext.toolName,
-            durationMs: executionContext.durationMs,
-            clarification,
+            toolName: request.integrationName,
+            durationMs: weatherToolDurationMs,
             contextMessages: [
                 formatWeatherToolResultMessage(weatherToolResult),
             ],

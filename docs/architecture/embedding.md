@@ -80,6 +80,23 @@ Treat these as implementation details (do not depend on exact values):
 - CSS class names and spacing
 - internal observer/timer strategy used to detect layout changes
 
+## Operational notes
+
+- Shared layered web styles are imported from
+  `packages/web/src/styles/index.css`.
+- At narrow widths, embed content stacks vertically. Keep the iframe container at
+  `width: 100%` and avoid CSS transforms that force zoom or horizontal scroll.
+- Prefer dynamic height from embed messages. If a host uses a fixed fallback
+  height, use at least `800px`.
+- If height updates do not work, confirm the iframe id, message listener,
+  `event.origin` validation, and iframe scrolling/overflow settings.
+- `/api/chat` rate limiting, Cloudflare Turnstile configuration, and focus
+  behavior still apply inside the embedded ask flow.
+- Header and CTA links may navigate inside the iframe unless the host or route
+  sets a parent/new-tab target.
+- The root `server.js` file is only a startup shim. Backend CORS and CSP
+  behavior belongs in backend runtime configuration and server code.
+
 ## Maintenance notes
 
 When updating embed UI, keep this doc in sync with:

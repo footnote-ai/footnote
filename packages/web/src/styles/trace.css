@@ -1,0 +1,80 @@
+.card {
+    border: 1px solid
+        color-mix(
+            in srgb,
+            var(--fn-border-default) 72%,
+            var(--fn-brand-accent) 28%
+        );
+    border-radius: var(--fn-radius-lg);
+    background: color-mix(
+        in srgb,
+        var(--fn-surface-soft) 92%,
+        var(--fn-surface-bg) 8%
+    );
+    box-shadow: var(--fn-shadow-soft);
+    padding: clamp(1rem, 2.2vw, 1.4rem);
+}
+
+.card h2 {
+    margin-bottom: 0.55rem;
+}
+
+.button-link {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0.52rem 0.84rem;
+    border-radius: 999px;
+    border: 1px solid var(--fn-border-default);
+    background-color: color-mix(
+        in srgb,
+        var(--fn-surface-bg) 95%,
+        var(--fn-brand-accent) 5%
+    );
+    color: var(--fn-link);
+    font-family: var(--fn-font-mono);
+    font-size: 0.88rem;
+    text-decoration: none;
+    transition: all var(--fn-duration-fast) var(--fn-ease-standard);
+}
+
+.button-link:hover,
+.button-link:focus {
+    background-color: color-mix(
+        in srgb,
+        var(--fn-surface-hover) 70%,
+        var(--fn-brand-accent) 30%
+    );
+    border-color: color-mix(
+        in srgb,
+        var(--fn-brand-accent-hover) 60%,
+        var(--fn-border-default) 40%
+    );
+    color: var(--fn-link-hover);
+}
+
+.button-link:focus-visible {
+    outline: 2px solid
+        color-mix(in srgb, var(--fn-brand-accent-hover) 55%, transparent 45%);
+    outline-offset: 2px;
+}
+
+.site-section .site-header {
+    margin-bottom: 0.3rem;
+}
+
+.site-section ul,
+.site-section ol {
+    padding-left: 1.2rem;
+}
+
+.site-section pre {
+    font-family: var(--fn-font-mono);
+    font-size: 0.85rem;
+}
+
+@media (max-width: 600px) {
+    .card {
+        padding: 0.9rem;
+    }
+}

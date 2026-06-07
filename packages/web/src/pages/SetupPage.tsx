@@ -9,7 +9,10 @@
 import { useEffect, useMemo, useState } from 'react';
 import type {
     AdminSettingsValidationError,
+    AdminSettingsValidationFailureResponse,
+    PostAdminSettingsValidateResponse,
     PostSetupSessionResponse,
+    PutAdminSettingsYamlResponse,
 } from '@footnote/contracts/web';
 import Header from '@components/Header';
 import Footer from '@components/Footer';
@@ -32,6 +35,24 @@ type LoadYamlState =
 type YamlNoticeState = {
     message: string;
     kind: 'info' | 'warning';
+};
+
+type SubmitStatusState =
+    | { kind: 'idle' }
+    | { kind: 'submitting' }
+    | { kind: 'error'; message: string }
+    | { kind: 'success'; message: string };
+
+type SubmitFeedbackState = {
+    validationErrors: AdminSettingsValidationError[];
+    validationWarnings: string[];
+    status: SubmitStatusState;
+};
+
+const INITIAL_SUBMIT_FEEDBACK: SubmitFeedbackState = {
+    validationErrors: [],
+    validationWarnings: [],
+    status: { kind: 'idle' },
 };
 
 const readErrorMessage = async (response: Response): Promise<string> => {
@@ -67,13 +88,9 @@ const SetupPage = (): JSX.Element => {
     const [ifMatch, setIfMatch] = useState<string>(MISSING_SETTINGS_SENTINEL);
     const [yamlRetryKey, setYamlRetryKey] = useState(0);
     const [yamlNotice, setYamlNotice] = useState<YamlNoticeState | null>(null);
-    const [validationErrors, setValidationErrors] = useState<
-        AdminSettingsValidationError[]
-    >([]);
-    const [validateMessage, setValidateMessage] = useState<string | null>(null);
-    const [saveMessage, setSaveMessage] = useState<string | null>(null);
-    const [saving, setSaving] = useState(false);
-    const [validating, setValidating] = useState(false);
+    const [submitFeedback, setSubmitFeedback] = useState<SubmitFeedbackState>(
+        INITIAL_SUBMIT_FEEDBACK
+    );
 
     useEffect(() => {
         if (!setupCode) {
@@ -236,57 +253,52 @@ const SetupPage = (): JSX.Element => {
         };
     }, [exchangeState, yamlRetryKey]);
 
-    const handleValidate = async (): Promise<void> => {
-        if (exchangeState.status !== 'ready' || yamlState.status !== 'ready') {
-            return;
-        }
-        setValidating(true);
-        setValidateMessage(null);
-        setSaveMessage(null);
-        setValidationErrors([]);
-        try {
-            const response = await fetch('/api/admin/settings/validate', {
-                method: 'POST',
-                headers: {
-                    'content-type': 'text/yaml',
-                    'x-setup-csrf': exchangeState.csrfToken,
-                },
-                body: yamlText,
-            });
-            if (response.status === 400) {
-                const payload = (await response.json()) as {
-                    validationErrors?: AdminSettingsValidationError[];
-                };
-                setValidationErrors(payload.validationErrors ?? []);
-                setValidateMessage('Validation failed. Fix the listed issues.');
-                return;
-            }
-            if (!response.ok) {
-                setValidateMessage(await readErrorMessage(response));
-                return;
-            }
-            setValidateMessage('YAML is valid. You can save settings now.');
-        } catch (error) {
-            setValidationErrors([]);
-            setValidateMessage(
-                error instanceof Error
-                    ? `Validation request failed: ${error.message}`
-                    : 'Validation request failed due to a network or parse error.'
-            );
-        } finally {
-            setValidating(false);
-        }
-    };
-
     const handleSave = async (): Promise<void> => {
         if (exchangeState.status !== 'ready' || yamlState.status !== 'ready') {
             return;
         }
-        setSaving(true);
-        setSaveMessage(null);
-        setValidateMessage(null);
-        setValidationErrors([]);
+        setSubmitFeedback((prior) => ({
+            ...prior,
+            status: { kind: 'submitting' },
+        }));
         try {
+            const validateResponse = await fetch(
+                '/api/admin/settings/validate',
+                {
+                    method: 'POST',
+                    headers: {
+                        'content-type': 'text/yaml',
+                        'x-setup-csrf': exchangeState.csrfToken,
+                    },
+                    body: yamlText,
+                }
+            );
+            if (validateResponse.status === 400) {
+                const payload =
+                    (await validateResponse.json()) as AdminSettingsValidationFailureResponse;
+                setSubmitFeedback({
+                    validationErrors: payload.validationErrors,
+                    validationWarnings: [],
+                    status: {
+                        kind: 'error',
+                        message: 'Validation failed. Fix the listed issues.',
+                    },
+                });
+                return;
+            }
+            if (!validateResponse.ok) {
+                const message = await readErrorMessage(validateResponse);
+                setSubmitFeedback((prior) => ({
+                    ...prior,
+                    status: { kind: 'error', message },
+                }));
+                return;
+            }
+
+            const validatePayload =
+                (await validateResponse.json()) as PostAdminSettingsValidateResponse;
+            const validationWarnings = validatePayload.warnings;
+
             const response = await fetch('/api/admin/settings.yaml', {
                 method: 'PUT',
                 headers: {
@@ -297,37 +309,61 @@ const SetupPage = (): JSX.Element => {
                 body: yamlText,
             });
             if (response.status === 400) {
-                const payload = (await response.json()) as {
-                    validationErrors?: AdminSettingsValidationError[];
-                };
-                setValidationErrors(payload.validationErrors ?? []);
-                setSaveMessage('Save failed because YAML is invalid.');
+                const payload =
+                    (await response.json()) as AdminSettingsValidationFailureResponse;
+                setSubmitFeedback({
+                    validationErrors: payload.validationErrors,
+                    validationWarnings,
+                    status: {
+                        kind: 'error',
+                        message: 'Save failed because YAML is invalid.',
+                    },
+                });
                 return;
             }
             if (response.status === 412) {
-                setSaveMessage(
-                    'Save failed because the optimistic lock is stale. Reload setup and try again.'
-                );
+                setSubmitFeedback((prior) => ({
+                    ...prior,
+                    validationWarnings,
+                    status: {
+                        kind: 'error',
+                        message:
+                            'Save failed because the optimistic lock is stale. Reload setup and try again.',
+                    },
+                }));
                 return;
             }
             if (!response.ok) {
-                setSaveMessage(await readErrorMessage(response));
+                const message = await readErrorMessage(response);
+                setSubmitFeedback((prior) => ({
+                    ...prior,
+                    validationWarnings,
+                    status: { kind: 'error', message },
+                }));
                 return;
             }
-            const payload = (await response.json()) as { etag?: unknown };
-            if (typeof payload.etag === 'string' && payload.etag.length > 0) {
+            const payload =
+                (await response.json()) as PutAdminSettingsYamlResponse;
+            if (payload.etag.length > 0) {
                 setIfMatch(payload.etag);
             }
-            setSaveMessage('Settings saved. Restart Footnote to use them.');
+            setSubmitFeedback({
+                validationErrors: [],
+                validationWarnings: [],
+                status: {
+                    kind: 'success',
+                    message: 'Settings saved. Restart Footnote to use them.',
+                },
+            });
         } catch (error) {
-            setValidationErrors([]);
-            setSaveMessage(
+            const message =
                 error instanceof Error
                     ? `Save request failed: ${error.message}`
-                    : 'Save request failed due to a network or parse error.'
-            );
-        } finally {
-            setSaving(false);
+                    : 'Save request failed due to a network or parse error.';
+            setSubmitFeedback((prior) => ({
+                ...prior,
+                status: { kind: 'error', message },
+            }));
         }
     };
 
@@ -338,8 +374,8 @@ const SetupPage = (): JSX.Element => {
                 <section className="page-hero" aria-labelledby="setup-title">
                     <h1 id="setup-title">First setup</h1>
                     <p className="page-hero__summary">
-                        Configure <code>footnote.yaml</code>, validate it, then
-                        save. Settings are not applied until Footnote restarts.
+                        Configure <code>footnote.yaml</code> and save. Settings
+                        are not applied until Footnote restarts.
                     </p>
                 </section>
 
@@ -386,53 +422,87 @@ const SetupPage = (): JSX.Element => {
                             aria-labelledby="setup-yaml-title"
                         >
                             <h2 id="setup-yaml-title">Settings YAML</h2>
-                            <textarea
-                                className="setup-textarea"
-                                value={yamlText}
-                                onChange={(event) =>
-                                    setYamlText(event.target.value)
-                                }
-                                spellCheck={false}
-                                rows={22}
-                            />
-                            <div className="setup-actions">
-                                <button
-                                    type="button"
-                                    onClick={() => void handleValidate()}
-                                    disabled={validating || saving}
-                                >
-                                    {validating ? 'Validating...' : 'Validate'}
-                                </button>
-                                <button
-                                    type="button"
-                                    onClick={() => void handleSave()}
-                                    disabled={validating || saving}
-                                >
-                                    {saving ? 'Saving...' : 'Save settings'}
-                                </button>
-                            </div>
-
-                            {validateMessage && (
-                                <p className="setup-note">{validateMessage}</p>
-                            )}
-                            {saveMessage && (
-                                <p className="setup-note">{saveMessage}</p>
-                            )}
-                            {validationErrors.length > 0 && (
-                                <ul className="setup-errors">
-                                    {validationErrors.map((error, index) => (
-                                        <li
-                                            key={`${error.category}-${error.pointer ?? 'root'}-${index}`}
+                            <details open className="setup-editor-disclosure">
+                                <summary>Settings YAML editor</summary>
+                                <div className="setup-editor-disclosure__content">
+                                    <textarea
+                                        className="setup-textarea"
+                                        value={yamlText}
+                                        onChange={(event) =>
+                                            setYamlText(event.target.value)
+                                        }
+                                        spellCheck={false}
+                                        rows={22}
+                                    />
+                                    <div className="setup-actions">
+                                        <button
+                                            type="button"
+                                            onClick={() => void handleSave()}
+                                            disabled={
+                                                submitFeedback.status.kind ===
+                                                'submitting'
+                                            }
                                         >
-                                            <strong>{error.category}</strong>{' '}
-                                            {error.pointer
-                                                ? `[${error.pointer}] `
-                                                : ''}
-                                            {error.message}
-                                        </li>
-                                    ))}
-                                </ul>
-                            )}
+                                            {submitFeedback.status.kind ===
+                                            'submitting'
+                                                ? 'Saving...'
+                                                : 'Save settings'}
+                                        </button>
+                                    </div>
+
+                                    <div
+                                        className="setup-submit-feedback"
+                                        aria-live="polite"
+                                    >
+                                        {submitFeedback.status.kind ===
+                                            'error' && (
+                                            <p className="setup-error">
+                                                {submitFeedback.status.message}
+                                            </p>
+                                        )}
+                                        {submitFeedback.status.kind ===
+                                            'success' && (
+                                            <p className="setup-note">
+                                                {submitFeedback.status.message}
+                                            </p>
+                                        )}
+                                        {submitFeedback.validationWarnings
+                                            .length > 0 && (
+                                            <ul className="setup-warnings">
+                                                {submitFeedback.validationWarnings.map(
+                                                    (warning, index) => (
+                                                        <li
+                                                            key={`${warning}-${index}`}
+                                                        >
+                                                            {warning}
+                                                        </li>
+                                                    )
+                                                )}
+                                            </ul>
+                                        )}
+                                        {submitFeedback.validationErrors
+                                            .length > 0 && (
+                                            <ul className="setup-errors">
+                                                {submitFeedback.validationErrors.map(
+                                                    (error, index) => (
+                                                        <li
+                                                            key={`${error.category}-${error.pointer ?? 'root'}-${index}`}
+                                                        >
+                                                            <strong>
+                                                                {error.category}
+                                                            </strong>{' '}
+                                                            {error.pointer
+                                                                ? `[${error.pointer}] `
+                                                                : ''}
+                                                            {error.message}
+                                                        </li>
+                                                    )
+                                                )}
+                                            </ul>
+                                        )}
+                                    </div>
+                                </div>
+                            </details>
                         </section>
                     )}
             </main>

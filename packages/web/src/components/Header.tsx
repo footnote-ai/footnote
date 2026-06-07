@@ -61,14 +61,16 @@ const Header = (): JSX.Element => {
 
         const updateHeaderHeight = (): void => {
             if (mobileViewport.matches) {
-                bodyElement.style.removeProperty('--site-header-height');
+                bodyElement.style.removeProperty(
+                    '--fn-layout-site-header-height'
+                );
                 return;
             }
 
             const { height } = headerElement.getBoundingClientRect();
             const safeHeight = Math.ceil(height);
             bodyElement.style.setProperty(
-                '--site-header-height',
+                '--fn-layout-site-header-height',
                 `${safeHeight}px`
             );
         };
@@ -85,7 +87,7 @@ const Header = (): JSX.Element => {
         return () => {
             observer.disconnect();
             window.removeEventListener('resize', updateHeaderHeight);
-            bodyElement.style.removeProperty('--site-header-height');
+            bodyElement.style.removeProperty('--fn-layout-site-header-height');
         };
     }, []);
 

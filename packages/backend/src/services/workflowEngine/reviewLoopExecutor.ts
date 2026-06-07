@@ -7,9 +7,12 @@
  */
 import type {
     ExecutionReasonCode,
+    StepSignals,
     StepRecord,
+    WorkflowAssessRoutingHintSignals,
     WorkflowTerminationReason,
 } from '@footnote/contracts/policy';
+import { buildWorkflowReviewParseFailureSignals } from '@footnote/contracts/policy';
 import type {
     GenerationRequest,
     GenerationResult,
@@ -29,13 +32,17 @@ import type {
     PlannerStepRequest,
 } from '../plannerWorkflowSeams.js';
 import type { ConversationContextEnvelope } from '../conversationContextService.js';
-import type { ReviewDecision } from './reviewDecision.js';
+import type {
+    ReviewDecision,
+    ReviewDecisionParseResult,
+} from './reviewDecision.js';
 import { isWorkflowTransitionAllowed } from './transitions.js';
 import { applyStepExecutionToState, type WorkflowState } from './state.js';
 import type { WorkflowRunPolicy } from '../workflowEngine.js';
 import { buildAssessSignals } from './reviewLoopSignals.js';
 import { executeStepRoutingChain } from '../stepRoutingExecutor.js';
 import type { ResolvedStepRoutingCandidate } from '../stepRoutingChains.js';
+import { toRoutingChainResult } from '../routingChainResult.js';
 import {
     decideRevisionRoutingHintLane,
     extractRoutingHintsFromAssess,
@@ -63,7 +70,7 @@ type CaptureStep = (input: {
     reasonCode?: ExecutionReasonCode;
     parentStepId?: string;
     attempt: number;
-    signals?: Record<string, string | number | boolean | null>;
+    signals?: StepSignals;
     recommendations?: string[];
 }) => string;
 
@@ -117,7 +124,7 @@ export const executeReviewLoop = async (ctx: {
             totalCostUsd: number;
         };
     };
-    effectiveParseReviewDecision: (text: string) => ReviewDecision | null;
+    effectiveParseReviewDecision: (text: string) => ReviewDecisionParseResult;
     captureStep: CaptureStep;
     draftParentStepId?: string;
     terminationReason: WorkflowTerminationReason;
@@ -199,10 +206,7 @@ export const executeReviewLoop = async (ctx: {
         exhaustedLimitKey = evaluation.exhaustedLimitKey;
         return true;
     };
-    const toLatestRoutingHintSignals = (): Record<
-        string,
-        string | number | boolean | null
-    > =>
+    const toLatestRoutingHintSignals = (): WorkflowAssessRoutingHintSignals =>
         buildAssessRoutingHintSignals({
             assessRoutingHintsCsv: latestAssessRoutingHintsCsv,
             routingHintApplied: latestRoutingHintApplied,
@@ -261,17 +265,49 @@ export const executeReviewLoop = async (ctx: {
                               }),
                       })
                     : undefined;
-            if (assessChainResult?.status === 'exhausted') {
-                throw new Error(assessChainResult.reasonCode);
+            const assessRoutingResult =
+                assessChainResult !== undefined
+                    ? toRoutingChainResult(assessChainResult)
+                    : undefined;
+            if (assessRoutingResult?.isErr()) {
+                const routingFailure = assessRoutingResult.error;
+                const reviewFinishedAt = Date.now();
+                ctx.captureStep({
+                    stepKind: 'assess',
+                    status: 'failed',
+                    summary:
+                        'Assessment routing chain failed; fail-open returned latest successful draft.',
+                    reasonCode: routingFailure.reasonCode,
+                    startedAtMs: reviewStartedAt,
+                    finishedAtMs: reviewFinishedAt,
+                    parentStepId: draftParentStepId,
+                    attempt: iteration,
+                    signals: {
+                        ...toLatestRoutingHintSignals(),
+                        ...buildRoutingChainSignals({
+                            attempts: routingFailure.attempts,
+                            selectedProfileId: null,
+                        }),
+                    },
+                });
+                workflowState = applyStepExecutionToState(
+                    workflowState,
+                    'assess',
+                    0,
+                    0,
+                    1
+                );
+                terminationReason = 'executor_error_fail_open';
+                workflowStatus = 'degraded';
+                shouldStop = true;
+                return { status: 'stopped' };
             }
-            const reviewResult =
-                assessChainResult?.status === 'executed'
-                    ? assessChainResult.value
-                    : await ctx.generationRuntime.generate(assessRequest);
-            const assessUsageModel =
-                assessChainResult?.status === 'executed'
-                    ? assessChainResult.selected.profile.providerModel
-                    : effectiveGenerationRequest.model;
+            const reviewResult = assessRoutingResult?.isOk()
+                ? assessRoutingResult.value.value
+                : await ctx.generationRuntime.generate(assessRequest);
+            const assessUsageModel = assessRoutingResult?.isOk()
+                ? assessRoutingResult.value.selected.profile.providerModel
+                : effectiveGenerationRequest.model;
             const reviewFinishedAt = Date.now();
             const reviewUsage = ctx.captureUsage(
                 reviewResult,
@@ -284,10 +320,11 @@ export const executeReviewLoop = async (ctx: {
                 0,
                 1
             );
-            const decision = ctx.effectiveParseReviewDecision(
+            const parseResult = ctx.effectiveParseReviewDecision(
                 reviewResult.text
             );
-            if (!decision) {
+            if (parseResult.isErr()) {
+                const failure = parseResult.error;
                 ctx.captureStep({
                     stepKind: 'assess',
                     status: 'failed',
@@ -301,12 +338,17 @@ export const executeReviewLoop = async (ctx: {
                     estimatedCost: reviewUsage.estimatedCost,
                     parentStepId: draftParentStepId,
                     attempt: iteration,
+                    signals: {
+                        ...buildWorkflowReviewParseFailureSignals(failure),
+                        ...toLatestRoutingHintSignals(),
+                    },
                 });
                 terminationReason = 'executor_error_fail_open';
                 workflowStatus = 'degraded';
                 shouldStop = true;
                 return { status: 'stopped' };
             }
+            const decision = parseResult.value;
             const assessSignals = buildAssessSignals(decision);
             const assessRoutingHints = extractRoutingHintsFromAssess({
                 assessRawText: reviewResult.text,
@@ -336,11 +378,12 @@ export const executeReviewLoop = async (ctx: {
                     ...assessSignals,
                     ...toLatestRoutingHintSignals(),
                     ...buildRoutingChainSignals({
-                        attempts: assessChainResult?.attempts,
-                        selectedProfileId:
-                            assessChainResult?.status === 'executed'
-                                ? assessChainResult.selected.profile.id
-                                : null,
+                        attempts: assessRoutingResult?.isOk()
+                            ? assessRoutingResult.value.attempts
+                            : undefined,
+                        selectedProfileId: assessRoutingResult?.isOk()
+                            ? assessRoutingResult.value.selected.profile.id
+                            : null,
                     }),
                 },
             });
@@ -350,21 +393,14 @@ export const executeReviewLoop = async (ctx: {
                 decision,
                 reviewStepId,
             };
-        } catch (error) {
+        } catch {
             const reviewFinishedAt = Date.now();
-            const errorMessage =
-                error instanceof Error ? error.message : String(error);
-            const reasonCode: ExecutionReasonCode =
-                errorMessage === 'routing_chain_exhausted' ||
-                errorMessage === 'routing_chain_non_transient_error'
-                    ? (errorMessage as ExecutionReasonCode)
-                    : 'generation_runtime_error';
             ctx.captureStep({
                 stepKind: 'assess',
                 status: 'failed',
                 summary:
                     'Assessment step failed; fail-open returned latest successful draft.',
-                reasonCode,
+                reasonCode: 'generation_runtime_error',
                 startedAtMs: reviewStartedAt,
                 finishedAtMs: reviewFinishedAt,
                 parentStepId: draftParentStepId,
@@ -553,17 +589,49 @@ export const executeReviewLoop = async (ctx: {
                               }),
                       })
                     : undefined;
-            if (revisionChainResult?.status === 'exhausted') {
-                throw new Error(revisionChainResult.reasonCode);
+            const revisionRoutingResult =
+                revisionChainResult !== undefined
+                    ? toRoutingChainResult(revisionChainResult)
+                    : undefined;
+            if (revisionRoutingResult?.isErr()) {
+                const routingFailure = revisionRoutingResult.error;
+                const revisionFinishedAt = Date.now();
+                ctx.captureStep({
+                    stepKind: 'generate',
+                    status: 'failed',
+                    summary:
+                        'Refinement routing chain failed; fail-open returned latest successful draft.',
+                    reasonCode: routingFailure.reasonCode,
+                    startedAtMs: revisionStartedAt,
+                    finishedAtMs: revisionFinishedAt,
+                    parentStepId: input.reviewStepId,
+                    attempt: input.iteration,
+                    signals: {
+                        ...toLatestRoutingHintSignals(),
+                        ...buildRoutingChainSignals({
+                            attempts: routingFailure.attempts,
+                            selectedProfileId: null,
+                        }),
+                    },
+                });
+                workflowState = applyStepExecutionToState(
+                    workflowState,
+                    'generate',
+                    0,
+                    0,
+                    0
+                );
+                terminationReason = 'executor_error_fail_open';
+                workflowStatus = 'degraded';
+                shouldStop = true;
+                return;
             }
-            const revisionResult =
-                revisionChainResult?.status === 'executed'
-                    ? revisionChainResult.value
-                    : await ctx.generationRuntime.generate(revisionRequest);
-            const revisionUsageModel =
-                revisionChainResult?.status === 'executed'
-                    ? revisionChainResult.selected.profile.providerModel
-                    : effectiveGenerationRequest.model;
+            const revisionResult = revisionRoutingResult?.isOk()
+                ? revisionRoutingResult.value.value
+                : await ctx.generationRuntime.generate(revisionRequest);
+            const revisionUsageModel = revisionRoutingResult?.isOk()
+                ? revisionRoutingResult.value.selected.profile.providerModel
+                : effectiveGenerationRequest.model;
             const revisionFinishedAt = Date.now();
             const revisionUsage = ctx.captureUsage(
                 revisionResult,
@@ -594,11 +662,12 @@ export const executeReviewLoop = async (ctx: {
                     }),
                     ...toLatestRoutingHintSignals(),
                     ...buildRoutingChainSignals({
-                        attempts: revisionChainResult?.attempts,
-                        selectedProfileId:
-                            revisionChainResult?.status === 'executed'
-                                ? revisionChainResult.selected.profile.id
-                                : null,
+                        attempts: revisionRoutingResult?.isOk()
+                            ? revisionRoutingResult.value.attempts
+                            : undefined,
+                        selectedProfileId: revisionRoutingResult?.isOk()
+                            ? revisionRoutingResult.value.selected.profile.id
+                            : null,
                     }),
                 },
             });
@@ -611,21 +680,14 @@ export const executeReviewLoop = async (ctx: {
             );
             draftResult = revisionResult;
             draftParentStepId = revisionStepId;
-        } catch (error) {
+        } catch {
             const revisionFinishedAt = Date.now();
-            const errorMessage =
-                error instanceof Error ? error.message : String(error);
-            const reasonCode: ExecutionReasonCode =
-                errorMessage === 'routing_chain_exhausted' ||
-                errorMessage === 'routing_chain_non_transient_error'
-                    ? (errorMessage as ExecutionReasonCode)
-                    : 'generation_runtime_error';
             ctx.captureStep({
                 stepKind: 'generate',
                 status: 'failed',
                 summary:
                     'Refinement generation failed; fail-open returned latest successful draft.',
-                reasonCode,
+                reasonCode: 'generation_runtime_error',
                 startedAtMs: revisionStartedAt,
                 finishedAtMs: revisionFinishedAt,
                 parentStepId: input.reviewStepId,

@@ -58,6 +58,9 @@ test('web search executor returns executed with normalized citations from searxn
             maxResults: 4,
         });
         const result = await executor(createBaseInput());
+        if (result.outcome !== 'executed') {
+            assert.fail(`Expected executed outcome, got ${result.outcome}`);
+        }
         assert.equal(result.executionContext.status, 'executed');
         assert.equal(result.sources?.[0]?.url, 'https://example.com/policy');
         assert.ok(
@@ -106,6 +109,9 @@ test('web search executor falls back to brave when searxng fails', async () => {
             maxResults: 4,
         });
         const result = await executor(createBaseInput());
+        if (result.outcome !== 'executed') {
+            assert.fail(`Expected executed outcome, got ${result.outcome}`);
+        }
         assert.equal(result.executionContext.status, 'executed');
         assert.equal(result.sources?.[0]?.url, 'https://brave.example/result');
         const payload = result.integrationContext?.payload as
@@ -145,6 +151,7 @@ test('web search executor returns skipped/tool_not_used when providers return em
             maxResults: 4,
         });
         const result = await executor(createBaseInput());
+        assert.equal(result.outcome, 'skipped');
         assert.equal(result.executionContext.status, 'skipped');
         assert.equal(result.executionContext.reasonCode, 'tool_not_used');
     } finally {
@@ -166,6 +173,7 @@ test('web search executor returns skipped/tool_unavailable when all providers ar
         maxResults: 4,
     });
     const result = await executor(createBaseInput());
+    assert.equal(result.outcome, 'skipped');
     assert.equal(result.executionContext.status, 'skipped');
     assert.equal(result.executionContext.reasonCode, 'tool_unavailable');
 });
@@ -202,6 +210,9 @@ test('web search executor falls back to serpapi when searxng and brave are unava
             maxResults: 4,
         });
         const result = await executor(createBaseInput());
+        if (result.outcome !== 'executed') {
+            assert.fail(`Expected executed outcome, got ${result.outcome}`);
+        }
         assert.equal(result.executionContext.status, 'executed');
         assert.equal(
             result.sources?.[0]?.url,
@@ -240,6 +251,7 @@ test('web search executor returns skipped/tool_unavailable when only serpapi is 
         maxResults: 4,
     });
     const result = await executor(createBaseInput());
+    assert.equal(result.outcome, 'skipped');
     assert.equal(result.executionContext.status, 'skipped');
     assert.equal(result.executionContext.reasonCode, 'tool_unavailable');
     const payload = result.integrationContext?.payload as

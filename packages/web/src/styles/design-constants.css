@@ -1,0 +1,147 @@
+:root {
+    /* Color constants */
+    --fn-color-ivory-100: #fdfcf9;
+    --fn-color-ivory-200: #f9f8f6;
+    --fn-color-ivory-300: #f7f2e9;
+    --fn-color-ivory-400: #f4f1ea;
+    --fn-color-ink-900: #2b2a27;
+    --fn-color-ink-700: #4d4a43;
+    --fn-color-sage-600: #4a7c59;
+    --fn-color-sage-500: #5b8f6a;
+    --fn-color-sage-400: #7ea089;
+    --fn-color-bronze-500: #c1a057;
+    --fn-color-rust-500: #a97b63;
+    --fn-color-blue-600: #3f6075;
+    --fn-color-blue-500: #6b8796;
+    --fn-color-stone-300: #e3ddd2;
+    --fn-color-stone-250: #e9ecdf;
+    --fn-color-error-700: #b02a37;
+    --fn-color-error-500: #dc2626;
+    --fn-color-success-300: #7fdca4;
+    --fn-color-warning-300: #f8e37c;
+    --fn-color-danger-300: #e27c7c;
+
+    --fn-color-dark-900: #1c1b1a;
+    --fn-color-dark-800: #23221f;
+    --fn-color-dark-700: #292622;
+    --fn-color-dark-650: #2d2a25;
+    --fn-color-dark-500: #3f3c35;
+    --fn-color-dark-450: #333029;
+    --fn-color-dark-text: #e3e0d7;
+    --fn-color-dark-text-muted: #d5d0c6;
+    --fn-color-dark-accent: #86b095;
+    --fn-color-dark-accent-soft: #98bda6;
+    --fn-color-dark-highlight: #c49d6e;
+    --fn-color-dark-rust: #a8715a;
+    --fn-color-dark-link: #9abfaa;
+    --fn-color-dark-link-hover: #a9d1ba;
+
+    /* Typography constants */
+    --fn-font-body:
+        'Baskerville', 'Iowan Old Style', 'Palatino Linotype', serif;
+    --fn-font-mono:
+        'IBM Plex Mono', 'JetBrains Mono', 'SFMono-Regular', monospace;
+    --fn-font-sans:
+        'Avenir Next Condensed', 'Gill Sans', 'Trebuchet MS', sans-serif;
+    --fn-font-display: 'Bodoni MT', 'Didot', 'Baskerville', serif;
+
+    /* Spacing scale */
+    --fn-space-0: 0;
+    --fn-space-1: 0.25rem;
+    --fn-space-2: 0.5rem;
+    --fn-space-3: 0.75rem;
+    --fn-space-4: 1rem;
+    --fn-space-5: 1.25rem;
+    --fn-space-6: 1.5rem;
+    --fn-space-7: 2rem;
+    --fn-space-8: 2.5rem;
+
+    /* Radius scale */
+    --fn-radius-sm: 4px;
+    --fn-radius-md: 8px;
+    --fn-radius-lg: 12px;
+    --fn-radius-xl: 16px;
+
+    /* Shadow scale */
+    --fn-shadow-soft: 0 8px 18px rgba(52, 52, 52, 0.08);
+    --fn-shadow-card: 0 14px 30px
+        color-mix(in srgb, rgba(52, 52, 52, 0.08) 55%, transparent 45%);
+    --fn-shadow-overlay: 0 20px 60px rgba(0, 0, 0, 0.5);
+
+    /* Z-index scale */
+    --fn-z-underlay: -1;
+    --fn-z-default: 0;
+    --fn-z-sticky: 120;
+    --fn-z-skip-link: 10000;
+    --fn-z-modal: 200;
+
+    /* Motion constants */
+    --fn-duration-fast: 200ms;
+    --fn-duration-reveal: 560ms;
+    --fn-ease-standard: ease;
+
+    /* Breakpoints */
+    --fn-breakpoint-xs: 320px;
+    --fn-breakpoint-sm: 480px;
+    --fn-breakpoint-md: 768px;
+    --fn-breakpoint-lg: 960px;
+
+    /* Layout constants */
+    --fn-layout-max-width: 1024px;
+    --fn-layout-site-header-height: 6.25rem;
+
+    /* Backdrop constants */
+    --fn-backdrop-light:
+        repeating-linear-gradient(
+            90deg,
+            rgba(33, 30, 26, 0.035) 0 1px,
+            transparent 1px 12px
+        ),
+        radial-gradient(
+            circle at 14% 20%,
+            rgba(174, 132, 88, 0.14),
+            transparent 56%
+        ),
+        radial-gradient(
+            circle at 86% 24%,
+            rgba(76, 99, 88, 0.11),
+            transparent 53%
+        ),
+        radial-gradient(
+            circle at 55% 86%,
+            rgba(132, 95, 76, 0.14),
+            transparent 57%
+        ),
+        linear-gradient(
+            145deg,
+            rgba(255, 255, 255, 0.12) 0%,
+            rgba(69, 57, 45, 0.08) 100%
+        );
+
+    --fn-backdrop-dark:
+        repeating-linear-gradient(
+            90deg,
+            rgba(255, 255, 255, 0.02) 0 1px,
+            transparent 1px 12px
+        ),
+        radial-gradient(
+            circle at 16% 18%,
+            rgba(148, 111, 73, 0.28),
+            transparent 62%
+        ),
+        radial-gradient(
+            circle at 84% 14%,
+            rgba(66, 92, 80, 0.24),
+            transparent 58%
+        ),
+        radial-gradient(
+            circle at 58% 86%,
+            rgba(124, 83, 61, 0.24),
+            transparent 61%
+        ),
+        linear-gradient(
+            150deg,
+            rgba(19, 18, 17, 0.82) 0%,
+            rgba(31, 28, 25, 0.72) 100%
+        );
+}
