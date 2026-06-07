@@ -23,6 +23,33 @@ const PLANNER_CONTRACT_TYPES = new Set<PlannerExecutionContractType>([
     'fallback',
 ]);
 
+const ROUTING_CHAIN_RESERVED_SIGNAL_KEYS = [
+    'routingChainAttemptCount',
+    'routingChainAttemptsJson',
+] as const;
+
+const createUniqueRoutingSignalKey = (
+    requestedKey: string | undefined,
+    fallbackKey: string,
+    usedKeys: Set<string>
+): string => {
+    const baseKey = requestedKey ?? fallbackKey;
+    if (!usedKeys.has(baseKey)) {
+        usedKeys.add(baseKey);
+        return baseKey;
+    }
+
+    let suffix = 1;
+    let candidateKey = `${baseKey}_alias`;
+    while (usedKeys.has(candidateKey)) {
+        suffix += 1;
+        candidateKey = `${baseKey}_alias${suffix}`;
+    }
+
+    usedKeys.add(candidateKey);
+    return candidateKey;
+};
+
 /**
  * Builds routing-chain signals while preserving the generic signal-bag shape.
  *
@@ -44,9 +71,22 @@ export const buildWorkflowRoutingChainSignals = (input: {
         return {};
     }
 
-    const profileIdKey = input.signalKeys?.profileId ?? 'selectedProfileId';
-    const providerKey = input.signalKeys?.provider ?? 'selectedProvider';
-    const modelKey = input.signalKeys?.model ?? 'selectedModel';
+    const usedSignalKeys = new Set<string>(ROUTING_CHAIN_RESERVED_SIGNAL_KEYS);
+    const profileIdKey = createUniqueRoutingSignalKey(
+        input.signalKeys?.profileId,
+        'selectedProfileId',
+        usedSignalKeys
+    );
+    const providerKey = createUniqueRoutingSignalKey(
+        input.signalKeys?.provider,
+        'selectedProvider',
+        usedSignalKeys
+    );
+    const modelKey = createUniqueRoutingSignalKey(
+        input.signalKeys?.model,
+        'selectedModel',
+        usedSignalKeys
+    );
     const signals: WorkflowRoutingChainSignals = {
         routingChainAttemptCount: input.attempts.length,
         routingChainAttemptsJson: JSON.stringify(input.attempts),
