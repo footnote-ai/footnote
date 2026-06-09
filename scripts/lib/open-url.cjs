@@ -11,15 +11,49 @@
 
 const { spawnSync } = require('node:child_process');
 
+const SAFE_BROWSER_URL_PATTERN =
+    /^https?:\/\/[A-Za-z0-9][A-Za-z0-9._~:/?#[\]@!$&'()*+,;=%-]*$/u;
+
+const parseBrowserUrl = (url) => {
+    if (typeof url !== 'string') {
+        return null;
+    }
+
+    try {
+        const parsed = new URL(url);
+        if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
+            return null;
+        }
+        if (parsed.username || parsed.password) {
+            return null;
+        }
+        if (!SAFE_BROWSER_URL_PATTERN.test(parsed.href)) {
+            return null;
+        }
+        return parsed.href;
+    } catch {
+        return null;
+    }
+};
+
 const openUrl = (url, label = 'settings') => {
+    const safeUrl = parseBrowserUrl(url);
+    if (!safeUrl) {
+        console.warn(`[${label}] Refusing to open an invalid browser URL.`);
+        console.log(`[${label}] Open this URL manually: ${url}`);
+        return false;
+    }
+
     const command =
         process.platform === 'win32'
-            ? 'cmd'
+            ? 'rundll32.exe'
             : process.platform === 'darwin'
               ? 'open'
               : 'xdg-open';
     const args =
-        process.platform === 'win32' ? ['/c', 'start', '', url] : [url];
+        process.platform === 'win32'
+            ? ['url.dll,FileProtocolHandler', safeUrl]
+            : [safeUrl];
 
     const result = spawnSync(command, args, {
         stdio: 'ignore',
@@ -28,7 +62,7 @@ const openUrl = (url, label = 'settings') => {
 
     if (result.error || (result.status ?? 1) !== 0) {
         console.warn(`[${label}] Could not open browser automatically.`);
-        console.log(`[${label}] Open this URL manually: ${url}`);
+        console.log(`[${label}] Open this URL manually: ${safeUrl}`);
         return false;
     }
     return true;
@@ -36,4 +70,5 @@ const openUrl = (url, label = 'settings') => {
 
 module.exports = {
     openUrl,
+    parseBrowserUrl,
 };
