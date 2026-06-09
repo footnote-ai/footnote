@@ -7,6 +7,8 @@
  */
 
 import type { IncomingMessage, ServerResponse } from 'node:http';
+import fs from 'node:fs';
+import path from 'node:path';
 import { sendJson } from './chatResponses.js';
 import {
     buildSetupSessionClearCookie,
@@ -35,6 +37,8 @@ type RequestHandler = (
 
 type CreateSetupSessionHandlersDeps = {
     setupBootstrapService: SetupBootstrapService;
+    settingsPath: string;
+    setupBaseUrl: string;
     logger: SetupSessionLogger;
     logRequest: LogRequest;
 };
@@ -42,9 +46,13 @@ type CreateSetupSessionHandlersDeps = {
 type SetupSessionHandlers = {
     handleSetupSessionPostRequest: RequestHandler;
     handleSetupSessionDeleteRequest: RequestHandler;
+    handleSetupOperatorLinkPostRequest: RequestHandler;
 };
 
 const MAX_SETUP_SESSION_BODY_BYTES = 4_096;
+const OPERATOR_REQUEST_HEADER_NAME = 'x-footnote-operator-request';
+const OPERATOR_REQUEST_HEADER_VALUE = 'cli';
+const SETUP_CSRF_HEADER_NAME = 'x-setup-csrf';
 
 class RequestBodyTooLargeError extends Error {
     constructor() {
@@ -66,6 +74,21 @@ const readSingleHeaderValue = (
 
 const readRequestId = (req: IncomingMessage): string | null =>
     readSingleHeaderValue(req.headers['x-request-id']);
+
+const readHeaderValue = (
+    req: IncomingMessage,
+    headerName: string
+): string | null => readSingleHeaderValue(req.headers[headerName]);
+
+const requestHasJsonContentType = (req: IncomingMessage): boolean => {
+    const contentType = readHeaderValue(req, 'content-type');
+    if (!contentType) {
+        return false;
+    }
+    return (
+        contentType.split(';')[0]?.trim().toLowerCase() === 'application/json'
+    );
+};
 
 const readRawBody = async (req: IncomingMessage): Promise<string> => {
     const contentLengthHeader = req.headers['content-length'];
@@ -110,8 +133,173 @@ const parseSetupSessionRequestBody = (
     }
 };
 
+type SetupOperatorLinkAction = 'settings' | 'reset';
+
+const parseSetupOperatorLinkRequestBody = (
+    rawBody: string
+): { ok: true; action: SetupOperatorLinkAction } | { ok: false } => {
+    try {
+        const parsed = JSON.parse(rawBody) as unknown;
+        if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+            return { ok: false };
+        }
+        const action = (parsed as { action?: unknown }).action;
+        if (action !== 'settings' && action !== 'reset') {
+            return { ok: false };
+        }
+        return { ok: true, action };
+    } catch {
+        return { ok: false };
+    }
+};
+
+export const isLoopbackAddress = (remoteAddress: string | undefined): boolean =>
+    remoteAddress === '127.0.0.1' ||
+    remoteAddress === '::1' ||
+    remoteAddress === '::ffff:127.0.0.1';
+
+const readOrigin = (value: string | null): string | null => {
+    if (!value) {
+        return null;
+    }
+    try {
+        return new URL(value).origin;
+    } catch {
+        return null;
+    }
+};
+
+const originMatchesSetupBaseUrl = (
+    headerValue: string | null,
+    setupBaseUrl: string
+): boolean => {
+    if (!headerValue) {
+        return true;
+    }
+    try {
+        return readOrigin(headerValue) === new URL(setupBaseUrl).origin;
+    } catch {
+        return false;
+    }
+};
+
+const hasValidSetupSessionCsrf = async (
+    req: IncomingMessage,
+    setupBootstrapService: SetupBootstrapService
+): Promise<boolean> => {
+    const sessionId = readSetupSessionIdFromRequest(req);
+    if (!sessionId) {
+        return false;
+    }
+    const csrfToken = readHeaderValue(req, SETUP_CSRF_HEADER_NAME);
+    if (!csrfToken) {
+        return false;
+    }
+    const session = await setupBootstrapService.validateSetupSession(sessionId);
+    return Boolean(session && session.csrfToken === csrfToken);
+};
+
+const validateOperatorLinkProvenance = async ({
+    req,
+    setupBaseUrl,
+    setupBootstrapService,
+}: {
+    req: IncomingMessage;
+    setupBaseUrl: string;
+    setupBootstrapService: SetupBootstrapService;
+}): Promise<
+    { ok: true } | { ok: false; status: 400 | 403; code: string; error: string }
+> => {
+    if (!requestHasJsonContentType(req)) {
+        return {
+            ok: false,
+            status: 400,
+            code: 'invalid_content_type',
+            error: 'Content-Type must be application/json',
+        };
+    }
+
+    const origin = readHeaderValue(req, 'origin');
+    const referer = readHeaderValue(req, 'referer');
+    if (
+        !originMatchesSetupBaseUrl(origin, setupBaseUrl) ||
+        (!origin && !originMatchesSetupBaseUrl(referer, setupBaseUrl))
+    ) {
+        return {
+            ok: false,
+            status: 403,
+            code: 'origin_mismatch',
+            error: 'Operator link requires same-origin provenance',
+        };
+    }
+
+    if (
+        readHeaderValue(req, OPERATOR_REQUEST_HEADER_NAME) ===
+        OPERATOR_REQUEST_HEADER_VALUE
+    ) {
+        return { ok: true };
+    }
+
+    if (await hasValidSetupSessionCsrf(req, setupBootstrapService)) {
+        return { ok: true };
+    }
+
+    return {
+        ok: false,
+        status: 403,
+        code: 'missing_operator_provenance',
+        error: 'Operator link requires CLI provenance or setup session CSRF',
+    };
+};
+
+const pathExists = async (filePath: string): Promise<boolean> => {
+    try {
+        await fs.promises.access(filePath, fs.constants.F_OK);
+        return true;
+    } catch (error) {
+        const nodeError = error as NodeJS.ErrnoException;
+        if (nodeError.code === 'ENOENT') {
+            return false;
+        }
+        throw error;
+    }
+};
+
+const buildBackupPath = (settingsPath: string, now = new Date()): string => {
+    const timestamp = now.toISOString().replace(/[:.]/g, '-');
+    return `${settingsPath}.reset-backup-${timestamp}`;
+};
+
+const buildSetupLinkPayload = ({
+    action,
+    settingsState,
+    setupBaseUrl,
+    issued,
+    backupPath,
+}: {
+    action: SetupOperatorLinkAction;
+    settingsState: 'present' | 'missing' | 'reset';
+    setupBaseUrl: string;
+    issued: { code: string; mode: string; expiresAt: string };
+    backupPath?: string;
+}) => {
+    const setupPath = `/setup#code=${encodeURIComponent(issued.code)}`;
+    return {
+        ok: true,
+        action,
+        mode: issued.mode,
+        setupPath,
+        setupUrl: `${setupBaseUrl}${setupPath}`,
+        expiresAt: issued.expiresAt,
+        settingsState,
+        ...(backupPath ? { backupPath } : {}),
+    };
+};
+
 export const createSetupSessionHandlers = ({
     setupBootstrapService,
+    settingsPath,
+    setupBaseUrl,
     logger,
     logRequest,
 }: CreateSetupSessionHandlersDeps): SetupSessionHandlers => {
@@ -250,8 +438,147 @@ export const createSetupSessionHandlers = ({
         logRequest(req, res, 'setup.session.delete ok');
     };
 
+    /**
+     * @api.operationId: postSetupOperatorLink
+     * @api.path: POST /api/setup/operator-link
+     */
+    const handleSetupOperatorLinkPostRequest: RequestHandler = async (
+        req,
+        res
+    ) => {
+        if (req.method !== 'POST') {
+            sendJson(res, 405, { error: 'Method not allowed' });
+            logRequest(req, res, 'setup.operator-link method-not-allowed');
+            return;
+        }
+
+        const requestId = readRequestId(req);
+        if (!isLoopbackAddress(req.socket.remoteAddress)) {
+            sendJson(res, 403, {
+                error: 'Operator link requires local access',
+            });
+            logger.warn('setup.operator_link.denied', {
+                requestId,
+                remoteAddress: req.socket.remoteAddress,
+            });
+            logRequest(req, res, 'setup.operator-link non-local');
+            return;
+        }
+
+        const provenance = await validateOperatorLinkProvenance({
+            req,
+            setupBaseUrl,
+            setupBootstrapService,
+        });
+        if (!provenance.ok) {
+            sendJson(res, provenance.status, { error: provenance.error });
+            logger.warn('setup.operator_link.denied', {
+                requestId,
+                code: provenance.code,
+            });
+            logRequest(req, res, `setup.operator-link ${provenance.code}`);
+            return;
+        }
+
+        try {
+            const rawBody = await readRawBody(req);
+            const parsedBody = parseSetupOperatorLinkRequestBody(rawBody);
+            if (!parsedBody.ok) {
+                sendJson(res, 400, { error: 'Invalid request payload' });
+                logger.warn('setup.operator_link.failed', {
+                    requestId,
+                    code: 'invalid_payload',
+                });
+                logRequest(req, res, 'setup.operator-link invalid-payload');
+                return;
+            }
+
+            const configExistsBefore = await pathExists(settingsPath);
+            let backupPath: string | undefined;
+            let settingsState: 'present' | 'missing' | 'reset';
+            if (parsedBody.action === 'reset') {
+                if (configExistsBefore) {
+                    backupPath = buildBackupPath(settingsPath);
+                    await fs.promises.mkdir(path.dirname(settingsPath), {
+                        recursive: true,
+                    });
+                    await fs.promises.copyFile(settingsPath, backupPath);
+                    await fs.promises.rm(settingsPath, { force: true });
+                    settingsState = 'reset';
+                } else {
+                    settingsState = 'missing';
+                }
+            } else {
+                settingsState = configExistsBefore ? 'present' : 'missing';
+            }
+
+            const mode =
+                parsedBody.action === 'settings' && configExistsBefore
+                    ? 'operator'
+                    : 'first-run';
+            const issued = await setupBootstrapService.issueOrGetActiveCode({
+                mode,
+            });
+            if (!issued) {
+                sendJson(res, 409, { error: 'Setup link is not available' });
+                logger.warn('setup.operator_link.failed', {
+                    requestId,
+                    code: 'link_unavailable',
+                    action: parsedBody.action,
+                    mode,
+                    settingsState,
+                });
+                logRequest(req, res, 'setup.operator-link unavailable');
+                return;
+            }
+
+            sendJson(
+                res,
+                200,
+                buildSetupLinkPayload({
+                    action: parsedBody.action,
+                    settingsState,
+                    setupBaseUrl,
+                    issued,
+                    backupPath,
+                }),
+                {
+                    'Cache-Control': 'no-store',
+                }
+            );
+            logger.info('setup.operator_link.succeeded', {
+                requestId,
+                action: parsedBody.action,
+                mode: issued.mode,
+                settingsState,
+                backupPath,
+                expiresAt: issued.expiresAt,
+            });
+            logRequest(req, res, 'setup.operator-link ok');
+        } catch (error) {
+            if (error instanceof RequestBodyTooLargeError) {
+                sendJson(res, 413, { error: 'Request payload too large' });
+                logger.warn('setup.operator_link.failed', {
+                    requestId,
+                    code: 'payload_too_large',
+                });
+                logRequest(req, res, 'setup.operator-link payload-too-large');
+                return;
+            }
+            sendJson(res, 500, { error: 'Internal server error' });
+            logger.error('setup.operator_link.failed', {
+                requestId,
+                code: 'internal_error',
+                message:
+                    error instanceof Error ? error.message : 'unknown error',
+            });
+            logRequest(req, res, 'setup.operator-link failed');
+        }
+    };
+
     return {
         handleSetupSessionPostRequest,
         handleSetupSessionDeleteRequest,
+        handleSetupOperatorLinkPostRequest,
     };
 };

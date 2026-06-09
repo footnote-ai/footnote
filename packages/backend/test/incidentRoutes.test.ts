@@ -139,6 +139,7 @@ test('incident routes are handled in Express with explicit precedence and no spe
         handleAdminSettingsYamlPutRequest: createUnhandledRouteHandler,
         handleSetupSessionPostRequest: createUnhandledRouteHandler,
         handleSetupSessionDeleteRequest: createUnhandledRouteHandler,
+        handleSetupOperatorLinkPostRequest: createUnhandledRouteHandler,
         handleStaticTransportRequest: async ({ res }) => {
             res.statusCode = 404;
             res.end('static');

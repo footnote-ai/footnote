@@ -148,6 +148,10 @@ type CreateExpressAppDeps = {
         req: http.IncomingMessage,
         res: http.ServerResponse
     ) => Promise<void>;
+    handleSetupOperatorLinkPostRequest: (
+        req: http.IncomingMessage,
+        res: http.ServerResponse
+    ) => Promise<void>;
     handleStaticTransportRequest: HandleStaticTransportRequest;
     resolveAsset: ResolveAsset;
     mimeMap: ReadonlyMap<string, string>;
@@ -182,6 +186,7 @@ const createExpressApp = ({
     handleAdminSettingsYamlPutRequest,
     handleSetupSessionPostRequest,
     handleSetupSessionDeleteRequest,
+    handleSetupOperatorLinkPostRequest,
     handleStaticTransportRequest,
     resolveAsset,
     mimeMap,
@@ -214,6 +219,7 @@ const createExpressApp = ({
         normalizePathname,
         handleSetupSessionPostRequest,
         handleSetupSessionDeleteRequest,
+        handleSetupOperatorLinkPostRequest,
         logRequest,
     });
     registerIncidentRoutes({

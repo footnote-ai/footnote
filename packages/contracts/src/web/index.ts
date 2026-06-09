@@ -117,6 +117,8 @@ export type { GetRuntimeConfigResponse } from './types.js';
 export type {
     PostSetupSessionRequest,
     PostSetupSessionResponse,
+    PostSetupOperatorLinkRequest,
+    PostSetupOperatorLinkResponse,
 } from './types.js';
 
 /**
@@ -178,6 +180,8 @@ export {
     ApiErrorResponseSchema,
     PostSetupSessionRequestSchema,
     PostSetupSessionResponseSchema,
+    PostSetupOperatorLinkRequestSchema,
+    PostSetupOperatorLinkResponseSchema,
     CitationSchema,
     GetTraceApiResponseSchema,
     GetIncidentResponseSchema,

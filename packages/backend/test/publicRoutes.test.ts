@@ -139,6 +139,10 @@ test('public routes are Express-owned and bypass central /api dispatch while pre
             res.statusCode = 204;
             res.end();
         },
+        handleSetupOperatorLinkPostRequest: async (_req, res) => {
+            res.statusCode = 200;
+            res.end('setup-operator-link');
+        },
         handleStaticTransportRequest: async ({ res }) => {
             res.statusCode = 404;
             res.end('static');

@@ -118,3 +118,51 @@ test('setup session validate/expiry/clear lifecycle is enforced', async () => {
         cleanup();
     }
 });
+
+test('first-run sessions expire after settings file appears but operator sessions remain valid', async () => {
+    const { settingsPath, cleanup } = createTempSettingsPath();
+    let tokenCounter = 0;
+    const service = createSetupBootstrapService({
+        settingsPath,
+        randomToken: () => `token_${++tokenCounter}`,
+    });
+    try {
+        const firstRunCode = await service.issueOrGetActiveCode();
+        assert.ok(firstRunCode);
+        assert.equal(firstRunCode.mode, 'first-run');
+        const firstRunExchange = await service.exchangeCodeForSession(
+            firstRunCode.code
+        );
+        assert.equal(firstRunExchange.ok, true);
+        if (!firstRunExchange.ok) {
+            return;
+        }
+
+        fs.writeFileSync(settingsPath, 'version: 1\n', 'utf8');
+        const expiredFirstRun = await service.validateSetupSession(
+            firstRunExchange.session.sessionId
+        );
+        assert.equal(expiredFirstRun, null);
+
+        const operatorCode = await service.issueOrGetActiveCode({
+            mode: 'operator',
+        });
+        assert.ok(operatorCode);
+        assert.equal(operatorCode.mode, 'operator');
+        const operatorExchange = await service.exchangeCodeForSession(
+            operatorCode.code
+        );
+        assert.equal(operatorExchange.ok, true);
+        if (!operatorExchange.ok) {
+            return;
+        }
+
+        const validOperator = await service.validateSetupSession(
+            operatorExchange.session.sessionId
+        );
+        assert.ok(validOperator);
+        assert.equal(validOperator?.mode, 'operator');
+    } finally {
+        cleanup();
+    }
+});

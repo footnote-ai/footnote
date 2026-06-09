@@ -8,15 +8,20 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import http from 'node:http';
+import type { IncomingMessage, ServerResponse } from 'node:http';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { Readable } from 'node:stream';
 import {
     computeSettingsEtag,
     createAdminSettingsHandlers,
     writeSettingsFileAtomically,
 } from '../src/handlers/adminSettings.js';
-import { createSetupSessionHandlers } from '../src/handlers/setupSession.js';
+import {
+    createSetupSessionHandlers,
+    isLoopbackAddress,
+} from '../src/handlers/setupSession.js';
 import { settingsSpecEntries } from '../src/config/settings-spec.js';
 import {
     createSetupBootstrapService,
@@ -31,11 +36,18 @@ type TestServer = {
     cleanup: () => void;
 };
 
+const OPERATOR_LINK_HEADERS = {
+    'content-type': 'application/json',
+    'x-footnote-operator-request': 'cli',
+};
+
 const createAdminSettingsTestServer = async (options?: {
     adminToken?: string | null;
     maxBodyBytes?: number;
     settingsYaml?: string;
     createSettingsFile?: boolean;
+    now?: () => number;
+    bootstrapCodeTtlMs?: number;
 }): Promise<TestServer> => {
     const tempDir = fs.mkdtempSync(
         path.join(os.tmpdir(), 'footnote-admin-settings-handler-')
@@ -56,6 +68,8 @@ const createAdminSettingsTestServer = async (options?: {
     }
     const setupBootstrapService = createSetupBootstrapService({
         settingsPath,
+        now: options?.now,
+        bootstrapCodeTtlMs: options?.bootstrapCodeTtlMs,
     });
 
     const handlers = createAdminSettingsHandlers({
@@ -73,6 +87,8 @@ const createAdminSettingsTestServer = async (options?: {
     });
     const setupSessionHandlers = createSetupSessionHandlers({
         setupBootstrapService,
+        settingsPath,
+        setupBaseUrl: 'http://127.0.0.1',
         logger: {
             info: () => undefined,
             warn: () => undefined,
@@ -119,6 +135,16 @@ const createAdminSettingsTestServer = async (options?: {
             void setupSessionHandlers.handleSetupSessionDeleteRequest(req, res);
             return;
         }
+        if (
+            (req.url ?? '') === '/api/setup/operator-link' &&
+            req.method === 'POST'
+        ) {
+            void setupSessionHandlers.handleSetupOperatorLinkPostRequest(
+                req,
+                res
+            );
+            return;
+        }
 
         res.statusCode = 404;
         res.end('Not Found');
@@ -146,6 +172,58 @@ const createAdminSettingsTestServer = async (options?: {
             }),
         cleanup: () => fs.rmSync(tempDir, { recursive: true, force: true }),
     };
+};
+
+const callOperatorLinkHandlerWithRemoteAddress = async (
+    remoteAddress: string | undefined
+): Promise<{ status: number; payload: { error?: string } }> => {
+    const tempDir = fs.mkdtempSync(
+        path.join(os.tmpdir(), 'footnote-operator-link-handler-')
+    );
+    const settingsPath = path.join(tempDir, 'footnote.yaml');
+    fs.writeFileSync(settingsPath, 'version: 1\n', 'utf8');
+    const setupBootstrapService = createSetupBootstrapService({
+        settingsPath,
+    });
+    const handlers = createSetupSessionHandlers({
+        setupBootstrapService,
+        settingsPath,
+        setupBaseUrl: 'http://127.0.0.1',
+        logger: {
+            info: () => undefined,
+            warn: () => undefined,
+            error: () => undefined,
+        },
+        logRequest: () => undefined,
+    });
+    const req = Readable.from([JSON.stringify({ action: 'settings' })]);
+    Object.assign(req, {
+        method: 'POST',
+        headers: OPERATOR_LINK_HEADERS,
+        socket: { remoteAddress },
+    });
+
+    let responseBody = '';
+    const res = {
+        statusCode: 0,
+        setHeader: () => undefined,
+        end: (body: string) => {
+            responseBody = body;
+        },
+    };
+
+    try {
+        await handlers.handleSetupOperatorLinkPostRequest(
+            req as unknown as IncomingMessage,
+            res as unknown as ServerResponse
+        );
+        return {
+            status: res.statusCode,
+            payload: JSON.parse(responseBody) as { error?: string },
+        };
+    } finally {
+        fs.rmSync(tempDir, { recursive: true, force: true });
+    }
 };
 
 test('admin settings schema returns 503 when admin token is not configured', async () => {
@@ -294,6 +372,325 @@ test('/api/setup/session returns 409 when setup is not required', async () => {
     }
 });
 
+test('operator link local access guard accepts only loopback addresses', () => {
+    assert.equal(isLoopbackAddress('127.0.0.1'), true);
+    assert.equal(isLoopbackAddress('::1'), true);
+    assert.equal(isLoopbackAddress('::ffff:127.0.0.1'), true);
+    assert.equal(isLoopbackAddress('203.0.113.10'), false);
+    assert.equal(isLoopbackAddress(undefined), false);
+});
+
+test('/api/setup/operator-link rejects non-loopback remote addresses', async () => {
+    const result =
+        await callOperatorLinkHandlerWithRemoteAddress('203.0.113.10');
+    assert.equal(result.status, 403);
+    assert.equal(result.payload.error, 'Operator link requires local access');
+});
+
+test('/api/setup/operator-link rejects missing CLI provenance', async () => {
+    const server = await createAdminSettingsTestServer({
+        createSettingsFile: true,
+        adminToken: null,
+    });
+    try {
+        const response = await fetch(`${server.url}/api/setup/operator-link`, {
+            method: 'POST',
+            headers: {
+                'content-type': 'application/json',
+            },
+            body: JSON.stringify({ action: 'reset' }),
+        });
+        assert.equal(response.status, 403);
+        assert.deepEqual(await response.json(), {
+            error: 'Operator link requires CLI provenance or setup session CSRF',
+        });
+    } finally {
+        await server.close();
+        server.cleanup();
+    }
+});
+
+test('/api/setup/operator-link rejects invalid content type and origin provenance', async () => {
+    const server = await createAdminSettingsTestServer({
+        createSettingsFile: true,
+        adminToken: null,
+    });
+    try {
+        const contentTypeResponse = await fetch(
+            `${server.url}/api/setup/operator-link`,
+            {
+                method: 'POST',
+                headers: {
+                    'content-type': 'text/plain',
+                    'x-footnote-operator-request': 'cli',
+                },
+                body: JSON.stringify({ action: 'settings' }),
+            }
+        );
+        assert.equal(contentTypeResponse.status, 400);
+        assert.deepEqual(await contentTypeResponse.json(), {
+            error: 'Content-Type must be application/json',
+        });
+
+        const originResponse = await fetch(
+            `${server.url}/api/setup/operator-link`,
+            {
+                method: 'POST',
+                headers: {
+                    ...OPERATOR_LINK_HEADERS,
+                    origin: 'https://example.invalid',
+                },
+                body: JSON.stringify({ action: 'settings' }),
+            }
+        );
+        assert.equal(originResponse.status, 403);
+        assert.deepEqual(await originResponse.json(), {
+            error: 'Operator link requires same-origin provenance',
+        });
+    } finally {
+        await server.close();
+        server.cleanup();
+    }
+});
+
+test('/api/setup/operator-link rejects malformed and oversized payloads', async () => {
+    const server = await createAdminSettingsTestServer({
+        createSettingsFile: true,
+        adminToken: null,
+    });
+    try {
+        const malformedResponse = await fetch(
+            `${server.url}/api/setup/operator-link`,
+            {
+                method: 'POST',
+                headers: OPERATOR_LINK_HEADERS,
+                body: '{"action":',
+            }
+        );
+        assert.equal(malformedResponse.status, 400);
+        assert.deepEqual(await malformedResponse.json(), {
+            error: 'Invalid request payload',
+        });
+
+        const oversizedResponse = await fetch(
+            `${server.url}/api/setup/operator-link`,
+            {
+                method: 'POST',
+                headers: OPERATOR_LINK_HEADERS,
+                body: JSON.stringify({
+                    action: 'settings',
+                    pad: 'x'.repeat(4_096),
+                }),
+            }
+        );
+        assert.equal(oversizedResponse.status, 413);
+        assert.deepEqual(await oversizedResponse.json(), {
+            error: 'Request payload too large',
+        });
+    } finally {
+        await server.close();
+        server.cleanup();
+    }
+});
+
+test('/api/setup/operator-link settings issues operator code for existing settings', async () => {
+    const server = await createAdminSettingsTestServer({
+        createSettingsFile: true,
+        adminToken: null,
+    });
+    try {
+        const operatorResponse = await fetch(
+            `${server.url}/api/setup/operator-link`,
+            {
+                method: 'POST',
+                headers: OPERATOR_LINK_HEADERS,
+                body: JSON.stringify({ action: 'settings' }),
+            }
+        );
+        assert.equal(operatorResponse.status, 200);
+        const operatorPayload = (await operatorResponse.json()) as {
+            ok: boolean;
+            action: string;
+            mode: string;
+            setupPath: string;
+            setupUrl: string;
+            settingsState: string;
+        };
+        assert.equal(operatorPayload.ok, true);
+        assert.equal(operatorPayload.action, 'settings');
+        assert.equal(operatorPayload.mode, 'operator');
+        assert.equal(operatorPayload.settingsState, 'present');
+        assert.match(operatorPayload.setupPath, /^\/setup#code=fn_setup_/);
+        assert.match(
+            operatorPayload.setupUrl,
+            /^http:\/\/127\.0\.0\.1\/setup#code=fn_setup_/
+        );
+    } finally {
+        await server.close();
+        server.cleanup();
+    }
+});
+
+test('/api/setup/operator-link settings issues first-run code when settings are missing', async () => {
+    const server = await createAdminSettingsTestServer({
+        createSettingsFile: false,
+        adminToken: null,
+    });
+    try {
+        const operatorResponse = await fetch(
+            `${server.url}/api/setup/operator-link`,
+            {
+                method: 'POST',
+                headers: OPERATOR_LINK_HEADERS,
+                body: JSON.stringify({ action: 'settings' }),
+            }
+        );
+        assert.equal(operatorResponse.status, 200);
+        const operatorPayload = (await operatorResponse.json()) as {
+            mode: string;
+            settingsState: string;
+        };
+        assert.equal(operatorPayload.mode, 'first-run');
+        assert.equal(operatorPayload.settingsState, 'missing');
+    } finally {
+        await server.close();
+        server.cleanup();
+    }
+});
+
+test('/api/setup/operator-link reset backs up and removes existing settings before first-run code', async () => {
+    const server = await createAdminSettingsTestServer({
+        createSettingsFile: true,
+        adminToken: null,
+        settingsYaml: [
+            'version: 1',
+            'rate-limits:',
+            '  web-api-rate-limit-ip: 77',
+            '',
+        ].join('\n'),
+    });
+    try {
+        const operatorResponse = await fetch(
+            `${server.url}/api/setup/operator-link`,
+            {
+                method: 'POST',
+                headers: OPERATOR_LINK_HEADERS,
+                body: JSON.stringify({ action: 'reset' }),
+            }
+        );
+        assert.equal(operatorResponse.status, 200);
+        const operatorPayload = (await operatorResponse.json()) as {
+            mode: string;
+            settingsState: string;
+            backupPath?: string;
+        };
+        assert.equal(operatorPayload.mode, 'first-run');
+        assert.equal(operatorPayload.settingsState, 'reset');
+        assert.ok(operatorPayload.backupPath);
+        assert.equal(fs.existsSync(server.settingsPath), false);
+        assert.equal(fs.existsSync(operatorPayload.backupPath!), true);
+        assert.match(
+            fs.readFileSync(operatorPayload.backupPath!, 'utf8'),
+            /web-api-rate-limit-ip:\s*77/
+        );
+    } finally {
+        await server.close();
+        server.cleanup();
+    }
+});
+
+test('operator setup session can read and write existing settings until expiry', async () => {
+    const server = await createAdminSettingsTestServer({
+        createSettingsFile: true,
+        adminToken: null,
+    });
+    try {
+        const operatorResponse = await fetch(
+            `${server.url}/api/setup/operator-link`,
+            {
+                method: 'POST',
+                headers: OPERATOR_LINK_HEADERS,
+                body: JSON.stringify({ action: 'settings' }),
+            }
+        );
+        assert.equal(operatorResponse.status, 200);
+        const operatorPayload = (await operatorResponse.json()) as {
+            setupPath: string;
+        };
+        const setupCode = new URLSearchParams(
+            operatorPayload.setupPath.split('#')[1] ?? ''
+        ).get('code');
+        assert.ok(setupCode);
+
+        const exchangeResponse = await fetch(
+            `${server.url}/api/setup/session`,
+            {
+                method: 'POST',
+                headers: {
+                    'content-type': 'application/json',
+                },
+                body: JSON.stringify({ code: setupCode }),
+            }
+        );
+        assert.equal(exchangeResponse.status, 200);
+        const exchangePayload = (await exchangeResponse.json()) as {
+            csrfToken: string;
+        };
+        const setupCookie = exchangeResponse.headers
+            .get('set-cookie')
+            ?.split(';')[0];
+        assert.ok(setupCookie);
+
+        const readResponse = await fetch(
+            `${server.url}/api/admin/settings.yaml`,
+            {
+                headers: {
+                    cookie: setupCookie!,
+                },
+            }
+        );
+        assert.equal(readResponse.status, 200);
+        const etag = readResponse.headers.get('etag');
+        assert.ok(etag);
+
+        const writeResponse = await fetch(
+            `${server.url}/api/admin/settings.yaml`,
+            {
+                method: 'PUT',
+                headers: {
+                    cookie: setupCookie!,
+                    'x-setup-csrf': exchangePayload.csrfToken,
+                    'if-match': etag!,
+                },
+                body: [
+                    'version: 1',
+                    'rate-limits:',
+                    '  web-api-rate-limit-ip: 88',
+                    '',
+                ].join('\n'),
+            }
+        );
+        assert.equal(writeResponse.status, 200);
+
+        const readAfterWriteResponse = await fetch(
+            `${server.url}/api/admin/settings.yaml`,
+            {
+                headers: {
+                    cookie: setupCookie!,
+                },
+            }
+        );
+        assert.equal(readAfterWriteResponse.status, 200);
+        assert.match(
+            await readAfterWriteResponse.text(),
+            /web-api-rate-limit-ip:\s*88/
+        );
+    } finally {
+        await server.close();
+        server.cleanup();
+    }
+});
+
 test('/api/setup/session exchange validates payload/code and issues one-time setup session cookie', async () => {
     const server = await createAdminSettingsTestServer({
         createSettingsFile: false,
@@ -311,6 +708,9 @@ test('/api/setup/session exchange validates payload/code and issues one-time set
             }
         );
         assert.equal(invalidPayloadResponse.status, 400);
+        assert.deepEqual(await invalidPayloadResponse.json(), {
+            error: 'Invalid request payload',
+        });
 
         const invalidCodeResponse = await fetch(
             `${server.url}/api/setup/session`,
@@ -323,6 +723,9 @@ test('/api/setup/session exchange validates payload/code and issues one-time set
             }
         );
         assert.equal(invalidCodeResponse.status, 401);
+        assert.deepEqual(await invalidCodeResponse.json(), {
+            error: 'Invalid setup code',
+        });
 
         const issued = await server.issueSetupCode();
         assert.ok(issued);
@@ -363,6 +766,9 @@ test('/api/setup/session exchange validates payload/code and issues one-time set
             body: JSON.stringify({ code: issued.code }),
         });
         assert.equal(reuseResponse.status, 401);
+        assert.deepEqual(await reuseResponse.json(), {
+            error: 'Invalid setup code',
+        });
 
         const deleteResponse = await fetch(`${server.url}/api/setup/session`, {
             method: 'DELETE',
@@ -378,6 +784,36 @@ test('/api/setup/session exchange validates payload/code and issues one-time set
         assert.match(clearCookie!, /Path=\//);
         assert.match(clearCookie!, /HttpOnly/);
         assert.match(clearCookie!, /SameSite=Strict/);
+    } finally {
+        await server.close();
+        server.cleanup();
+    }
+});
+
+test('/api/setup/session rejects expired setup codes', async () => {
+    let now = Date.parse('2026-06-08T00:00:00.000Z');
+    const server = await createAdminSettingsTestServer({
+        createSettingsFile: false,
+        adminToken: null,
+        now: () => now,
+        bootstrapCodeTtlMs: 10,
+    });
+    try {
+        const issued = await server.issueSetupCode();
+        assert.ok(issued);
+        now += 11;
+
+        const response = await fetch(`${server.url}/api/setup/session`, {
+            method: 'POST',
+            headers: {
+                'content-type': 'application/json',
+            },
+            body: JSON.stringify({ code: issued.code }),
+        });
+        assert.equal(response.status, 401);
+        assert.deepEqual(await response.json(), {
+            error: 'Invalid setup code',
+        });
     } finally {
         await server.close();
         server.cleanup();

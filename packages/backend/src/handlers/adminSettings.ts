@@ -230,8 +230,9 @@ const buildSchemaFields = (entries: readonly SettingsSpecEntry[]) =>
  *   - `adminToken` unset + token provided => 503 (disabled).
  *   - token missing => flow can fall through to setup-session path when setup is required.
  *   - token present but invalid => 403.
- * - setup-session path is permitted only while `setupBootstrapService.isSetupRequiredNow()`
- *   is true, and requires a valid `footnote_setup_session` cookie.
+ * - setup-session path is permitted only when `validateSetupSession` returns a
+ *   valid short-lived session. First-run sessions expire when setup is no
+ *   longer required; operator sessions can edit existing settings until TTL.
  * - setup-session non-GET calls additionally require `x-setup-csrf` exact match
  *   against the issued session CSRF token; mismatch => 403.
  * - when setup is required and neither valid token nor valid setup-session auth
@@ -321,45 +322,43 @@ const createAdminSettingsHandlers = ({
             return { actorSource: 'x-admin-token' };
         }
 
+        const setupSessionId = readSetupSessionIdFromRequest(req);
+        if (setupSessionId) {
+            const setupSession =
+                await setupBootstrapService.validateSetupSession(
+                    setupSessionId
+                );
+            if (setupSession) {
+                if (req.method !== 'GET') {
+                    const csrfHeader = readHeaderValue(
+                        req.headers['x-setup-csrf']
+                    );
+                    if (!csrfHeader || csrfHeader !== setupSession.csrfToken) {
+                        sendJson(res, 403, {
+                            error: 'Missing or invalid setup CSRF token',
+                        });
+                        logger.warn('admin.settings.auth.failed', {
+                            requestId,
+                            routeLabel,
+                            actorSource: 'setup-session',
+                            result: 'csrf_invalid',
+                            mode: setupSession.mode,
+                        });
+                        logRequest(
+                            req,
+                            res,
+                            `${routeLabel} invalid-setup-csrf`
+                        );
+                        return null;
+                    }
+                }
+                return { actorSource: 'setup-session' };
+            }
+        }
+
         const setupRequiredNow =
             await setupBootstrapService.isSetupRequiredNow();
         if (setupRequiredNow) {
-            const setupSessionId = readSetupSessionIdFromRequest(req);
-            if (setupSessionId) {
-                const setupSession =
-                    await setupBootstrapService.validateSetupSession(
-                        setupSessionId
-                    );
-                if (setupSession) {
-                    if (req.method !== 'GET') {
-                        const csrfHeader = readHeaderValue(
-                            req.headers['x-setup-csrf']
-                        );
-                        if (
-                            !csrfHeader ||
-                            csrfHeader !== setupSession.csrfToken
-                        ) {
-                            sendJson(res, 403, {
-                                error: 'Missing or invalid setup CSRF token',
-                            });
-                            logger.warn('admin.settings.auth.failed', {
-                                requestId,
-                                routeLabel,
-                                actorSource: 'setup-session',
-                                result: 'csrf_invalid',
-                            });
-                            logRequest(
-                                req,
-                                res,
-                                `${routeLabel} invalid-setup-csrf`
-                            );
-                            return null;
-                        }
-                    }
-                    return { actorSource: 'setup-session' };
-                }
-            }
-
             sendJson(res, 401, { error: 'Missing admin token' });
             logger.warn('admin.settings.auth.failed', {
                 requestId,

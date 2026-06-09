@@ -22,11 +22,12 @@ openapi: 3.1.0
 # - GET /api/traces/{responseId}/assets/trace-card.svg: Trace-card SVG fetch (public)
 # - POST /api/setup/session: Exchange one-time setup bootstrap code for short-lived setup session
 # - DELETE /api/setup/session: Clear setup session cookie
-# - GET /api/admin/settings/schema: Admin editable settings schema metadata (AdminSettingsToken OR setup session during setup-required mode)
-# - GET /api/admin/settings/template: Canonical commented settings template YAML (AdminSettingsToken OR setup session during setup-required mode)
-# - GET /api/admin/settings.yaml: Admin canonical settings YAML read (AdminSettingsToken OR setup session during setup-required mode)
-# - POST /api/admin/settings/validate: Admin settings YAML validation (AdminSettingsToken OR setup session during setup-required mode)
-# - PUT /api/admin/settings.yaml: Admin settings YAML replace with If-Match concurrency (AdminSettingsToken OR setup session during setup-required mode)
+# - POST /api/setup/operator-link: Local-only operator setup/settings link issuance
+# - GET /api/admin/settings/schema: Admin editable settings schema metadata (AdminSettingsToken OR valid setup session)
+# - GET /api/admin/settings/template: Canonical commented settings template YAML (AdminSettingsToken OR valid setup session)
+# - GET /api/admin/settings.yaml: Admin canonical settings YAML read (AdminSettingsToken OR valid setup session)
+# - POST /api/admin/settings/validate: Admin settings YAML validation (AdminSettingsToken OR valid setup session)
+# - PUT /api/admin/settings.yaml: Admin settings YAML replace with If-Match concurrency (AdminSettingsToken OR valid setup session)
 # - GET /config.json: Runtime config (public)
 # - Operation/code index: docs/api/operation-map.md
 
@@ -826,7 +827,8 @@ paths:
             summary: Exchange one-time setup bootstrap code for setup session
             description: |
                 Exchanges a one-time `fn_setup_...` bootstrap code for a short-lived httpOnly setup session cookie.
-                Returns setup-session CSRF token required for non-GET admin settings writes during setup-required mode.
+                Returns setup-session CSRF token required for non-GET admin settings writes.
+                First-run sessions are valid only while settings are missing; operator sessions stay valid until TTL.
             tags:
                 - Admin
             requestBody:
@@ -869,6 +871,40 @@ paths:
                 '405':
                     $ref: '#/components/responses/MethodNotAllowed'
 
+    /api/setup/operator-link:
+        post:
+            operationId: postSetupOperatorLink
+            x-codeRefs:
+                - packages/backend/src/handlers/setupSession.ts#createSetupSessionHandlers
+                - packages/contracts/src/web/types.ts#PostSetupOperatorLinkRequest
+                - packages/contracts/src/web/types.ts#PostSetupOperatorLinkResponse
+            summary: Issue local-only operator settings link
+            description: |
+                Issues a short-lived setup/settings link for local operator tooling.
+                Requests must originate from loopback; Fly operators reach this endpoint through `fly ssh console`.
+                `settings` opens the existing config when present. `reset` backs up and removes the config before issuing a first-run link.
+            tags:
+                - Admin
+            requestBody:
+                required: true
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/SetupOperatorLinkRequest'
+            responses:
+                '200':
+                    $ref: '#/components/responses/SetupOperatorLinkOk'
+                '400':
+                    $ref: '#/components/responses/BadRequest'
+                '403':
+                    $ref: '#/components/responses/Forbidden'
+                '409':
+                    $ref: '#/components/responses/Conflict'
+                '405':
+                    $ref: '#/components/responses/MethodNotAllowed'
+                '500':
+                    $ref: '#/components/responses/InternalServerError'
+
     /api/admin/settings/schema:
         get:
             operationId: getAdminSettingsSchema
@@ -878,7 +914,7 @@ paths:
             summary: Fetch editable settings schema metadata
             description: |
                 Trusted admin endpoint that returns metadata for YAML-editable runtime settings.
-                Auth accepts either `x-admin-token`, or setup session cookie while setup is currently required.
+                Auth accepts either `x-admin-token`, or a valid setup session cookie.
                 When setup is not required and SETTINGS_ADMIN_TOKEN is unset, endpoint returns 503.
             tags:
                 - Admin
@@ -905,7 +941,7 @@ paths:
             summary: Fetch canonical commented settings template YAML
             description: |
                 Trusted admin endpoint that returns the canonical full commented `footnote.yaml` template.
-                Auth accepts either `x-admin-token`, or setup session cookie while setup is currently required.
+                Auth accepts either `x-admin-token`, or a valid setup session cookie.
                 When setup is not required and SETTINGS_ADMIN_TOKEN is unset, endpoint returns 503.
             tags:
                 - Admin
@@ -932,7 +968,7 @@ paths:
             summary: Fetch canonical settings YAML
             description: |
                 Trusted admin endpoint that returns the canonical persisted settings YAML document.
-                Auth accepts either `x-admin-token`, or setup session cookie while setup is currently required.
+                Auth accepts either `x-admin-token`, or a valid setup session cookie.
                 When setup is not required and SETTINGS_ADMIN_TOKEN is unset, endpoint returns 503.
             tags:
                 - Admin
@@ -960,7 +996,7 @@ paths:
             summary: Replace canonical settings YAML
             description: |
                 Trusted admin endpoint that validates and replaces the canonical persisted settings YAML document.
-                Auth accepts either `x-admin-token`, or setup session cookie while setup is currently required.
+                Auth accepts either `x-admin-token`, or a valid setup session cookie.
                 Setup-session auth requires `x-setup-csrf` on non-GET calls.
                 Requires If-Match optimistic concurrency with either current YAML ETag or `"footnote-settings-missing"` while file is absent.
             tags:
@@ -1007,7 +1043,7 @@ paths:
             summary: Validate admin settings YAML without writing
             description: |
                 Trusted admin endpoint that validates YAML settings without persisting changes.
-                Auth accepts either `x-admin-token`, or setup session cookie while setup is currently required.
+                Auth accepts either `x-admin-token`, or a valid setup session cookie.
                 Setup-session auth requires `x-setup-csrf` on non-GET calls.
                 When setup is not required and SETTINGS_ADMIN_TOKEN is unset, endpoint returns 503.
             tags:
@@ -1087,7 +1123,7 @@ components:
             type: apiKey
             in: cookie
             name: footnote_setup_session
-            description: Short-lived setup session cookie accepted only while setup is currently required.
+            description: Short-lived setup session cookie accepted while the session remains valid.
 
     # Data models for request/response payloads.
     schemas:
@@ -3689,6 +3725,60 @@ components:
                 - csrfToken
             additionalProperties: false
 
+        SetupOperatorLinkRequest:
+            type: object
+            properties:
+                action:
+                    type: string
+                    enum:
+                        - settings
+                        - reset
+            required:
+                - action
+            additionalProperties: false
+
+        SetupOperatorLinkResponse:
+            type: object
+            properties:
+                ok:
+                    type: boolean
+                    const: true
+                action:
+                    type: string
+                    enum:
+                        - settings
+                        - reset
+                mode:
+                    type: string
+                    enum:
+                        - operator
+                        - first-run
+                setupPath:
+                    type: string
+                setupUrl:
+                    type: string
+                    format: uri
+                expiresAt:
+                    type: string
+                    format: date-time
+                settingsState:
+                    type: string
+                    enum:
+                        - present
+                        - missing
+                        - reset
+                backupPath:
+                    type: string
+            required:
+                - ok
+                - action
+                - mode
+                - setupPath
+                - setupUrl
+                - expiresAt
+                - settingsState
+            additionalProperties: false
+
         AdminSettingsSchemaField:
             type: object
             properties:
@@ -4079,6 +4169,12 @@ components:
                 application/json:
                     schema:
                         $ref: '#/components/schemas/SetupSessionResponse'
+        SetupOperatorLinkOk:
+            description: Short-lived operator setup/settings link issued.
+            content:
+                application/json:
+                    schema:
+                        $ref: '#/components/schemas/SetupOperatorLinkResponse'
         AdminSettingsSchemaOk:
             description: Admin settings schema metadata.
             content:

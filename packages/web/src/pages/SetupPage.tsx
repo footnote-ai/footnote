@@ -1,5 +1,5 @@
 /**
- * @description: First-setup page for bootstrapping footnote.yaml when missing and saving validated YAML through backend-owned admin routes.
+ * @description: Settings page for editing footnote.yaml through short-lived setup/operator sessions.
  * @footnote-scope: web
  * @footnote-module: SetupPage
  * @footnote-risk: high - Setup-flow mistakes can prevent initial configuration or cause invalid privileged writes.
@@ -97,7 +97,7 @@ const SetupPage = (): JSX.Element => {
             setExchangeState({
                 status: 'error',
                 message:
-                    'Setup code is missing. Re-run `footnote setup` to generate a new setup link.',
+                    'Setup code is missing. Run `pnpm settings` to generate a new settings link.',
             });
             return;
         }
@@ -372,10 +372,10 @@ const SetupPage = (): JSX.Element => {
             <Header />
             <main className="page-content" id="main-content">
                 <section className="page-hero" aria-labelledby="setup-title">
-                    <h1 id="setup-title">First setup</h1>
+                    <h1 id="setup-title">Settings</h1>
                     <p className="page-hero__summary">
-                        Configure <code>footnote.yaml</code> and save. Settings
-                        are not applied until Footnote restarts.
+                        Edit <code>footnote.yaml</code> and save. Settings are
+                        not applied until Footnote restarts.
                     </p>
                 </section>
 

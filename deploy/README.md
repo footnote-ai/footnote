@@ -70,13 +70,36 @@ pnpm start
 
 3. Set secrets only in `.env` (or platform secrets).
 
-4. Validate env:
+4. To open the temporary settings editor for the current deployment:
+
+```bash
+pnpm settings
+```
+
+`pnpm settings` auto-detects local vs Fly from `footnote.yaml`, Fly env, and
+Fly manifests. Override detection when needed:
+
+```bash
+pnpm settings -- --target local
+pnpm settings -- --target fly
+```
+
+5. To restart first setup with deployment defaults:
+
+```bash
+pnpm reset
+```
+
+`pnpm reset` creates an automatic backup of the current config before removing
+the active config and opening a first-run setup link. It does not prompt.
+
+6. Validate env:
 
 ```bash
 pnpm validate-env --target server
 ```
 
-5. Start:
+7. Start:
 
 ```bash
 docker compose -f deploy/compose.yml up
@@ -133,3 +156,8 @@ Manual deploy:
 ```bash
 fly deploy -c deploy/fly/server.toml
 ```
+
+For Fly, `pnpm settings` and `pnpm reset` issue links through `fly ssh console`
+against the app detected from `deployment.fly-app`, `FLY_APP_NAME`, `fly.toml`,
+or `deploy/fly/server.toml`. The backend operator-link endpoint only accepts
+loopback requests, so public web traffic cannot mint settings links.

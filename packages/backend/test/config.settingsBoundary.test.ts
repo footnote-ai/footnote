@@ -217,6 +217,61 @@ test('discord-bots entries allow omitted credentials/profile blocks', () => {
     );
 });
 
+test('parseServerSettingsYaml accepts deployment metadata without runtime env projection', () => {
+    const rawYaml = [
+        'version: 1',
+        'deployment:',
+        '  target: fly',
+        '  fly-app: footnote',
+        '',
+    ].join('\n');
+    const settingsPath = withSettingsFile(rawYaml);
+    const parsed = parseServerSettingsYaml({
+        rawText: rawYaml,
+        settingsPath,
+    });
+
+    assert.deepEqual(parsed.yamlSettings.deployment, {
+        target: 'fly',
+        flyApp: 'footnote',
+    });
+    assert.equal(parsed.yamlEnv.FLY_APP_NAME, undefined);
+});
+
+test('parseServerSettingsYaml rejects invalid deployment target', () => {
+    const rawYaml = ['version: 1', 'deployment:', '  target: docker', ''].join(
+        '\n'
+    );
+
+    assert.throws(
+        () =>
+            parseServerSettingsYaml({
+                rawText: rawYaml,
+                settingsPath: withSettingsFile(rawYaml),
+            }),
+        /deployment\.target must be "local" or "fly"/i
+    );
+});
+
+test('parseServerSettingsYaml rejects unsupported deployment keys', () => {
+    const rawYaml = [
+        'version: 1',
+        'deployment:',
+        '  target: fly',
+        '  region: ord',
+        '',
+    ].join('\n');
+
+    assert.throws(
+        () =>
+            parseServerSettingsYaml({
+                rawText: rawYaml,
+                settingsPath: withSettingsFile(rawYaml),
+            }),
+        /deployment contains unsupported key "region"/i
+    );
+});
+
 test('invalid present YAML fails startup', () => {
     const settingsPath = withSettingsFile('version: [1\n');
 

@@ -1685,6 +1685,33 @@ export const PostSetupSessionResponseSchema = z
     })
     .strict();
 
+/**
+ * @api.operationId: postSetupOperatorLink
+ * @api.path: POST /api/setup/operator-link
+ */
+export const PostSetupOperatorLinkRequestSchema = z
+    .object({
+        action: z.enum(['settings', 'reset']),
+    })
+    .strict();
+
+/**
+ * @api.operationId: postSetupOperatorLink
+ * @api.path: POST /api/setup/operator-link
+ */
+export const PostSetupOperatorLinkResponseSchema = z
+    .object({
+        ok: z.literal(true),
+        action: z.enum(['settings', 'reset']),
+        mode: z.enum(['operator', 'first-run']),
+        setupPath: z.string().min(1),
+        setupUrl: z.string().url(),
+        expiresAt: z.string().datetime(),
+        settingsState: z.enum(['present', 'missing', 'reset']),
+        backupPath: z.string().min(1).optional(),
+    })
+    .strict();
+
 const AdminSettingsValidationErrorCategorySchema = z.enum([
     'yaml_parse_error',
     'invalid_root',

@@ -52,8 +52,14 @@ type CanonicalDiscordBot = {
     };
 };
 
+type DeploymentMetadata = {
+    target?: 'local' | 'fly';
+    flyApp?: string;
+};
+
 export type FootnoteSettings = {
     version: number;
+    deployment?: DeploymentMetadata;
     'discord-bots': CanonicalDiscordBot[];
     settingsEnv: SettingsMap;
 };
@@ -245,7 +251,9 @@ const validateSupportedSettingsKeys = (
     for (const [key, value] of Object.entries(root)) {
         if (
             pointer === 'root' &&
-            (key === 'version' || key === 'discord-bots')
+            (key === 'version' ||
+                key === 'discord-bots' ||
+                key === 'deployment')
         ) {
             continue;
         }
@@ -296,6 +304,61 @@ const validateSupportedSettingsKeys = (
             });
         }
     }
+};
+
+const normalizeDeploymentMetadata = (
+    value: unknown,
+    settingsPath: string
+): DeploymentMetadata | undefined => {
+    if (value === undefined) {
+        return undefined;
+    }
+    if (!isRecord(value)) {
+        throw new ServerSettingsValidationError({
+            message: `Invalid server settings YAML at ${settingsPath}: deployment must be an object when provided.`,
+            category: 'type_mismatch',
+            pointer: 'deployment',
+        });
+    }
+
+    const allowedDeploymentKeys = new Set(['target', 'fly-app']);
+    for (const key of Object.keys(value)) {
+        if (!allowedDeploymentKeys.has(key)) {
+            throw new ServerSettingsValidationError({
+                message: `Invalid server settings YAML at ${settingsPath}: deployment contains unsupported key "${key}".`,
+                category: 'unsupported_key',
+                pointer: `deployment.${key}`,
+            });
+        }
+    }
+
+    const target = value.target;
+    if (target !== undefined && target !== 'local' && target !== 'fly') {
+        throw new ServerSettingsValidationError({
+            message: `Invalid server settings YAML at ${settingsPath}: deployment.target must be "local" or "fly".`,
+            category: 'type_mismatch',
+            pointer: 'deployment.target',
+        });
+    }
+
+    const flyApp = value['fly-app'];
+    if (flyApp !== undefined && typeof flyApp !== 'string') {
+        throw new ServerSettingsValidationError({
+            message: `Invalid server settings YAML at ${settingsPath}: deployment.fly-app must be a string when provided.`,
+            category: 'type_mismatch',
+            pointer: 'deployment.fly-app',
+        });
+    }
+
+    const normalized: DeploymentMetadata = {};
+    if (target === 'local' || target === 'fly') {
+        normalized.target = target;
+    }
+    if (typeof flyApp === 'string') {
+        normalized.flyApp = flyApp;
+    }
+
+    return Object.keys(normalized).length > 0 ? normalized : undefined;
 };
 
 const normalizeDiscordBots = (value: unknown, settingsPath: string) => {
@@ -568,6 +631,10 @@ export const parseServerSettingsYaml = ({
         yamlEnv[specEntry.envKey] = serializeSettingValue(normalized);
     }
 
+    const deployment = normalizeDeploymentMetadata(
+        parsed.deployment,
+        settingsPath
+    );
     const discordBots = normalizeDiscordBots(
         parsed['discord-bots'],
         settingsPath
@@ -575,6 +642,7 @@ export const parseServerSettingsYaml = ({
     return {
         yamlSettings: {
             version: 1,
+            ...(deployment ? { deployment } : {}),
             'discord-bots': discordBots,
             settingsEnv,
         },

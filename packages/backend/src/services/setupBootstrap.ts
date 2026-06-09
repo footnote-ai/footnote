@@ -12,6 +12,7 @@ import type { IncomingMessage } from 'node:http';
 
 export const SETUP_SESSION_COOKIE_NAME = 'footnote_setup_session';
 export const SETUP_MISSING_IF_MATCH_ETAG = '"footnote-settings-missing"';
+export type SetupBootstrapMode = 'first-run' | 'operator';
 
 const DEFAULT_BOOTSTRAP_CODE_TTL_MS = 15 * 60 * 1_000;
 const DEFAULT_SESSION_TTL_MS = 15 * 60 * 1_000;
@@ -19,11 +20,13 @@ const BOOTSTRAP_CODE_PREFIX = 'fn_setup_';
 
 type SetupBootstrapCode = {
     code: string;
+    mode: SetupBootstrapMode;
     expiresAt: string;
 };
 
 export type SetupSessionRecord = {
     sessionId: string;
+    mode: SetupBootstrapMode;
     csrfToken: string;
     expiresAt: string;
 };
@@ -48,7 +51,9 @@ type CreateSetupBootstrapServiceDeps = {
 
 export type SetupBootstrapService = {
     isSetupRequiredNow: () => Promise<boolean>;
-    issueOrGetActiveCode: () => Promise<SetupBootstrapCode | null>;
+    issueOrGetActiveCode: (options?: {
+        mode?: SetupBootstrapMode;
+    }) => Promise<SetupBootstrapCode | null>;
     exchangeCodeForSession: (
         code: string
     ) => Promise<SetupSessionExchangeResult>;
@@ -60,6 +65,7 @@ export type SetupBootstrapService = {
 
 type ActiveBootstrapCode = {
     code: string;
+    mode: SetupBootstrapMode;
     expiresAtMs: number;
     used: boolean;
 };
@@ -165,6 +171,8 @@ export const createSetupBootstrapService = ({
     randomToken = (byteLength: number) =>
         randomBytes(byteLength).toString('hex'),
 }: CreateSetupBootstrapServiceDeps): SetupBootstrapService => {
+    // activeBootstrapCode is global: issuing a code for a different mode replaces
+    // the previous code. Operator requests intentionally take precedence.
     let activeBootstrapCode: ActiveBootstrapCode | null = null;
     const sessions = new Map<
         string,
@@ -193,42 +201,61 @@ export const createSetupBootstrapService = ({
         }
     };
 
-    const issueOrGetActiveCode =
-        async (): Promise<SetupBootstrapCode | null> => {
-            if (!(await isSetupRequiredNow())) {
+    const isModeCurrentlyAllowed = async (
+        mode: SetupBootstrapMode
+    ): Promise<boolean> =>
+        mode === 'operator' ? true : await isSetupRequiredNow();
+
+    const issueOrGetActiveCode = async (
+        options: { mode?: SetupBootstrapMode } = {}
+    ): Promise<SetupBootstrapCode | null> => {
+        const mode = options.mode ?? 'first-run';
+        if (!(await isModeCurrentlyAllowed(mode))) {
+            if (activeBootstrapCode?.mode === mode) {
                 activeBootstrapCode = null;
-                return null;
             }
-            const nowMs = now();
-            if (
-                activeBootstrapCode &&
-                activeBootstrapCode.used === false &&
-                activeBootstrapCode.expiresAtMs > nowMs
-            ) {
-                return {
-                    code: activeBootstrapCode.code,
-                    expiresAt: new Date(
-                        activeBootstrapCode.expiresAtMs
-                    ).toISOString(),
-                };
-            }
-            const expiresAtMs = nowMs + bootstrapCodeTtlMs;
-            const code = `${BOOTSTRAP_CODE_PREFIX}${randomToken(24)}`;
-            activeBootstrapCode = {
-                code,
-                expiresAtMs,
-                used: false,
-            };
+            return null;
+        }
+        const nowMs = now();
+        if (
+            activeBootstrapCode &&
+            activeBootstrapCode.mode === mode &&
+            activeBootstrapCode.used === false &&
+            activeBootstrapCode.expiresAtMs > nowMs
+        ) {
             return {
-                code,
-                expiresAt: new Date(expiresAtMs).toISOString(),
+                code: activeBootstrapCode.code,
+                mode: activeBootstrapCode.mode,
+                expiresAt: new Date(
+                    activeBootstrapCode.expiresAtMs
+                ).toISOString(),
             };
+        }
+        const expiresAtMs = nowMs + bootstrapCodeTtlMs;
+        const code = `${BOOTSTRAP_CODE_PREFIX}${randomToken(24)}`;
+        activeBootstrapCode = {
+            code,
+            mode,
+            expiresAtMs,
+            used: false,
         };
+        return {
+            code,
+            mode,
+            expiresAt: new Date(expiresAtMs).toISOString(),
+        };
+    };
 
     const exchangeCodeForSession = async (
         code: string
     ): Promise<SetupSessionExchangeResult> => {
-        if (!(await isSetupRequiredNow())) {
+        if (!activeBootstrapCode) {
+            if (!(await isSetupRequiredNow())) {
+                return { ok: false, reason: 'setup_not_required' };
+            }
+            return { ok: false, reason: 'invalid_code' };
+        }
+        if (!(await isModeCurrentlyAllowed(activeBootstrapCode.mode))) {
             activeBootstrapCode = null;
             return { ok: false, reason: 'setup_not_required' };
         }
@@ -248,6 +275,7 @@ export const createSetupBootstrapService = ({
         const csrfToken = randomToken(24);
         const session = {
             sessionId,
+            mode: activeBootstrapCode.mode,
             csrfToken,
             expiresAtMs,
             expiresAt: new Date(expiresAtMs).toISOString(),
@@ -257,6 +285,7 @@ export const createSetupBootstrapService = ({
             ok: true,
             session: {
                 sessionId,
+                mode: session.mode,
                 csrfToken,
                 expiresAt: session.expiresAt,
             },
@@ -266,17 +295,18 @@ export const createSetupBootstrapService = ({
     const validateSetupSession = async (
         sessionId: string
     ): Promise<SetupSessionRecord | null> => {
-        if (!(await isSetupRequiredNow())) {
-            sessions.clear();
-            return null;
-        }
         pruneExpiredSessions();
         const session = sessions.get(sessionId);
         if (!session) {
             return null;
         }
+        if (!(await isModeCurrentlyAllowed(session.mode))) {
+            sessions.delete(sessionId);
+            return null;
+        }
         return {
             sessionId: session.sessionId,
+            mode: session.mode,
             csrfToken: session.csrfToken,
             expiresAt: session.expiresAt,
         };

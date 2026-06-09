@@ -44,6 +44,7 @@ const DEFAULT_LOCAL_BACKEND_BASE_URL = 'http://localhost:3000';
 const DEFAULT_LOCAL_WEB_BASE_URL = 'http://localhost:8080';
 
 const OPERATOR_ROOT_ORDER = [
+    'deployment',
     'server',
     'web',
     'urls',
@@ -70,6 +71,7 @@ const OPERATOR_ROOT_ORDER = [
 ] as const;
 
 const ROOT_GROUP_LABELS: Record<string, string> = {
+    deployment: 'Deployment',
     server: 'Server',
     web: 'Web',
     urls: 'Urls',
@@ -117,6 +119,9 @@ const parseFlyAppName = (env: NodeJS.ProcessEnv): string | null => {
     const trimmed = raw.trim();
     return trimmed.length > 0 ? trimmed : null;
 };
+
+const resolveDeploymentFlyApp = (env: NodeJS.ProcessEnv): string =>
+    parseFlyAppName(env) ?? '';
 
 export const resolveTemplateTarget = (
     env: NodeJS.ProcessEnv
@@ -483,6 +488,18 @@ const renderDiscordBotsBlock = (): string[] => [
     '#         mention-aliases: []',
 ];
 
+const renderDeploymentBlock = (
+    target: ResolvedTemplateTarget,
+    env: NodeJS.ProcessEnv
+): string[] => [
+    '# Operator tooling metadata. Runtime behavior must not depend on this block.',
+    'deployment:',
+    `    target: ${quoteString(target)}`,
+    `    fly-app: ${quoteString(
+        target === 'fly' ? resolveDeploymentFlyApp(env) : ''
+    )}`,
+];
+
 export const renderSettingsTemplateYaml = ({
     target,
     env,
@@ -519,6 +536,9 @@ export const renderSettingsTemplateYaml = ({
         '',
         '# Canonical document version',
         'version: 1',
+        '',
+        ...renderGroupHeader(resolveGroupTitle('deployment')),
+        ...renderDeploymentBlock(model.target, env),
     ];
 
     for (const root of rootOrder) {

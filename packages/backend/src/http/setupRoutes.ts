@@ -19,6 +19,7 @@ type RegisterSetupRoutesDeps = {
     normalizePathname: (pathname: string) => string;
     handleSetupSessionPostRequest: RequestHandler;
     handleSetupSessionDeleteRequest: RequestHandler;
+    handleSetupOperatorLinkPostRequest: RequestHandler;
     logRequest: LogRequest;
 };
 
@@ -27,9 +28,10 @@ type RegisterSetupRoutesDeps = {
  *
  * Route/method contract:
  * - Mounted at `/api/setup` via `registerSetupRoutes`.
- * - Matcher handles `/api/setup/session` only.
+ * - Matcher handles `/api/setup/session` and `/api/setup/operator-link` only.
  * - `POST /api/setup/session` dispatches to `handleSetupSessionPostRequest`.
  * - `DELETE /api/setup/session` dispatches to `handleSetupSessionDeleteRequest`.
+ * - `POST /api/setup/operator-link` dispatches to `handleSetupOperatorLinkPostRequest`.
  *
  * Fall-through contract:
  * - Matcher intentionally calls `next()` for non-matching paths/methods so other
@@ -41,6 +43,7 @@ const registerSetupRoutes = ({
     normalizePathname,
     handleSetupSessionPostRequest,
     handleSetupSessionDeleteRequest,
+    handleSetupOperatorLinkPostRequest,
     logRequest,
 }: RegisterSetupRoutesDeps): void => {
     const setupRouter = createDispatchRouter({
@@ -56,6 +59,13 @@ const registerSetupRoutes = ({
                     await handleSetupSessionDeleteRequest(req, res);
                     return;
                 }
+            }
+            if (
+                normalizedPathname === '/api/setup/operator-link' &&
+                req.method === 'POST'
+            ) {
+                await handleSetupOperatorLinkPostRequest(req, res);
+                return;
             }
             next();
         },
