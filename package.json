@@ -16,6 +16,8 @@
         "start:bot": "node scripts/preflight-dev-ports.cjs bot && cross-env NODE_OPTIONS= VSCODE_INSPECTOR_OPTIONS= pnpm dev:bot",
         "start:all": "node scripts/start-all.cjs",
         "setup": "node scripts/setup.cjs",
+        "settings": "node scripts/settings.cjs",
+        "reset": "node scripts/reset.cjs",
         "settings:init": "node scripts/generate-footnote-settings.cjs",
         "settings:check": "node scripts/check-footnote-settings.cjs",
         "workspace:bootstrap": "node scripts/workspace-bootstrap.cjs",

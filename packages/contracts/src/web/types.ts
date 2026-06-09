@@ -928,6 +928,29 @@ export type PostSetupSessionResponse = {
     csrfToken: string;
 };
 
+/**
+ * @api.operationId: postSetupOperatorLink
+ * @api.path: POST /api/setup/operator-link
+ */
+export type PostSetupOperatorLinkRequest = {
+    action: 'settings' | 'reset';
+};
+
+/**
+ * @api.operationId: postSetupOperatorLink
+ * @api.path: POST /api/setup/operator-link
+ */
+export type PostSetupOperatorLinkResponse = {
+    ok: true;
+    action: 'settings' | 'reset';
+    mode: 'operator' | 'first-run';
+    setupPath: string;
+    setupUrl: string;
+    expiresAt: string;
+    settingsState: 'present' | 'missing' | 'reset';
+    backupPath?: string;
+};
+
 export type AdminSettingsValidationErrorCategory =
     | 'yaml_parse_error'
     | 'invalid_root'

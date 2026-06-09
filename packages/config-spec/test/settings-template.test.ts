@@ -101,6 +101,9 @@ test('local target renders local concrete defaults for derived keys', () => {
     const parsed = parseYamlObject(rendered);
 
     const urls = parsed.urls as Record<string, unknown>;
+    const deployment = parsed.deployment as Record<string, unknown>;
+    assert.equal(deployment.target, 'local');
+    assert.equal(deployment['fly-app'], '');
     assert.equal(urls['backend-base-url'], 'http://localhost:3000');
     assert.equal(urls['web-base-url'], 'http://localhost:8080');
 });
@@ -115,6 +118,9 @@ test('fly target renders fly concrete defaults for derived keys', () => {
     const parsed = parseYamlObject(rendered);
 
     const urls = parsed.urls as Record<string, unknown>;
+    const deployment = parsed.deployment as Record<string, unknown>;
+    assert.equal(deployment.target, 'fly');
+    assert.equal(deployment['fly-app'], 'footnote-app');
     assert.equal(
         urls['backend-base-url'],
         'http://footnote-backend.internal:3000'
@@ -181,7 +187,14 @@ test('top-level section order follows operator flow roots first', () => {
     const parsed = parseYamlObject(rendered);
     const topLevelKeys = Object.keys(parsed);
 
-    const expectedPrefix = ['version', 'server', 'web', 'urls', 'openai'];
+    const expectedPrefix = [
+        'version',
+        'deployment',
+        'server',
+        'web',
+        'urls',
+        'openai',
+    ];
     assert.deepEqual(
         topLevelKeys.slice(0, expectedPrefix.length),
         expectedPrefix

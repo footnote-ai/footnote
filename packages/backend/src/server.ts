@@ -525,12 +525,19 @@ const {
     logger,
     logRequest,
 });
-const { handleSetupSessionPostRequest, handleSetupSessionDeleteRequest } =
-    createSetupSessionHandlers({
-        setupBootstrapService,
-        logger,
-        logRequest,
-    });
+const {
+    handleSetupSessionPostRequest,
+    handleSetupSessionDeleteRequest,
+    handleSetupOperatorLinkPostRequest,
+} = createSetupSessionHandlers({
+    setupBootstrapService,
+    settingsPath: runtimeConfig.settings.path,
+    setupBaseUrl: runtimeConfig.runtime.flyAppName
+        ? `https://${runtimeConfig.runtime.flyAppName}.fly.dev`
+        : `http://localhost:${runtimeConfig.server.port}`,
+    logger,
+    logRequest,
+});
 const { handleInternalTextRequest } = createInternalTextHandler({
     internalNewsTaskService,
     internalImageDescriptionTaskService,
@@ -639,6 +646,7 @@ const app = createExpressApp({
     handleAdminSettingsYamlPutRequest,
     handleSetupSessionPostRequest,
     handleSetupSessionDeleteRequest,
+    handleSetupOperatorLinkPostRequest,
     handleStaticTransportRequest,
     resolveAsset,
     mimeMap,

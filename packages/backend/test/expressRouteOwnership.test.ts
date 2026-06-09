@@ -113,6 +113,7 @@ const baseAppDeps = (
     handleAdminSettingsYamlPutRequest: createUnhandledRouteHandler,
     handleSetupSessionPostRequest: createUnhandledRouteHandler,
     handleSetupSessionDeleteRequest: createUnhandledRouteHandler,
+    handleSetupOperatorLinkPostRequest: createUnhandledRouteHandler,
     handleStaticTransportRequest: async ({ res }) => {
         res.statusCode = 404;
         res.end('static');
@@ -387,6 +388,11 @@ test('setup session routes are Express-owned and bypass central dispatch', async
                 res.statusCode = 204;
                 res.end();
             },
+            handleSetupOperatorLinkPostRequest: async (_req, res) => {
+                setupCalls.push('/api/setup/operator-link:post');
+                res.statusCode = 200;
+                res.end('operator-link');
+            },
         })
     );
 
@@ -409,11 +415,22 @@ test('setup session routes are Express-owned and bypass central dispatch', async
     const getResponse = await fetch(`${server.baseUrl}/api/setup/session`);
     assert.equal(getResponse.status, 404);
 
+    const operatorLinkResponse = await fetch(
+        `${server.baseUrl}/api/setup/operator-link`,
+        {
+            method: 'POST',
+        }
+    );
+    assert.equal(operatorLinkResponse.status, 200);
+    assert.equal(await operatorLinkResponse.text(), 'operator-link');
+
     assert.deepEqual(setupCalls, [
         '/api/setup/session:post',
         '/api/setup/session:delete',
+        '/api/setup/operator-link:post',
     ]);
     assert.equal(dispatchCalls.includes('/api/setup/session'), true);
+    assert.equal(dispatchCalls.includes('/api/setup/operator-link'), false);
 });
 
 test('trace write/card route is Express-owned while Accept-negotiated trace read stays in special transport dispatch', async (t) => {

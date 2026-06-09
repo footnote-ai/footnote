@@ -16,7 +16,10 @@ import {
     createAdminSettingsHandlers,
     writeSettingsFileAtomically,
 } from '../src/handlers/adminSettings.js';
-import { createSetupSessionHandlers } from '../src/handlers/setupSession.js';
+import {
+    createSetupSessionHandlers,
+    isLoopbackAddress,
+} from '../src/handlers/setupSession.js';
 import { settingsSpecEntries } from '../src/config/settings-spec.js';
 import {
     createSetupBootstrapService,
@@ -73,6 +76,8 @@ const createAdminSettingsTestServer = async (options?: {
     });
     const setupSessionHandlers = createSetupSessionHandlers({
         setupBootstrapService,
+        settingsPath,
+        setupBaseUrl: 'http://127.0.0.1',
         logger: {
             info: () => undefined,
             warn: () => undefined,
@@ -117,6 +122,16 @@ const createAdminSettingsTestServer = async (options?: {
             req.method === 'DELETE'
         ) {
             void setupSessionHandlers.handleSetupSessionDeleteRequest(req, res);
+            return;
+        }
+        if (
+            (req.url ?? '') === '/api/setup/operator-link' &&
+            req.method === 'POST'
+        ) {
+            void setupSessionHandlers.handleSetupOperatorLinkPostRequest(
+                req,
+                res
+            );
             return;
         }
 
@@ -288,6 +303,220 @@ test('/api/setup/session returns 409 when setup is not required', async () => {
             body: JSON.stringify({ code: 'fn_setup_invalid' }),
         });
         assert.equal(response.status, 409);
+    } finally {
+        await server.close();
+        server.cleanup();
+    }
+});
+
+test('operator link local access guard accepts only loopback addresses', () => {
+    assert.equal(isLoopbackAddress('127.0.0.1'), true);
+    assert.equal(isLoopbackAddress('::1'), true);
+    assert.equal(isLoopbackAddress('::ffff:127.0.0.1'), true);
+    assert.equal(isLoopbackAddress('203.0.113.10'), false);
+    assert.equal(isLoopbackAddress(undefined), false);
+});
+
+test('/api/setup/operator-link settings issues operator code for existing settings', async () => {
+    const server = await createAdminSettingsTestServer({
+        createSettingsFile: true,
+        adminToken: null,
+    });
+    try {
+        const operatorResponse = await fetch(
+            `${server.url}/api/setup/operator-link`,
+            {
+                method: 'POST',
+                headers: {
+                    'content-type': 'application/json',
+                },
+                body: JSON.stringify({ action: 'settings' }),
+            }
+        );
+        assert.equal(operatorResponse.status, 200);
+        const operatorPayload = (await operatorResponse.json()) as {
+            ok: boolean;
+            action: string;
+            mode: string;
+            setupPath: string;
+            setupUrl: string;
+            settingsState: string;
+        };
+        assert.equal(operatorPayload.ok, true);
+        assert.equal(operatorPayload.action, 'settings');
+        assert.equal(operatorPayload.mode, 'operator');
+        assert.equal(operatorPayload.settingsState, 'present');
+        assert.match(operatorPayload.setupPath, /^\/setup#code=fn_setup_/);
+        assert.match(
+            operatorPayload.setupUrl,
+            /^http:\/\/127\.0\.0\.1\/setup#code=fn_setup_/
+        );
+    } finally {
+        await server.close();
+        server.cleanup();
+    }
+});
+
+test('/api/setup/operator-link settings issues first-run code when settings are missing', async () => {
+    const server = await createAdminSettingsTestServer({
+        createSettingsFile: false,
+        adminToken: null,
+    });
+    try {
+        const operatorResponse = await fetch(
+            `${server.url}/api/setup/operator-link`,
+            {
+                method: 'POST',
+                headers: {
+                    'content-type': 'application/json',
+                },
+                body: JSON.stringify({ action: 'settings' }),
+            }
+        );
+        assert.equal(operatorResponse.status, 200);
+        const operatorPayload = (await operatorResponse.json()) as {
+            mode: string;
+            settingsState: string;
+        };
+        assert.equal(operatorPayload.mode, 'first-run');
+        assert.equal(operatorPayload.settingsState, 'missing');
+    } finally {
+        await server.close();
+        server.cleanup();
+    }
+});
+
+test('/api/setup/operator-link reset backs up and removes existing settings before first-run code', async () => {
+    const server = await createAdminSettingsTestServer({
+        createSettingsFile: true,
+        adminToken: null,
+        settingsYaml: [
+            'version: 1',
+            'rate-limits:',
+            '  web-api-rate-limit-ip: 77',
+            '',
+        ].join('\n'),
+    });
+    try {
+        const operatorResponse = await fetch(
+            `${server.url}/api/setup/operator-link`,
+            {
+                method: 'POST',
+                headers: {
+                    'content-type': 'application/json',
+                },
+                body: JSON.stringify({ action: 'reset' }),
+            }
+        );
+        assert.equal(operatorResponse.status, 200);
+        const operatorPayload = (await operatorResponse.json()) as {
+            mode: string;
+            settingsState: string;
+            backupPath?: string;
+        };
+        assert.equal(operatorPayload.mode, 'first-run');
+        assert.equal(operatorPayload.settingsState, 'reset');
+        assert.ok(operatorPayload.backupPath);
+        assert.equal(fs.existsSync(server.settingsPath), false);
+        assert.equal(fs.existsSync(operatorPayload.backupPath!), true);
+        assert.match(
+            fs.readFileSync(operatorPayload.backupPath!, 'utf8'),
+            /web-api-rate-limit-ip:\s*77/
+        );
+    } finally {
+        await server.close();
+        server.cleanup();
+    }
+});
+
+test('operator setup session can read and write existing settings until expiry', async () => {
+    const server = await createAdminSettingsTestServer({
+        createSettingsFile: true,
+        adminToken: null,
+    });
+    try {
+        const operatorResponse = await fetch(
+            `${server.url}/api/setup/operator-link`,
+            {
+                method: 'POST',
+                headers: {
+                    'content-type': 'application/json',
+                },
+                body: JSON.stringify({ action: 'settings' }),
+            }
+        );
+        assert.equal(operatorResponse.status, 200);
+        const operatorPayload = (await operatorResponse.json()) as {
+            setupPath: string;
+        };
+        const setupCode = new URLSearchParams(
+            operatorPayload.setupPath.split('#')[1] ?? ''
+        ).get('code');
+        assert.ok(setupCode);
+
+        const exchangeResponse = await fetch(
+            `${server.url}/api/setup/session`,
+            {
+                method: 'POST',
+                headers: {
+                    'content-type': 'application/json',
+                },
+                body: JSON.stringify({ code: setupCode }),
+            }
+        );
+        assert.equal(exchangeResponse.status, 200);
+        const exchangePayload = (await exchangeResponse.json()) as {
+            csrfToken: string;
+        };
+        const setupCookie = exchangeResponse.headers
+            .get('set-cookie')
+            ?.split(';')[0];
+        assert.ok(setupCookie);
+
+        const readResponse = await fetch(
+            `${server.url}/api/admin/settings.yaml`,
+            {
+                headers: {
+                    cookie: setupCookie!,
+                },
+            }
+        );
+        assert.equal(readResponse.status, 200);
+        const etag = readResponse.headers.get('etag');
+        assert.ok(etag);
+
+        const writeResponse = await fetch(
+            `${server.url}/api/admin/settings.yaml`,
+            {
+                method: 'PUT',
+                headers: {
+                    cookie: setupCookie!,
+                    'x-setup-csrf': exchangePayload.csrfToken,
+                    'if-match': etag!,
+                },
+                body: [
+                    'version: 1',
+                    'rate-limits:',
+                    '  web-api-rate-limit-ip: 88',
+                    '',
+                ].join('\n'),
+            }
+        );
+        assert.equal(writeResponse.status, 200);
+
+        const readAfterWriteResponse = await fetch(
+            `${server.url}/api/admin/settings.yaml`,
+            {
+                headers: {
+                    cookie: setupCookie!,
+                },
+            }
+        );
+        assert.equal(readAfterWriteResponse.status, 200);
+        assert.match(
+            await readAfterWriteResponse.text(),
+            /web-api-rate-limit-ip:\s*88/
+        );
     } finally {
         await server.close();
         server.cleanup();
