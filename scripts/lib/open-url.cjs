@@ -36,6 +36,13 @@ const parseBrowserUrl = (url) => {
     }
 };
 
+/**
+ * Opens a validated browser URL with the current platform opener.
+ *
+ * @param {string} url - The URL to open.
+ * @param {string} [label='settings'] - Optional label for context in fallback output.
+ * @returns {boolean} True when the platform opener reports success; otherwise false.
+ */
 const openUrl = (url, label = 'settings') => {
     const safeUrl = parseBrowserUrl(url);
     if (!safeUrl) {

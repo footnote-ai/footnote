@@ -171,6 +171,8 @@ export const createSetupBootstrapService = ({
     randomToken = (byteLength: number) =>
         randomBytes(byteLength).toString('hex'),
 }: CreateSetupBootstrapServiceDeps): SetupBootstrapService => {
+    // activeBootstrapCode is global: issuing a code for a different mode replaces
+    // the previous code. Operator requests intentionally take precedence.
     let activeBootstrapCode: ActiveBootstrapCode | null = null;
     const sessions = new Map<
         string,

@@ -85,6 +85,13 @@ const readDeploymentMetadata = (repoRoot) => {
     };
 };
 
+/**
+ * resolveDeploymentTarget resolves the operator command target from explicit
+ * args, footnote.yaml deployment metadata, env, and Fly manifests.
+ *
+ * @param {{ argv: string[], repoRoot: string }} options - CLI argv tokens and repository root path.
+ * @returns {{ target: 'local'|'fly', flyApp?: string, localPort: number, settingsPath: string }} Resolved deployment metadata.
+ */
 const resolveDeploymentTarget = ({ argv, repoRoot }) => {
     const parsedArgs = parseTargetArgs(argv);
     const metadata = readDeploymentMetadata(repoRoot);
