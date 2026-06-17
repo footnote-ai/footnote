@@ -26,7 +26,7 @@
     "dependencies": {
         "@footnote/contracts": "workspace:*",
         "@voltagent/core": "2.7.7",
-        "ai": "6.0.199",
+        "ai": "6.0.207",
         "openai": "catalog:",
         "ws": "catalog:"
     }
