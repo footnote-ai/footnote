@@ -23,7 +23,7 @@ catalog:
     '@openai/agents': ^0.11.6
     '@resvg/resvg-js': ^2.6.2
     '@sapphire/shapeshift': ^4.0.0
-    '@swc/core': ^1.15.41
+    '@swc/core': ^1.15.43
     '@swc/helpers': ^0.5.23
     '@types/better-sqlite3': ^7.6.13
     '@types/body-parser': ^1.19.6
@@ -35,8 +35,8 @@ catalog:
     '@types/react': 19.2.17
     '@types/react-dom': 19.2.3
     '@types/ws': ^8.18.1
-    '@typescript-eslint/eslint-plugin': ^8.61.0
-    '@typescript-eslint/parser': ^8.61.0
+    '@typescript-eslint/eslint-plugin': ^8.62.0
+    '@typescript-eslint/parser': ^8.62.0
     '@vitejs/plugin-react': ^6.0.2
     autoprefixer: ^10.5.0
     better-sqlite3: ^12.10.0
@@ -52,7 +52,7 @@ catalog:
     discord.js: ^14.26.4
     dotenv: ^17.4.2
     esbuild: ^0.28.0
-    eslint: ^10.4.1
+    eslint: ^10.5.0
     eslint-config-prettier: ^10.1.8
     eslint-plugin-react-hooks: ^7.1.1
     express: ^5.2.1
@@ -74,7 +74,7 @@ catalog:
     react-dom: ^19.2.7
     react-markdown: ^10.1.0
     react-router-dom: ^7.16.0
-    repomix: ^1.14.1
+    repomix: ^1.15.0
     reindex: ^0.1.0
     remark-gfm: ^4.0.1
     rimraf: ^6.1.3
