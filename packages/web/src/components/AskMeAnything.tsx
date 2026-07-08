@@ -10,7 +10,8 @@ import { FormEvent, useEffect, useRef, useState } from 'react';
 import { Turnstile, type TurnstileInstance } from '@marsidev/react-turnstile';
 import ProvenanceFooter from './ProvenanceFooter';
 import type { ResponseMetadata } from '@footnote/contracts/policy';
-import examplePrompts from '../data/examplePrompts.json';
+import { landingScenarios } from '../data/landingScenarios.js';
+import type { LandingScenario } from '../data/landingScenarios.js';
 import { loadRuntimeConfig } from '../config';
 import { api, isApiClientError } from '../utils/api';
 import {
@@ -55,39 +56,43 @@ const AskMeAnything = (): JSX.Element => {
     const isTurnstileExecutingRef = useRef(false);
     const hasInteractedRef = useRef(false); // Track if user has interacted to prevent initial status flash
 
-    // Random prompt selection
-    const getRandomPrompt = (): string => {
-        const prompts = examplePrompts.prompts;
-        return prompts[Math.floor(Math.random() * prompts.length)];
+    // Random landing scenario selection.
+    const getRandomScenario = (
+        excludedScenarioId?: string
+    ): LandingScenario => {
+        const candidateScenarios =
+            excludedScenarioId && landingScenarios.length > 1
+                ? landingScenarios.filter(
+                      (scenario) => scenario.id !== excludedScenarioId
+                  )
+                : landingScenarios;
+
+        return candidateScenarios[
+            Math.floor(Math.random() * candidateScenarios.length)
+        ]!;
     };
 
-    const [currentPrompt, setCurrentPrompt] = useState<string>(() =>
-        getRandomPrompt()
+    const [currentScenario, setCurrentScenario] = useState<LandingScenario>(
+        () => getRandomScenario()
     );
 
-    const shufflePrompt = () => {
-        setCurrentPrompt(getRandomPrompt());
+    const shuffleScenario = () => {
+        setCurrentScenario((previousScenario) =>
+            getRandomScenario(previousScenario.id)
+        );
     };
 
-    const usePrompt = () => {
-        setQuestion((prev) => {
-            if (!prev.trim()) {
-                return currentPrompt;
-            }
-            // Check if the current text already ends with punctuation
-            const trimmed = prev.trim();
-            const endsWithPunctuation = /[.!?]$/.test(trimmed);
-            const endsWithSpace = /\s$/.test(prev);
+    const showPreparedScenario = () => {
+        abortRef.current?.abort();
 
-            // If it ends with punctuation, just add a space before the new text
-            // If it ends with a space, just append
-            // Otherwise, add period and space
-            if (endsWithPunctuation) {
-                return prev + (endsWithSpace ? '' : ' ') + currentPrompt;
-            } else {
-                return prev + '. ' + currentPrompt;
-            }
-        });
+        hasInteractedRef.current = true;
+        setQuestion(currentScenario.question);
+        setStatus('');
+        setIsLoading(false);
+        setAnswer(currentScenario.response.message);
+        setMetadata(currentScenario.response.metadata);
+        setIsTypingComplete(false);
+
         if (shouldAutoFocusAskInput('prompt-button')) {
             inputRef.current?.focus();
         }
@@ -385,6 +390,7 @@ const AskMeAnything = (): JSX.Element => {
 
         // Mark that user has interacted
         hasInteractedRef.current = true;
+        abortRef.current?.abort();
 
         const trimmedQuestion = question.trim();
 
@@ -726,21 +732,21 @@ const AskMeAnything = (): JSX.Element => {
                     <button
                         type="button"
                         className="interaction-prompt-text-button"
-                        onClick={usePrompt}
+                        onClick={showPreparedScenario}
                         onMouseDown={(e) => e.currentTarget.blur()}
-                        aria-label={`Use prompt suggestion: ${currentPrompt}`}
+                        aria-label={`Show prepared example: ${currentScenario.question}`}
                     >
                         <span className="interaction-prompt-text">
-                            {currentPrompt}
+                            {currentScenario.question}
                         </span>
                     </button>
                 </div>
                 <button
                     type="button"
                     className="interaction-prompt-shuffle-button"
-                    onClick={shufflePrompt}
+                    onClick={shuffleScenario}
                     onMouseDown={(e) => e.currentTarget.blur()}
-                    aria-label="Shuffle prompt suggestions"
+                    aria-label="Shuffle prepared examples"
                 >
                     <span className="interaction-prompt-shuffle-icon">
                         <svg

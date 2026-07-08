@@ -1,0 +1,56 @@
+{
+    "id": "what-does-footnote-do-differently",
+    "question": "What does Footnote do differently from other AI tools?",
+    "response": {
+        "action": "message",
+        "message": "Footnote is designed to be more transparent and decision-support oriented than many AI tools.\n\nKey differences:\n\n- **Provenance first**: it emphasizes where claims come from, so you can trace reasoning instead of treating output as a black box.\n- **Human oversight**: it’s built to support your judgment, not replace it.\n- **Clear trade-offs**: it helps compare options and values, rather than only optimizing for a single “best” answer.\n- **Interpretability over flair**: it aims for plain, accountable explanations instead of polished but opaque responses.\n- **Open-source orientation**: it’s part of an open project, which usually means more visibility into how it works and how it can be audited.\n\nIn short: many AI tools try to be fast or impressive; Footnote tries to be **clear, accountable, and easy to reason about**.",
+        "modality": "text",
+        "metadata": {
+            "responseId": "prepared-landing-what-does-footnote-do-differently",
+            "provenance": "Inferred",
+            "safetyTier": "Low",
+            "tradeoffCount": 0,
+            "chainHash": "67097b2c839e2264",
+            "licenseContext": "MIT + HL3",
+            "modelVersion": "gpt-5.4-mini-2026-03-17",
+            "staleAfter": "2026-09-09T00:34:14.270Z",
+            "citations": [],
+            "trace_target": {
+                "tightness": 3,
+                "rationale": 3,
+                "attribution": 3,
+                "caution": 3,
+                "extent": 3
+            },
+            "trace_final": {
+                "tightness": 2,
+                "rationale": 3,
+                "attribution": 2,
+                "caution": 2,
+                "extent": 2
+            },
+            "trace_final_reason_code": "runtime_posture_adjustment",
+            "reviewRuntime": {
+                "label": "reviewed_no_revision"
+            },
+            "evaluator": {
+                "authorityLevel": "observe",
+                "mode": "observe_only",
+                "provenance": "Inferred",
+                "safetyDecision": {
+                    "action": "allow",
+                    "safetyTier": "Low",
+                    "ruleId": null
+                }
+            },
+            "totalDurationMs": 7075
+        }
+    },
+    "capture": {
+        "generatedAt": "2026-06-11T00:34:14.273Z",
+        "backendBaseUrl": "http://localhost:3000",
+        "workflowModeId": "balanced",
+        "capturedResponseId": "QlBQeJqK",
+        "capturedChainHash": "ad494dc37045cddb"
+    }
+}

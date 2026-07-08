@@ -58,7 +58,8 @@ packages/web/vite.config.js.map
 packages/web/vite.config.d.ts
 
 # Database
-data/
+/data/
+/packages/discord-bot/data/
 
 # Logs
 packages/discord-bot/logs
