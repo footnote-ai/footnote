@@ -8,6 +8,7 @@
 
 import { FormEvent, useEffect, useRef, useState } from 'react';
 import { Turnstile, type TurnstileInstance } from '@marsidev/react-turnstile';
+import MarkdownResponse from './MarkdownResponse';
 import ProvenanceFooter from './ProvenanceFooter';
 import type { ResponseMetadata } from '@footnote/contracts/policy';
 import { landingScenarios } from '../data/landingScenarios.js';
@@ -39,10 +40,8 @@ const AskMeAnything = (): JSX.Element => {
     const [question, setQuestion] = useState('');
     const [status, setStatus] = useState('');
     const [answer, setAnswer] = useState('');
-    const [displayedAnswer, setDisplayedAnswer] = useState('');
     const [metadata, setMetadata] = useState<ResponseMetadata | null>(null);
     const [isLoading, setIsLoading] = useState(false);
-    const [isTypingComplete, setIsTypingComplete] = useState(false);
     const [turnstileToken, setTurnstileToken] = useState<string | null>(null);
     const [turnstileError, setTurnstileError] = useState<string | null>(null);
     const [isTurnstileReady, setIsTurnstileReady] = useState(false);
@@ -91,8 +90,6 @@ const AskMeAnything = (): JSX.Element => {
         setIsLoading(false);
         setAnswer(currentScenario.response.message);
         setMetadata(currentScenario.response.metadata);
-        setIsTypingComplete(false);
-
         if (shouldAutoFocusAskInput('prompt-button')) {
             inputRef.current?.focus();
         }
@@ -346,44 +343,9 @@ const AskMeAnything = (): JSX.Element => {
         notifyEmbedLayoutChanged('question-input-resize');
     }, [question]);
 
-    // Animate the text reveal whenever the answer changes for a gentle typewriter feel.
-    useEffect(() => {
-        if (!answer) {
-            setDisplayedAnswer('');
-            setIsTypingComplete(false);
-            return;
-        }
-
-        setDisplayedAnswer('');
-        setIsTypingComplete(false);
-        const characters = Array.from(answer);
-
-        let index = 0;
-
-        const interval = window.setInterval(() => {
-            const char = characters[index];
-            setDisplayedAnswer((previous) => previous + char);
-            index += 1;
-
-            if (index >= characters.length) {
-                window.clearInterval(interval);
-                setIsTypingComplete(true);
-            }
-        }, 5);
-
-        return () => window.clearInterval(interval);
-    }, [answer]);
-
     useEffect(() => {
         notifyEmbedLayoutChanged('interaction-state-change');
-    }, [
-        displayedAnswer,
-        isLoading,
-        isTypingComplete,
-        metadata,
-        status,
-        turnstileError,
-    ]);
+    }, [answer, isLoading, metadata, status, turnstileError]);
 
     const onSubmit = async (event: FormEvent<HTMLFormElement>) => {
         event.preventDefault();
@@ -471,8 +433,6 @@ const AskMeAnything = (): JSX.Element => {
         setIsLoading(true);
         setAnswer('');
         setMetadata(null);
-        setIsTypingComplete(false);
-
         try {
             const payload = await api.chatQuestion(
                 {
@@ -611,7 +571,6 @@ const AskMeAnything = (): JSX.Element => {
             setStatus('');
             setAnswer(FALLBACK_REFLECTION);
             setMetadata(null);
-            setIsTypingComplete(false);
         } finally {
             clearTimeout(timeoutId); // Ensure timeout is cleared in all cases
             setIsLoading(false);
@@ -778,9 +737,9 @@ const AskMeAnything = (): JSX.Element => {
                 </div>
             )}
             {/* Only show output when there's actual content, not just when loading */}
-            {displayedAnswer && (
+            {answer && (
                 <div className="interaction-output" aria-live="polite">
-                    {displayedAnswer}
+                    <MarkdownResponse markdown={answer} />
                 </div>
             )}
             {/* Render Turnstile widget in Invisible mode - requires manual execute() calls for deterministic timing */}
@@ -832,9 +791,7 @@ const AskMeAnything = (): JSX.Element => {
                     </p>
                 </div>
             )}
-            {isTypingComplete && metadata && (
-                <ProvenanceFooter metadata={metadata} />
-            )}
+            {answer && metadata && <ProvenanceFooter metadata={metadata} />}
         </div>
     );
 };
