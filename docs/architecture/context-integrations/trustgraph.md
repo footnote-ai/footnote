@@ -118,6 +118,15 @@ Code references:
 - [chatOrchestrator.ts](../../../packages/backend/src/services/chatOrchestrator.ts)
 - [chatService.ts](../../../packages/backend/src/services/chatService.ts)
 
+## Repo-owned data loading
+
+Footnote may keep small, versioned project facts and generated summaries in the
+repo so they can be loaded into a real TrustGraph deployment.
+
+This data should stay reviewable, source-linked, and updated outside request
+handling. TrustGraph remains advisory; loaded repo data must not become a
+second policy authority.
+
 ## Recorded afterward
 
 If TrustGraph influences a run, that influence should be visible afterward.
