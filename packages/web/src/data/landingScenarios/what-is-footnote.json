@@ -1,0 +1,56 @@
+{
+    "id": "what-is-footnote",
+    "question": "What is Footnote?",
+    "response": {
+        "action": "message",
+        "message": "Footnote is an open-source reasoning assistant focused on transparency, provenance, and human oversight. It helps people think through trade-offs and values, rather than replacing human judgment.",
+        "modality": "text",
+        "metadata": {
+            "responseId": "prepared-landing-what-is-footnote",
+            "provenance": "Inferred",
+            "safetyTier": "Low",
+            "tradeoffCount": 0,
+            "chainHash": "0442761ebe23587d",
+            "licenseContext": "MIT + HL3",
+            "modelVersion": "gpt-5.4-mini-2026-03-17",
+            "staleAfter": "2026-09-09T00:34:07.179Z",
+            "citations": [],
+            "trace_target": {
+                "tightness": 3,
+                "rationale": 3,
+                "attribution": 3,
+                "caution": 3,
+                "extent": 2
+            },
+            "trace_final": {
+                "tightness": 2,
+                "rationale": 2,
+                "attribution": 1,
+                "caution": 2,
+                "extent": 1
+            },
+            "trace_final_reason_code": "runtime_posture_adjustment",
+            "reviewRuntime": {
+                "label": "reviewed_no_revision"
+            },
+            "evaluator": {
+                "authorityLevel": "observe",
+                "mode": "observe_only",
+                "provenance": "Inferred",
+                "safetyDecision": {
+                    "action": "allow",
+                    "safetyTier": "Low",
+                    "ruleId": null
+                }
+            },
+            "totalDurationMs": 8867
+        }
+    },
+    "capture": {
+        "generatedAt": "2026-06-11T00:34:07.189Z",
+        "backendBaseUrl": "http://localhost:3000",
+        "workflowModeId": "balanced",
+        "capturedResponseId": "9Z59qMWj",
+        "capturedChainHash": "60734d8ad16a2d7d"
+    }
+}

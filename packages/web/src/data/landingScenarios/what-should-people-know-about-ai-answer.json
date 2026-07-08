@@ -1,0 +1,55 @@
+{
+    "id": "what-should-people-know-about-ai-answer",
+    "question": "What should people be able to know about an AI answer?",
+    "response": {
+        "action": "message",
+        "message": "People should be able to know, at minimum:\n\n- **Where the answer came from** — whether it’s based on the model’s training, a retrieved source, a calculation, or a guess.\n- **How confident it is** — including uncertainty, likely failure points, and whether there are competing interpretations.\n- **What assumptions it depends on** — especially if changing one detail would change the answer.\n- **What it might be missing** — gaps in data, time sensitivity, ambiguity, or limits in the model’s knowledge.\n- **Whether it was checked** — for example, whether facts were verified against sources or not.\n- **Any relevant limitations or bias** — such as incomplete coverage, outdated information, or perspective effects.\n- **What parts are reasoning vs. fact** — so people can tell inference from evidence.\n- **When human judgment is still needed** — especially for legal, medical, financial, safety, or high-stakes decisions.\n\nA good AI answer should be understandable, traceable, and honest about uncertainty—not just fluent.",
+        "modality": "text",
+        "metadata": {
+            "responseId": "prepared-landing-what-should-people-know-about-ai-answer",
+            "provenance": "Inferred",
+            "safetyTier": "Low",
+            "tradeoffCount": 0,
+            "chainHash": "10fe024981c7c0a5",
+            "licenseContext": "MIT + HL3",
+            "modelVersion": "gpt-5.4-mini-2026-03-17",
+            "staleAfter": "2026-09-09T00:34:32.146Z",
+            "citations": [],
+            "trace_target": {
+                "tightness": 3,
+                "rationale": 3,
+                "attribution": 3,
+                "caution": 3,
+                "extent": 3
+            },
+            "trace_final": {
+                "tightness": 3,
+                "rationale": 3,
+                "attribution": 3,
+                "caution": 3,
+                "extent": 3
+            },
+            "reviewRuntime": {
+                "label": "reviewed_no_revision"
+            },
+            "evaluator": {
+                "authorityLevel": "observe",
+                "mode": "observe_only",
+                "provenance": "Inferred",
+                "safetyDecision": {
+                    "action": "allow",
+                    "safetyTier": "Low",
+                    "ruleId": null
+                }
+            },
+            "totalDurationMs": 7508
+        }
+    },
+    "capture": {
+        "generatedAt": "2026-06-11T00:34:32.149Z",
+        "backendBaseUrl": "http://localhost:3000",
+        "workflowModeId": "balanced",
+        "capturedResponseId": "6QLQAyCW",
+        "capturedChainHash": "30fe342d5e4ce059"
+    }
+}
