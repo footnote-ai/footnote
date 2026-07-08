@@ -127,6 +127,25 @@ test('sanitizeLandingScenarioResponse rejects non-message responses', () => {
     );
 });
 
+test('sanitizeLandingScenarioResponse rejects non-text message responses', () => {
+    assert.throws(
+        () =>
+            sanitizeLandingScenarioResponse({
+                scenario: LANDING_SCENARIO_PROMPTS[0],
+                response: {
+                    ...createMessageResponse('A prepared answer'),
+                    modality: 'image',
+                } as never,
+                capturedResponseId: 'AbCdEf12',
+                capturedChainHash: '0123456789abcdef',
+                capturedAt: '2026-06-11T00:34:07.189Z',
+                backendBaseUrl: 'http://localhost:3000',
+                workflowModeId: 'balanced',
+            }),
+        /Expected text modality/
+    );
+});
+
 test('buildChatRequest emits the landing capture payload shape', () => {
     const request = buildChatRequest(LANDING_SCENARIO_PROMPTS[1], {
         backendBaseUrl: 'http://localhost:3000',

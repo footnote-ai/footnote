@@ -12,6 +12,7 @@ import { fileURLToPath } from 'node:url';
 
 import type { WorkflowModeId } from '@footnote/contracts/policy';
 import { PostChatResponseSchema } from '@footnote/contracts/web/schemas';
+import { logger } from '../packages/discord-bot/src/utils/logger';
 import {
     LANDING_SCENARIO_PROMPTS,
     buildChatRequest,
@@ -35,6 +36,7 @@ const fixturesJsonPath = path.join(
     rootDir,
     'packages/web/src/data/landingScenarioFixtures.json'
 );
+const CAPTURE_REQUEST_TIMEOUT_MS = 60_000;
 
 const getEnv = (name: string): string | undefined => {
     const value = process.env[name]?.trim();
@@ -76,15 +78,37 @@ const captureScenario = async (
         backendBaseUrl,
         modeId,
     });
+    const controller = new AbortController();
+    let didTimeout = false;
+    const timeoutHandle = setTimeout(() => {
+        didTimeout = true;
+        controller.abort();
+    }, CAPTURE_REQUEST_TIMEOUT_MS);
+    timeoutHandle.unref?.();
 
-    const response = await fetch(new URL('/api/chat', backendBaseUrl), {
-        method: 'POST',
-        headers: {
-            'content-type': 'application/json',
-            'x-trace-token': traceApiToken,
-        },
-        body: JSON.stringify(request),
-    });
+    let response: Response;
+    try {
+        response = await fetch(new URL('/api/chat', backendBaseUrl), {
+            method: 'POST',
+            headers: {
+                'content-type': 'application/json',
+                'x-trace-token': traceApiToken,
+            },
+            body: JSON.stringify(request),
+            signal: controller.signal,
+        });
+    } catch (error) {
+        if (didTimeout) {
+            throw new Error(
+                `Landing scenario capture-timeout for ${prompt.id} after ${CAPTURE_REQUEST_TIMEOUT_MS}ms.`,
+                { cause: error }
+            );
+        }
+
+        throw error;
+    } finally {
+        clearTimeout(timeoutHandle);
+    }
 
     if (!response.ok) {
         const errorText = await response.text();
@@ -189,13 +213,18 @@ const main = async (): Promise<void> => {
         'utf8'
     );
 
-    console.log(
-        `Generated ${captures.length} landing scenarios into ${path.relative(rootDir, scenarioDir)} and ${path.relative(rootDir, fixturesJsonPath)}.`
+    logger.info(
+        `Generated ${captures.length} landing scenarios into ${path.relative(rootDir, scenarioDir)} and ${path.relative(rootDir, fixturesJsonPath)}.`,
+        {
+            count: captures.length,
+            scenarioDir: path.relative(rootDir, scenarioDir),
+            fixturesJsonPath: path.relative(rootDir, fixturesJsonPath),
+        }
     );
 };
 
 main().catch((error: unknown) => {
     const message = error instanceof Error ? error.message : String(error);
-    console.error(message);
+    logger.error(message, { error });
     process.exitCode = 1;
 });

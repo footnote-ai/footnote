@@ -14,7 +14,6 @@ onlyBuiltDependencies:
     - protobufjs
     - '@discordjs/opus'
     - bufferutil
-    - zlib-sync
 catalog:
     '@discordjs/opus': ^0.10.0
     '@discordjs/voice': ^0.19.2
@@ -84,5 +83,4 @@ catalog:
     winston: ^3.19.0
     winston-daily-rotate-file: ^5.0.0
     ws: ^8.20.1
-    zlib-sync: ^0.1.10
     zod: ^4.4.3

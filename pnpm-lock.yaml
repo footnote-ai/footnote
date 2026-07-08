@@ -199,9 +199,6 @@ catalogs:
     ws:
       specifier: ^8.20.1
       version: 8.21.0
-    zlib-sync:
-      specifier: ^0.1.10
-      version: 0.1.10
     zod:
       specifier: ^4.4.3
       version: 4.4.3
@@ -494,9 +491,6 @@ importers:
       ws:
         specifier: 'catalog:'
         version: 8.21.0(bufferutil@4.1.0)
-      zlib-sync:
-        specifier: 'catalog:'
-        version: 0.1.10
     devDependencies:
       '@types/body-parser':
         specifier: 'catalog:'
@@ -3588,9 +3582,6 @@ packages:
   ms@2.1.3:
     resolution: {integrity: sha512-6FlzubTLZG3J2a/NVCAleEhjzq5oxgHyaCU9yYXvcLsvoVaHJq/s5xXI6/XXP6tz7R9xAOtHnSO/tXtF3WRTlA==}
 
-  nan@2.26.2:
-    resolution: {integrity: sha512-0tTvBTYkt3tdGw22nrAy50x7gpbGCCFH3AFcyS5WiUu7Eu4vWlri1woE6qHBSfy11vksDqkiwjOnlR7WV8G1Hw==}
-
   nanoevents@7.0.1:
     resolution: {integrity: sha512-o6lpKiCxLeijK4hgsqfR6CNToPyRU3keKyyI6uwuHRvpRTbZ0wXw51WRgyldVugZqoJfkGFrjrIenYH3bfEO3Q==}
     engines: {node: ^14.0.0 || ^16.0.0 || >=18.0.0}
@@ -4584,9 +4575,6 @@ packages:
   yocto-queue@0.1.0:
     resolution: {integrity: sha512-rVksvsnNCdJ/ohGc6xgPwyN8eheCxsiLM8mxuE/t/mOVqJewPuO1miLpTHQiRgTKCLexL4MeAFVagts7HmNZ2Q==}
     engines: {node: '>=10'}
-
-  zlib-sync@0.1.10:
-    resolution: {integrity: sha512-t7/pYg5tLBznL1RuhmbAt8rNp5tbhr+TSrJFnMkRtrGIaPJZ6Dc0uR4u3OoQI2d6cGlVI62E3Gy6gwkxyIqr/w==}
 
   zod-from-json-schema@0.0.5:
     resolution: {integrity: sha512-zYEoo86M1qpA1Pq6329oSyHLS785z/mTwfr9V1Xf/ZLhuuBGaMlDGu/pDVGVUe4H4oa1EFgWZT53DP0U3oT9CQ==}
@@ -7965,8 +7953,6 @@ snapshots:
 
   ms@2.1.3: {}
 
-  nan@2.26.2: {}
-
   nanoevents@7.0.1: {}
 
   nanoid@3.3.12: {}
@@ -8975,10 +8961,6 @@ snapshots:
       yargs-parser: 22.0.0
 
   yocto-queue@0.1.0: {}
-
-  zlib-sync@0.1.10:
-    dependencies:
-      nan: 2.26.2
 
   zod-from-json-schema@0.0.5:
     dependencies:

@@ -80,6 +80,12 @@ export type LandingScenarioRequestOptions = {
 
 const SCENARIO_ID_PATTERN = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 
+/**
+ * Defines the public landing prompts that may be captured from the backend.
+ *
+ * The ids are stable fixture keys, so they stay serializable and do not carry
+ * runtime provenance until a capture is sanitized.
+ */
 export const LANDING_SCENARIO_PROMPTS = [
     {
         id: 'what-is-footnote',
@@ -100,6 +106,12 @@ export const LANDING_SCENARIO_PROMPTS = [
     },
 ] as const satisfies readonly LandingScenarioPromptConfig[];
 
+/**
+ * Builds the prepared-response hash used by checked-in landing fixtures.
+ *
+ * The hash intentionally uses only the public question and message so regenerated
+ * fixtures do not expose backend runtime ids or private capture details.
+ */
 export const canonicalLandingHash = (
     question: string,
     message: string
@@ -110,12 +122,24 @@ export const canonicalLandingHash = (
         .digest('hex')
         .slice(0, 16);
 
+/**
+ * Enforces the fixture id boundary before data is emitted to web-facing JSON.
+ *
+ * This keeps generated files addressable by predictable kebab-case names and
+ * prevents arbitrary ids from becoming public fixture keys.
+ */
 export function assertScenarioId(value: string): void {
     if (!SCENARIO_ID_PATTERN.test(value)) {
         throw new Error(`Invalid landing scenario id: ${value}`);
     }
 }
 
+/**
+ * Constructs the backend chat request used during landing scenario capture.
+ *
+ * The request is limited to text messaging and records only the request host so
+ * fixture generation does not depend on browser-only state.
+ */
 export const buildChatRequest = (
     scenario: LandingScenarioPromptConfig,
     options: LandingScenarioRequestOptions
@@ -140,6 +164,12 @@ export const buildChatRequest = (
     },
 });
 
+/**
+ * Converts a backend chat response into the public runtime fixture shape.
+ *
+ * Capture-only fields are stripped, provenance metadata is narrowed to the web
+ * display contract, and the chain hash is replaced with the prepared hash.
+ */
 export const sanitizeLandingScenarioResponse = (
     input: LandingScenarioGenerationInput
 ): LandingScenarioRuntimePayload => {
@@ -186,6 +216,12 @@ export const sanitizeLandingScenarioResponse = (
     };
 };
 
+/**
+ * Adds compact capture provenance around a sanitized landing scenario.
+ *
+ * The capture block keeps regeneration audit data separate from the runtime
+ * response payload that the web UI renders.
+ */
 export const buildLandingScenarioFixture = (
     input: LandingScenarioGenerationInput
 ): LandingScenarioFixture => ({
@@ -199,5 +235,8 @@ export const buildLandingScenarioFixture = (
     },
 });
 
+/**
+ * Emits stable pretty JSON with the trailing newline expected by fixtures.
+ */
 export const formatJson = (value: unknown): string =>
     `${JSON.stringify(value, null, 4)}\n`;

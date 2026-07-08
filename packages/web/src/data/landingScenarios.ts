@@ -49,8 +49,8 @@ export type LandingScenarioFixture = LandingScenario & {
     capture: LandingScenarioCapture;
 };
 
-const landingScenarioFixtures =
-    landingScenarioFixturesJson as readonly LandingScenarioFixture[];
+const landingScenarioFixtures: readonly LandingScenarioFixture[] =
+    landingScenarioFixturesJson;
 
 export const landingScenarios = landingScenarioFixtures.map(
     ({ capture: _capture, ...scenario }) => scenario
