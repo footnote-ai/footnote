@@ -111,6 +111,12 @@ test('public routes are Express-owned and bypass central /api dispatch while pre
             res.setHeader('Content-Type', 'application/json; charset=utf-8');
             res.end(JSON.stringify({ profiles: [] }));
         },
+        handlePreparedLandingConversationsRequest: async (_req, res) => {
+            handledPaths.push('/api/prepared-conversations/landing');
+            res.statusCode = 200;
+            res.setHeader('Content-Type', 'application/json; charset=utf-8');
+            res.end(JSON.stringify({ conversations: [] }));
+        },
         handleAdminSettingsSchemaRequest: async (_req, res) => {
             res.statusCode = 200;
             res.end('admin-settings-schema');
@@ -166,9 +172,18 @@ test('public routes are Express-owned and bypass central /api dispatch while pre
     );
     assert.equal(chatProfilesResponse.status, 200);
 
+    const preparedLandingResponse = await fetch(
+        `${server.baseUrl}/api/prepared-conversations/landing`
+    );
+    assert.equal(preparedLandingResponse.status, 200);
+
     const healthResponse = await fetch(`${server.baseUrl}/api/health`);
     assert.equal(healthResponse.status, 404);
 
-    assert.deepEqual(handledPaths, ['/config.json', '/api/chat/profiles']);
+    assert.deepEqual(handledPaths, [
+        '/config.json',
+        '/api/chat/profiles',
+        '/api/prepared-conversations/landing',
+    ]);
     assert.deepEqual(dispatchCalls, ['/api/health']);
 });

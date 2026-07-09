@@ -14,6 +14,7 @@ import {
     type CreateWebApiClientOptions,
 } from '@footnote/api-client/web-client';
 import type {
+    GetPreparedLandingConversationsResponse,
     GetRuntimeConfigResponse,
     GetTraceResponse,
     GetTraceStaleResponse,
@@ -33,6 +34,9 @@ export type WebApiClient = {
     getRuntimeConfig: (
         signal?: AbortSignal
     ) => Promise<GetRuntimeConfigResponse>;
+    getPreparedLandingConversations: (
+        signal?: AbortSignal
+    ) => Promise<GetPreparedLandingConversationsResponse>;
     getTrace: (
         responseId: string,
         signal?: AbortSignal
@@ -48,12 +52,15 @@ export const createWebApiClient = (
 
     const chatQuestion = shared.chatQuestion;
     const getRuntimeConfig = shared.getRuntimeConfig;
+    const getPreparedLandingConversations =
+        shared.getPreparedLandingConversations;
     const getTrace = shared.getTrace;
 
     return {
         requestJson: shared.requestJson,
         chatQuestion,
         getRuntimeConfig,
+        getPreparedLandingConversations,
         getTrace,
     };
 };
@@ -78,6 +85,15 @@ export const chatQuestion = (
 export const getRuntimeConfig = (
     signal?: AbortSignal
 ): Promise<GetRuntimeConfigResponse> => api.getRuntimeConfig(signal);
+
+/**
+ * Public API boundary helper for loading curated prepared landing examples.
+ * Returns backend-owned reserved conversation rows for the landing surface.
+ */
+export const getPreparedLandingConversations = (
+    signal?: AbortSignal
+): Promise<GetPreparedLandingConversationsResponse> =>
+    api.getPreparedLandingConversations(signal);
 
 /**
  * Public API boundary helper for fetching trace details for a response id.

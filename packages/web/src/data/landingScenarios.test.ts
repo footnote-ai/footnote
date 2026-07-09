@@ -315,7 +315,11 @@ test('runtime ui source stays on prepared landing scenarios only', () => {
     assert.equal(fs.existsSync(oldPromptFile), false);
 
     const askMeAnythingSource = fs.readFileSync(askMeAnythingPath, 'utf8');
-    assert.equal(askMeAnythingSource.includes('landingScenarios'), true);
+    assert.equal(
+        askMeAnythingSource.includes('getPreparedLandingConversations'),
+        true
+    );
+    assert.equal(askMeAnythingSource.includes('landingScenarios'), false);
     assert.equal(askMeAnythingSource.includes('examplePrompts'), false);
     assert.equal(
         askMeAnythingSource.includes('landingScenarioFixtures'),

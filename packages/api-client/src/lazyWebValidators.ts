@@ -8,6 +8,7 @@
 
 import type {
     GetChatProfilesResponse,
+    GetPreparedLandingConversationsResponse,
     GetTraceResponse,
     GetTraceStaleResponse,
     PostChatResponse,
@@ -19,6 +20,9 @@ type WebSchemasModule = typeof import('@footnote/contracts/web/schemas');
 let webSchemasModulePromise: Promise<WebSchemasModule> | null = null;
 let getChatProfilesResponseValidatorPromise: Promise<
     ApiResponseValidator<GetChatProfilesResponse>
+> | null = null;
+let getPreparedLandingConversationsResponseValidatorPromise: Promise<
+    ApiResponseValidator<GetPreparedLandingConversationsResponse>
 > | null = null;
 let postChatResponseValidatorPromise: Promise<
     ApiResponseValidator<PostChatResponse>
@@ -76,6 +80,32 @@ export const loadPostChatResponseValidator = async (): Promise<
 
     return postChatResponseValidatorPromise;
 };
+
+export const loadGetPreparedLandingConversationsResponseValidator =
+    async (): Promise<
+        ApiResponseValidator<GetPreparedLandingConversationsResponse>
+    > => {
+        if (!getPreparedLandingConversationsResponseValidatorPromise) {
+            getPreparedLandingConversationsResponseValidatorPromise =
+                loadWebSchemasModule()
+                    .then(
+                        ({
+                            GetPreparedLandingConversationsResponseSchema,
+                            createSchemaResponseValidator,
+                        }) =>
+                            createSchemaResponseValidator(
+                                GetPreparedLandingConversationsResponseSchema
+                            )
+                    )
+                    .catch((error) => {
+                        getPreparedLandingConversationsResponseValidatorPromise =
+                            null;
+                        throw error;
+                    });
+        }
+
+        return getPreparedLandingConversationsResponseValidatorPromise;
+    };
 
 export const loadGetTraceApiResponseValidator = async (): Promise<
     ApiResponseValidator<GetTraceResponse | GetTraceStaleResponse>

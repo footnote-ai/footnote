@@ -120,6 +120,10 @@ type CreateExpressAppDeps = {
         req: http.IncomingMessage,
         res: http.ServerResponse
     ) => Promise<void>;
+    handlePreparedLandingConversationsRequest: (
+        req: http.IncomingMessage,
+        res: http.ServerResponse
+    ) => Promise<void>;
     handleAdminSettingsSchemaRequest: (
         req: http.IncomingMessage,
         res: http.ServerResponse
@@ -179,6 +183,7 @@ const createExpressApp = ({
     handleTraceCardAssetRequest,
     handleRuntimeConfigRequest,
     handleChatProfilesRequest,
+    handlePreparedLandingConversationsRequest,
     handleAdminSettingsSchemaRequest,
     handleAdminSettingsTemplateRequest,
     handleAdminSettingsYamlRequest,
@@ -202,6 +207,7 @@ const createExpressApp = ({
         app,
         handleRuntimeConfigRequest,
         handleChatProfilesRequest,
+        handlePreparedLandingConversationsRequest,
         logRequest,
     });
     registerAdminRoutes({

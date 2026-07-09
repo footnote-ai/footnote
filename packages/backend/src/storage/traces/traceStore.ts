@@ -9,6 +9,10 @@
 import { runtimeConfig } from '../../config.js';
 import { logger } from '../../utils/logger.js';
 import { SqliteTraceStore } from './sqliteTraceStore.js';
+import type {
+    ReservedLandingConversationSeed,
+    StoredPreparedLandingConversation,
+} from './sqliteTraceStore.js';
 import {
     assertValidResponseMetadata,
     traceStoreJsonReplacer,
@@ -26,6 +30,7 @@ const traceStoreLogger =
         : logger;
 
 export { assertValidResponseMetadata, traceStoreJsonReplacer };
+export type { ReservedLandingConversationSeed, StoredPreparedLandingConversation };
 
 /**
  * Creates the trace store from runtime config and falls back to a local SQLite

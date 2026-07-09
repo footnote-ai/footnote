@@ -132,6 +132,7 @@ test('incident routes are handled in Express with explicit precedence and no spe
         },
         handleRuntimeConfigRequest: createUnhandledRouteHandler,
         handleChatProfilesRequest: createUnhandledRouteHandler,
+        handlePreparedLandingConversationsRequest: createUnhandledRouteHandler,
         handleAdminSettingsSchemaRequest: createUnhandledRouteHandler,
         handleAdminSettingsTemplateRequest: createUnhandledRouteHandler,
         handleAdminSettingsYamlRequest: createUnhandledRouteHandler,

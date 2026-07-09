@@ -29,6 +29,8 @@ import {
 import { SafetyDecisionSchema } from '../policy/schemas.js';
 import type { ApiResponseValidationResult } from './client-core.js';
 import type {
+    ChatMessageActionResponse,
+    GetPreparedLandingConversationsResponse,
     GetTraceResponse,
     GetTraceStaleResponse,
     PostChatResponse,
@@ -1292,6 +1294,35 @@ export const PostChatResponseSchema: z.ZodType<PostChatResponse> =
             })
             .passthrough(),
     ]);
+
+const ChatMessageActionResponseSchema: z.ZodType<ChatMessageActionResponse> = z
+    .object({
+        action: z.literal('message'),
+        message: z.string(),
+        modality: z.enum(['text', 'tts']),
+        metadata: ResponseMetadataSchema,
+    })
+    .passthrough();
+
+/**
+ * @api.operationId: getPreparedLandingConversations
+ * @api.path: GET /api/prepared-conversations/landing
+ */
+export const GetPreparedLandingConversationsResponseSchema: z.ZodType<GetPreparedLandingConversationsResponse> =
+    z
+        .object({
+            conversations: z.array(
+                z
+                    .object({
+                        threadId: z.string().min(1),
+                        scenarioId: z.string().min(1),
+                        question: z.string().min(1),
+                        response: ChatMessageActionResponseSchema,
+                    })
+                    .strict()
+            ),
+        })
+        .strict();
 
 /**
  * @api.operationId: getChatProfiles

@@ -19,6 +19,7 @@ type RegisterPublicRoutesDeps = {
     app: express.Express;
     handleRuntimeConfigRequest: RequestHandler;
     handleChatProfilesRequest: RequestHandler;
+    handlePreparedLandingConversationsRequest: RequestHandler;
     logRequest: LogRequest;
 };
 
@@ -28,6 +29,7 @@ type RegisterPublicRoutesDeps = {
  * Public route contract:
  * - `/config.json`
  * - `/api/chat/profiles`
+ * - `/api/prepared-conversations/landing`
  * - Unmatched `/api/chat/*` requests intentionally fall through to downstream
  *   dispatch (fail-open behavior).
  *
@@ -41,6 +43,7 @@ const registerPublicRoutes = ({
     app,
     handleRuntimeConfigRequest,
     handleChatProfilesRequest,
+    handlePreparedLandingConversationsRequest,
     logRequest,
 }: RegisterPublicRoutesDeps): void => {
     app.all('/config.json', async (req, res) => {
@@ -60,6 +63,14 @@ const registerPublicRoutes = ({
         }
     });
     app.use('/api/chat', chatRouter);
+
+    app.all('/api/prepared-conversations/landing', async (req, res) => {
+        try {
+            await handlePreparedLandingConversationsRequest(req, res);
+        } catch (error) {
+            respondWithRouteError(req, res, logRequest, error);
+        }
+    });
 };
 
 export { registerPublicRoutes };

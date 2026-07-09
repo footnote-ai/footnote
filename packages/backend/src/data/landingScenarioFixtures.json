@@ -1,0 +1,225 @@
+[
+    {
+        "id": "what-is-footnote",
+        "question": "What is Footnote?",
+        "response": {
+            "action": "message",
+            "message": "Footnote is an open-source reasoning assistant focused on transparency, provenance, and human oversight. It helps people think through trade-offs and values, rather than replacing human judgment.",
+            "modality": "text",
+            "metadata": {
+                "responseId": "prepared-landing-what-is-footnote",
+                "provenance": "Inferred",
+                "safetyTier": "Low",
+                "tradeoffCount": 0,
+                "chainHash": "0442761ebe23587d",
+                "licenseContext": "MIT + HL3",
+                "modelVersion": "gpt-5.4-mini-2026-03-17",
+                "staleAfter": "2026-09-09T00:34:07.179Z",
+                "citations": [],
+                "trace_target": {
+                    "tightness": 3,
+                    "rationale": 3,
+                    "attribution": 3,
+                    "caution": 3,
+                    "extent": 2
+                },
+                "trace_final": {
+                    "tightness": 2,
+                    "rationale": 2,
+                    "attribution": 1,
+                    "caution": 2,
+                    "extent": 1
+                },
+                "trace_final_reason_code": "runtime_posture_adjustment",
+                "reviewRuntime": {
+                    "label": "reviewed_no_revision"
+                },
+                "evaluator": {
+                    "authorityLevel": "observe",
+                    "mode": "observe_only",
+                    "provenance": "Inferred",
+                    "safetyDecision": {
+                        "action": "allow",
+                        "safetyTier": "Low",
+                        "ruleId": null
+                    }
+                },
+                "totalDurationMs": 8867
+            }
+        },
+        "capture": {
+            "generatedAt": "2026-06-11T00:34:07.189Z",
+            "backendBaseUrl": "http://localhost:3000",
+            "workflowModeId": "balanced",
+            "capturedResponseId": "9Z59qMWj",
+            "capturedChainHash": "60734d8ad16a2d7d"
+        }
+    },
+    {
+        "id": "what-does-footnote-do-differently",
+        "question": "What does Footnote do differently from other AI tools?",
+        "response": {
+            "action": "message",
+            "message": "Footnote is designed to be more transparent and decision-support oriented than many AI tools.\n\nKey differences:\n\n- **Provenance first**: it emphasizes where claims come from, so you can trace reasoning instead of treating output as a black box.\n- **Human oversight**: it’s built to support your judgment, not replace it.\n- **Clear trade-offs**: it helps compare options and values, rather than only optimizing for a single “best” answer.\n- **Interpretability over flair**: it aims for plain, accountable explanations instead of polished but opaque responses.\n- **Open-source orientation**: it’s part of an open project, which usually means more visibility into how it works and how it can be audited.\n\nIn short: many AI tools try to be fast or impressive; Footnote tries to be **clear, accountable, and easy to reason about**.",
+            "modality": "text",
+            "metadata": {
+                "responseId": "prepared-landing-what-does-footnote-do-differently",
+                "provenance": "Inferred",
+                "safetyTier": "Low",
+                "tradeoffCount": 0,
+                "chainHash": "67097b2c839e2264",
+                "licenseContext": "MIT + HL3",
+                "modelVersion": "gpt-5.4-mini-2026-03-17",
+                "staleAfter": "2026-09-09T00:34:14.270Z",
+                "citations": [],
+                "trace_target": {
+                    "tightness": 3,
+                    "rationale": 3,
+                    "attribution": 3,
+                    "caution": 3,
+                    "extent": 3
+                },
+                "trace_final": {
+                    "tightness": 2,
+                    "rationale": 3,
+                    "attribution": 2,
+                    "caution": 2,
+                    "extent": 2
+                },
+                "trace_final_reason_code": "runtime_posture_adjustment",
+                "reviewRuntime": {
+                    "label": "reviewed_no_revision"
+                },
+                "evaluator": {
+                    "authorityLevel": "observe",
+                    "mode": "observe_only",
+                    "provenance": "Inferred",
+                    "safetyDecision": {
+                        "action": "allow",
+                        "safetyTier": "Low",
+                        "ruleId": null
+                    }
+                },
+                "totalDurationMs": 7075
+            }
+        },
+        "capture": {
+            "generatedAt": "2026-06-11T00:34:14.273Z",
+            "backendBaseUrl": "http://localhost:3000",
+            "workflowModeId": "balanced",
+            "capturedResponseId": "QlBQeJqK",
+            "capturedChainHash": "ad494dc37045cddb"
+        }
+    },
+    {
+        "id": "why-show-work-if-answer-can-be-wrong",
+        "question": "Why does showing the work matter if the answer can still be wrong?",
+        "response": {
+            "action": "message",
+            "message": "Because the work is often more valuable than the final answer.\n\nShowing the work matters even when the answer is wrong because it lets people see:\n\n- **Where the mistake happened** — a wrong answer with clear steps is easier to debug than a guess.\n- **Whether the reasoning was sound up to a point** — you may be right about most of the path and wrong at one step.\n- **How to improve** — others can give feedback on the exact step that failed.\n- **Trust and accountability** — a result with no reasoning is hard to evaluate.\n- **Learning** — in math, writing, science, and decision-making, the process is often the part that teaches.\n\nSo the point of showing work is not “the answer must be right.” It’s “the thinking should be inspectable.” A wrong but transparent solution is usually more useful than a right answer with no explanation, because it can be checked, corrected, and reused.\n\nIf you want, I can also explain this in the context of school, AI, or real-world decision-making.",
+            "modality": "text",
+            "metadata": {
+                "responseId": "prepared-landing-why-show-work-if-answer-can-be-wrong",
+                "provenance": "Inferred",
+                "safetyTier": "Low",
+                "tradeoffCount": 0,
+                "chainHash": "adb67260e0cbd50e",
+                "licenseContext": "MIT + HL3",
+                "modelVersion": "gpt-5.4-mini-2026-03-17",
+                "staleAfter": "2026-09-09T00:34:24.629Z",
+                "citations": [],
+                "trace_target": {
+                    "tightness": 3,
+                    "rationale": 3,
+                    "attribution": 3,
+                    "caution": 3,
+                    "extent": 3
+                },
+                "trace_final": {
+                    "tightness": 2,
+                    "rationale": 2,
+                    "attribution": 1,
+                    "caution": 2,
+                    "extent": 2
+                },
+                "trace_final_reason_code": "runtime_posture_adjustment",
+                "reviewRuntime": {
+                    "label": "reviewed_no_revision"
+                },
+                "evaluator": {
+                    "authorityLevel": "observe",
+                    "mode": "observe_only",
+                    "provenance": "Inferred",
+                    "safetyDecision": {
+                        "action": "allow",
+                        "safetyTier": "Low",
+                        "ruleId": null
+                    }
+                },
+                "totalDurationMs": 10351
+            }
+        },
+        "capture": {
+            "generatedAt": "2026-06-11T00:34:24.633Z",
+            "backendBaseUrl": "http://localhost:3000",
+            "workflowModeId": "balanced",
+            "capturedResponseId": "Mj2JP3rp",
+            "capturedChainHash": "2c84d8150c637466"
+        }
+    },
+    {
+        "id": "what-should-people-know-about-ai-answer",
+        "question": "What should people be able to know about an AI answer?",
+        "response": {
+            "action": "message",
+            "message": "People should be able to know, at minimum:\n\n- **Where the answer came from** — whether it’s based on the model’s training, a retrieved source, a calculation, or a guess.\n- **How confident it is** — including uncertainty, likely failure points, and whether there are competing interpretations.\n- **What assumptions it depends on** — especially if changing one detail would change the answer.\n- **What it might be missing** — gaps in data, time sensitivity, ambiguity, or limits in the model’s knowledge.\n- **Whether it was checked** — for example, whether facts were verified against sources or not.\n- **Any relevant limitations or bias** — such as incomplete coverage, outdated information, or perspective effects.\n- **What parts are reasoning vs. fact** — so people can tell inference from evidence.\n- **When human judgment is still needed** — especially for legal, medical, financial, safety, or high-stakes decisions.\n\nA good AI answer should be understandable, traceable, and honest about uncertainty—not just fluent.",
+            "modality": "text",
+            "metadata": {
+                "responseId": "prepared-landing-what-should-people-know-about-ai-answer",
+                "provenance": "Inferred",
+                "safetyTier": "Low",
+                "tradeoffCount": 0,
+                "chainHash": "10fe024981c7c0a5",
+                "licenseContext": "MIT + HL3",
+                "modelVersion": "gpt-5.4-mini-2026-03-17",
+                "staleAfter": "2026-09-09T00:34:32.146Z",
+                "citations": [],
+                "trace_target": {
+                    "tightness": 3,
+                    "rationale": 3,
+                    "attribution": 3,
+                    "caution": 3,
+                    "extent": 3
+                },
+                "trace_final": {
+                    "tightness": 3,
+                    "rationale": 3,
+                    "attribution": 3,
+                    "caution": 3,
+                    "extent": 3
+                },
+                "reviewRuntime": {
+                    "label": "reviewed_no_revision"
+                },
+                "evaluator": {
+                    "authorityLevel": "observe",
+                    "mode": "observe_only",
+                    "provenance": "Inferred",
+                    "safetyDecision": {
+                        "action": "allow",
+                        "safetyTier": "Low",
+                        "ruleId": null
+                    }
+                },
+                "totalDurationMs": 7508
+            }
+        },
+        "capture": {
+            "generatedAt": "2026-06-11T00:34:32.149Z",
+            "backendBaseUrl": "http://localhost:3000",
+            "workflowModeId": "balanced",
+            "capturedResponseId": "6QLQAyCW",
+            "capturedChainHash": "30fe342d5e4ce059"
+        }
+    }
+]

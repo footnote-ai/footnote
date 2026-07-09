@@ -11,8 +11,7 @@ import { Turnstile, type TurnstileInstance } from '@marsidev/react-turnstile';
 import MarkdownResponse from './MarkdownResponse';
 import ProvenanceFooter from './ProvenanceFooter';
 import type { ResponseMetadata } from '@footnote/contracts/policy';
-import { landingScenarios } from '../data/landingScenarios.js';
-import type { LandingScenario } from '../data/landingScenarios.js';
+import type { PreparedLandingConversation } from '@footnote/contracts/web';
 import { loadRuntimeConfig } from '../config';
 import { api, isApiClientError } from '../utils/api';
 import {
@@ -55,33 +54,66 @@ const AskMeAnything = (): JSX.Element => {
     const isTurnstileExecutingRef = useRef(false);
     const hasInteractedRef = useRef(false); // Track if user has interacted to prevent initial status flash
 
+    const [preparedScenarios, setPreparedScenarios] = useState<
+        readonly PreparedLandingConversation[]
+    >([]);
+
     // Random landing scenario selection.
     const getRandomScenario = (
         excludedScenarioId?: string
-    ): LandingScenario => {
+    ): PreparedLandingConversation | null => {
+        if (preparedScenarios.length === 0) {
+            return null;
+        }
+
         const candidateScenarios =
-            excludedScenarioId && landingScenarios.length > 1
-                ? landingScenarios.filter(
-                      (scenario) => scenario.id !== excludedScenarioId
+            excludedScenarioId && preparedScenarios.length > 1
+                ? preparedScenarios.filter(
+                      (scenario) => scenario.scenarioId !== excludedScenarioId
                   )
-                : landingScenarios;
+                : preparedScenarios;
 
         return candidateScenarios[
             Math.floor(Math.random() * candidateScenarios.length)
         ]!;
     };
 
-    const [currentScenario, setCurrentScenario] = useState<LandingScenario>(
-        () => getRandomScenario()
-    );
+    const [currentScenario, setCurrentScenario] =
+        useState<PreparedLandingConversation | null>(null);
+
+    useEffect(() => {
+        const controller = new AbortController();
+
+        api.getPreparedLandingConversations(controller.signal)
+            .then((payload) => {
+                setPreparedScenarios(payload.conversations);
+                setCurrentScenario(
+                    payload.conversations[
+                        Math.floor(Math.random() * payload.conversations.length)
+                    ] ?? null
+                );
+            })
+            .catch((error) => {
+                if ((error as Error).name !== 'AbortError') {
+                    setPreparedScenarios([]);
+                    setCurrentScenario(null);
+                }
+            });
+
+        return () => controller.abort();
+    }, []);
 
     const shuffleScenario = () => {
         setCurrentScenario((previousScenario) =>
-            getRandomScenario(previousScenario.id)
+            getRandomScenario(previousScenario?.scenarioId)
         );
     };
 
     const showPreparedScenario = () => {
+        if (!currentScenario) {
+            return;
+        }
+
         abortRef.current?.abort();
 
         hasInteractedRef.current = true;
@@ -90,6 +122,7 @@ const AskMeAnything = (): JSX.Element => {
         setIsLoading(false);
         setAnswer(currentScenario.response.message);
         setMetadata(currentScenario.response.metadata);
+
         if (shouldAutoFocusAskInput('prompt-button')) {
             inputRef.current?.focus();
         }
@@ -433,6 +466,7 @@ const AskMeAnything = (): JSX.Element => {
         setIsLoading(true);
         setAnswer('');
         setMetadata(null);
+
         try {
             const payload = await api.chatQuestion(
                 {
@@ -686,43 +720,45 @@ const AskMeAnything = (): JSX.Element => {
                     </button>
                 </div>
             </form>
-            <div className="interaction-prompt-buttons-row">
-                <div className="interaction-prompt-text-button-wrapper">
+            {currentScenario && (
+                <div className="interaction-prompt-buttons-row">
+                    <div className="interaction-prompt-text-button-wrapper">
+                        <button
+                            type="button"
+                            className="interaction-prompt-text-button"
+                            onClick={showPreparedScenario}
+                            onMouseDown={(e) => e.currentTarget.blur()}
+                            aria-label={`Show prepared example: ${currentScenario.question}`}
+                        >
+                            <span className="interaction-prompt-text">
+                                {currentScenario.question}
+                            </span>
+                        </button>
+                    </div>
                     <button
                         type="button"
-                        className="interaction-prompt-text-button"
-                        onClick={showPreparedScenario}
+                        className="interaction-prompt-shuffle-button"
+                        onClick={shuffleScenario}
                         onMouseDown={(e) => e.currentTarget.blur()}
-                        aria-label={`Show prepared example: ${currentScenario.question}`}
+                        aria-label="Shuffle prepared examples"
                     >
-                        <span className="interaction-prompt-text">
-                            {currentScenario.question}
+                        <span className="interaction-prompt-shuffle-icon">
+                            <svg
+                                width="16"
+                                height="16"
+                                viewBox="0 0 24 24"
+                                fill="none"
+                                stroke="currentColor"
+                                strokeWidth="2"
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                            >
+                                <path d="M21.5 2v6h-6M2.5 22v-6h6M2 11.5a10 10 0 0 1 18.8-4.3M22 12.5a10 10 0 0 1-18.8 4.2" />
+                            </svg>
                         </span>
                     </button>
                 </div>
-                <button
-                    type="button"
-                    className="interaction-prompt-shuffle-button"
-                    onClick={shuffleScenario}
-                    onMouseDown={(e) => e.currentTarget.blur()}
-                    aria-label="Shuffle prepared examples"
-                >
-                    <span className="interaction-prompt-shuffle-icon">
-                        <svg
-                            width="16"
-                            height="16"
-                            viewBox="0 0 24 24"
-                            fill="none"
-                            stroke="currentColor"
-                            strokeWidth="2"
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                        >
-                            <path d="M21.5 2v6h-6M2.5 22v-6h6M2 11.5a10 10 0 0 1 18.8-4.3M22 12.5a10 10 0 0 1-18.8 4.2" />
-                        </svg>
-                    </span>
-                </button>
-            </div>
+            )}
 
             {/* Only show status when there's actual content (error messages, etc.) - spinner is in button during loading */}
             {/* Conditionally render only when we have actual content to avoid empty div taking space */}

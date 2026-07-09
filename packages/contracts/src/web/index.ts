@@ -27,6 +27,8 @@ export type {
     ChatIgnoreActionResponse,
     ChatImageActionResponse,
     PostChatResponse,
+    PreparedLandingConversation,
+    GetPreparedLandingConversationsResponse,
     GetChatProfilesResponse,
 } from './types.js';
 
@@ -215,6 +217,7 @@ export {
     PostInternalTextResponseSchema,
     PostChatRequestSchema,
     GetChatProfilesResponseSchema,
+    GetPreparedLandingConversationsResponseSchema,
     PostChatResponseSchema,
     PostTraceCardFromTraceRequestSchema,
     PostTraceCardFromTraceResponseSchema,

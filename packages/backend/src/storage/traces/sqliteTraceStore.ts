@@ -10,6 +10,7 @@ import {
     type Citation,
     type ResponseMetadata,
 } from '@footnote/contracts/policy';
+import type { ChatMessageActionResponse } from '@footnote/contracts/web';
 import { ResponseMetadataSchema } from '@footnote/contracts/web/schemas';
 import Database from 'better-sqlite3';
 import fs from 'fs';
@@ -144,6 +145,21 @@ export interface SqliteTraceStoreConfig {
     dbPath: string;
 }
 
+export interface ReservedLandingConversationSeed {
+    threadId: string;
+    scenarioId: string;
+    question: string;
+    response: ChatMessageActionResponse;
+    displayOrder: number;
+}
+
+export interface StoredPreparedLandingConversation {
+    threadId: string;
+    scenarioId: string;
+    question: string;
+    response: ChatMessageActionResponse;
+}
+
 export class SqliteTraceStore {
     private readonly db: Database.Database;
     private readonly upsertStatement: Database.Statement;
@@ -152,6 +168,10 @@ export class SqliteTraceStore {
     private readonly deleteTraceCardStatement: Database.Statement;
     private readonly upsertTraceCardStatement: Database.Statement;
     private readonly retrieveTraceCardStatement: Database.Statement;
+    private readonly upsertThreadStatement: Database.Statement;
+    private readonly upsertMessageStatement: Database.Statement;
+    private readonly upsertAssistantResponseStatement: Database.Statement;
+    private readonly listPreparedLandingConversationsStatement: Database.Statement;
 
     constructor(config: SqliteTraceStoreConfig) {
         const resolvedPath = path.resolve(config.dbPath);
@@ -175,6 +195,36 @@ export class SqliteTraceStore {
         response_id TEXT PRIMARY KEY REFERENCES provenance_traces(response_id) ON DELETE CASCADE,
         trace_card_svg TEXT NOT NULL
       );
+      CREATE TABLE IF NOT EXISTS conversation_threads (
+        thread_id TEXT PRIMARY KEY,
+        source TEXT NOT NULL,
+        scenario_id TEXT NOT NULL UNIQUE,
+        title TEXT NOT NULL,
+        display_order INTEGER NOT NULL,
+        retention_class TEXT NOT NULL,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      );
+      CREATE INDEX IF NOT EXISTS idx_conversation_threads_source_order ON conversation_threads (source, display_order);
+      CREATE TABLE IF NOT EXISTS conversation_messages (
+        message_id TEXT PRIMARY KEY,
+        thread_id TEXT NOT NULL REFERENCES conversation_threads(thread_id) ON DELETE CASCADE,
+        role TEXT NOT NULL,
+        body_text TEXT NOT NULL,
+        sequence_index INTEGER NOT NULL,
+        created_at TEXT NOT NULL,
+        UNIQUE(thread_id, sequence_index)
+      );
+      CREATE INDEX IF NOT EXISTS idx_conversation_messages_thread_sequence ON conversation_messages (thread_id, sequence_index);
+      CREATE TABLE IF NOT EXISTS assistant_responses (
+        response_id TEXT PRIMARY KEY REFERENCES provenance_traces(response_id) ON DELETE CASCADE,
+        thread_id TEXT NOT NULL REFERENCES conversation_threads(thread_id) ON DELETE CASCADE,
+        assistant_message_id TEXT NOT NULL REFERENCES conversation_messages(message_id) ON DELETE CASCADE,
+        status TEXT NOT NULL,
+        created_at TEXT NOT NULL,
+        completed_at TEXT NOT NULL
+      );
+      CREATE INDEX IF NOT EXISTS idx_assistant_responses_thread_id ON assistant_responses (thread_id);
     `);
         this.ensureTraceCardForeignKey();
 
@@ -204,6 +254,100 @@ export class SqliteTraceStore {
         this.retrieveTraceCardStatement = this.db.prepare(
             `SELECT trace_card_svg FROM provenance_trace_cards WHERE response_id = ? LIMIT 1`
         );
+        this.upsertThreadStatement = this.db.prepare(`
+      INSERT INTO conversation_threads (
+        thread_id,
+        source,
+        scenario_id,
+        title,
+        display_order,
+        retention_class,
+        created_at,
+        updated_at
+      ) VALUES (
+        @thread_id,
+        @source,
+        @scenario_id,
+        @title,
+        @display_order,
+        @retention_class,
+        @created_at,
+        @updated_at
+      )
+      ON CONFLICT(thread_id) DO UPDATE SET
+        source = excluded.source,
+        scenario_id = excluded.scenario_id,
+        title = excluded.title,
+        display_order = excluded.display_order,
+        retention_class = excluded.retention_class,
+        updated_at = excluded.updated_at
+    `);
+        this.upsertMessageStatement = this.db.prepare(`
+      INSERT INTO conversation_messages (
+        message_id,
+        thread_id,
+        role,
+        body_text,
+        sequence_index,
+        created_at
+      ) VALUES (
+        @message_id,
+        @thread_id,
+        @role,
+        @body_text,
+        @sequence_index,
+        @created_at
+      )
+      ON CONFLICT(message_id) DO UPDATE SET
+        thread_id = excluded.thread_id,
+        role = excluded.role,
+        body_text = excluded.body_text,
+        sequence_index = excluded.sequence_index
+    `);
+        this.upsertAssistantResponseStatement = this.db.prepare(`
+      INSERT INTO assistant_responses (
+        response_id,
+        thread_id,
+        assistant_message_id,
+        status,
+        created_at,
+        completed_at
+      ) VALUES (
+        @response_id,
+        @thread_id,
+        @assistant_message_id,
+        @status,
+        @created_at,
+        @completed_at
+      )
+      ON CONFLICT(response_id) DO UPDATE SET
+        thread_id = excluded.thread_id,
+        assistant_message_id = excluded.assistant_message_id,
+        status = excluded.status,
+        completed_at = excluded.completed_at
+    `);
+        this.listPreparedLandingConversationsStatement = this.db.prepare(`
+      SELECT
+        threads.thread_id,
+        threads.scenario_id,
+        responses.response_id,
+        user_messages.body_text AS question,
+        assistant_messages.body_text AS message,
+        traces.metadata_json
+      FROM conversation_threads AS threads
+      INNER JOIN conversation_messages AS user_messages
+        ON user_messages.thread_id = threads.thread_id
+        AND user_messages.role = 'user'
+        AND user_messages.sequence_index = 0
+      INNER JOIN assistant_responses AS responses
+        ON responses.thread_id = threads.thread_id
+      INNER JOIN conversation_messages AS assistant_messages
+        ON assistant_messages.message_id = responses.assistant_message_id
+      INNER JOIN provenance_traces AS traces
+        ON traces.response_id = responses.response_id
+      WHERE threads.source = 'reserved_landing'
+      ORDER BY threads.display_order ASC, threads.thread_id ASC
+    `);
 
         traceLogger.info(`Initialized SQLite trace store at ${resolvedPath}`);
     }
@@ -320,37 +464,13 @@ export class SqliteTraceStore {
         throw new Error('Failed to execute SQLite operation after retries.');
     }
 
-    async upsert(metadata: ResponseMetadata): Promise<void> {
-        const normalized = this.normalizeMetadata(metadata);
-        const serialized = JSON.stringify(normalized, traceStoreJsonReplacer);
-        const now = new Date().toISOString();
-
-        await this.withRetry(() =>
-            this.upsertStatement.run({
-                response_id: normalized.responseId,
-                metadata_json: serialized,
-                stale_after: normalized.staleAfter,
-                created_at: now,
-                updated_at: now,
-            })
-        );
-        traceLogger.info(`Trace stored in SQLite: ${normalized.responseId}`);
-    }
-
-    async retrieve(responseId: string): Promise<ResponseMetadata | null> {
-        const row = await this.withRetry(
-            () =>
-                this.retrieveStatement.get(responseId) as
-                    | { metadata_json: string }
-                    | undefined
-        );
-        if (!row) {
-            return null;
-        }
-
+    private parseTraceMetadataJson(
+        metadataJson: string,
+        responseId: string
+    ): ResponseMetadata | null {
         let parsedJson: unknown;
         try {
-            parsedJson = JSON.parse(row.metadata_json) as unknown;
+            parsedJson = JSON.parse(metadataJson) as unknown;
         } catch (error) {
             traceLogger.warn(
                 `Trace record "${responseId}" failed JSON parsing; returning null fail-open.`,
@@ -404,6 +524,39 @@ export class SqliteTraceStore {
         return null;
     }
 
+    private upsertMetadataSync(metadata: ResponseMetadata): void {
+        const normalized = this.normalizeMetadata(metadata);
+        const serialized = JSON.stringify(normalized, traceStoreJsonReplacer);
+        const now = new Date().toISOString();
+
+        this.upsertStatement.run({
+            response_id: normalized.responseId,
+            metadata_json: serialized,
+            stale_after: normalized.staleAfter,
+            created_at: now,
+            updated_at: now,
+        });
+    }
+
+    async upsert(metadata: ResponseMetadata): Promise<void> {
+        await this.withRetry(() => this.upsertMetadataSync(metadata));
+        traceLogger.info(`Trace stored in SQLite: ${metadata.responseId}`);
+    }
+
+    async retrieve(responseId: string): Promise<ResponseMetadata | null> {
+        const row = await this.withRetry(
+            () =>
+                this.retrieveStatement.get(responseId) as
+                    | { metadata_json: string }
+                    | undefined
+        );
+        if (!row) {
+            return null;
+        }
+
+        return this.parseTraceMetadataJson(row.metadata_json, responseId);
+    }
+
     async delete(responseId: string): Promise<void> {
         await this.withRetry(() => {
             const deleteTrace = this.deleteStatement;
@@ -414,6 +567,108 @@ export class SqliteTraceStore {
             });
             transaction(responseId);
         });
+    }
+
+    seedReservedLandingConversations(
+        seeds: readonly ReservedLandingConversationSeed[]
+    ): void {
+        const transaction = this.db.transaction(() => {
+            for (const seed of seeds) {
+                const now = new Date().toISOString();
+                const responseId = seed.response.metadata.responseId;
+                const userMessageId = `${seed.threadId}-user`;
+                const assistantMessageId = `${seed.threadId}-assistant`;
+
+                this.upsertMetadataSync(seed.response.metadata);
+                this.upsertThreadStatement.run({
+                    thread_id: seed.threadId,
+                    source: 'reserved_landing',
+                    scenario_id: seed.scenarioId,
+                    title: seed.question,
+                    display_order: seed.displayOrder,
+                    retention_class: 'reserved_public',
+                    created_at: now,
+                    updated_at: now,
+                });
+                this.upsertMessageStatement.run({
+                    message_id: userMessageId,
+                    thread_id: seed.threadId,
+                    role: 'user',
+                    body_text: seed.question,
+                    sequence_index: 0,
+                    created_at: now,
+                });
+                this.upsertMessageStatement.run({
+                    message_id: assistantMessageId,
+                    thread_id: seed.threadId,
+                    role: 'assistant',
+                    body_text: seed.response.message,
+                    sequence_index: 1,
+                    created_at: now,
+                });
+                this.upsertAssistantResponseStatement.run({
+                    response_id: responseId,
+                    thread_id: seed.threadId,
+                    assistant_message_id: assistantMessageId,
+                    status: 'completed',
+                    created_at: now,
+                    completed_at: now,
+                });
+            }
+        });
+
+        transaction();
+        traceLogger.info(
+            `Seeded ${seeds.length} reserved landing conversation(s).`
+        );
+    }
+
+    async listReservedLandingConversations(): Promise<
+        StoredPreparedLandingConversation[]
+    > {
+        type PreparedLandingRow = {
+            thread_id: string;
+            scenario_id: string;
+            response_id: string;
+            question: string;
+            message: string;
+            metadata_json: string;
+        };
+
+        const rows = await this.withRetry(
+            () =>
+                this.listPreparedLandingConversationsStatement.all() as
+                    PreparedLandingRow[]
+        );
+
+        return rows
+            .map((row): StoredPreparedLandingConversation | null => {
+                const metadata = this.parseTraceMetadataJson(
+                    row.metadata_json,
+                    row.response_id
+                );
+                if (!metadata) {
+                    return null;
+                }
+
+                return {
+                    threadId: row.thread_id,
+                    scenarioId: row.scenario_id,
+                    question: row.question,
+                    response: {
+                        action: 'message',
+                        message: row.message,
+                        modality: 'text',
+                        metadata,
+                    },
+                };
+            })
+            .filter(
+                (
+                    conversation
+                ): conversation is StoredPreparedLandingConversation =>
+                    conversation !== null
+            );
     }
 
     /**
