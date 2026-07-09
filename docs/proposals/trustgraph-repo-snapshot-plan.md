@@ -2,9 +2,9 @@
 
 Current purpose: feature branch plan.
 
-Status: draft.
+Status: implemented for the first branch.
 
-Last updated: 2026-07-08.
+Last updated: 2026-07-09.
 
 ## Goal
 
@@ -38,10 +38,11 @@ Name: Minimal snapshot seed.
 
 Scope:
 
-- add one versioned snapshot file
-- validate the snapshot shape
-- add the smallest loader needed to send the snapshot to TrustGraph
-- document the service settings needed to run the loader
+- add one versioned snapshot file at `docs/trustgraph/repo-snapshot.v1.json`
+- validate the snapshot shape with `pnpm trustgraph:snapshot:validate`
+- add the smallest loader needed to send the snapshot to TrustGraph with
+  `pnpm trustgraph:snapshot:load`
+- document the service settings needed to run the loader and smoke request
 - keep backend retrieval on the existing HTTP adapter path
 - add focused tests for snapshot validation and seed payload creation
 - add a smoke path for loading the data and seeing TrustGraph metadata in chat
@@ -63,22 +64,88 @@ Example:
 
 ```json
 {
-  "schemaVersion": "repo-snapshot-v1",
-  "generatedAt": "2026-07-08T00:00:00.000Z",
-  "sourceCommit": "<git-sha>",
-  "items": [
-    {
-      "id": "project-overview",
-      "title": "Project overview",
-      "summary": "Footnote is a transparency- and provenance-focused AI framework.",
-      "sourceRef": "repo://docs/README.md"
-    }
-  ]
+    "schemaVersion": "repo-snapshot-v1",
+    "generatedAt": "2026-07-08T00:00:00.000Z",
+    "sourceCommit": "<git-sha>",
+    "items": [
+        {
+            "id": "project-overview",
+            "title": "Project overview",
+            "summary": "Footnote is a transparency- and provenance-focused AI framework.",
+            "sourceRef": "repo://docs/README.md"
+        }
+    ]
 }
 ```
 
 Keep stable IDs and source refs so retrieved TrustGraph evidence can be traced
 back to the snapshot and source commit.
+
+## Loader Settings
+
+The loader is manual-only and separate from request handling.
+
+Required:
+
+- `TRUSTGRAPH_SEED_ENDPOINT_URL`
+
+Optional:
+
+- `TRUSTGRAPH_SEED_API_TOKEN`
+- `TRUSTGRAPH_SEED_USER_ID`
+- `TRUSTGRAPH_SEED_PROJECT_ID`
+- `TRUSTGRAPH_SEED_COLLECTION_ID`
+
+Default seed scope:
+
+- `userId`: `repo_snapshot_seed_user`
+- `projectId`: `footnote_repo_snapshot`
+
+Set only one of `TRUSTGRAPH_SEED_PROJECT_ID` or
+`TRUSTGRAPH_SEED_COLLECTION_ID`.
+
+Run:
+
+```sh
+pnpm trustgraph:snapshot:validate
+pnpm trustgraph:snapshot:load
+```
+
+## Smoke Path
+
+1. Run a real TrustGraph service with a seed endpoint and a retrieval endpoint.
+2. Load the checked-in snapshot with `pnpm trustgraph:snapshot:load`.
+3. Start the backend with the existing retrieval adapter enabled:
+
+```sh
+EXECUTION_CONTRACT_TRUSTGRAPH_ENABLED=true
+EXECUTION_CONTRACT_TRUSTGRAPH_ADAPTER_MODE=http
+EXECUTION_CONTRACT_TRUSTGRAPH_ADAPTER_ENDPOINT_URL=<retrieval endpoint>
+EXECUTION_CONTRACT_TRUSTGRAPH_ADAPTER_API_TOKEN=<token>
+```
+
+4. If a real ownership validator is available, also set:
+
+```sh
+EXECUTION_CONTRACT_TRUSTGRAPH_OWNERSHIP_BINDING_MODE=http
+EXECUTION_CONTRACT_TRUSTGRAPH_OWNERSHIP_ENDPOINT_URL=<ownership endpoint>
+EXECUTION_CONTRACT_TRUSTGRAPH_OWNERSHIP_API_TOKEN=<token>
+```
+
+5. Send a chat request with explicit scope fields matching the seeded scope:
+
+```json
+{
+    "surfaceContext": {
+        "userId": "repo_snapshot_seed_user",
+        "channelId": "footnote_repo_snapshot"
+    }
+}
+```
+
+6. Confirm the response includes `metadata.trustGraph.adapterStatus` with
+   `success` and that disabling TrustGraph or breaking the adapter endpoint
+   still returns a local chat response.
 
 ## Refresh
 
