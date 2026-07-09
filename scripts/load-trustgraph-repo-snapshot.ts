@@ -20,6 +20,7 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const repoRoot = path.resolve(__dirname, '..');
 const snapshotPath = path.join(repoRoot, 'docs/trustgraph/repo-snapshot.json');
+const SEED_REQUEST_TIMEOUT_MS = 30_000;
 
 const getEnv = (name: string): string | undefined => {
     const value = process.env[name]?.trim();
@@ -61,16 +62,38 @@ const postSeedPayload = async (input: {
     apiToken?: string;
     payload: unknown;
 }): Promise<void> => {
-    const response = await fetch(input.endpointUrl, {
-        method: 'POST',
-        headers: {
-            'content-type': 'application/json',
-            ...(input.apiToken !== undefined && {
-                authorization: `Bearer ${input.apiToken}`,
-            }),
-        },
-        body: JSON.stringify(input.payload),
-    });
+    const controller = new AbortController();
+    let didTimeout = false;
+    const timeoutHandle = setTimeout(() => {
+        didTimeout = true;
+        controller.abort();
+    }, SEED_REQUEST_TIMEOUT_MS);
+    timeoutHandle.unref?.();
+
+    let response: Response;
+    try {
+        response = await fetch(input.endpointUrl, {
+            method: 'POST',
+            headers: {
+                'content-type': 'application/json',
+                ...(input.apiToken !== undefined && {
+                    authorization: `Bearer ${input.apiToken}`,
+                }),
+            },
+            body: JSON.stringify(input.payload),
+            signal: controller.signal,
+        });
+    } catch (error) {
+        if (didTimeout) {
+            throw new Error(
+                `TrustGraph repo snapshot load timed out after ${SEED_REQUEST_TIMEOUT_MS}ms.`,
+                { cause: error }
+            );
+        }
+        throw error;
+    } finally {
+        clearTimeout(timeoutHandle);
+    }
 
     if (!response.ok) {
         const errorText = await response.text();
@@ -80,6 +103,8 @@ const postSeedPayload = async (input: {
             }`
         );
     }
+
+    await response.arrayBuffer();
 };
 
 const main = async (): Promise<void> => {

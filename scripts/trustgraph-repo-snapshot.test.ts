@@ -127,6 +127,18 @@ test('seed payload preserves stable IDs, source refs, and summaries', () => {
     );
 });
 
+test('seed payload rejects invalid seededAt values', () => {
+    const snapshot = parseTrustGraphRepoSnapshot(createSnapshot());
+
+    assert.throws(
+        () =>
+            buildTrustGraphRepoSnapshotSeedPayload(snapshot, {
+                seededAt: 'not-a-timestamp',
+            }),
+        /seededAt must be an ISO timestamp/
+    );
+});
+
 test('seed payload matches the existing EvidenceBundle contract shape', () => {
     const snapshot = parseTrustGraphRepoSnapshot(createSnapshot());
     const payload = buildTrustGraphRepoSnapshotSeedPayload(snapshot);
