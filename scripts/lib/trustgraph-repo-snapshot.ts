@@ -13,9 +13,10 @@ import type {
     ScopeTuple,
 } from '../../packages/backend/src/services/executionContractTrustGraph/index.js';
 
-export const TRUSTGRAPH_REPO_SNAPSHOT_SCHEMA_VERSION = 'repo-snapshot-v1';
 export const TRUSTGRAPH_REPO_SNAPSHOT_ADAPTER_VERSION =
     'footnote-repo-snapshot-loader-v1';
+export const TRUSTGRAPH_REPO_SNAPSHOT_DEFAULT_RETRIEVED_AT =
+    '2026-07-09T00:00:00.000Z';
 
 export type TrustGraphRepoSnapshotItem = {
     id: string;
@@ -25,23 +26,23 @@ export type TrustGraphRepoSnapshotItem = {
 };
 
 export type TrustGraphRepoSnapshot = {
-    schemaVersion: typeof TRUSTGRAPH_REPO_SNAPSHOT_SCHEMA_VERSION;
-    generatedAt: string;
-    sourceCommit: string;
     items: TrustGraphRepoSnapshotItem[];
 };
 
 export type TrustGraphRepoSnapshotSeedPayload = {
     kind: 'footnote.trustgraph.repo_snapshot_seed';
-    schemaVersion: typeof TRUSTGRAPH_REPO_SNAPSHOT_SCHEMA_VERSION;
-    generatedAt: string;
-    sourceCommit: string;
+    snapshotRef: 'repo-snapshot';
+    seededAt: string;
     itemCount: number;
     bundle: EvidenceBundle;
 };
 
+export type TrustGraphRepoSnapshotSeedOptions = {
+    scopeTuple?: ScopeTuple;
+    seededAt?: string;
+};
+
 const SNAPSHOT_ID_PATTERN = /^[a-z0-9][a-z0-9-]*$/;
-const SOURCE_COMMIT_PATTERN = /^[a-f0-9]{7,40}$/;
 const DEFAULT_SCOPE_TUPLE: ScopeTuple = {
     userId: 'repo_snapshot_seed_user',
     projectId: 'footnote_repo_snapshot',
@@ -106,29 +107,6 @@ export const parseTrustGraphRepoSnapshot = (
         throw new Error('TrustGraph repo snapshot must be an object.');
     }
 
-    if (value.schemaVersion !== TRUSTGRAPH_REPO_SNAPSHOT_SCHEMA_VERSION) {
-        throw new Error(
-            `Unsupported TrustGraph repo snapshot schemaVersion: ${String(
-                value.schemaVersion
-            )}.`
-        );
-    }
-    if (
-        !isNonEmptyString(value.generatedAt) ||
-        !isIsoTimestamp(value.generatedAt)
-    ) {
-        throw new Error(
-            'TrustGraph repo snapshot generatedAt must be an ISO timestamp.'
-        );
-    }
-    if (
-        !isNonEmptyString(value.sourceCommit) ||
-        !SOURCE_COMMIT_PATTERN.test(value.sourceCommit)
-    ) {
-        throw new Error(
-            'TrustGraph repo snapshot sourceCommit must be a git SHA.'
-        );
-    }
     if (!Array.isArray(value.items) || value.items.length === 0) {
         throw new Error(
             'TrustGraph repo snapshot must contain at least one item.'
@@ -147,9 +125,6 @@ export const parseTrustGraphRepoSnapshot = (
     }
 
     return {
-        schemaVersion: TRUSTGRAPH_REPO_SNAPSHOT_SCHEMA_VERSION,
-        generatedAt: value.generatedAt,
-        sourceCommit: value.sourceCommit,
         items,
     };
 };
@@ -173,24 +148,30 @@ const buildCollectionScope = (scopeTuple: ScopeTuple): string => {
 
 export const buildTrustGraphRepoSnapshotSeedPayload = (
     snapshot: TrustGraphRepoSnapshot,
-    scopeTuple: ScopeTuple = DEFAULT_SCOPE_TUPLE
+    options: TrustGraphRepoSnapshotSeedOptions = {}
 ): TrustGraphRepoSnapshotSeedPayload => {
+    const scopeTuple = options.scopeTuple ?? DEFAULT_SCOPE_TUPLE;
+    const seededAt =
+        options.seededAt ?? TRUSTGRAPH_REPO_SNAPSHOT_DEFAULT_RETRIEVED_AT;
+    if (!isIsoTimestamp(seededAt)) {
+        throw new Error(
+            'TrustGraph repo snapshot seededAt must be an ISO timestamp.'
+        );
+    }
+
     const collectionScope = buildCollectionScope(scopeTuple);
     const bundle: EvidenceBundle = {
-        bundleId: `repo_snapshot_${snapshot.sourceCommit}`,
+        bundleId: 'repo_snapshot',
         queryIntent: 'Footnote repository snapshot seed',
         items: snapshot.items.map((item) => ({
             evidenceId: `repo_snapshot:${item.id}`,
             claimText: `${item.title}: ${item.summary}`,
             sourceRef: item.sourceRef,
-            provenancePathRef: [
-                `repo-snapshot://${snapshot.schemaVersion}/${item.id}`,
-                `repo-commit://${snapshot.sourceCommit}`,
-            ],
+            provenancePathRef: [`repo-snapshot://${item.id}`],
             retrievalReason: 'repo_snapshot_seed',
             confidenceScore: 1,
-            confidenceMethodId: 'repo_snapshot_manual_seed_v1',
-            retrievedAt: snapshot.generatedAt,
+            confidenceMethodId: 'repo_snapshot_manual_seed',
+            retrievedAt: seededAt,
             collectionScope,
             adapterVersion: TRUSTGRAPH_REPO_SNAPSHOT_ADAPTER_VERSION,
         })),
@@ -203,18 +184,15 @@ export const buildTrustGraphRepoSnapshotSeedPayload = (
             adapterVersion: TRUSTGRAPH_REPO_SNAPSHOT_ADAPTER_VERSION,
         },
         conflictSignals: [],
-        traceRefs: snapshot.items.map(
-            (item) => `repo-snapshot://${snapshot.schemaVersion}/${item.id}`
-        ),
+        traceRefs: snapshot.items.map((item) => `repo-snapshot://${item.id}`),
         scopeTuple,
         adapterVersion: TRUSTGRAPH_REPO_SNAPSHOT_ADAPTER_VERSION,
     };
 
     return {
         kind: 'footnote.trustgraph.repo_snapshot_seed',
-        schemaVersion: snapshot.schemaVersion,
-        generatedAt: snapshot.generatedAt,
-        sourceCommit: snapshot.sourceCommit,
+        snapshotRef: 'repo-snapshot',
+        seededAt,
         itemCount: snapshot.items.length,
         bundle,
     };

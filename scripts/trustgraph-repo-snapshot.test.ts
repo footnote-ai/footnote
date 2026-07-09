@@ -16,19 +16,17 @@ import {
     parseTrustGraphRepoSnapshot,
     readTrustGraphRepoSnapshotFile,
     TRUSTGRAPH_REPO_SNAPSHOT_ADAPTER_VERSION,
+    TRUSTGRAPH_REPO_SNAPSHOT_DEFAULT_RETRIEVED_AT,
 } from './lib/trustgraph-repo-snapshot.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const snapshotPath = path.join(
     __dirname,
-    '../docs/trustgraph/repo-snapshot.v1.json'
+    '../docs/trustgraph/repo-snapshot.json'
 );
 
 const createSnapshot = () => ({
-    schemaVersion: 'repo-snapshot-v1',
-    generatedAt: '2026-07-09T00:00:00.000Z',
-    sourceCommit: '78460c720be7',
     items: [
         {
             id: 'project-overview',
@@ -49,19 +47,16 @@ const createSnapshot = () => ({
 test('checked-in TrustGraph repo snapshot parses', async () => {
     const snapshot = await readTrustGraphRepoSnapshotFile(snapshotPath);
 
-    assert.equal(snapshot.schemaVersion, 'repo-snapshot-v1');
-    assert.equal(snapshot.sourceCommit, '78460c720be7');
     assert.equal(snapshot.items.length, 4);
 });
 
-test('unsupported snapshot schema version fails', () => {
+test('snapshot accepts only item collections', () => {
     assert.throws(
         () =>
             parseTrustGraphRepoSnapshot({
-                ...createSnapshot(),
-                schemaVersion: 'repo-snapshot-v2',
+                items: [],
             }),
-        /Unsupported TrustGraph repo snapshot schemaVersion/
+        /must contain at least one item/
     );
 });
 
@@ -101,14 +96,18 @@ test('invalid source refs fail', () => {
     );
 });
 
-test('seed payload preserves stable IDs, source refs, source commit, and summaries', () => {
+test('seed payload preserves stable IDs, source refs, and summaries', () => {
     const snapshot = parseTrustGraphRepoSnapshot(createSnapshot());
     const payload = buildTrustGraphRepoSnapshotSeedPayload(snapshot, {
-        userId: 'user_1',
-        projectId: 'project_1',
+        scopeTuple: {
+            userId: 'user_1',
+            projectId: 'project_1',
+        },
+        seededAt: '2026-07-09T00:00:00.000Z',
     });
 
-    assert.equal(payload.sourceCommit, snapshot.sourceCommit);
+    assert.equal(payload.snapshotRef, 'repo-snapshot');
+    assert.equal(payload.seededAt, '2026-07-09T00:00:00.000Z');
     assert.equal(payload.itemCount, snapshot.items.length);
     assert.equal(payload.bundle.scopeTuple.userId, 'user_1');
     assert.equal(payload.bundle.scopeTuple.projectId, 'project_1');
@@ -132,7 +131,7 @@ test('seed payload matches the existing EvidenceBundle contract shape', () => {
     const snapshot = parseTrustGraphRepoSnapshot(createSnapshot());
     const payload = buildTrustGraphRepoSnapshotSeedPayload(snapshot);
 
-    assert.equal(payload.bundle.bundleId, 'repo_snapshot_78460c720be7');
+    assert.equal(payload.bundle.bundleId, 'repo_snapshot');
     assert.equal(payload.bundle.queryIntent.length > 0, true);
     assert.equal(payload.bundle.items.length, 2);
     assert.equal(payload.bundle.coverageEstimate.evaluationUnit, 'source');
@@ -149,7 +148,11 @@ test('seed payload matches the existing EvidenceBundle contract shape', () => {
             (item) =>
                 item.adapterVersion ===
                     TRUSTGRAPH_REPO_SNAPSHOT_ADAPTER_VERSION &&
-                item.provenancePathRef.includes('repo-commit://78460c720be7')
+                item.retrievedAt ===
+                    TRUSTGRAPH_REPO_SNAPSHOT_DEFAULT_RETRIEVED_AT &&
+                item.provenancePathRef.every((ref) =>
+                    ref.startsWith('repo-snapshot://')
+                )
         ),
         true
     );

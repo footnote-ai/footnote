@@ -19,10 +19,7 @@ import type { ScopeTuple } from '../packages/backend/src/services/executionContr
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const repoRoot = path.resolve(__dirname, '..');
-const snapshotPath = path.join(
-    repoRoot,
-    'docs/trustgraph/repo-snapshot.v1.json'
-);
+const snapshotPath = path.join(repoRoot, 'docs/trustgraph/repo-snapshot.json');
 
 const getEnv = (name: string): string | undefined => {
     const value = process.env[name]?.trim();
@@ -90,10 +87,9 @@ const main = async (): Promise<void> => {
     const apiToken = getEnv('TRUSTGRAPH_SEED_API_TOKEN');
     const scopeTuple = resolveSeedScopeTuple();
     const snapshot = await readTrustGraphRepoSnapshotFile(snapshotPath);
-    const payload = buildTrustGraphRepoSnapshotSeedPayload(
-        snapshot,
-        scopeTuple
-    );
+    const payload = buildTrustGraphRepoSnapshotSeedPayload(snapshot, {
+        scopeTuple,
+    });
 
     await postSeedPayload({
         endpointUrl,
@@ -103,7 +99,6 @@ const main = async (): Promise<void> => {
 
     logger.info('Loaded TrustGraph repo snapshot seed payload.', {
         endpointUrl,
-        sourceCommit: snapshot.sourceCommit,
         itemCount: snapshot.items.length,
         scopeKind:
             scopeTuple.projectId !== undefined
