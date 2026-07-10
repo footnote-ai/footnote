@@ -71,7 +71,7 @@
                     "author": "Maintainer"
                 },
                 {
-                    "content": "Include a simple first-run path: start the backend, open the web app, trigger one chat request, and inspect the resulting trace.",
+                    "content": "Include a simple first-run path: start the backend, open the web app, trigger one live chat request, and inspect the resulting trace. Keep this distinct from the curated landing demo, which uses prepared backend-served conversations and does not call a model.",
                     "author": "Maintainer"
                 }
             ]
@@ -113,7 +113,9 @@
                 "docs/architecture/prompt-resolution.md",
                 "docs/architecture/workflow.md",
                 "docs/architecture/langfuse-metadata-mirror.md",
-                "docs/architecture/context-integrations/README.md"
+                "docs/architecture/context-integrations/README.md",
+                "docs/proposals/proposal_execution_adapters_workflow_authority.md",
+                "docs/proposals/proposal_local_observability_agent_inspect.md"
             ],
             "page_notes": [
                 {
@@ -134,6 +136,10 @@
                 },
                 {
                     "content": "Context integrations bring external context (like weather) into workflows without giving integrations policy authority. See the Context Integrations page.",
+                    "author": "Maintainer"
+                },
+                {
+                    "content": "The backend workflow remains Footnote's execution authority. VoltAgent and future runtimes are bounded execution adapters; they do not own public response acceptance, review, termination, provenance, or cost authority. This is current direction, not a second shipped overseer.",
                     "author": "Maintainer"
                 }
             ]
@@ -216,6 +222,7 @@
                 "packages/backend/src/utils/logger.ts",
                 "packages/discord-bot/src/state/ChannelContextManager.ts",
                 "docs/architecture/langfuse-metadata-mirror.md",
+                "docs/proposals/proposal_local_observability_agent_inspect.md",
                 "AGENTS.md",
                 "cursor.rules"
             ],
@@ -226,6 +233,10 @@
                 },
                 {
                     "content": "Include failure modes and where to look when debugging trace, provenance, or cost-accounting issues.",
+                    "author": "Maintainer"
+                },
+                {
+                    "content": "Langfuse is the current optional metadata-only mirror. The proposed local JSONL or agent-inspect projection is not shipped and must remain derived from canonical Footnote traces.",
                     "author": "Maintainer"
                 }
             ]
@@ -312,6 +323,7 @@
                 "docs/architecture/context-integrations/README.md",
                 "docs/architecture/context-integrations/weather-forecast.md",
                 "docs/architecture/context-integrations/trustgraph.md",
+                "docs/proposals/trustgraph-repo-snapshot-plan.md",
                 "docs/proposals/web-search-context-integration.md",
                 "packages/backend/src/services/contextIntegrations/weather",
                 "packages/backend/src/services/tools/toolRegistry.ts",
@@ -346,6 +358,10 @@
                 },
                 {
                     "content": "Search discovery is distinct from source reading. Discovery provides candidate sources; reading and citing sources is a later, stronger step.",
+                    "author": "Maintainer"
+                },
+                {
+                    "content": "TrustGraph repository snapshot seeding is development/indexing support, not a new runtime authority. Keep snapshot loading and future derived-artifact indexing separate from the workflow context-step integration.",
                     "author": "Maintainer"
                 }
             ]
@@ -395,7 +411,8 @@
                 "packages/backend/src/services/chatOrchestrator.ts",
                 "docs/decisions/2026-03-voltagent-runtime-adoption.md",
                 "docs/decisions/2026-03-legacy-openai-removal-and-runtime-branching.md",
-                "docs/decisions/2026-03-model-profile-catalog-and-staged-planner-selection.md"
+                "docs/decisions/2026-03-model-profile-catalog-and-staged-planner-selection.md",
+                "docs/proposals/proposal_execution_adapters_workflow_authority.md"
             ],
             "page_notes": [
                 {
@@ -417,6 +434,10 @@
                 {
                     "content": "Model-native search is distinct from explicit context integrations like weather_forecast. Runtime search behavior is not equivalent to provider-neutral search integrations.",
                     "author": "Maintainer"
+                },
+                {
+                    "content": "Current behavior is VoltAgent-backed text generation plus dedicated image and voice adapters. The adapter/authority split and broader delegated-runtime model are planning direction only; do not document runtime selection or subagent delegation as shipped.",
+                    "author": "Maintainer"
                 }
             ]
         },
@@ -432,7 +453,8 @@
                 "packages/api-client/src/internalText.ts",
                 "packages/api-client/src/internalImage.ts",
                 "packages/api-client/src/internalVoice.ts",
-                "packages/api-client/src/incidents.ts"
+                "packages/api-client/src/incidents.ts",
+                "packages/api-client/src/web.ts"
             ],
             "page_notes": [
                 {
@@ -441,6 +463,10 @@
                 },
                 {
                     "content": "Show how web and Discord wrappers compose these factories so auth and error behavior stay aligned.",
+                    "author": "Maintainer"
+                },
+                {
+                    "content": "Include the prepared landing-conversation helper as a typed backend read path used by web. Keep it separate from the live chat request helper.",
                     "author": "Maintainer"
                 }
             ]
@@ -520,7 +546,9 @@
                 "packages/agent-runtime/src",
                 "packages/backend/src/services/responseMetadataHeuristics.ts",
                 "packages/contracts/src/web/types.ts",
-                "packages/contracts/src/web/schemas.ts"
+                "packages/contracts/src/web/schemas.ts",
+                "packages/backend/src/handlers/preparedConversations.ts",
+                "packages/backend/src/data/preparedLandingConversations.ts"
             ],
             "page_notes": [
                 {
@@ -550,6 +578,10 @@
                 {
                     "author": "Maintainer",
                     "content": "Chat flow uses contextStepRequests for workflow context-step execution (weather_forecast, web_search, file_scan, trustgraph, reverse_image_search where applicable)."
+                },
+                {
+                    "author": "Maintainer",
+                    "content": "Prepared landing conversations are a reserved, backend-owned read path for curated examples. Do not present them as live /api/chat execution or mix them into the normal chat workflow walkthrough."
                 }
             ]
         },
@@ -608,11 +640,19 @@
             "entrypoints": [
                 "packages/backend/src/bootstrapEnv.ts",
                 "packages/backend/src/config.ts",
-                "packages/backend/src/handlers/config.ts"
+                "packages/backend/src/handlers/config.ts",
+                "packages/backend/src/handlers/setupSession.ts",
+                "packages/backend/src/handlers/adminSettings.ts",
+                "packages/backend/src/services/setupBootstrap.ts",
+                "packages/config-spec/src/settings-template.ts"
             ],
             "page_notes": [
                 {
                     "content": "Explain which config is private, which config is exposed to clients, and where fail-open behavior is intentional.",
+                    "author": "Maintainer"
+                },
+                {
+                    "content": "Cover the operator settings/setup-link and reset flow: local setup creates a bounded operator session, settings remain backend-owned, and reset is an explicit local command rather than a public client capability.",
                     "author": "Maintainer"
                 }
             ]
@@ -790,12 +830,19 @@
             "parent": "Web",
             "entrypoints": [
                 "packages/web/src/components/AskMeAnything.tsx",
+                "packages/web/src/components/MarkdownResponse.tsx",
                 "packages/web/src/App.tsx",
-                "packages/web/src/utils/api.ts"
+                "packages/web/src/utils/api.ts",
+                "packages/web/src/data/landingScenarios.ts",
+                "packages/web/src/data/landingScenarioFixtures.json"
             ],
             "page_notes": [
                 {
                     "content": "Include one screenshot of the ask-and-answer flow so readers can connect the components to the real user experience.",
+                    "author": "Maintainer"
+                },
+                {
+                    "content": "Document both paths briefly: the prepared landing suggestion loads a backend-served answer and renders Markdown; typed submission remains the live chat path. Point to AskMeAnything, MarkdownResponse, landing scenarios, and the prepared-conversation API helper.",
                     "author": "Maintainer"
                 }
             ]
@@ -830,7 +877,8 @@
                 "packages/api-client/src/traces.ts",
                 "packages/api-client/src/internalText.ts",
                 "packages/api-client/src/internalImage.ts",
-                "packages/api-client/src/internalVoice.ts"
+                "packages/api-client/src/internalVoice.ts",
+                "packages/api-client/src/web.ts"
             ],
             "page_notes": [
                 {
@@ -839,6 +887,10 @@
                 },
                 {
                     "content": "Keep this top-level so contributors can find the API contract quickly from anywhere in the wiki.",
+                    "author": "Maintainer"
+                },
+                {
+                    "content": "Include GET /api/prepared-conversations/landing as the curated web-example read contract, with its runtime schema and code references. Keep it distinct from POST /api/chat.",
                     "author": "Maintainer"
                 }
             ]
@@ -854,7 +906,12 @@
                 "deploy/traceTokenResolver.mjs",
                 "packages/discord-bot/src/supervisor",
                 "README.md",
-                "deploy/README.md"
+                "deploy/README.md",
+                "packages/backend/src/handlers/setupSession.ts",
+                "packages/backend/src/services/setupBootstrap.ts",
+                "scripts/settings.cjs",
+                "scripts/reset.cjs",
+                "scripts/lib/operator-link.cjs"
             ],
             "page_notes": [
                 {
@@ -880,6 +937,10 @@
                 {
                     "author": "Maintainer",
                     "content": "Not yet supported as a default path: provider-specific one-click deployment flows."
+                },
+                {
+                    "author": "Maintainer",
+                    "content": "Include the local operator setup link, settings command, and reset command in the operator path. Explain that setup and settings are server-owned and local-only; Discord nodes remain supervised adapters."
                 }
             ]
         }
