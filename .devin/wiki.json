@@ -67,11 +67,7 @@
                     "author": "Maintainer"
                 },
                 {
-                    "content": "Start here, then read Architecture, Glossary, and Provenance. Use Packages when you want to find where a feature lives in code.",
-                    "author": "Maintainer"
-                },
-                {
-                    "content": "Include a simple first-run path: start the backend, open the web app, trigger one live chat request, and inspect the resulting trace. Keep this distinct from the curated landing demo, which uses prepared backend-served conversations and does not call a model.",
+                    "content": "Start here, then read Architecture, Glossary, and Provenance. Use Packages when you want to find where a feature lives in code. Include a simple first-run path: start the backend, open the web app, trigger one live chat request, and inspect the resulting trace. Keep this distinct from the curated landing demo, which uses prepared backend-served conversations and does not call a model.",
                     "author": "Maintainer"
                 }
             ]
@@ -90,11 +86,7 @@
             ],
             "page_notes": [
                 {
-                    "content": "Read this after Introduction. It should explain the shared ideas before readers dive into package-specific feature pages.",
-                    "author": "Maintainer"
-                },
-                {
-                    "content": "Keep this section concept-first. Save detailed feature tours for the Packages branch of the wiki.",
+                    "content": "Read this after Introduction. Keep it concept-first and save detailed feature tours for the Packages branch of the wiki.",
                     "author": "Maintainer"
                 }
             ]
@@ -131,14 +123,6 @@
                     "author": "Maintainer"
                 },
                 {
-                    "content": "Workflow is the current execution skeleton for chat modes. See the Workflow page for mode/profile details.",
-                    "author": "Maintainer"
-                },
-                {
-                    "content": "Context integrations bring external context (like weather) into workflows without giving integrations policy authority. See the Context Integrations page.",
-                    "author": "Maintainer"
-                },
-                {
                     "content": "The backend workflow remains Footnote's execution authority. VoltAgent and future runtimes are bounded execution adapters; they do not own public response acceptance, review, termination, provenance, or cost authority. This is current direction, not a second shipped overseer.",
                     "author": "Maintainer"
                 }
@@ -154,10 +138,6 @@
                 "docs/api/openapi.yaml"
             ],
             "page_notes": [
-                {
-                    "content": "Keep this page lightweight and definitional. Other pages should link back here instead of redefining common terms from scratch.",
-                    "author": "Maintainer"
-                },
                 {
                     "content": "Include provenance, evidence/freshness scores, risk tier, tradeoff count, citations, chain hash, stale-after behavior, trace retrieval, and trace display.",
                     "author": "Maintainer"
@@ -181,11 +161,7 @@
             ],
             "page_notes": [
                 {
-                    "content": "Explain both product meaning and engineering shape. A reader should understand why provenance exists before they read where the fields are stored or displayed.",
-                    "author": "Maintainer"
-                },
-                {
-                    "content": "Point readers to Trace Flow for the concrete end-to-end walkthrough.",
+                    "content": "Explain both product meaning and engineering shape, then point readers to Trace Flow for the concrete end-to-end walkthrough.",
                     "author": "Maintainer"
                 }
             ]
@@ -205,10 +181,6 @@
             "page_notes": [
                 {
                     "content": "Keep this concrete. Use one worked example that shows how responseId, metadata, and trace retrieval connect across packages.",
-                    "author": "Maintainer"
-                },
-                {
-                    "content": "After this page, branch into the package-specific pages for Backend Chat, Backend Traces, Discord Provenance, Web Chat, and Web Traces.",
                     "author": "Maintainer"
                 }
             ]
@@ -265,10 +237,6 @@
                 "packages/backend/test/chatOrchestrator.test.ts"
             ],
             "page_notes": [
-                {
-                    "author": "Maintainer",
-                    "content": "Workflow is the step pattern Footnote uses to answer a request. Keep the page flow-first, showing one request moving through the workflow."
-                },
                 {
                     "author": "Maintainer",
                     "content": "balanced and grounded presets use the shared reviewed workflow shape (generate -> assess -> planner re-entry -> generate)."
@@ -337,10 +305,6 @@
             ],
             "page_notes": [
                 {
-                    "content": "Context integrations add evidence and context without owning execution policy. The backend decides routing, limits, and final response behavior.",
-                    "author": "Maintainer"
-                },
-                {
                     "content": "weather_forecast is implemented as a workflow context-step integration and can inject context into the generation prompt.",
                     "author": "Maintainer"
                 },
@@ -386,14 +350,6 @@
                 {
                     "content": "Backend, Contracts, Discord, and Web should be hub pages that branch into concrete features such as traces, voice, images, incidents, embeds, and shared schemas.",
                     "author": "Maintainer"
-                },
-                {
-                    "content": "Include Agent Runtime as its own package page. It is backend-facing and not a public client surface, but it is now important enough to deserve a first-class wiki entry.",
-                    "author": "Maintainer"
-                },
-                {
-                    "content": "Include API Client and Prompts as first-class pages. They now own shared transport and prompt behavior used by web, Discord, and backend.",
-                    "author": "Maintainer"
                 }
             ]
         },
@@ -424,19 +380,7 @@
                     "author": "Maintainer"
                 },
                 {
-                    "content": "Document current modality coverage plainly: VoltAgent-backed text generation is active; image and voice run through dedicated runtime adapters in this package family.",
-                    "author": "Maintainer"
-                },
-                {
-                    "content": "Call out forward direction: this package is not limited to chat. It is the execution substrate for multiple backend-owned task types as provider capability expands.",
-                    "author": "Maintainer"
-                },
-                {
-                    "content": "Model-native search is distinct from explicit context integrations like weather_forecast. Runtime search behavior is not equivalent to provider-neutral search integrations.",
-                    "author": "Maintainer"
-                },
-                {
-                    "content": "Current behavior is VoltAgent-backed text generation plus dedicated image and voice adapters. The adapter/authority split and broader delegated-runtime model are planning direction only; do not document runtime selection or subagent delegation as shipped.",
+                    "content": "Current behavior is VoltAgent-backed text generation plus dedicated image and voice adapters. The package is not limited to chat, but runtime selection and broader delegated-runtime behavior remain planning direction only. Model-native search is distinct from provider-neutral context integrations such as weather_forecast.",
                     "author": "Maintainer"
                 }
             ]
@@ -458,11 +402,7 @@
             ],
             "page_notes": [
                 {
-                    "content": "Keep this page focused on shared transport behavior and backend boundary rules. Skip UI details.",
-                    "author": "Maintainer"
-                },
-                {
-                    "content": "Show how web and Discord wrappers compose these factories so auth and error behavior stay aligned.",
+                    "content": "Show how web and Discord wrappers compose these factories so auth and error behavior stay aligned; keep the page focused on shared transport and backend boundaries rather than UI details.",
                     "author": "Maintainer"
                 },
                 {
@@ -553,11 +493,7 @@
             "page_notes": [
                 {
                     "author": "Maintainer",
-                    "content": "Use one worked example to show how a chat request becomes an answer plus provenance metadata."
-                },
-                {
-                    "author": "Maintainer",
-                    "content": "Explain how response metadata is built from backend request context and API annotations."
+                    "content": "Use one worked example to show how a chat request becomes an answer plus provenance metadata, including how response metadata is built from backend request context and API annotations."
                 },
                 {
                     "author": "Maintainer",
@@ -920,11 +856,7 @@
                 },
                 {
                     "author": "Maintainer",
-                    "content": "Server ownership: orchestration, trace/provenance, auth, incident/review semantics, cost accounting, and persistence."
-                },
-                {
-                    "author": "Maintainer",
-                    "content": "Discord bots are supervised adapters for Discord personas; backend logic remains server-authoritative."
+                    "content": "Server ownership: orchestration, trace/provenance, auth, incident/review semantics, cost accounting, and persistence. Discord bots are supervised adapters for Discord personas; backend logic remains server-authoritative."
                 },
                 {
                     "author": "Maintainer",
