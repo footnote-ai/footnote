@@ -197,7 +197,7 @@ catalogs:
       specifier: ^5.0.0
       version: 5.0.0
     ws:
-      specifier: ^8.20.1
+      specifier: ^8.21.0
       version: 8.21.0
     zod:
       specifier: ^4.4.3
