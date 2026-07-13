@@ -62,7 +62,7 @@ catalog:
     mime-types: ^3.0.2
     neverthrow: ^8.2.0
     node-fetch: ^3.3.2
-    nodemailer: ^8.0.10
+    nodemailer: ^9.0.1
     only: ^0.0.2
     openai: ^6.42.0
     opusscript: ^0.1.1
