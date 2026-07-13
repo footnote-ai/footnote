@@ -6,3 +6,6 @@ node_modules
 packages/*/dist
 packages/*/build
 **/*.tsbuildinfo
+
+# Package manager generated; preserve pnpm's native lockfile layout.
+pnpm-lock.yaml
