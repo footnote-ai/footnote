@@ -1,0 +1,28 @@
+{
+    "items": [
+        {
+            "id": "project-overview",
+            "title": "Project overview",
+            "summary": "Footnote is a transparency- and provenance-focused AI framework with backend, web, Discord bot, contracts, API client, agent runtime, and prompt packages.",
+            "sourceRef": "repo://README.md"
+        },
+        {
+            "id": "package-layout",
+            "title": "Package layout",
+            "summary": "The main surfaces are packages/backend, packages/discord-bot, packages/web, packages/contracts, packages/api-client, packages/agent-runtime, and packages/prompts.",
+            "sourceRef": "repo://AGENTS.md"
+        },
+        {
+            "id": "current-trustgraph-notes",
+            "title": "Current TrustGraph notes",
+            "summary": "TrustGraph is an optional context integration that can add advisory evidence to chat responses while the backend keeps execution, routing, verification, and terminal authority.",
+            "sourceRef": "repo://docs/architecture/context-integrations/trustgraph.md"
+        },
+        {
+            "id": "recent-commit-summaries",
+            "title": "Recent commit summaries",
+            "summary": "Recent commits include rendering web demo markdown, planning the TrustGraph repo snapshot seed, merging prepared landing scenarios, validating landing response fixtures, and hardening landing scenario generation.",
+            "sourceRef": "repo://git/log/78460c720be7"
+        }
+    ]
+}

@@ -1,0 +1,171 @@
+/**
+ * @description: Verifies TrustGraph repo snapshot validation and manual seed payload creation.
+ * These tests keep the first real TrustGraph smoke fixture stable, scoped, and auditable.
+ * @footnote-scope: test
+ * @footnote-module: TrustGraphRepoSnapshotTests
+ * @footnote-risk: medium - Weak fixture validation can make external TrustGraph smoke results hard to trust.
+ * @footnote-ethics: high - Provenance seed data needs clear source refs and stable IDs for reviewer accountability.
+ */
+
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+import {
+    buildTrustGraphRepoSnapshotSeedPayload,
+    parseTrustGraphRepoSnapshot,
+    readTrustGraphRepoSnapshotFile,
+    TRUSTGRAPH_REPO_SNAPSHOT_ADAPTER_VERSION,
+    TRUSTGRAPH_REPO_SNAPSHOT_DEFAULT_RETRIEVED_AT,
+} from './lib/trustgraph-repo-snapshot.js';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+const snapshotPath = path.join(
+    __dirname,
+    '../docs/trustgraph/repo-snapshot.json'
+);
+
+const createSnapshot = () => ({
+    items: [
+        {
+            id: 'project-overview',
+            title: 'Project overview',
+            summary: 'Footnote is a provenance-focused AI framework.',
+            sourceRef: 'repo://README.md',
+        },
+        {
+            id: 'trustgraph-notes',
+            title: 'TrustGraph notes',
+            summary: 'TrustGraph stays advisory in the backend runtime path.',
+            sourceRef:
+                'repo://docs/architecture/context-integrations/trustgraph.md',
+        },
+    ],
+});
+
+test('checked-in TrustGraph repo snapshot parses', async () => {
+    const snapshot = await readTrustGraphRepoSnapshotFile(snapshotPath);
+
+    assert.equal(snapshot.items.length, 4);
+});
+
+test('snapshot accepts only item collections', () => {
+    assert.throws(
+        () =>
+            parseTrustGraphRepoSnapshot({
+                items: [],
+            }),
+        /must contain at least one item/
+    );
+});
+
+test('duplicate snapshot item ids fail', () => {
+    const snapshot = createSnapshot();
+    assert.throws(
+        () =>
+            parseTrustGraphRepoSnapshot({
+                ...snapshot,
+                items: [snapshot.items[0], snapshot.items[0]],
+            }),
+        /duplicate item id/
+    );
+});
+
+test('empty required snapshot fields fail', () => {
+    const snapshot = createSnapshot();
+    assert.throws(
+        () =>
+            parseTrustGraphRepoSnapshot({
+                ...snapshot,
+                items: [{ ...snapshot.items[0], summary: '' }],
+            }),
+        /missing summary/
+    );
+});
+
+test('invalid source refs fail', () => {
+    const snapshot = createSnapshot();
+    assert.throws(
+        () =>
+            parseTrustGraphRepoSnapshot({
+                ...snapshot,
+                items: [{ ...snapshot.items[0], sourceRef: 'local file' }],
+            }),
+        /invalid sourceRef/
+    );
+});
+
+test('seed payload preserves stable IDs, source refs, and summaries', () => {
+    const snapshot = parseTrustGraphRepoSnapshot(createSnapshot());
+    const payload = buildTrustGraphRepoSnapshotSeedPayload(snapshot, {
+        scopeTuple: {
+            userId: 'user_1',
+            projectId: 'project_1',
+        },
+        seededAt: '2026-07-09T00:00:00.000Z',
+    });
+
+    assert.equal(payload.snapshotRef, 'repo-snapshot');
+    assert.equal(payload.seededAt, '2026-07-09T00:00:00.000Z');
+    assert.equal(payload.itemCount, snapshot.items.length);
+    assert.equal(payload.bundle.scopeTuple.userId, 'user_1');
+    assert.equal(payload.bundle.scopeTuple.projectId, 'project_1');
+    assert.deepEqual(
+        payload.bundle.items.map((item) => item.evidenceId),
+        ['repo_snapshot:project-overview', 'repo_snapshot:trustgraph-notes']
+    );
+    assert.deepEqual(
+        payload.bundle.items.map((item) => item.sourceRef),
+        snapshot.items.map((item) => item.sourceRef)
+    );
+    assert.equal(
+        payload.bundle.items[0]?.claimText.includes(
+            snapshot.items[0]?.summary ?? ''
+        ),
+        true
+    );
+});
+
+test('seed payload rejects invalid seededAt values', () => {
+    const snapshot = parseTrustGraphRepoSnapshot(createSnapshot());
+
+    assert.throws(
+        () =>
+            buildTrustGraphRepoSnapshotSeedPayload(snapshot, {
+                seededAt: 'not-a-timestamp',
+            }),
+        /seededAt must be an ISO timestamp/
+    );
+});
+
+test('seed payload matches the existing EvidenceBundle contract shape', () => {
+    const snapshot = parseTrustGraphRepoSnapshot(createSnapshot());
+    const payload = buildTrustGraphRepoSnapshotSeedPayload(snapshot);
+
+    assert.equal(payload.bundle.bundleId, 'repo_snapshot');
+    assert.equal(payload.bundle.queryIntent.length > 0, true);
+    assert.equal(payload.bundle.items.length, 2);
+    assert.equal(payload.bundle.coverageEstimate.evaluationUnit, 'source');
+    assert.equal(payload.bundle.coverageEstimate.scoreRange, '0..1');
+    assert.equal(payload.bundle.coverageEstimate.value, 1);
+    assert.deepEqual(payload.bundle.conflictSignals, []);
+    assert.equal(payload.bundle.traceRefs.length, 2);
+    assert.equal(
+        payload.bundle.adapterVersion,
+        TRUSTGRAPH_REPO_SNAPSHOT_ADAPTER_VERSION
+    );
+    assert.equal(
+        payload.bundle.items.every(
+            (item) =>
+                item.adapterVersion ===
+                    TRUSTGRAPH_REPO_SNAPSHOT_ADAPTER_VERSION &&
+                item.retrievedAt ===
+                    TRUSTGRAPH_REPO_SNAPSHOT_DEFAULT_RETRIEVED_AT &&
+                item.provenancePathRef.every((ref) =>
+                    ref.startsWith('repo-snapshot://')
+                )
+        ),
+        true
+    );
+});
