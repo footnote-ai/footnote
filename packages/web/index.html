@@ -69,11 +69,37 @@
                 }
             }
         </script>
+        <script>
+            try {
+                if (
+                    window.localStorage.getItem('footnote-theme-preference') ===
+                    'dark'
+                ) {
+                    document.documentElement.setAttribute('data-theme', 'dark');
+                }
+            } catch {
+                // The app safely falls back to the light theme when storage is unavailable.
+            }
+        </script>
         <style>
+            :root {
+                color-scheme: light;
+                background: #fdfcf9;
+            }
+
+            :root[data-theme='dark'] {
+                color-scheme: dark;
+                background: #1c1b1a;
+            }
+
             body {
                 margin: 0;
-                background: #fdfcf9;
+                background: inherit;
                 color: #2b2a27;
+            }
+
+            :root[data-theme='dark'] body {
+                color: #e3e0d7;
             }
 
             #root {
@@ -84,42 +110,20 @@
                 box-sizing: border-box;
                 min-height: 100dvh;
                 margin: 0;
-                padding: clamp(2rem, 8vw, 5rem) 1.25rem;
                 display: grid;
                 place-content: center;
-                background: transparent;
+                background: inherit;
                 color: inherit;
-                font-family: 'Iowan Old Style', 'Palatino Linotype', serif;
-            }
-
-            .preload-shell__card {
-                width: 15.5rem;
-                max-width: calc(100vw - 2.5rem);
-                padding: 0.62rem 0.95rem;
-                display: flex;
-                align-items: center;
-                justify-content: center;
-                gap: 0.55rem;
-                border: 1px solid #e3ddd2;
-                border-radius: 999px;
-                background: #f7f2e9;
-                box-shadow: 0 8px 18px rgba(52, 52, 52, 0.08);
-            }
-
-            .preload-shell__line {
-                margin: 0;
-                font-family: 'SFMono-Regular', 'JetBrains Mono', 'Courier New', monospace;
-                font-size: 0.9rem;
-                font-weight: 600;
-                line-height: 1.4;
-                color: #2b2a27;
-                white-space: nowrap;
             }
 
             .preload-shell__state {
-                width: 0.95rem;
-                height: 0.95rem;
-                color: #4a7c59;
+                width: 1.25rem;
+                height: 1.25rem;
+                color: #2b2a27;
+            }
+
+            :root[data-theme='dark'] .preload-shell__state {
+                color: #e3e0d7;
             }
 
             .preload-shell__state .spinner {
@@ -155,13 +159,15 @@
     </head>
     <body>
         <div id="root">
-            <div class="preload-shell" aria-live="polite">
-                <div class="preload-shell__card">
-                    <span class="preload-shell__state" aria-hidden="true"
-                        ><span class="spinner"></span
-                    ></span>
-                    <p class="preload-shell__line">Loading page...</p>
-                </div>
+            <div
+                class="preload-shell"
+                aria-label="Page loading state"
+                role="status"
+                aria-live="polite"
+            >
+                <span class="preload-shell__state" aria-hidden="true"
+                    ><span class="spinner"></span
+                ></span>
             </div>
         </div>
         <script type="module" src="/src/main.tsx"></script>

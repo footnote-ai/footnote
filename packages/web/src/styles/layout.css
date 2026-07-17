@@ -10,34 +10,17 @@
 }
 
 .route-loading-shell {
+    position: fixed;
+    inset: 0;
     display: grid;
     place-items: center;
-    min-height: 45vh;
-}
-
-.route-loading-card {
-    border: 1px solid var(--fn-border-default);
-    background-color: var(--fn-surface-soft);
-    box-shadow: var(--fn-shadow-soft);
-    border-radius: var(--fn-radius-lg);
-    padding: clamp(1rem, 2.4vw, 1.5rem);
-    display: inline-flex;
-    align-items: center;
-    gap: 0.75rem;
+    min-height: 100dvh;
+    background: var(--fn-surface-bg);
 }
 
 .route-loading-spinner {
-    width: 1rem;
-    height: 1rem;
-}
-
-.route-loading-title {
-    margin: 0;
-    color: var(--fn-brand-accent);
-    font-family: var(--fn-font-mono);
-    font-size: 0.85rem;
-    letter-spacing: 0.04em;
-    text-transform: uppercase;
+    width: 1.25rem;
+    height: 1.25rem;
 }
 
 .page-content,
