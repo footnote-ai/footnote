@@ -10,7 +10,7 @@ A lot of AI systems give answers that *look* convincing, but reveal very little 
 
 Transparency is non-negotiable, but not the full story. You also need control: over which AI is being used, what it can and cannot do, what gets remembered, how much money can be spent, how carefully a question should be handled, and much more.
 
-Footnote tries to bridge the gap between what AI can do and what people need in order to use it ressponsibly. See our [philosophy](docs/Philosophy.md) page for the thinking behind the project.
+Footnote tries to bridge the gap between what AI can do and what people need in order to use it responsibly. See our [philosophy](docs/Philosophy.md) page for the thinking behind the project.
 
 ### What does this look like?
 
