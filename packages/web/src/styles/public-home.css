@@ -1,0 +1,400 @@
+.app-shell--public-home {
+    max-width: none;
+    padding: 0;
+}
+
+#root:has(.app-shell--public-home) {
+    min-width: 0;
+    max-width: none;
+}
+
+.public-home {
+    --public-focus: #23626a;
+    --public-paper: #f6f3ec;
+    --public-paper-raised: #fbfaf6;
+    --public-ink: #242522;
+    --public-muted: #686b66;
+    --public-rule: #ccc9bf;
+    --public-person: #e6eee9;
+    min-height: 100vh;
+    min-width: 0;
+    background: var(--public-paper);
+    color: var(--public-ink);
+    font-family: var(--fn-font-sans);
+}
+
+[data-theme='dark'] .public-home {
+    --public-paper: #171918;
+    --public-paper-raised: #1e211f;
+    --public-ink: #ecebe5;
+    --public-muted: #a9aca6;
+    --public-rule: #3d413e;
+    --public-person: #26332e;
+}
+
+.public-home a {
+    color: inherit;
+    text-underline-offset: 0.22rem;
+}
+
+.public-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 2rem;
+    min-height: 5rem;
+    padding: 1rem max(1.25rem, calc((100vw - 72rem) / 2));
+    border-bottom: 1px solid var(--public-rule);
+}
+
+.public-header__mark {
+    color: var(--public-ink);
+    font-family: var(--fn-font-mono);
+    font-size: clamp(1.3rem, 2vw, 1.6rem);
+    font-weight: 600;
+    letter-spacing: 0.17em;
+    text-decoration: none;
+}
+
+.public-header nav {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    gap: 1.2rem;
+    font-family: var(--fn-font-mono);
+    font-size: 0.85rem;
+}
+
+.public-header nav > a {
+    text-decoration: none;
+}
+
+.public-header .theme-toggle {
+    width: 2.35rem;
+    min-height: 2.35rem;
+    padding: 0;
+    border-color: var(--public-rule);
+    background: transparent;
+}
+
+.public-home__main {
+    width: min(calc(100% - 2.5rem), 72rem);
+    margin: 0 auto;
+}
+
+.public-home section {
+    padding: clamp(3rem, 7vw, 6.5rem) 0 clamp(3rem, 6vw, 5rem);
+}
+
+.public-home h1 {
+    margin: 0 0 clamp(2rem, 4vw, 3.5rem);
+    font-family: var(--fn-font-display);
+    font-size: clamp(2.1rem, 4vw, 3.5rem);
+    font-weight: 550;
+    letter-spacing: -0.025em;
+    line-height: 1;
+}
+
+.public-home__intro {
+    max-width: 43rem;
+}
+
+.public-home__intro p {
+    max-width: 38rem;
+    margin: 0 0 1rem;
+    font-size: clamp(1.12rem, 1.55vw, 1.35rem);
+    line-height: 1.5;
+}
+
+.public-home__intro p:last-child {
+    max-width: 47.5rem;
+    color: var(--public-muted);
+}
+
+.public-home__intro-rule {
+    height: 1px;
+    margin: clamp(2.5rem, 5vw, 4.5rem) 0;
+    background: var(--public-rule);
+}
+
+.public-home__thread {
+    width: 100%;
+    margin: 0;
+}
+
+.public-home__response {
+    transition:
+        opacity 180ms ease,
+        transform 180ms ease;
+}
+
+.public-home__response--transitioning {
+    pointer-events: none;
+    opacity: 0;
+    transform: translateY(0.3rem);
+}
+
+.public-message {
+    margin: 0;
+    border: 1px solid var(--public-rule);
+    border-radius: 0.35rem;
+}
+
+.public-message--person,
+.public-message--assistant {
+    font-family: Georgia, 'Times New Roman', serif;
+    font-size: clamp(1.05rem, 1.4vw, 1.25rem);
+    line-height: 1.55;
+}
+
+.public-message--person {
+    width: fit-content;
+    max-width: min(80%, 57.5rem);
+    margin-left: auto;
+    padding: clamp(1.25rem, 3vw, 2rem);
+    background: var(--public-person);
+}
+
+.public-message--assistant {
+    width: min(80%, 57.5rem);
+    margin-top: 2.25rem;
+    margin-right: auto;
+    padding: clamp(1.25rem, 3vw, 2rem);
+    border-bottom-right-radius: 0;
+    border-bottom-left-radius: 0;
+    background: var(--public-paper-raised);
+}
+
+.public-message--assistant > *:first-child {
+    margin-top: 0;
+}
+
+.public-message--assistant > *:last-child {
+    margin-bottom: 0;
+}
+
+.trace-footer-placeholder {
+    width: min(80%, 57.5rem);
+    min-height: 4.75rem;
+    margin: 0 auto 0 0;
+    border: 1px solid var(--public-rule);
+    border-top: 0;
+    border-radius: 0 0 0.35rem 0.35rem;
+    background: color-mix(in srgb, var(--public-paper-raised) 70%, transparent);
+}
+
+.public-home__prepared {
+    width: 100%;
+    margin: 0.8rem 0 0;
+    color: var(--public-muted);
+    font-size: 0.8rem;
+    text-align: center;
+}
+
+.public-home__scenario-dots {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    gap: 0.65rem;
+    margin-top: 1.15rem;
+}
+
+.public-home__scenario-dot {
+    width: 0.55rem;
+    height: 0.55rem;
+    padding: 0;
+    border: 1px solid var(--public-muted);
+    border-radius: 999px;
+    background: transparent;
+    cursor: pointer;
+    transition:
+        background-color 160ms ease,
+        border-color 160ms ease,
+        transform 160ms ease;
+}
+
+.public-home__scenario-dot:hover:not(:disabled),
+.public-home__scenario-dot:focus-visible {
+    border-color: var(--public-focus);
+    background: color-mix(in srgb, var(--public-focus) 30%, transparent);
+    transform: scale(1.2);
+}
+
+.public-home__scenario-dot--selected {
+    width: 0.8rem;
+    height: 0.8rem;
+    border-color: var(--public-focus);
+    background: var(--public-focus);
+}
+
+.public-home__scenario-dot:disabled {
+    cursor: wait;
+}
+
+.public-home__get-started {
+    padding: clamp(3rem, 7vw, 6rem) 0;
+    border-top: 1px solid var(--public-rule);
+}
+
+.public-home__get-started h2 {
+    margin: 0 0 1rem;
+    font-family: var(--fn-font-display);
+    font-size: clamp(1.8rem, 3vw, 2.7rem);
+    font-weight: 550;
+}
+
+.public-home__get-started > p {
+    max-width: 47.5rem;
+    margin: 0 0 1.5rem;
+    font-size: clamp(1.12rem, 1.55vw, 1.35rem);
+    line-height: 1.5;
+}
+
+.public-home__get-started > div {
+    display: flex;
+    align-items: flex-start;
+    gap: 1.25rem;
+    font-size: 0.9rem;
+}
+
+.public-home__download,
+.public-home__documentation {
+    padding: 0.75rem 1rem;
+    border-radius: 0.3rem;
+    text-decoration: none;
+}
+
+.public-home__download {
+    background: var(--public-ink);
+    color: var(--public-paper) !important;
+}
+
+.public-home__documentation {
+    border: 1px solid var(--public-rule);
+    background: var(--public-paper-raised);
+}
+
+.public-footer {
+    width: min(calc(100% - 2.5rem), 72rem);
+    display: flex;
+    flex-wrap: wrap;
+    gap: 1rem 1.25rem;
+    margin: 0 auto;
+    padding: 2rem 0 3rem;
+    border-top: 1px solid var(--public-rule);
+    color: var(--public-muted);
+    font-size: 0.8rem;
+}
+
+@media (max-width: 760px) {
+    .public-header {
+        padding-inline: 1.25rem;
+        row-gap: 0.85rem;
+    }
+
+    .public-header nav {
+        width: 100%;
+        justify-content: flex-start;
+        gap: 0.75rem;
+    }
+
+    .public-home__main {
+        width: min(calc(100% - 2.5rem), 72rem);
+    }
+
+    .public-home section {
+        padding-top: 3rem;
+        padding-bottom: 3.5rem;
+    }
+
+    .public-home h1 {
+        font-size: 2.35rem;
+    }
+
+    .public-message--person {
+        width: fit-content;
+        max-width: 86%;
+        margin-right: 0.75rem;
+    }
+
+    .public-message--assistant {
+        width: 86%;
+        padding: 1.2rem;
+        font-size: 1.05rem;
+        line-height: 1.55;
+    }
+
+    .public-home__prepared,
+    .trace-footer-placeholder {
+        width: 86%;
+    }
+
+    .public-home__prepared {
+        width: 100%;
+    }
+
+    .public-home__get-started > div {
+        flex-wrap: wrap;
+    }
+
+    .public-footer {
+        width: min(calc(100% - 2.5rem), 72rem);
+        gap: 1.25rem;
+        padding-top: 2.25rem;
+        padding-bottom: 3.25rem;
+    }
+}
+
+@media (max-width: 280px) {
+    .public-header {
+        gap: 0.75rem;
+        padding-block: 0.85rem;
+    }
+
+    .public-header__mark {
+        font-size: 1.1rem;
+        letter-spacing: 0.14em;
+    }
+
+    .public-header nav {
+        gap: 0.6rem;
+        font-size: 0.75rem;
+    }
+
+    .public-home section {
+        padding-top: 2.5rem;
+        padding-bottom: 3rem;
+    }
+
+    .public-home h1 {
+        font-size: clamp(1.75rem, 14vw, 2.35rem);
+    }
+
+    .public-home__intro p,
+    .public-home__get-started > p {
+        font-size: 1rem;
+    }
+
+    .public-message--person,
+    .public-message--assistant,
+    .trace-footer-placeholder {
+        width: 100%;
+        max-width: 100%;
+    }
+
+    .public-message--person,
+    .public-message--assistant {
+        padding: 0.8rem;
+        font-size: 1rem;
+    }
+
+    .public-message--person {
+        margin-right: 0.5rem;
+    }
+
+    .public-home__prepared {
+        font-size: 0.75rem;
+    }
+}

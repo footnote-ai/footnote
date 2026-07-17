@@ -105,11 +105,7 @@ const landingScenarioFixturesTsPath = path.join(
 );
 const oldNoteDir = path.join(dataDirectory, 'landingScenarioGenerationNotes');
 const oldPromptFile = path.join(dataDirectory, 'examplePrompts.json');
-const askMeAnythingPath = path.join(
-    sourceRoot,
-    'components',
-    'AskMeAnything.tsx'
-);
+const publicHomePagePath = path.join(sourceRoot, 'pages', 'PublicHomePage.tsx');
 
 const landingScenarioFixtures =
     landingScenarioFixturesJson as readonly LandingScenarioFixture[];
@@ -311,18 +307,14 @@ test('old note files are gone and no source imports the old note module', () => 
     assert.deepEqual(importingFiles, []);
 });
 
-test('runtime ui source stays on prepared landing scenarios only', () => {
+test('public homepage uses prepared landing scenarios without fixture internals', () => {
     assert.equal(fs.existsSync(oldPromptFile), false);
 
-    const askMeAnythingSource = fs.readFileSync(askMeAnythingPath, 'utf8');
+    const publicHomePageSource = fs.readFileSync(publicHomePagePath, 'utf8');
+    assert.equal(publicHomePageSource.includes('landingScenarios'), true);
+    assert.equal(publicHomePageSource.includes('examplePrompts'), false);
     assert.equal(
-        askMeAnythingSource.includes('getPreparedLandingConversations'),
-        true
-    );
-    assert.equal(askMeAnythingSource.includes('landingScenarios'), false);
-    assert.equal(askMeAnythingSource.includes('examplePrompts'), false);
-    assert.equal(
-        askMeAnythingSource.includes('landingScenarioFixtures'),
+        publicHomePageSource.includes('landingScenarioFixtures'),
         false
     );
 
