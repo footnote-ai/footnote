@@ -66,9 +66,9 @@ export type {
     TrustGraphMetadata,
     ResponseMetadata,
     ResponseFootnote,
-    ResponseFootnoteDisclosureSection,
+    ResponseFootnoteSection,
 } from './policy/index.js';
-export { RESPONSE_FOOTNOTE_DISCLOSURE_SECTIONS } from './policy/index.js';
+export { RESPONSE_FOOTNOTE_SECTIONS } from './policy/index.js';
 export {
     formatExecutionTimelineSummary,
     deriveReviewRuntimeSummary,

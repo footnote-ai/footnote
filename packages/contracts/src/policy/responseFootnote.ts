@@ -9,25 +9,25 @@
 import type { ResponseMetadata } from './types.js';
 
 /**
- * Stable disclosure topics for response-footnote surfaces. These name the
+ * Stable sections for response-footnote surfaces. These name the
  * information a person can inspect; they do not require a particular button,
  * layout, or platform interaction.
  */
-export const RESPONSE_FOOTNOTE_DISCLOSURE_SECTIONS = [
+export const RESPONSE_FOOTNOTE_SECTIONS = [
     'sources',
     'workflow',
     'controls',
     'details',
 ] as const;
 
-export type ResponseFootnoteDisclosureSection =
-    (typeof RESPONSE_FOOTNOTE_DISCLOSURE_SECTIONS)[number];
+export type ResponseFootnoteSection =
+    (typeof RESPONSE_FOOTNOTE_SECTIONS)[number];
 
 /**
  * The portable, response-level inspection view for a completed Footnote
  * answer. It deliberately reuses `ResponseMetadata` rather than creating a
  * second serialized record. Each surface can disclose the fields it supports
- * through its own interaction model. The shared disclosure topics are
+ * through its own interaction model. The shared sections are
  * `sources`, `workflow`, `controls`, and `details`.
  *
  * `steerabilityControls` records controls that influenced this response. It

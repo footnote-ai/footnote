@@ -117,9 +117,9 @@ export type {
 } from './types.js';
 export type {
     ResponseFootnote,
-    ResponseFootnoteDisclosureSection,
+    ResponseFootnoteSection,
 } from './responseFootnote.js';
-export { RESPONSE_FOOTNOTE_DISCLOSURE_SECTIONS } from './responseFootnote.js';
+export { RESPONSE_FOOTNOTE_SECTIONS } from './responseFootnote.js';
 export {
     WORKFLOW_STEP_STATUSES,
     WORKFLOW_STEP_KINDS,
