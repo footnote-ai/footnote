@@ -17,7 +17,7 @@ export const RESPONSE_FOOTNOTE_DISCLOSURE_SECTIONS = [
     'sources',
     'workflow',
     'controls',
-    'trace_details',
+    'details',
 ] as const;
 
 export type ResponseFootnoteDisclosureSection =
@@ -28,7 +28,7 @@ export type ResponseFootnoteDisclosureSection =
  * answer. It deliberately reuses `ResponseMetadata` rather than creating a
  * second serialized record. Each surface can disclose the fields it supports
  * through its own interaction model. The shared disclosure topics are
- * `sources`, `workflow`, `controls`, and `trace_details`.
+ * `sources`, `workflow`, `controls`, and `details`.
  *
  * `steerabilityControls` records controls that influenced this response. It
  * does not describe controls currently available to the user or surface.

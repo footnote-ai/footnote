@@ -1,8 +1,7 @@
 # Canonical Response Footnote
 
-This gives Footnote one shared meaning for the information shown below a
-completed response. Web can show more detail. Discord and other surfaces can
-show less or use different interactions. All should use the same backend facts.
+The canonical response footnote is the shared inspection record shown below a
+completed response. Every Footnote surface uses the same backend facts.
 
 The shared TypeScript view is
 [`ResponseFootnote`](../../packages/contracts/src/policy/responseFootnote.ts).
@@ -11,7 +10,7 @@ It selects fields from
 a new saved record or API response. The backend still owns and returns
 `ResponseMetadata`.
 
-## Current scope
+## Scope
 
 The contract includes data Footnote already records:
 
@@ -21,48 +20,52 @@ The contract includes data Footnote already records:
 - TRACE target, final posture, evidence, and freshness
 - controls that affected the response
 
+## Canonical layout
+
+- **Top row:** the TRACE wheel and short mouseover help for its axes.
+- **Bottom row:** the four disclosure buttons: Sources, Workflow, Controls,
+  and Details. Each button opens its own dropdown or panel.
+
+Web implements this layout. Other surfaces keep the same four disclosures and
+their meaning, using the interaction model they support. For example, Discord
+can show a disclosure in an ephemeral message instead of a dropdown.
+
 ## Disclosure topics
 
 The footnote has four shared topics:
 
-| Topic             | Uses existing response data                       |
-| ----------------- | ------------------------------------------------- |
-| **Sources**       | citations and provenance assessment               |
-| **Workflow**      | workflow, review, and execution records           |
-| **Controls**      | controls that affected the response               |
-| **TRACE Details** | target and final posture, evidence, and freshness |
+| Topic        | Uses existing response data                                 |
+| ------------ | ----------------------------------------------------------- |
+| **Sources**  | citations and provenance assessment                         |
+| **Workflow** | workflow, review, and execution records                     |
+| **Controls** | controls that affected the response                         |
+| **Details**  | the full recorded response detail, including its trace link |
 
-They are named in
+The topics are named in
 [`ResponseFootnoteDisclosureSection`](../../packages/contracts/src/policy/responseFootnote.ts).
-Web can render them as the four planned buttons. Other surfaces can use links,
-menus, or a compact message instead.
+Details opens the fuller response record, including its trace link.
 
-When a topic has no recorded information, Web can keep its button visible but
-disabled. A small info icon can explain why it is unavailable. This is a UI
-rule for the later implementation, not a new response field.
+When a topic has no recorded information, its control stays visible but
+disabled. An info icon explains why it is unavailable.
 
-## Not included yet
+## Excluded
 
-This is an inspection view, not the full response or full trace. We are
-leaving these out for now:
+The footnote is an inspection view, not the full response or full trace. It
+does not include:
 
 - **Answer text, history, and attachments.** They belong to the chat response.
 - **Controls a person can use.** `steerabilityControls` says what affected this
-  response. It does not say what controls are available. That needs a clear
-  backend contract first. Current surface capabilities are request-side
+  response. It does not say what controls are available. Current surface
+  capabilities are request-side
   [`ChatCapabilities`](../../packages/contracts/src/web/types.ts).
 - **Claim-to-source links.** Footnote records sources for a response, but not
   which source supports each claim.
 - **Raw prompts, model output, and large tool results.** The current workflow
   and execution records are the safe, bounded inspection data.
 - **TrustGraph and image details.** These are useful trace details, but do not
-  yet have a shared footnote meaning.
+  have a shared footnote meaning.
 - **Older support fields.** `modelVersion`, `staleAfter`, `chainHash`,
-  `licenseContext`, and `totalDurationMs` are not part of this shared footnote
-  meaning yet.
-
-TRACE remains answer-posture metadata. It is not a source or workflow
-substitute.
+  `licenseContext`, and `totalDurationMs` are not part of the footnote.
 
 ## Related material
 
