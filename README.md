@@ -4,103 +4,58 @@
 [![Hippocratic License HL3-CORE](https://img.shields.io/static/v1?label=Hippocratic%20License&message=HL3-CORE&labelColor=5e2751&color=bc8c3d)](https://firstdonoharm.dev/version/3/0/core.html)
 [![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/footnote-ai/footnote)
 
-Footnote is an AI framework that tries to show its work.
+### AI that shows its work.
+
+A lot of AI systems give answers that *look* convincing, but reveal very little about how those answers were made. Footnote creates useful answers with a trail you can follow when it matters.
+
+Transparency is non-negotiable, but not the full story. You also need control: over which AI is being used, what it can and cannot do, what gets remembered, how much money can be spent, how carefully a question should be handled, and much more.
+
+Footnote tries to bridge the gap between what AI can do and what people need in order to use it ressponsibly. See our [philosophy](docs/Philosophy.md) page for the thinking behind the project.
+
+### What does this look like?
+
+Footnote feels like a normal chat until you want to look closer.
+
+<!-- screenshot of a question+response here -->
+
+Each answer includes what shaped it: the settings in effect, checks performed, sources and tools used, important limits, and more.
+
+<!-- screenshot of an expanded footnote -->
+
+You can inspect that trail and change how future questions are handled. Or simply ignore it.
+
+[Try the live demo](https://ai.jordanmakes.dev)
+
 
 ## Quickstart
 
-### 1) Download the app file
+Try it out with a few clicks:
 
-Download the latest app files from
-[GitHub Releases](https://github.com/footnote-ai/footnote/releases).
+[Download the latest release](https://github.com/footnote-ai/footnote/releases) which matches your system. Double-click the file to start.
 
-### 2) Choose the file for your system
+On first run it will open the setup page—Accept the defaults, or tweak to your liking. Save, then restart Footnote.
 
-Choose the file that matches your system:
+## Advanced Start
 
-- Windows x64: `footnote-win32-x64.exe`
-- macOS Apple Silicon (arm64): `footnote-darwin-arm64`
-- Linux x64: `footnote-linux-x64`
-
-### 3) Verify the download (`.sha256`)
-
-Each download includes a matching `.sha256` file. `.sha256` files are
-checksums. A checksum is a short fingerprint for a file. It lets you check that
-the file you downloaded matches the file we released.
-
-Replace the example filenames below with the file you downloaded.
-
-Windows PowerShell:
-
-```powershell
-Get-FileHash -Algorithm SHA256 .\footnote-win32-x64.exe
-Get-Content .\footnote-win32-x64.exe.sha256
-```
-
-macOS/Linux:
-
-```bash
-shasum -a 256 ./footnote-darwin-arm64
-cat ./footnote-darwin-arm64.sha256
-```
-
-Compare the hash output from your command to the value in the matching
-`.sha256` file.
-
-### 4) Open the file
-
-Double-click the file, or run it from a terminal.
-
-macOS/Linux users may need to allow the file to run first:
-
-```bash
-chmod +x ./footnote-linux-x64
-./footnote-linux-x64
-```
-
-Use the filename you downloaded.
-
-### 5) First run and setup
-
-On first run, Footnote starts the local runtime and opens the setup page in
-your browser. The setup page starts with a default config for your environment,
-which you can review and save. After saving settings, restart Footnote so the
-runtime applies your updated configuration.
-
-## Run from source (Developers and contributors)
+Run from the source code:
 
 Prerequisites:
 
 - Node.js 22+
-- `pnpm` (repo uses `pnpm@10.27.0`)
+- `pnpm` (`pnpm@10.27.0`+)
 
-Install `pnpm` with one of:
+Clone the repo and start with `pnpm start`
 
-```bash
-corepack enable && corepack prepare pnpm@10.27.0 --activate
-```
+## Deployment
 
-```bash
-npm i -g pnpm@10.27.0
-```
-
-Clone and start:
-
-```bash
-git clone https://github.com/footnote-ai/footnote.git
-cd footnote
-pnpm start
-```
-
-## Deployment and advanced setup
-
-For container and operator paths, use the [Deployment Guide](deploy/README.md).
+Footnote leverages Docker containers for easy deployment on your own hardware or in the cloud—See the [deployment guide](deploy/README.md) for details.
 
 ## Need help?
 
-- [Docs map](docs/README.md)
+- [Docs](docs/README.md)
 - [GitHub issues](https://github.com/footnote-ai/footnote/issues)
 - [GitHub discussions](https://github.com/footnote-ai/footnote/discussions)
 
 ## License
 
-Footnote is dual-licensed under MIT and HL3-CORE. See the [license strategy](docs/LICENSE_STRATEGY.md) for more details.
+Footnote is [dual-licensed under MIT and HL3-CORE](docs/LICENSE_STRATEGY.md).
