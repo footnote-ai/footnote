@@ -115,6 +115,11 @@ export type {
     ImageGenerationMetadata,
     ResponseMetadata,
 } from './types.js';
+export type {
+    ResponseFootnote,
+    ResponseFootnoteDisclosureSection,
+} from './responseFootnote.js';
+export { RESPONSE_FOOTNOTE_DISCLOSURE_SECTIONS } from './responseFootnote.js';
 export {
     WORKFLOW_STEP_STATUSES,
     WORKFLOW_STEP_KINDS,
