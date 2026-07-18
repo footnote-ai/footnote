@@ -107,7 +107,8 @@
                 "docs/architecture/langfuse-metadata-mirror.md",
                 "docs/architecture/context-integrations/README.md",
                 "docs/proposals/proposal_execution_adapters_workflow_authority.md",
-                "docs/proposals/proposal_local_observability_agent_inspect.md"
+                "docs/proposals/proposal_local_observability_agent_inspect.md",
+                "docs/architecture/canonical-response-footnote.md"
             ],
             "page_notes": [
                 {
@@ -231,7 +232,6 @@
                 "packages/contracts/src/policy/workflowReceipt.ts",
                 "packages/contracts/src/policy/executionFormatting.ts",
                 "packages/web/src/utils/traceOutcome.ts",
-                "packages/backend/test/workflowEngine.test.ts",
                 "packages/backend/test/workflowProfileRegistry.test.ts",
                 "packages/backend/test/chatService.test.ts",
                 "packages/backend/test/chatOrchestrator.test.ts"
@@ -291,8 +291,6 @@
                 "docs/architecture/context-integrations/README.md",
                 "docs/architecture/context-integrations/weather-forecast.md",
                 "docs/architecture/context-integrations/trustgraph.md",
-                "docs/proposals/trustgraph-repo-snapshot-plan.md",
-                "docs/proposals/web-search-context-integration.md",
                 "packages/backend/src/services/contextIntegrations/weather",
                 "packages/backend/src/services/tools/toolRegistry.ts",
                 "packages/backend/src/services/contextIntegrations/fileScanning",
@@ -443,9 +441,6 @@
                 "packages/backend/src",
                 "server.js",
                 "docs/api/openapi.yaml",
-                "packages/backend/src/handlers/webhook.ts",
-                "packages/backend/src/handlers/blog.ts",
-                "packages/backend/src/storage/blogStore.ts",
                 "packages/backend/src/storage/incidents/sqliteIncidentStore.ts",
                 "packages/backend/src/utils/pseudonymization.ts",
                 "packages/backend/test/incidentStore.test.ts",
@@ -461,7 +456,7 @@
                     "author": "Maintainer"
                 },
                 {
-                    "content": "Webhook and blog ingestion are backend support flows. Incident storage and pseudonymization are also backend support areas. See the handlers and storage modules for these features.",
+                    "content": "Incident storage and pseudonymization are backend support areas. See the handlers and storage modules for these features.",
                     "author": "Maintainer"
                 }
             ]
@@ -606,7 +601,8 @@
                 "docs/api/openapi.yaml",
                 "packages/contracts/test/webSchemas.test.ts",
                 "packages/contracts/test/workflowReceipt.test.ts",
-                "packages/contracts/test/executionFormatting.test.ts"
+                "packages/contracts/test/executionFormatting.test.ts",
+                "packages/contracts/src/policy/responseFootnote.ts"
             ],
             "page_notes": [
                 {
@@ -631,6 +627,10 @@
                 },
                 {
                     "content": "Point readers to OpenAPI for the external shape of WorkflowRecord, WorkflowStepRecord, WorkflowStepOutcome, WorkflowStepSignals, and ReviewRuntimeSummary.",
+                    "author": "Maintainer"
+                },
+                {
+                    "content": "ResponseFootnote is a portable inspection view over existing response metadata, not a separate stored record or API response.",
                     "author": "Maintainer"
                 }
             ]
@@ -736,17 +736,12 @@
         },
         {
             "title": "Web",
-            "purpose": "Explain the web package as the main browser surface for asking questions, inspecting traces, and browsing public content.",
+            "purpose": "Explain the web package as the main browser surface for asking questions and inspecting traces.",
             "parent": "Packages",
             "entrypoints": [
                 "packages/web/src",
                 "packages/web/src/App.tsx",
                 "packages/web/src/utils/api.ts",
-                "packages/web/src/pages/BlogListPage.tsx",
-                "packages/web/src/pages/BlogPostPage.tsx",
-                "packages/web/src/components/BlogPostCard.tsx",
-                "packages/web/src/components/BlogProvenance.tsx",
-                "packages/web/src/utils/blog.ts",
                 "packages/web/src/pages/EmbedPage.tsx"
             ],
             "page_notes": [
@@ -755,7 +750,7 @@
                     "author": "Maintainer"
                 },
                 {
-                    "content": "Blog and Embed are secondary web surfaces. Blog covers list pages, post rendering, provenance display, and fetch utilities. Embed covers iframe sizing and external integrations.",
+                    "content": "Embed is a secondary web surface covering iframe sizing and external integrations.",
                     "author": "Maintainer"
                 }
             ]
@@ -838,7 +833,6 @@
             "entrypoints": [
                 "deploy/Dockerfile.server",
                 "deploy/server-entrypoint.sh",
-                "deploy/compose.server.yml",
                 "deploy/traceTokenResolver.mjs",
                 "packages/discord-bot/src/supervisor",
                 "README.md",
