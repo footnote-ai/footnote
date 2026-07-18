@@ -1,7 +1,7 @@
 /**
- * @description: Provides the embeddable ask experience used on the landing page and iframe surfaces.
+ * @description: Provides the live chat experience for public and embedded Footnote surfaces.
  * @footnote-scope: web
- * @footnote-module: AskMeAnything
+ * @footnote-module: Chat
  * @footnote-risk: medium - Input, Turnstile, or response rendering failures can break the primary interactive web flow.
  * @footnote-ethics: high - This component brokers live user prompts and transparency metadata in a public-facing context.
  */
@@ -19,6 +19,7 @@ import {
     shouldExecuteTurnstileChallenge,
 } from '../utils/turnstile';
 import { notifyEmbedLayoutChanged } from '../utils/embedHeight';
+import { useTheme } from '../theme';
 
 // Module augmentation for Vite environment variables
 declare global {
@@ -35,7 +36,8 @@ declare global {
 const FALLBACK_REFLECTION =
     'I was unable to generate a response - please try again later.';
 
-const AskMeAnything = (): JSX.Element => {
+const Chat = (): JSX.Element => {
+    const { theme } = useTheme();
     const [question, setQuestion] = useState('');
     const [status, setStatus] = useState('');
     const [answer, setAnswer] = useState('');
@@ -155,32 +157,16 @@ const AskMeAnything = (): JSX.Element => {
     // Skip CAPTCHA when the site key is missing or invalid.
     const isCaptchaDisabled = !hasValidSiteKey;
 
-    // Turnstile callback functions
-    // According to Cloudflare docs: tokens are max 2048 chars, expire after 300s, single-use only
+    // Turnstile tokens are short-lived and single-use. Do not log token values or previews.
     const onTurnstileVerify = (token: string) => {
-        console.log(
-            '[Turnstile] onTurnstileVerify called with token:',
-            token ? `${token.substring(0, 30)}...` : 'null'
-        );
         // Check if using test keys (test keys generate shorter dummy tokens like "XXXX.DUMMY.TOKEN.XXXX")
         const isTestKey =
             turnstileSiteKey.startsWith('1x00000000000000000000') ||
             turnstileSiteKey.startsWith('2x00000000000000000000') ||
             turnstileSiteKey.startsWith('3x00000000000000000000');
 
-        // Log token generation (for debugging)
-        console.log(
-            '[Turnstile] Token details - length:',
-            token?.length || 0,
-            'site key:',
-            turnstileSiteKey.substring(0, 20),
-            'isTestKey:',
-            isTestKey
-        );
-
         // Validate token - test keys generate shorter tokens, production tokens should be ~200+ chars
         if (!token) {
-            console.error('Turnstile token is empty');
             setTurnstileError('CAPTCHA token is invalid. Please try again.');
             setIsTurnstileReady(false);
             setTurnstileToken(null);
@@ -189,26 +175,10 @@ const AskMeAnything = (): JSX.Element => {
 
         // Only validate length for production keys (test keys use dummy tokens)
         if (!isTestKey && token.length < 50) {
-            console.error(
-                'Turnstile token appears invalid - length:',
-                token.length
-            );
-            console.error('Token preview:', token.substring(0, 50));
-            console.error('Full token:', token);
             setTurnstileError('CAPTCHA token is invalid. Please try again.');
             setIsTurnstileReady(false);
             setTurnstileToken(null);
             return;
-        }
-
-        // Log token info for debugging (especially in production)
-        if (!isTestKey) {
-            console.log(
-                'Turnstile token generated - length:',
-                token.length,
-                'hostname:',
-                window.location.hostname
-            );
         }
 
         setTurnstileToken(token);
@@ -272,27 +242,11 @@ const AskMeAnything = (): JSX.Element => {
             ) {
                 const timer = setTimeout(() => {
                     if (turnstileRef.current) {
-                        console.log(
-                            '[Turnstile] Executing invisible widget (mounted)...'
-                        );
                         isTurnstileExecutingRef.current = true;
                         turnstileRef.current.execute();
-                        turnstileRef.current
+                        void turnstileRef.current
                             .getResponsePromise?.()
-                            .then((token) => {
-                                console.log(
-                                    '[Turnstile] Token resolved from promise:',
-                                    token
-                                        ? `${token.substring(0, 20)}...`
-                                        : 'null'
-                                );
-                            })
-                            .catch((err) => {
-                                console.error(
-                                    '[Turnstile] Promise rejection:',
-                                    err
-                                );
-                            })
+                            .catch(() => undefined)
                             .finally(() => {
                                 isTurnstileExecutingRef.current = false;
                             });
@@ -323,18 +277,11 @@ const AskMeAnything = (): JSX.Element => {
                             isMounted: isTurnstileMounted,
                         })
                     ) {
-                        console.log(
-                            "[Turnstile] Fallback: Executing widget even though onLoad hasn't fired"
-                        );
                         try {
                             isTurnstileExecutingRef.current = true;
                             turnstileRef.current.execute();
-                        } catch (err) {
+                        } catch {
                             isTurnstileExecutingRef.current = false;
-                            console.error(
-                                '[Turnstile] Fallback execution failed:',
-                                err
-                            );
                         }
                     }
                 }, 2000);
@@ -457,7 +404,9 @@ const AskMeAnything = (): JSX.Element => {
         abortRef.current = controller;
 
         // Set a timeout for the fetch request (60 seconds)
+        let didRequestTimeout = false;
         const timeoutId = setTimeout(() => {
+            didRequestTimeout = true;
             controller.abort();
         }, 60000);
 
@@ -531,6 +480,9 @@ const AskMeAnything = (): JSX.Element => {
             setTurnstileKey((prev) => prev + 1);
         } catch (error) {
             if ((error as Error).name === 'AbortError') {
+                if (didRequestTimeout && abortRef.current === controller) {
+                    setStatus('The request timed out. Please try again.');
+                }
                 return;
             }
 
@@ -607,9 +559,12 @@ const AskMeAnything = (): JSX.Element => {
             setMetadata(null);
         } finally {
             clearTimeout(timeoutId); // Ensure timeout is cleared in all cases
-            setIsLoading(false);
-            if (shouldAutoFocusAskInput('submit-cleanup')) {
-                inputRef.current?.focus();
+            if (abortRef.current === controller) {
+                abortRef.current = null;
+                setIsLoading(false);
+                if (shouldAutoFocusAskInput('submit-cleanup')) {
+                    inputRef.current?.focus();
+                }
             }
         }
     };
@@ -789,14 +744,9 @@ const AskMeAnything = (): JSX.Element => {
                         onSuccess={onTurnstileVerify}
                         onError={onTurnstileError}
                         onExpire={onTurnstileExpire}
-                        onLoad={() => {
-                            console.log(
-                                '[Turnstile] onLoad called - widget is mounted'
-                            );
-                            setIsTurnstileMounted(true);
-                        }}
+                        onLoad={() => setIsTurnstileMounted(true)}
                         options={{
-                            theme: 'light',
+                            theme,
                             size: 'invisible', // True Invisible widget type
                             execution: 'execute', // Manual execution control
                             appearance: 'execute', // Execute challenge, only show UI when executing
@@ -817,7 +767,7 @@ const AskMeAnything = (): JSX.Element => {
                         onError={onTurnstileError}
                         onExpire={onTurnstileExpire}
                         options={{
-                            theme: 'light',
+                            theme,
                             size: 'normal',
                             language: 'auto',
                         }}
@@ -835,8 +785,8 @@ const AskMeAnything = (): JSX.Element => {
 /**
  * Named export kept for callers that prefer explicit component imports.
  */
-export { AskMeAnything };
+export { Chat };
 /**
  * Default export for route and section imports.
  */
-export default AskMeAnything;
+export default Chat;

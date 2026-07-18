@@ -14,8 +14,7 @@ import type {
     PostSetupSessionResponse,
     PutAdminSettingsYamlResponse,
 } from '@footnote/contracts/web';
-import Header from '@components/Header';
-import Footer from '@components/Footer';
+import PublicPageLayout from '@components/PublicPageLayout';
 import { parseSetupCodeFromHash } from '../utils/setupFlow';
 
 const MISSING_SETTINGS_SENTINEL = '"footnote-settings-missing"';
@@ -368,12 +367,14 @@ const SetupPage = (): JSX.Element => {
     };
 
     return (
-        <>
-            <Header />
-            <main className="page-content" id="main-content">
-                <section className="page-hero" aria-labelledby="setup-title">
+        <PublicPageLayout>
+            <main className="public-page__main" id="main-content">
+                <section
+                    className="public-page__intro"
+                    aria-labelledby="setup-title"
+                >
                     <h1 id="setup-title">Settings</h1>
-                    <p className="page-hero__summary">
+                    <p className="public-page__lede">
                         Edit <code>footnote.yaml</code> and save. Settings are
                         not applied until Footnote restarts.
                     </p>
@@ -506,8 +507,7 @@ const SetupPage = (): JSX.Element => {
                         </section>
                     )}
             </main>
-            <Footer />
-        </>
+        </PublicPageLayout>
     );
 };
 

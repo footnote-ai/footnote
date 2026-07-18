@@ -1,177 +1,121 @@
 .interaction {
     display: grid;
-    gap: 0.72rem;
-    margin-top: 0.5rem;
+    gap: 0.9rem;
+    margin-top: 1.5rem;
 }
 
 .interaction-form {
     margin: 0;
 }
 
-.interaction-input-group {
+.interaction-input-group,
+.interaction-prompt-buttons-row {
     display: flex;
     align-items: flex-start;
-    gap: 0.45rem;
+    gap: 0.55rem;
 }
 
-.interaction-input-wrapper {
+.interaction-input-wrapper,
+.interaction-prompt-text-button-wrapper {
     position: relative;
     flex: 1 1 auto;
 }
 
 .interaction-input {
     width: 100%;
-    min-height: 2.9rem;
+    min-height: 3rem;
     max-height: 20rem;
-    padding: 0.72rem 2.6rem 0.72rem 0.88rem;
-    border: 1px solid var(--fn-border-default);
-    border-radius: 14px;
-    font-family: var(--fn-font-body);
-    font-size: 1rem;
-    line-height: 1.45;
     resize: none;
     overflow-y: hidden;
-    background-color: var(--fn-surface-bg);
-    color: var(--fn-text-primary);
-    transition:
-        border-color var(--fn-duration-fast) var(--fn-ease-standard),
-        box-shadow var(--fn-duration-fast) var(--fn-ease-standard);
+    border: 1px solid var(--public-rule);
+    border-radius: 0.3rem;
+    padding: 0.8rem 2.7rem 0.8rem 0.9rem;
+    background: var(--public-paper-raised);
+    color: var(--public-ink);
+    font-family: Georgia, 'Times New Roman', serif;
+    font-size: 1.05rem;
+    line-height: 1.5;
 }
 
-.interaction-input:focus {
-    outline: none;
-    border-color: color-mix(
-        in srgb,
-        var(--fn-brand-accent) 60%,
-        var(--fn-border-default) 40%
-    );
-    box-shadow: 0 0 0 3px
-        color-mix(in srgb, var(--fn-brand-accent) 25%, transparent 75%);
+.interaction-input:focus,
+.interaction-prompt-text-button:focus-visible,
+.interaction-prompt-shuffle-button:focus-visible {
+    outline: 2px solid var(--public-focus);
+    outline-offset: 2px;
 }
 
 .interaction-input::placeholder {
-    color: color-mix(in srgb, var(--fn-text-muted) 78%, transparent 22%);
+    color: var(--public-muted);
 }
 
 .interaction-clear-button {
     position: absolute;
-    top: 0.42rem;
-    right: 0.42rem;
-    border: none;
-    background: transparent;
-    color: color-mix(in srgb, var(--fn-text-primary) 50%, transparent 50%);
-    width: 1.9rem;
-    height: 1.9rem;
-    border-radius: 999px;
+    top: 0.5rem;
+    right: 0.45rem;
     display: inline-flex;
     align-items: center;
     justify-content: center;
+    width: 1.9rem;
+    height: 1.9rem;
+    border: 0;
+    border-radius: 999px;
+    background: transparent;
+    color: var(--public-muted);
     cursor: pointer;
-    transition: background-color var(--fn-duration-fast) var(--fn-ease-standard);
 }
 
 .interaction-clear-button:hover {
-    background-color: color-mix(
-        in srgb,
-        var(--fn-border-default) 30%,
-        transparent 70%
-    );
+    background: color-mix(in srgb, var(--public-rule) 40%, transparent);
+}
+
+.interaction-submit,
+.interaction-prompt-text-button,
+.interaction-prompt-shuffle-button {
+    border: 1px solid var(--public-rule);
+    border-radius: 0.3rem;
+    color: var(--public-ink);
+    cursor: pointer;
 }
 
 .interaction-submit {
-    min-width: 3rem;
-    min-height: 2.9rem;
-    border-radius: 14px;
-    border: 1px solid
-        color-mix(
-            in srgb,
-            var(--fn-brand-accent) 80%,
-            var(--fn-brand-highlight) 20%
-        );
-    background-color: var(--fn-brand-accent);
-    color: var(--fn-text-inverse);
+    min-width: 3.2rem;
+    min-height: 3rem;
+    padding-inline: 0.8rem;
+    background: var(--public-ink);
+    color: var(--public-paper);
     font-family: var(--fn-font-mono);
-    font-size: 0.92rem;
-    cursor: pointer;
-    transition: all var(--fn-duration-fast) var(--fn-ease-standard);
 }
 
-.interaction-submit:hover,
-.interaction-submit:focus {
-    background-color: color-mix(
-        in srgb,
-        var(--fn-brand-accent) 85%,
-        #ffffff 15%
-    );
-    border-color: color-mix(
-        in srgb,
-        var(--fn-brand-accent) 75%,
-        var(--fn-border-default) 25%
-    );
+.interaction-submit:hover:not(:disabled) {
+    background: color-mix(in srgb, var(--public-ink) 85%, var(--public-focus));
 }
 
 .interaction-submit:disabled {
-    opacity: 0.65;
     cursor: not-allowed;
-}
-
-.interaction-prompt-buttons-row {
-    display: flex;
-    align-items: stretch;
-    gap: 0.4rem;
-}
-
-.interaction-prompt-text-button-wrapper {
-    flex: 1 1 auto;
+    opacity: 0.6;
 }
 
 .interaction-prompt-text-button,
 .interaction-prompt-shuffle-button {
-    border: 1px solid
-        color-mix(in srgb, var(--fn-border-default) 60%, transparent 40%);
-    background: color-mix(
-        in srgb,
-        var(--fn-surface-soft) 85%,
-        var(--fn-surface-accent) 15%
-    );
-    border-radius: 10px;
-    color: var(--fn-text-primary);
-    cursor: pointer;
-    transition: all var(--fn-duration-fast) var(--fn-ease-standard);
+    background: var(--public-paper-raised);
 }
 
 .interaction-prompt-text-button {
     width: 100%;
+    padding: 0.65rem 0.75rem;
     text-align: left;
-    padding: 0.6rem 0.7rem;
 }
 
 .interaction-prompt-shuffle-button {
-    width: 2.55rem;
     display: inline-flex;
     align-items: center;
     justify-content: center;
+    width: 2.6rem;
 }
 
 .interaction-prompt-text-button:hover,
 .interaction-prompt-shuffle-button:hover {
-    background: color-mix(
-        in srgb,
-        var(--fn-surface-soft) 90%,
-        var(--fn-surface-hover) 10%
-    );
-    border-color: color-mix(
-        in srgb,
-        var(--fn-border-default) 80%,
-        var(--fn-brand-accent) 20%
-    );
-}
-
-.interaction-prompt-text-button:focus-visible,
-.interaction-prompt-shuffle-button:focus-visible {
-    outline: 2px solid
-        color-mix(in srgb, var(--fn-brand-accent) 60%, transparent 40%);
-    outline-offset: 2px;
+    border-color: var(--public-focus);
 }
 
 .interaction-prompt-text {
@@ -180,11 +124,6 @@
 
 .interaction-prompt-shuffle-icon {
     display: inline-flex;
-    transition: transform var(--fn-duration-fast) var(--fn-ease-standard);
-}
-
-.interaction-prompt-shuffle-button:hover .interaction-prompt-shuffle-icon {
-    transform: rotate(18deg);
 }
 
 .interaction-status {
@@ -192,107 +131,45 @@
 }
 
 .interaction-status.interaction-status-visible {
-    display: flex !important;
-    align-items: center;
-    gap: 0.45rem;
-    border-left: 3px solid var(--fn-brand-accent);
-    padding: 0.55rem 0.75rem;
-    border-radius: 8px;
-    background: color-mix(
-        in srgb,
-        var(--fn-surface-soft) 92%,
-        var(--fn-brand-accent-soft) 8%
-    );
+    display: block;
+    border-left: 3px solid var(--public-focus);
+    padding: 0.6rem 0.75rem;
+    background: var(--public-paper-raised);
 }
 
 .interaction-output {
-    border-left: 3px solid var(--fn-brand-accent);
-    border-radius: 8px;
-    padding: 0.7rem 0.9rem;
-    background: color-mix(
-        in srgb,
-        var(--fn-surface-soft) 95%,
-        var(--fn-brand-accent-soft) 5%
-    );
+    border: 1px solid var(--public-rule);
+    border-radius: 0.35rem;
+    padding: clamp(1rem, 2.5vw, 1.5rem);
+    background: var(--public-paper-raised);
+    font-family: Georgia, 'Times New Roman', serif;
+    font-size: 1.05rem;
+    line-height: 1.55;
 }
 
 .interaction-output > :first-child {
     margin-top: 0;
 }
-
 .interaction-output > :last-child {
     margin-bottom: 0;
 }
-
-.interaction-output p,
-.interaction-output ul,
-.interaction-output ol,
-.interaction-output blockquote,
-.interaction-output pre,
-.interaction-output table {
-    margin: 0.55rem 0;
-}
-
 .interaction-output ul,
 .interaction-output ol {
     padding-left: 1.25rem;
 }
-
-.interaction-output li + li {
-    margin-top: 0.22rem;
-}
-
-.interaction-output strong {
-    color: var(--fn-text-primary);
-    font-weight: 700;
-}
-
-.interaction-output a {
-    color: var(--fn-brand-accent);
-    text-underline-offset: 0.18em;
-}
-
-.interaction-output blockquote {
-    border-left: 2px solid
-        color-mix(in srgb, var(--fn-brand-accent) 45%, transparent 55%);
-    padding-left: 0.75rem;
-    color: var(--fn-text-muted);
-}
-
-.interaction-output code {
-    border-radius: 4px;
-    padding: 0.08rem 0.24rem;
-    background: color-mix(
-        in srgb,
-        var(--fn-surface-bg) 75%,
-        var(--fn-brand-accent-soft) 25%
-    );
-    font-family: var(--fn-font-mono);
-    font-size: 0.9em;
-}
-
 .interaction-output pre {
     overflow-x: auto;
-    border-radius: 6px;
-    padding: 0.7rem;
-    background: var(--fn-surface-bg);
+    padding: 0.75rem;
+    background: var(--public-paper);
 }
-
-.interaction-output pre code {
-    padding: 0;
-    background: transparent;
-}
-
 .interaction-output table {
     width: 100%;
     border-collapse: collapse;
-    font-size: 0.92rem;
 }
-
 .interaction-output th,
 .interaction-output td {
-    border: 1px solid var(--fn-border-default);
-    padding: 0.35rem 0.45rem;
+    border: 1px solid var(--public-rule);
+    padding: 0.4rem;
     text-align: left;
     vertical-align: top;
 }
@@ -300,56 +177,45 @@
 .interaction-captcha {
     min-height: 0;
 }
-
 .interaction-captcha.interaction-captcha-visible {
-    display: flex !important;
+    display: flex;
     flex-direction: column;
     gap: 0.5rem;
 }
-
 .interaction-error {
     margin: 0;
-    color: var(--fn-status-error);
-    background-color: var(--fn-status-error-soft-bg);
-    border: 1px solid var(--fn-status-error-soft-border);
-    border-radius: var(--fn-radius-md);
-    padding: 0.55rem 0.7rem;
-    font-family: var(--fn-font-mono);
-    font-size: 0.85rem;
+    border-left: 3px solid #b6604f;
+    padding: 0.6rem 0.75rem;
+    background: var(--public-paper-raised);
+    color: #b6604f;
 }
 
 .spinner {
     width: 1rem;
     height: 1rem;
-    border: 2px solid
-        color-mix(in srgb, var(--fn-text-primary) 20%, transparent 80%);
-    border-top-color: var(--fn-text-primary);
+    border: 2px solid color-mix(in srgb, currentColor 25%, transparent);
+    border-top-color: currentColor;
     border-radius: 50%;
     animation: spin 0.85s linear infinite;
 }
-
 .hourglass {
     display: inline-block;
     animation: hourglass-flip 1.2s ease-in-out infinite;
 }
-
 @keyframes spin {
     to {
         transform: rotate(360deg);
     }
 }
-
 @keyframes hourglass-flip {
     0%,
     42% {
         transform: rotate(0deg);
     }
-
     48%,
     90% {
         transform: rotate(180deg);
     }
-
     96%,
     100% {
         transform: rotate(360deg);
@@ -360,11 +226,12 @@
     .interaction-input-group {
         flex-direction: column;
         align-items: stretch;
-        gap: clamp(0.4rem, 2vw, 0.6rem);
     }
-
     .interaction-input,
     .interaction-submit {
         width: 100%;
+    }
+    .interaction-submit {
+        min-height: 2.75rem;
     }
 }

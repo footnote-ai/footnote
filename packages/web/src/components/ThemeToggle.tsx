@@ -9,6 +9,12 @@
 import { useTheme } from '../theme';
 import { useRef } from 'react';
 
+const playClickAudio = (source: string, volume: number): void => {
+    const audio = new Audio(source);
+    audio.volume = volume;
+    void audio.play().catch(() => undefined);
+};
+
 // Button used in the header to switch between light and dark modes.
 const ThemeToggle = (): JSX.Element => {
     const { theme, toggleTheme } = useTheme();
@@ -55,37 +61,11 @@ const ThemeToggle = (): JSX.Element => {
     const minClickInterval = 150; // Minimum time between clicks in milliseconds
 
     const playClickSoundDown = () => {
-        const audio = new Audio('/assets/click_mouse_down.ogg');
-        audio.volume = 0.7;
-
-        audio.addEventListener('loadstart', () =>
-            console.log('Audio loading started')
-        );
-        audio.addEventListener('canplay', () => console.log('Audio can play'));
-        audio.addEventListener('error', (e) =>
-            console.error('Audio error:', e)
-        );
-
-        audio.play().catch((error) => {
-            console.warn('Could not play click sound:', error);
-        });
+        playClickAudio('/assets/click_mouse_down.ogg', 0.7);
     };
 
     const playClickSoundUp = () => {
-        const audio = new Audio('/assets/click_mouse_up.ogg');
-        audio.volume = 0.7;
-
-        audio.addEventListener('loadstart', () =>
-            console.log('Audio loading started')
-        );
-        audio.addEventListener('canplay', () => console.log('Audio can play'));
-        audio.addEventListener('error', (e) =>
-            console.error('Audio error:', e)
-        );
-
-        audio.play().catch((error) => {
-            console.warn('Could not play click sound:', error);
-        });
+        playClickAudio('/assets/click_mouse_up.ogg', 0.7);
     };
 
     const playClickSound = () => {
@@ -97,20 +77,7 @@ const ThemeToggle = (): JSX.Element => {
         const randomFile =
             audioFiles[Math.floor(Math.random() * audioFiles.length)];
 
-        const audio = new Audio(randomFile);
-        audio.volume = 0.5;
-
-        audio.addEventListener('loadstart', () =>
-            console.log('Audio loading started')
-        );
-        audio.addEventListener('canplay', () => console.log('Audio can play'));
-        audio.addEventListener('error', (e) =>
-            console.error('Audio error:', e)
-        );
-
-        audio.play().catch((error) => {
-            console.warn('Could not play click sound:', error);
-        });
+        playClickAudio(randomFile, 0.5);
     };
 
     const handleMouseDown = () => {

@@ -24,8 +24,8 @@ test('public homepage keeps approved prepared-response content and destinations'
     assert.match(source, /AI that shows its work/);
     assert.match(source, /Most chatbots rush to give you a polished answer/);
     assert.match(source, /Pre-prepared response/);
-    assert.match(source, /Ask anything/);
-    assert.match(source, /https:\/\/ai\.jordanmakes\.dev\/ask/);
+    assert.match(source, /<Link to="\/chat">Chat<\/Link>/);
+    assert.doesNotMatch(source, /ai\.jordanmakes\.dev\/ask/);
     assert.match(source, /TraceFooterPlaceholder/);
     assert.match(source, /landingScenarios\.map/);
     assert.match(source, /public-home__scenario-dot--selected/);
@@ -41,8 +41,8 @@ test('public homepage keeps approved prepared-response content and destinations'
     assert.match(source, />\s*Download\s*</);
     assert.match(source, />\s*Documentation\s*</);
     assert.ok(
-        source.indexOf('>\n                            Download') <
-            source.indexOf('>\n                            Documentation')
+        source.search(/>\s*Download\s*</) <
+            source.search(/>\s*Documentation\s*</)
     );
     assert.doesNotMatch(source, /Download Footnote/);
     assert.doesNotMatch(source, /Quickstart/);
@@ -52,25 +52,52 @@ test('public cutover removes the design-lab route', async () => {
     const appSource = await readFile(`${webSourceDirectory}App.tsx`, 'utf8');
 
     assert.match(appSource, /path="\/" element={<PublicHomePage \/>}/);
+    assert.match(appSource, /path="\/chat"/);
+    assert.match(appSource, /<ChatPage \/>/);
     assert.doesNotMatch(appSource, /design-lab/);
     assert.doesNotMatch(appSource, /AskMeAnything/);
 });
 
+test('chat cutover removes the old component name and browser diagnostics', async () => {
+    const [chatSource, embedSource, headerSource, publicStyles] =
+        await Promise.all([
+            readFile(`${webSourceDirectory}components/Chat.tsx`, 'utf8'),
+            readFile(`${pagesDirectory}EmbedPage.tsx`, 'utf8'),
+            readFile(
+                `${webSourceDirectory}components/PublicHeader.tsx`,
+                'utf8'
+            ),
+            readFile(`${webSourceDirectory}styles/public-home.css`, 'utf8'),
+        ]);
+
+    assert.match(chatSource, /const Chat =/);
+    assert.doesNotMatch(chatSource, /AskMeAnything/);
+    assert.doesNotMatch(chatSource, /console\./);
+    assert.match(chatSource, /theme,/);
+    assert.match(embedSource, /<Chat \/>/);
+    assert.match(headerSource, /Sign-in is not available yet/);
+    assert.doesNotMatch(headerSource, /<Link to="\/">Sign in<\/Link>/);
+    assert.match(publicStyles, /\.public-header__unavailable-tooltip/);
+});
+
 test('route fallback is a flat, spinner-only loading state', async () => {
-    const [appSource, layoutStyles, preloadSource] = await Promise.all([
+    const [appSource, publicStyles, preloadSource] = await Promise.all([
         readFile(`${webSourceDirectory}App.tsx`, 'utf8'),
-        readFile(`${webSourceDirectory}styles/layout.css`, 'utf8'),
+        readFile(`${webSourceDirectory}styles/public-home.css`, 'utf8'),
         readFile(path.join(webDirectory, 'index.html'), 'utf8'),
     ]);
 
-    assert.match(appSource, /className="route-loading-shell"/);
+    assert.match(appSource, /route-loading-shell/);
     assert.match(appSource, /spinner route-loading-spinner/);
+    assert.match(appSource, /<div role="status" aria-live="polite">/);
+    assert.match(appSource, /Loading page\./);
+    assert.doesNotMatch(appSource, /<main[^>]*role="status"/);
     assert.doesNotMatch(appSource, /route-loading-card/);
     assert.doesNotMatch(appSource, /route-loading-title/);
-    assert.match(layoutStyles, /\.route-loading-shell[\s\S]*?position: fixed/);
+    assert.match(appSource, /PublicPageLayout/);
     assert.match(
-        layoutStyles,
-        /\.route-loading-shell[\s\S]*?background: var\(--fn-surface-bg\)/
+        publicStyles,
+        /\.route-loading-shell[\s\S]*?min-height: calc\(100vh - 14rem\)/
     );
     assert.doesNotMatch(preloadSource, /preload-shell__card/);
     assert.doesNotMatch(preloadSource, /Loading page\.\.\./);
@@ -107,10 +134,48 @@ test('trace placeholder is empty and joined to the assistant response', async ()
     );
     assert.match(
         stylesSource,
-        /#root:has\(.app-shell--public-home\)[\s\S]*?min-width: 0/
+        /#root:has\(.app-shell--public\)[\s\S]*?min-width: 0/
     );
     assert.match(
         stylesSource,
         /\.public-message--person[\s\S]*?margin-right: 0\.75rem/
     );
+});
+
+test('standalone routes use the shared public shell without changing their route behavior', async () => {
+    const [layoutSource, setupSource, embedSource, traceSource, traceStyles] =
+        await Promise.all([
+            readFile(
+                `${webSourceDirectory}components/PublicPageLayout.tsx`,
+                'utf8'
+            ),
+            readFile(`${pagesDirectory}SetupPage.tsx`, 'utf8'),
+            readFile(`${pagesDirectory}EmbedPage.tsx`, 'utf8'),
+            readFile(`${pagesDirectory}TracePage.tsx`, 'utf8'),
+            readFile(`${webSourceDirectory}styles/trace.css`, 'utf8'),
+        ]);
+
+    assert.match(layoutSource, /PublicHeader/);
+    assert.match(layoutSource, /PublicFooter/);
+    assert.match(setupSource, /<PublicPageLayout>/);
+    assert.match(embedSource, /<PublicPageLayout>/);
+    assert.match(embedSource, /createEmbedHeightMessenger/);
+    assert.match(traceSource, /<PublicPageLayout>/);
+    assert.match(traceSource, /trace-safety-indicator/);
+    assert.doesNotMatch(traceSource, /style=\{\{/);
+    assert.match(traceStyles, /\.trace-prompt-block/);
+    assert.match(traceStyles, /\.trace-raw-json/);
+});
+
+test('chat request cleanup distinguishes timeouts from replaced requests', async () => {
+    const chatSource = await readFile(
+        `${webSourceDirectory}components/Chat.tsx`,
+        'utf8'
+    );
+
+    assert.match(chatSource, /let didRequestTimeout = false/);
+    assert.match(chatSource, /didRequestTimeout = true/);
+    assert.match(chatSource, /The request timed out\. Please try again\./);
+    assert.match(chatSource, /abortRef\.current === controller/);
+    assert.match(chatSource, /abortRef\.current = null/);
 });

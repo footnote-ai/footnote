@@ -1,5 +1,5 @@
 /**
- * @description: Defines the web app route tree and stitches together the landing page and standalone pages.
+ * @description: Defines the web app route tree for the public homepage and standalone public pages.
  * @footnote-scope: web
  * @footnote-module: WebAppRoutes
  * @footnote-risk: medium - Routing mistakes can hide key web surfaces or send users to broken pages.
@@ -7,22 +7,22 @@
  */
 
 import { Suspense, lazy, useEffect } from 'react';
-import { Routes, Route, useLocation } from 'react-router-dom';
-import Header from '@components/Header';
-import Footer from '@components/Footer';
+import { Routes, Route } from 'react-router-dom';
 import PublicHomePage from '@pages/PublicHomePage';
+import PublicPageLayout from '@components/PublicPageLayout';
 
 const NotFound = (): JSX.Element => (
-    <>
-        <Header />
-        <main id="main-content" className="page-content">
-            <section className="page-hero" aria-labelledby="not-found-title">
+    <PublicPageLayout>
+        <main id="main-content" className="public-page__main">
+            <section
+                className="public-page__intro"
+                aria-labelledby="not-found-title"
+            >
                 <h1 id="not-found-title">Page not found</h1>
                 <p>That page does not exist.</p>
             </section>
         </main>
-        <Footer />
-    </>
+    </PublicPageLayout>
 );
 
 const loadTracePage = (): Promise<typeof import('@pages/TracePage')> =>
@@ -31,28 +31,33 @@ const loadEmbedPage = (): Promise<typeof import('@pages/EmbedPage')> =>
     import('@pages/EmbedPage');
 const loadSetupPage = (): Promise<typeof import('@pages/SetupPage')> =>
     import('@pages/SetupPage');
+const loadChatPage = (): Promise<typeof import('@pages/ChatPage')> =>
+    import('@pages/ChatPage');
 
 const TracePage = lazy(loadTracePage);
 const EmbedPage = lazy(loadEmbedPage);
 const SetupPage = lazy(loadSetupPage);
+const ChatPage = lazy(loadChatPage);
 
 const routeFallback = (
-    <main
-        id="main-content"
-        className="route-loading-shell"
-        aria-label="Page loading state"
-        role="status"
-        aria-live="polite"
-    >
-        <div className="spinner route-loading-spinner" aria-hidden="true" />
-    </main>
+    <PublicPageLayout>
+        <main
+            id="main-content"
+            className="public-page__main route-loading-shell"
+        >
+            <div role="status" aria-live="polite">
+                <span className="sr-only">Loading page.</span>
+                <div
+                    className="spinner route-loading-spinner"
+                    aria-hidden="true"
+                />
+            </div>
+        </main>
+    </PublicPageLayout>
 );
 
 // The App component stitches together the landing page sections in their intended scroll order.
 const App = (): JSX.Element => {
-    const location = useLocation();
-    const isPublicHome = location.pathname === '/';
-
     useEffect(() => {
         const windowWithIdleCallbacks = window as typeof globalThis & {
             requestIdleCallback?: (callback: () => void) => number;
@@ -64,6 +69,7 @@ const App = (): JSX.Element => {
                 loadTracePage(),
                 loadEmbedPage(),
                 loadSetupPage(),
+                loadChatPage(),
             ]);
         };
 
@@ -87,14 +93,20 @@ const App = (): JSX.Element => {
     }, []);
 
     return (
-        <div
-            className={`app-shell${isPublicHome ? ' app-shell--public-home' : ''}`}
-        >
+        <div className="app-shell app-shell--public">
             <a href="#main-content" className="skip-link">
                 Skip to main content
             </a>
             <Routes>
                 <Route path="/" element={<PublicHomePage />} />
+                <Route
+                    path="/chat"
+                    element={
+                        <Suspense fallback={routeFallback}>
+                            <ChatPage />
+                        </Suspense>
+                    }
+                />
                 <Route
                     path="/setup"
                     element={
