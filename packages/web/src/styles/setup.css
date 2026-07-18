@@ -1,7 +1,7 @@
 .setup-panel,
 .setup-editor {
     width: 100%;
-    margin: 0 auto 1.4rem;
+    margin: 0 auto 1.5rem;
 }
 
 .setup-panel {
@@ -11,18 +11,14 @@
 .setup-editor {
     max-width: min(100%, clamp(44rem, 82vw, 66rem));
     display: grid;
-    gap: 0.8rem;
+    gap: 1rem;
 }
 
 .setup-editor-disclosure {
-    border: 1px solid var(--fn-border-default);
-    border-radius: 10px;
-    background: color-mix(
-        in srgb,
-        var(--fn-surface-soft) 78%,
-        var(--fn-surface-bg) 22%
-    );
-    padding: 0.25rem 0.8rem 0.8rem;
+    border: 1px solid var(--public-rule);
+    border-radius: 0.35rem;
+    background: var(--public-paper-raised);
+    padding: 0.35rem 1rem 1rem;
 }
 
 .setup-editor-disclosure summary {
@@ -31,7 +27,7 @@
     font-size: 0.92rem;
     font-weight: 600;
     padding: 0.52rem 0 0.44rem;
-    color: var(--fn-text-primary);
+    color: var(--public-ink);
 }
 
 .setup-editor-disclosure__content {
@@ -48,14 +44,14 @@
     width: 100%;
     min-height: 560px;
     resize: vertical;
-    border: 1px solid var(--fn-border-default);
-    border-radius: 10px;
+    border: 1px solid var(--public-rule);
+    border-radius: 0.3rem;
     padding: 0.9rem;
     font-family: var(--fn-font-mono);
     font-size: 0.88rem;
     line-height: 1.55;
-    color: var(--fn-text-primary);
-    background: var(--fn-surface-alt);
+    color: var(--public-ink);
+    background: var(--public-paper);
 }
 
 .setup-actions {
@@ -65,11 +61,11 @@
 }
 
 .setup-actions button {
-    border: 1px solid var(--fn-border-default);
-    border-radius: var(--fn-radius-md);
-    padding: 0.52rem 0.84rem;
-    background: var(--fn-surface-soft);
-    color: var(--fn-text-primary);
+    border: 1px solid var(--public-rule);
+    border-radius: 0.3rem;
+    padding: 0.7rem 0.9rem;
+    background: var(--public-paper-raised);
+    color: var(--public-ink);
     cursor: pointer;
 }
 
@@ -83,7 +79,7 @@
 }
 
 .setup-note {
-    color: var(--fn-text-muted);
+    color: var(--public-muted);
 }
 
 .setup-submit-feedback {

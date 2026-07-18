@@ -29,7 +29,27 @@ const PublicHeader = (): JSX.Element => (
             >
                 Wiki
             </a>
-            <Link to="/">Sign in</Link>
+            <span
+                className="public-header__unavailable"
+                tabIndex={0}
+                aria-disabled="true"
+                aria-describedby="sign-in-unavailable-message"
+            >
+                Sign in
+                <span
+                    className="public-header__unavailable-icon"
+                    aria-hidden="true"
+                >
+                    ⚠
+                </span>
+                <span
+                    id="sign-in-unavailable-message"
+                    className="public-header__unavailable-tooltip"
+                    role="tooltip"
+                >
+                    Sign-in is not available yet.
+                </span>
+            </span>
             <ThemeToggle />
         </nav>
     </header>

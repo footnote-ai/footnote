@@ -1,14 +1,15 @@
-.app-shell--public-home {
+.app-shell--public {
     max-width: none;
     padding: 0;
 }
 
-#root:has(.app-shell--public-home) {
+#root:has(.app-shell--public) {
     min-width: 0;
     max-width: none;
 }
 
-.public-home {
+.public-home,
+.public-page {
     --public-focus: #23626a;
     --public-paper: #f6f3ec;
     --public-paper-raised: #fbfaf6;
@@ -23,7 +24,8 @@
     font-family: var(--fn-font-sans);
 }
 
-[data-theme='dark'] .public-home {
+[data-theme='dark'] .public-home,
+[data-theme='dark'] .public-page {
     --public-paper: #171918;
     --public-paper-raised: #1e211f;
     --public-ink: #ecebe5;
@@ -33,6 +35,11 @@
 }
 
 .public-home a {
+    color: inherit;
+    text-underline-offset: 0.22rem;
+}
+
+.public-page a {
     color: inherit;
     text-underline-offset: 0.22rem;
 }
@@ -71,6 +78,62 @@
     text-decoration: none;
 }
 
+.public-header__unavailable {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    color: var(--public-muted);
+    cursor: not-allowed;
+}
+
+.public-header__unavailable-icon {
+    display: inline-grid;
+    place-items: center;
+    width: 0;
+    overflow: hidden;
+    color: #b6604f;
+    opacity: 0;
+    transition:
+        width 160ms ease,
+        opacity 160ms ease;
+}
+
+.public-header__unavailable-tooltip {
+    position: absolute;
+    top: calc(100% + 0.6rem);
+    right: 0;
+    z-index: 1;
+    width: max-content;
+    max-width: min(16rem, calc(100vw - 2.5rem));
+    padding: 0.45rem 0.6rem;
+    border: 1px solid var(--public-rule);
+    border-radius: 0.3rem;
+    background: var(--public-paper-raised);
+    box-shadow: 0 0.25rem 0.75rem
+        color-mix(in srgb, var(--public-ink) 15%, transparent);
+    color: var(--public-ink);
+    font-size: 0.75rem;
+    opacity: 0;
+    pointer-events: none;
+    transform: translateY(-0.15rem);
+    transition:
+        opacity 160ms ease,
+        transform 160ms ease;
+}
+
+.public-header__unavailable:hover .public-header__unavailable-icon,
+.public-header__unavailable:focus-visible .public-header__unavailable-icon {
+    width: 0.9rem;
+    opacity: 1;
+}
+
+.public-header__unavailable:hover .public-header__unavailable-tooltip,
+.public-header__unavailable:focus-visible .public-header__unavailable-tooltip {
+    opacity: 1;
+    transform: translateY(0);
+}
+
 .public-header .theme-toggle {
     width: 2.35rem;
     min-height: 2.35rem;
@@ -82,6 +145,71 @@
 .public-home__main {
     width: min(calc(100% - 2.5rem), 72rem);
     margin: 0 auto;
+}
+
+.public-page__main {
+    width: min(calc(100% - 2.5rem), 72rem);
+    min-height: calc(100vh - 14rem);
+    margin: 0 auto;
+}
+
+.public-page__intro,
+.public-page__section {
+    padding: clamp(3rem, 7vw, 6.5rem) 0 clamp(3rem, 6vw, 5rem);
+}
+
+.public-page__section {
+    border-top: 1px solid var(--public-rule);
+}
+
+.public-page__intro h1,
+.public-page__section h2 {
+    margin: 0 0 1rem;
+    font-family: var(--fn-font-display);
+    font-weight: 550;
+    letter-spacing: -0.025em;
+    line-height: 1;
+}
+
+.public-page__intro h1 {
+    font-size: clamp(2.1rem, 4vw, 3.5rem);
+}
+
+.public-page__section h2 {
+    font-size: clamp(1.8rem, 3vw, 2.7rem);
+}
+
+.public-page__intro > p,
+.public-page__section > p,
+.public-page__lede {
+    max-width: 47.5rem;
+    margin: 0 0 1.25rem;
+    font-size: clamp(1.05rem, 1.45vw, 1.25rem);
+    line-height: 1.55;
+}
+
+.public-page__lede {
+    color: var(--public-muted);
+}
+
+.public-page__actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 1rem;
+    margin-top: 1.5rem;
+}
+
+.public-page__action {
+    padding: 0.75rem 1rem;
+    border: 1px solid var(--public-rule);
+    border-radius: 0.3rem;
+    background: var(--public-paper-raised);
+    text-decoration: none;
+}
+
+.public-page__action--primary {
+    background: var(--public-ink);
+    color: var(--public-paper) !important;
 }
 
 .public-home section {
@@ -288,6 +416,17 @@
     font-size: 0.8rem;
 }
 
+.route-loading-shell {
+    display: grid;
+    place-items: center;
+    min-height: calc(100vh - 14rem);
+}
+
+.route-loading-spinner {
+    width: 1.25rem;
+    height: 1.25rem;
+}
+
 @media (max-width: 760px) {
     .public-header {
         padding-inline: 1.25rem;
@@ -302,6 +441,16 @@
 
     .public-home__main {
         width: min(calc(100% - 2.5rem), 72rem);
+    }
+
+    .public-page__main {
+        width: min(calc(100% - 2.5rem), 72rem);
+    }
+
+    .public-page__intro,
+    .public-page__section {
+        padding-top: 3rem;
+        padding-bottom: 3.5rem;
     }
 
     .public-home section {
@@ -369,6 +518,10 @@
     }
 
     .public-home h1 {
+        font-size: clamp(1.75rem, 14vw, 2.35rem);
+    }
+
+    .public-page__intro h1 {
         font-size: clamp(1.75rem, 14vw, 2.35rem);
     }
 

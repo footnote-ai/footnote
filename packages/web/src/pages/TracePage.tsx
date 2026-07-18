@@ -10,7 +10,7 @@
  * citations, and technical details. Handles various states including loading, errors,
  * stale traces, and integrity check failures.
  */
-import { useEffect, useState } from 'react';
+import { useEffect, useState, type PropsWithChildren } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import {
     formatExecutionTimelineSummary,
@@ -24,6 +24,7 @@ import type {
     ImageGenerationMetadata,
     WorkflowStepKind,
 } from '@footnote/contracts/policy';
+import PublicPageLayout from '@components/PublicPageLayout';
 import { api, isApiClientError } from '../utils/api';
 import { createScopedLogger } from '../utils/logger';
 import {
@@ -211,6 +212,15 @@ const buildDisplayTrace = (traceData: ServerMetadata): DisplayTrace => ({
 
 const tracePageLogger = createScopedLogger('TracePage');
 
+/** Applies the public page frame without changing trace loading or integrity behavior. */
+const TracePageShell = ({ children }: PropsWithChildren): JSX.Element => (
+    <PublicPageLayout>
+        <main id="main-content" className="public-page__main trace-page">
+            {children}
+        </main>
+    </PublicPageLayout>
+);
+
 // Helper to extract payload from 410 (stale) responses
 const extractPayload = (data: unknown): ServerMetadata | null => {
     if (data && typeof data === 'object' && 'metadata' in data) {
@@ -247,13 +257,6 @@ type LoadingState =
     | 'not-found'
     | 'stale'
     | 'hash-mismatch';
-
-// Safety tier colors matching the server constants
-const SAFETY_TIER_COLORS: Record<string, string> = {
-    low: '#7FDCA4', // Low safety tier - sage green
-    medium: '#F8E37C', // Medium safety tier - warm gold
-    high: '#E27C7C', // High safety tier - soft coral
-};
 
 const renderRunOutcomeSummary = (
     runOutcomeSummary: RunOutcomeSummary | null
@@ -299,17 +302,7 @@ const renderImagePromptBlock = (
         <dt>{label}</dt>
         <dd>
             {formatPromptForDisplay(value) ? (
-                <pre
-                    style={{
-                        marginTop: '0.5rem',
-                        padding: '0.75rem',
-                        borderRadius: '0.5rem',
-                        background: '#f8fafc',
-                        color: '#111827',
-                        whiteSpace: 'pre-wrap',
-                        wordBreak: 'break-word',
-                    }}
-                >
+                <pre className="trace-prompt-block">
                     {formatPromptForDisplay(value)}
                 </pre>
             ) : (
@@ -364,9 +357,9 @@ const renderImageGenerationSection = (
                 <strong>Generation time:</strong>{' '}
                 {imageGeneration.result.generationTimeMs}ms
             </p>
-            <details style={{ marginTop: '0.75rem' }} open>
+            <details className="trace-details" open>
                 <summary>Prompt provenance</summary>
-                <p style={{ marginTop: '0.75rem' }}>
+                <p className="trace-details__copy">
                     <strong>Policy:</strong>{' '}
                     {imageGeneration.prompts.policyTruncated
                         ? 'Prompt input was policy-truncated before generation.'
@@ -374,7 +367,7 @@ const renderImageGenerationSection = (
                     Max input chars: {imageGeneration.prompts.maxInputChars}.
                 </p>
                 {/* TODO(auth-memory-governance): Gate prompt visibility with user opt-in auth/memory/governance controls before broad exposure. */}
-                <dl style={{ marginTop: '0.75rem' }}>
+                <dl className="trace-details__list">
                     {renderImagePromptBlock(
                         'Original prompt',
                         imageGeneration.prompts.original
@@ -389,9 +382,9 @@ const renderImageGenerationSection = (
                     )}
                 </dl>
             </details>
-            <details style={{ marginTop: '0.75rem' }}>
+            <details className="trace-details">
                 <summary>Generation settings and usage</summary>
-                <dl style={{ marginTop: '0.75rem' }}>
+                <dl className="trace-details__list">
                     <div>
                         <dt>Quality</dt>
                         <dd>{imageGeneration.request.quality}</dd>
@@ -566,16 +559,18 @@ const TracePage = (): JSX.Element => {
 
     if (loadingState === 'loading') {
         return (
-            <section className="interaction-status" aria-live="polite">
-                <div className="spinner" aria-hidden="true" />
-                <p>Loading trace...</p>
-            </section>
+            <TracePageShell>
+                <section className="trace-loading" aria-live="polite">
+                    <div className="spinner" aria-hidden="true" />
+                    <p>Loading trace...</p>
+                </section>
+            </TracePageShell>
         );
     }
 
     if (loadingState === 'not-found') {
         return (
-            <section className="site-section">
+            <TracePageShell>
                 <article className="card">
                     <h1>Trace Not Found</h1>
                     <p>
@@ -586,13 +581,13 @@ const TracePage = (): JSX.Element => {
                         Back to home
                     </Link>
                 </article>
-            </section>
+            </TracePageShell>
         );
     }
 
     if (loadingState === 'error') {
         return (
-            <section className="site-section">
+            <TracePageShell>
                 <article className="card">
                     <h1>Trace Unavailable</h1>
                     <p>
@@ -603,13 +598,13 @@ const TracePage = (): JSX.Element => {
                         Back to home
                     </Link>
                 </article>
-            </section>
+            </TracePageShell>
         );
     }
 
     if (loadingState === 'stale') {
         return (
-            <section className="site-section">
+            <TracePageShell>
                 <article className="card">
                     <h1>Trace Stale</h1>
                     <p>
@@ -622,8 +617,11 @@ const TracePage = (): JSX.Element => {
                 </article>
                 {traceData && (
                     <>
-                        <header className="site-header" aria-live="polite">
-                            <div className="site-mark">
+                        <header
+                            className="trace-page__header"
+                            aria-live="polite"
+                        >
+                            <div>
                                 <h1>Response Trace</h1>
                                 <code>
                                     {traceData.responseId ?? responseId}
@@ -633,7 +631,10 @@ const TracePage = (): JSX.Element => {
                                 Back to home
                             </Link>
                         </header>
-                        <article className="card" aria-label="Trace summary">
+                        <article
+                            className="card trace-card"
+                            aria-label="Trace summary"
+                        >
                             <h2>Summary</h2>
                             {renderRunOutcomeSummary(traceRunOutcomeSummary)}
                             <p>
@@ -651,13 +652,13 @@ const TracePage = (): JSX.Element => {
                         </article>
                     </>
                 )}
-            </section>
+            </TracePageShell>
         );
     }
 
     if (loadingState === 'hash-mismatch') {
         return (
-            <section className="site-section">
+            <TracePageShell>
                 <article className="card">
                     <h1>Trace Integrity Check Failed</h1>
                     <p>
@@ -668,13 +669,13 @@ const TracePage = (): JSX.Element => {
                         Back to home
                     </Link>
                 </article>
-            </section>
+            </TracePageShell>
         );
     }
 
     if (!traceData) {
         return (
-            <section className="site-section">
+            <TracePageShell>
                 <article className="card">
                     <h1>Trace Unavailable</h1>
                     <p>No trace data available.</p>
@@ -682,14 +683,18 @@ const TracePage = (): JSX.Element => {
                         Back to home
                     </Link>
                 </article>
-            </section>
+            </TracePageShell>
         );
     }
 
     const rawSafetyTier = traceData?.safetyTier;
     const normalizedSafetyTier =
         typeof rawSafetyTier === 'string' ? rawSafetyTier.toLowerCase() : 'low';
-    const safetyColor = SAFETY_TIER_COLORS[normalizedSafetyTier] ?? '#6b7280';
+    const safetyTierClass = ['low', 'medium', 'high'].includes(
+        normalizedSafetyTier
+    )
+        ? normalizedSafetyTier
+        : 'unknown';
     const provenance =
         traceData?.provenance || traceData?.reasoningEffort || 'Unknown';
     const model = resolveTraceModelLabel(traceData);
@@ -738,9 +743,9 @@ const TracePage = (): JSX.Element => {
         },
     ];
     return (
-        <section className="site-section">
-            <header className="site-header" aria-live="polite">
-                <div className="site-mark">
+        <TracePageShell>
+            <header className="trace-page__header" aria-live="polite">
+                <div>
                     <h1>Response Trace</h1>
                     <code>{displayId}</code>
                 </div>
@@ -749,11 +754,7 @@ const TracePage = (): JSX.Element => {
                 </Link>
             </header>
 
-            <article
-                className="card"
-                style={{ borderLeft: `4px solid ${safetyColor}` }}
-                aria-label="Trace summary"
-            >
+            <article className="card trace-card" aria-label="Trace summary">
                 <h2>What happened</h2>
                 <p>
                     This page summarizes how this answer was produced and where
@@ -787,7 +788,11 @@ const TracePage = (): JSX.Element => {
             {traceData.imageGeneration &&
                 renderImageGenerationSection(traceData.imageGeneration)}
 
-            <article className="card" id="trace-sources" aria-label="Sources">
+            <article
+                className="card trace-card"
+                id="trace-sources"
+                aria-label="Sources"
+            >
                 <h2>Sources and Evidence</h2>
                 {traceData?.citations && traceData.citations.length > 0 ? (
                     <ul>
@@ -817,13 +822,7 @@ const TracePage = (): JSX.Element => {
                                             </span>
                                         )}
                                         {citation.snippet && (
-                                            <p
-                                                style={{
-                                                    marginTop: '0.25rem',
-                                                    fontSize: '0.875rem',
-                                                    color: '#6b7280',
-                                                }}
-                                            >
+                                            <p className="trace-citation-snippet">
                                                 {citation.snippet}
                                             </p>
                                         )}
@@ -835,9 +834,9 @@ const TracePage = (): JSX.Element => {
                 ) : (
                     <p>{groundingEvidenceSummary.explanation}</p>
                 )}
-                <details style={{ marginTop: '0.75rem' }}>
+                <details className="trace-details">
                     <summary>How Footnote decided this</summary>
-                    <p style={{ marginTop: '0.5rem' }}>
+                    <p className="trace-details__copy">
                         Footnote shows sources when it has them. If no sources
                         are shown, Footnote only explains why when it has a
                         clear reason to share. A careful response can still be
@@ -847,7 +846,7 @@ const TracePage = (): JSX.Element => {
             </article>
 
             <article
-                className="card"
+                className="card trace-card"
                 id="trace-runtime"
                 aria-label="Runtime and workflow details"
             >
@@ -874,27 +873,15 @@ const TracePage = (): JSX.Element => {
                         {traceData.usage.total_tokens}
                     </p>
                 )}
-                <details style={{ marginTop: '0.75rem' }}>
+                <details className="trace-details">
                     <summary>Safety and evaluator details</summary>
-                    <dl style={{ marginTop: '0.75rem' }}>
+                    <dl className="trace-details__list">
                         <div>
                             <dt>Safety Tier</dt>
                             <dd>
-                                <span
-                                    style={{
-                                        display: 'inline-flex',
-                                        alignItems: 'center',
-                                        gap: '0.5rem',
-                                    }}
-                                >
+                                <span className="trace-safety-indicator">
                                     <span
-                                        style={{
-                                            width: '0.75rem',
-                                            height: '0.75rem',
-                                            borderRadius: '9999px',
-                                            backgroundColor: safetyColor,
-                                            display: 'inline-block',
-                                        }}
+                                        className={`trace-safety-indicator__dot trace-safety-indicator__dot--${safetyTierClass}`}
                                     />
                                     {safetyLabel}
                                 </span>
@@ -922,9 +909,9 @@ const TracePage = (): JSX.Element => {
                         </div>
                     </dl>
                 </details>
-                <details style={{ marginTop: '0.75rem' }}>
+                <details className="trace-details">
                     <summary>Technical fields</summary>
-                    <dl style={{ marginTop: '0.75rem' }}>
+                    <dl className="trace-details__list">
                         <div>
                             <dt>Tradeoff Count</dt>
                             <dd>{tradeoffCount}</dd>
@@ -973,7 +960,7 @@ const TracePage = (): JSX.Element => {
             </article>
 
             <article
-                className="card"
+                className="card trace-card"
                 id="trace-raw"
                 aria-label="Raw trace data"
             >
@@ -981,21 +968,14 @@ const TracePage = (): JSX.Element => {
                 <p>
                     This is the redacted debug payload used to render the page.
                 </p>
-                <details style={{ marginTop: '0.75rem' }}>
+                <details className="trace-details">
                     <summary>Raw JSON</summary>
-                    <pre
-                        style={{
-                            marginTop: '0.75rem',
-                            overflowX: 'auto',
-                            maxHeight: '24rem',
-                            whiteSpace: 'pre-wrap',
-                        }}
-                    >
+                    <pre className="trace-raw-json">
                         {JSON.stringify(sanitizedTraceData, null, 2)}
                     </pre>
                 </details>
             </article>
-        </section>
+        </TracePageShell>
     );
 };
 

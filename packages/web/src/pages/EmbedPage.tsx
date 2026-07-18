@@ -7,9 +7,8 @@
  */
 
 import { useEffect, useRef } from 'react';
-import Header from '@components/Header';
-import Footer from '@components/Footer';
-import AskMeAnything from '@components/AskMeAnything';
+import PublicPageLayout from '@components/PublicPageLayout';
+import Chat from '@components/Chat';
 import {
     createEmbedHeightMessenger,
     EMBED_LAYOUT_CHANGE_EVENT,
@@ -126,23 +125,21 @@ const EmbedPage = (): JSX.Element => {
     }, []);
 
     return (
-        <>
-            <Header />
+        <PublicPageLayout>
             <main
                 ref={containerRef}
                 id="main-content"
-                className="page-content landing-page landing-page--embed"
+                className="public-page__main public-page__main--embed"
             >
                 <section
                     id="about"
-                    className="landing-section"
+                    className="public-page__intro"
                     aria-labelledby="embed-about-title"
                 >
-                    <p className="landing-kicker">About</p>
-                    <h1 id="embed-about-title" className="landing-title">
+                    <h1 id="embed-about-title">
                         Footnote, anywhere you need it.
                     </h1>
-                    <p className="landing-lede">
+                    <p className="public-page__lede">
                         Footnote is a transparency-first AI framework that helps
                         keep answers inspectable, understandable, and easier to
                         steer.
@@ -156,37 +153,33 @@ const EmbedPage = (): JSX.Element => {
 
                 <section
                     id="demo"
-                    className="landing-section"
+                    className="public-page__section"
                     aria-labelledby="embed-demo-title"
                 >
-                    <div className="hero-copy">
-                        <p className="landing-kicker">Demo</p>
-                        <h2 id="embed-demo-title" className="landing-title">
-                            Ask from your own page.
-                        </h2>
-                        <p className="hero-subheader">
+                    <div>
+                        <h2 id="embed-demo-title">Chat from your own page.</h2>
+                        <p className="public-page__lede">
                             Run a live prompt and inspect the response details.
                         </p>
-                        <AskMeAnything />
+                        <Chat />
                     </div>
                 </section>
 
                 <section
                     id="get-started"
-                    className="landing-section"
+                    className="public-page__section"
                     aria-labelledby="embed-start-title"
                 >
-                    <p className="landing-kicker">Get started</p>
-                    <h2 id="embed-start-title" className="landing-title">
+                    <h2 id="embed-start-title">
                         Go from embed to local runtime.
                     </h2>
-                    <p className="landing-lede">
+                    <p className="public-page__lede">
                         Install the CLI launcher from GitHub Releases to run
                         Footnote with your own setup.
                     </p>
-                    <div className="cta-group">
+                    <div className="public-page__actions">
                         <a
-                            className="cta-button primary"
+                            className="public-page__action public-page__action--primary"
                             href="https://github.com/footnote-ai/footnote/releases"
                             target="_blank"
                             rel="noreferrer"
@@ -194,7 +187,7 @@ const EmbedPage = (): JSX.Element => {
                             Download Footnote
                         </a>
                         <a
-                            className="cta-button secondary"
+                            className="public-page__action"
                             href="https://github.com/footnote-ai/footnote#quickstart"
                             target="_blank"
                             rel="noreferrer"
@@ -204,8 +197,7 @@ const EmbedPage = (): JSX.Element => {
                     </div>
                 </section>
             </main>
-            <Footer />
-        </>
+        </PublicPageLayout>
     );
 };
 

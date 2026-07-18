@@ -7,6 +7,7 @@
  */
 
 import { useEffect, useRef, useState } from 'react';
+import { Link } from 'react-router-dom';
 import MarkdownResponse from '@components/MarkdownResponse';
 import PublicFooter from '@components/PublicFooter';
 import PublicHeader from '@components/PublicHeader';
@@ -96,14 +97,7 @@ const PublicHomePage = (): JSX.Element => {
                             })}
                         </div>
                         <p className="public-home__prepared">
-                            Pre-prepared response.{' '}
-                            <a
-                                href="https://ai.jordanmakes.dev/ask"
-                                target="_blank"
-                                rel="noreferrer"
-                            >
-                                Ask anything
-                            </a>
+                            Pre-prepared response. <Link to="/chat">Chat</Link>
                         </p>
                     </div>
                 </section>
