@@ -6,23 +6,15 @@
 
 ### AI that shows its work.
 
-A lot of AI systems give answers that *look* convincing, but reveal very little about how those answers were made. Footnote creates useful answers with a trail you can follow when it matters.
+A lot of AI systems give answers that *look* convincing, but reveal very little about how they were made. Footnote creates answers with a trail you can follow when it matters.
 
-Transparency is non-negotiable, but not the full story. You also need control: over which AI is being used, what it can and cannot do, what gets remembered, how much money can be spent, how carefully a question should be handled, and much more.
+Transparency is important, but you also need control: over what it can and can't do, what's remembered, how much money can be spent, how carefully sensitive questions should be handled, and much more.
 
 Footnote tries to bridge the gap between what AI can do and what people need in order to use it responsibly. See our [philosophy](docs/Philosophy.md) page for the thinking behind the project.
 
-### What does this look like?
-
-Footnote feels like a normal chat until you want to look closer.
-
 <!-- screenshot of a question+response here -->
 
-Each answer includes what shaped it: the settings in effect, checks performed, sources and tools used, important limits, and more.
-
 <!-- screenshot of an expanded footnote -->
-
-You can inspect that trail and change how future questions are handled. Or simply ignore it.
 
 [Try the live demo](https://ai.jordanmakes.dev)
 
