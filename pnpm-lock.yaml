@@ -1282,9 +1282,11 @@ packages:
 
   '@footnote/agent-runtime@file:packages/agent-runtime':
     resolution: {directory: packages/agent-runtime, type: directory}
+    version: 0.0.1
 
   '@footnote/contracts@file:packages/contracts':
     resolution: {directory: packages/contracts, type: directory}
+    version: 0.0.1
 
   '@gitlab/gitlab-ai-provider@3.6.1':
     resolution: {integrity: sha512-8JihlrwiUuyxzMU+wnUqx9oZZ+JtFFMYcYAULxdr0IsXYfe1OUd6xfUAioLzdUfWBobFVRDTQSVS8788Zg786A==}

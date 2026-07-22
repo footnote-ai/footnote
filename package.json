@@ -1,7 +1,7 @@
 {
     "name": "footnote",
     "private": true,
-    "packageManager": "pnpm@10.27.0",
+    "packageManager": "pnpm@11.16.0",
     "scripts": {
         "start": "node scripts/start.cjs",
         "dev": "concurrently \"pnpm dev:backend\" \"pnpm dev:web\"",
