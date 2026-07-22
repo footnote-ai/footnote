@@ -266,4 +266,4 @@ Use the boundary and a real use case, not feature count alone:
 - [Workflow](../architecture/workflow.md)
 - [VoltAgent Runtime Adoption](../decisions/2026-03-voltagent-runtime-adoption.md)
 - [TrustGraph](../architecture/context-integrations/trustgraph.md)
-- [Local Observability With agent-inspect](./proposal_local_observability_agent_inspect.md)
+- [Rejected: Local Observability With agent-inspect](./rejected/local_observability_agent_inspect.md)

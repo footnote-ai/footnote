@@ -106,8 +106,7 @@
                 "docs/architecture/workflow.md",
                 "docs/architecture/langfuse-metadata-mirror.md",
                 "docs/architecture/context-integrations/README.md",
-                "docs/proposals/proposal_execution_adapters_workflow_authority.md",
-                "docs/proposals/proposal_local_observability_agent_inspect.md",
+                "docs/proposals/execution_adapters_workflow_authority.md",
                 "docs/architecture/canonical-response-footnote.md"
             ],
             "page_notes": [
@@ -195,7 +194,6 @@
                 "packages/backend/src/utils/logger.ts",
                 "packages/discord-bot/src/state/ChannelContextManager.ts",
                 "docs/architecture/langfuse-metadata-mirror.md",
-                "docs/proposals/proposal_local_observability_agent_inspect.md",
                 "AGENTS.md",
                 "cursor.rules"
             ],
@@ -366,7 +364,7 @@
                 "docs/decisions/2026-03-voltagent-runtime-adoption.md",
                 "docs/decisions/2026-03-legacy-openai-removal-and-runtime-branching.md",
                 "docs/decisions/2026-03-model-profile-catalog-and-staged-planner-selection.md",
-                "docs/proposals/proposal_execution_adapters_workflow_authority.md"
+                "docs/proposals/execution_adapters_workflow_authority.md"
             ],
             "page_notes": [
                 {

@@ -14,7 +14,7 @@ For contributors:
 - Source setup: [Run from source](../README.md#run-from-source-developers-and-contributors)
 - [CI](./ci/README.md)
 - [Architecture](./architecture/README.md)
-- [Proposals](./proposals/)
+- [Proposals](./proposals/index.md)
 
 Source runs use `pnpm`; quick install:
 `corepack enable && corepack prepare pnpm@10.27.0 --activate` (fallback:
@@ -43,7 +43,8 @@ The web package uses a layered stylesheet entrypoint at
 - [CI](./ci/README.md): workflow map, what checks run, and how to debug CI
   failures.
 - [Decisions](./decisions/): durable technical choices and why they were made.
-- [Proposals](./proposals/): unadopted or exploratory ideas.
+- [Proposals](./proposals/index.md): unadopted or exploratory ideas.
+- [Work Status](./status/index.md): current implementation trackers and next steps.
 - [API](./api/README.md): OpenAPI source, operation mapping, and code-linking
   rules.
 - [AI](./ai/README.md): contributor workflow for AI-assisted changes.

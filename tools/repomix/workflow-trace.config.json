@@ -24,7 +24,7 @@
     "ignore": {
         "useGitignore": true,
         "useDefaultPatterns": true,
-        "customPatterns": ["docs/status/archive/**"]
+        "customPatterns": ["docs/status/completed/**"]
     },
     "security": {
         "enableSecurityCheck": true

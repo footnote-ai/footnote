@@ -134,7 +134,7 @@ the request. If TrustGraph is unavailable, the local chat path continues
 without it.
 
 The current branch sequence and short-term status are tracked in
-[Repository Context and TrustGraph Status](../../trustgraph/repository-context-status.md).
+[Repository Context and TrustGraph Status](../../status/repository-context-status.md).
 
 ## Recorded afterward
 

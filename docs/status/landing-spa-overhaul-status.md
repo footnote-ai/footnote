@@ -10,9 +10,9 @@ Last completed branch: none yet.
 
 Last updated: 2026-06-10.
 
-Initial file path: `docs/proposals/landing-spa-overhaul-status.md`.
+Current file path: `docs/status/landing-spa-overhaul-status.md`.
 
-This document should stay in `docs/proposals/` while the overhaul is underway. After the work is complete, remove the branch tracker, temporary notes, blockers, and resolved questions. Move the remaining narrative to its long-lived home, likely under `docs/architecture/` or another docs path chosen after the implemented shape is known.
+This document should stay in `docs/status/` while the overhaul is underway. After the work is complete, remove the branch tracker, temporary notes, blockers, and resolved questions. Move the remaining narrative to its long-lived home, likely under `docs/architecture/` or another docs path chosen after the implemented shape is known.
 
 Future editors should preserve the writing style here: plain, specific, and close to the product. Avoid vague design language, inflated section names, and repeated slogans. Explain what someone sees, what happens when they interact, what the code owns, and why a decision exists.
 

@@ -1,6 +1,33 @@
 # Feature Proposal: Local Observability With agent-inspect
 
-**Last updated:** 2026-07-09
+**Last Updated:** 2026-07-09
+
+> **Decision: Rejected on 2026-07-22**
+>
+> We are not moving forward with this integration right now. AgentInspect is a
+> thoughtful project, and its local-first execution trees fit Footnote's values
+> around transparency, self-hosting, and user choice.
+>
+> The problem is the amount of overlap. Footnote's web trace viewer is already
+> meant to give people a clear summary of a run or conversation, with deeper
+> details available when they want them. AgentInspect would offer a different
+> interface for much of the same information rather than filling a major gap in
+> the product.
+>
+> It also could not replace Footnote's trace infrastructure. The backend would
+> still need to own the canonical trace, provenance meanings, workflow and
+> review records, cost data, privacy rules, and public trace experience. The
+> AgentInspect path would sit beside that system as another derived view, which would mean maintaining an exporter, a second
+> schema and its version compatibility, configuration, retention and file
+> permissions, redaction rules, failure handling, tests, documentation, and
+> support for users deciding which trace view to use. That is more ongoing work
+> than the additional terminal and offline viewing option currently justifies.
+>
+> We like what AgentInspect is doing and support the project. It fits the kind
+> of ecosystem we want to see around transparent AI. For Footnote, though, it
+> overlaps too much with work we already have, and the cost of supporting
+> another integration is too high right now. We are going to focus on our own
+> trace viewer for the time being.
 
 ## Purpose
 
@@ -12,9 +39,8 @@ Footnote's local trace store stays canonical. The new JSONL file is a derived
 projection designed to work with agent-inspect. Langfuse remains optional for
 people who want an external observability mirror.
 
-This is a plan, not shipped behavior. The existing Langfuse metadata mirror is
-already optional and metadata-only. A local JSONL projection does not exist
-yet.
+The existing Langfuse metadata mirror is optional and metadata-only. The local
+JSONL projection described here was not implemented.
 
 ## Why local first
 
@@ -26,10 +52,10 @@ Local observability fits Footnote's existing direction:
 - it keeps the execution trail close to the local provenance store; and
 - it supports Footnote's goal of making an answer and its limits checkable.
 
-This is not a plan to turn agent-inspect into Footnote's runtime platform. The
-first goal is a small, stable JSONL projection. Before implementation, verify
-the target agent-inspect schema and version so the exporter does not claim
-compatibility from a look-alike format.
+The goal was not to turn agent-inspect into Footnote's runtime platform. It
+was to add a small, stable JSONL projection. Any implementation would first
+need to verify the target agent-inspect schema and version so the exporter did
+not claim compatibility from a look-alike format.
 
 ## Current baseline
 
@@ -202,7 +228,7 @@ fail-open workflow outcome.
 - `packages/backend/src/services/workflowEngine.ts`
 - `packages/backend/src/services/langfuseMetadataMirrorExporter.ts`
 - `packages/config-spec/src/env-spec.ts`
-- [Workflow](../architecture/workflow.md)
-- [Langfuse Metadata Mirror](../architecture/langfuse-metadata-mirror.md)
-- [TrustGraph](../architecture/context-integrations/trustgraph.md)
-- [Security Policy](../../SECURITY.md)
+- [Workflow](../../architecture/workflow.md)
+- [Langfuse Metadata Mirror](../../architecture/langfuse-metadata-mirror.md)
+- [TrustGraph](../../architecture/context-integrations/trustgraph.md)
+- [Security Policy](../../../SECURITY.md)

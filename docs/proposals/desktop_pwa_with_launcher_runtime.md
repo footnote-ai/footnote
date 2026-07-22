@@ -158,4 +158,3 @@ work to a later branch.
 
 This gives users install-like desktop UX with minimal architectural risk and
 preserves optionality for deeper desktop integration later.
-

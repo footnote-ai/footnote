@@ -129,7 +129,7 @@ not choose the response action or decide when the workflow is finished.
 
 The runtime rules are documented in [trustgraph.md](./trustgraph.md). The next
 repository context branches are tracked in
-[Repository Context and TrustGraph Status](../../trustgraph/repository-context-status.md).
+[Repository Context and TrustGraph Status](../../status/repository-context-status.md).
 
 ### Tool-registry path
 
