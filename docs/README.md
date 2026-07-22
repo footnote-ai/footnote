@@ -17,8 +17,8 @@ For contributors:
 - [Proposals](./proposals/index.md)
 
 Source runs use `pnpm`; quick install:
-`corepack enable && corepack prepare pnpm@10.27.0 --activate` (fallback:
-`npm i -g pnpm@10.27.0`).
+`corepack enable && corepack prepare pnpm@11.16.0 --activate` (fallback:
+`npm i -g pnpm@11.16.0`).
 
 Standalone launcher note: running `footnote` with no command (or double-clicking
 the binary) opens the `footnote info` launcher menu. Use explicit commands like

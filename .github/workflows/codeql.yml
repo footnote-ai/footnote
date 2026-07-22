@@ -63,7 +63,7 @@ jobs:
               if: matrix.language == 'javascript-typescript'
               uses: actions/setup-node@v4
               with:
-                  node-version: '20'
+                  node-version: '22'
 
             - name: Enable Corepack
               if: matrix.language == 'javascript-typescript'
@@ -71,7 +71,7 @@ jobs:
 
             - name: Activate pnpm
               if: matrix.language == 'javascript-typescript'
-              run: corepack prepare pnpm@10.27.0 --activate
+              run: corepack prepare pnpm@11.16.0 --activate
 
             - name: Fix corepack node-gyp python shim permissions
               if: matrix.language == 'javascript-typescript'

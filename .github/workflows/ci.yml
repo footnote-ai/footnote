@@ -20,7 +20,7 @@ jobs:
                   node-version: 22
 
             - run: corepack enable
-            - run: corepack prepare pnpm@10.26.2 --activate
+            - run: corepack prepare pnpm@11.16.0 --activate
             - name: Fix corepack node-gyp python shim permissions
               shell: bash
               run: |
