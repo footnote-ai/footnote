@@ -121,6 +121,9 @@ catalogs:
     flyio:
       specifier: ^0.6.14
       version: 0.6.14
+    globby:
+      specifier: ^16.2.2
+      version: 16.2.2
     js-yaml:
       specifier: ^3.15.0
       version: 3.15.0
@@ -276,6 +279,9 @@ importers:
       eslint-plugin-react-hooks:
         specifier: 'catalog:'
         version: 7.1.1(eslint@10.4.1(jiti@2.7.0))
+      globby:
+        specifier: 'catalog:'
+        version: 16.2.2
       prettier:
         specifier: 'catalog:'
         version: 3.8.4
@@ -3041,8 +3047,8 @@ packages:
     resolution: {integrity: sha512-wHTUcDUoZ1H5/0iVqEudYW4/kAlN5cZ3j/bXn0Dpbizl9iaUVeWSHqiOjsgk6OW2bkLclbBjzewBz6weQ1zA2Q==}
     engines: {node: '>=18'}
 
-  globby@16.2.0:
-    resolution: {integrity: sha512-QrJia2qDf5BB/V6HYlDTs0I0lBahyjLzpGQg3KT7FnCdTonAyPy2RtY802m2k4ALx6Dp752f82WsOczEVr3l6Q==}
+  globby@16.2.2:
+    resolution: {integrity: sha512-NLvV9ubZ6NDsJaOpKPy3cQeJpKi9DcWiyCiFUpJPA0YihRqiE6RWaLUmgNNPr8MgPpLZjnBjSmou7uZBRJv9wA==}
     engines: {node: '>=20'}
 
   google-auth-library@10.9.0:
@@ -7341,7 +7347,7 @@ snapshots:
     dependencies:
       ini: 4.1.1
 
-  globby@16.2.0:
+  globby@16.2.2:
     dependencies:
       '@sindresorhus/merge-streams': 4.0.0
       fast-glob: 3.3.3
@@ -8552,7 +8558,7 @@ snapshots:
       commander: 14.0.3
       fast-xml-builder: 1.2.0
       git-url-parse: 16.1.0
-      globby: 16.2.0
+      globby: 16.2.2
       gpt-tokenizer: 3.4.0
       handlebars: 4.7.9
       iconv-lite: 0.7.2

@@ -1,0 +1,11 @@
+# Files selected if repository context is enabled
+
+README.md
+AGENTS.md
+SECURITY.md
+MIT_LICENSE.md
+HIPPOCRATIC_LICENSE.md
+docs/**/*.md
+
+# Exclude files matched above by prefixing a pattern with !
+# Example: !docs/archive/**
