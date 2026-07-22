@@ -64,7 +64,6 @@ packages/web/vite.config.d.ts
 # Logs
 packages/discord-bot/logs
 logs/
-artifacts/repomix/
 artifacts/sea/
 .tmp-start*.log
 

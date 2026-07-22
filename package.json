@@ -48,9 +48,6 @@
         "test:build": "docker compose -f deploy/compose.yml -f deploy/compose.dev-build.yml build",
         "refactor:lookup": "node scripts/refactor-lookup.cjs",
         "review": "node scripts/review.cjs",
-        "repomix:workflow-trace": "pnpm exec repomix --config tools/repomix/workflow-trace.config.json .",
-        "repomix:docs-proposal": "pnpm exec repomix --config tools/repomix/docs-proposal.config.json .",
-        "repomix:all": "pnpm repomix:workflow-trace && pnpm repomix:docs-proposal",
         "sea:build-launcher": "node tools/sea/build-launcher.mjs",
         "sea:package": "node tools/sea/package-sea.mjs",
         "sea:checksums": "node tools/sea/checksums.mjs",
@@ -90,7 +87,6 @@
         "eslint-plugin-react-hooks": "catalog:",
         "globby": "catalog:",
         "prettier": "catalog:",
-        "repomix": "catalog:",
         "tsx": "catalog:",
         "typescript": "catalog:"
     },
