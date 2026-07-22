@@ -117,16 +117,19 @@ is active. In this pattern:
   flow
 - Preserves fail-open semantics
 
-### TrustGraph governance pass
+### TrustGraph
 
-`TrustGraph` executes as a workflow context step, while keeping
-its predicate-view and provenance mapping as a separate governance pass. In this
-pattern:
+TrustGraph runs as a workflow context step before the response is generated.
+Footnote checks that the request has a clear, allowed user and project scope
+before asking TrustGraph for context.
 
-- Executes through `workflowEngine` as `trustgraph` context integration
-- Preserves scope validation and ownership validation inside TrustGraph ingestion
-- Surfaces bounded TrustGraph metadata/provenance after generation
-- Is documented in [trustgraph.md](./trustgraph.md)
+If the lookup succeeds, Footnote keeps a limited record of the context it used.
+If the lookup fails or times out, Footnote continues without it. TrustGraph does
+not choose the response action or decide when the workflow is finished.
+
+The runtime rules are documented in [trustgraph.md](./trustgraph.md). The next
+repository context branches are tracked in
+[Repository Context and TrustGraph Status](../../trustgraph/repository-context-status.md).
 
 ### Tool-registry path
 

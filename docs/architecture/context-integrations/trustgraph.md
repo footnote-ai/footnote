@@ -118,14 +118,23 @@ Code references:
 - [chatOrchestrator.ts](../../../packages/backend/src/services/chatOrchestrator.ts)
 - [chatService.ts](../../../packages/backend/src/services/chatService.ts)
 
-## Repo-owned data loading
+## Repository context
 
-Footnote may keep small, versioned project facts and generated summaries in the
-repo so they can be loaded into a real TrustGraph deployment.
+A repository may define the files Footnote can load into TrustGraph as project
+context. The planned repo-owned file is `.footnote/context-files`.
 
-This data should stay reviewable, source-linked, and updated outside request
-handling. TrustGraph remains advisory; loaded repo data must not become a
-second policy authority.
+The selection must be easy to review before anything is sent outside the
+repository. The first version will use Git-tracked files, familiar include and
+exclude patterns, stable paths, and clear size limits. Loading and refreshing
+this context happens during setup or through an operator command, not while a
+chat request is running.
+
+TrustGraph can supply extra context, but Footnote still decides how to handle
+the request. If TrustGraph is unavailable, the local chat path continues
+without it.
+
+The current branch sequence and short-term status are tracked in
+[Repository Context and TrustGraph Status](../../trustgraph/repository-context-status.md).
 
 ## Recorded afterward
 
