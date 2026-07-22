@@ -8,15 +8,13 @@
     margin: 0;
 }
 
-.interaction-input-group,
-.interaction-prompt-buttons-row {
+.interaction-input-group {
     display: flex;
     align-items: flex-start;
     gap: 0.55rem;
 }
 
-.interaction-input-wrapper,
-.interaction-prompt-text-button-wrapper {
+.interaction-input-wrapper {
     position: relative;
     flex: 1 1 auto;
 }
@@ -37,9 +35,7 @@
     line-height: 1.5;
 }
 
-.interaction-input:focus,
-.interaction-prompt-text-button:focus-visible,
-.interaction-prompt-shuffle-button:focus-visible {
+.interaction-input:focus {
     outline: 2px solid var(--public-focus);
     outline-offset: 2px;
 }
@@ -68,9 +64,7 @@
     background: color-mix(in srgb, var(--public-rule) 40%, transparent);
 }
 
-.interaction-submit,
-.interaction-prompt-text-button,
-.interaction-prompt-shuffle-button {
+.interaction-submit {
     border: 1px solid var(--public-rule);
     border-radius: 0.3rem;
     color: var(--public-ink);
@@ -93,37 +87,6 @@
 .interaction-submit:disabled {
     cursor: not-allowed;
     opacity: 0.6;
-}
-
-.interaction-prompt-text-button,
-.interaction-prompt-shuffle-button {
-    background: var(--public-paper-raised);
-}
-
-.interaction-prompt-text-button {
-    width: 100%;
-    padding: 0.65rem 0.75rem;
-    text-align: left;
-}
-
-.interaction-prompt-shuffle-button {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    width: 2.6rem;
-}
-
-.interaction-prompt-text-button:hover,
-.interaction-prompt-shuffle-button:hover {
-    border-color: var(--public-focus);
-}
-
-.interaction-prompt-text {
-    font-size: 0.9rem;
-}
-
-.interaction-prompt-shuffle-icon {
-    display: inline-flex;
 }
 
 .interaction-status {
@@ -177,7 +140,16 @@
 .interaction-captcha {
     min-height: 0;
 }
-.interaction-captcha.interaction-captcha-visible {
+
+.interaction-captcha--invisible {
+    position: absolute;
+    width: 0;
+    height: 0;
+    overflow: hidden;
+    pointer-events: none;
+}
+
+.interaction-captcha--managed {
     display: flex;
     flex-direction: column;
     gap: 0.5rem;

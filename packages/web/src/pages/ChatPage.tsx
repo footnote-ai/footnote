@@ -3,7 +3,7 @@
  * @footnote-scope: web
  * @footnote-module: ChatPage
  * @footnote-risk: medium - Chat-page failures can block public access to the backend chat flow.
- * @footnote-ethics: high - The page must distinguish live responses from prepared public examples and preserve provenance cues.
+ * @footnote-ethics: high - The page must preserve provenance cues for live public responses.
  */
 
 import Chat from '@components/Chat';
@@ -19,8 +19,7 @@ const ChatPage = (): JSX.Element => (
             >
                 <h1 id="chat-title">Chat</h1>
                 <p className="public-page__lede">
-                    Ask a question and inspect the response details when they
-                    are available.
+                    Ask anything, and see how Footnote responds!
                 </p>
                 <Chat />
             </section>

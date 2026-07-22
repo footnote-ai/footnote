@@ -106,7 +106,6 @@ const baseAppDeps = (
         createUnhandledRouteHandler(req, res),
     handleRuntimeConfigRequest: createUnhandledRouteHandler,
     handleChatProfilesRequest: createUnhandledRouteHandler,
-    handlePreparedLandingConversationsRequest: createUnhandledRouteHandler,
     handleAdminSettingsSchemaRequest: createUnhandledRouteHandler,
     handleAdminSettingsTemplateRequest: createUnhandledRouteHandler,
     handleAdminSettingsYamlRequest: createUnhandledRouteHandler,
