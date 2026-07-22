@@ -1,15 +1,19 @@
-# Account Identity and Access Roadmap
+# Account Identity and Access Status
 
-This roadmap describes the expected order of work. It stays high-level on
-purpose. It assumes the account direction has already been agreed. Each
-implementation branch gets its own working plan before code changes begin.
+Status: basic account sign-in is planned; implementation has not started.
+
+Last updated: 2026-07-22.
+
+This tracker describes the expected order of work. It stays high-level on
+purpose. Each implementation branch gets its own status document before code
+changes begin.
 
 ## Delivery Approach
 
 Prefer a small branch that produces one working result over separate backend,
 web, and configuration branches that cannot be used on their own.
 
-Each branch:
+Each branch must:
 
 - have one clear user-visible or administrator-visible outcome
 - keep existing public and setup behavior working
@@ -19,6 +23,8 @@ Each branch:
 ## 1. Basic Account Sign-In
 
 Branch: `feat/account-sign-in`
+
+Branch status: [Account Sign-In Status](./account-sign-in.md)
 
 Outcome:
 
@@ -33,10 +39,10 @@ High-level scope:
 - the minimum provider configuration needed to run the flow
 - focused tests and deployment instructions
 
-The working plan for this branch will name the provider used for initial
-testing. authentik is the current self-hosted candidate. The Footnote boundary
-stays based on standard OIDC behavior so a compatible cloud or self-hosted
-provider can be considered later.
+The branch status names the provider used for initial testing. authentik is the
+current self-hosted candidate. The Footnote boundary stays based on standard
+OIDC behavior so a compatible cloud or self-hosted provider can be considered
+later.
 
 Not included:
 
@@ -97,5 +103,5 @@ could be useful someday.
 2. connect signed-in administrators to `/admin`
 3. add regular-user features one concrete need at a time
 
-The [account identity direction](./README.md) remains the source for the shared
-boundaries behind these slices.
+The [account identity direction](../auth/README.md) remains the source for the
+shared boundaries behind these slices.

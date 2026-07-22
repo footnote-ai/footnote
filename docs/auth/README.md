@@ -4,15 +4,16 @@
 
 ## Status
 
-This document records the current direction. It is not a complete implementation
-plan or a final provider decision.
+This document records the stable direction for account identity and access. It
+does not track individual implementation branches.
 
 The first implementation is intended for Footnote administrators. The same
 identity foundation should later support regular users who choose to create an
 account.
 
-See the [high-level delivery roadmap](./roadmap.md) for the intended order of
-small working slices.
+See the [account identity and access status](../status/account-identity-and-access.md)
+for the active delivery sequence. The current branch has its own
+[account sign-in status](../status/account-sign-in.md).
 
 ## Why Footnote Needs This
 
@@ -75,8 +76,8 @@ The intended route meanings are:
 - `/admin`: instance-wide administration
 - `/api/auth/*`: backend login, callback, session, and logout operations
 
-The first login page should use `/account`, even when only administrators can
-sign in. This avoids treating every future account as an administrator account.
+Account login should use `/account`, even when only administrators can sign in.
+This avoids treating every future account as an administrator account.
 
 ### Separate identity from permissions
 
@@ -85,82 +86,8 @@ such as the provider issuer and subject identifier. Names and email addresses
 are useful display information, but they can change and should not be permanent
 identifiers.
 
-Administrator access should be a separate decision. During the first slice,
-every identity admitted to the Footnote application may be treated as an
-administrator. Later work can add roles or other access rules without changing
-the basic login identity.
-
-## First Working Slice
-
-The first slice should prove one small flow:
-
-1. An approved administrator visits `/account`.
-2. They choose **Sign in**.
-3. An OIDC provider confirms their identity.
-4. Footnote creates its own short-lived session.
-5. `/account` shows the signed-in identity.
-6. The administrator can sign out.
-
-Likely backend operations are:
-
-- start login
-- receive the provider callback
-- return the current session identity
-- sign out
-
-Exact endpoint names, library choices, cookie settings, and configuration keys
-belong in the implementation plan. They should not be fixed by this direction
-document before the code path is reviewed.
-
-### Expected limits of the first slice
-
-- Only administrators are admitted.
-- There are no roles or administrator levels.
-- Login does not yet grant access to the admin settings API.
-- Existing setup links and admin-token behavior remain unchanged.
-- Sessions may be temporary and may end when the backend restarts.
-- Public Footnote features continue to work when account login is disabled.
-
-This gives us a real end-to-end login without also changing configuration
-authority.
-
-## Later Slices
-
-Likely follow-up work includes:
-
-- connect authenticated administrator sessions to selected `/api/admin/*`
-  operations
-- add the `/admin` web surface
-- decide how administrator access is assigned and reviewed
-- support regular user accounts on `/account`
-- add account-linked preferences, consent, retention, and deletion controls
-- decide whether sessions need persistent storage
-
-These are directions, not a commitment to one large account system. Each slice
-should be justified by a concrete need.
-
-The roadmap keeps these outcomes on separate branches so the first login change
-does not grow into the full account and administration system.
-
-## Provider Options
-
-### authentik
-
-authentik is still the leading self-hosted candidate because it supports OIDC,
-fits community-run deployments, and can keep identity infrastructure under the
-deployment owner's control.
-
-### Cloud identity services
-
-A cloud provider may reduce setup and maintenance for some deployments. Footnote
-should be able to use one without moving Footnote-owned access, consent, or data
-rules into that provider.
-
-### Other self-hosted providers
-
-Other OIDC-compatible providers should remain possible. We should prefer a
-small standards-based integration over a broad provider abstraction created
-before we have evidence that it is needed.
+Administrator access should be a separate decision. Roles or other access rules
+should be able to change without changing the basic login identity.
 
 ## Relationship To Current Setup Access
 
@@ -180,21 +107,6 @@ account.
 Some implemented setup API names still contain `operator`. Those names describe
 the current contract and should remain accurate in current-system docs until a
 follow-up change renames the code and API together.
-
-## What This Direction Does Not Decide
-
-This direction does not yet choose:
-
-- the first production identity provider
-- an OIDC client library
-- exact configuration keys
-- session storage technology
-- role or permission shapes
-- account database tables
-- consent or retention data models
-- whether every deployment must enable accounts
-
-Those decisions should be made as the relevant working slice is planned.
 
 ## References
 
