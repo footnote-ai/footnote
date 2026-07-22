@@ -8,6 +8,7 @@ work is done.
 
 - [Account identity and access](./account-identity-and-access.md)
 - [Account sign-in](./account-sign-in.md)
+- [GPT-5.6 default rollout](./gpt-5-6-default-rollout-status.md)
 - [Launcher canary releases](./launcher-canary-releases.md)
 - [Repository context and TrustGraph](./repository-context-status.md)
 - [Web search grounding recovery](./web-search-grounding-recovery-status.md)
