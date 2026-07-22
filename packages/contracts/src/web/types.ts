@@ -416,30 +416,6 @@ export type PostChatResponse =
     | ChatImageActionResponse;
 
 /**
- * Public prepared conversation used by the landing page. These rows are
- * curated, reserved content, not user transcript exports.
- *
- * @api.operationId: getPreparedLandingConversations
- * @api.path: GET /api/prepared-conversations/landing
- */
-export type PreparedLandingConversation = {
-    threadId: string;
-    scenarioId: string;
-    question: string;
-    response: ChatMessageActionResponse;
-};
-
-/**
- * Landing prepared conversation list returned by the backend-owned seed store.
- *
- * @api.operationId: getPreparedLandingConversations
- * @api.path: GET /api/prepared-conversations/landing
- */
-export type GetPreparedLandingConversationsResponse = {
-    conversations: PreparedLandingConversation[];
-};
-
-/**
  * One chat profile choice exposed for Discord slash-command model switching.
  *
  * @api.operationId: getChatProfiles

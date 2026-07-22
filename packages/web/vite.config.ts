@@ -70,7 +70,7 @@ const cspPlugin = () => ({
                     const csp = [
                         `frame-ancestors ${normalizedFrameAncestors.join(' ')}`,
                         "default-src 'self'",
-                        "script-src 'self' 'unsafe-inline' 'unsafe-eval' data: blob: https://challenges.cloudflare.com",
+                        "script-src 'self' 'unsafe-inline' data: blob: https://challenges.cloudflare.com",
                         "style-src 'self' 'unsafe-inline' data:",
                         "img-src 'self' data: blob:",
                         "font-src 'self' data:",

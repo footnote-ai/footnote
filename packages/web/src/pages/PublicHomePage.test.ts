@@ -58,26 +58,51 @@ test('public cutover removes the design-lab route', async () => {
     assert.doesNotMatch(appSource, /AskMeAnything/);
 });
 
-test('chat cutover removes the old component name and browser diagnostics', async () => {
-    const [chatSource, embedSource, headerSource, publicStyles] =
-        await Promise.all([
-            readFile(`${webSourceDirectory}components/Chat.tsx`, 'utf8'),
-            readFile(`${pagesDirectory}EmbedPage.tsx`, 'utf8'),
-            readFile(
-                `${webSourceDirectory}components/PublicHeader.tsx`,
-                'utf8'
-            ),
-            readFile(`${webSourceDirectory}styles/public-home.css`, 'utf8'),
-        ]);
+test('chat stays suggestion-free and falls back to an out-of-flow managed challenge', async () => {
+    const [
+        chatSource,
+        chatPageSource,
+        embedSource,
+        headerSource,
+        publicStyles,
+        interactionStyles,
+    ] = await Promise.all([
+        readFile(`${webSourceDirectory}components/Chat.tsx`, 'utf8'),
+        readFile(`${pagesDirectory}ChatPage.tsx`, 'utf8'),
+        readFile(`${pagesDirectory}EmbedPage.tsx`, 'utf8'),
+        readFile(`${webSourceDirectory}components/PublicHeader.tsx`, 'utf8'),
+        readFile(`${webSourceDirectory}styles/public-home.css`, 'utf8'),
+        readFile(`${webSourceDirectory}styles/interaction.css`, 'utf8'),
+    ]);
 
     assert.match(chatSource, /const Chat =/);
     assert.doesNotMatch(chatSource, /AskMeAnything/);
     assert.doesNotMatch(chatSource, /console\./);
+    assert.doesNotMatch(chatSource, /PreparedLandingConversation/);
+    assert.doesNotMatch(chatSource, /getPreparedLandingConversations/);
+    assert.doesNotMatch(chatSource, /currentScenario/);
+    assert.doesNotMatch(chatSource, /language: 'auto'/);
+    assert.match(chatSource, /size: 'invisible'/);
+    assert.match(chatSource, /execution: 'execute'/);
+    assert.match(chatSource, /appearance: 'execute'/);
+    assert.match(chatSource, /size: 'normal'/);
+    assert.match(chatSource, /isManagedChallengeVisible/);
+    assert.match(chatSource, /showManagedChallenge/);
+    assert.match(chatSource, /language: 'en'/);
     assert.match(chatSource, /theme,/);
+    assert.match(
+        chatPageSource,
+        /Ask anything, and see how Footnote responds!/
+    );
     assert.match(embedSource, /<Chat \/>/);
     assert.match(headerSource, /Sign-in is not available yet/);
     assert.doesNotMatch(headerSource, /<Link to="\/">Sign in<\/Link>/);
     assert.match(publicStyles, /\.public-header__unavailable-tooltip/);
+    assert.match(
+        interactionStyles,
+        /\.interaction-captcha--invisible[\s\S]*?position: absolute[\s\S]*?width: 0[\s\S]*?height: 0[\s\S]*?overflow: hidden/
+    );
+    assert.match(interactionStyles, /\.interaction-captcha--managed/);
 });
 
 test('route fallback is a flat, spinner-only loading state', async () => {

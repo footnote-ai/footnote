@@ -6,18 +6,13 @@
  * @footnote-ethics: high - This component brokers live user prompts and transparency metadata in a public-facing context.
  */
 
-import { FormEvent, useEffect, useRef, useState } from 'react';
+import { FormEvent, useCallback, useEffect, useRef, useState } from 'react';
 import { Turnstile, type TurnstileInstance } from '@marsidev/react-turnstile';
 import MarkdownResponse from './MarkdownResponse';
 import ProvenanceFooter from './ProvenanceFooter';
 import type { ResponseMetadata } from '@footnote/contracts/policy';
-import type { PreparedLandingConversation } from '@footnote/contracts/web';
 import { loadRuntimeConfig } from '../config';
 import { api, isApiClientError } from '../utils/api';
-import {
-    shouldAutoFocusAskInput,
-    shouldExecuteTurnstileChallenge,
-} from '../utils/turnstile';
 import { notifyEmbedLayoutChanged } from '../utils/embedHeight';
 import { useTheme } from '../theme';
 
@@ -35,6 +30,7 @@ declare global {
 // Provide a stable fallback response in case the backend is unavailable so the space stays welcoming.
 const FALLBACK_REFLECTION =
     'I was unable to generate a response - please try again later.';
+const INVISIBLE_CHALLENGE_TIMEOUT_MS = 8000;
 
 const Chat = (): JSX.Element => {
     const { theme } = useTheme();
@@ -45,90 +41,17 @@ const Chat = (): JSX.Element => {
     const [isLoading, setIsLoading] = useState(false);
     const [turnstileToken, setTurnstileToken] = useState<string | null>(null);
     const [turnstileError, setTurnstileError] = useState<string | null>(null);
-    const [isTurnstileReady, setIsTurnstileReady] = useState(false);
     const [turnstileKey, setTurnstileKey] = useState(0);
-    const [isTurnstileMounted, setIsTurnstileMounted] = useState(false);
     const [turnstileSiteKey, setTurnstileSiteKey] = useState('');
+    const [isTurnstileMounted, setIsTurnstileMounted] = useState(false);
+    const [isManagedChallengeVisible, setIsManagedChallengeVisible] =
+        useState(false);
     const abortRef = useRef<AbortController | null>(null);
     const inputRef = useRef<HTMLTextAreaElement | null>(null);
     const formRef = useRef<HTMLFormElement | null>(null);
     const turnstileRef = useRef<TurnstileInstance | null>(null);
     const isTurnstileExecutingRef = useRef(false);
     const hasInteractedRef = useRef(false); // Track if user has interacted to prevent initial status flash
-
-    const [preparedScenarios, setPreparedScenarios] = useState<
-        readonly PreparedLandingConversation[]
-    >([]);
-
-    // Random landing scenario selection.
-    const getRandomScenario = (
-        excludedScenarioId?: string
-    ): PreparedLandingConversation | null => {
-        if (preparedScenarios.length === 0) {
-            return null;
-        }
-
-        const candidateScenarios =
-            excludedScenarioId && preparedScenarios.length > 1
-                ? preparedScenarios.filter(
-                      (scenario) => scenario.scenarioId !== excludedScenarioId
-                  )
-                : preparedScenarios;
-
-        return candidateScenarios[
-            Math.floor(Math.random() * candidateScenarios.length)
-        ]!;
-    };
-
-    const [currentScenario, setCurrentScenario] =
-        useState<PreparedLandingConversation | null>(null);
-
-    useEffect(() => {
-        const controller = new AbortController();
-
-        api.getPreparedLandingConversations(controller.signal)
-            .then((payload) => {
-                setPreparedScenarios(payload.conversations);
-                setCurrentScenario(
-                    payload.conversations[
-                        Math.floor(Math.random() * payload.conversations.length)
-                    ] ?? null
-                );
-            })
-            .catch((error) => {
-                if ((error as Error).name !== 'AbortError') {
-                    setPreparedScenarios([]);
-                    setCurrentScenario(null);
-                }
-            });
-
-        return () => controller.abort();
-    }, []);
-
-    const shuffleScenario = () => {
-        setCurrentScenario((previousScenario) =>
-            getRandomScenario(previousScenario?.scenarioId)
-        );
-    };
-
-    const showPreparedScenario = () => {
-        if (!currentScenario) {
-            return;
-        }
-
-        abortRef.current?.abort();
-
-        hasInteractedRef.current = true;
-        setQuestion(currentScenario.question);
-        setStatus('');
-        setIsLoading(false);
-        setAnswer(currentScenario.response.message);
-        setMetadata(currentScenario.response.metadata);
-
-        if (shouldAutoFocusAskInput('prompt-button')) {
-            inputRef.current?.focus();
-        }
-    };
 
     const ensureRuntimeConfigLoaded = async (): Promise<string> => {
         if (
@@ -159,6 +82,7 @@ const Chat = (): JSX.Element => {
 
     // Turnstile tokens are short-lived and single-use. Do not log token values or previews.
     const onTurnstileVerify = (token: string) => {
+        isTurnstileExecutingRef.current = false;
         // Check if using test keys (test keys generate shorter dummy tokens like "XXXX.DUMMY.TOKEN.XXXX")
         const isTestKey =
             turnstileSiteKey.startsWith('1x00000000000000000000') ||
@@ -168,7 +92,6 @@ const Chat = (): JSX.Element => {
         // Validate token - test keys generate shorter tokens, production tokens should be ~200+ chars
         if (!token) {
             setTurnstileError('CAPTCHA token is invalid. Please try again.');
-            setIsTurnstileReady(false);
             setTurnstileToken(null);
             return;
         }
@@ -176,13 +99,11 @@ const Chat = (): JSX.Element => {
         // Only validate length for production keys (test keys use dummy tokens)
         if (!isTestKey && token.length < 50) {
             setTurnstileError('CAPTCHA token is invalid. Please try again.');
-            setIsTurnstileReady(false);
             setTurnstileToken(null);
             return;
         }
 
         setTurnstileToken(token);
-        setIsTurnstileReady(true);
         setTurnstileError(null);
         // Only clear status if it's not an error message (errors should persist until next submission)
         // Check if current status is an error by looking for common error keywords
@@ -199,102 +120,82 @@ const Chat = (): JSX.Element => {
             // Clear non-error status messages
             return '';
         });
-        isTurnstileExecutingRef.current = false;
-        if (shouldAutoFocusAskInput('turnstile-verify')) {
-            inputRef.current?.focus();
-        }
     };
 
-    const onTurnstileError = () => {
+    /** Falls back from the background check without blocking the chat form indefinitely. */
+    const showManagedChallenge = useCallback((): void => {
         isTurnstileExecutingRef.current = false;
-        setTurnstileError('CAPTCHA verification failed. Please try again.');
-        setIsTurnstileReady(false);
+        setIsTurnstileMounted(false);
+        setTurnstileToken(null);
+        setIsManagedChallengeVisible(true);
+        setTurnstileError(
+            'The background check could not finish. Please complete the visible CAPTCHA.'
+        );
+    }, []);
+
+    const onManagedTurnstileError = () => {
+        isTurnstileExecutingRef.current = false;
+        setTurnstileError(
+            'CAPTCHA verification failed. Check Brave Shields for this site, then try again.'
+        );
         setTurnstileToken(null);
     };
 
     const onTurnstileExpire = () => {
         isTurnstileExecutingRef.current = false;
         setTurnstileToken(null);
-        setIsTurnstileReady(false);
-        setTurnstileError('CAPTCHA expired. Please verify again.');
+        setTurnstileError('CAPTCHA expired. Please complete it again.');
     };
 
-    // Execute Turnstile challenge on mount and when widget is reset
-    // Guard execution to when widget is mounted and ready
-    // Fallback: if onLoad doesn't fire (can happen with test keys + invisible mode), try executing after delay
     useEffect(() => {
         if (
-            !isCaptchaDisabled &&
-            turnstileRef.current &&
-            !turnstileError &&
-            !turnstileToken
+            isCaptchaDisabled ||
+            isManagedChallengeVisible ||
+            !isTurnstileMounted ||
+            !turnstileRef.current ||
+            turnstileToken ||
+            isTurnstileExecutingRef.current
         ) {
-            // If widget is mounted, execute immediately
-            if (
-                shouldExecuteTurnstileChallenge('mount', {
-                    isCaptchaDisabled,
-                    hasToken: Boolean(turnstileToken),
-                    hasError: Boolean(turnstileError),
-                    hasWidget: Boolean(turnstileRef.current),
-                    isExecuting: isTurnstileExecutingRef.current,
-                    isMounted: isTurnstileMounted,
-                })
-            ) {
-                const timer = setTimeout(() => {
-                    if (turnstileRef.current) {
-                        isTurnstileExecutingRef.current = true;
-                        turnstileRef.current.execute();
-                        void turnstileRef.current
-                            .getResponsePromise?.()
-                            .catch(() => undefined)
-                            .finally(() => {
-                                isTurnstileExecutingRef.current = false;
-                            });
-                    }
-                }, 100);
-                return () => clearTimeout(timer);
-            } else if (
-                shouldExecuteTurnstileChallenge('fallback', {
-                    isCaptchaDisabled,
-                    hasToken: Boolean(turnstileToken),
-                    hasError: Boolean(turnstileError),
-                    hasWidget: Boolean(turnstileRef.current),
-                    isExecuting: isTurnstileExecutingRef.current,
-                    isMounted: isTurnstileMounted,
-                })
-            ) {
-                // Fallback: if onLoad doesn't fire, try executing after 2 seconds anyway
-                // This handles cases where onLoad callback doesn't fire (test keys + invisible mode)
-                const fallbackTimer = setTimeout(() => {
-                    if (
-                        turnstileRef.current &&
-                        shouldExecuteTurnstileChallenge('fallback', {
-                            isCaptchaDisabled,
-                            hasToken: Boolean(turnstileToken),
-                            hasError: Boolean(turnstileError),
-                            hasWidget: Boolean(turnstileRef.current),
-                            isExecuting: isTurnstileExecutingRef.current,
-                            isMounted: isTurnstileMounted,
-                        })
-                    ) {
-                        try {
-                            isTurnstileExecutingRef.current = true;
-                            turnstileRef.current.execute();
-                        } catch {
-                            isTurnstileExecutingRef.current = false;
-                        }
-                    }
-                }, 2000);
-                return () => clearTimeout(fallbackTimer);
-            }
+            return undefined;
         }
-        return undefined;
+
+        const challengeTimer = window.setTimeout(() => {
+            if (!turnstileRef.current) {
+                return;
+            }
+
+            isTurnstileExecutingRef.current = true;
+            try {
+                turnstileRef.current.execute();
+                const responsePromise =
+                    turnstileRef.current.getResponsePromise?.();
+                if (responsePromise) {
+                    void responsePromise
+                        .catch(showManagedChallenge)
+                        .finally(() => {
+                            isTurnstileExecutingRef.current = false;
+                        });
+                }
+            } catch {
+                showManagedChallenge();
+            }
+        }, 100);
+
+        const fallbackTimer = window.setTimeout(
+            showManagedChallenge,
+            INVISIBLE_CHALLENGE_TIMEOUT_MS
+        );
+
+        return () => {
+            window.clearTimeout(challengeTimer);
+            window.clearTimeout(fallbackTimer);
+        };
     }, [
-        turnstileKey,
         isCaptchaDisabled,
-        hasValidSiteKey,
-        turnstileError,
+        isManagedChallengeVisible,
         isTurnstileMounted,
+        showManagedChallenge,
+        turnstileKey,
         turnstileToken,
     ]);
 
@@ -325,7 +226,14 @@ const Chat = (): JSX.Element => {
 
     useEffect(() => {
         notifyEmbedLayoutChanged('interaction-state-change');
-    }, [answer, isLoading, metadata, status, turnstileError]);
+    }, [
+        answer,
+        isLoading,
+        isManagedChallengeVisible,
+        metadata,
+        status,
+        turnstileError,
+    ]);
 
     const onSubmit = async (event: FormEvent<HTMLFormElement>) => {
         event.preventDefault();
@@ -352,50 +260,13 @@ const Chat = (): JSX.Element => {
             runtimeSiteKey && runtimeSiteKey.trim().length > 0
         );
 
-        // Fallback: trigger execution if token isn't pre-fetched to avoid deadlock
-        let resolvedToken = turnstileToken;
+        const resolvedToken = turnstileToken;
         if (!captchaDisabledForRequest && !resolvedToken) {
-            if (
-                shouldExecuteTurnstileChallenge('submit', {
-                    isCaptchaDisabled: captchaDisabledForRequest,
-                    hasToken: Boolean(resolvedToken),
-                    hasError: Boolean(turnstileError),
-                    hasWidget: Boolean(turnstileRef.current),
-                    isExecuting: isTurnstileExecutingRef.current,
-                    isMounted: isTurnstileMounted,
-                }) &&
-                turnstileRef.current
-            ) {
-                // Execute challenge and wait for token
-                isTurnstileExecutingRef.current = true;
-                turnstileRef.current.execute();
-                try {
-                    // Wait for token with timeout and capture the resolved token
-                    const tokenFromPromise = await Promise.race([
-                        turnstileRef.current.getResponsePromise?.() ||
-                            Promise.resolve(null),
-                        new Promise<string | null>((_, reject) =>
-                            setTimeout(() => reject(new Error('Timeout')), 3000)
-                        ),
-                    ]).catch(() => {
-                        // If timeout or no promise, return null - validation will catch empty token
-                        return null;
-                    });
-                    if (tokenFromPromise) {
-                        resolvedToken = tokenFromPromise;
-                    }
-                } catch {
-                    // Continue - validation will handle empty token
-                } finally {
-                    isTurnstileExecutingRef.current = false;
-                }
+            if (!isManagedChallengeVisible) {
+                showManagedChallenge();
             }
-            // Re-check token after execution attempt
-            if (!resolvedToken) {
-                setStatus('Please complete the CAPTCHA verification.');
-                setIsLoading(false); // Ensure loading state is reset if we return early
-                return;
-            }
+            setStatus('Please complete the visible CAPTCHA verification.');
+            return;
         }
 
         // Abort any in-flight request when a new one starts to avoid race conditions.
@@ -471,12 +342,12 @@ const Chat = (): JSX.Element => {
             // Normalize backend metadata to ResponseMetadata format
             setMetadata(backendMetadata ?? null);
 
-            // Reset Turnstile for next question by forcing re-render
-            // The useEffect hook will automatically re-execute after turnstileKey increments
+            // Turnstile tokens are single-use, so mount a fresh invisible challenge.
             isTurnstileExecutingRef.current = false;
             setTurnstileToken(null);
-            setIsTurnstileReady(false);
-            setIsTurnstileMounted(false); // Reset mount state to trigger re-mount
+            setTurnstileError(null);
+            setIsTurnstileMounted(false);
+            setIsManagedChallengeVisible(false);
             setTurnstileKey((prev) => prev + 1);
         } catch (error) {
             if ((error as Error).name === 'AbortError') {
@@ -497,9 +368,11 @@ const Chat = (): JSX.Element => {
                     setStatus(errorMessage);
                     isTurnstileExecutingRef.current = false;
                     setTurnstileToken(null);
-                    setIsTurnstileReady(false);
-                    setTurnstileError(null); // Clear any widget errors, we're showing API error in status instead
-                    setIsTurnstileMounted(false); // Reset mount state
+                    setIsTurnstileMounted(false);
+                    setIsManagedChallengeVisible(true);
+                    setTurnstileError(
+                        'Please complete the visible CAPTCHA and try again.'
+                    );
                     setTurnstileKey((prev) => prev + 1);
                     return;
                 }
@@ -520,9 +393,11 @@ const Chat = (): JSX.Element => {
                     );
                     isTurnstileExecutingRef.current = false;
                     setTurnstileToken(null);
-                    setIsTurnstileReady(false);
-                    setTurnstileError(null);
-                    setIsTurnstileMounted(false); // Reset mount state
+                    setIsTurnstileMounted(false);
+                    setIsManagedChallengeVisible(true);
+                    setTurnstileError(
+                        'Please complete the visible CAPTCHA and try again.'
+                    );
                     setTurnstileKey((prev) => prev + 1);
                     return;
                 }
@@ -546,9 +421,11 @@ const Chat = (): JSX.Element => {
                     );
                     isTurnstileExecutingRef.current = false;
                     setTurnstileToken(null);
-                    setIsTurnstileReady(false);
-                    setTurnstileError(null);
-                    setIsTurnstileMounted(false); // Reset mount state
+                    setIsTurnstileMounted(false);
+                    setIsManagedChallengeVisible(true);
+                    setTurnstileError(
+                        'Please complete the visible CAPTCHA and try again.'
+                    );
                     setIsLoading(false);
                     return;
                 }
@@ -562,9 +439,6 @@ const Chat = (): JSX.Element => {
             if (abortRef.current === controller) {
                 abortRef.current = null;
                 setIsLoading(false);
-                if (shouldAutoFocusAskInput('submit-cleanup')) {
-                    inputRef.current?.focus();
-                }
             }
         }
     };
@@ -648,12 +522,12 @@ const Chat = (): JSX.Element => {
                         className="interaction-submit"
                         disabled={
                             isLoading ||
-                            (!isCaptchaDisabled && !isTurnstileReady)
+                            (isManagedChallengeVisible && !turnstileToken)
                         }
                         aria-label={
                             isLoading
                                 ? 'Submitting question'
-                                : !isCaptchaDisabled && !isTurnstileReady
+                                : isManagedChallengeVisible && !turnstileToken
                                   ? 'Complete CAPTCHA to submit'
                                   : 'Submit question'
                         }
@@ -662,7 +536,7 @@ const Chat = (): JSX.Element => {
                             <>
                                 <span className="spinner" aria-hidden="true" />
                             </>
-                        ) : !isCaptchaDisabled && !isTurnstileReady ? (
+                        ) : isManagedChallengeVisible && !turnstileToken ? (
                             <span
                                 className="hourglass"
                                 aria-label="Complete CAPTCHA verification"
@@ -675,45 +549,6 @@ const Chat = (): JSX.Element => {
                     </button>
                 </div>
             </form>
-            {currentScenario && (
-                <div className="interaction-prompt-buttons-row">
-                    <div className="interaction-prompt-text-button-wrapper">
-                        <button
-                            type="button"
-                            className="interaction-prompt-text-button"
-                            onClick={showPreparedScenario}
-                            onMouseDown={(e) => e.currentTarget.blur()}
-                            aria-label={`Show prepared example: ${currentScenario.question}`}
-                        >
-                            <span className="interaction-prompt-text">
-                                {currentScenario.question}
-                            </span>
-                        </button>
-                    </div>
-                    <button
-                        type="button"
-                        className="interaction-prompt-shuffle-button"
-                        onClick={shuffleScenario}
-                        onMouseDown={(e) => e.currentTarget.blur()}
-                        aria-label="Shuffle prepared examples"
-                    >
-                        <span className="interaction-prompt-shuffle-icon">
-                            <svg
-                                width="16"
-                                height="16"
-                                viewBox="0 0 24 24"
-                                fill="none"
-                                stroke="currentColor"
-                                strokeWidth="2"
-                                strokeLinecap="round"
-                                strokeLinejoin="round"
-                            >
-                                <path d="M21.5 2v6h-6M2.5 22v-6h6M2 11.5a10 10 0 0 1 18.8-4.3M22 12.5a10 10 0 0 1-18.8 4.2" />
-                            </svg>
-                        </span>
-                    </button>
-                </div>
-            )}
 
             {/* Only show status when there's actual content (error messages, etc.) - spinner is in button during loading */}
             {/* Conditionally render only when we have actual content to avoid empty div taking space */}
@@ -733,50 +568,60 @@ const Chat = (): JSX.Element => {
                     <MarkdownResponse markdown={answer} />
                 </div>
             )}
-            {/* Render Turnstile widget in Invisible mode - requires manual execute() calls for deterministic timing */}
-            {/* Only render if we have a valid site key and CAPTCHA is required */}
-            {hasValidSiteKey && !isCaptchaDisabled && !turnstileError && (
-                <div className="interaction-captcha">
-                    <Turnstile
-                        ref={turnstileRef}
-                        key={turnstileKey}
-                        siteKey={turnstileSiteKey}
-                        onSuccess={onTurnstileVerify}
-                        onError={onTurnstileError}
-                        onExpire={onTurnstileExpire}
-                        onLoad={() => setIsTurnstileMounted(true)}
-                        options={{
-                            theme,
-                            size: 'invisible', // True Invisible widget type
-                            execution: 'execute', // Manual execution control
-                            appearance: 'execute', // Execute challenge, only show UI when executing
-                            language: 'auto',
-                        }}
-                    />
-                </div>
-            )}
-            {!isCaptchaDisabled && turnstileError && (
-                <div
-                    className="interaction-captcha interaction-captcha-visible"
-                    aria-label="Complete CAPTCHA verification to submit your question"
-                >
-                    <Turnstile
-                        key={turnstileKey}
-                        siteKey={turnstileSiteKey}
-                        onSuccess={onTurnstileVerify}
-                        onError={onTurnstileError}
-                        onExpire={onTurnstileExpire}
-                        options={{
-                            theme,
-                            size: 'normal',
-                            language: 'auto',
-                        }}
-                    />
-                    <p className="interaction-error" role="alert">
-                        {turnstileError}
-                    </p>
-                </div>
-            )}
+            {/* The background widget is absolutely positioned so it never reserves layout space. */}
+            {hasValidSiteKey &&
+                !isCaptchaDisabled &&
+                !isManagedChallengeVisible && (
+                    <div
+                        className="interaction-captcha interaction-captcha--invisible"
+                        aria-hidden="true"
+                    >
+                        <Turnstile
+                            ref={turnstileRef}
+                            key={turnstileKey}
+                            siteKey={turnstileSiteKey}
+                            onSuccess={onTurnstileVerify}
+                            onError={showManagedChallenge}
+                            onExpire={onTurnstileExpire}
+                            onLoad={() => setIsTurnstileMounted(true)}
+                            options={{
+                                theme,
+                                size: 'invisible',
+                                execution: 'execute',
+                                appearance: 'execute',
+                                language: 'en',
+                            }}
+                        />
+                    </div>
+                )}
+            {/* Do not mount the managed widget until the invisible challenge fails. */}
+            {hasValidSiteKey &&
+                !isCaptchaDisabled &&
+                isManagedChallengeVisible && (
+                    <div
+                        className="interaction-captcha interaction-captcha--managed"
+                        aria-label="Complete CAPTCHA verification to submit your question"
+                    >
+                        <Turnstile
+                            key={turnstileKey}
+                            siteKey={turnstileSiteKey}
+                            onSuccess={onTurnstileVerify}
+                            onError={onManagedTurnstileError}
+                            onExpire={onTurnstileExpire}
+                            options={{
+                                theme,
+                                size: 'normal',
+                                language: 'en',
+                                refreshExpired: 'auto',
+                            }}
+                        />
+                        {turnstileError && (
+                            <p className="interaction-error" role="alert">
+                                {turnstileError}
+                            </p>
+                        )}
+                    </div>
+                )}
             {answer && metadata && <ProvenanceFooter metadata={metadata} />}
         </div>
     );

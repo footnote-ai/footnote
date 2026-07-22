@@ -817,10 +817,6 @@
                 {
                     "content": "Keep this top-level so contributors can find the API contract quickly from anywhere in the wiki.",
                     "author": "Maintainer"
-                },
-                {
-                    "content": "Include GET /api/prepared-conversations/landing as the curated web-example read contract, with its runtime schema and code references. Keep it distinct from POST /api/chat.",
-                    "author": "Maintainer"
                 }
             ]
         },
