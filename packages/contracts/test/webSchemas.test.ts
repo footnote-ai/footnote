@@ -24,7 +24,6 @@ import {
     PutAdminSettingsYamlResponseSchema,
     GetIncidentResponseSchema,
     GetIncidentsResponseSchema,
-    GetPreparedLandingConversationsResponseSchema,
     InternalImageStreamEventSchema,
     PostInternalImageDescriptionTaskRequestSchema,
     PostInternalImageDescriptionTaskResponseSchema,
@@ -61,7 +60,6 @@ import type {
     GetAdminSettingsSchemaResponse,
     GetIncidentResponse,
     GetIncidentsResponse,
-    GetPreparedLandingConversationsResponse,
     PutAdminSettingsYamlResponse,
     PostInternalImageGenerateResponse,
     PostInternalImageResponse,
@@ -1486,48 +1484,6 @@ test('GetTraceApiResponseSchema accepts both live and stale trace payloads', () 
             metadata: baseMetadata,
         }).success,
         true
-    );
-});
-
-test('GetPreparedLandingConversationsResponseSchema accepts reserved message responses', () => {
-    const payload: GetPreparedLandingConversationsResponse = {
-        conversations: [
-            {
-                threadId: 'reserved-landing-what-is-footnote',
-                scenarioId: 'what-is-footnote',
-                question: 'What is Footnote?',
-                response: {
-                    action: 'message',
-                    message: 'Footnote is a transparency-focused AI framework.',
-                    modality: 'text',
-                    metadata: {
-                        ...baseMetadata,
-                        responseId: 'prepared-landing-what-is-footnote',
-                    },
-                },
-            },
-        ],
-    };
-
-    assert.equal(
-        GetPreparedLandingConversationsResponseSchema.safeParse(payload)
-            .success,
-        true
-    );
-    assert.equal(
-        GetPreparedLandingConversationsResponseSchema.safeParse({
-            conversations: [
-                {
-                    ...payload.conversations[0],
-                    response: {
-                        action: 'react',
-                        reaction: '👍',
-                        metadata: null,
-                    },
-                },
-            ],
-        }).success,
-        false
     );
 });
 

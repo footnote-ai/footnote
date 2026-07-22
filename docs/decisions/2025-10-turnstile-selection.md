@@ -21,7 +21,7 @@ Candidate solutions evaluated:
 ## 2. Decision
 
 **Cloudflare Turnstile** will be implemented as the default verification mechanism for all public web interactions requiring human validation.  
-Turnstile will operate in _Invisible mode_ (`size: 'invisible'`, `execution: 'execute'`), which executes challenges silently without visible UI, providing seamless user experience with no layout impact and deterministic token timing through manual execution control.
+Turnstile will run an invisible challenge by default. If that background challenge errors or times out, Footnote will replace it with a visible managed widget so the user can complete verification directly.
 
 ---
 
@@ -56,24 +56,25 @@ Turnstile verifies _browser integrity_ rather than _personal identity_, aligning
 
 ## 6. Implementation Notes
 
-**Mode Selection: Invisible Widget Type**
+**Mode Selection: Invisible With Managed Fallback**
 
-- **Chosen Mode**: Cloudflare's dedicated "Invisible" widget type with `size: 'invisible'` and `execution: 'execute'` for manual control.
-- **Why Invisible Widget**: Provides seamless UX with no visible UI, zero layout impact, and deterministic token timing through manual `execute()` calls. This gives precise control over when challenges run (on mount, after form submission, etc.).
+- **Chosen Mode**: Cloudflare's invisible widget with manual execution, followed by a normal-size managed widget only after failure.
+- **Why Hybrid Mode**: The common path stays silent and preserves the page layout. Privacy-focused browsers still have a visible recovery path when the background challenge cannot finish.
 - **Implementation Details**:
-    - Widget type must be set to "Invisible" in Cloudflare dashboard
-    - Uses `ref` to access `TurnstileInstance` for manual `execute()` calls
-    - Executes on mount via `useEffect` hook with `onLoad` callback to ensure widget readiness
-    - Includes fallback execution in `onSubmit()` if token isn't pre-fetched (prevents deadlock)
-    - Re-executes after token consumption and on errors
-    - Error fallback shows visible widget (normal size, default appearance) for user retry
-- **Technical Constraints**: Invisible widgets never show UI—errors must be handled via custom styling and fallback to visible widget when needed. Execution timing must be carefully managed to ensure tokens are ready when needed.
+    - Uses `onSuccess` to store the token before enabling submission
+    - Executes the invisible widget after it reports that it has loaded
+    - Falls back on widget error, execution rejection, timeout, or rejected server verification
+    - Does not mount the managed widget until fallback is required
+    - Keeps the invisible widget absolutely positioned at zero size so it never participates in layout
+    - Uses an explicit English language setting instead of browser auto-detection
+    - Shows a direct Brave Shields hint if the challenge reports an error
+- **Technical Constraints**: Browser privacy protections can still block Cloudflare resources. The managed fallback must remain absent from the document flow until needed, then stay visible long enough for the user to retry.
 - **Token Characteristics**:
     - Production tokens: ~200+ characters
     - Single-use only
     - 5-minute expiry
-    - Generated on manual `execute()` call
-- **Error Handling**: When Invisible widget errors occur, the code falls back to showing a visible Managed mode widget (same site key, different configuration) to allow user retry. Custom error styling maintains consistent UX.
+    - Generated when either widget completes
+- **Error Handling**: Invisible failures mount the managed fallback. Managed-widget errors remain visible beside the challenge so users can adjust site-level browser protections and retry.
 
 ---
 

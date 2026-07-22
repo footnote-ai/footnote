@@ -4,7 +4,7 @@
     "type": "module",
     "main": "dist/server.js",
     "scripts": {
-        "build": "tsc -b tsconfig.json && node -e \"const fs=require('node:fs'); fs.mkdirSync('dist/data',{recursive:true}); fs.copyFileSync('src/data/landingScenarioFixtures.json','dist/data/landingScenarioFixtures.json');\""
+        "build": "tsc -b tsconfig.json"
     },
     "dependencies": {
         "@footnote/agent-runtime": "workspace:*",

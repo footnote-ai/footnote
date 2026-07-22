@@ -45,7 +45,6 @@ import { logger } from './utils/logger.js';
 import { createVoltAgentLogger } from './utils/voltagentLogger.js';
 import { createChatHandler } from './handlers/chat.js';
 import { createTraceHandlers } from './handlers/trace.js';
-import { createPreparedConversationsHandler } from './handlers/preparedConversations.js';
 import { createIncidentHandlers } from './handlers/incidents.js';
 import { createRuntimeConfigHandler } from './handlers/config.js';
 import { createAdminSettingsHandlers } from './handlers/adminSettings.js';
@@ -70,7 +69,6 @@ import { resolveExecutionContractTrustGraphRuntimeOptions } from './services/exe
 import { createModelProfileResolver } from './services/modelProfileResolver.js';
 import { createSetupBootstrapService } from './services/setupBootstrap.js';
 import { settingsSpecEntries } from './config/settings-spec.js';
-import { loadPreparedLandingConversationSeeds } from './data/preparedLandingConversations.js';
 
 /**
  * @footnote-logger: openAiRealtimeVoiceRuntime
@@ -164,15 +162,6 @@ const initializeServices = () => {
     try {
         // Initialize trace storage even when OpenAI is disabled.
         traceStore = createTraceStore();
-        try {
-            traceStore.seedReservedLandingConversations(
-                loadPreparedLandingConversationSeeds()
-            );
-        } catch (error) {
-            logger.error(
-                `Failed to seed prepared landing conversations: ${error instanceof Error ? error.message : String(error)}`
-            );
-        }
         configureTraceMetadataMirror(
             createLangfuseMetadataMirrorExporter(
                 runtimeConfig.langfuseMetadataMirror
@@ -521,11 +510,6 @@ const handleRuntimeConfigRequest = createRuntimeConfigHandler({
     isSetupRequiredNow: setupBootstrapService.isSetupRequiredNow,
 });
 const handleChatProfilesRequest = createChatProfilesHandler({ logRequest });
-const { handlePreparedLandingConversationsRequest } =
-    createPreparedConversationsHandler({
-        traceStore,
-        logRequest,
-    });
 const {
     handleAdminSettingsSchemaRequest,
     handleAdminSettingsTemplateRequest,
@@ -655,7 +639,6 @@ const app = createExpressApp({
     handleTraceCardAssetRequest,
     handleRuntimeConfigRequest,
     handleChatProfilesRequest,
-    handlePreparedLandingConversationsRequest,
     handleAdminSettingsSchemaRequest,
     handleAdminSettingsTemplateRequest,
     handleAdminSettingsYamlRequest,
