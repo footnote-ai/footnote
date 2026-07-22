@@ -43,6 +43,9 @@ detail once you have the main runtime shape in mind.
 
 ## Subsystem Notes
 
+- [Public Web Surfaces](./public-web-surfaces.md): route ownership, prepared
+  homepage content, shared live chat, and embed boundaries.
+
 - [Admin Settings API](./admin-settings-architecture.md): trusted YAML settings
   management API (`/api/admin/*`), auth/ETag semantics, and planned admin
   surface direction.
