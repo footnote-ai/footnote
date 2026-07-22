@@ -18,15 +18,19 @@ Do not add migrations, backfills, or compatibility layers unless the user asks.
 ## What This Repo Is
 
 Footnote is a transparency- and provenance-focused AI framework.
-Main surfaces:
 
-- `packages/backend`
-- `packages/discord-bot`
-- `packages/web`
-- `packages/contracts`
-- `packages/api-client`
-- `packages/agent-runtime`
-- `packages/prompts`
+## Package Roles
+
+- `packages/backend`: Public runtime and HTTP boundary for web and Discord. Owns orchestration, persistence, and LLM cost recording.
+- `packages/discord-bot`: Discord interface adapter. Presents backend-owned decisions without becoming the authority for Footnote semantics.
+- `packages/web`: Browser interface. Displays backend-owned provenance, trace, review, incident, and cost data.
+- `packages/contracts`: Serializable shared schemas, types, and pure contract helpers. Do not add application orchestration here.
+- `packages/api-client`: Typed transport for backend APIs. Do not duplicate backend policy or authority.
+- `packages/agent-runtime`: Framework- and provider-specific runtime adapters. Keep Footnote governance semantics outside adapters.
+- `packages/prompts`: Prompt defaults, composition, and registry behavior.
+- `packages/config-spec`: Shared environment, settings, and bot-profile schemas and templates.
+- `packages/launcher-core`: Shared setup, bootstrap, settings, browser, and process-launching behavior.
+- `packages/launcher-cli`: Command-line interface built on launcher-core.
 
 ## Non-Negotiables
 
@@ -61,22 +65,26 @@ For API boundary changes, keep links in sync:
 - code annotations: `@api.operationId` and `@api.path`
 - OpenAPI refs: `x-codeRefs` in `docs/api/openapi.yaml`
 
-## Validation Commands
+## Task Completion Requirements
 
-After edits:
-
-- `pnpm lint:fix`
-
-Before final handoff:
-
-- `pnpm lint`
-
-Conditional (must explain if skipped):
-
-- `pnpm validate-footnote-tags`
-- `pnpm validate-openapi-links` (API boundary changes)
-- `pnpm review` (required for review-ready code changes; explain if skipped)
-- `pnpm test:build` (required for startup, provider, env, deploy, or runtime packaging impact; explain if skipped)
+- Keep local verification focused on the files, packages, and behavior changed.
+- Run the smallest relevant test set.
+    - Use `pnpm exec tsx --test <test-files>` for focused tests.
+    - Backend behavior changes must add or update focused tests and run them.
+- Run `pnpm format:write` after edits.
+- Run `pnpm review --changed-only` before final handoff.
+- Build each affected package when public types, imports, exports, or build output change: `pnpm --filter @footnote/<package> build`.
+- Do not routinely run the full `pnpm review`, workspace build, or Docker build locally. CI runs `pnpm review` and `pnpm -r build`.
+- Run these additional checks when applicable:
+    - API boundary changes: `pnpm validate-openapi-links`.
+    - Startup, provider, environment, deployment, or runtime packaging changes: `pnpm test:build`.
+    - High-risk work or an explicit user request: full `pnpm review` and workspace build.
+    - Non-trivial structural refactors: include 1-2 example evidence links using `pnpm refactor:lookup`.
+- After a user-visible web behavior change, run one integrated browser smoke test of the affected flow when the environment supports it.
+    - Verify the integrated behavior, not only a component or utility test.
+    - If browser verification is unavailable, say so clearly.
+- Reuse an existing development environment when practical. Stop servers, watchers, containers, and other long-running verification processes when finished.
+- Report the commands run. If a required check could not run, state why.
 
 ## Working Style
 
@@ -85,7 +93,6 @@ Conditional (must explain if skipped):
 - If the task starts touching multiple concepts, packages, or behavior surfaces, stop, report the scope expansion, and wait for confirmation before continuing.
 - Follow the user’s requested change, but preserve existing project boundaries unless the prompt explicitly asks to change them. If the prompt appears to conflict with core Footnote semantics, stop and ask before rewriting those semantics.
 - Use repo code/docs as primary context; use MCP/external tools only to verify third-party APIs, UI behavior, secrets, or issue state.
-- For non-trivial structural refactors, include 1-2 example evidence links using `pnpm refactor:lookup`.
 - Do not invent runtime facts, command output, or test results.
 - If a check was not run, say that clearly.
 
