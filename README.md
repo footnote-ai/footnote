@@ -35,8 +35,8 @@ Run from the source code:
 
 Prerequisites:
 
-- Node.js 22+
-- `pnpm` (`pnpm@10.27.0`+)
+- Node.js 22.13+
+- `pnpm` (`pnpm@11.16.0`+)
 
 Clone the repo and start with `pnpm start`
 
