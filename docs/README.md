@@ -38,8 +38,8 @@ The web package uses a layered stylesheet entrypoint at
 
 - [Architecture](./architecture/README.md): current system shape, boundaries,
   and reading order.
-- [Account Identity and Access](./auth/README.md): provider-neutral login
-  direction and high-level delivery roadmap.
+- [Account Identity and Access](./auth/README.md): stable, provider-neutral
+  identity and access direction.
 - [CI](./ci/README.md): workflow map, what checks run, and how to debug CI
   failures.
 - [Decisions](./decisions/): durable technical choices and why they were made.
