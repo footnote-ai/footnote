@@ -174,7 +174,9 @@ Likely next steps, but not committed in this branch:
 
 1. backend-owned admin web page for raw YAML read/validate/save flow
 2. schema-driven form editing on top of existing schema endpoint
-3. stronger operator authn/authz (for example OIDC-backed identities and roles)
+3. authenticated administrator access built on the provider-neutral account
+   identity direction described in
+   [Account Identity and Access](../auth/README.md)
 4. persistent audit log once admin action surface grows
 5. optional restart orchestration endpoint, gated by deployment policy
 

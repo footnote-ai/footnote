@@ -49,6 +49,9 @@ detail once you have the main runtime shape in mind.
 - [First-Setup Flow](./first-setup-flow.md): bootstrap link/session flow used
   when `footnote.yaml` is missing, including setup-route gating and first-write
   sentinel behavior.
+- [Account Identity and Access](../auth/README.md):
+  proposed provider-neutral login direction for administrators and future user
+  accounts.
 - [Footnote and Common Agentic Patterns](./footnote-and-common-agentic-patterns.md):
   external-pattern comparison and fit.
 - [Footnote Annotations](./footnote-annotations.md): code annotation conventions.
