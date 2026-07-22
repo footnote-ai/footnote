@@ -1,6 +1,7 @@
 # Repository Context and TrustGraph Status
 
-Status: direction agreed; the next branches are not implemented yet.
+Status: repository context selection and preview are implemented; TrustGraph
+loading is not implemented yet.
 
 Last updated: 2026-07-22.
 
@@ -27,6 +28,11 @@ Footnote already has a guarded TrustGraph lookup path. It can call an outside
 service for extra context, record what happened, and continue without that
 context if the service is unavailable.
 
+Repositories can now define eligible context files through
+`.footnote/context-files` and preview the safe, tracked selection with
+`pnpm context:repo:list`. Repository context is not enabled or loaded by
+default. The resolver does not read file contents or contact TrustGraph.
+
 The repository-loading test is still limited. It uses a small, hand-written
 file at `docs/trustgraph/repo-snapshot.json`. It does not yet read the
 repository's real documentation or connect directly to TrustGraph's document
@@ -46,17 +52,19 @@ The agreed location is:
 The file will use familiar include and exclude patterns:
 
 ```gitignore
-# Files available as repository context
+# Files selected if repository context is enabled
 README.md
 AGENTS.md
-docs/**/*.{md,mdx,txt}
+SECURITY.md
+MIT_LICENSE.md
+HIPPOCRATIC_LICENSE.md
+docs/**/*.md
 
-# Remove files matched above
-!docs/archive/**
-!docs/generated/**
+# Exclude files matched above by prefixing a pattern with !
+# Example: !docs/archive/**
 ```
 
-The first version should:
+The first version now does the following:
 
 - use `globby` for pattern matching
 - consider Git-tracked files only
@@ -74,8 +82,9 @@ source links.
 
 ### 1. Choose repository context files
 
-Add `.footnote/context-files`, the file resolver, tests, and a command that
-lists the selected files. This branch does not contact TrustGraph.
+Implemented on `feature/repository-context-files`: `.footnote/context-files`,
+the file resolver, tests, and a command that lists the selected files. This
+work does not contact TrustGraph.
 
 Done when a contributor can review one stable list of repository context files.
 
