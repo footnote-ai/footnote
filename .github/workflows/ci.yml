@@ -9,6 +9,9 @@ on:
 permissions:
     contents: read
 
+env:
+    LAUNCHER_CANARY_BASE_VERSION: '0.2.0'
+
 jobs:
     validate:
         runs-on: ubuntu-latest
@@ -28,6 +31,156 @@ jobs:
             - run: pnpm install --frozen-lockfile
             - run: pnpm review
             - run: pnpm -r build
+
+    launcher_changes:
+        name: Detect launcher canary changes
+        if: github.event_name == 'push'
+        runs-on: ubuntu-latest
+        outputs:
+            should_package: ${{ steps.detect.outputs.should_package }}
+        steps:
+            - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
+              with:
+                  fetch-depth: 0
+                  persist-credentials: false
+
+            - id: detect
+              name: Match launcher packaging inputs
+              shell: bash
+              env:
+                  BEFORE_SHA: ${{ github.event.before }}
+                  AFTER_SHA: ${{ github.sha }}
+              run: |
+                  set -uo pipefail
+
+                  should_package=true
+                  if [[ -z "$BEFORE_SHA" || "$BEFORE_SHA" =~ ^0+$ ]]; then
+                      echo "No usable previous commit was provided; packaging the launcher."
+                  elif ! git cat-file -e "${BEFORE_SHA}^{commit}" 2>/dev/null; then
+                      echo "Previous commit $BEFORE_SHA is unavailable; packaging the launcher."
+                  elif changed_files="$(git diff --name-only "$BEFORE_SHA" "$AFTER_SHA")"; then
+                      should_package=false
+                      while IFS= read -r path; do
+                          case "$path" in
+                              .github/workflows/ci.yml|.github/workflows/launcher-package.yml|.github/workflows/launcher-release.yml|.github/workflows/launcher-sea-spike.yml|package.json|pnpm-lock.yaml|pnpm-workspace.yaml|tsconfig.json|packages/contracts/*|packages/config-spec/*|packages/launcher-core/*|packages/launcher-cli/*|tools/sea/*)
+                                  should_package=true
+                                  echo "Launcher packaging input changed: $path"
+                                  break
+                                  ;;
+                          esac
+                      done <<< "$changed_files"
+                  else
+                      echo "Could not compare $BEFORE_SHA with $AFTER_SHA; packaging the launcher."
+                  fi
+
+                  echo "should_package=$should_package" >> "$GITHUB_OUTPUT"
+
+    launcher_canary_package:
+        name: Package launcher canary
+        needs: [validate, launcher_changes]
+        if: ${{ github.event_name == 'push' && needs.launcher_changes.outputs.should_package == 'true' }}
+        permissions:
+            contents: read
+        concurrency:
+            group: launcher-canary-package
+            cancel-in-progress: true
+        uses: ./.github/workflows/launcher-package.yml
+
+    launcher_canary_publish:
+        name: Publish launcher canary
+        needs: [launcher_changes, launcher_canary_package]
+        if: ${{ github.event_name == 'push' && needs.launcher_changes.outputs.should_package == 'true' }}
+        permissions:
+            contents: write
+        concurrency:
+            group: launcher-canary-publish
+            cancel-in-progress: false
+        runs-on: ubuntu-latest
+        steps:
+            - id: eligibility
+              name: Confirm canary is current and version base is open
+              shell: bash
+              env:
+                  GH_TOKEN: ${{ github.token }}
+                  EXPECTED_SHA: ${{ github.sha }}
+                  STABLE_TAG: v${{ env.LAUNCHER_CANARY_BASE_VERSION }}
+              run: |
+                  set -euo pipefail
+
+                  current_sha="$(gh api "repos/${GITHUB_REPOSITORY}/git/ref/heads/main" --jq '.object.sha')"
+                  if [[ "$current_sha" != "$EXPECTED_SHA" ]]; then
+                      echo "publish=false" >> "$GITHUB_OUTPUT"
+                      echo "Skipping launcher canary because main advanced from $EXPECTED_SHA to $current_sha." | tee -a "$GITHUB_STEP_SUMMARY"
+                      exit 0
+                  fi
+
+                  stable_ref_count="$(
+                      gh api "repos/${GITHUB_REPOSITORY}/git/matching-refs/tags/${STABLE_TAG}" \
+                          --jq "[.[] | select(.ref == \"refs/tags/${STABLE_TAG}\")] | length"
+                  )"
+                  if [[ "$stable_ref_count" != "0" ]]; then
+                      echo "::error::Stable tag $STABLE_TAG already exists. Advance LAUNCHER_CANARY_BASE_VERSION before publishing another canary."
+                      exit 1
+                  fi
+
+                  echo "publish=true" >> "$GITHUB_OUTPUT"
+
+            - name: Download launcher artifacts
+              if: steps.eligibility.outputs.publish == 'true'
+              uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+              with:
+                  path: artifacts/sea
+
+            - name: Verify release assets and checksums
+              if: steps.eligibility.outputs.publish == 'true'
+              shell: bash
+              run: |
+                  set -euo pipefail
+
+                  mapfile -t binaries < <(
+                      find artifacts/sea -type f -name 'footnote-*' ! -name '*.sha256' | sort
+                  )
+                  mapfile -t checksum_files < <(
+                      find artifacts/sea -type f -name 'footnote-*.sha256' | sort
+                  )
+
+                  if [[ "${#binaries[@]}" -ne 3 || "${#checksum_files[@]}" -ne 3 ]]; then
+                      echo "::error::Expected 3 launcher binaries and 3 checksum files, found ${#binaries[@]} binaries and ${#checksum_files[@]} checksum files."
+                      find artifacts/sea -type f -print
+                      exit 1
+                  fi
+
+                  for checksum_file in "${checksum_files[@]}"; do
+                      checksum_dir="$(dirname "$checksum_file")"
+                      checksum_name="$(basename "$checksum_file")"
+                      (cd "$checksum_dir" && sha256sum --check "$checksum_name")
+                  done
+
+            - id: release
+              name: Publish immutable launcher canary
+              if: steps.eligibility.outputs.publish == 'true'
+              uses: softprops/action-gh-release@3d0d9888cb7fd7b750713d6e236d1fcb99157228
+              with:
+                  tag_name: v${{ env.LAUNCHER_CANARY_BASE_VERSION }}-canary.${{ github.run_number }}
+                  name: Footnote v${{ env.LAUNCHER_CANARY_BASE_VERSION }} Canary ${{ github.run_number }}
+                  body: |
+                      Automated launcher preview for commit ${{ github.sha }}.
+
+                      Source: ${{ github.server_url }}/${{ github.repository }}/commit/${{ github.sha }}
+                      Workflow: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+                  target_commitish: ${{ github.sha }}
+                  prerelease: true
+                  make_latest: false
+                  files: artifacts/sea/**/footnote-*
+                  fail_on_unmatched_files: true
+
+            - name: Record canary release
+              if: steps.eligibility.outputs.publish == 'true'
+              shell: bash
+              env:
+                  CANARY_TAG: v${{ env.LAUNCHER_CANARY_BASE_VERSION }}-canary.${{ github.run_number }}
+              run: |
+                  echo "Published [$CANARY_TAG](${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/releases/tag/${CANARY_TAG}) for $GITHUB_SHA." >> "$GITHUB_STEP_SUMMARY"
 
     docker:
         runs-on: ubuntu-latest

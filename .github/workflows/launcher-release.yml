@@ -13,35 +13,12 @@ jobs:
     build:
         permissions:
             contents: read
-        strategy:
-            fail-fast: false
-            matrix:
-                os: [ubuntu-latest, macos-latest, windows-latest]
-        runs-on: ${{ matrix.os }}
-        steps:
-            - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
-              with:
-                  persist-credentials: false
-            - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
-              with:
-                  node-version: 22
-            - run: corepack enable
-            - run: corepack prepare pnpm@11.16.0 --activate
-            - run: pnpm install --frozen-lockfile
-            - run: pnpm sea:build-launcher
-            - run: pnpm sea:package
-            - run: pnpm sea:verify
-
-            - name: Upload platform artifacts
-              uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
-              with:
-                  name: sea-${{ runner.os }}-${{ runner.arch }}
-                  path: artifacts/sea
+        uses: ./.github/workflows/launcher-package.yml
 
     publish:
         permissions:
             contents: write
-        if: startsWith(github.ref, 'refs/tags/')
+        if: startsWith(github.ref, 'refs/tags/') && !contains(github.ref_name, '-')
         needs: build
         runs-on: ubuntu-latest
         steps:
@@ -53,3 +30,4 @@ jobs:
             - uses: softprops/action-gh-release@3d0d9888cb7fd7b750713d6e236d1fcb99157228
               with:
                   files: artifacts/sea/**/footnote-*
+                  fail_on_unmatched_files: true
