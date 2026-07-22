@@ -2,8 +2,9 @@
 
 **Branch:** `agent/nightly-prereleases`
 
-**Status:** Implemented and locally verified on the branch. Pull request
-verification and the first `main` canary are still pending.
+**Status:** Implemented and verified locally and in draft PR
+[#449](https://github.com/footnote-ai/footnote/pull/449). The first `main`
+canary is still pending.
 
 **Last updated:** 2026-07-22
 
@@ -123,12 +124,16 @@ Local verification completed on 2026-07-22 with the Windows SEA build and
 verification commands, the full workspace review and build, the server Docker
 build, and `actionlint` across the GitHub workflows.
 
+Draft PR #449 verified the shared SEA packaging workflow and launcher checks on
+Linux, macOS, and Windows. Main validation, the server Docker build, and code
+scanning passed. Canary change detection, packaging, and publishing were skipped
+on the pull request, and no canary tag or release was created.
+
 Remaining rollout work:
 
-1. Complete pull request checks, including the three-platform SEA spike.
-2. Merge the branch and inspect the first `main` canary.
-3. Record the release link and evidence below.
-4. Review release volume after real use, then document a retention policy if
+1. Merge the branch and inspect the first `main` canary.
+2. Record the release link and evidence below.
+3. Review release volume after real use, then document a retention policy if
    old canaries become noisy.
 
 ## Out of Scope For The First Slice
@@ -153,7 +158,10 @@ Remaining rollout work:
 
 ## First Release Evidence
 
-Pending the first launcher-relevant run on `main`.
+PR validation: [draft PR #449](https://github.com/footnote-ai/footnote/pull/449)
+at implementation commit `0dce2aa3`.
+
+Release evidence is pending the first launcher-relevant run on `main`.
 
 ## Related Docs
 
