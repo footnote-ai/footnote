@@ -47,4 +47,5 @@ The web package uses a layered stylesheet entrypoint at
 - [Work Status](./status/index.md): current implementation trackers and next steps.
 - [API](./api/README.md): OpenAPI source, operation mapping, and code-linking
   rules.
-- [AI](./ai/README.md): contributor workflow for AI-assisted changes.
+- [AI](./ai/README.md): contributor workflow and the project's public
+  [AI use disclosure](./ai/ai-use-disclosure.md).

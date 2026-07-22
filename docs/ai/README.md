@@ -3,6 +3,9 @@
 This page is for people working in the Footnote repo.
 It explains how to use AI tools responsibly and how to review AI-generated changes.
 
+For a public account of how AI is used to build Footnote, including the limits
+of human review, see the [AI use disclosure](./ai-use-disclosure.md).
+
 ## Audience
 
 - New contributors
