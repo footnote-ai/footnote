@@ -1,6 +1,6 @@
 # GPT-5.6 Default Rollout Status
 
-Status: implementation in progress across focused worktrees.
+Status: focused implementations integrated; verification in progress.
 
 Last updated: 2026-07-22.
 
@@ -90,13 +90,13 @@ omits the field and records a structured diagnostic without blocking execution.
 
 ## Worktrees
 
-| Workstream         | Branch                             | Status      | Ownership                                      |
-| ------------------ | ---------------------------------- | ----------- | ---------------------------------------------- |
-| Integration        | `agent/gpt-5-6-integration`        | in progress | tracker, integration, final validation         |
-| Catalog/defaults   | `agent/gpt-5-6-catalog-defaults`   | in progress | models, profiles, defaults, OpenAPI            |
-| Runtime management | `agent/gpt-5-6-runtime-management` | queued      | reasoning behavior and safety identifiers      |
-| Cost accounting    | `agent/gpt-5-6-cost-accounting`    | in progress | pricing, usage, completeness, applied rules    |
-| Prompt guidance    | `agent/gpt-5-6-prompt-guidance`    | in progress | planner prompt split and focused prompt review |
+| Workstream         | Branch                             | Status     | Ownership                                      |
+| ------------------ | ---------------------------------- | ---------- | ---------------------------------------------- |
+| Integration        | `agent/gpt-5-6-integration`        | verifying  | tracker, integration, final validation         |
+| Catalog/defaults   | `agent/gpt-5-6-catalog-defaults`   | integrated | models, profiles, defaults, OpenAPI            |
+| Runtime management | `agent/gpt-5-6-runtime-management` | integrated | reasoning behavior and safety identifiers      |
+| Cost accounting    | `agent/gpt-5-6-cost-accounting`    | integrated | pricing, usage, completeness, applied rules    |
+| Prompt guidance    | `agent/gpt-5-6-prompt-guidance`    | integrated | planner prompt split and focused prompt review |
 
 The integration branch receives focused commits in this order: catalog,
 runtime, costs, then prompts. Runtime work begins after the shared catalog and
@@ -192,3 +192,12 @@ quality-gated tasks; tone or length alone does not justify escalation.
   HMAC safety identifiers, and explicit family IDs.
 - 2026-07-22: Created focused catalog, runtime, cost, and prompt worktrees.
 - 2026-07-22: Started catalog, cost, and prompt implementation in parallel.
+- 2026-07-22: Integrated all four focused workstreams into the integration
+  branch.
+- 2026-07-22: Built contracts, config-spec, prompts, agent-runtime, backend,
+  api-client, and discord-bot with the workspace TypeScript compiler.
+- 2026-07-22: Passed the integrated orchestrator suite, focused GPT-5.6
+  catalog test, Discord news tests, and OpenAPI link validation. Three
+  pre-existing model-profile catalog tests also fail on unchanged `main` and
+  remain outside this rollout's scope.
+- 2026-07-22: Passed changed-file review and the full Docker build check.
