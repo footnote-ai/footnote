@@ -32,9 +32,13 @@ function logRequest(
     const timestamp = new Date().toISOString();
 
     // --- URL sanitization ---
-    // Avoid logging full chat query strings because they can include user content.
+    // Avoid logging chat content or OIDC callback values from query strings.
     let logUrl = req.url;
-    if (req.url && req.url.includes('/api/chat')) {
+    if (
+        req.url &&
+        (req.url.includes('/api/chat') ||
+            req.url.includes('/api/auth/callback'))
+    ) {
         try {
             const parsedUrl = new URL(req.url, 'http://localhost');
             logUrl = parsedUrl.pathname;

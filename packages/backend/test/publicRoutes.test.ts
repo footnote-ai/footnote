@@ -60,6 +60,10 @@ test('public routes are Express-owned and bypass central /api dispatch while pre
                 ? pathname.slice(0, -1)
                 : pathname,
         trustProxy: false,
+        handleAuthLoginRequest: async () => undefined,
+        handleAuthCallbackRequest: async () => undefined,
+        handleAuthSessionRequest: async () => undefined,
+        handleAuthLogoutRequest: async () => undefined,
         handleIncidentListRequest: async () => undefined,
         handleIncidentReportRequest: async () => undefined,
         handleIncidentStatusRequest: async () => undefined,

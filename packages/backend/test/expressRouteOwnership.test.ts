@@ -114,6 +114,10 @@ const baseAppDeps = (
     handleSetupSessionPostRequest: createUnhandledRouteHandler,
     handleSetupSessionDeleteRequest: createUnhandledRouteHandler,
     handleSetupOperatorLinkPostRequest: createUnhandledRouteHandler,
+    handleAuthLoginRequest: createUnhandledRouteHandler,
+    handleAuthCallbackRequest: createUnhandledRouteHandler,
+    handleAuthSessionRequest: createUnhandledRouteHandler,
+    handleAuthLogoutRequest: createUnhandledRouteHandler,
     handleStaticTransportRequest: async ({ res }) => {
         res.statusCode = 404;
         res.end('static');
@@ -123,6 +127,49 @@ const baseAppDeps = (
     frameAncestors: [],
     logRequest: () => undefined,
     ...overrides,
+});
+
+test('account auth routes keep exact Express path and method ownership', async (t) => {
+    const dispatchCalls: string[] = [];
+    const authCalls: string[] = [];
+    const respond =
+        (label: string) =>
+        async (
+            _req: http.IncomingMessage,
+            res: http.ServerResponse
+        ): Promise<void> => {
+            authCalls.push(label);
+            res.statusCode = 200;
+            res.end(label);
+        };
+    const app = createExpressApp(
+        baseAppDeps(dispatchCalls, {
+            handleAuthLoginRequest: respond('login'),
+            handleAuthCallbackRequest: respond('callback'),
+            handleAuthSessionRequest: respond('session'),
+            handleAuthLogoutRequest: respond('logout'),
+        })
+    );
+    const server = await createTestServer(app);
+    t.after(server.stop);
+
+    for (const [method, pathname, expected] of [
+        ['GET', '/api/auth/login', 'login'],
+        ['GET', '/api/auth/callback', 'callback'],
+        ['GET', '/api/auth/session', 'session'],
+        ['POST', '/api/auth/logout', 'logout'],
+    ] as const) {
+        const response = await fetch(`${server.baseUrl}${pathname}`, {
+            method,
+        });
+        assert.equal(response.status, 200);
+        assert.equal(await response.text(), expected);
+    }
+
+    const unmatched = await fetch(`${server.baseUrl}/api/auth/logout`);
+    assert.equal(unmatched.status, 404);
+    assert.deepEqual(authCalls, ['login', 'callback', 'session', 'logout']);
+    assert.ok(dispatchCalls.includes('/api/auth/logout'));
 });
 
 test('chat route is Express-owned and bypasses central dispatch', async (t) => {

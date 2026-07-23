@@ -14,6 +14,7 @@ import {
     type CreateWebApiClientOptions,
 } from '@footnote/api-client/web-client';
 import type {
+    GetAuthSessionResponse,
     GetRuntimeConfigResponse,
     GetTraceResponse,
     GetTraceStaleResponse,
@@ -35,6 +36,8 @@ export type WebApiClient = {
     getRuntimeConfig: (
         signal?: AbortSignal
     ) => Promise<GetRuntimeConfigResponse>;
+    getAuthSession: (signal?: AbortSignal) => Promise<GetAuthSessionResponse>;
+    logoutAccount: (csrfToken: string, signal?: AbortSignal) => Promise<void>;
     getTrace: (
         responseId: string,
         signal?: AbortSignal
@@ -58,6 +61,8 @@ export const createWebApiClient = (
 
     const chatQuestion = shared.chatQuestion;
     const getRuntimeConfig = shared.getRuntimeConfig;
+    const getAuthSession = shared.getAuthSession;
+    const logoutAccount = shared.logoutAccount;
     const getTrace = shared.getTrace;
     const getResponseVersions = shared.getResponseVersions;
 
@@ -65,6 +70,8 @@ export const createWebApiClient = (
         requestJson: shared.requestJson,
         chatQuestion,
         getRuntimeConfig,
+        getAuthSession,
+        logoutAccount,
         getTrace,
         getResponseVersions,
     };
@@ -90,6 +97,21 @@ export const chatQuestion = (
 export const getRuntimeConfig = (
     signal?: AbortSignal
 ): Promise<GetRuntimeConfigResponse> => api.getRuntimeConfig(signal);
+
+/**
+ * Public API boundary helper for reading backend-owned account session state.
+ */
+export const getAuthSession = (
+    signal?: AbortSignal
+): Promise<GetAuthSessionResponse> => api.getAuthSession(signal);
+
+/**
+ * Public API boundary helper for revoking the current local account session.
+ */
+export const logoutAccount = (
+    csrfToken: string,
+    signal?: AbortSignal
+): Promise<void> => api.logoutAccount(csrfToken, signal);
 
 /**
  * Public API boundary helper for fetching trace details for a response id.

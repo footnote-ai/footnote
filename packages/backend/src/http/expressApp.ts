@@ -11,6 +11,7 @@ import express from 'express';
 import { registerPublicRoutes } from './publicRoutes.js';
 import { registerAdminRoutes } from './adminRoutes.js';
 import { registerSetupRoutes } from './setupRoutes.js';
+import { registerAuthRoutes } from './authRoutes.js';
 import { registerIncidentRoutes } from './incidentRoutes.js';
 import { registerChatRoutes } from './chatRoutes.js';
 import { registerInternalRoutes } from './internalRoutes.js';
@@ -165,6 +166,22 @@ type CreateExpressAppDeps = {
         req: http.IncomingMessage,
         res: http.ServerResponse
     ) => Promise<void>;
+    handleAuthLoginRequest: (
+        req: http.IncomingMessage,
+        res: http.ServerResponse
+    ) => Promise<void>;
+    handleAuthCallbackRequest: (
+        req: http.IncomingMessage,
+        res: http.ServerResponse
+    ) => Promise<void>;
+    handleAuthSessionRequest: (
+        req: http.IncomingMessage,
+        res: http.ServerResponse
+    ) => Promise<void>;
+    handleAuthLogoutRequest: (
+        req: http.IncomingMessage,
+        res: http.ServerResponse
+    ) => Promise<void>;
     handleStaticTransportRequest: HandleStaticTransportRequest;
     resolveAsset: ResolveAsset;
     mimeMap: ReadonlyMap<string, string>;
@@ -203,6 +220,10 @@ const createExpressApp = ({
     handleSetupSessionPostRequest,
     handleSetupSessionDeleteRequest,
     handleSetupOperatorLinkPostRequest,
+    handleAuthLoginRequest,
+    handleAuthCallbackRequest,
+    handleAuthSessionRequest,
+    handleAuthLogoutRequest,
     handleStaticTransportRequest,
     resolveAsset,
     mimeMap,
@@ -236,6 +257,15 @@ const createExpressApp = ({
         handleSetupSessionPostRequest,
         handleSetupSessionDeleteRequest,
         handleSetupOperatorLinkPostRequest,
+        logRequest,
+    });
+    registerAuthRoutes({
+        app,
+        normalizePathname,
+        handleAuthLoginRequest,
+        handleAuthCallbackRequest,
+        handleAuthSessionRequest,
+        handleAuthLogoutRequest,
         logRequest,
     });
     registerIncidentRoutes({

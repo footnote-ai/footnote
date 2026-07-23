@@ -8,7 +8,11 @@
 
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { envDefaultValues } from '../src/index.js';
+import {
+    envConfigSourceByKey,
+    envDefaultValues,
+    envSpecByKey,
+} from '../src/index.js';
 
 test('OpenAI defaults use the balanced GPT-5.6 Terra profile', () => {
     assert.equal(envDefaultValues.DEFAULT_MODEL, 'gpt-5.6-terra');
@@ -21,4 +25,12 @@ test('image prompting defaults to the request-local GPT-5.6 Luna model', () => {
         envDefaultValues.IMAGE_DEFAULT_IMAGE_MODEL,
         'gpt-image-1-mini'
     );
+});
+
+test('account auth keeps bootstrap values out of settings and the secret in env', () => {
+    assert.equal(envConfigSourceByKey.OIDC_ISSUER_URL, 'bootstrap_env');
+    assert.equal(envConfigSourceByKey.OIDC_CLIENT_ID, 'bootstrap_env');
+    assert.equal(envConfigSourceByKey.OIDC_REDIRECT_URI, 'bootstrap_env');
+    assert.equal(envConfigSourceByKey.OIDC_CLIENT_SECRET, 'secret_env');
+    assert.equal(envSpecByKey.OIDC_CLIENT_SECRET.secret, true);
 });

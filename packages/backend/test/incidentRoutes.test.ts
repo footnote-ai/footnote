@@ -68,6 +68,10 @@ test('incident routes are handled in Express with explicit precedence and no spe
                 ? pathname.slice(0, -1)
                 : pathname,
         trustProxy: false,
+        handleAuthLoginRequest: createUnhandledRouteHandler,
+        handleAuthCallbackRequest: createUnhandledRouteHandler,
+        handleAuthSessionRequest: createUnhandledRouteHandler,
+        handleAuthLogoutRequest: createUnhandledRouteHandler,
         handleIncidentListRequest: async (_req, res) => {
             incidentCalls.push('/api/incidents');
             res.statusCode = 200;

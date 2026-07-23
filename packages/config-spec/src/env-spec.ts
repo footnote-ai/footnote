@@ -397,6 +397,62 @@ export const envEntries = [
     }),
 
     defineEnv({
+        key: 'OIDC_ISSUER_URL',
+        owner: 'backend',
+        stage: 'bootstrap',
+        section: 'account-auth',
+        required: false,
+        secret: false,
+        kind: 'string',
+        description:
+            'OpenID Connect issuer used for optional administrator account sign-in.',
+        defaultValue: noDefault(),
+        usedBy: ['packages/backend/src/config.ts'],
+    }),
+
+    defineEnv({
+        key: 'OIDC_CLIENT_ID',
+        owner: 'backend',
+        stage: 'bootstrap',
+        section: 'account-auth',
+        required: false,
+        secret: false,
+        kind: 'string',
+        description:
+            'OpenID Connect client identifier used for optional administrator account sign-in.',
+        defaultValue: noDefault(),
+        usedBy: ['packages/backend/src/config.ts'],
+    }),
+
+    defineEnv({
+        key: 'OIDC_CLIENT_SECRET',
+        owner: 'backend',
+        stage: 'runtime',
+        section: 'account-auth',
+        required: false,
+        secret: true,
+        kind: 'string',
+        description:
+            'OpenID Connect confidential-client secret used for account sign-in.',
+        defaultValue: noDefault(),
+        usedBy: ['packages/backend/src/config.ts'],
+    }),
+
+    defineEnv({
+        key: 'OIDC_REDIRECT_URI',
+        owner: 'backend',
+        stage: 'bootstrap',
+        section: 'account-auth',
+        required: false,
+        secret: false,
+        kind: 'string',
+        description:
+            'Absolute Footnote callback URI for OpenID Connect account sign-in.',
+        defaultValue: noDefault(),
+        usedBy: ['packages/backend/src/config.ts'],
+    }),
+
+    defineEnv({
         key: 'BACKEND_BASE_URL',
         owner: 'shared',
         stage: 'runtime',
@@ -2923,6 +2979,9 @@ const BOOTSTRAP_ENV_ALLOWLIST = new Set<string>([
     'FOOTNOTE_SETTINGS_PATH',
     'NODE_ENV',
     'FLY_APP_NAME',
+    'OIDC_ISSUER_URL',
+    'OIDC_CLIENT_ID',
+    'OIDC_REDIRECT_URI',
     'PROMPT_CONFIG_PATH',
     'TRACE_API_TOKEN_FILE',
 ]);

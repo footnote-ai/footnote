@@ -1,0 +1,136 @@
+/**
+ * @description: Styles the standalone account session and sign-in states.
+ * @footnote-scope: web
+ * @footnote-module: AccountPageStyles
+ * @footnote-risk: low - Styles affect only account page presentation.
+ * @footnote-ethics: medium - Clear session states and controls support informed account use.
+ */
+
+.account-page {
+    max-width: 72rem;
+}
+
+.account-page__notice,
+.account-card {
+    max-width: 42rem;
+}
+
+.account-page__notice {
+    margin: 0 0 1rem;
+    padding: 0.8rem 1rem;
+    border: 1px solid var(--fn-status-error-soft-border);
+    border-radius: 0.35rem;
+    background: var(--fn-status-error-soft-bg);
+    color: var(--fn-status-error);
+}
+
+.account-card {
+    padding: clamp(1.25rem, 3vw, 2rem);
+    border: 1px solid var(--public-rule);
+    border-radius: 0.4rem;
+    background: var(--public-paper-raised);
+}
+
+.account-card__stack {
+    display: grid;
+    justify-items: start;
+    gap: 1rem;
+}
+
+.account-card__stack > * {
+    margin: 0;
+}
+
+.account-card h2 {
+    font-family: var(--fn-font-display);
+    font-size: clamp(1.5rem, 3vw, 2rem);
+    line-height: 1.1;
+}
+
+.account-card h2:focus {
+    outline: 2px solid var(--public-focus);
+    outline-offset: 0.25rem;
+}
+
+.account-card__status {
+    margin: 0;
+    color: var(--public-muted);
+}
+
+.account-card__identity {
+    display: grid;
+    width: 100%;
+    gap: 0.9rem;
+    margin: 0;
+}
+
+.account-card__identity > div {
+    display: grid;
+    grid-template-columns: minmax(7rem, 0.35fr) minmax(0, 1fr);
+    gap: 0.75rem;
+}
+
+.account-card__identity dt {
+    color: var(--public-muted);
+    font-family: var(--fn-font-mono);
+    font-size: 0.78rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+}
+
+.account-card__identity dd {
+    min-width: 0;
+    margin: 0;
+    overflow-wrap: anywhere;
+}
+
+.account-card__button {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 2.75rem;
+    padding: 0.65rem 1rem;
+    border: 1px solid var(--public-rule);
+    border-radius: 0.3rem;
+    background: var(--public-paper);
+    color: var(--public-ink);
+    font: 600 0.9rem var(--fn-font-mono);
+    text-decoration: none;
+    cursor: pointer;
+}
+
+.account-card__button:hover:not(:disabled) {
+    border-color: var(--public-focus);
+}
+
+.account-card__button:focus-visible {
+    outline: 2px solid var(--public-focus);
+    outline-offset: 0.2rem;
+}
+
+.account-card__button:disabled {
+    opacity: 0.65;
+    cursor: wait;
+}
+
+.account-card__button--primary {
+    border-color: var(--public-focus);
+    background: var(--public-focus);
+    color: #fff;
+}
+
+.account-card__note {
+    color: var(--public-muted);
+}
+
+.account-card__error {
+    color: var(--fn-status-error);
+}
+
+@media (max-width: 480px) {
+    .account-card__identity > div {
+        grid-template-columns: 1fr;
+        gap: 0.2rem;
+    }
+}

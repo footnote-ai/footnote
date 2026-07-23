@@ -33,11 +33,14 @@ const loadSetupPage = (): Promise<typeof import('@pages/SetupPage')> =>
     import('@pages/SetupPage');
 const loadChatPage = (): Promise<typeof import('@pages/ChatPage')> =>
     import('@pages/ChatPage');
+const loadAccountPage = (): Promise<typeof import('@pages/AccountPage')> =>
+    import('@pages/AccountPage');
 
 const TracePage = lazy(loadTracePage);
 const EmbedPage = lazy(loadEmbedPage);
 const SetupPage = lazy(loadSetupPage);
 const ChatPage = lazy(loadChatPage);
+const AccountPage = lazy(loadAccountPage);
 
 const routeFallback = (
     <PublicPageLayout>
@@ -70,6 +73,7 @@ const App = (): JSX.Element => {
                 loadEmbedPage(),
                 loadSetupPage(),
                 loadChatPage(),
+                loadAccountPage(),
             ]);
         };
 
@@ -104,6 +108,14 @@ const App = (): JSX.Element => {
                     element={
                         <Suspense fallback={routeFallback}>
                             <ChatPage />
+                        </Suspense>
+                    }
+                />
+                <Route
+                    path="/account"
+                    element={
+                        <Suspense fallback={routeFallback}>
+                            <AccountPage />
                         </Suspense>
                     }
                 />

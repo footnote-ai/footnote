@@ -78,14 +78,12 @@ test('chat stays suggestion-free and falls back to an out-of-flow managed challe
         chatPageSource,
         embedSource,
         headerSource,
-        publicStyles,
         interactionStyles,
     ] = await Promise.all([
         readFile(`${webSourceDirectory}components/Chat.tsx`, 'utf8'),
         readFile(`${pagesDirectory}ChatPage.tsx`, 'utf8'),
         readFile(`${pagesDirectory}EmbedPage.tsx`, 'utf8'),
         readFile(`${webSourceDirectory}components/PublicHeader.tsx`, 'utf8'),
-        readFile(`${webSourceDirectory}styles/public-home.css`, 'utf8'),
         readFile(`${webSourceDirectory}styles/interaction.css`, 'utf8'),
     ]);
 
@@ -109,9 +107,8 @@ test('chat stays suggestion-free and falls back to an out-of-flow managed challe
         /Ask anything, and see how Footnote responds!/
     );
     assert.match(embedSource, /<Chat \/>/);
-    assert.match(headerSource, /Sign-in is not available yet/);
-    assert.doesNotMatch(headerSource, /<Link to="\/">Sign in<\/Link>/);
-    assert.match(publicStyles, /\.public-header__unavailable-tooltip/);
+    assert.match(headerSource, /<Link to="\/account">\s*Sign in\s*<\/Link>/);
+    assert.doesNotMatch(headerSource, /Sign-in is not available yet/);
     assert.match(
         interactionStyles,
         /\.interaction-captcha--invisible[\s\S]*?position: absolute[\s\S]*?width: 0[\s\S]*?height: 0[\s\S]*?overflow: hidden/

@@ -3,6 +3,7 @@
 @import './reset-base.css';
 @import './typography.css';
 @import './public-home.css';
+@import './account.css';
 @import './interaction.css';
 @import './provenance.css';
 @import './setup.css';

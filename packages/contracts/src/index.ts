@@ -106,6 +106,8 @@ export {
 export type {
     ApiErrorResponse,
     NormalizedApiError,
+    AuthenticatedPrincipal,
+    GetAuthSessionResponse,
     ChatSurface,
     ChatTriggerKind,
     ChatAddressingEvidence,

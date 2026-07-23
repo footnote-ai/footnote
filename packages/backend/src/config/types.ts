@@ -52,6 +52,18 @@ export type RuntimeConfig = {
         port: number;
         trustProxy: boolean;
     };
+    accountAuth:
+        | {
+              enabled: false;
+          }
+        | {
+              enabled: true;
+              issuerUrl: string;
+              clientId: string;
+              clientSecret: string;
+              redirectUri: string;
+              secureCookies: boolean;
+          };
     openai: {
         apiKey: string | null;
         safetyIdentifierSecret: string | null;

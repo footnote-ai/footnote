@@ -1,8 +1,9 @@
 # Account Sign-In Status
 
-**Branch:** `feat/account-sign-in`
+**Branch:** `agent/issue-455-account-sign-in`
 
-**Status:** Planned; implementation has not started.
+**Status:** Implemented; automated validation is complete. The Authentik smoke
+test still needs a configured test provider.
 
 **Last updated:** 2026-07-22
 
@@ -18,6 +19,18 @@ Deliver one complete account login flow:
 
 This branch proves authentication only. It does not grant access to `/admin` or
 the admin settings API.
+
+## Implementation Result
+
+The backend, shared contracts, API client, and `/account` page now implement the
+planned sign-in slice. Automated tests cover disabled login, provider failures,
+one-time callbacks, session expiry, CSRF-protected logout, route ownership,
+shared response validation, and the public account states.
+
+The live Authentik smoke test has not been run because this worktree does not
+have a configured Authentik provider or test administrator credentials. Record
+the Authentik version and complete the manual checklist below before closing
+the issue.
 
 ## Decisions For This Branch
 
