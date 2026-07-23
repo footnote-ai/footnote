@@ -106,6 +106,37 @@ test('summarizeTraceAccounting reports complete coverage when every model step h
     assert.equal(summary?.costCoverage, 'complete');
 });
 
+test('summarizeTraceAccounting sums non-model cost without counting model coverage', () => {
+    const workflow = createWorkflow();
+    workflow.steps.push({
+        stepId: 'step_3',
+        parentStepId: 'step_1',
+        attempt: 1,
+        stepKind: 'tool',
+        startedAt: '2026-01-01T00:00:02.000Z',
+        finishedAt: '2026-01-01T00:00:03.000Z',
+        durationMs: 1000,
+        cost: {
+            inputCostUsd: 0.004,
+            outputCostUsd: 0.005,
+            totalCostUsd: 0.009,
+        },
+        outcome: {
+            status: 'executed',
+            summary: 'Executed a billed tool.',
+        },
+    });
+
+    const summary = summarizeTraceAccounting(workflow);
+
+    assert.equal(summary?.recordedCost.inputCostUsd, 0.005);
+    assert.equal(summary?.recordedCost.outputCostUsd, 0.007);
+    assert.equal(summary?.recordedCost.totalCostUsd, 0.012);
+    assert.equal(summary?.costStepCount, 1);
+    assert.equal(summary?.modelStepCount, 2);
+    assert.equal(summary?.costCoverage, 'partial');
+});
+
 test('summarizeTraceAccounting returns null without workflow metadata', () => {
     assert.equal(summarizeTraceAccounting(undefined), null);
 });

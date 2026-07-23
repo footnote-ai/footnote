@@ -59,10 +59,10 @@ export const summarizeTraceAccounting = (
     let modelStepCount = 0;
 
     for (const step of workflow.steps) {
-        if (
+        const isExecutedModelStep =
             step.outcome.status === 'executed' &&
-            (MODEL_STEP_KINDS.has(step.stepKind) || step.model !== undefined)
-        ) {
+            (MODEL_STEP_KINDS.has(step.stepKind) || step.model !== undefined);
+        if (isExecutedModelStep) {
             modelStepCount += 1;
         }
 
@@ -81,7 +81,9 @@ export const summarizeTraceAccounting = (
             inputCostUsd += step.cost.inputCostUsd;
             outputCostUsd += step.cost.outputCostUsd;
             totalCostUsd += step.cost.totalCostUsd;
-            costStepCount += 1;
+            if (isExecutedModelStep) {
+                costStepCount += 1;
+            }
         }
     }
 

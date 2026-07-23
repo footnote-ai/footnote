@@ -1485,6 +1485,8 @@ export const createChatPlanner = ({
             totalCostUsd: 0,
         };
 
+        // This is the single authoritative point for attaching backend-computed
+        // usage and cost consumed by workflow budgets and trace cost display.
         const withPlannerAccounting = (
             execution: ChatPlannerExecution
         ): ChatPlannerExecution => ({

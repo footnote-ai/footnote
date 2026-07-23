@@ -33,6 +33,7 @@ import type {
     PlannerStepExecutor,
     PlannerStepRequest,
 } from '../plannerWorkflowSeams.js';
+import { buildPlannerExecutionSummaryExtras } from '../plannerWorkflowSeams.js';
 import type { ConversationContextEnvelope } from '../conversationContextService.js';
 import type {
     ReviewDecision,
@@ -498,20 +499,9 @@ export const executeReviewLoop = async (ctx: {
                     modality: plannerReentryResult.plan.modality,
                     requestedCapabilityProfile:
                         plannerReentryResult.plan.requestedCapabilityProfile,
-                    ...(plannerReentryResult.execution.model !== undefined && {
-                        model: plannerReentryResult.execution.model,
-                    }),
-                    ...(plannerReentryResult.execution.usage !== undefined && {
-                        usage: plannerReentryResult.execution.usage,
-                    }),
-                    ...(plannerReentryResult.execution.cost !== undefined && {
-                        cost: plannerReentryResult.execution.cost,
-                    }),
-                    ...(plannerReentryResult.execution.routingChainAttempts !==
-                        undefined && {
-                        routingChainAttempts:
-                            plannerReentryResult.execution.routingChainAttempts,
-                    }),
+                    ...buildPlannerExecutionSummaryExtras(
+                        plannerReentryResult.execution
+                    ),
                 },
             });
             ctx.workflowStepsRef.value.push(plannerReentryStep);

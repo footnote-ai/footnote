@@ -36,6 +36,7 @@ import type {
     PlannerStepRequest,
     PlannerStepResult,
 } from './plannerWorkflowSeams.js';
+import { buildPlannerExecutionSummaryExtras } from './plannerWorkflowSeams.js';
 import type { ConversationContextEnvelope } from './conversationContextService.js';
 import {
     sanitizeReviewModuleIds,
@@ -556,23 +557,9 @@ export const runBoundedReviewWorkflow = async ({
                     modality: plannerExecutionResult.plan.modality,
                     requestedCapabilityProfile:
                         plannerExecutionResult.plan.requestedCapabilityProfile,
-                    ...(plannerExecutionResult.execution.model !==
-                        undefined && {
-                        model: plannerExecutionResult.execution.model,
-                    }),
-                    ...(plannerExecutionResult.execution.usage !==
-                        undefined && {
-                        usage: plannerExecutionResult.execution.usage,
-                    }),
-                    ...(plannerExecutionResult.execution.cost !== undefined && {
-                        cost: plannerExecutionResult.execution.cost,
-                    }),
-                    ...(plannerExecutionResult.execution
-                        .routingChainAttempts !== undefined && {
-                        routingChainAttempts:
-                            plannerExecutionResult.execution
-                                .routingChainAttempts,
-                    }),
+                    ...buildPlannerExecutionSummaryExtras(
+                        plannerExecutionResult.execution
+                    ),
                 },
             });
             workflowSteps.push(plannerStep);

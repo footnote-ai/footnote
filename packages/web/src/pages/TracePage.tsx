@@ -33,6 +33,7 @@ import {
     type RunOutcomeSummary,
 } from '../utils/traceOutcome';
 import { summarizeTraceAccounting } from '../utils/traceAccounting';
+import { sanitizeWorkflowForDisplay } from '../utils/traceDisplay';
 // Define the actual server response metadata structure
 type ServerMetadata = GetTraceResponse & {
     timestamp?: string;
@@ -73,31 +74,6 @@ type DisplayTrace = {
         conversationSnapshot: string | null;
     } | null;
 };
-
-const sanitizeWorkflowForDisplay = (
-    workflow: WorkflowRecord | undefined
-): WorkflowRecord | null =>
-    workflow
-        ? {
-              ...workflow,
-              steps: workflow.steps.map((step) => {
-                  const { artifacts, ...outcomeWithoutArtifacts } =
-                      step.outcome;
-                  return {
-                      ...step,
-                      outcome: {
-                          ...outcomeWithoutArtifacts,
-                          ...(artifacts !== undefined && {
-                              artifacts: artifacts.map(
-                                  (artifact) =>
-                                      `[redacted:${artifact.length} chars]`
-                              ),
-                          }),
-                      },
-                  };
-              }),
-          }
-        : null;
 
 type SummarySignal = {
     label: string;
