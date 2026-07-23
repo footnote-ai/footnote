@@ -31,6 +31,9 @@ export type SupportedNodeEnv = (typeof supportedNodeEnvs)[number];
  * Pricing support is tracked separately in shared pricing tables.
  */
 export const supportedOpenAITextModels = [
+    'gpt-5.6-sol',
+    'gpt-5.6-terra',
+    'gpt-5.6-luna',
     'gpt-5.4',
     'gpt-5.4-pro',
     'gpt-5.4-mini',
@@ -256,7 +259,14 @@ export type ConfiguredProviderModel = SupportedProviderModel | (string & {});
 /**
  * Reasoning effort levels shared across planner and generation surfaces.
  */
-export const supportedReasoningEfforts = ['low', 'medium', 'high'] as const;
+export const supportedReasoningEfforts = [
+    'none',
+    'low',
+    'medium',
+    'high',
+    'xhigh',
+    'max',
+] as const;
 
 /**
  * One supported reasoning effort value.

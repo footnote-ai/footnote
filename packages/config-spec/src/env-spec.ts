@@ -1497,7 +1497,7 @@ export const envEntries = [
         secret: false,
         kind: 'string',
         description: 'Default model used by backend chat flows.',
-        defaultValue: literal('gpt-5-mini'),
+        defaultValue: literal('gpt-5.6-terra'),
         usedBy: ['packages/backend/src/config.ts'],
     }),
     defineEnv({

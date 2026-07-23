@@ -2,76 +2,81 @@ profiles:
     # ==========
     # OpenAI
     # ==========
-    # https://platform.openai.com/docs/models/gpt-5-mini
+    # https://developers.openai.com/api/docs/models/gpt-5.6-luna
     - id: openai-text-fast
       description: Lower-latency, quick replies and lightweight tasks.
       provider: openai
-      providerModel: gpt-5-mini
+      providerModel: gpt-5.6-luna
       enabled: true
       tierBindings:
           - text-fast
       capabilities:
           canUseSearch: true
+          supportedReasoningEfforts: [none, low, medium, high, xhigh, max]
           toolCapabilities:
               routing.generation.structured-cheap: true
               routing.generation.balanced-general: true
               routing.generation.expressive-generation: false
-      maxInputTokens: 400000
+      maxInputTokens: 1050000
       maxOutputTokens: 128000
       costClass: low
       latencyClass: low
 
-    # https://developers.openai.com/api/docs/models/gpt-5.4-mini
+    # https://developers.openai.com/api/docs/models/gpt-5.6-terra
     - id: openai-text-medium
       description: Balanced, everyday conversation and general reasoning.
       provider: openai
-      providerModel: gpt-5.4-mini
+      providerModel: gpt-5.6-terra
       enabled: true
       tierBindings:
           - text-medium
       capabilities:
           canUseSearch: true
+          supportedReasoningEfforts: [none, low, medium, high, xhigh, max]
           toolCapabilities:
               routing.generation.structured-cheap: true
               routing.generation.balanced-general: true
               routing.generation.expressive-generation: false
-      maxInputTokens: 400000
+      maxInputTokens: 1050000
       maxOutputTokens: 128000
       costClass: medium
       latencyClass: medium
 
-    # https://developers.openai.com/api/docs/models/gpt-5.4-nano
+    # https://developers.openai.com/api/docs/models/gpt-5.6-luna
     - id: openai-json-optimized
       description: Structured/JSON-oriented routing profile for planner and assess steps.
       provider: openai
-      providerModel: gpt-5.4-nano
+      providerModel: gpt-5.6-luna
       enabled: true
       tierBindings: []
       capabilities:
           canUseSearch: true
+          supportedReasoningEfforts: [none, low, medium, high, xhigh, max]
           toolCapabilities:
               routing.generation.structured-cheap: true
               routing.generation.balanced-general: false
               routing.generation.expressive-generation: false
-      maxInputTokens: 400000
-      maxOutputTokens: 64000
+      maxInputTokens: 1050000
+      maxOutputTokens: 128000
       costClass: low
       latencyClass: low
 
-    # https://platform.openai.com/docs/models/gpt-5.1
+    # https://developers.openai.com/api/docs/models/gpt-5.6-sol
     - id: openai-text-quality
       description: Deeper reasoning and more complex prompts.
       provider: openai
-      providerModel: gpt-5.1
+      providerModel: gpt-5.6-sol
       enabled: true
       tierBindings:
           - text-quality
       capabilities:
           canUseSearch: true
+          supportedReasoningEfforts: [none, low, medium, high, xhigh, max]
           toolCapabilities:
               routing.generation.structured-cheap: false
               routing.generation.balanced-general: true
               routing.generation.expressive-generation: true
+      defaultReasoningEffort: medium
       maxInputTokens: 1050000
       maxOutputTokens: 128000
       costClass: high

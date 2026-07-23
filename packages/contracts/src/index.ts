@@ -175,6 +175,7 @@ export type {
     SupportedReasoningEffort,
     SupportedVerbosity,
 } from './providers.js';
+export { supportedReasoningEfforts } from './providers.js';
 export type {
     ModelCostClass,
     ModelLatencyClass,
