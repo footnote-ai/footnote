@@ -9,45 +9,28 @@ on:
                 type: string
     pull_request:
         paths:
+            - '.github/workflows/ci.yml'
+            - '.github/workflows/launcher-package.yml'
+            - '.github/workflows/launcher-release.yml'
             - '.github/workflows/launcher-sea-spike.yml'
             - 'tools/sea/**'
+            - 'packages/contracts/**'
+            - 'packages/config-spec/**'
             - 'packages/launcher-core/**'
             - 'packages/launcher-cli/**'
             - 'package.json'
             - 'pnpm-lock.yaml'
+            - 'pnpm-workspace.yaml'
+            - 'tsconfig.json'
 
 permissions:
     contents: read
 
 jobs:
     build:
-        strategy:
-            fail-fast: false
-            matrix:
-                os: [ubuntu-latest, macos-latest, windows-latest]
-        runs-on: ${{ matrix.os }}
-        steps:
-            - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
-              with:
-                  persist-credentials: false
-
-            - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
-              with:
-                  node-version: 22
-
-            - run: corepack enable
-            - run: corepack prepare pnpm@11.16.0 --activate
-            - run: pnpm install --frozen-lockfile
-            - run: pnpm sea:build-launcher
-            - run: pnpm sea:package
-            - run: pnpm sea:verify
-            - run: pnpm sea:checksums
-
-            - name: Upload SEA artifact
-              uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
-              with:
-                  name: sea-${{ runner.os }}-${{ runner.arch }}
-                  path: artifacts/sea
+        permissions:
+            contents: read
+        uses: ./.github/workflows/launcher-package.yml
 
     publish-draft:
         permissions:
@@ -66,4 +49,5 @@ jobs:
                   name: SEA Spike ${{ inputs.draft_tag }}
                   draft: true
                   prerelease: true
-                  files: artifacts/sea/**/*
+                  files: artifacts/sea/**/footnote-*
+                  fail_on_unmatched_files: true
