@@ -775,6 +775,7 @@ const WorkflowRecordSchema = z
                 stoppedByLimit: z.boolean(),
                 terminationReason: z.enum(WORKFLOW_TERMINATION_REASONS),
                 exhaustedLimitKey: z.enum(WORKFLOW_LIMIT_KEYS).optional(),
+                stoppedBeforeStepKind: z.enum(WORKFLOW_STEP_KINDS).optional(),
             })
             .strict()
             .optional(),
@@ -855,6 +856,17 @@ const WorkflowRecordSchema = z
                 path: ['limitStop', 'exhaustedLimitKey'],
                 message:
                     'limitStop.exhaustedLimitKey must be omitted when stoppedByLimit is false.',
+            });
+        }
+        if (
+            value.limitStop?.stoppedByLimit === false &&
+            value.limitStop.stoppedBeforeStepKind !== undefined
+        ) {
+            context.addIssue({
+                code: z.ZodIssueCode.custom,
+                path: ['limitStop', 'stoppedBeforeStepKind'],
+                message:
+                    'limitStop.stoppedBeforeStepKind must be omitted when stoppedByLimit is false.',
             });
         }
     })

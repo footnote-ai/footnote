@@ -453,6 +453,14 @@ Workflow limits are backend-enforced stops, not model suggestions.
 Model output can recommend transitions only where policy allows. If a limit
 stops a run, the workflow record includes that stop reason.
 
+`workflow.limitStop.stoppedBeforeStepKind` records the next step that the
+exhausted limit prevented. This keeps a pre-generation stop distinct from a
+run that generated an answer and then lacked budget for assessment or
+revision. Token accounting includes planner, generation, assessment, and
+revision model calls when provider usage is available. Step-level `usage` and
+backend-estimated `cost` remain the canonical trace accounting records; UIs
+must label sums as partial when any executed model step lacks cost data.
+
 Profiles may narrow budgets. Hard-limit enforcement still happens in the
 engine. Adapters may pass configured limits, but exhausted-limit reason codes
 come from the workflow runtime.

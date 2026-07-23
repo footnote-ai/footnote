@@ -295,6 +295,12 @@ test('chatPlanner accepts structured planner decisions without text JSON parsing
     assert.equal(plan.action, 'message');
     assert.equal(plan.requestedCapabilityProfile, 'structured-cheap');
     assert.equal(execution.status, 'executed');
+    assert.deepEqual(execution.usage, {
+        promptTokens: 12,
+        completionTokens: 8,
+        totalTokens: 20,
+    });
+    assert.ok((execution.cost?.totalCostUsd ?? 0) > 0);
 });
 
 test('chatPlanner switches output instructions for text JSON compatibility fallback', async () => {

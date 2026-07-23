@@ -64,6 +64,16 @@ export type PlannerStepResult = {
         profileId?: string;
         provider?: string;
         model?: string;
+        usage?: {
+            promptTokens: number;
+            completionTokens: number;
+            totalTokens: number;
+        };
+        cost?: {
+            inputCostUsd: number;
+            outputCostUsd: number;
+            totalCostUsd: number;
+        };
         routingChainAttempts?: RoutingChainAttemptLog[];
     };
     ingestion: {

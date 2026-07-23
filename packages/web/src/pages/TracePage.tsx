@@ -22,6 +22,7 @@ import type {
 } from '@footnote/contracts/web';
 import type {
     ImageGenerationMetadata,
+    WorkflowRecord,
     WorkflowStepKind,
 } from '@footnote/contracts/policy';
 import PublicPageLayout from '@components/PublicPageLayout';
@@ -31,6 +32,7 @@ import {
     buildRunOutcomeSummary,
     type RunOutcomeSummary,
 } from '../utils/traceOutcome';
+import { summarizeTraceAccounting } from '../utils/traceAccounting';
 // Define the actual server response metadata structure
 type ServerMetadata = GetTraceResponse & {
     timestamp?: string;
@@ -65,11 +67,37 @@ type DisplayTrace = {
     citations: ServerMetadata['citations'];
     execution: ServerMetadata['execution'];
     evaluator: ServerMetadata['evaluator'] | null;
+    workflow: WorkflowRecord | null;
     runtimeContext: {
         modelVersion: string | null;
         conversationSnapshot: string | null;
     } | null;
 };
+
+const sanitizeWorkflowForDisplay = (
+    workflow: WorkflowRecord | undefined
+): WorkflowRecord | null =>
+    workflow
+        ? {
+              ...workflow,
+              steps: workflow.steps.map((step) => {
+                  const { artifacts, ...outcomeWithoutArtifacts } =
+                      step.outcome;
+                  return {
+                      ...step,
+                      outcome: {
+                          ...outcomeWithoutArtifacts,
+                          ...(artifacts !== undefined && {
+                              artifacts: artifacts.map(
+                                  (artifact) =>
+                                      `[redacted:${artifact.length} chars]`
+                              ),
+                          }),
+                      },
+                  };
+              }),
+          }
+        : null;
 
 type SummarySignal = {
     label: string;
@@ -199,6 +227,7 @@ const buildDisplayTrace = (traceData: ServerMetadata): DisplayTrace => ({
     citations: traceData.citations ?? [],
     execution: traceData.execution ?? [],
     evaluator: traceData.evaluator ?? null,
+    workflow: sanitizeWorkflowForDisplay(traceData.workflow),
     runtimeContext: traceData.runtimeContext
         ? {
               modelVersion: traceData.runtimeContext.modelVersion ?? null,
@@ -699,6 +728,7 @@ const TracePage = (): JSX.Element => {
         traceData?.provenance || traceData?.reasoningEffort || 'Unknown';
     const model = resolveTraceModelLabel(traceData);
     const executionSummary = resolveExecutionSummary(traceData);
+    const traceAccounting = summarizeTraceAccounting(traceData.workflow);
     const sanitizedTraceData = buildDisplayTrace(traceData);
     const safetyLabel = rawSafetyTier ?? 'Unspecified';
     const chainHash =
@@ -865,12 +895,37 @@ const TracePage = (): JSX.Element => {
                         {traceData.totalDurationMs}ms
                     </p>
                 )}
-                {traceData.usage && (
+                {traceAccounting && traceAccounting.usageStepCount > 0 ? (
                     <p>
-                        <strong>Token usage:</strong> input{' '}
-                        {traceData.usage.input_tokens}, output{' '}
-                        {traceData.usage.output_tokens}, total{' '}
-                        {traceData.usage.total_tokens}
+                        <strong>Recorded token usage:</strong> input{' '}
+                        {traceAccounting.usage.promptTokens}, output{' '}
+                        {traceAccounting.usage.completionTokens}, total{' '}
+                        {traceAccounting.usage.totalTokens}
+                    </p>
+                ) : (
+                    traceData.usage && (
+                        <p>
+                            <strong>Token usage:</strong> input{' '}
+                            {traceData.usage.input_tokens}, output{' '}
+                            {traceData.usage.output_tokens}, total{' '}
+                            {traceData.usage.total_tokens}
+                        </p>
+                    )
+                )}
+                {traceAccounting && (
+                    <p>
+                        <strong>Recorded workflow cost:</strong>{' '}
+                        {traceAccounting.costStepCount > 0
+                            ? `$${traceAccounting.recordedCost.totalCostUsd.toFixed(6)}`
+                            : 'Unavailable'}
+                    </p>
+                )}
+                {traceAccounting && traceAccounting.modelStepCount > 0 && (
+                    <p>
+                        <strong>Cost coverage:</strong>{' '}
+                        {traceAccounting.costStepCount} of{' '}
+                        {traceAccounting.modelStepCount} model steps (
+                        {traceAccounting.costCoverage})
                     </p>
                 )}
                 <details className="trace-details">
