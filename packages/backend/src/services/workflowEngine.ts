@@ -27,6 +27,7 @@ import type {
 } from '@footnote/agent-runtime';
 import type { ModelProfile } from '@footnote/contracts';
 import { logger } from '../utils/logger.js';
+import { resolveProfileReasoningEffort } from './runtimeRequestControls.js';
 import type {
     PlanContinuationBuilder,
     PlanContinuation,
@@ -895,6 +896,11 @@ export const runBoundedReviewWorkflow = async ({
                                 model: profile.providerModel,
                                 provider: profile.provider,
                                 capabilities: profile.capabilities,
+                                reasoningEffort: resolveProfileReasoningEffort(
+                                    profile,
+                                    generationRequestForAttempt.reasoningEffort,
+                                    logger
+                                ),
                             }),
                     });
                     const routingResult = toRoutingChainResult(chainResult);

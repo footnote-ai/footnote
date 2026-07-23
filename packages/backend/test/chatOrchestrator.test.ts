@@ -456,7 +456,7 @@ test('orchestrator carries resolved Execution Contract policy payload through se
         };
     };
     assert.deepEqual(parsedSnapshot.executionContract, {
-        policyId: 'core-quality-grounded',
+        policyId: 'core-balanced',
         policyVersion: 'v1',
     });
     assert.ok(
@@ -465,7 +465,7 @@ test('orchestrator carries resolved Execution Contract policy payload through se
     );
 });
 
-test('request-level generation overrides replace planner reasoning effort and verbosity', async () => {
+test('quality profile preserves explicit planner reasoning while planner verbosity applies', async () => {
     let observedReasoningEffort: string | undefined;
     let observedVerbosity: string | undefined;
 
@@ -1006,9 +1006,8 @@ test('invalid planner output falls open to policy-selected default capability pr
             (profile) => profile.enabled
         ),
         requiresSearch: false,
-        routingIntent: resolveExecutionContract({
-            presetId: 'quality-grounded',
-        }).policyContract.routing,
+        routingIntent: resolveExecutionContract({ presetId: 'balanced' })
+            .policyContract.routing,
     });
     assert.ok(expectedCapabilitySelection.selectedProfile);
 

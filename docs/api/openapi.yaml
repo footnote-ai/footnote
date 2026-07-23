@@ -2028,6 +2028,9 @@ components:
                     type: string
                     enum:
                         [
+                            gpt-5.6-sol,
+                            gpt-5.6-terra,
+                            gpt-5.6-luna,
                             gpt-5.4,
                             gpt-5.4-pro,
                             gpt-5.4-mini,
@@ -2142,6 +2145,9 @@ components:
                     type: string
                     enum:
                         [
+                            gpt-5.6-sol,
+                            gpt-5.6-terra,
+                            gpt-5.6-luna,
                             gpt-5.4,
                             gpt-5.4-pro,
                             gpt-5.4-mini,
@@ -2358,7 +2364,11 @@ components:
                     maximum: 5
                 reasoningEffort:
                     type: string
-                    enum: [minimal, low, medium, high]
+                    enum: [none, low, medium, high, xhigh, max]
+                    description: >-
+                        Requested reasoning effort. The backend resolves it against
+                        the selected model profile and omits unsupported provider
+                        settings fail-open.
                 verbosity:
                     type: string
                     enum: [low, medium, high]
@@ -2371,6 +2381,13 @@ components:
                         guildId:
                             type: string
                             minLength: 1
+                        userId:
+                            type: string
+                            minLength: 1
+                            description: >-
+                                Backend-only identity material used to derive a
+                                privacy-preserving safety identifier. It is never
+                                included in model prompts or logs.
                     additionalProperties: false
             required:
                 - task
@@ -2385,6 +2402,7 @@ components:
                 channelContext:
                     channelId: '123456789012345678'
                     guildId: '234567890123456789'
+                    userId: '345678901234567890'
 
         InternalNewsTaskResponse:
             type: object

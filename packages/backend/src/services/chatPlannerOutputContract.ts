@@ -276,7 +276,7 @@ export const chatPlannerDecisionParametersSchema: Record<string, unknown> = {
             properties: {
                 reasoningEffort: {
                     type: 'string',
-                    enum: ['minimal', 'low', 'medium', 'high'],
+                    enum: ['none', 'low', 'medium', 'high', 'xhigh', 'max'],
                 },
                 verbosity: {
                     type: 'string',

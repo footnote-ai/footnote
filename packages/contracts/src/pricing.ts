@@ -32,6 +32,10 @@ export type SupportedOpenAIEmbeddingModel =
  * Any OpenAI text-capable model that Footnote knows how to price today.
  */
 export const supportedPricedOpenAITextModels = [
+    'gpt-5.6',
+    'gpt-5.6-sol',
+    'gpt-5.6-terra',
+    'gpt-5.6-luna',
     'gpt-5.4',
     'gpt-5.4-pro',
     'gpt-5.2',
@@ -168,6 +172,33 @@ export interface OpenAITextCostBreakdown {
     totalCost: number;
 }
 
+export interface OpenAITextCostEstimate extends OpenAITextCostBreakdown {
+    cachedInputTokens?: number;
+    cacheWriteTokens?: number;
+    completeness: OpenAITextCostCompleteness;
+    appliedRules: OpenAITextCostAppliedRule[];
+    incompleteReasons: OpenAITextCostIncompleteReason[];
+}
+
+export type OpenAITextCostCompleteness = 'complete' | 'partial' | 'unknown';
+
+export type OpenAITextCostAppliedRule =
+    | 'prompt_cache_read_discount'
+    | 'prompt_cache_write_multiplier'
+    | 'gpt_5_6_long_context_input_multiplier'
+    | 'gpt_5_6_long_context_output_multiplier';
+
+export type OpenAITextCostIncompleteReason =
+    | 'unpriced_model'
+    | 'cached_input_tokens_unavailable'
+    | 'cache_write_tokens_unavailable'
+    | 'invalid_input_token_breakdown';
+
+export interface OpenAITextUsageDetails {
+    cachedInputTokens?: number;
+    cacheWriteTokens?: number;
+}
+
 /**
  * Shared TTS-cost breakdown used by backend accounting and bot-side display
  * helpers.
@@ -206,6 +237,13 @@ export interface ImageGenerationCostEstimate {
 export type OpenAITextPricingEntry = {
     input: number;
     output: number;
+    cachedInput?: number;
+    cacheWriteMultiplier?: number;
+    longContext?: {
+        inputTokenThreshold: number;
+        inputMultiplier: number;
+        outputMultiplier: number;
+    };
 };
 
 export type OpenAIModelCanonicalizationRule =
@@ -274,13 +312,58 @@ type OpenAIImageTokenPricingEntry = {
 
 /**
  * Canonical text pricing per 1M tokens (USD).
- * Source: https://platform.openai.com/pricing
- * Last updated in-repo: 2026-04-21
+ * Sources: https://developers.openai.com/api/docs/models and
+ * https://platform.openai.com/pricing
+ * Last updated in-repo: 2026-07-22
  */
 export const openAITextPricingTable: Record<
     PricedOpenAITextModel,
     OpenAITextPricingEntry
 > = {
+    'gpt-5.6': {
+        input: 5.0,
+        cachedInput: 0.5,
+        output: 30.0,
+        cacheWriteMultiplier: 1.25,
+        longContext: {
+            inputTokenThreshold: 272_000,
+            inputMultiplier: 2,
+            outputMultiplier: 1.5,
+        },
+    },
+    'gpt-5.6-sol': {
+        input: 5.0,
+        cachedInput: 0.5,
+        output: 30.0,
+        cacheWriteMultiplier: 1.25,
+        longContext: {
+            inputTokenThreshold: 272_000,
+            inputMultiplier: 2,
+            outputMultiplier: 1.5,
+        },
+    },
+    'gpt-5.6-terra': {
+        input: 2.5,
+        cachedInput: 0.25,
+        output: 15.0,
+        cacheWriteMultiplier: 1.25,
+        longContext: {
+            inputTokenThreshold: 272_000,
+            inputMultiplier: 2,
+            outputMultiplier: 1.5,
+        },
+    },
+    'gpt-5.6-luna': {
+        input: 1.0,
+        cachedInput: 0.1,
+        output: 6.0,
+        cacheWriteMultiplier: 1.25,
+        longContext: {
+            inputTokenThreshold: 272_000,
+            inputMultiplier: 2,
+            outputMultiplier: 1.5,
+        },
+    },
     'gpt-5.4': { input: 2.5, output: 15.0 },
     'gpt-5.4-pro': { input: 30.0, output: 180.0 },
     'gpt-5.2': { input: 1.75, output: 14.0 },
@@ -642,8 +725,9 @@ export const resolveEffectiveImageGenerationSize = (
 export const estimateOpenAITextCost = (
     model: string,
     inputTokens: number,
-    outputTokens: number
-): OpenAITextCostBreakdown => {
+    outputTokens: number,
+    usageDetails: OpenAITextUsageDetails = {}
+): OpenAITextCostEstimate => {
     const pricingModel = resolveOpenAITextPricingModel(model).matchedModel;
     const pricing = pricingModel ? openAITextPricingTable[pricingModel] : null;
 
@@ -654,18 +738,99 @@ export const estimateOpenAITextCost = (
             inputCost: 0,
             outputCost: 0,
             totalCost: 0,
+            completeness: 'unknown',
+            appliedRules: [],
+            incompleteReasons: ['unpriced_model'],
         };
     }
 
-    const inputCost = (inputTokens / 1_000_000) * pricing.input;
-    const outputCost = (outputTokens / 1_000_000) * pricing.output;
+    const appliedRules: OpenAITextCostAppliedRule[] = [];
+    const incompleteReasons: OpenAITextCostIncompleteReason[] = [];
+    const hasAdvancedInputPricing =
+        pricing.cachedInput !== undefined ||
+        pricing.cacheWriteMultiplier !== undefined;
+    const cachedInputTokens = usageDetails.cachedInputTokens;
+    const cacheWriteTokens = usageDetails.cacheWriteTokens;
+
+    if (hasAdvancedInputPricing && cachedInputTokens === undefined) {
+        incompleteReasons.push('cached_input_tokens_unavailable');
+    }
+    if (hasAdvancedInputPricing && cacheWriteTokens === undefined) {
+        incompleteReasons.push('cache_write_tokens_unavailable');
+    }
+
+    const knownCachedInputTokens = Math.max(0, cachedInputTokens ?? 0);
+    const knownCacheWriteTokens = Math.max(0, cacheWriteTokens ?? 0);
+    const knownSpecialInputTokens =
+        knownCachedInputTokens + knownCacheWriteTokens;
+    const hasValidSpecialInputBreakdown =
+        knownSpecialInputTokens <= inputTokens;
+    if (!hasValidSpecialInputBreakdown) {
+        incompleteReasons.push('invalid_input_token_breakdown');
+    }
+    // Invalid provider breakdowns stay visible in the returned usage fields,
+    // but cannot create more billable input than the provider reported. Treat
+    // the whole input as ordinary when no safe allocation can be inferred.
+    const billableCachedInputTokens = hasValidSpecialInputBreakdown
+        ? knownCachedInputTokens
+        : 0;
+    const billableCacheWriteTokens = hasValidSpecialInputBreakdown
+        ? knownCacheWriteTokens
+        : 0;
+    const billableSpecialInputTokens =
+        billableCachedInputTokens + billableCacheWriteTokens;
+    const ordinaryInputTokens = inputTokens - billableSpecialInputTokens;
+    const longContextApplies =
+        pricing.longContext !== undefined &&
+        inputTokens > pricing.longContext.inputTokenThreshold;
+    const inputMultiplier = longContextApplies
+        ? (pricing.longContext?.inputMultiplier ?? 1)
+        : 1;
+    const outputMultiplier = longContextApplies
+        ? (pricing.longContext?.outputMultiplier ?? 1)
+        : 1;
+
+    if (billableCachedInputTokens > 0 && pricing.cachedInput !== undefined) {
+        appliedRules.push('prompt_cache_read_discount');
+    }
+    if (
+        billableCacheWriteTokens > 0 &&
+        pricing.cacheWriteMultiplier !== undefined
+    ) {
+        appliedRules.push('prompt_cache_write_multiplier');
+    }
+    if (longContextApplies) {
+        appliedRules.push(
+            'gpt_5_6_long_context_input_multiplier',
+            'gpt_5_6_long_context_output_multiplier'
+        );
+    }
+
+    const ordinaryInputCost = (ordinaryInputTokens / 1_000_000) * pricing.input;
+    const cachedInputCost =
+        (billableCachedInputTokens / 1_000_000) *
+        (pricing.cachedInput ?? pricing.input);
+    const cacheWriteInputCost =
+        (billableCacheWriteTokens / 1_000_000) *
+        pricing.input *
+        (pricing.cacheWriteMultiplier ?? 1);
+    const inputCost =
+        (ordinaryInputCost + cachedInputCost + cacheWriteInputCost) *
+        inputMultiplier;
+    const outputCost =
+        (outputTokens / 1_000_000) * pricing.output * outputMultiplier;
 
     return {
         inputTokens,
         outputTokens,
+        ...(cachedInputTokens !== undefined && { cachedInputTokens }),
+        ...(cacheWriteTokens !== undefined && { cacheWriteTokens }),
         inputCost,
         outputCost,
         totalCost: inputCost + outputCost,
+        completeness: incompleteReasons.length === 0 ? 'complete' : 'partial',
+        appliedRules,
+        incompleteReasons,
     };
 };
 

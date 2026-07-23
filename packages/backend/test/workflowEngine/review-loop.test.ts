@@ -491,9 +491,10 @@ test('runBoundedReviewWorkflow records initial generation routing exhaustion wit
 
 test('runBoundedReviewWorkflow persists assess machine decision and reason in lineage signals', async () => {
     let generationCalls = 0;
+    let assessSafetyIdentifier: string | undefined;
     const generationRuntime: GenerationRuntime = {
         kind: 'test-runtime',
-        async generate() {
+        async generate(input) {
             generationCalls += 1;
             if (generationCalls === 1) {
                 return {
@@ -510,6 +511,7 @@ test('runBoundedReviewWorkflow persists assess machine decision and reason in li
             }
 
             if (generationCalls === 2) {
+                assessSafetyIdentifier = input.safetyIdentifier;
                 return {
                     text: '{"reviewDecision":"finalize","reviewReason":"Draft is complete and clear."}',
                     model: 'gpt-5-mini',
@@ -532,6 +534,7 @@ test('runBoundedReviewWorkflow persists assess machine decision and reason in li
         generationRequest: {
             model: 'gpt-5-mini',
             messages: [{ role: 'user', content: 'Summarize this.' }],
+            safetyIdentifier: 'derived-safety-id',
         },
         messagesWithHints: [{ role: 'user', content: 'Summarize this.' }],
         generationStartedAtMs: Date.now(),
@@ -574,6 +577,7 @@ test('runBoundedReviewWorkflow persists assess machine decision and reason in li
         'Draft is complete and clear.'
     );
     assert.equal(assessStep.outcome.signals?.traceAlignment, 'aligned');
+    assert.equal(assessSafetyIdentifier, 'derived-safety-id');
     assert.equal(generationCalls, 2);
 });
 

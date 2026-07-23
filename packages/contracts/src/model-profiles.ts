@@ -7,7 +7,11 @@
  */
 
 import { z } from 'zod';
-import { supportedProviders } from './providers.js';
+import {
+    supportedProviders,
+    supportedReasoningEfforts,
+    type SupportedReasoningEffort,
+} from './providers.js';
 
 /**
  * Shorthand labels for callers that want "fast" or "quality" style routing
@@ -36,6 +40,8 @@ export type ModelLatencyClass = (typeof modelLatencyClasses)[number];
  */
 export interface ModelProfileCapabilities {
     canUseSearch: boolean;
+    /** Reasoning levels the concrete provider model accepts. */
+    supportedReasoningEfforts?: SupportedReasoningEffort[];
     toolCapabilities?: Record<string, boolean>;
 }
 
@@ -51,6 +57,8 @@ export interface ModelProfile {
     enabled: boolean;
     tierBindings: ModelTierAlias[];
     capabilities: ModelProfileCapabilities;
+    /** Fallback effort used only when the caller does not request one. */
+    defaultReasoningEffort?: SupportedReasoningEffort;
     maxInputTokens?: number;
     maxOutputTokens?: number;
     costClass?: ModelCostClass;
@@ -102,6 +110,9 @@ export type StepRoutingChainsConfig = Record<
 export const ModelProfileCapabilitiesSchema = z
     .object({
         canUseSearch: z.boolean(),
+        supportedReasoningEfforts: z
+            .array(z.enum(supportedReasoningEfforts))
+            .optional(),
         toolCapabilities: z.record(z.string(), z.boolean()).optional(),
     })
     .strict();
@@ -118,12 +129,27 @@ export const ModelProfileSchema: z.ZodType<ModelProfile> = z
         enabled: z.boolean(),
         tierBindings: z.array(z.enum(modelTierAliases)).default([]),
         capabilities: ModelProfileCapabilitiesSchema,
+        defaultReasoningEffort: z.enum(supportedReasoningEfforts).optional(),
         maxInputTokens: z.number().int().positive().optional(),
         maxOutputTokens: z.number().int().positive().optional(),
         costClass: z.enum(modelCostClasses).optional(),
         latencyClass: z.enum(modelLatencyClasses).optional(),
     })
-    .strict();
+    .strict()
+    .superRefine((profile, context) => {
+        const supported = profile.capabilities.supportedReasoningEfforts;
+        if (
+            profile.defaultReasoningEffort !== undefined &&
+            !supported?.includes(profile.defaultReasoningEffort)
+        ) {
+            context.addIssue({
+                code: z.ZodIssueCode.custom,
+                path: ['defaultReasoningEffort'],
+                message:
+                    'Default reasoning effort must be included in the profile supported reasoning efforts.',
+            });
+        }
+    });
 
 /**
  * Schema for the full model profile list.

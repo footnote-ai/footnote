@@ -174,6 +174,8 @@ type CreateChatPlannerOptions = {
     structuredExecutionTimeoutMs?: number;
     availableCapabilityProfiles?: ChatPlannerCapabilityProfileOption[];
     recordUsage?: (record: BackendLLMCostRecord) => void;
+    /** Backend-derived pseudonym; never pass a raw surface identifier. */
+    safetyIdentifier?: string;
 };
 
 /**
@@ -185,8 +187,9 @@ type ChatPlannerExecutionRequest = {
     messages: RuntimeMessage[];
     model: string;
     maxOutputTokens: number;
-    reasoningEffort: ChatGenerationPlan['reasoningEffort'];
+    reasoningEffort?: ChatGenerationPlan['reasoningEffort'];
     verbosity?: ChatGenerationPlan['verbosity'];
+    safetyIdentifier?: string;
     signal?: AbortSignal;
 };
 
@@ -215,6 +218,21 @@ type ChatPlannerStructuredExecutor = (
     request: ChatPlannerExecutionRequest
 ) => Promise<ChatPlannerStructuredExecutionResult>;
 type ChatPlannerExecutionMode = 'structured' | 'text_json';
+
+/**
+ * Composes shared planner policy with the output contract for one execution
+ * mode. Structured calls rely on the supplied tool schema, while the
+ * compatibility path keeps its explicit JSON contract.
+ */
+const renderPlannerModePrompt = (mode: ChatPlannerExecutionMode): string => {
+    const sharedPrompt = renderPrompt('chat.planner.system').content;
+    const outputPrompt = renderPrompt(
+        mode === 'structured'
+            ? 'chat.planner.structured.system'
+            : 'chat.planner.text_json.system'
+    ).content;
+    return `${sharedPrompt}\n\n${outputPrompt}`;
+};
 
 export type PlannerCandidate = Partial<ChatPlan> & {
     requestedCapabilityProfile?: unknown;
@@ -271,10 +289,12 @@ const normalizeReasoningEffort = (
     value: unknown
 ): ChatGenerationPlan['reasoningEffort'] => {
     if (
-        value === 'minimal' ||
+        value === 'none' ||
         value === 'low' ||
         value === 'medium' ||
-        value === 'high'
+        value === 'high' ||
+        value === 'xhigh' ||
+        value === 'max'
     ) {
         return value;
     }
@@ -1365,6 +1385,7 @@ export const createChatPlanner = ({
     structuredExecutionTimeoutMs = runtimeConfig.openai.requestTimeoutMs,
     availableCapabilityProfiles = [],
     recordUsage = recordBackendLLMUsage,
+    safetyIdentifier,
 }: CreateChatPlannerOptions) => {
     if (!executePlanner && !executePlannerStructured) {
         throw new Error(
@@ -1423,22 +1444,27 @@ export const createChatPlanner = ({
             : 'text_json';
         let plannerResponseText: string | undefined;
         let plannerStructuredArguments: string | undefined;
-        const plannerPrompt = renderPrompt('chat.planner.system').content;
         const requestSummary = summarizeRequest(request);
-        const plannerMessages = buildPlannerMessages({
-            plannerPrompt,
-            plannerProfileContext: plannerCapabilityContext,
-            requestSummary,
-            request,
-            contextTier: 'current_window',
-        });
-
-        const requestPayload: ChatPlannerExecutionRequest = {
-            messages: plannerMessages,
+        const buildPlannerRequestPayload = (
+            mode: ChatPlannerExecutionMode,
+            contextTier: PlannerContextTier
+        ): ChatPlannerExecutionRequest => ({
+            messages: buildPlannerMessages({
+                plannerPrompt: renderPlannerModePrompt(mode),
+                plannerProfileContext: plannerCapabilityContext,
+                requestSummary,
+                request,
+                contextTier,
+            }),
             model: defaultModel,
             maxOutputTokens: 1200,
             reasoningEffort: 'low',
-        };
+            ...(safetyIdentifier !== undefined && { safetyIdentifier }),
+        });
+        const requestPayload = buildPlannerRequestPayload(
+            plannerMode,
+            'current_window'
+        );
 
         const recordPlannerUsage = (
             usageModel: string,
@@ -1454,12 +1480,26 @@ export const createChatPlanner = ({
                         feature: 'chat_planner',
                         model: usageModel,
                         promptTokens,
+                        ...(usage?.cachedInputTokens !== undefined && {
+                            cachedInputTokens: usage.cachedInputTokens,
+                        }),
+                        ...(usage?.cacheWriteTokens !== undefined && {
+                            cacheWriteTokens: usage.cacheWriteTokens,
+                        }),
                         completionTokens,
                         totalTokens,
                         ...estimateBackendTextCost(
                             usageModel,
                             promptTokens,
-                            completionTokens
+                            completionTokens,
+                            {
+                                ...(usage?.cachedInputTokens !== undefined && {
+                                    cachedInputTokens: usage.cachedInputTokens,
+                                }),
+                                ...(usage?.cacheWriteTokens !== undefined && {
+                                    cacheWriteTokens: usage.cacheWriteTokens,
+                                }),
+                            }
                         ),
                         timestamp: Date.now(),
                     });
@@ -1478,19 +1518,10 @@ export const createChatPlanner = ({
                 return null;
             }
 
-            const expandedMessages = buildPlannerMessages({
-                plannerPrompt,
-                plannerProfileContext: plannerCapabilityContext,
-                requestSummary,
-                request,
-                contextTier,
-            });
-            const expandedRequestPayload: ChatPlannerExecutionRequest = {
-                messages: expandedMessages,
-                model: defaultModel,
-                maxOutputTokens: 1200,
-                reasoningEffort: 'low',
-            };
+            const expandedRequestPayload = buildPlannerRequestPayload(
+                'text_json',
+                contextTier
+            );
             const expandedResponse = await executePlanner(
                 expandedRequestPayload
             );
@@ -1802,8 +1833,12 @@ export const createChatPlanner = ({
                 );
                 try {
                     plannerMode = 'text_json';
-                    const textJsonResponse =
-                        await executePlanner(requestPayload);
+                    const textJsonResponse = await executePlanner(
+                        buildPlannerRequestPayload(
+                            'text_json',
+                            'current_window'
+                        )
+                    );
                     plannerResponseText = textJsonResponse.text;
                     recordPlannerUsage(
                         textJsonResponse.model || defaultModel,

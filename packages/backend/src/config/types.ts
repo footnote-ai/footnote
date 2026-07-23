@@ -54,6 +54,7 @@ export type RuntimeConfig = {
     };
     openai: {
         apiKey: string | null;
+        safetyIdentifierSecret: string | null;
         defaultModel: ConfiguredProviderModel;
         plannerStructuredOutputEnabled: boolean;
         plannerAllowTextJsonCompatibilityFallback: boolean;

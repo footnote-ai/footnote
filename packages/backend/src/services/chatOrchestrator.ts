@@ -74,6 +74,10 @@ import type {
     PlanContinuationBuilder,
     AppliedPlanState,
 } from './plannerWorkflowSeams.js';
+import {
+    deriveOpenAiSafetyIdentifier,
+    resolveProfileReasoningEffort,
+} from './runtimeRequestControls.js';
 
 type CreateChatOrchestratorOptions = CreateChatServiceOptions & {
     weatherForecastTool?: WeatherForecastTool;
@@ -154,19 +158,35 @@ export const createChatOrchestrator = ({
         executionContractTrustGraph,
     });
     const createRuntimeChatPlanner = (
-        getActivePlannerProfile: () => ModelProfile
-    ) =>
-        createChatPlanner({
+        getActivePlannerProfile: () => ModelProfile,
+        safetyIdentifier: string | undefined
+    ) => {
+        const structuredExecutor =
+            runtimeConfig.openai.plannerStructuredOutputEnabled &&
+            plannerProfile.provider === 'openai' &&
+            runtimeConfig.openai.apiKey &&
+            generationRuntime.kind !== 'test-runtime'
+                ? createOpenAiChatPlannerStructuredExecutor({
+                      apiKey: runtimeConfig.openai.apiKey,
+                  })
+                : undefined;
+
+        return createChatPlanner({
             availableCapabilityProfiles: plannerCapabilityOptions,
-            ...(runtimeConfig.openai.plannerStructuredOutputEnabled &&
-                plannerProfile.provider === 'openai' &&
-                runtimeConfig.openai.apiKey &&
-                generationRuntime.kind !== 'test-runtime' && {
-                    executePlannerStructured:
-                        createOpenAiChatPlannerStructuredExecutor({
-                            apiKey: runtimeConfig.openai.apiKey,
+            ...(structuredExecutor !== undefined && {
+                executePlannerStructured: async (request) =>
+                    structuredExecutor({
+                        ...request,
+                        reasoningEffort: resolveProfileReasoningEffort(
+                            getActivePlannerProfile(),
+                            request.reasoningEffort,
+                            chatOrchestratorLogger
+                        ),
+                        ...(safetyIdentifier !== undefined && {
+                            safetyIdentifier,
                         }),
-                }),
+                    }),
+            }),
             executePlanner: async ({
                 messages,
                 model: _model,
@@ -183,8 +203,15 @@ export const createChatOrchestrator = ({
                     provider: activePlannerProfile.provider,
                     capabilities: activePlannerProfile.capabilities,
                     maxOutputTokens,
-                    reasoningEffort,
+                    reasoningEffort: resolveProfileReasoningEffort(
+                        activePlannerProfile,
+                        reasoningEffort,
+                        chatOrchestratorLogger
+                    ),
                     verbosity,
+                    ...(safetyIdentifier !== undefined && {
+                        safetyIdentifier,
+                    }),
                 });
 
                 return {
@@ -197,7 +224,9 @@ export const createChatOrchestrator = ({
                 runtimeConfig.openai.plannerAllowTextJsonCompatibilityFallback,
             defaultModel: plannerProfile.providerModel,
             recordUsage,
+            ...(safetyIdentifier !== undefined && { safetyIdentifier }),
         });
+    };
 
     /**
      * Runs one chat request end-to-end.
@@ -210,8 +239,17 @@ export const createChatOrchestrator = ({
         request: PostChatRequest
     ): Promise<PostChatResponse> => {
         let activePlannerProfile = plannerProfile;
+        const safetyIdentifier = deriveOpenAiSafetyIdentifier(
+            {
+                secret: runtimeConfig.openai.safetyIdentifierSecret,
+                surface: request.surface,
+                userId: request.surfaceContext?.userId,
+            },
+            chatOrchestratorLogger
+        );
         const chatPlanner = createRuntimeChatPlanner(
-            () => activePlannerProfile
+            () => activePlannerProfile,
+            safetyIdentifier
         );
         const isWeatherLikeRequest = (input: string): boolean => {
             const normalized = input.trim().toLowerCase();
@@ -750,7 +788,11 @@ export const createChatOrchestrator = ({
                         plannerApplication.selectedResponseProfile.provider,
                     capabilities:
                         plannerApplication.selectedResponseProfile.capabilities,
-                    reasoningEffort: executionPlan.generation.reasoningEffort,
+                    ...(executionPlan.generation.reasoningEffort !==
+                        undefined && {
+                        reasoningEffort:
+                            executionPlan.generation.reasoningEffort,
+                    }),
                     verbosity: executionPlan.generation.verbosity,
                 },
                 plannerTemperament: executionPlan.generation.temperament,
@@ -790,6 +832,7 @@ export const createChatOrchestrator = ({
             model: defaultResponseProfile.providerModel,
             provider: defaultResponseProfile.provider,
             capabilities: defaultResponseProfile.capabilities,
+            ...(safetyIdentifier !== undefined && { safetyIdentifier }),
             workflowModeId: workflowModeResolution.modeDecision.modeId,
             workflowMaxReviewCycles: normalizedRequest.maxReviewCycles,
             routingRequest: {

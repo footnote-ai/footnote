@@ -25,8 +25,9 @@ import { extractMarkdownLinkCitations } from './citationRecovery.js';
 import type { ToolExecutionContext } from '@footnote/contracts/policy';
 
 type VoltAgentOpenAiProviderOptions = {
-    reasoningEffort?: 'low' | 'medium' | 'high';
+    reasoningEffort?: GenerationRequest['reasoningEffort'];
     textVerbosity?: 'low' | 'medium' | 'high';
+    safetyIdentifier?: string;
 };
 
 /**
@@ -38,6 +39,7 @@ export type VoltAgentProviderOptions = {
     reasoningEffort?: VoltAgentOpenAiProviderOptions['reasoningEffort'];
     verbosity?: VoltAgentOpenAiProviderOptions['textVerbosity'];
     searchContextSize?: GenerationSearchRequest['contextSize'];
+    safetyIdentifier?: string;
     providerHints?: Record<string, unknown>;
 };
 
@@ -56,6 +58,8 @@ export interface VoltAgentGenerateTextOptions {
  */
 export interface VoltAgentUsage {
     promptTokens?: number;
+    cachedInputTokens?: number;
+    cacheWriteTokens?: number;
     completionTokens?: number;
     totalTokens?: number;
 }
@@ -458,23 +462,6 @@ const toFootnoteModel = (model: string): string => {
 };
 
 /**
- * Keeps the current reasoning semantics aligned with the legacy runtime path.
- */
-const normalizeVoltAgentReasoningEffort = (
-    value: GenerationRequest['reasoningEffort']
-): VoltAgentOpenAiProviderOptions['reasoningEffort'] => {
-    if (value === 'minimal') {
-        return 'low';
-    }
-
-    if (value === 'low' || value === 'medium' || value === 'high') {
-        return value;
-    }
-
-    return undefined;
-};
-
-/**
  * Builds the provider option bag for one VoltAgent text call.
  */
 const buildVoltAgentProviderOptions = (
@@ -488,13 +475,17 @@ const buildVoltAgentProviderOptions = (
         return undefined;
     }
 
-    const reasoningEffort = normalizeVoltAgentReasoningEffort(
-        request.reasoningEffort
-    );
+    const reasoningEffort = request.reasoningEffort;
     const verbosity = request.verbosity;
     const searchContextSize = request.search?.contextSize;
+    const safetyIdentifier = request.safetyIdentifier;
 
-    if (!reasoningEffort && !verbosity && !searchContextSize) {
+    if (
+        !reasoningEffort &&
+        !verbosity &&
+        !searchContextSize &&
+        !safetyIdentifier
+    ) {
         return undefined;
     }
 
@@ -502,6 +493,7 @@ const buildVoltAgentProviderOptions = (
         ...(reasoningEffort !== undefined && { reasoningEffort }),
         ...(verbosity !== undefined && { verbosity }),
         ...(searchContextSize !== undefined && { searchContextSize }),
+        ...(safetyIdentifier !== undefined && { safetyIdentifier }),
     };
 };
 
@@ -530,6 +522,9 @@ const toVoltAgentCallProviderOptions = (
     }
     if (providerOptions.verbosity !== undefined) {
         openAiOptions.textVerbosity = providerOptions.verbosity;
+    }
+    if (providerOptions.safetyIdentifier !== undefined) {
+        openAiOptions.safetyIdentifier = providerOptions.safetyIdentifier;
     }
 
     const normalizedProviderOptions: Record<string, unknown> = {
@@ -712,6 +707,12 @@ const normalizeVoltAgentResult = (
     const usage: GenerationUsage | undefined = result.usage
         ? {
               promptTokens: result.usage.promptTokens,
+              ...(result.usage.cachedInputTokens !== undefined && {
+                  cachedInputTokens: result.usage.cachedInputTokens,
+              }),
+              ...(result.usage.cacheWriteTokens !== undefined && {
+                  cacheWriteTokens: result.usage.cacheWriteTokens,
+              }),
               completionTokens: result.usage.completionTokens,
               totalTokens: result.usage.totalTokens,
           }
@@ -863,6 +864,10 @@ const createDefaultVoltAgentExecutor = ({
                 finishReason: result.finishReason,
                 usage: {
                     promptTokens: result.usage.inputTokens,
+                    cachedInputTokens:
+                        result.usage.inputTokenDetails.cacheReadTokens,
+                    cacheWriteTokens:
+                        result.usage.inputTokenDetails.cacheWriteTokens,
                     completionTokens: result.usage.outputTokens,
                     totalTokens: result.usage.totalTokens,
                 },
@@ -1030,7 +1035,6 @@ export {
     buildVoltAgentProviderOptions,
     createDefaultVoltAgentExecutor,
     createVoltAgentRuntime,
-    normalizeVoltAgentReasoningEffort,
     normalizeVoltAgentResult,
     toFootnoteModel,
     toVoltAgentMessages,

@@ -14,6 +14,7 @@ import type {
     SupportedOpenAIImageModel,
     SupportedOpenAITextModel,
     SupportedProvider,
+    SupportedReasoningEffort,
 } from '@footnote/contracts';
 import type { ToolExecutionContext } from '@footnote/contracts/policy';
 import type {
@@ -34,7 +35,7 @@ export type RuntimeMessageRole = 'system' | 'user' | 'assistant';
 /**
  * Shared reasoning effort levels that runtime adapters may support.
  */
-export type GenerationReasoningEffort = 'minimal' | 'low' | 'medium' | 'high';
+export type GenerationReasoningEffort = SupportedReasoningEffort;
 
 /**
  * Shared verbosity levels that runtime adapters may support.
@@ -137,6 +138,12 @@ export interface GenerationRequest {
      */
     reasoningEffort?: GenerationReasoningEffort;
     /**
+     * Optional backend-derived pseudonymous identifier forwarded only to
+     * providers that support abuse-monitoring identifiers. Raw caller IDs
+     * must never cross this runtime boundary in this field.
+     */
+    safetyIdentifier?: string;
+    /**
      * Requested verbosity level for the generation attempt.
      */
     verbosity?: GenerationVerbosity;
@@ -184,6 +191,14 @@ export interface GenerationUsage {
      * Input or prompt token count, when the runtime exposes it.
      */
     promptTokens?: number;
+    /**
+     * Input tokens read from the provider prompt cache, when reported.
+     */
+    cachedInputTokens?: number;
+    /**
+     * Input tokens written to the provider prompt cache, when reported.
+     */
+    cacheWriteTokens?: number;
     /**
      * Output or completion token count, when the runtime exposes it.
      */

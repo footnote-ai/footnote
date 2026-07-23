@@ -514,6 +514,45 @@ test('model profile resolver normalizes provider-prefixed legacy default models'
     assert.equal(resolved.providerModel, 'qwen3.5:cloud');
 });
 
+test('bundled OpenAI profiles map GPT-5.6 tiers to their intended roles', () => {
+    const section = buildModelProfilesSection(
+        {
+            OPENAI_API_KEY: 'test-key',
+            OLLAMA_BASE_URL: 'https://api.ollama.com',
+        },
+        process.cwd(),
+        () => undefined
+    );
+    const profilesById = new Map(
+        section.catalog.map((profile) => [profile.id, profile])
+    );
+
+    assert.equal(
+        profilesById.get('openai-text-fast')?.providerModel,
+        'gpt-5.6-luna'
+    );
+    assert.equal(
+        profilesById.get('openai-json-optimized')?.providerModel,
+        'gpt-5.6-luna'
+    );
+    assert.equal(
+        profilesById.get('openai-text-medium')?.providerModel,
+        'gpt-5.6-terra'
+    );
+    const qualityProfile = profilesById.get('openai-text-quality');
+    assert.equal(qualityProfile?.providerModel, 'gpt-5.6-sol');
+    assert.equal(qualityProfile?.defaultReasoningEffort, 'medium');
+    assert.deepEqual(qualityProfile?.capabilities.supportedReasoningEfforts, [
+        'none',
+        'low',
+        'medium',
+        'high',
+        'xhigh',
+        'max',
+    ]);
+    assert.equal(section.defaultProfileId, 'openai-text-medium');
+});
+
 test('bundled active model profiles are fully covered by pricing or explicit policy classifications', () => {
     const section = buildModelProfilesSection(
         {

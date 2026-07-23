@@ -175,6 +175,7 @@ export type {
     SupportedReasoningEffort,
     SupportedVerbosity,
 } from './providers.js';
+export { supportedReasoningEfforts } from './providers.js';
 export type {
     ModelCostClass,
     ModelLatencyClass,
@@ -217,7 +218,12 @@ export type {
     ModelProfileTextPricingCoverage,
     OpenAIModelCanonicalizationResult,
     OpenAIModelCanonicalizationRule,
+    OpenAITextCostAppliedRule,
     OpenAITextCostBreakdown,
+    OpenAITextCostCompleteness,
+    OpenAITextCostEstimate,
+    OpenAITextCostIncompleteReason,
+    OpenAITextUsageDetails,
     OpenAITtsCostBreakdown,
     OpenAIModelPricingResolution,
     OpenAITextPricingEntry,

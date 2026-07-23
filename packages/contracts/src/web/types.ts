@@ -16,6 +16,7 @@ import type {
     InternalImageRenderModelId,
     InternalImageTextModelId,
     SupportedImageOutputFormat,
+    SupportedReasoningEffort,
 } from '../providers.js';
 
 // Standard API error envelope used by multiple endpoints.
@@ -706,11 +707,14 @@ export type PostInternalNewsTaskRequest = {
     query?: string;
     category?: string;
     maxResults?: number;
-    reasoningEffort?: 'minimal' | 'low' | 'medium' | 'high';
+    /** Backend resolves this against the selected profile and omits unsupported values fail-open. */
+    reasoningEffort?: SupportedReasoningEffort;
     verbosity?: 'low' | 'medium' | 'high';
     channelContext?: {
         channelId?: string;
         guildId?: string;
+        /** Backend-only safety-ID input. It must never be mirrored into prompts or logs. */
+        userId?: string;
     };
 };
 

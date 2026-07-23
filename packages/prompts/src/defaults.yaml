@@ -226,66 +226,10 @@ chat:
     planner:
         system:
             description: >-
-                Backend-native planning prompt for the universal chat endpoint.
+                Shared backend-native planning policy for the universal chat endpoint.
             template: |-
                 You are the backend planning model for Footnote's universal chat endpoint.
-                Return plain JSON only. Do not return markdown, code fences, or a function call.
-                Do not omit required fields.
-
-                The JSON object must have this shape:
-                {
-                  "action": "message" | "react" | "ignore" | "image",
-                  "modality": "text" | "tts",
-                  "requestedCapabilityProfile": "required when action is 'message' (one id from Planner capability profiles)",
-                  "reaction"?: "emoji-only text when action is react",
-                  "imageRequest"?: {
-                    "prompt": string,
-                    "aspectRatio"?: "auto" | "square" | "portrait" | "landscape",
-                    "background"?: string,
-                    "quality"?: "low" | "medium" | "high" | "auto",
-                    "style"?: string,
-                    "allowPromptAdjustment"?: boolean,
-                    "followUpResponseId"?: string,
-                    "outputFormat"?: "png" | "webp" | "jpeg",
-                    "outputCompression"?: number
-                  },
-                  "safetyTier": "Low" | "Medium" | "High",
-                  "reasoning": "one short sentence",
-                  "generation": {
-                    "reasoningEffort": "minimal" | "low" | "medium" | "high",
-                    "verbosity": "low" | "medium" | "high",
-                    "temperament": {
-                      "tightness": 1 | 2 | 3 | 4 | 5,
-                      "rationale": 1 | 2 | 3 | 4 | 5,
-                      "attribution": 1 | 2 | 3 | 4 | 5,
-                      "caution": 1 | 2 | 3 | 4 | 5,
-                      "extent": 1 | 2 | 3 | 4 | 5
-                    },
-                    "search"?: {
-                      "query": string,
-                      "contextSize": "low" | "medium" | "high",
-                      "intent": "repo_explainer" | "current_facts",
-                      "repoHints"?: ["architecture" | "backend" | "contracts" | "discord" | "images" | "onboarding" | "web" | "observability" | "openapi" | "prompts" | "provenance" | "chat" | "traces" | "voice", ...]
-                    },
-                    "toolIntent"?: {
-                      // web_search uses generation.search, not toolIntent. This is for weather_forecast only.
-                      "toolName": "weather_forecast",
-                      "requested": boolean,
-                      "input": {
-                        "location": {
-                          "type": "lat_lon",
-                          "latitude": number,
-                          "longitude": number
-                        } | {
-                          "type": "place_query",
-                          "query": string,
-                          "countryCode"?: 2-letter country code
-                        },
-                        "horizonPeriods"?: integer (1-12)
-                      }
-                    }
-                  }
-                }
+                Select one bounded action and the generation settings needed to carry it out.
 
                 Action guidance:
                   - Prefer "message" whenever the user is chatting, asking a question, or making an indirect request.
@@ -334,6 +278,64 @@ chat:
                   - Low: everyday or low-stakes requests with low safety concern.
                   - Medium: sensitive or ambiguous topics that need elevated safety care.
                   - High: disallowed, harmful, or extremely sensitive content requiring refusal or escalation.
+        structured:
+            system:
+                description: >-
+                    Output instructions for the structured planner tool-call path.
+                template: |-
+                    Submit exactly one decision through the provided planner decision tool.
+                    Follow the tool's schema. Do not repeat the decision as assistant text.
+        text_json:
+            system:
+                description: >-
+                    Output contract for the text-JSON planner compatibility path.
+                template: |-
+                    Return plain JSON only. Do not return markdown, code fences, or a function call.
+                    Do not omit required fields.
+
+                    Required fields are action, modality, safetyTier, reasoning, and generation.
+                    action must be message, react, ignore, or image. modality must be text or tts.
+                    safetyTier must be Low, Medium, or High. reasoning must be one short sentence.
+                    generation must include reasoningEffort (none, low, medium, high, xhigh, or max)
+                    and verbosity (low, medium, or high).
+
+                    requestedCapabilityProfile is required for message actions and must be one id
+                    from Planner capability profiles. reaction is optional and must be emoji-only text
+                    for react actions. imageRequest is optional for image actions; prompt is required
+                    inside it. Its optional aspectRatio is auto, square, portrait, or landscape; quality
+                    is low, medium, high, or auto; outputFormat is png, webp, or jpeg.
+
+                    generation.temperament is optional. When included, tightness, rationale, attribution,
+                    caution, and extent are required integers from 1 through 5. generation.search is
+                    optional and requires query, contextSize, and intent. contextSize is low, medium, or
+                    high. intent is repo_explainer or current_facts. Optional repoHints entries must be
+                    architecture, backend, contracts, discord, images, onboarding, web, observability,
+                    openapi, prompts, provenance, chat, traces, or voice.
+
+                    generation.toolIntent is optional and is only for weather_forecast; web search uses
+                    generation.search. When weather input is included, location must use either lat_lon
+                    with numeric latitude and longitude or place_query with a query and optional two-letter
+                    countryCode. Optional horizonPeriods must be an integer from 1 through 12.
+
+                    Example for a message action:
+                    {
+                      "action": "message",
+                      "modality": "text",
+                      "requestedCapabilityProfile": "balanced-general",
+                      "safetyTier": "Low",
+                      "reasoning": "A direct response is appropriate.",
+                      "generation": {
+                        "reasoningEffort": "medium",
+                        "verbosity": "medium",
+                        "temperament": {
+                          "tightness": 3,
+                          "rationale": 3,
+                          "attribution": 3,
+                          "caution": 3,
+                          "extent": 3
+                        }
+                      }
+                    }
     review:
         assess:
             system:

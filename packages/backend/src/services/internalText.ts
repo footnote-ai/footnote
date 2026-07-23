@@ -6,6 +6,7 @@
  * @footnote-ethics: medium - Backend-owned prompt assembly and normalization affect what users see and how clearly helper results are explained.
  */
 import type { GenerationRuntime } from '@footnote/agent-runtime';
+import type { ModelProfile } from '@footnote/contracts';
 import type {
     PostInternalImageDescriptionTaskRequest,
     PostInternalImageDescriptionTaskResponse,
@@ -24,6 +25,10 @@ import {
 } from './llmCostRecorder.js';
 import type { InternalImageDescriptionAdapter } from './internalImageDescription.js';
 import { logger } from '../utils/logger.js';
+import {
+    deriveOpenAiSafetyIdentifier,
+    resolveProfileReasoningEffort,
+} from './runtimeRequestControls.js';
 
 /**
  * @footnote-logger: internalTextTaskService
@@ -72,7 +77,8 @@ Additional context (may indicate what to focus on): {{context}}
 
 export type CreateInternalNewsTaskServiceOptions = {
     generationRuntime: GenerationRuntime;
-    defaultModel: string;
+    defaultProfile: ModelProfile;
+    safetyIdentifierSecret?: string | null;
     recordUsage?: (record: BackendLLMCostRecord) => void;
 };
 
@@ -291,7 +297,8 @@ const buildImageDescriptionPrompt = (context?: string): string => {
 
 export const createInternalNewsTaskService = ({
     generationRuntime,
-    defaultModel,
+    defaultProfile,
+    safetyIdentifierSecret,
     recordUsage = recordBackendLLMUsage,
 }: CreateInternalNewsTaskServiceOptions): InternalNewsTaskService => {
     const runNewsTask = async (
@@ -315,9 +322,24 @@ export const createInternalNewsTaskService = ({
             category: category ?? 'Not specified',
             maxResults,
         });
+        const safetyIdentifier = deriveOpenAiSafetyIdentifier(
+            {
+                secret: safetyIdentifierSecret,
+                surface: 'discord',
+                userId: request.channelContext?.userId,
+            },
+            textTaskLogger
+        );
+        const effectiveReasoningEffort = resolveProfileReasoningEffort(
+            defaultProfile,
+            request.reasoningEffort ?? 'medium',
+            textTaskLogger
+        );
 
         const generationResult = await generationRuntime.generate({
-            model: defaultModel,
+            model: defaultProfile.providerModel,
+            provider: defaultProfile.provider,
+            capabilities: defaultProfile.capabilities,
             messages: [
                 { role: 'system', content: systemPrompt },
                 {
@@ -330,12 +352,14 @@ export const createInternalNewsTaskService = ({
                         query,
                         category,
                         maxResults,
-                        channelContext: request.channelContext,
                     })}`,
                 },
             ],
-            reasoningEffort: request.reasoningEffort ?? 'medium',
+            ...(effectiveReasoningEffort !== undefined && {
+                reasoningEffort: effectiveReasoningEffort,
+            }),
             verbosity: request.verbosity ?? 'medium',
+            ...(safetyIdentifier !== undefined && { safetyIdentifier }),
             search: {
                 query: searchQuery,
                 contextSize: 'medium',
@@ -343,7 +367,8 @@ export const createInternalNewsTaskService = ({
             },
         });
 
-        const usageModel = generationResult.model ?? defaultModel;
+        const usageModel =
+            generationResult.model ?? defaultProfile.providerModel;
         const promptTokens = generationResult.usage?.promptTokens ?? 0;
         const completionTokens = generationResult.usage?.completionTokens ?? 0;
         const totalTokens =
@@ -355,12 +380,30 @@ export const createInternalNewsTaskService = ({
                 feature: 'news',
                 model: usageModel,
                 promptTokens,
+                ...(generationResult.usage?.cachedInputTokens !== undefined && {
+                    cachedInputTokens: generationResult.usage.cachedInputTokens,
+                }),
+                ...(generationResult.usage?.cacheWriteTokens !== undefined && {
+                    cacheWriteTokens: generationResult.usage.cacheWriteTokens,
+                }),
                 completionTokens,
                 totalTokens,
                 ...estimateBackendTextCost(
                     usageModel,
                     promptTokens,
-                    completionTokens
+                    completionTokens,
+                    {
+                        ...(generationResult.usage?.cachedInputTokens !==
+                            undefined && {
+                            cachedInputTokens:
+                                generationResult.usage.cachedInputTokens,
+                        }),
+                        ...(generationResult.usage?.cacheWriteTokens !==
+                            undefined && {
+                            cacheWriteTokens:
+                                generationResult.usage.cacheWriteTokens,
+                        }),
+                    }
                 ),
                 timestamp: Date.now(),
             });

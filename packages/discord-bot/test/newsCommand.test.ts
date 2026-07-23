@@ -45,7 +45,7 @@ test('news command calls the backend-owned news task and renders the returned su
             channelId: 'channel-123',
             guildId: 'guild-456',
             token: 'token-present',
-            user: { tag: 'tester#0001' },
+            user: { id: 'user-789', tag: 'tester#0001' },
             channel: { id: 'channel-123' },
             isChatInputCommand: () => true,
             options: {
@@ -82,6 +82,7 @@ test('news command calls the backend-owned news task and renders the returned su
                 channelContext: {
                     channelId: 'channel-123',
                     guildId: 'guild-456',
+                    userId: 'user-789',
                 },
             },
         ]);

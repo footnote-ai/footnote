@@ -76,3 +76,33 @@ test('estimateBackendTextCost warns with canonicalization outcome for unknown id
         logger.warn = originalWarn;
     }
 });
+
+test('estimateBackendTextCost reports complete GPT-5.6 cache-aware pricing', () => {
+    const cost = estimateBackendTextCost('gpt-5.6-terra', 200_000, 100_000, {
+        cachedInputTokens: 100_000,
+        cacheWriteTokens: 50_000,
+    });
+
+    assert.equal(cost.inputCostUsd, 0.30625);
+    assert.equal(cost.outputCostUsd, 1.5);
+    assert.equal(cost.totalCostUsd, 1.80625);
+    assert.equal(cost.costCompleteness, 'complete');
+    assert.deepEqual(cost.costAppliedRules, [
+        'prompt_cache_read_discount',
+        'prompt_cache_write_multiplier',
+    ]);
+    assert.deepEqual(cost.costIncompleteReasons, []);
+});
+
+test('estimateBackendTextCost marks GPT-5.6 cost partial when cache details are missing', () => {
+    const cost = estimateBackendTextCost('gpt-5.6-sol', 200_000, 100_000);
+
+    assert.equal(cost.inputCostUsd, 1);
+    assert.equal(cost.outputCostUsd, 3);
+    assert.equal(cost.totalCostUsd, 4);
+    assert.equal(cost.costCompleteness, 'partial');
+    assert.deepEqual(cost.costIncompleteReasons, [
+        'cached_input_tokens_unavailable',
+        'cache_write_tokens_unavailable',
+    ]);
+});

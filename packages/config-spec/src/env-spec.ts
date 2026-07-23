@@ -47,6 +47,20 @@ export const envEntries = [
     }),
 
     defineEnv({
+        key: 'OPENAI_SAFETY_IDENTIFIER_SECRET',
+        owner: 'backend',
+        stage: 'runtime',
+        section: 'openai',
+        required: false,
+        secret: true,
+        kind: 'string',
+        description:
+            'Optional HMAC secret used to derive privacy-preserving OpenAI safety identifiers.',
+        defaultValue: noDefault(),
+        usedBy: ['packages/backend/src/config.ts'],
+    }),
+
+    defineEnv({
         key: 'OLLAMA_BASE_URL',
         owner: 'backend',
         stage: 'runtime',
@@ -1497,7 +1511,7 @@ export const envEntries = [
         secret: false,
         kind: 'string',
         description: 'Default model used by backend chat flows.',
-        defaultValue: literal('gpt-5-mini'),
+        defaultValue: literal('gpt-5.6-terra'),
         usedBy: ['packages/backend/src/config.ts'],
     }),
     defineEnv({

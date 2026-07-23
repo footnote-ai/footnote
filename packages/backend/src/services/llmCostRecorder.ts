@@ -10,6 +10,10 @@ import {
     estimateOpenAIRealtimeCost,
     resolveOpenAITextPricingModel,
     resolveOpenAIRealtimePricingModel,
+    type OpenAITextCostAppliedRule,
+    type OpenAITextCostCompleteness,
+    type OpenAITextCostIncompleteReason,
+    type OpenAITextUsageDetails,
 } from '@footnote/contracts/pricing';
 import { formatUsd, logger, type LLMCostTotals } from '../utils/logger.js';
 
@@ -24,13 +28,28 @@ export type BackendLLMCostRecord = {
         | 'voice_realtime';
     model: string;
     promptTokens: number;
+    cachedInputTokens?: number;
+    cacheWriteTokens?: number;
     completionTokens: number;
     totalTokens: number;
     inputCostUsd: number;
     outputCostUsd: number;
     totalCostUsd: number;
+    costCompleteness?: OpenAITextCostCompleteness;
+    costAppliedRules?: OpenAITextCostAppliedRule[];
+    costIncompleteReasons?: OpenAITextCostIncompleteReason[];
     timestamp: number;
 };
+
+export type BackendTextCostEstimate = Pick<
+    BackendLLMCostRecord,
+    | 'inputCostUsd'
+    | 'outputCostUsd'
+    | 'totalCostUsd'
+    | 'costCompleteness'
+    | 'costAppliedRules'
+    | 'costIncompleteReasons'
+>;
 
 const backendCostTotals: LLMCostTotals = {
     totalCostUsd: 0,
@@ -42,11 +61,9 @@ const backendCostTotals: LLMCostTotals = {
 export const estimateBackendTextCost = (
     model: string,
     promptTokens: number,
-    completionTokens: number
-): Pick<
-    BackendLLMCostRecord,
-    'inputCostUsd' | 'outputCostUsd' | 'totalCostUsd'
-> => {
+    completionTokens: number,
+    usageDetails: OpenAITextUsageDetails = {}
+): BackendTextCostEstimate => {
     const pricingResolution = resolveOpenAITextPricingModel(model);
     if (!pricingResolution.matchedModel) {
         logger.warn(
@@ -67,12 +84,16 @@ export const estimateBackendTextCost = (
     const estimatedCost = estimateOpenAITextCost(
         model,
         promptTokens,
-        completionTokens
+        completionTokens,
+        usageDetails
     );
     return {
         inputCostUsd: estimatedCost.inputCost,
         outputCostUsd: estimatedCost.outputCost,
         totalCostUsd: estimatedCost.totalCost,
+        costCompleteness: estimatedCost.completeness,
+        costAppliedRules: estimatedCost.appliedRules,
+        costIncompleteReasons: estimatedCost.incompleteReasons,
     };
 };
 
@@ -125,10 +146,25 @@ export const recordBackendLLMUsage = (record: BackendLLMCostRecord): void => {
             feature: record.feature,
             model: record.model,
             promptTokens: record.promptTokens,
+            ...(record.cachedInputTokens !== undefined && {
+                cachedInputTokens: record.cachedInputTokens,
+            }),
+            ...(record.cacheWriteTokens !== undefined && {
+                cacheWriteTokens: record.cacheWriteTokens,
+            }),
             completionTokens: record.completionTokens,
             totalTokens: record.totalTokens,
             totalCostUsd: Number(record.totalCostUsd.toFixed(6)),
             totalCostFormatted: formatUsd(record.totalCostUsd),
+            ...(record.costCompleteness !== undefined && {
+                costCompleteness: record.costCompleteness,
+            }),
+            ...(record.costAppliedRules !== undefined && {
+                costAppliedRules: record.costAppliedRules,
+            }),
+            ...(record.costIncompleteReasons !== undefined && {
+                costIncompleteReasons: record.costIncompleteReasons,
+            }),
             cumulativeTotalCostUsd: Number(
                 backendCostTotals.totalCostUsd.toFixed(6)
             ),

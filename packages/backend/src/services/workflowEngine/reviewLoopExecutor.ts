@@ -52,6 +52,8 @@ import {
     buildAssessRoutingHintSignals,
     buildRoutingChainSignals,
 } from './routingSignals.js';
+import { logger } from '../../utils/logger.js';
+import { resolveProfileReasoningEffort } from '../runtimeRequestControls.js';
 
 type CaptureStep = (input: {
     stepKind: 'plan' | 'tool' | 'generate' | 'assess' | 'revise' | 'finalize';
@@ -243,6 +245,11 @@ export const executeReviewLoop = async (ctx: {
                 ...(effectiveGenerationRequest.capabilities !== undefined && {
                     capabilities: effectiveGenerationRequest.capabilities,
                 }),
+                ...(effectiveGenerationRequest.safetyIdentifier !==
+                    undefined && {
+                    safetyIdentifier:
+                        effectiveGenerationRequest.safetyIdentifier,
+                }),
                 maxOutputTokens: 200,
                 reasoningEffort: 'low',
                 verbosity: 'low',
@@ -262,6 +269,12 @@ export const executeReviewLoop = async (ctx: {
                                   model: profile.providerModel,
                                   provider: profile.provider,
                                   capabilities: profile.capabilities,
+                                  reasoningEffort:
+                                      resolveProfileReasoningEffort(
+                                          profile,
+                                          assessRequest.reasoningEffort,
+                                          logger
+                                      ),
                               }),
                       })
                     : undefined;
@@ -586,6 +599,12 @@ export const executeReviewLoop = async (ctx: {
                                   model: profile.providerModel,
                                   provider: profile.provider,
                                   capabilities: profile.capabilities,
+                                  reasoningEffort:
+                                      resolveProfileReasoningEffort(
+                                          profile,
+                                          revisionRequest.reasoningEffort,
+                                          logger
+                                      ),
                               }),
                       })
                     : undefined;

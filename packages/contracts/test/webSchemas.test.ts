@@ -1760,11 +1760,12 @@ test('internal text task schemas enforce a narrow task union', () => {
             query: 'latest ai policy',
             category: 'tech',
             maxResults: 3,
-            reasoningEffort: 'medium',
+            reasoningEffort: 'xhigh',
             verbosity: 'medium',
             channelContext: {
                 channelId: '123',
                 guildId: '456',
+                userId: '789',
             },
         }).success,
         true
@@ -1776,11 +1777,12 @@ test('internal text task schemas enforce a narrow task union', () => {
             query: 'latest ai policy',
             category: 'tech',
             maxResults: 3,
-            reasoningEffort: 'medium',
+            reasoningEffort: 'max',
             verbosity: 'medium',
             channelContext: {
                 channelId: '123',
                 guildId: '456',
+                userId: '789',
             },
         }).success,
         true

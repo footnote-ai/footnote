@@ -80,6 +80,7 @@ import type {
 } from './executionContractTrustGraph/trustGraphEvidenceTypes.js';
 import type { ScopeValidationPolicy } from './executionContractTrustGraph/scopeValidator.js';
 import { logger } from '../utils/logger.js';
+import { resolveProfileReasoningEffort } from './runtimeRequestControls.js';
 import { runtimeConfig } from '../config.js';
 import { buildToolClarificationResponse } from './tools/toolClarificationResponse.js';
 import { buildWeatherToolFailureResponse } from './tools/weatherToolFailureResponse.js';
@@ -754,6 +755,8 @@ export type RunChatMessagesInput = {
     model?: string;
     provider?: SupportedProvider;
     capabilities?: ModelProfileCapabilities;
+    /** Backend-derived pseudonym; raw surface identifiers are not accepted. */
+    safetyIdentifier?: string;
     generation?: ChatGenerationPlan;
     executionContext?: ResponseMetadataRuntimeContext['executionContext'];
     workflowModeId?: string;
@@ -893,7 +896,15 @@ export const createChatService = ({
         const estimatedCost = estimateBackendTextCost(
             usageModel,
             promptTokens,
-            completionTokens
+            completionTokens,
+            {
+                ...(result.usage?.cachedInputTokens !== undefined && {
+                    cachedInputTokens: result.usage.cachedInputTokens,
+                }),
+                ...(result.usage?.cacheWriteTokens !== undefined && {
+                    cacheWriteTokens: result.usage.cacheWriteTokens,
+                }),
+            }
         );
 
         if (recordUsage) {
@@ -902,6 +913,12 @@ export const createChatService = ({
                     feature: 'chat',
                     model: usageModel,
                     promptTokens,
+                    ...(result.usage?.cachedInputTokens !== undefined && {
+                        cachedInputTokens: result.usage.cachedInputTokens,
+                    }),
+                    ...(result.usage?.cacheWriteTokens !== undefined && {
+                        cacheWriteTokens: result.usage.cacheWriteTokens,
+                    }),
                     completionTokens,
                     totalTokens,
                     ...estimatedCost,
@@ -934,6 +951,7 @@ export const createChatService = ({
         model,
         provider,
         capabilities,
+        safetyIdentifier,
         generation,
         executionContext,
         workflowModeId,
@@ -1010,6 +1028,7 @@ export const createChatService = ({
                 ...(normalizedGeneration?.verbosity !== undefined && {
                     verbosity: normalizedGeneration.verbosity,
                 }),
+                ...(safetyIdentifier !== undefined && { safetyIdentifier }),
                 ...(normalizedGeneration?.search !== undefined && {
                     search: normalizedGeneration.search,
                 }),
@@ -1091,6 +1110,11 @@ export const createChatService = ({
                             model: profile.providerModel,
                             provider: profile.provider,
                             capabilities: profile.capabilities,
+                            reasoningEffort: resolveProfileReasoningEffort(
+                                profile,
+                                request.reasoningEffort,
+                                logger
+                            ),
                         }),
                 });
                 const routingResult = toRoutingChainResult(chainResult);
