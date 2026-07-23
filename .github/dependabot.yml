@@ -12,6 +12,8 @@ updates:
       ignore:
           - dependency-name: 'typescript'
             update-types: ['version-update:semver-major']
+      labels:
+          - 'dependencies'
 
     # ─── Fly.io Deployment Stack ──────────────────────────────────────────────────
     - package-ecosystem: 'docker'
@@ -22,11 +24,14 @@ updates:
           - dependency-name: 'node'
             update-types: ['version-update:semver-major']
       labels:
-          - 'fly.io'
           - 'dependencies'
+          - 'area: deployment'
 
     # ─── GitHub Actions ─────────────────────────────────────────────────────────
     - package-ecosystem: 'github-actions'
       directory: '/'
       schedule:
           interval: 'weekly'
+      labels:
+          - 'dependencies'
+          - 'area: ci'

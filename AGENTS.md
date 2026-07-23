@@ -65,6 +65,31 @@ For API boundary changes, keep links in sync:
 - code annotations: `@api.operationId` and `@api.path`
 - OpenAPI refs: `x-codeRefs` in `docs/api/openapi.yaml`
 
+## GitHub Work Management
+
+Use each GitHub feature for one job. Do not copy the same planning detail into
+labels, issue text, project fields, and milestones.
+
+- Assignees name the person who owns the next move. Leave backlog work
+  unassigned.
+- Use the organization issue types `Feature`, `Bug`, and `Task`. Do not recreate
+  issue types as labels.
+- Labels describe areas, Footnote concerns, contribution opportunities, and
+  automation. Do not use labels for priority, workflow status, or milestones.
+- Use organization issue fields for priority, effort, start date, and target
+  date. Set dates only when work is actually scheduled.
+- Use the organization Project for workflow status and planning views. Do not
+  add project fields that duplicate issue types, labels, milestones, or
+  organization issue fields.
+- Milestones describe finite outcomes. Keep ongoing principles and general
+  maintenance out of milestones.
+- Use sub-issues for decomposition and dependency links for hard ordering. Do
+  not duplicate them with checklist trees or `blocked` labels.
+- Link pull requests to the issue they deliver. Give a pull request its own
+  milestone only when it represents standalone work.
+
+See `docs/ai/github-work-management.md` for the full working model.
+
 ## Task Completion Requirements
 
 - Keep local verification focused on the files, packages, and behavior changed.

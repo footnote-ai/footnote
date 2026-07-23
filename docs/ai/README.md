@@ -26,6 +26,12 @@ If you see conflicting guidance, trust `AGENTS.md`.
 3. Validate the result with project checks.
 4. Do a human pass before opening a PR.
 
+## GitHub Work Management
+
+Use GitHub's native planning features instead of rebuilding them with labels or
+issue templates. See [GitHub work management](./github-work-management.md) for
+the intended shape and examples.
+
 ## Checks to Run
 
 Always:
