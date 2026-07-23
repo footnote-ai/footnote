@@ -156,23 +156,63 @@ jobs:
                       (cd "$checksum_dir" && sha256sum --check "$checksum_name")
                   done
 
-            - id: release
-              name: Publish immutable launcher canary
+            - name: Publish immutable launcher canary
               if: steps.eligibility.outputs.publish == 'true'
-              uses: softprops/action-gh-release@3d0d9888cb7fd7b750713d6e236d1fcb99157228
-              with:
-                  tag_name: v${{ env.LAUNCHER_CANARY_BASE_VERSION }}-canary.${{ github.run_number }}
-                  name: Footnote v${{ env.LAUNCHER_CANARY_BASE_VERSION }} Canary ${{ github.run_number }}
-                  body: |
-                      Automated launcher preview for commit ${{ github.sha }}.
+              shell: bash
+              env:
+                  GH_TOKEN: ${{ github.token }}
+                  CANARY_TAG: v${{ env.LAUNCHER_CANARY_BASE_VERSION }}-canary.${{ github.run_number }}
+                  RELEASE_NAME: Footnote v${{ env.LAUNCHER_CANARY_BASE_VERSION }} Canary ${{ github.run_number }}
+                  TARGET_SHA: ${{ github.sha }}
+                  SOURCE_URL: ${{ github.server_url }}/${{ github.repository }}/commit/${{ github.sha }}
+                  WORKFLOW_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+              run: |
+                  set -euo pipefail
+                  shopt -s globstar nullglob
 
-                      Source: ${{ github.server_url }}/${{ github.repository }}/commit/${{ github.sha }}
-                      Workflow: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
-                  target_commitish: ${{ github.sha }}
-                  prerelease: true
-                  make_latest: false
-                  files: artifacts/sea/**/footnote-*
-                  fail_on_unmatched_files: true
+                  release_files=(artifacts/sea/**/footnote-*)
+                  if [[ "${#release_files[@]}" -eq 0 ]]; then
+                      echo "::error::No launcher release files matched artifacts/sea/**/footnote-*."
+                      exit 1
+                  fi
+
+                  notes_file="$(mktemp)"
+                  trap 'rm -f "$notes_file"' EXIT
+                  cat > "$notes_file" <<EOF
+                  Automated launcher preview for commit $TARGET_SHA.
+
+                  Source: $SOURCE_URL
+                  Workflow: $WORKFLOW_URL
+                  EOF
+
+                  if gh release view "$CANARY_TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+                      existing_sha="$(
+                          gh api "repos/${GITHUB_REPOSITORY}/commits/${CANARY_TAG}" --jq '.sha'
+                      )"
+                      if [[ "$existing_sha" != "$TARGET_SHA" ]]; then
+                          echo "::error::Existing release $CANARY_TAG targets $existing_sha instead of $TARGET_SHA."
+                          exit 1
+                      fi
+
+                      gh release edit "$CANARY_TAG" \
+                          --repo "$GITHUB_REPOSITORY" \
+                          --title "$RELEASE_NAME" \
+                          --notes-file "$notes_file" \
+                          --target "$TARGET_SHA" \
+                          --prerelease \
+                          --latest=false
+                      gh release upload "$CANARY_TAG" "${release_files[@]}" \
+                          --repo "$GITHUB_REPOSITORY" \
+                          --clobber
+                  else
+                      gh release create "$CANARY_TAG" "${release_files[@]}" \
+                          --repo "$GITHUB_REPOSITORY" \
+                          --title "$RELEASE_NAME" \
+                          --notes-file "$notes_file" \
+                          --target "$TARGET_SHA" \
+                          --prerelease \
+                          --latest=false
+                  fi
 
             - name: Record canary release
               if: steps.eligibility.outputs.publish == 'true'

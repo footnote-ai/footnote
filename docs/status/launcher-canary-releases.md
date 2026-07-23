@@ -42,8 +42,9 @@ binaries attached to a GitHub prerelease, not an npm package.
 
 ### Use a canary channel
 
-A build from each accepted `main` change is a canary. The term `nightly` is
-reserved for a future scheduled build that runs at most once per day.
+A build from each accepted launcher-relevant change is a canary. The term
+`nightly` is reserved for a future scheduled build that runs at most once per
+day.
 
 Canary identifiers are unique and identify the source commit. The first release
 line uses:
