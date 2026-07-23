@@ -1,6 +1,6 @@
 # GPT-5.6 Default Rollout Status
 
-Status: focused implementations integrated; verification in progress.
+Status: ready for review.
 
 Last updated: 2026-07-22.
 
@@ -201,3 +201,5 @@ quality-gated tasks; tone or length alone does not justify escalation.
   pre-existing model-profile catalog tests also fail on unchanged `main` and
   remain outside this rollout's scope.
 - 2026-07-22: Passed changed-file review and the full Docker build check.
+- 2026-07-22: Rebased the integration branch onto current `origin/main` and
+  marked the rollout ready for review.
