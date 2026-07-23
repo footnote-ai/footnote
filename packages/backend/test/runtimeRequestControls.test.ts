@@ -43,10 +43,16 @@ const profile: ModelProfile = {
     defaultReasoningEffort: 'medium',
 };
 
-test('profile default is authoritative over a requested effort', () => {
+test('requested effort takes precedence over the profile fallback', () => {
+    logs.length = 0;
+    assert.equal(resolveProfileReasoningEffort(profile, 'low', logger), 'low');
+    assert.equal(logs.length, 0);
+});
+
+test('profile reasoning effort applies when no effort is requested', () => {
     logs.length = 0;
     assert.equal(
-        resolveProfileReasoningEffort(profile, 'low', logger),
+        resolveProfileReasoningEffort(profile, undefined, logger),
         'medium'
     );
     assert.equal(

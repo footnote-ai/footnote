@@ -465,7 +465,7 @@ test('orchestrator carries resolved Execution Contract policy payload through se
     );
 });
 
-test('quality profile keeps its authoritative reasoning default while planner verbosity applies', async () => {
+test('quality profile preserves explicit planner reasoning while planner verbosity applies', async () => {
     let observedReasoningEffort: string | undefined;
     let observedVerbosity: string | undefined;
 
@@ -517,7 +517,7 @@ test('quality profile keeps its authoritative reasoning default while planner ve
     const response = await orchestrator.runChat(createChatRequest());
 
     assert.equal(response.action, 'message');
-    assert.equal(observedReasoningEffort, 'medium');
+    assert.equal(observedReasoningEffort, 'low');
     assert.equal(observedVerbosity, 'low');
 });
 

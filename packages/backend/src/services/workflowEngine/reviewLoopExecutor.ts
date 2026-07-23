@@ -245,6 +245,11 @@ export const executeReviewLoop = async (ctx: {
                 ...(effectiveGenerationRequest.capabilities !== undefined && {
                     capabilities: effectiveGenerationRequest.capabilities,
                 }),
+                ...(effectiveGenerationRequest.safetyIdentifier !==
+                    undefined && {
+                    safetyIdentifier:
+                        effectiveGenerationRequest.safetyIdentifier,
+                }),
                 maxOutputTokens: 200,
                 reasoningEffort: 'low',
                 verbosity: 'low',

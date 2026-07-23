@@ -721,8 +721,6 @@ export type CreateChatServiceOptions = {
     // Optional provider/capability defaults from model profile resolution.
     defaultProvider?: SupportedProvider;
     defaultCapabilities?: ModelProfileCapabilities;
-    /** Full backend-selected default profile used to resolve request controls. */
-    defaultProfile?: ModelProfile;
     recordUsage?: (record: BackendLLMCostRecord) => void;
     chatWorkflowConfig?: {
         modeId?: string;
@@ -837,7 +835,6 @@ export const createChatService = ({
     defaultModel,
     defaultProvider,
     defaultCapabilities,
-    defaultProfile,
     recordUsage = recordBackendLLMUsage,
     chatWorkflowConfig = runtimeConfig.chatWorkflow,
     runReviewWorkflow = runBoundedReviewWorkflow,
@@ -1016,14 +1013,6 @@ export const createChatService = ({
                       },
                   ]
                 : messages;
-            const effectiveReasoningEffort =
-                defaultProfile !== undefined
-                    ? resolveProfileReasoningEffort(
-                          defaultProfile,
-                          normalizedGeneration?.reasoningEffort,
-                          logger
-                      )
-                    : normalizedGeneration?.reasoningEffort;
             const generationRequest: GenerationRequest = {
                 messages: messagesWithHints,
                 model: model ?? defaultModel,
@@ -1033,8 +1022,8 @@ export const createChatService = ({
                 ...((capabilities ?? defaultCapabilities) !== undefined && {
                     capabilities: capabilities ?? defaultCapabilities,
                 }),
-                ...(effectiveReasoningEffort !== undefined && {
-                    reasoningEffort: effectiveReasoningEffort,
+                ...(normalizedGeneration?.reasoningEffort !== undefined && {
+                    reasoningEffort: normalizedGeneration.reasoningEffort,
                 }),
                 ...(normalizedGeneration?.verbosity !== undefined && {
                     verbosity: normalizedGeneration.verbosity,

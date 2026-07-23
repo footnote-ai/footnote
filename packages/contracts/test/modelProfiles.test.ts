@@ -90,6 +90,31 @@ test('ModelProfileCatalogSchema rejects an unsupported default reasoning effort'
     }
 });
 
+test('ModelProfileCatalogSchema rejects a default when supported efforts are absent', () => {
+    const parsed = ModelProfileCatalogSchema.safeParse([
+        {
+            id: 'openai-text-quality',
+            description: 'Quality profile',
+            provider: 'openai',
+            providerModel: 'gpt-5.6-sol',
+            enabled: true,
+            tierBindings: ['text-quality'],
+            capabilities: {
+                canUseSearch: true,
+            },
+            defaultReasoningEffort: 'medium',
+        },
+    ]);
+
+    assert.equal(parsed.success, false);
+    if (!parsed.success) {
+        assert.match(
+            parsed.error.issues.map((issue) => issue.message).join('\n'),
+            /default reasoning effort/i
+        );
+    }
+});
+
 test('ModelProfileCatalogSchema rejects duplicate profile ids with a clear error', () => {
     const parsed = ModelProfileCatalogSchema.safeParse([
         {

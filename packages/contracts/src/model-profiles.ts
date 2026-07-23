@@ -57,7 +57,7 @@ export interface ModelProfile {
     enabled: boolean;
     tierBindings: ModelTierAlias[];
     capabilities: ModelProfileCapabilities;
-    /** Profile-owned effort used when a caller does not request one. */
+    /** Fallback effort used only when the caller does not request one. */
     defaultReasoningEffort?: SupportedReasoningEffort;
     maxInputTokens?: number;
     maxOutputTokens?: number;
@@ -140,8 +140,7 @@ export const ModelProfileSchema: z.ZodType<ModelProfile> = z
         const supported = profile.capabilities.supportedReasoningEfforts;
         if (
             profile.defaultReasoningEffort !== undefined &&
-            supported !== undefined &&
-            !supported.includes(profile.defaultReasoningEffort)
+            !supported?.includes(profile.defaultReasoningEffort)
         ) {
             context.addIssue({
                 code: z.ZodIssueCode.custom,

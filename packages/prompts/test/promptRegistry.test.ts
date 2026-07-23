@@ -294,8 +294,12 @@ test('chat planner output prompts are mode-specific', () => {
         /The JSON object must have this shape/i
     );
     assert.match(textJsonPrompt, /Return plain JSON only/i);
-    assert.match(textJsonPrompt, /The JSON object must have this shape/i);
+    assert.match(textJsonPrompt, /Example for a message action/i);
     assert.match(textJsonPrompt, /Do not return .* a function call/i);
+
+    const example = textJsonPrompt.split('Example for a message action:')[1];
+    assert.ok(example);
+    assert.doesNotThrow(() => JSON.parse(example.trim()));
 });
 
 test('traceTemperamentContract defaults include canonical anchor axes and levels', () => {

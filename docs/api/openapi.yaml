@@ -2365,6 +2365,10 @@ components:
                 reasoningEffort:
                     type: string
                     enum: [none, low, medium, high, xhigh, max]
+                    description: >-
+                        Requested reasoning effort. The backend resolves it against
+                        the selected model profile and omits unsupported provider
+                        settings fail-open.
                 verbosity:
                     type: string
                     enum: [low, medium, high]
@@ -2380,6 +2384,10 @@ components:
                         userId:
                             type: string
                             minLength: 1
+                            description: >-
+                                Backend-only identity material used to derive a
+                                privacy-preserving safety identifier. It is never
+                                included in model prompts or logs.
                     additionalProperties: false
             required:
                 - task

@@ -763,13 +763,23 @@ export const estimateOpenAITextCost = (
     const knownCacheWriteTokens = Math.max(0, cacheWriteTokens ?? 0);
     const knownSpecialInputTokens =
         knownCachedInputTokens + knownCacheWriteTokens;
-    if (knownSpecialInputTokens > inputTokens) {
+    const hasValidSpecialInputBreakdown =
+        knownSpecialInputTokens <= inputTokens;
+    if (!hasValidSpecialInputBreakdown) {
         incompleteReasons.push('invalid_input_token_breakdown');
     }
-    const ordinaryInputTokens = Math.max(
-        0,
-        inputTokens - Math.min(inputTokens, knownSpecialInputTokens)
-    );
+    // Invalid provider breakdowns stay visible in the returned usage fields,
+    // but cannot create more billable input than the provider reported. Treat
+    // the whole input as ordinary when no safe allocation can be inferred.
+    const billableCachedInputTokens = hasValidSpecialInputBreakdown
+        ? knownCachedInputTokens
+        : 0;
+    const billableCacheWriteTokens = hasValidSpecialInputBreakdown
+        ? knownCacheWriteTokens
+        : 0;
+    const billableSpecialInputTokens =
+        billableCachedInputTokens + billableCacheWriteTokens;
+    const ordinaryInputTokens = inputTokens - billableSpecialInputTokens;
     const longContextApplies =
         pricing.longContext !== undefined &&
         inputTokens > pricing.longContext.inputTokenThreshold;
@@ -780,11 +790,11 @@ export const estimateOpenAITextCost = (
         ? (pricing.longContext?.outputMultiplier ?? 1)
         : 1;
 
-    if (knownCachedInputTokens > 0 && pricing.cachedInput !== undefined) {
+    if (billableCachedInputTokens > 0 && pricing.cachedInput !== undefined) {
         appliedRules.push('prompt_cache_read_discount');
     }
     if (
-        knownCacheWriteTokens > 0 &&
+        billableCacheWriteTokens > 0 &&
         pricing.cacheWriteMultiplier !== undefined
     ) {
         appliedRules.push('prompt_cache_write_multiplier');
@@ -798,10 +808,10 @@ export const estimateOpenAITextCost = (
 
     const ordinaryInputCost = (ordinaryInputTokens / 1_000_000) * pricing.input;
     const cachedInputCost =
-        (knownCachedInputTokens / 1_000_000) *
+        (billableCachedInputTokens / 1_000_000) *
         (pricing.cachedInput ?? pricing.input);
     const cacheWriteInputCost =
-        (knownCacheWriteTokens / 1_000_000) *
+        (billableCacheWriteTokens / 1_000_000) *
         pricing.input *
         (pricing.cacheWriteMultiplier ?? 1);
     const inputCost =

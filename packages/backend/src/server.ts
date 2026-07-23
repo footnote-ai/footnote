@@ -279,7 +279,7 @@ const initializeServices = () => {
         generationRuntime !== null
             ? createInternalNewsTaskService({
                   generationRuntime,
-                  defaultModel: runtimeConfig.modelProfiles.defaultProfileId,
+                  defaultProfile: startupDefaultProfile,
                   safetyIdentifierSecret:
                       runtimeConfig.openai.safetyIdentifierSecret,
               })

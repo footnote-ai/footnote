@@ -19,9 +19,10 @@ type RuntimeControlLogger = {
 };
 
 /**
- * Applies a profile-owned default first, then accepts only efforts explicitly
- * advertised by the selected profile. Unsupported controls are omitted so the
- * request remains fail-open instead of sending an invalid provider value.
+ * Preserves an explicit caller request and falls back to the profile default
+ * only when no effort was requested. The selected profile must advertise the
+ * effective effort; unsupported controls are omitted so execution stays
+ * fail-open instead of sending an invalid provider value.
  */
 export const resolveProfileReasoningEffort = (
     profile: ModelProfile,
@@ -30,7 +31,7 @@ export const resolveProfileReasoningEffort = (
 ): SupportedReasoningEffort | undefined => {
     const supportedEfforts = profile.capabilities.supportedReasoningEfforts;
     const profileDefault = profile.defaultReasoningEffort;
-    const candidate = profileDefault ?? requestedEffort;
+    const candidate = requestedEffort ?? profileDefault;
 
     if (candidate === undefined) {
         return undefined;
@@ -48,7 +49,7 @@ export const resolveProfileReasoningEffort = (
         return undefined;
     }
 
-    if (profileDefault !== undefined && profileDefault !== requestedEffort) {
+    if (requestedEffort === undefined && profileDefault !== undefined) {
         logger.debug('Model profile default reasoning effort applied.', {
             reasonCode: 'reasoning_effort_profile_default_applied',
             profileId: profile.id,

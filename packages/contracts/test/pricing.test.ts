@@ -48,21 +48,59 @@ test('estimateOpenAITextCost resolves versioned OpenAI model ids through canonic
 
 test('GPT-5.6 tiers use their documented base and cached token rates', () => {
     const cases = [
-        { model: 'gpt-5.6-sol', expected: 3.55 },
-        { model: 'gpt-5.6-terra', expected: 1.775 },
-        { model: 'gpt-5.6-luna', expected: 0.71 },
+        {
+            model: 'gpt-5.6-sol',
+            expectedInputCost: 0.55,
+            expectedOutputCost: 3,
+            expectedTotalCost: 3.55,
+        },
+        {
+            model: 'gpt-5.6-terra',
+            expectedInputCost: 0.275,
+            expectedOutputCost: 1.5,
+            expectedTotalCost: 1.775,
+        },
+        {
+            model: 'gpt-5.6-luna',
+            expectedInputCost: 0.11,
+            expectedOutputCost: 0.6,
+            expectedTotalCost: 0.71,
+        },
     ] as const;
 
-    for (const { model, expected } of cases) {
+    for (const {
+        model,
+        expectedInputCost,
+        expectedOutputCost,
+        expectedTotalCost,
+    } of cases) {
         const result = estimateOpenAITextCost(model, 200_000, 100_000, {
             cachedInputTokens: 100_000,
             cacheWriteTokens: 0,
         });
 
-        assert.ok(Math.abs(result.totalCost - expected) < 1e-12);
+        assert.ok(Math.abs(result.inputCost - expectedInputCost) < 1e-12);
+        assert.ok(Math.abs(result.outputCost - expectedOutputCost) < 1e-12);
+        assert.ok(Math.abs(result.totalCost - expectedTotalCost) < 1e-12);
         assert.equal(result.completeness, 'complete');
         assert.deepEqual(result.appliedRules, ['prompt_cache_read_discount']);
     }
+});
+
+test('invalid GPT-5.6 input breakdowns cannot bill more tokens than reported', () => {
+    const result = estimateOpenAITextCost('gpt-5.6-terra', 100_000, 0, {
+        cachedInputTokens: 80_000,
+        cacheWriteTokens: 80_000,
+    });
+
+    assert.equal(result.inputCost, 0.25);
+    assert.equal(result.outputCost, 0);
+    assert.equal(result.totalCost, 0.25);
+    assert.equal(result.completeness, 'partial');
+    assert.deepEqual(result.appliedRules, []);
+    assert.deepEqual(result.incompleteReasons, [
+        'invalid_input_token_breakdown',
+    ]);
 });
 
 test('GPT-5.6 cache writes use 1.25 times the uncached input rate', () => {

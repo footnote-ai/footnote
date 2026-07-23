@@ -1323,13 +1323,24 @@ export const PostInternalNewsTaskRequestSchema = z
         query: z.string().min(1).max(512).optional(),
         category: z.string().min(1).max(128).optional(),
         maxResults: z.number().int().min(1).max(5).optional(),
-        reasoningEffort: z.enum(supportedReasoningEfforts).optional(),
+        reasoningEffort: z
+            .enum(supportedReasoningEfforts)
+            .describe(
+                'Backend resolves this value against the selected model profile and omits unsupported values fail-open.'
+            )
+            .optional(),
         verbosity: z.enum(['low', 'medium', 'high']).optional(),
         channelContext: z
             .object({
                 channelId: z.string().min(1).optional(),
                 guildId: z.string().min(1).optional(),
-                userId: z.string().min(1).optional(),
+                userId: z
+                    .string()
+                    .min(1)
+                    .describe(
+                        'Backend-only safety identifier material; never model prompt or log context.'
+                    )
+                    .optional(),
             })
             .strict()
             .optional(),

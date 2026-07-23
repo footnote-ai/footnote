@@ -154,7 +154,6 @@ export const createChatOrchestrator = ({
         defaultModel: defaultResponseProfile.providerModel,
         defaultProvider: defaultResponseProfile.provider,
         defaultCapabilities: defaultResponseProfile.capabilities,
-        defaultProfile: defaultResponseProfile,
         recordUsage,
         executionContractTrustGraph,
     });
@@ -777,11 +776,6 @@ export const createChatOrchestrator = ({
                 input.baseMessagesWithHints.length > 0
                     ? [...input.baseMessagesWithHints, plannerPayloadMessage]
                     : postPlanAssembly.conversationMessages;
-            const effectiveReasoningEffort = resolveProfileReasoningEffort(
-                plannerApplication.selectedResponseProfile,
-                executionPlan.generation.reasoningEffort,
-                chatOrchestratorLogger
-            );
             return {
                 continuation: 'continue_message' as const,
                 messagesWithHints: mergedMessagesWithHints,
@@ -794,8 +788,10 @@ export const createChatOrchestrator = ({
                         plannerApplication.selectedResponseProfile.provider,
                     capabilities:
                         plannerApplication.selectedResponseProfile.capabilities,
-                    ...(effectiveReasoningEffort !== undefined && {
-                        reasoningEffort: effectiveReasoningEffort,
+                    ...(executionPlan.generation.reasoningEffort !==
+                        undefined && {
+                        reasoningEffort:
+                            executionPlan.generation.reasoningEffort,
                     }),
                     verbosity: executionPlan.generation.verbosity,
                 },

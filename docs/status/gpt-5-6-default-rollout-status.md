@@ -62,8 +62,10 @@ Remove `minimal` rather than preserving a pre-1.0 compatibility alias. Model
 profiles declare supported/default reasoning behavior. Unsupported provider
 settings are omitted with structured diagnostics so execution remains fail-open.
 
-Sol starts at medium. Higher effort is opt-in and requires representative
-evaluation evidence.
+The opt-in higher-effort criterion is complete: Sol falls back to medium only
+when a workflow does not request an effort. Explicit higher effort remains
+opt-in and requires representative evaluation evidence; explicit lower effort
+is preserved.
 
 ### Keep optional GPT-5.6 features separate
 

@@ -13,6 +13,7 @@ import type {
     GenerationRequest,
     GenerationRuntime,
 } from '@footnote/agent-runtime';
+import type { ModelProfile } from '@footnote/contracts';
 import { createInternalTextHandler } from '../src/handlers/internalText.js';
 import {
     createInternalNewsTaskService,
@@ -25,6 +26,26 @@ import { hmacId } from '../src/utils/pseudonymization.js';
 type TestServer = {
     url: string;
     close: () => Promise<void>;
+};
+
+const defaultNewsProfile: ModelProfile = {
+    id: 'openai-text-medium',
+    description: 'Test news profile',
+    provider: 'openai',
+    providerModel: 'gpt-5-mini',
+    enabled: true,
+    tierBindings: ['text-medium'],
+    capabilities: {
+        canUseSearch: true,
+        supportedReasoningEfforts: [
+            'none',
+            'low',
+            'medium',
+            'high',
+            'xhigh',
+            'max',
+        ],
+    },
 };
 
 const createInternalTextServer = async (
@@ -41,7 +62,7 @@ const createInternalTextServer = async (
             : generationRuntime
               ? createInternalNewsTaskService({
                     generationRuntime,
-                    defaultModel: 'gpt-5-mini',
+                    defaultProfile: defaultNewsProfile,
                     recordUsage: () => undefined,
                 })
               : null;
@@ -539,7 +560,7 @@ test('internal news task service records usage even when structured parsing fail
                 };
             },
         },
-        defaultModel: 'gpt-5-mini',
+        defaultProfile: defaultNewsProfile,
         recordUsage: () => {
             recordedUsageCount += 1;
         },
@@ -570,14 +591,21 @@ test('internal news task forwards only a backend-derived safety identifier', asy
                 };
             },
         },
-        defaultModel: 'gpt-5.6-terra',
+        defaultProfile: {
+            ...defaultNewsProfile,
+            providerModel: 'gpt-5.6-terra',
+        },
         safetyIdentifierSecret: 'safety-secret',
         recordUsage: () => undefined,
     });
 
     await service.runNewsTask({
         task: 'news',
-        channelContext: { userId: 'raw-discord-user' },
+        channelContext: {
+            channelId: 'raw-discord-channel',
+            guildId: 'raw-discord-guild',
+            userId: 'raw-discord-user',
+        },
     });
 
     assert.equal(
@@ -585,6 +613,44 @@ test('internal news task forwards only a backend-derived safety identifier', asy
         hmacId('safety-secret', 'raw-discord-user', 'openai-safety:v1:discord')
     );
     assert.notEqual(seenRequest?.safetyIdentifier, 'raw-discord-user');
+    const serializedMessages = JSON.stringify(seenRequest?.messages);
+    assert.equal(serializedMessages.includes('raw-discord-user'), false);
+    assert.equal(serializedMessages.includes('raw-discord-channel'), false);
+    assert.equal(serializedMessages.includes('raw-discord-guild'), false);
+});
+
+test('internal news task omits reasoning unsupported by its selected profile', async () => {
+    let seenRequest: GenerationRequest | undefined;
+    const service = createInternalNewsTaskService({
+        generationRuntime: {
+            kind: 'test-runtime',
+            async generate(request) {
+                seenRequest = request;
+                return {
+                    text: JSON.stringify({ news: [], summary: 'No news.' }),
+                    model: 'gpt-5.6-terra',
+                };
+            },
+        },
+        defaultProfile: {
+            ...defaultNewsProfile,
+            providerModel: 'gpt-5.6-terra',
+            capabilities: {
+                canUseSearch: true,
+                supportedReasoningEfforts: ['low'],
+            },
+        },
+        recordUsage: () => undefined,
+    });
+
+    await service.runNewsTask({
+        task: 'news',
+        reasoningEffort: 'max',
+    });
+
+    assert.equal(seenRequest?.reasoningEffort, undefined);
+    assert.equal(seenRequest?.model, 'gpt-5.6-terra');
+    assert.equal(seenRequest?.provider, 'openai');
 });
 
 test('internal news task service preserves its descriptive JSON-object error when fallback parsing fails', async () => {
@@ -598,7 +664,7 @@ test('internal news task service preserves its descriptive JSON-object error whe
                 };
             },
         },
-        defaultModel: 'gpt-5-mini',
+        defaultProfile: defaultNewsProfile,
         recordUsage: () => undefined,
     });
 
@@ -650,7 +716,7 @@ test('internal news task service keeps articles when timestamps are missing or m
                 };
             },
         },
-        defaultModel: 'gpt-5-mini',
+        defaultProfile: defaultNewsProfile,
         recordUsage: () => undefined,
     });
 
