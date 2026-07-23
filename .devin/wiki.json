@@ -21,15 +21,15 @@
             "author": "Maintainer"
         },
         {
-            "content": "For pages about routes or data flow, prefer this shape: purpose, key concepts, how it works, ownership boundaries, typical flow, failure modes, and how to test.",
-            "author": "Maintainer"
-        },
-        {
-            "content": "Each page should include: Purpose, Key concepts, Ownership boundaries, Typical flow, Failure modes, How to test, and Related pages.",
+            "content": "Structure pages around Purpose, Key concepts, Ownership boundaries, Typical flow, Failure modes, How to test, and Related pages. For routes and data flows, add a concrete How it works walkthrough.",
             "author": "Maintainer"
         },
         {
             "content": "Treat docs freshness as part of the contract. If a PR changes route shapes, runtime schemas, provenance fields, trace behavior, or user-visible feature flows, the matching wiki page should be updated in the same PR.",
+            "author": "Maintainer"
+        },
+        {
+            "content": "Keep this file within the public/free DeepWiki validation limits: no more than 30 pages and 100 total notes across repo_notes and every page_notes array. Consolidate duplicate guidance and leave note-count headroom for future updates.",
             "author": "Maintainer"
         },
         {
@@ -57,6 +57,8 @@
                 "README.md",
                 "cursor.rules",
                 "AGENTS.md",
+                "docs/ai/github-work-management.md",
+                "docs/ai/ai-use-disclosure.md",
                 "packages/backend/src",
                 "packages/web/src",
                 "packages/discord-bot/src"
@@ -67,7 +69,7 @@
                     "author": "Maintainer"
                 },
                 {
-                    "content": "Start here, then read Architecture, Glossary, and Provenance. Use Packages when you want to find where a feature lives in code. Include a simple first-run path: start the backend, open the web app, trigger one live chat request, and inspect the resulting trace. Keep this distinct from the curated landing demo, which uses prepared backend-served conversations and does not call a model.",
+                    "content": "Start here, then read Architecture, Glossary, and Provenance. Use Packages when you want to find where a feature lives in code. Include a simple first-run path: start the backend, open the web app, trigger one live chat request, and inspect the resulting trace. Keep this distinct from the homepage's checked-in prepared examples, which do not call a model.",
                     "author": "Maintainer"
                 }
             ]
@@ -107,7 +109,8 @@
                 "docs/architecture/langfuse-metadata-mirror.md",
                 "docs/architecture/context-integrations/README.md",
                 "docs/proposals/execution_adapters_workflow_authority.md",
-                "docs/architecture/canonical-response-footnote.md"
+                "docs/architecture/canonical-response-footnote.md",
+                "docs/architecture/public-web-surfaces.md"
             ],
             "page_notes": [
                 {
@@ -265,15 +268,7 @@
                 },
                 {
                     "author": "Maintainer",
-                    "content": "Explain workflow step signals as small public clues attached to step records. They are for lineage and receipts, not a place to dump raw prompts, raw model output, or broad telemetry."
-                },
-                {
-                    "author": "Maintainer",
-                    "content": "Known signal groups now live in shared contracts: planner, routing chain, assess routing hint, tool clarification, terminal action, refinement, and review parse failure."
-                },
-                {
-                    "author": "Maintainer",
-                    "content": "Backend code should emit known workflow signals through shared builders, and UI or receipt code should read them through shared helpers instead of checking magic signal keys directly."
+                    "content": "Explain workflow step signals as small public clues for lineage and receipts, not raw prompts, model output, or broad telemetry. Known groups live in shared contracts, backend code emits them through builders, and consumers use shared readers instead of magic keys."
                 },
                 {
                     "author": "Maintainer",
@@ -295,6 +290,9 @@
                 "packages/backend/src/services/contextIntegrations/trustgraph",
                 "packages/backend/src/services/contextIntegrations/reverseImageSearch",
                 "packages/backend/src/services/contextIntegrations/contextStepExecution.ts",
+                ".footnote/context-files",
+                "scripts/list-repository-context.ts",
+                "docs/status/repository-context-status.md",
                 "packages/backend/test/webSearchContextStepExecutor.test.ts",
                 "packages/backend/test/reverseImageSearchContextStepExecutor.test.ts",
                 "packages/backend/test/toolExecutionParity.test.ts"
@@ -321,7 +319,7 @@
                     "author": "Maintainer"
                 },
                 {
-                    "content": "TrustGraph repository snapshot seeding is development/indexing support, not a new runtime authority. Keep snapshot loading and future derived-artifact indexing separate from the workflow context-step integration.",
+                    "content": "Repository context selection and preview use `.footnote/context-files` plus `pnpm context:repo:list`; loading those files into TrustGraph is not implemented yet. Keep indexing support separate from the workflow context-step integration and from runtime authority.",
                     "author": "Maintainer"
                 }
             ]
@@ -364,7 +362,8 @@
                 "docs/decisions/2026-03-voltagent-runtime-adoption.md",
                 "docs/decisions/2026-03-legacy-openai-removal-and-runtime-branching.md",
                 "docs/decisions/2026-03-model-profile-catalog-and-staged-planner-selection.md",
-                "docs/proposals/execution_adapters_workflow_authority.md"
+                "docs/proposals/execution_adapters_workflow_authority.md",
+                "docs/status/gpt-5-6-default-rollout-status.md"
             ],
             "page_notes": [
                 {
@@ -376,7 +375,7 @@
                     "author": "Maintainer"
                 },
                 {
-                    "content": "Current behavior is VoltAgent-backed text generation plus dedicated image and voice adapters. The package is not limited to chat, but runtime selection and broader delegated-runtime behavior remain planning direction only. Model-native search is distinct from provider-neutral context integrations such as weather_forecast.",
+                    "content": "Current behavior is VoltAgent-backed text generation plus dedicated image and voice adapters. The default OpenAI text profiles use the GPT-5.6 family, while profile selection and request controls remain backend-owned. Broader delegated-runtime behavior remains planning direction only, and model-native search is distinct from provider-neutral context integrations such as weather_forecast.",
                     "author": "Maintainer"
                 }
             ]
@@ -399,10 +398,6 @@
             "page_notes": [
                 {
                     "content": "Show how web and Discord wrappers compose these factories so auth and error behavior stay aligned; keep the page focused on shared transport and backend boundaries rather than UI details.",
-                    "author": "Maintainer"
-                },
-                {
-                    "content": "Include the prepared landing-conversation helper as a typed backend read path used by web. Keep it separate from the live chat request helper.",
                     "author": "Maintainer"
                 }
             ]
@@ -476,12 +471,12 @@
                 "packages/backend/src/services/chatService/planContinuation.ts",
                 "packages/backend/src/services/plannerWorkflowSeams.ts",
                 "packages/backend/src/services/contextIntegrations/contextStepExecution.ts",
+                "packages/backend/src/services/runtimeRequestControls.ts",
+                "packages/backend/src/config/model-profiles.defaults.yaml",
                 "packages/agent-runtime/src",
                 "packages/backend/src/services/responseMetadataHeuristics.ts",
                 "packages/contracts/src/web/types.ts",
-                "packages/contracts/src/web/schemas.ts",
-                "packages/backend/src/handlers/preparedConversations.ts",
-                "packages/backend/src/data/preparedLandingConversations.ts"
+                "packages/contracts/src/web/schemas.ts"
             ],
             "page_notes": [
                 {
@@ -490,7 +485,7 @@
                 },
                 {
                     "author": "Maintainer",
-                    "content": "Update this page for the runtime seam: planner decisions stay in backend, generation runs through `@footnote/agent-runtime`, and VoltAgent handles chat text generation."
+                    "content": "Document the runtime seam: planner decisions, model-profile routing, capability-gated reasoning effort, and privacy-preserving OpenAI safety identifiers stay backend-owned; generation runs through `@footnote/agent-runtime`, with VoltAgent handling chat text execution."
                 },
                 {
                     "author": "Maintainer",
@@ -507,10 +502,6 @@
                 {
                     "author": "Maintainer",
                     "content": "Chat flow uses contextStepRequests for workflow context-step execution (weather_forecast, web_search, file_scan, trustgraph, reverse_image_search where applicable)."
-                },
-                {
-                    "author": "Maintainer",
-                    "content": "Prepared landing conversations are a reserved, backend-owned read path for curated examples. Do not present them as live /api/chat execution or mix them into the normal chat workflow walkthrough."
                 }
             ]
         },
@@ -573,7 +564,12 @@
                 "packages/backend/src/handlers/setupSession.ts",
                 "packages/backend/src/handlers/adminSettings.ts",
                 "packages/backend/src/services/setupBootstrap.ts",
-                "packages/config-spec/src/settings-template.ts"
+                "packages/backend/src/config/model-profiles.defaults.yaml",
+                "packages/backend/src/services/runtimeRequestControls.ts",
+                "packages/config-spec/src/settings-template.ts",
+                "packages/config-spec/src/env-spec.ts",
+                "docs/auth/README.md",
+                "docs/status/account-identity-and-access.md"
             ],
             "page_notes": [
                 {
@@ -581,7 +577,7 @@
                     "author": "Maintainer"
                 },
                 {
-                    "content": "Cover the operator settings/setup-link and reset flow: local setup creates a bounded operator session, settings remain backend-owned, and reset is an explicit local command rather than a public client capability.",
+                    "content": "Cover the operator settings/setup-link and reset flow: local setup creates a bounded operator session, settings remain backend-owned, and reset is an explicit local command rather than a public client capability. Keep planned account identity and sign-in work clearly separate from this shipped operator flow.",
                     "author": "Maintainer"
                 }
             ]
@@ -616,11 +612,7 @@
                     "author": "Maintainer"
                 },
                 {
-                    "content": "For workflow step signals, explain the compromise plainly: the wire shape stays a primitive map, but known groups have named TypeScript types, builders, reader helpers, schema checks, OpenAPI docs, and focused tests.",
-                    "author": "Maintainer"
-                },
-                {
-                    "content": "ResponseMetadataSchema should stay tolerant of additive metadata, but it should still catch drift for known workflow signal groups such as plan signals, routing-chain pairs, clarification pairs, refinement markers, and assess decisions.",
+                    "content": "For workflow step signals, explain the compromise plainly: the wire shape stays a primitive map, but known groups have named TypeScript types, builders, reader helpers, schema checks, OpenAPI docs, and focused tests. ResponseMetadataSchema remains additive while catching drift in those known groups.",
                     "author": "Maintainer"
                 },
                 {
@@ -739,8 +731,12 @@
             "entrypoints": [
                 "packages/web/src",
                 "packages/web/src/App.tsx",
+                "packages/web/src/pages/PublicHomePage.tsx",
+                "packages/web/src/pages/ChatPage.tsx",
+                "packages/web/src/components/Chat.tsx",
                 "packages/web/src/utils/api.ts",
-                "packages/web/src/pages/EmbedPage.tsx"
+                "packages/web/src/pages/EmbedPage.tsx",
+                "docs/architecture/public-web-surfaces.md"
             ],
             "page_notes": [
                 {
@@ -758,12 +754,13 @@
             "purpose": "Document the web ask flow: how the UI sends chat requests, displays answers, and exposes provenance cues in the browser.",
             "parent": "Web",
             "entrypoints": [
-                "packages/web/src/components/AskMeAnything.tsx",
+                "packages/web/src/components/Chat.tsx",
                 "packages/web/src/components/MarkdownResponse.tsx",
+                "packages/web/src/components/ProvenanceFooter.tsx",
+                "packages/web/src/pages/ChatPage.tsx",
+                "packages/web/src/pages/EmbedPage.tsx",
                 "packages/web/src/App.tsx",
-                "packages/web/src/utils/api.ts",
-                "packages/web/src/data/landingScenarios.ts",
-                "packages/web/src/data/landingScenarioFixtures.json"
+                "packages/web/src/utils/api.ts"
             ],
             "page_notes": [
                 {
@@ -771,7 +768,7 @@
                     "author": "Maintainer"
                 },
                 {
-                    "content": "Document both paths briefly: the prepared landing suggestion loads a backend-served answer and renders Markdown; typed submission remains the live chat path. Point to AskMeAnything, MarkdownResponse, landing scenarios, and the prepared-conversation API helper.",
+                    "content": "Document `Chat` as the shared live flow for `/chat` and `/embed`: it owns request cancellation, local status, Markdown rendering, backend-returned provenance, and Turnstile state. If the invisible challenge fails or times out, it switches to a visible managed challenge instead of leaving submission stuck.",
                     "author": "Maintainer"
                 }
             ]
@@ -783,11 +780,13 @@
             "entrypoints": [
                 "packages/web/src/pages/TracePage.tsx",
                 "packages/web/src/components/ProvenanceFooter.tsx",
+                "packages/web/src/utils/traceAccounting.ts",
+                "packages/web/src/utils/traceDisplay.ts",
                 "packages/web/src/utils/api.ts"
             ],
             "page_notes": [
                 {
-                    "content": "Include one screenshot of the trace page and call out the key provenance fields users actually see.",
+                    "content": "Include one screenshot of the trace page and call out the key provenance fields users actually see. Explain requested versus applied workflow budgets, termination outcomes, token totals, and backend-recorded costs without recomputing cost authority in the web package.",
                     "author": "Maintainer"
                 }
             ]
@@ -835,7 +834,11 @@
                 "packages/backend/src/services/setupBootstrap.ts",
                 "scripts/settings.cjs",
                 "scripts/reset.cjs",
-                "scripts/lib/operator-link.cjs"
+                "scripts/lib/operator-link.cjs",
+                "packages/launcher-core",
+                "packages/launcher-cli",
+                ".github/workflows/launcher-package.yml",
+                "docs/status/launcher-canary-releases.md"
             ],
             "page_notes": [
                 {
@@ -860,7 +863,7 @@
                 },
                 {
                     "author": "Maintainer",
-                    "content": "Include the local operator setup link, settings command, and reset command in the operator path. Explain that setup and settings are server-owned and local-only; Discord nodes remain supervised adapters."
+                    "content": "Include the local operator setup link, settings command, reset command, and launcher path. Launcher canaries publish from main for early verification; setup and settings stay server-owned and local-only, and Discord nodes remain supervised adapters."
                 }
             ]
         }
