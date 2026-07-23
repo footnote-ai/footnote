@@ -21,6 +21,8 @@ export const promptKeys = [
     'discord.realtime.system',
     'discord.realtime.persona.footnote',
     'chat.planner.system',
+    'chat.planner.structured.system',
+    'chat.planner.text_json.system',
     'chat.review.assess.system',
     'chat.review.refine.system',
     'chat.review.module.concise_answer.assess',

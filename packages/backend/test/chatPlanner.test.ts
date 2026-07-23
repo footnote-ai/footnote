@@ -297,6 +297,59 @@ test('chatPlanner accepts structured planner decisions without text JSON parsing
     assert.equal(execution.status, 'executed');
 });
 
+test('chatPlanner switches output instructions for text JSON compatibility fallback', async () => {
+    let structuredSystemPrompt = '';
+    let textJsonSystemPrompt = '';
+    const decision = {
+        action: 'message',
+        modality: 'text',
+        requestedCapabilityProfile: 'balanced-general',
+        safetyTier: 'Low',
+        reasoning: 'Reply should be a normal message.',
+        generation: {
+            reasoningEffort: 'low',
+            verbosity: 'low',
+            temperament: {
+                tightness: 4,
+                rationale: 3,
+                attribution: 4,
+                caution: 3,
+                extent: 4,
+            },
+        },
+    };
+    const planner = createChatPlanner({
+        executePlannerStructured: async ({ messages }) => {
+            structuredSystemPrompt = messages[0]?.content ?? '';
+            throw new SyntaxError('structured decision was malformed');
+        },
+        executePlanner: async ({ messages }) => {
+            textJsonSystemPrompt = messages[0]?.content ?? '';
+            return {
+                text: JSON.stringify(decision),
+                model: 'gpt-5-mini',
+            };
+        },
+    });
+
+    const { execution } = await planFromWorkflow(planner, createChatRequest());
+
+    assert.equal(execution.status, 'executed');
+    assert.equal(execution.contractType, 'text_json');
+    assert.match(structuredSystemPrompt, /provided planner decision tool/i);
+    assert.doesNotMatch(structuredSystemPrompt, /Return plain JSON/i);
+    assert.match(textJsonSystemPrompt, /Return plain JSON only/i);
+    assert.match(textJsonSystemPrompt, /The JSON object must have this shape/i);
+    assert.doesNotMatch(
+        textJsonSystemPrompt,
+        /Submit exactly one decision through the provided planner decision tool/i
+    );
+    assert.match(structuredSystemPrompt, /Retrieval guidance:/);
+    assert.match(textJsonSystemPrompt, /Retrieval guidance:/);
+    assert.match(structuredSystemPrompt, /Safety guidance:/);
+    assert.match(textJsonSystemPrompt, /Safety guidance:/);
+});
+
 test('chatPlanner ingestion marks clean structured outputs as accepted', async () => {
     const infos: Array<{ message: string; meta?: unknown }> = [];
     const originalInfo = logger.info;

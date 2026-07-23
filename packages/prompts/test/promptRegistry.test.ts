@@ -275,6 +275,29 @@ test('chat planner TRACE rubric is rendered from traceTemperamentContract defaul
     assert.ok(tightness2Index > extent1Index);
 });
 
+test('chat planner output prompts are mode-specific', () => {
+    const registry = createPromptRegistry();
+    const sharedPrompt = registry.renderPrompt('chat.planner.system').content;
+    const structuredPrompt = registry.renderPrompt(
+        'chat.planner.structured.system'
+    ).content;
+    const textJsonPrompt = registry.renderPrompt(
+        'chat.planner.text_json.system'
+    ).content;
+
+    assert.doesNotMatch(sharedPrompt, /Return plain JSON/i);
+    assert.doesNotMatch(sharedPrompt, /function call/i);
+    assert.match(structuredPrompt, /provided planner decision tool/i);
+    assert.match(structuredPrompt, /tool's schema/i);
+    assert.doesNotMatch(
+        structuredPrompt,
+        /The JSON object must have this shape/i
+    );
+    assert.match(textJsonPrompt, /Return plain JSON only/i);
+    assert.match(textJsonPrompt, /The JSON object must have this shape/i);
+    assert.match(textJsonPrompt, /Do not return .* a function call/i);
+});
+
 test('traceTemperamentContract defaults include canonical anchor axes and levels', () => {
     // Dual strategy: this test parses defaults.yaml directly to validate source
     // data integrity (anchor, axes, levels), while the planner-render test

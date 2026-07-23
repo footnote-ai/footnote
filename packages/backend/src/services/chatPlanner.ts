@@ -219,6 +219,21 @@ type ChatPlannerStructuredExecutor = (
 ) => Promise<ChatPlannerStructuredExecutionResult>;
 type ChatPlannerExecutionMode = 'structured' | 'text_json';
 
+/**
+ * Composes shared planner policy with the output contract for one execution
+ * mode. Structured calls rely on the supplied tool schema, while the
+ * compatibility path keeps its explicit JSON contract.
+ */
+const renderPlannerModePrompt = (mode: ChatPlannerExecutionMode): string => {
+    const sharedPrompt = renderPrompt('chat.planner.system').content;
+    const outputPrompt = renderPrompt(
+        mode === 'structured'
+            ? 'chat.planner.structured.system'
+            : 'chat.planner.text_json.system'
+    ).content;
+    return `${sharedPrompt}\n\n${outputPrompt}`;
+};
+
 export type PlannerCandidate = Partial<ChatPlan> & {
     requestedCapabilityProfile?: unknown;
     reasoning?: unknown;
@@ -1429,23 +1444,27 @@ export const createChatPlanner = ({
             : 'text_json';
         let plannerResponseText: string | undefined;
         let plannerStructuredArguments: string | undefined;
-        const plannerPrompt = renderPrompt('chat.planner.system').content;
         const requestSummary = summarizeRequest(request);
-        const plannerMessages = buildPlannerMessages({
-            plannerPrompt,
-            plannerProfileContext: plannerCapabilityContext,
-            requestSummary,
-            request,
-            contextTier: 'current_window',
-        });
-
-        const requestPayload: ChatPlannerExecutionRequest = {
-            messages: plannerMessages,
+        const buildPlannerRequestPayload = (
+            mode: ChatPlannerExecutionMode,
+            contextTier: PlannerContextTier
+        ): ChatPlannerExecutionRequest => ({
+            messages: buildPlannerMessages({
+                plannerPrompt: renderPlannerModePrompt(mode),
+                plannerProfileContext: plannerCapabilityContext,
+                requestSummary,
+                request,
+                contextTier,
+            }),
             model: defaultModel,
             maxOutputTokens: 1200,
             reasoningEffort: 'low',
             ...(safetyIdentifier !== undefined && { safetyIdentifier }),
-        };
+        });
+        const requestPayload = buildPlannerRequestPayload(
+            plannerMode,
+            'current_window'
+        );
 
         const recordPlannerUsage = (
             usageModel: string,
@@ -1499,20 +1518,10 @@ export const createChatPlanner = ({
                 return null;
             }
 
-            const expandedMessages = buildPlannerMessages({
-                plannerPrompt,
-                plannerProfileContext: plannerCapabilityContext,
-                requestSummary,
-                request,
-                contextTier,
-            });
-            const expandedRequestPayload: ChatPlannerExecutionRequest = {
-                messages: expandedMessages,
-                model: defaultModel,
-                maxOutputTokens: 1200,
-                reasoningEffort: 'low',
-                ...(safetyIdentifier !== undefined && { safetyIdentifier }),
-            };
+            const expandedRequestPayload = buildPlannerRequestPayload(
+                'text_json',
+                contextTier
+            );
             const expandedResponse = await executePlanner(
                 expandedRequestPayload
             );
@@ -1824,8 +1833,12 @@ export const createChatPlanner = ({
                 );
                 try {
                     plannerMode = 'text_json';
-                    const textJsonResponse =
-                        await executePlanner(requestPayload);
+                    const textJsonResponse = await executePlanner(
+                        buildPlannerRequestPayload(
+                            'text_json',
+                            'current_window'
+                        )
+                    );
                     plannerResponseText = textJsonResponse.text;
                     recordPlannerUsage(
                         textJsonResponse.model || defaultModel,
