@@ -185,6 +185,14 @@ export interface GenerationUsage {
      */
     promptTokens?: number;
     /**
+     * Input tokens read from the provider prompt cache, when reported.
+     */
+    cachedInputTokens?: number;
+    /**
+     * Input tokens written to the provider prompt cache, when reported.
+     */
+    cacheWriteTokens?: number;
+    /**
      * Output or completion token count, when the runtime exposes it.
      */
     completionTokens?: number;

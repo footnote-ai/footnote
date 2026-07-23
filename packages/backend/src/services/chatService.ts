@@ -893,7 +893,15 @@ export const createChatService = ({
         const estimatedCost = estimateBackendTextCost(
             usageModel,
             promptTokens,
-            completionTokens
+            completionTokens,
+            {
+                ...(result.usage?.cachedInputTokens !== undefined && {
+                    cachedInputTokens: result.usage.cachedInputTokens,
+                }),
+                ...(result.usage?.cacheWriteTokens !== undefined && {
+                    cacheWriteTokens: result.usage.cacheWriteTokens,
+                }),
+            }
         );
 
         if (recordUsage) {
@@ -902,6 +910,12 @@ export const createChatService = ({
                     feature: 'chat',
                     model: usageModel,
                     promptTokens,
+                    ...(result.usage?.cachedInputTokens !== undefined && {
+                        cachedInputTokens: result.usage.cachedInputTokens,
+                    }),
+                    ...(result.usage?.cacheWriteTokens !== undefined && {
+                        cacheWriteTokens: result.usage.cacheWriteTokens,
+                    }),
                     completionTokens,
                     totalTokens,
                     ...estimatedCost,

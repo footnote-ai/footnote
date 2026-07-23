@@ -355,12 +355,30 @@ export const createInternalNewsTaskService = ({
                 feature: 'news',
                 model: usageModel,
                 promptTokens,
+                ...(generationResult.usage?.cachedInputTokens !== undefined && {
+                    cachedInputTokens: generationResult.usage.cachedInputTokens,
+                }),
+                ...(generationResult.usage?.cacheWriteTokens !== undefined && {
+                    cacheWriteTokens: generationResult.usage.cacheWriteTokens,
+                }),
                 completionTokens,
                 totalTokens,
                 ...estimateBackendTextCost(
                     usageModel,
                     promptTokens,
-                    completionTokens
+                    completionTokens,
+                    {
+                        ...(generationResult.usage?.cachedInputTokens !==
+                            undefined && {
+                            cachedInputTokens:
+                                generationResult.usage.cachedInputTokens,
+                        }),
+                        ...(generationResult.usage?.cacheWriteTokens !==
+                            undefined && {
+                            cacheWriteTokens:
+                                generationResult.usage.cacheWriteTokens,
+                        }),
+                    }
                 ),
                 timestamp: Date.now(),
             });

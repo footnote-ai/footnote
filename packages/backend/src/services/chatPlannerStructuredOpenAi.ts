@@ -153,6 +153,10 @@ export const createOpenAiChatPlannerStructuredExecutor = ({
             model?: string;
             usage?: {
                 input_tokens?: number;
+                input_tokens_details?: {
+                    cached_tokens?: number;
+                    cache_write_tokens?: number;
+                };
                 output_tokens?: number;
                 total_tokens?: number;
             };
@@ -192,6 +196,10 @@ export const createOpenAiChatPlannerStructuredExecutor = ({
             model: data.model ?? request.model,
             usage: {
                 promptTokens: data.usage?.input_tokens,
+                cachedInputTokens:
+                    data.usage?.input_tokens_details?.cached_tokens,
+                cacheWriteTokens:
+                    data.usage?.input_tokens_details?.cache_write_tokens,
                 completionTokens: data.usage?.output_tokens,
                 totalTokens:
                     data.usage?.total_tokens ??

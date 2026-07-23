@@ -25,6 +25,10 @@ test('structured planner executor parses function_call arguments', async () => {
                 model: 'gpt-5-nano',
                 usage: {
                     input_tokens: 10,
+                    input_tokens_details: {
+                        cached_tokens: 4,
+                        cache_write_tokens: 2,
+                    },
                     output_tokens: 9,
                     total_tokens: 19,
                 },
@@ -117,6 +121,8 @@ test('structured planner executor parses function_call arguments', async () => {
             'message'
         );
         assert.equal(result.model, 'gpt-5-nano');
+        assert.equal(result.usage?.cachedInputTokens, 4);
+        assert.equal(result.usage?.cacheWriteTokens, 2);
         assert.equal(result.usage?.totalTokens, 19);
     } finally {
         globalThis.fetch = originalFetch;

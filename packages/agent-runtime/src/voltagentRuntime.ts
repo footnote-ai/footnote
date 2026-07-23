@@ -56,6 +56,8 @@ export interface VoltAgentGenerateTextOptions {
  */
 export interface VoltAgentUsage {
     promptTokens?: number;
+    cachedInputTokens?: number;
+    cacheWriteTokens?: number;
     completionTokens?: number;
     totalTokens?: number;
 }
@@ -712,6 +714,12 @@ const normalizeVoltAgentResult = (
     const usage: GenerationUsage | undefined = result.usage
         ? {
               promptTokens: result.usage.promptTokens,
+              ...(result.usage.cachedInputTokens !== undefined && {
+                  cachedInputTokens: result.usage.cachedInputTokens,
+              }),
+              ...(result.usage.cacheWriteTokens !== undefined && {
+                  cacheWriteTokens: result.usage.cacheWriteTokens,
+              }),
               completionTokens: result.usage.completionTokens,
               totalTokens: result.usage.totalTokens,
           }
@@ -863,6 +871,10 @@ const createDefaultVoltAgentExecutor = ({
                 finishReason: result.finishReason,
                 usage: {
                     promptTokens: result.usage.inputTokens,
+                    cachedInputTokens:
+                        result.usage.inputTokenDetails.cacheReadTokens,
+                    cacheWriteTokens:
+                        result.usage.inputTokenDetails.cacheWriteTokens,
                     completionTokens: result.usage.outputTokens,
                     totalTokens: result.usage.totalTokens,
                 },

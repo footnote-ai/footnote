@@ -1454,12 +1454,26 @@ export const createChatPlanner = ({
                         feature: 'chat_planner',
                         model: usageModel,
                         promptTokens,
+                        ...(usage?.cachedInputTokens !== undefined && {
+                            cachedInputTokens: usage.cachedInputTokens,
+                        }),
+                        ...(usage?.cacheWriteTokens !== undefined && {
+                            cacheWriteTokens: usage.cacheWriteTokens,
+                        }),
                         completionTokens,
                         totalTokens,
                         ...estimateBackendTextCost(
                             usageModel,
                             promptTokens,
-                            completionTokens
+                            completionTokens,
+                            {
+                                ...(usage?.cachedInputTokens !== undefined && {
+                                    cachedInputTokens: usage.cachedInputTokens,
+                                }),
+                                ...(usage?.cacheWriteTokens !== undefined && {
+                                    cacheWriteTokens: usage.cacheWriteTokens,
+                                }),
+                            }
                         ),
                         timestamp: Date.now(),
                     });

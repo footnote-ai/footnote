@@ -724,9 +724,9 @@ test('default VoltAgent executor maps usage from the installed AI SDK token fiel
             usage: {
                 inputTokens: 21,
                 inputTokenDetails: {
-                    noCacheTokens: 21,
-                    cacheReadTokens: 0,
-                    cacheWriteTokens: 0,
+                    noCacheTokens: 13,
+                    cacheReadTokens: 5,
+                    cacheWriteTokens: 3,
                 },
                 outputTokens: 9,
                 outputTokenDetails: {
@@ -738,9 +738,9 @@ test('default VoltAgent executor maps usage from the installed AI SDK token fiel
             totalUsage: {
                 inputTokens: 21,
                 inputTokenDetails: {
-                    noCacheTokens: 21,
-                    cacheReadTokens: 0,
-                    cacheWriteTokens: 0,
+                    noCacheTokens: 13,
+                    cacheReadTokens: 5,
+                    cacheWriteTokens: 3,
                 },
                 outputTokens: 9,
                 outputTokenDetails: {
@@ -777,6 +777,8 @@ test('default VoltAgent executor maps usage from the installed AI SDK token fiel
 
     assert.deepEqual(result.usage, {
         promptTokens: 21,
+        cachedInputTokens: 5,
+        cacheWriteTokens: 3,
         completionTokens: 9,
         totalTokens: 30,
     });
