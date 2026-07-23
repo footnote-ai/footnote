@@ -25,6 +25,9 @@ web:
         - 'http://localhost:3000'
     frame-ancestors:
         - "'self'"
+        - 'https://www.jordanmakes.dev'
+        - 'https://jordanmakes.dev'
+        - 'https://jordanmakes.fly.dev'
         - 'http://localhost:8080'
         - 'http://localhost:3000'
 
