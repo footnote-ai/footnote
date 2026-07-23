@@ -24,6 +24,7 @@ import {
 } from './llmCostRecorder.js';
 import type { InternalImageDescriptionAdapter } from './internalImageDescription.js';
 import { logger } from '../utils/logger.js';
+import { deriveOpenAiSafetyIdentifier } from './runtimeRequestControls.js';
 
 /**
  * @footnote-logger: internalTextTaskService
@@ -73,6 +74,7 @@ Additional context (may indicate what to focus on): {{context}}
 export type CreateInternalNewsTaskServiceOptions = {
     generationRuntime: GenerationRuntime;
     defaultModel: string;
+    safetyIdentifierSecret?: string | null;
     recordUsage?: (record: BackendLLMCostRecord) => void;
 };
 
@@ -292,6 +294,7 @@ const buildImageDescriptionPrompt = (context?: string): string => {
 export const createInternalNewsTaskService = ({
     generationRuntime,
     defaultModel,
+    safetyIdentifierSecret,
     recordUsage = recordBackendLLMUsage,
 }: CreateInternalNewsTaskServiceOptions): InternalNewsTaskService => {
     const runNewsTask = async (
@@ -315,6 +318,14 @@ export const createInternalNewsTaskService = ({
             category: category ?? 'Not specified',
             maxResults,
         });
+        const safetyIdentifier = deriveOpenAiSafetyIdentifier(
+            {
+                secret: safetyIdentifierSecret,
+                surface: 'discord',
+                userId: request.channelContext?.userId,
+            },
+            textTaskLogger
+        );
 
         const generationResult = await generationRuntime.generate({
             model: defaultModel,
@@ -336,6 +347,7 @@ export const createInternalNewsTaskService = ({
             ],
             reasoningEffort: request.reasoningEffort ?? 'medium',
             verbosity: request.verbosity ?? 'medium',
+            ...(safetyIdentifier !== undefined && { safetyIdentifier }),
             search: {
                 query: searchQuery,
                 contextSize: 'medium',

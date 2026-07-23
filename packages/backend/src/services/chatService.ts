@@ -80,6 +80,7 @@ import type {
 } from './executionContractTrustGraph/trustGraphEvidenceTypes.js';
 import type { ScopeValidationPolicy } from './executionContractTrustGraph/scopeValidator.js';
 import { logger } from '../utils/logger.js';
+import { resolveProfileReasoningEffort } from './runtimeRequestControls.js';
 import { runtimeConfig } from '../config.js';
 import { buildToolClarificationResponse } from './tools/toolClarificationResponse.js';
 import { buildWeatherToolFailureResponse } from './tools/weatherToolFailureResponse.js';
@@ -720,6 +721,8 @@ export type CreateChatServiceOptions = {
     // Optional provider/capability defaults from model profile resolution.
     defaultProvider?: SupportedProvider;
     defaultCapabilities?: ModelProfileCapabilities;
+    /** Full backend-selected default profile used to resolve request controls. */
+    defaultProfile?: ModelProfile;
     recordUsage?: (record: BackendLLMCostRecord) => void;
     chatWorkflowConfig?: {
         modeId?: string;
@@ -754,6 +757,8 @@ export type RunChatMessagesInput = {
     model?: string;
     provider?: SupportedProvider;
     capabilities?: ModelProfileCapabilities;
+    /** Backend-derived pseudonym; raw surface identifiers are not accepted. */
+    safetyIdentifier?: string;
     generation?: ChatGenerationPlan;
     executionContext?: ResponseMetadataRuntimeContext['executionContext'];
     workflowModeId?: string;
@@ -832,6 +837,7 @@ export const createChatService = ({
     defaultModel,
     defaultProvider,
     defaultCapabilities,
+    defaultProfile,
     recordUsage = recordBackendLLMUsage,
     chatWorkflowConfig = runtimeConfig.chatWorkflow,
     runReviewWorkflow = runBoundedReviewWorkflow,
@@ -948,6 +954,7 @@ export const createChatService = ({
         model,
         provider,
         capabilities,
+        safetyIdentifier,
         generation,
         executionContext,
         workflowModeId,
@@ -1009,6 +1016,14 @@ export const createChatService = ({
                       },
                   ]
                 : messages;
+            const effectiveReasoningEffort =
+                defaultProfile !== undefined
+                    ? resolveProfileReasoningEffort(
+                          defaultProfile,
+                          normalizedGeneration?.reasoningEffort,
+                          logger
+                      )
+                    : normalizedGeneration?.reasoningEffort;
             const generationRequest: GenerationRequest = {
                 messages: messagesWithHints,
                 model: model ?? defaultModel,
@@ -1018,12 +1033,13 @@ export const createChatService = ({
                 ...((capabilities ?? defaultCapabilities) !== undefined && {
                     capabilities: capabilities ?? defaultCapabilities,
                 }),
-                ...(normalizedGeneration?.reasoningEffort !== undefined && {
-                    reasoningEffort: normalizedGeneration.reasoningEffort,
+                ...(effectiveReasoningEffort !== undefined && {
+                    reasoningEffort: effectiveReasoningEffort,
                 }),
                 ...(normalizedGeneration?.verbosity !== undefined && {
                     verbosity: normalizedGeneration.verbosity,
                 }),
+                ...(safetyIdentifier !== undefined && { safetyIdentifier }),
                 ...(normalizedGeneration?.search !== undefined && {
                     search: normalizedGeneration.search,
                 }),
@@ -1105,6 +1121,11 @@ export const createChatService = ({
                             model: profile.providerModel,
                             provider: profile.provider,
                             capabilities: profile.capabilities,
+                            reasoningEffort: resolveProfileReasoningEffort(
+                                profile,
+                                request.reasoningEffort,
+                                logger
+                            ),
                         }),
                 });
                 const routingResult = toRoutingChainResult(chainResult);

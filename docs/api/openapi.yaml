@@ -2364,7 +2364,7 @@ components:
                     maximum: 5
                 reasoningEffort:
                     type: string
-                    enum: [minimal, low, medium, high]
+                    enum: [none, low, medium, high, xhigh, max]
                 verbosity:
                     type: string
                     enum: [low, medium, high]
@@ -2375,6 +2375,9 @@ components:
                             type: string
                             minLength: 1
                         guildId:
+                            type: string
+                            minLength: 1
+                        userId:
                             type: string
                             minLength: 1
                     additionalProperties: false
@@ -2391,6 +2394,7 @@ components:
                 channelContext:
                     channelId: '123456789012345678'
                     guildId: '234567890123456789'
+                    userId: '345678901234567890'
 
         InternalNewsTaskResponse:
             type: object

@@ -465,7 +465,7 @@ test('orchestrator carries resolved Execution Contract policy payload through se
     );
 });
 
-test('request-level generation overrides replace planner reasoning effort and verbosity', async () => {
+test('quality profile keeps its authoritative reasoning default while planner verbosity applies', async () => {
     let observedReasoningEffort: string | undefined;
     let observedVerbosity: string | undefined;
 
@@ -517,7 +517,7 @@ test('request-level generation overrides replace planner reasoning effort and ve
     const response = await orchestrator.runChat(createChatRequest());
 
     assert.equal(response.action, 'message');
-    assert.equal(observedReasoningEffort, 'low');
+    assert.equal(observedReasoningEffort, 'medium');
     assert.equal(observedVerbosity, 'low');
 });
 

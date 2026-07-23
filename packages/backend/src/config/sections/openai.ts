@@ -47,6 +47,9 @@ export const buildOpenAISection = (
     warn: WarningSink
 ): RuntimeConfig['openai'] => ({
     apiKey: parseOptionalTrimmedString(env.OPENAI_API_KEY),
+    safetyIdentifierSecret: parseOptionalTrimmedString(
+        env.OPENAI_SAFETY_IDENTIFIER_SECRET
+    ),
     defaultModel:
         parseOptionalTrimmedString(env.DEFAULT_MODEL) ||
         envDefaultValues.DEFAULT_MODEL,

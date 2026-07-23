@@ -63,10 +63,12 @@ const newsCommand: Command = {
                 .setName('reasoning_effort')
                 .setDescription('How much effort to put into reasoning')
                 .addChoices(
-                    { name: 'Minimal', value: 'minimal' },
+                    { name: 'None', value: 'none' },
                     { name: 'Low', value: 'low' },
                     { name: 'Medium', value: 'medium' },
-                    { name: 'High', value: 'high' }
+                    { name: 'High', value: 'high' },
+                    { name: 'Extra high', value: 'xhigh' },
+                    { name: 'Maximum', value: 'max' }
                 )
                 .setRequired(false)
         )
@@ -163,14 +165,17 @@ const newsCommand: Command = {
                         category: category || undefined,
                         maxResults,
                         reasoningEffort: reasoningEffort as
-                            | 'minimal'
+                            | 'none'
                             | 'low'
                             | 'medium'
-                            | 'high',
+                            | 'high'
+                            | 'xhigh'
+                            | 'max',
                         verbosity: verbosity as 'low' | 'medium' | 'high',
                         channelContext: {
                             channelId: interaction.channelId ?? undefined,
                             guildId: interaction.guildId ?? undefined,
+                            userId: interaction.user.id,
                         },
                     },
                     { signal: controller.signal }

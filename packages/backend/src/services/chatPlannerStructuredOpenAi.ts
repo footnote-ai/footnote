@@ -6,6 +6,7 @@
  * @footnote-ethics: high - Structured planner correctness affects grounding and response behavior.
  */
 import type { GenerationUsage, RuntimeMessage } from '@footnote/agent-runtime';
+import type { SupportedReasoningEffort } from '@footnote/contracts';
 import {
     CHAT_PLANNER_TOOL_NAME,
     chatPlannerDecisionTool,
@@ -15,8 +16,9 @@ type ChatPlannerStructuredExecutionRequest = {
     messages: RuntimeMessage[];
     model: string;
     maxOutputTokens: number;
-    reasoningEffort: 'minimal' | 'low' | 'medium' | 'high';
+    reasoningEffort?: SupportedReasoningEffort;
     verbosity?: 'low' | 'medium' | 'high';
+    safetyIdentifier?: string;
     signal?: AbortSignal;
 };
 
@@ -48,15 +50,6 @@ type ResponsesInputMessage = {
               type: 'input_text';
               text: string;
           }>;
-};
-
-const normalizeReasoningEffort = (
-    value: ChatPlannerStructuredExecutionRequest['reasoningEffort']
-): 'low' | 'medium' | 'high' => {
-    if (value === 'medium' || value === 'high') {
-        return value;
-    }
-    return 'low';
 };
 
 const normalizeVerbosity = (
@@ -96,9 +89,14 @@ export const createOpenAiChatPlannerStructuredExecutor = ({
             model: request.model,
             input: toResponsesInputMessages(request.messages),
             max_output_tokens: request.maxOutputTokens,
-            reasoning: {
-                effort: normalizeReasoningEffort(request.reasoningEffort),
-            },
+            ...(request.reasoningEffort !== undefined && {
+                reasoning: {
+                    effort: request.reasoningEffort,
+                },
+            }),
+            ...(request.safetyIdentifier !== undefined && {
+                safety_identifier: request.safetyIdentifier,
+            }),
             ...(request.verbosity !== undefined && {
                 text: {
                     verbosity: normalizeVerbosity(request.verbosity),

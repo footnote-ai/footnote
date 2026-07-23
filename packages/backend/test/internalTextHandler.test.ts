@@ -20,6 +20,7 @@ import {
     type InternalNewsTaskService,
 } from '../src/services/internalText.js';
 import { SimpleRateLimiter } from '../src/services/rateLimiter.js';
+import { hmacId } from '../src/utils/pseudonymization.js';
 
 type TestServer = {
     url: string;
@@ -554,6 +555,36 @@ test('internal news task service records usage even when structured parsing fail
     );
 
     assert.equal(recordedUsageCount, 1);
+});
+
+test('internal news task forwards only a backend-derived safety identifier', async () => {
+    let seenRequest: GenerationRequest | undefined;
+    const service = createInternalNewsTaskService({
+        generationRuntime: {
+            kind: 'test-runtime',
+            async generate(request) {
+                seenRequest = request;
+                return {
+                    text: JSON.stringify({ news: [], summary: 'No news.' }),
+                    model: 'gpt-5.6-terra',
+                };
+            },
+        },
+        defaultModel: 'gpt-5.6-terra',
+        safetyIdentifierSecret: 'safety-secret',
+        recordUsage: () => undefined,
+    });
+
+    await service.runNewsTask({
+        task: 'news',
+        channelContext: { userId: 'raw-discord-user' },
+    });
+
+    assert.equal(
+        seenRequest?.safetyIdentifier,
+        hmacId('safety-secret', 'raw-discord-user', 'openai-safety:v1:discord')
+    );
+    assert.notEqual(seenRequest?.safetyIdentifier, 'raw-discord-user');
 });
 
 test('internal news task service preserves its descriptive JSON-object error when fallback parsing fails', async () => {

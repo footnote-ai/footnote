@@ -82,8 +82,9 @@ test('structured planner executor parses function_call arguments', async () => {
             ],
             model: 'gpt-5-nano',
             maxOutputTokens: 700,
-            reasoningEffort: 'low',
+            reasoningEffort: 'max',
             verbosity: 'low',
+            safetyIdentifier: 'derived-safety-id',
         });
 
         assert.equal(
@@ -91,6 +92,11 @@ test('structured planner executor parses function_call arguments', async () => {
                 ?.name,
             'submit_planner_decision'
         );
+        assert.equal(
+            capturedRequestBody?.safety_identifier,
+            'derived-safety-id'
+        );
+        assert.deepEqual(capturedRequestBody?.reasoning, { effort: 'max' });
         assert.equal(
             Array.isArray(capturedRequestBody?.tools) &&
                 capturedRequestBody?.tools?.length,

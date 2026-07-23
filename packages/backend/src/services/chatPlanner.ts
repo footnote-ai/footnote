@@ -174,6 +174,8 @@ type CreateChatPlannerOptions = {
     structuredExecutionTimeoutMs?: number;
     availableCapabilityProfiles?: ChatPlannerCapabilityProfileOption[];
     recordUsage?: (record: BackendLLMCostRecord) => void;
+    /** Backend-derived pseudonym; never pass a raw surface identifier. */
+    safetyIdentifier?: string;
 };
 
 /**
@@ -185,8 +187,9 @@ type ChatPlannerExecutionRequest = {
     messages: RuntimeMessage[];
     model: string;
     maxOutputTokens: number;
-    reasoningEffort: ChatGenerationPlan['reasoningEffort'];
+    reasoningEffort?: ChatGenerationPlan['reasoningEffort'];
     verbosity?: ChatGenerationPlan['verbosity'];
+    safetyIdentifier?: string;
     signal?: AbortSignal;
 };
 
@@ -271,10 +274,12 @@ const normalizeReasoningEffort = (
     value: unknown
 ): ChatGenerationPlan['reasoningEffort'] => {
     if (
-        value === 'minimal' ||
+        value === 'none' ||
         value === 'low' ||
         value === 'medium' ||
-        value === 'high'
+        value === 'high' ||
+        value === 'xhigh' ||
+        value === 'max'
     ) {
         return value;
     }
@@ -1365,6 +1370,7 @@ export const createChatPlanner = ({
     structuredExecutionTimeoutMs = runtimeConfig.openai.requestTimeoutMs,
     availableCapabilityProfiles = [],
     recordUsage = recordBackendLLMUsage,
+    safetyIdentifier,
 }: CreateChatPlannerOptions) => {
     if (!executePlanner && !executePlannerStructured) {
         throw new Error(
@@ -1438,6 +1444,7 @@ export const createChatPlanner = ({
             model: defaultModel,
             maxOutputTokens: 1200,
             reasoningEffort: 'low',
+            ...(safetyIdentifier !== undefined && { safetyIdentifier }),
         };
 
         const recordPlannerUsage = (
@@ -1504,6 +1511,7 @@ export const createChatPlanner = ({
                 model: defaultModel,
                 maxOutputTokens: 1200,
                 reasoningEffort: 'low',
+                ...(safetyIdentifier !== undefined && { safetyIdentifier }),
             };
             const expandedResponse = await executePlanner(
                 expandedRequestPayload

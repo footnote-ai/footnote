@@ -49,8 +49,9 @@ test('voltagent runtime maps transcript and generation settings into executor op
         messages: [{ role: 'user', content: 'Summarize the repo changes.' }],
         model: 'gpt-5.1',
         maxOutputTokens: 800,
-        reasoningEffort: 'minimal',
+        reasoningEffort: 'max',
         verbosity: 'high',
+        safetyIdentifier: 'derived-safety-id',
         signal,
     };
 
@@ -61,8 +62,9 @@ test('voltagent runtime maps transcript and generation settings into executor op
     assert.equal(seenOptions?.maxOutputTokens, 800);
     assert.equal(seenOptions?.signal, signal);
     assert.deepEqual(seenOptions?.providerOptions, {
-        reasoningEffort: 'low',
+        reasoningEffort: 'max',
         verbosity: 'high',
+        safetyIdentifier: 'derived-safety-id',
     });
     assert.equal(result.text, 'voltagent reply');
     assert.equal(result.model, 'gpt-5.1');
