@@ -3,6 +3,9 @@ FROM node:22-slim AS builder
 
 WORKDIR /app
 ENV NODE_ENV=production
+# pnpm may refresh workspace modules before filtered scripts. Mark the
+# non-interactive builder as CI so that refresh can proceed without a TTY.
+ENV CI=true
 # Keep builder links self-contained because the runtime image copies /app/node_modules without pnpm's global store.
 ENV PNPM_CONFIG_ENABLE_GLOBAL_VIRTUAL_STORE=false
 
