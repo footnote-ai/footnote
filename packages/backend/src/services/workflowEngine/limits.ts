@@ -180,12 +180,17 @@ export const resolveExecutionLimits = (input: {
 export const buildExecutionLimitStop = (input: {
     terminationReason: WorkflowTerminationReason;
     exhaustedLimitKey?: WorkflowLimitKey;
+    stoppedBeforeStepKind?: WorkflowStepKind;
 }): WorkflowLimitStop => ({
     stoppedByLimit: input.exhaustedLimitKey !== undefined,
     terminationReason: input.terminationReason,
     ...(input.exhaustedLimitKey !== undefined && {
         exhaustedLimitKey: input.exhaustedLimitKey,
     }),
+    ...(input.exhaustedLimitKey !== undefined &&
+        input.stoppedBeforeStepKind !== undefined && {
+            stoppedBeforeStepKind: input.stoppedBeforeStepKind,
+        }),
 });
 
 export const UNBOUNDED_EXECUTION_LIMIT = UNBOUNDED_EXECUTION_LIMIT_SENTINEL;

@@ -290,6 +290,17 @@ test('runBoundedReviewWorkflow attaches planner plan step to lineage and links i
                 purpose: 'chat_orchestrator_action_selection',
                 contractType: 'structured',
                 durationMs: 1,
+                model: 'gpt-5-mini',
+                usage: {
+                    promptTokens: 20,
+                    completionTokens: 5,
+                    totalTokens: 25,
+                },
+                cost: {
+                    inputCostUsd: 0.00002,
+                    outputCostUsd: 0.00001,
+                    totalCostUsd: 0.00003,
+                },
             },
             ingestion: {
                 outputApplyOutcome: 'accepted',
@@ -377,6 +388,9 @@ test('runBoundedReviewWorkflow attaches planner plan step to lineage and links i
     assert.equal(result.outcome, 'generated');
     assert.equal(result.workflowLineage.stepCount, 2);
     assert.equal(result.workflowLineage.steps[0].stepKind, 'plan');
+    assert.equal(result.workflowLineage.steps[0].model, 'gpt-5-mini');
+    assert.equal(result.workflowLineage.steps[0].usage?.totalTokens, 25);
+    assert.equal(result.workflowLineage.steps[0].cost?.totalCostUsd, 0.00003);
     assert.equal(result.workflowLineage.steps[1].stepKind, 'generate');
     assert.equal(
         result.workflowLineage.steps[1].parentStepId,
@@ -390,6 +404,136 @@ test('runBoundedReviewWorkflow attaches planner plan step to lineage and links i
                 message.content === '// adapter-added planner payload'
         )
     );
+});
+
+test('runBoundedReviewWorkflow counts planner tokens before deciding whether generation can start', async () => {
+    let generationCalls = 0;
+    const generationRuntime: GenerationRuntime = {
+        kind: 'test-runtime',
+        async generate() {
+            generationCalls += 1;
+            return {
+                text: 'should not run',
+                model: 'gpt-5-mini',
+                provenance: 'Inferred',
+                citations: [],
+            };
+        },
+    };
+
+    const result = await runBoundedReviewWorkflowForTest({
+        generationRuntime,
+        generationRequest: {
+            model: 'gpt-5-mini',
+            messages: [{ role: 'user', content: 'Summarize this.' }],
+        },
+        messagesWithHints: [{ role: 'user', content: 'Summarize this.' }],
+        generationStartedAtMs: Date.now(),
+        workflowConfig: {
+            workflowName: 'message_reviewed',
+            maxIterations: 0,
+            maxDurationMs: 15000,
+            executionLimits: {
+                maxWorkflowSteps: 2,
+                maxToolCalls: 0,
+                maxPlanCycles: 1,
+                maxReviewCycles: 0,
+                maxDeliberationCalls: 1,
+                maxTokensTotal: 50,
+                maxDurationMs: 15000,
+            },
+        },
+        workflowPolicy: {
+            enablePlanning: true,
+            enableToolUse: false,
+            enableReplanning: false,
+            enableGeneration: true,
+            enableAssessment: false,
+            enableRevision: false,
+        },
+        plannerStepRequest: {
+            workflowId: 'wf_planner_budget',
+            workflowName: 'message_reviewed',
+            attempt: 1,
+            request: {
+                surface: 'web',
+                trigger: { kind: 'submit' },
+                latestUserInput: 'Summarize this.',
+                conversation: [{ role: 'user', content: 'Summarize this.' }],
+            },
+            invocationContext: {
+                owner: 'workflow',
+                workflowName: 'message_reviewed',
+                stepKind: 'plan',
+                purpose: 'chat_orchestrator_action_selection',
+            },
+            capabilityProfiles: [],
+        },
+        plannerStepExecutor: async () => ({
+            plan: {
+                action: 'message',
+                modality: 'text',
+                safetyTier: 'Low',
+                reasoning: 'Use normal message flow.',
+                generation: { reasoningEffort: 'low', verbosity: 'low' },
+            },
+            execution: {
+                status: 'executed',
+                purpose: 'chat_orchestrator_action_selection',
+                contractType: 'structured',
+                durationMs: 1,
+                model: 'gpt-5-mini',
+                usage: {
+                    promptTokens: 40,
+                    completionTokens: 10,
+                    totalTokens: 50,
+                },
+                cost: {
+                    inputCostUsd: 0.00004,
+                    outputCostUsd: 0.00002,
+                    totalCostUsd: 0.00006,
+                },
+            },
+            ingestion: {
+                outputApplyOutcome: 'accepted',
+                fallbackTier: 'none',
+                correctionCodes: [],
+                outOfContractFields: [],
+                authorityFieldAttempts: [],
+            },
+            diagnostics: {
+                rawToolIntentPresent: false,
+                normalizedToolIntentPresent: false,
+                toolIntentRejected: false,
+                toolIntentRejectionReasons: [],
+            },
+        }),
+        captureUsage: () => ({
+            model: 'gpt-5-mini',
+            promptTokens: 0,
+            completionTokens: 0,
+            totalTokens: 0,
+            estimatedCost: {
+                inputCostUsd: 0,
+                outputCostUsd: 0,
+                totalCostUsd: 0,
+            },
+        }),
+    });
+
+    assert.equal(result.outcome, 'no_generation');
+    assert.equal(generationCalls, 0);
+    assert.equal(
+        result.workflowLineage.terminationReason,
+        'budget_exhausted_tokens'
+    );
+    assert.deepEqual(result.workflowLineage.limitStop, {
+        stoppedByLimit: true,
+        terminationReason: 'budget_exhausted_tokens',
+        exhaustedLimitKey: 'maxTokensTotal',
+        stoppedBeforeStepKind: 'generate',
+    });
+    assert.equal(result.workflowLineage.steps[0]?.usage?.totalTokens, 50);
 });
 
 test('runBoundedReviewWorkflow preserves failed planner fallback status on injected plan step', async () => {

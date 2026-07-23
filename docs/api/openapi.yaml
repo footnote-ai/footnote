@@ -3078,6 +3078,11 @@ components:
                                     maxTokensTotal,
                                     maxDurationMs,
                                 ]
+                        stoppedBeforeStepKind:
+                            type: string
+                            description: Workflow step prevented by the exhausted limit.
+                            enum:
+                                [plan, tool, generate, assess, revise, finalize]
                     required:
                         - stoppedByLimit
                         - terminationReason

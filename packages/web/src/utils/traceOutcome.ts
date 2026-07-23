@@ -10,6 +10,7 @@ import type {
     ExecutionEvent,
     ResponseMetadata,
     WorkflowRecord,
+    WorkflowStepKind,
     WorkflowTerminationReason,
 } from '@footnote/contracts/policy';
 import { isPlannerFallbackStep } from '@footnote/contracts/policy';
@@ -97,6 +98,15 @@ const isKnownSkippedReason = (reasonCode: string): boolean =>
 const isKnownStoppedExecutionReason = (reasonCode: string): boolean =>
     reasonCode in STOPPED_EXECUTION_REASON_EXPLANATIONS;
 
+const STEP_KIND_LABELS: Partial<Record<WorkflowStepKind, string>> = {
+    plan: 'planning',
+    tool: 'tool execution',
+    generate: 'generation',
+    assess: 'assessment',
+    revise: 'revision',
+    finalize: 'finalization',
+};
+
 /**
  * Derives a conservative run-outcome summary for trace presentation.
  *
@@ -156,6 +166,13 @@ export const buildRunOutcomeSummary = (
     const hasExecutedGeneration = execution.some(
         (event) => event.kind === 'generation' && event.status === 'executed'
     );
+    const hasGeneratedAnswer =
+        hasExecutedGeneration ||
+        (workflow?.steps ?? []).some(
+            (step) =>
+                step.stepKind === 'generate' &&
+                step.outcome.status === 'executed'
+        );
 
     if (terminationReason && terminationReason !== 'goal_satisfied') {
         const stopExplanation =
@@ -167,6 +184,24 @@ export const buildRunOutcomeSummary = (
                 : hasPlannerFallbackSignal
                   ? ' A fallback planner-contract signal was also recorded.'
                   : '';
+        const stoppedBeforeStepKind =
+            workflow?.limitStop?.stoppedBeforeStepKind;
+        if (
+            hasGeneratedAnswer &&
+            workflow?.limitStop?.stoppedByLimit === true &&
+            stoppedBeforeStepKind !== undefined
+        ) {
+            const stepLabel =
+                STEP_KIND_LABELS[stoppedBeforeStepKind] ??
+                stoppedBeforeStepKind;
+            return {
+                category: 'stopped',
+                headline: 'Answer generated',
+                explanation: `Answer generation completed, but the workflow stopped before ${stepLabel}. ${stopExplanation}${fallbackSuffix}`,
+                reasonCode: terminationReason,
+                secondaryReasonCode: primaryFallbackReason,
+            };
+        }
         return {
             category: 'stopped',
             headline: 'Stopped',

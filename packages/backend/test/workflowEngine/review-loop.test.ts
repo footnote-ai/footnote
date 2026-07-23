@@ -323,6 +323,7 @@ test('runBoundedReviewWorkflow records explicit limit stop attribution for exhau
         stoppedByLimit: true,
         terminationReason: 'budget_exhausted_steps',
         exhaustedLimitKey: 'maxWorkflowSteps',
+        stoppedBeforeStepKind: 'generate',
     });
     const stepsLimit = result.workflowLineage.effectiveLimits?.find(
         (limit) => limit.key === 'maxWorkflowSteps'
@@ -330,6 +331,87 @@ test('runBoundedReviewWorkflow records explicit limit stop attribution for exhau
     assert.ok(stepsLimit);
     assert.equal(stepsLimit.state, 'enforced');
     assert.equal(stepsLimit.stoppedRun, true);
+});
+
+test('runBoundedReviewWorkflow records that assessment was skipped after generation exhausted tokens', async () => {
+    let generationCalls = 0;
+    const generationRuntime: GenerationRuntime = {
+        kind: 'test-runtime',
+        async generate() {
+            generationCalls += 1;
+            return {
+                text: 'generated answer',
+                model: 'gpt-5-mini',
+                usage: {
+                    promptTokens: 490,
+                    completionTokens: 10,
+                    totalTokens: 500,
+                },
+                provenance: 'Inferred',
+                citations: [],
+            };
+        },
+    };
+
+    const result = await runBoundedReviewWorkflowForTest({
+        generationRuntime,
+        generationRequest: {
+            model: 'gpt-5-mini',
+            messages: [{ role: 'user', content: 'hi' }],
+        },
+        messagesWithHints: [{ role: 'user', content: 'hi' }],
+        generationStartedAtMs: Date.now(),
+        workflowConfig: {
+            workflowName: 'message_reviewed',
+            maxIterations: 2,
+            maxDurationMs: 15000,
+            executionLimits: {
+                maxWorkflowSteps: 8,
+                maxToolCalls: 1,
+                maxDeliberationCalls: 4,
+                maxTokensTotal: 500,
+                maxDurationMs: 15000,
+            },
+        },
+        workflowPolicy: {
+            enablePlanning: false,
+            enableToolUse: false,
+            enableReplanning: false,
+            enableGeneration: true,
+            enableAssessment: true,
+            enableRevision: true,
+        },
+        captureUsage: () => ({
+            model: 'gpt-5-mini',
+            promptTokens: 490,
+            completionTokens: 10,
+            totalTokens: 500,
+            estimatedCost: {
+                inputCostUsd: 0.0001,
+                outputCostUsd: 0.00001,
+                totalCostUsd: 0.00011,
+            },
+        }),
+    });
+
+    assert.equal(result.outcome, 'generated');
+    assert.equal(result.generationResult.text, 'generated answer');
+    assert.equal(generationCalls, 1);
+    assert.equal(result.workflowLineage.status, 'degraded');
+    assert.equal(
+        result.workflowLineage.terminationReason,
+        'budget_exhausted_tokens'
+    );
+    assert.deepEqual(result.workflowLineage.limitStop, {
+        stoppedByLimit: true,
+        terminationReason: 'budget_exhausted_tokens',
+        exhaustedLimitKey: 'maxTokensTotal',
+        stoppedBeforeStepKind: 'assess',
+    });
+    assert.deepEqual(
+        result.workflowLineage.steps.map((step) => step.stepKind),
+        ['generate']
+    );
 });
 
 test('runBoundedReviewWorkflow classifies initial generate runtime failure as no_generation with lineage', async () => {

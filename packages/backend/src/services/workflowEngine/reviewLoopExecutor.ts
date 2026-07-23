@@ -10,6 +10,8 @@ import type {
     StepSignals,
     StepRecord,
     WorkflowAssessRoutingHintSignals,
+    WorkflowLimitKey,
+    WorkflowStepKind,
     WorkflowTerminationReason,
 } from '@footnote/contracts/policy';
 import { buildWorkflowReviewParseFailureSignals } from '@footnote/contracts/policy';
@@ -31,6 +33,7 @@ import type {
     PlannerStepExecutor,
     PlannerStepRequest,
 } from '../plannerWorkflowSeams.js';
+import { buildPlannerExecutionSummaryExtras } from '../plannerWorkflowSeams.js';
 import type { ConversationContextEnvelope } from '../conversationContextService.js';
 import type {
     ReviewDecision,
@@ -81,12 +84,8 @@ type LimitStopEvaluation = {
     shouldStop: boolean;
     terminationReason: WorkflowTerminationReason;
     workflowStatus: 'completed' | 'degraded';
-    exhaustedLimitKey?:
-        | 'maxWorkflowSteps'
-        | 'maxToolCalls'
-        | 'maxDeliberationCalls'
-        | 'maxTokensTotal'
-        | 'maxDurationMs';
+    exhaustedLimitKey?: WorkflowLimitKey;
+    stoppedBeforeStepKind?: WorkflowStepKind;
 };
 
 /**
@@ -133,12 +132,8 @@ export const executeReviewLoop = async (ctx: {
     workflowStatus: 'completed' | 'degraded';
     shouldStop: boolean;
     workflowState: WorkflowState;
-    exhaustedLimitKey?:
-        | 'maxWorkflowSteps'
-        | 'maxToolCalls'
-        | 'maxDeliberationCalls'
-        | 'maxTokensTotal'
-        | 'maxDurationMs';
+    exhaustedLimitKey?: WorkflowLimitKey;
+    stoppedBeforeStepKind?: WorkflowStepKind;
     plannerStepRequest?: PlannerStepRequest;
     plannerStepExecutor?: PlannerStepExecutor;
     planContinuationBuilder?: PlanContinuationBuilder;
@@ -164,12 +159,8 @@ export const executeReviewLoop = async (ctx: {
     workflowStatus: 'completed' | 'degraded';
     shouldStop: boolean;
     workflowState: WorkflowState;
-    exhaustedLimitKey?:
-        | 'maxWorkflowSteps'
-        | 'maxToolCalls'
-        | 'maxDeliberationCalls'
-        | 'maxTokensTotal'
-        | 'maxDurationMs';
+    exhaustedLimitKey?: WorkflowLimitKey;
+    stoppedBeforeStepKind?: WorkflowStepKind;
     effectiveGenerationRequest: GenerationRequest;
     effectiveMessagesWithHints: RuntimeMessage[];
     effectiveContextEnvelope: ConversationContextEnvelope;
@@ -184,6 +175,7 @@ export const executeReviewLoop = async (ctx: {
         shouldStop,
         workflowState,
         exhaustedLimitKey,
+        stoppedBeforeStepKind,
         effectiveGenerationRequest,
         effectiveMessagesWithHints,
         effectiveContextEnvelope,
@@ -206,6 +198,7 @@ export const executeReviewLoop = async (ctx: {
         terminationReason = evaluation.terminationReason;
         workflowStatus = evaluation.workflowStatus;
         exhaustedLimitKey = evaluation.exhaustedLimitKey;
+        stoppedBeforeStepKind = evaluation.stoppedBeforeStepKind;
         return true;
     };
     const toLatestRoutingHintSignals = (): WorkflowAssessRoutingHintSignals =>
@@ -506,11 +499,9 @@ export const executeReviewLoop = async (ctx: {
                     modality: plannerReentryResult.plan.modality,
                     requestedCapabilityProfile:
                         plannerReentryResult.plan.requestedCapabilityProfile,
-                    ...(plannerReentryResult.execution.routingChainAttempts !==
-                        undefined && {
-                        routingChainAttempts:
-                            plannerReentryResult.execution.routingChainAttempts,
-                    }),
+                    ...buildPlannerExecutionSummaryExtras(
+                        plannerReentryResult.execution
+                    ),
                 },
             });
             ctx.workflowStepsRef.value.push(plannerReentryStep);
@@ -518,7 +509,7 @@ export const executeReviewLoop = async (ctx: {
             workflowState = applyStepExecutionToState(
                 workflowState,
                 'plan',
-                0,
+                plannerReentryResult.execution.usage?.totalTokens ?? 0,
                 0,
                 1
             );
@@ -759,6 +750,7 @@ export const executeReviewLoop = async (ctx: {
         if (iteration >= ctx.effectiveMaxIterations) {
             terminationReason = 'budget_exhausted_steps';
             exhaustedLimitKey = 'maxWorkflowSteps';
+            stoppedBeforeStepKind = 'generate';
             workflowStatus = 'degraded';
             shouldStop = true;
             break;
@@ -815,6 +807,7 @@ export const executeReviewLoop = async (ctx: {
         shouldStop,
         workflowState,
         exhaustedLimitKey,
+        stoppedBeforeStepKind,
         effectiveGenerationRequest,
         effectiveMessagesWithHints,
         effectiveContextEnvelope,

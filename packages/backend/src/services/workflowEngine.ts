@@ -36,6 +36,7 @@ import type {
     PlannerStepRequest,
     PlannerStepResult,
 } from './plannerWorkflowSeams.js';
+import { buildPlannerExecutionSummaryExtras } from './plannerWorkflowSeams.js';
 import type { ConversationContextEnvelope } from './conversationContextService.js';
 import {
     sanitizeReviewModuleIds,
@@ -225,6 +226,7 @@ type LimitStopEvaluation = {
     terminationReason: WorkflowTerminationReason;
     workflowStatus: WorkflowRecord['status'];
     exhaustedLimitKey?: WorkflowLimitKey;
+    stoppedBeforeStepKind?: WorkflowStepKind;
 };
 
 export { isWorkflowTransitionAllowed } from './workflowEngine/transitions.js';
@@ -316,6 +318,7 @@ export const runBoundedReviewWorkflow = async ({
     let draftParentStepId: string | undefined;
     let shouldStop = false;
     let exhaustedLimitKey: WorkflowLimitKey | undefined;
+    let stoppedBeforeStepKind: WorkflowStepKind | undefined;
     let executedContextStepResult: ContextStepResult | undefined;
     let executedContextStepResults: ContextStepResult[] = [];
     let messagesWithContext = messagesWithHints;
@@ -396,10 +399,15 @@ export const runBoundedReviewWorkflow = async ({
     });
 
     if (plannerStepRecord?.stepKind === 'plan') {
+        const plannerStepUsageTokens =
+            plannerStepRecord.usage?.totalTokens ??
+            (plannerStepRecord.usage?.promptTokens ?? 0) +
+                (plannerStepRecord.usage?.completionTokens ?? 0);
         workflowState = {
             ...workflowState,
             stepCount: workflowState.stepCount + 1,
             planCallCount: workflowState.planCallCount + 1,
+            totalTokens: workflowState.totalTokens + plannerStepUsageTokens,
         };
     }
 
@@ -482,10 +490,12 @@ export const runBoundedReviewWorkflow = async ({
                 terminationReason,
                 workflowStatus,
                 exhaustedLimitKey,
+                stoppedBeforeStepKind,
             };
         }
 
         exhaustedLimitKey = limitsCheck.exhaustedBy;
+        stoppedBeforeStepKind = nextStepKind;
         terminationReason =
             exhaustedLimitKey !== undefined
                 ? mapLimitExhaustionToTerminationReason(exhaustedLimitKey)
@@ -498,6 +508,7 @@ export const runBoundedReviewWorkflow = async ({
             terminationReason,
             workflowStatus,
             exhaustedLimitKey,
+            stoppedBeforeStepKind,
         };
     };
 
@@ -546,12 +557,9 @@ export const runBoundedReviewWorkflow = async ({
                     modality: plannerExecutionResult.plan.modality,
                     requestedCapabilityProfile:
                         plannerExecutionResult.plan.requestedCapabilityProfile,
-                    ...(plannerExecutionResult.execution
-                        .routingChainAttempts !== undefined && {
-                        routingChainAttempts:
-                            plannerExecutionResult.execution
-                                .routingChainAttempts,
-                    }),
+                    ...buildPlannerExecutionSummaryExtras(
+                        plannerExecutionResult.execution
+                    ),
                 },
             });
             workflowSteps.push(plannerStep);
@@ -560,7 +568,7 @@ export const runBoundedReviewWorkflow = async ({
             workflowState = applyStepExecutionToState(
                 workflowState,
                 'plan',
-                0,
+                plannerExecutionResult.execution.usage?.totalTokens ?? 0,
                 0,
                 1
             );
@@ -723,6 +731,7 @@ export const runBoundedReviewWorkflow = async ({
             for (const contextStepOutcome of contextStepOutcomes) {
                 if (contextStepOutcome.blockedByLimit === true) {
                     exhaustedLimitKey = 'maxToolCalls';
+                    stoppedBeforeStepKind = 'tool';
                     terminationReason =
                         mapLimitExhaustionToTerminationReason('maxToolCalls');
                     workflowStatus = 'degraded';
@@ -1080,6 +1089,7 @@ export const runBoundedReviewWorkflow = async ({
         shouldStop,
         workflowState,
         exhaustedLimitKey,
+        stoppedBeforeStepKind,
         plannerStepRequest,
         plannerStepExecutor,
         planContinuationBuilder,
@@ -1099,6 +1109,7 @@ export const runBoundedReviewWorkflow = async ({
     workflowStatus = reviewLoopResult.workflowStatus;
     workflowState = reviewLoopResult.workflowState;
     exhaustedLimitKey = reviewLoopResult.exhaustedLimitKey;
+    stoppedBeforeStepKind = reviewLoopResult.stoppedBeforeStepKind;
     planContinuation = reviewLoopResult.planContinuation;
 
     const workflowLineage: WorkflowRecord = {
@@ -1116,6 +1127,7 @@ export const runBoundedReviewWorkflow = async ({
         limitStop: buildExecutionLimitStop({
             terminationReason,
             exhaustedLimitKey,
+            stoppedBeforeStepKind,
         }),
         terminationReason,
         steps: workflowSteps,

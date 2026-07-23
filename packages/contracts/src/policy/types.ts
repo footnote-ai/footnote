@@ -494,6 +494,13 @@ export type WorkflowLimitStop = {
     stoppedByLimit: boolean;
     terminationReason: WorkflowTerminationReason;
     exhaustedLimitKey?: WorkflowLimitKey;
+    /**
+     * The workflow step that the exhausted limit prevented from starting.
+     *
+     * This distinguishes a pre-generation stop from a generated answer whose
+     * later assessment or revision step could not run.
+     */
+    stoppedBeforeStepKind?: WorkflowStepKind;
 };
 
 /**

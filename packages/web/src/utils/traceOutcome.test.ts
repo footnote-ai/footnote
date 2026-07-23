@@ -72,6 +72,41 @@ test('buildRunOutcomeSummary returns stopped for workflow budget limits', () => 
     );
 });
 
+test('buildRunOutcomeSummary distinguishes a generated answer from a pre-generation budget stop', () => {
+    const workflow = createWorkflow('budget_exhausted_tokens');
+    workflow.stepCount = 1;
+    workflow.steps = [
+        {
+            stepId: 'step_1',
+            attempt: 1,
+            stepKind: 'generate',
+            startedAt: '2026-01-01T00:00:00.000Z',
+            finishedAt: '2026-01-01T00:00:01.000Z',
+            durationMs: 1000,
+            outcome: {
+                status: 'executed',
+                summary: 'Generated initial draft response.',
+            },
+        },
+    ];
+    workflow.limitStop = {
+        stoppedByLimit: true,
+        terminationReason: 'budget_exhausted_tokens',
+        exhaustedLimitKey: 'maxTokensTotal',
+        stoppedBeforeStepKind: 'assess',
+    };
+
+    const summary = buildRunOutcomeSummary(createSource({ workflow }));
+
+    assert.equal(summary?.category, 'stopped');
+    assert.equal(summary?.headline, 'Answer generated');
+    assert.equal(summary?.reasonCode, 'budget_exhausted_tokens');
+    assert.equal(
+        summary?.explanation,
+        'Answer generation completed, but the workflow stopped before assessment. Workflow stopped after reaching the configured token budget.'
+    );
+});
+
 test('buildRunOutcomeSummary preserves fallback signal when stop reason exists', () => {
     const summary = buildRunOutcomeSummary(
         createSource({

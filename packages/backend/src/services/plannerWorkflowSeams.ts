@@ -64,6 +64,16 @@ export type PlannerStepResult = {
         profileId?: string;
         provider?: string;
         model?: string;
+        usage?: {
+            promptTokens: number;
+            completionTokens: number;
+            totalTokens: number;
+        };
+        cost?: {
+            inputCostUsd: number;
+            outputCostUsd: number;
+            totalCostUsd: number;
+        };
         routingChainAttempts?: RoutingChainAttemptLog[];
     };
     ingestion: {
@@ -75,6 +85,28 @@ export type PlannerStepResult = {
     };
     diagnostics: PlannerToolIntentDiagnostics;
 };
+
+export type PlannerExecutionSummaryExtras = {
+    model?: PlannerStepResult['execution']['model'];
+    usage?: PlannerStepResult['execution']['usage'];
+    cost?: PlannerStepResult['execution']['cost'];
+    routingChainAttempts?: PlannerStepResult['execution']['routingChainAttempts'];
+};
+
+/**
+ * Copies optional planner execution accounting and routing details into the
+ * workflow step summary without emitting undefined public fields.
+ */
+export const buildPlannerExecutionSummaryExtras = (
+    execution: PlannerStepResult['execution']
+): PlannerExecutionSummaryExtras => ({
+    ...(execution.model !== undefined && { model: execution.model }),
+    ...(execution.usage !== undefined && { usage: execution.usage }),
+    ...(execution.cost !== undefined && { cost: execution.cost }),
+    ...(execution.routingChainAttempts !== undefined && {
+        routingChainAttempts: execution.routingChainAttempts,
+    }),
+});
 
 export type PlannerStepExecutor = (
     input: PlannerStepRequest

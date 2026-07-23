@@ -681,6 +681,35 @@ test('ResponseMetadataSchema rejects workflow lineage limitStop without exhauste
     assert.equal(parsed.success, false);
 });
 
+test('ResponseMetadataSchema accepts the step prevented by an exhausted workflow limit', () => {
+    const now = new Date().toISOString();
+    const payload = createValidWorkflowMetadataPayload(now);
+    payload.workflow.status = 'degraded';
+    payload.workflow.terminationReason = 'budget_exhausted_tokens';
+    payload.workflow.limitStop = {
+        stoppedByLimit: true,
+        terminationReason: 'budget_exhausted_tokens',
+        exhaustedLimitKey: 'maxTokensTotal',
+        stoppedBeforeStepKind: 'assess',
+    };
+
+    const parsed = ResponseMetadataSchema.safeParse(payload);
+    assert.equal(parsed.success, true);
+});
+
+test('ResponseMetadataSchema rejects a prevented step when no workflow limit stopped the run', () => {
+    const now = new Date().toISOString();
+    const payload = createValidWorkflowMetadataPayload(now);
+    payload.workflow.limitStop = {
+        stoppedByLimit: false,
+        terminationReason: 'goal_satisfied',
+        stoppedBeforeStepKind: 'assess',
+    };
+
+    const parsed = ResponseMetadataSchema.safeParse(payload);
+    assert.equal(parsed.success, false);
+});
+
 test('ResponseMetadataSchema rejects workflow lineage with duplicate effective limit keys', () => {
     const now = new Date().toISOString();
     const payload = createValidWorkflowMetadataPayload(now);

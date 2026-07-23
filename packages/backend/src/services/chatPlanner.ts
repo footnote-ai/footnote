@@ -80,6 +80,16 @@ export type ChatPlannerExecution = {
     contextReasonCode?: PlannerContextReasonCode;
     purpose: PlannerExecutionPurpose;
     contractType: PlannerExecutionContractType;
+    usage?: {
+        promptTokens: number;
+        completionTokens: number;
+        totalTokens: number;
+    };
+    cost?: {
+        inputCostUsd: number;
+        outputCostUsd: number;
+        totalCostUsd: number;
+    };
 };
 
 export type ChatPlannerResult = {
@@ -1465,6 +1475,35 @@ export const createChatPlanner = ({
             plannerMode,
             'current_window'
         );
+        let plannerUsageRecorded = false;
+        const plannerUsageTotals = {
+            promptTokens: 0,
+            completionTokens: 0,
+            totalTokens: 0,
+            inputCostUsd: 0,
+            outputCostUsd: 0,
+            totalCostUsd: 0,
+        };
+
+        // This is the single authoritative point for attaching backend-computed
+        // usage and cost consumed by workflow budgets and trace cost display.
+        const withPlannerAccounting = (
+            execution: ChatPlannerExecution
+        ): ChatPlannerExecution => ({
+            ...execution,
+            ...(plannerUsageRecorded && {
+                usage: {
+                    promptTokens: plannerUsageTotals.promptTokens,
+                    completionTokens: plannerUsageTotals.completionTokens,
+                    totalTokens: plannerUsageTotals.totalTokens,
+                },
+                cost: {
+                    inputCostUsd: plannerUsageTotals.inputCostUsd,
+                    outputCostUsd: plannerUsageTotals.outputCostUsd,
+                    totalCostUsd: plannerUsageTotals.totalCostUsd,
+                },
+            }),
+        });
 
         const recordPlannerUsage = (
             usageModel: string,
@@ -1474,6 +1513,28 @@ export const createChatPlanner = ({
             const completionTokens = usage?.completionTokens ?? 0;
             const totalTokens =
                 usage?.totalTokens ?? promptTokens + completionTokens;
+            const estimatedCost = estimateBackendTextCost(
+                usageModel,
+                promptTokens,
+                completionTokens,
+                {
+                    ...(usage?.cachedInputTokens !== undefined && {
+                        cachedInputTokens: usage.cachedInputTokens,
+                    }),
+                    ...(usage?.cacheWriteTokens !== undefined && {
+                        cacheWriteTokens: usage.cacheWriteTokens,
+                    }),
+                }
+            );
+            if (usage !== undefined) {
+                plannerUsageRecorded = true;
+                plannerUsageTotals.promptTokens += promptTokens;
+                plannerUsageTotals.completionTokens += completionTokens;
+                plannerUsageTotals.totalTokens += totalTokens;
+                plannerUsageTotals.inputCostUsd += estimatedCost.inputCostUsd;
+                plannerUsageTotals.outputCostUsd += estimatedCost.outputCostUsd;
+                plannerUsageTotals.totalCostUsd += estimatedCost.totalCostUsd;
+            }
             if (recordUsage) {
                 try {
                     recordUsage({
@@ -1488,19 +1549,7 @@ export const createChatPlanner = ({
                         }),
                         completionTokens,
                         totalTokens,
-                        ...estimateBackendTextCost(
-                            usageModel,
-                            promptTokens,
-                            completionTokens,
-                            {
-                                ...(usage?.cachedInputTokens !== undefined && {
-                                    cachedInputTokens: usage.cachedInputTokens,
-                                }),
-                                ...(usage?.cacheWriteTokens !== undefined && {
-                                    cacheWriteTokens: usage.cacheWriteTokens,
-                                }),
-                            }
-                        ),
+                        ...estimatedCost,
                         timestamp: Date.now(),
                     });
                 } catch (error) {
@@ -1570,7 +1619,7 @@ export const createChatPlanner = ({
             ) {
                 return {
                     plan: initialNormalization.plan,
-                    execution: baseExecution,
+                    execution: withPlannerAccounting(baseExecution),
                     diagnostics: initialNormalization.diagnostics,
                 };
             }
@@ -1582,10 +1631,10 @@ export const createChatPlanner = ({
             if (!hasContextExpansionBudget(request, expandedTier)) {
                 return {
                     plan: initialNormalization.plan,
-                    execution: {
+                    execution: withPlannerAccounting({
                         ...baseExecution,
                         contextReasonCode: 'planner_context_budget_exhausted',
-                    },
+                    }),
                     diagnostics: initialNormalization.diagnostics,
                 };
             }
@@ -1596,11 +1645,11 @@ export const createChatPlanner = ({
                 if (!expandedNormalization) {
                     return {
                         plan: initialNormalization.plan,
-                        execution: {
+                        execution: withPlannerAccounting({
                             ...baseExecution,
                             contextReasonCode:
                                 'planner_expansion_invalid_fallback_initial',
-                        },
+                        }),
                         diagnostics: initialNormalization.diagnostics,
                     };
                 }
@@ -1610,12 +1659,12 @@ export const createChatPlanner = ({
                 ) {
                     return {
                         plan: initialNormalization.plan,
-                        execution: {
+                        execution: withPlannerAccounting({
                             ...baseExecution,
                             plannerAttemptIndex: 2,
                             contextReasonCode:
                                 'planner_expansion_invalid_fallback_initial',
-                        },
+                        }),
                         diagnostics: initialNormalization.diagnostics,
                     };
                 }
@@ -1629,7 +1678,7 @@ export const createChatPlanner = ({
                 if (shouldAdoptExpandedPlan) {
                     return {
                         plan: expandedNormalization.plan,
-                        execution: {
+                        execution: withPlannerAccounting({
                             status: 'executed',
                             durationMs: Date.now() - plannerStartedAt,
                             plannerAttemptIndex: 2,
@@ -1638,18 +1687,18 @@ export const createChatPlanner = ({
                             contextReasonCode: 'planner_context_expanded',
                             purpose: invocationContext.purpose,
                             contractType: 'text_json',
-                        },
+                        }),
                         diagnostics: expandedNormalization.diagnostics,
                     };
                 }
 
                 return {
                     plan: initialNormalization.plan,
-                    execution: {
+                    execution: withPlannerAccounting({
                         ...baseExecution,
                         plannerAttemptIndex: 2,
                         contextReasonCode: 'planner_expansion_rejected',
-                    },
+                    }),
                     diagnostics: initialNormalization.diagnostics,
                 };
             } catch (error) {
@@ -1657,13 +1706,13 @@ export const createChatPlanner = ({
                     error instanceof Error && /timed out/i.test(error.message);
                 return {
                     plan: initialNormalization.plan,
-                    execution: {
+                    execution: withPlannerAccounting({
                         ...baseExecution,
                         plannerAttemptIndex: 2,
                         contextReasonCode: timeoutExpansion
                             ? 'planner_context_timeout_fail_open'
                             : 'planner_expansion_invalid_fallback_initial',
-                    },
+                    }),
                     diagnostics: initialNormalization.diagnostics,
                 };
             }
@@ -1934,13 +1983,13 @@ export const createChatPlanner = ({
             );
             return {
                 plan: fallbackPlan,
-                execution: {
+                execution: withPlannerAccounting({
                     status: 'failed',
                     reasonCode,
                     durationMs: Date.now() - plannerStartedAt,
                     purpose: invocationContext.purpose,
                     contractType: 'fallback',
-                },
+                }),
                 diagnostics: {
                     rawToolIntentPresent: false,
                     normalizedToolIntentPresent: false,
