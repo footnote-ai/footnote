@@ -31,6 +31,7 @@ full response or trace.
 
 ## Related material
 
+- [Platform Experience Standard](./platform-experience-standard.md)
 - [Answer Posture and Control Influence](./answer-posture-and-control-influence.md)
 - [Workflow](./workflow.md)
 - [`ResponseMetadata` schema](../../packages/contracts/src/web/schemas.ts)
