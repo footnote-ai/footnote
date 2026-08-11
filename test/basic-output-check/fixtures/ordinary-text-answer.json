@@ -1,0 +1,27 @@
+{
+    "question": "What does provenance mean in an AI answer?",
+    "response": {
+        "action": "message",
+        "message": "Provenance identifies the sources and process behind an answer, so you can judge how well it is supported.",
+        "modality": "text",
+        "metadata": {
+            "responseId": "output-check-response-1",
+            "provenance": "Retrieved",
+            "safetyTier": "Low",
+            "tradeoffCount": 0,
+            "chainHash": "output-check-hash",
+            "licenseContext": "MIT + HL3",
+            "modelVersion": "test-model-1",
+            "staleAfter": "2030-01-01T00:00:00.000Z",
+            "citations": [
+                {
+                    "title": "Provenance overview",
+                    "url": "https://example.org/provenance",
+                    "snippet": "Provenance records where information came from."
+                }
+            ],
+            "trace_target": {},
+            "trace_final": {}
+        }
+    }
+}
