@@ -107,6 +107,7 @@ const reconcileRecoveredTaskReply = async (
         embeds: [],
         components: [],
         files: [],
+        attachments: [],
     });
     return 'failed';
 };

@@ -219,6 +219,7 @@ test('startup recovery edits unfinished replies independently and preserves comp
             embeds: [],
             components: [],
             files: [],
+            attachments: [],
         });
         assert.deepEqual(terminalStates, [
             'complete:task-complete',
