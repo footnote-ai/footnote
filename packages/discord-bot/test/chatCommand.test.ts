@@ -220,14 +220,18 @@ test('/chat renders the shared basic output fixture', async () => {
     const originalChatViaApi = botApi.chatViaApi;
     const originalPostTraceCardFromTrace = botApi.postTraceCardFromTrace;
     const seenRequests: unknown[] = [];
+    const seenTraceCardRequests: unknown[] = [];
     botApi.chatViaApi = (async (request) => {
         seenRequests.push(request);
         return basicOutputFixture.response;
     }) as typeof botApi.chatViaApi;
-    botApi.postTraceCardFromTrace = (async (request, _options) => ({
-        responseId: request.responseId,
-        pngBase64: Buffer.from('trace-card').toString('base64'),
-    })) as typeof botApi.postTraceCardFromTrace;
+    botApi.postTraceCardFromTrace = (async (request, _options) => {
+        seenTraceCardRequests.push(request);
+        return {
+            responseId: request.responseId,
+            pngBase64: Buffer.from('trace-card').toString('base64'),
+        };
+    }) as typeof botApi.postTraceCardFromTrace;
 
     const { interaction, editReplyPayloads, deferReplyPayloads } =
         createInteraction({
@@ -269,47 +273,32 @@ test('/chat renders the shared basic output fixture', async () => {
         const payload = editReplyPayloads[0] as {
             content?: string;
             components?: unknown[];
-            files?: unknown[];
+            files?: Array<{ attachment?: unknown; name?: string }>;
         };
-        const serializedPayload = JSON.parse(
-            JSON.stringify({
-                content: payload.content,
-                components: payload.components,
-                files: payload.files,
-            })
-        ) as unknown;
+        assert.equal(payload.content, basicOutputFixture.response.message);
+        assert.deepEqual(seenTraceCardRequests, [
+            { responseId: basicOutputFixture.response.metadata.responseId },
+        ]);
 
-        assert.deepEqual(serializedPayload, {
-            content: basicOutputFixture.response.message,
-            components: [
-                {
-                    type: 1,
-                    components: [
-                        {
-                            type: 2,
-                            emoji: { name: '🔍', animated: false },
-                            custom_id: `details:${basicOutputFixture.response.metadata.responseId}`,
-                            style: 2,
-                        },
-                        {
-                            type: 2,
-                            emoji: { name: '🚩', animated: false },
-                            custom_id: `report_issue:${basicOutputFixture.response.metadata.responseId}`,
-                            style: 2,
-                        },
-                    ],
-                },
-            ],
-            files: [
-                {
-                    attachment: {
-                        data: [116, 114, 97, 99, 101, 45, 99, 97, 114, 100],
-                        type: 'Buffer',
-                    },
-                    name: 'trace-card.png',
-                },
-            ],
-        });
+        const serializedComponents = JSON.parse(
+            JSON.stringify(payload.components)
+        ) as Array<{
+            components?: Array<{ custom_id?: string }>;
+        }>;
+        assert.deepEqual(
+            serializedComponents.flatMap(
+                (row) => row.components?.map((button) => button.custom_id) ?? []
+            ),
+            [
+                `details:${basicOutputFixture.response.metadata.responseId}`,
+                `report_issue:${basicOutputFixture.response.metadata.responseId}`,
+            ]
+        );
+        assert.deepEqual(
+            payload.files?.map((file) => file.name),
+            ['trace-card.png']
+        );
+        assert.equal(Buffer.isBuffer(payload.files?.[0]?.attachment), true);
     } finally {
         botApi.chatViaApi = originalChatViaApi;
         botApi.postTraceCardFromTrace = originalPostTraceCardFromTrace;

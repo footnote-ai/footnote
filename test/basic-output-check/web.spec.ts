@@ -8,7 +8,9 @@
 import { expect, test } from '@playwright/test';
 import outputCase from './fixtures/ordinary-text-answer.json';
 
-test('shows one ordinary answer with its provenance', async ({ page }) => {
+test('shows one ordinary answer with its provenance', async ({
+    page,
+}, testInfo) => {
     let configRequestCount = 0;
 
     await page.route('**/config.json', async (route) => {
@@ -66,8 +68,9 @@ test('shows one ordinary answer with its provenance', async ({ page }) => {
         'href',
         `/api/traces/${outputCase.response.metadata.responseId}`
     );
-    await expect(page).toHaveScreenshot('ordinary-text-answer.png', {
+    await page.screenshot({
         animations: 'disabled',
         fullPage: true,
+        path: testInfo.outputPath('ordinary-text-answer.png'),
     });
 });

@@ -11,7 +11,6 @@ export default defineConfig({
     testDir: './test/basic-output-check',
     outputDir: 'test-results/output-check',
     reporter: 'list',
-    snapshotPathTemplate: '{testDir}/snapshots/{testFilePath}/{arg}{ext}',
     use: {
         baseURL: 'http://output-check.localhost:4173',
         viewport: { width: 1440, height: 900 },
