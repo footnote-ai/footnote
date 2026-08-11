@@ -1460,6 +1460,7 @@ export const PostInternalImageGenerateRequestSchema = z
             })
             .strict(),
         followUpResponseId: z.string().min(1).optional(),
+        recoverableTaskId: z.string().uuid().optional(),
         stream: z.boolean().optional(),
         channelContext: z
             .object({
@@ -2032,3 +2033,51 @@ export const createSchemaResponseValidator =
             error: formatSchemaIssues(parsed.error),
         };
     };
+
+const RecoverableTaskSchema = z
+    .object({
+        id: z.string().uuid(),
+        kind: z.literal('image_generation'),
+        state: z.enum(['started', 'complete', 'failed']),
+        botProfileId: z.string().min(1).max(128),
+        discordChannelId: z.string().min(1).max(32),
+        discordMessageId: z.string().min(1).max(32),
+        createdAt: z.string().datetime(),
+        updatedAt: z.string().datetime(),
+    })
+    .strict();
+
+/** @api.operationId: postInternalRecoverableTask @api.path: POST /api/internal/recoverable-tasks */
+export const PostInternalRecoverableTaskCreateRequestSchema = z
+    .object({
+        kind: z.literal('image_generation'),
+        botProfileId: z.string().min(1).max(128),
+        discordChannelId: z.string().min(1).max(32),
+        discordMessageId: z.string().min(1).max(32),
+    })
+    .strict();
+
+/** @api.operationId: postInternalRecoverableTask @api.path: POST /api/internal/recoverable-tasks */
+export const PostInternalRecoverableTaskCreateResponseSchema = z
+    .object({ task: RecoverableTaskSchema })
+    .strict();
+
+/** @api.operationId: postInternalRecoverableTaskClaim @api.path: POST /api/internal/recoverable-tasks/claim */
+export const PostInternalRecoverableTaskClaimRequestSchema = z
+    .object({ botProfileId: z.string().min(1).max(128) })
+    .strict();
+
+/** @api.operationId: postInternalRecoverableTaskClaim @api.path: POST /api/internal/recoverable-tasks/claim */
+export const PostInternalRecoverableTaskClaimResponseSchema = z
+    .object({ tasks: z.array(RecoverableTaskSchema) })
+    .strict();
+
+/** @api.operationId: postInternalRecoverableTaskFinish @api.path: POST /api/internal/recoverable-tasks/{taskId}/finish */
+export const PostInternalRecoverableTaskFinishRequestSchema = z
+    .object({ state: z.enum(['complete', 'failed']) })
+    .strict();
+
+/** @api.operationId: postInternalRecoverableTaskFinish @api.path: POST /api/internal/recoverable-tasks/{taskId}/finish */
+export const PostInternalRecoverableTaskFinishResponseSchema = z
+    .object({ task: RecoverableTaskSchema.nullable(), changed: z.boolean() })
+    .strict();

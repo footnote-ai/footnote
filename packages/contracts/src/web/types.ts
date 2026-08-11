@@ -560,6 +560,8 @@ export type PostInternalImageGenerateRequest = {
     user: InternalImageUserContext;
     followUpResponseId?: string;
     channelContext?: InternalImageChannelContext;
+    /** Discord delivery recovery correlation only; it is never provider input. */
+    recoverableTaskId?: string;
     stream?: boolean;
 };
 
@@ -1037,4 +1039,66 @@ export type PutAdminSettingsYamlResponse = {
     etag: string;
     restartRequired: true;
     applied: false;
+};
+
+/**
+ * Recoverable task kinds are intentionally narrow until another backend-owned
+ * delivery workflow opts into this persistence seam.
+ *
+ * @api.operationId: postInternalRecoverableTask
+ * @api.path: POST /api/internal/recoverable-tasks
+ */
+export type RecoverableTaskKind = 'image_generation';
+
+/** @api.operationId: postInternalRecoverableTask @api.path: POST /api/internal/recoverable-tasks */
+export type RecoverableTaskState = 'started' | 'complete' | 'failed';
+
+/**
+ * Minimal delivery record used to reconcile a public Discord reply after a restart.
+ * Prompts, provider requests, image bytes, and error details are deliberately excluded.
+ *
+ * @api.operationId: postInternalRecoverableTask
+ * @api.path: POST /api/internal/recoverable-tasks
+ */
+export type RecoverableTask = {
+    id: string;
+    kind: RecoverableTaskKind;
+    state: RecoverableTaskState;
+    botProfileId: string;
+    discordChannelId: string;
+    discordMessageId: string;
+    createdAt: string;
+    updatedAt: string;
+};
+
+/** @api.operationId: postInternalRecoverableTask @api.path: POST /api/internal/recoverable-tasks */
+export type PostInternalRecoverableTaskCreateRequest = {
+    kind: RecoverableTaskKind;
+    botProfileId: string;
+    discordChannelId: string;
+    discordMessageId: string;
+};
+
+/** @api.operationId: postInternalRecoverableTask @api.path: POST /api/internal/recoverable-tasks */
+export type PostInternalRecoverableTaskCreateResponse = {
+    task: RecoverableTask;
+};
+
+/** @api.operationId: postInternalRecoverableTaskClaim @api.path: POST /api/internal/recoverable-tasks/claim */
+export type PostInternalRecoverableTaskClaimRequest = { botProfileId: string };
+
+/** @api.operationId: postInternalRecoverableTaskClaim @api.path: POST /api/internal/recoverable-tasks/claim */
+export type PostInternalRecoverableTaskClaimResponse = {
+    tasks: RecoverableTask[];
+};
+
+/** @api.operationId: postInternalRecoverableTaskFinish @api.path: POST /api/internal/recoverable-tasks/{taskId}/finish */
+export type PostInternalRecoverableTaskFinishRequest = {
+    state: Extract<RecoverableTaskState, 'complete' | 'failed'>;
+};
+
+/** @api.operationId: postInternalRecoverableTaskFinish @api.path: POST /api/internal/recoverable-tasks/{taskId}/finish */
+export type PostInternalRecoverableTaskFinishResponse = {
+    task: RecoverableTask | null;
+    changed: boolean;
 };

@@ -12,11 +12,10 @@ import {
     readRetryContext,
 } from '../../commands/image/retryCache.js';
 import {
-    buildImageResultPresentation,
     createRetryButtonRow,
-    executeImageGeneration,
     formatRetryCountdown,
 } from '../../commands/image/sessionHelpers.js';
+import { runImageGenerationSession } from '../../commands/image.js';
 import { runtimeConfig } from '../../config.js';
 import {
     buildTokenSummaryLine,
@@ -25,7 +24,6 @@ import {
     refundImageTokens,
 } from '../../utils/imageTokens.js';
 import { logger } from '../../utils/logger.js';
-import { resolveMemberDisplayName } from '../../utils/response/provenanceInteractions.js';
 import { EPHEMERAL_FLAG } from './shared.js';
 
 /**
@@ -96,37 +94,15 @@ export async function handleImageRetryButtonInteraction(
             .edit({ components: [] })
             .catch(() => undefined);
 
-        const artifacts = await executeImageGeneration(cachedContext, {
-            user: {
-                username: interaction.user.username,
-                nickname: resolveMemberDisplayName(
-                    interaction.member,
-                    interaction.user.username
-                ),
-                guildName:
-                    interaction.guild?.name ??
-                    `No guild for ${interaction.type} interaction`,
-            },
-            channelContext: {
-                channelId: interaction.channelId,
-                guildId: interaction.guildId ?? undefined,
-            },
-        });
-
-        const presentation = buildImageResultPresentation(
-            cachedContext,
-            artifacts
+        const result = await runImageGenerationSession(
+            interaction,
+            cachedContext
         );
-
-        evictRetryContext(retryKey);
-
-        await interaction.editReply({
-            content: presentation.content,
-            embeds: [presentation.embed],
-            files: presentation.attachments,
-            attachments: [],
-            components: presentation.components,
-        });
+        if (result.success) {
+            evictRetryContext(retryKey);
+        } else if (retrySpend) {
+            refundImageTokens(interaction.user.id, retrySpend.cost);
+        }
     } catch (error) {
         if (retrySpend) {
             refundImageTokens(interaction.user.id, retrySpend.cost);

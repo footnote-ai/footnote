@@ -59,6 +59,8 @@ import { createOpenAiImageDescriptionAdapter } from './services/internalImageDes
 import { createInternalImageTaskService } from './services/internalImage.js';
 import { createInternalTextHandler } from './handlers/internalText.js';
 import { createInternalImageHandler } from './handlers/internalImage.js';
+import { createRecoverableTaskHandler } from './handlers/recoverableTasks.js';
+import { SqliteRecoverableTaskStore } from './storage/recoverableTaskStore.js';
 import { createInternalVoiceTtsService } from './services/internalVoiceTts.js';
 import { createInternalVoiceTtsHandler } from './handlers/internalVoiceTts.js';
 import { createInternalVoiceRealtimeHandler } from './handlers/internalVoiceRealtime.js';
@@ -97,6 +99,7 @@ const { resolveAsset, mimeMap } = createAssetResolver(DIST_DIR);
 let traceStore: ReturnType<typeof createTraceStore> | null = null;
 let incidentStore: ReturnType<typeof getDefaultIncidentStore> | null = null;
 let incidentStoreUnavailableReason: string | null = null;
+let recoverableTaskStore: SqliteRecoverableTaskStore | null = null;
 let generationRuntime: GenerationRuntime | null = null;
 let imageGenerationRuntime: ImageGenerationRuntime | null = null;
 let weatherForecastTool: ReturnType<typeof createOpenMeteoForecastTool> | null =
@@ -185,6 +188,20 @@ const initializeServices = () => {
             error instanceof Error ? error.message : String(error);
         logger.error(
             `Incident store unavailable; incident routes will return 503. ${incidentStoreUnavailableReason}`
+        );
+    }
+
+    try {
+        recoverableTaskStore = new SqliteRecoverableTaskStore({
+            dbPath: path.join(
+                runtimeConfig.server.dataDir,
+                'recoverable-tasks.db'
+            ),
+        });
+    } catch (error) {
+        recoverableTaskStore = null;
+        logger.error(
+            `Recoverable task store unavailable; Discord recovery will fail open. ${error instanceof Error ? error.message : String(error)}`
         );
     }
 
@@ -567,6 +584,23 @@ const { handleInternalImageRequest } = createInternalImageHandler({
             window: runtimeConfig.rateLimits.chatService.windowMs,
         }),
 });
+const {
+    handleCreateRecoverableTaskRequest,
+    handleFinishRecoverableTaskRequest,
+    handleClaimRecoverableTasksRequest,
+} = createRecoverableTaskHandler({
+    recoverableTaskStore,
+    logRequest,
+    maxBodyBytes: runtimeConfig.reflect.maxBodyBytes,
+    traceApiToken: runtimeConfig.trace.apiToken,
+    serviceToken: runtimeConfig.reflect.serviceToken,
+    serviceRateLimiter:
+        serviceRateLimiter ??
+        new SimpleRateLimiter({
+            limit: runtimeConfig.rateLimits.chatService.limit,
+            window: runtimeConfig.rateLimits.chatService.windowMs,
+        }),
+});
 const { handleInternalVoiceTtsRequest } = createInternalVoiceTtsHandler({
     internalVoiceTtsService,
     logRequest,
@@ -634,6 +668,9 @@ const app = createExpressApp({
     handleChatRequest,
     handleInternalTextRequest,
     handleInternalImageRequest,
+    handleCreateRecoverableTaskRequest,
+    handleFinishRecoverableTaskRequest,
+    handleClaimRecoverableTasksRequest,
     handleInternalVoiceTtsRequest,
     handleTraceUpsertRequest,
     handleTraceCardCreateRequest,
@@ -710,6 +747,16 @@ const shutdownGracefully = (signal: 'SIGINT' | 'SIGTERM'): void => {
     }
 
     try {
+        recoverableTaskStore?.checkpointWalTruncate();
+    } catch (error) {
+        logger.error(
+            `Failed recoverable-task store WAL checkpoint during shutdown: ${
+                error instanceof Error ? error.message : String(error)
+            }`
+        );
+    }
+
+    try {
         traceStore?.close();
     } catch (error) {
         logger.error(
@@ -731,6 +778,18 @@ const shutdownGracefully = (signal: 'SIGINT' | 'SIGTERM'): void => {
         );
     } finally {
         incidentStore = null;
+    }
+
+    try {
+        recoverableTaskStore?.close();
+    } catch (error) {
+        logger.error(
+            `Failed to close recoverable-task store during shutdown: ${
+                error instanceof Error ? error.message : String(error)
+            }`
+        );
+    } finally {
+        recoverableTaskStore = null;
     }
 
     const forceExitTimer = setTimeout(() => {

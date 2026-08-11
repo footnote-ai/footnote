@@ -19,6 +19,7 @@ import { applyChatCommandProfileChoices } from './utils/chatCommandProfiles.js';
 import { handleButtonInteraction } from './interactions/buttonHandlers.js';
 import { handleModalSubmitInteraction } from './interactions/modalSubmitHandlers.js';
 import { handleStringSelectMenuInteraction } from './interactions/selectMenuHandlers.js';
+import { recoverInterruptedImageTasks } from './commands/image/recoverableTasks.js';
 //import express from 'express'; // For webhook
 //import bodyParser from "body-parser"; // For webhook
 
@@ -150,8 +151,9 @@ client.handlers = new Collection();
 // Process Handlers
 // ====================
 // Client ready handler
-client.once(Events.ClientReady, () => {
+client.once(Events.ClientReady, async () => {
     logger.info(`Logged in as ${client.user?.tag}`);
+    await recoverInterruptedImageTasks(client);
 });
 
 // Slash commands handler

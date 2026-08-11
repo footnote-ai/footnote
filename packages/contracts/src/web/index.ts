@@ -175,9 +175,35 @@ export type {
     PostIncidentStatusResponse,
 } from './types.js';
 
+/**
+ * @api.operationId: postInternalRecoverableTask
+ * @api.path: POST /api/internal/recoverable-tasks
+ * @api.operationId: postInternalRecoverableTaskClaim
+ * @api.path: POST /api/internal/recoverable-tasks/claim
+ * @api.operationId: postInternalRecoverableTaskFinish
+ * @api.path: POST /api/internal/recoverable-tasks/{taskId}/finish
+ */
+export type {
+    RecoverableTask,
+    RecoverableTaskKind,
+    RecoverableTaskState,
+    PostInternalRecoverableTaskCreateRequest,
+    PostInternalRecoverableTaskCreateResponse,
+    PostInternalRecoverableTaskClaimRequest,
+    PostInternalRecoverableTaskClaimResponse,
+    PostInternalRecoverableTaskFinishRequest,
+    PostInternalRecoverableTaskFinishResponse,
+} from './types.js';
+
 // Runtime validation schemas for chat/traces contracts.
 export {
     ApiErrorResponseSchema,
+    PostInternalRecoverableTaskCreateRequestSchema,
+    PostInternalRecoverableTaskCreateResponseSchema,
+    PostInternalRecoverableTaskClaimRequestSchema,
+    PostInternalRecoverableTaskClaimResponseSchema,
+    PostInternalRecoverableTaskFinishRequestSchema,
+    PostInternalRecoverableTaskFinishResponseSchema,
     PostSetupSessionRequestSchema,
     PostSetupSessionResponseSchema,
     PostSetupOperatorLinkRequestSchema,

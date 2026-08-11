@@ -60,6 +60,10 @@ import {
     refundImageTokens,
 } from '../utils/imageTokens.js';
 import { runtimeConfig } from '../config.js';
+import {
+    finishRecoverableImageTask,
+    startRecoverableImageTask,
+} from './image/recoverableTasks.js';
 
 /**
  * Ensures that the interaction has been deferred before we begin streaming
@@ -265,6 +269,7 @@ export async function runImageGenerationSession(
     embed.addFields(statusFields);
 
     await interaction.editReply({ embeds: [embed], components: [], files: [] });
+    let recoverableTaskId: string | null = null;
 
     let editChain: Promise<void> = Promise.resolve();
 
@@ -284,6 +289,9 @@ export async function runImageGenerationSession(
     };
 
     try {
+        const initialReply = await interaction.fetchReply();
+        recoverableTaskId = await startRecoverableImageTask(initialReply);
+
         const rawMember = interaction.member;
         const resolvedNickname =
             typeof rawMember === 'object' && rawMember !== null
@@ -295,6 +303,7 @@ export async function runImageGenerationSession(
 
         const artifacts = await executeImageGeneration(context, {
             followUpResponseId,
+            recoverableTaskId: recoverableTaskId ?? undefined,
             user: {
                 username: interaction.user.username,
                 nickname:
@@ -349,6 +358,8 @@ export async function runImageGenerationSession(
             components: presentation.components,
         });
 
+        await finishRecoverableImageTask(recoverableTaskId, 'complete');
+
         return { success: true, responseId: artifacts.responseId };
     } catch (error) {
         await editChain;
@@ -380,6 +391,8 @@ export async function runImageGenerationSession(
                 );
             }
         }
+
+        await finishRecoverableImageTask(recoverableTaskId, 'failed');
 
         return { success: false, responseId: null };
     }

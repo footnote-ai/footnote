@@ -44,6 +44,11 @@ import {
     type InternalVoiceApi,
 } from './internalVoice.js';
 import {
+    createRecoverableTaskApi,
+    type CreateRecoverableTaskApiOptions,
+    type RecoverableTaskApi,
+} from './recoverableTasks.js';
+import {
     createTraceApi,
     type CreateTraceApiOptions,
     type TraceApi,
@@ -57,7 +62,8 @@ export type CreateDiscordApiClientOptions = CreateApiTransportOptions & {
     CreateChatApiOptions &
     CreateInternalImageApiOptions &
     CreateInternalTextApiOptions &
-    CreateInternalVoiceApiOptions;
+    CreateInternalVoiceApiOptions &
+    CreateRecoverableTaskApiOptions;
 
 export type DiscordApiClient = {
     requestJson: ApiRequester;
@@ -66,7 +72,8 @@ export type DiscordApiClient = {
     IncidentApi &
     InternalImageApi &
     InternalTextApi &
-    InternalVoiceApi;
+    InternalVoiceApi &
+    RecoverableTaskApi;
 
 export const createDiscordApiClient = ({
     baseUrl,
@@ -95,6 +102,7 @@ export const createDiscordApiClient = ({
         }),
         ...createInternalTextApi(requestJson, { traceApiToken }),
         ...createInternalVoiceApi(requestJson, { traceApiToken }),
+        ...createRecoverableTaskApi(requestJson, { traceApiToken }),
         ...createChatApi(requestJson, { traceApiToken }),
         ...createTraceApi(requestJson, { traceApiToken }),
     };
@@ -141,6 +149,7 @@ export {
     createInternalImageApi,
     createInternalTextApi,
     createInternalVoiceApi,
+    createRecoverableTaskApi,
     createTraceApi,
     createWebReadApi,
 };
@@ -159,6 +168,7 @@ export type {
     CreateInternalImageApiOptions,
     CreateInternalTextApiOptions,
     CreateInternalVoiceApiOptions,
+    CreateRecoverableTaskApiOptions,
     CreateTraceApiOptions,
     DiscordChatApiResponse,
     ChatToolExecutionContext,
@@ -166,6 +176,7 @@ export type {
     InternalImageApi,
     InternalTextApi,
     InternalVoiceApi,
+    RecoverableTaskApi,
     TraceApi,
     UnknownChatActionResponse,
     WebReadApi,
@@ -173,6 +184,13 @@ export type {
 export type {
     GetIncidentResponse,
     GetIncidentsResponse,
+    PostInternalRecoverableTaskClaimRequest,
+    PostInternalRecoverableTaskClaimResponse,
+    PostInternalRecoverableTaskCreateRequest,
+    PostInternalRecoverableTaskCreateResponse,
+    PostInternalRecoverableTaskFinishRequest,
+    PostInternalRecoverableTaskFinishResponse,
+    RecoverableTask,
     PostInternalImageGenerateRequest,
     PostInternalImageGenerateResponse,
     PostInternalImageDescriptionTaskRequest,

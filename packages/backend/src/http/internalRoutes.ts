@@ -15,11 +15,24 @@ type RequestHandler = (
     res: ServerResponse
 ) => Promise<void>;
 
+const respondRecoverableTasksDisabled: RequestHandler = async (_req, res) => {
+    res.statusCode = 503;
+    res.setHeader('Content-Type', 'application/json');
+    res.end(JSON.stringify({ error: 'Recoverable task store unavailable' }));
+};
+
 type RegisterInternalRoutesDeps = {
     app: express.Express;
     handleInternalTextRequest: RequestHandler;
     handleInternalImageRequest: RequestHandler;
     handleInternalVoiceTtsRequest: RequestHandler;
+    handleCreateRecoverableTaskRequest?: RequestHandler;
+    handleFinishRecoverableTaskRequest?: (
+        req: IncomingMessage,
+        res: ServerResponse,
+        taskId: string
+    ) => Promise<void>;
+    handleClaimRecoverableTasksRequest?: RequestHandler;
     logRequest: LogRequest;
 };
 
@@ -52,6 +65,9 @@ const registerInternalRoutes = ({
     handleInternalTextRequest,
     handleInternalImageRequest,
     handleInternalVoiceTtsRequest,
+    handleCreateRecoverableTaskRequest = respondRecoverableTasksDisabled,
+    handleFinishRecoverableTaskRequest = respondRecoverableTasksDisabled,
+    handleClaimRecoverableTasksRequest = respondRecoverableTasksDisabled,
     logRequest,
 }: RegisterInternalRoutesDeps): void => {
     const internalRouter = express.Router();
@@ -72,6 +88,37 @@ const registerInternalRoutes = ({
             respondWithRouteError(req, res, logRequest, error);
         }
     });
+
+    internalRouter.all('/recoverable-tasks', async (req, res) => {
+        try {
+            await handleCreateRecoverableTaskRequest(req, res);
+        } catch (error) {
+            respondWithRouteError(req, res, logRequest, error);
+        }
+    });
+
+    internalRouter.all('/recoverable-tasks/claim', async (req, res) => {
+        try {
+            await handleClaimRecoverableTasksRequest(req, res);
+        } catch (error) {
+            respondWithRouteError(req, res, logRequest, error);
+        }
+    });
+
+    internalRouter.all(
+        '/recoverable-tasks/:taskId/finish',
+        async (req, res) => {
+            try {
+                await handleFinishRecoverableTaskRequest(
+                    req,
+                    res,
+                    req.params.taskId
+                );
+            } catch (error) {
+                respondWithRouteError(req, res, logRequest, error);
+            }
+        }
+    );
 
     internalRouter.all('/voice/tts', async (req, res) => {
         try {
