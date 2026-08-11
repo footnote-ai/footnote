@@ -25,8 +25,9 @@ Web and Discord must:
 
 ## Web and Discord
 
-Web is the fullest presentation. It has room for the full answer, sources,
-trace, and controls.
+Web currently has room for the full answer, sources, trace, and controls. A
+surface may offer more or less detail, but no surface becomes the authority for
+response meaning.
 
 Discord can split the same material across messages, buttons, ephemeral
 replies, and attachments. Discord's limits justify a different layout, not a
@@ -49,5 +50,6 @@ The current basic example is described in [Output Testing](../output-testing.md)
 
 ## Updating
 
-When shared behavior changes, update this page and its checks together. A
-presentation-only change should update only that platform's expectations.
+When shared behavior changes, update the relevant checks. Update this page only
+when the cross-platform requirements change. A presentation-only change should
+update only that platform's expectations.
