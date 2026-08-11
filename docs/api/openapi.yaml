@@ -316,7 +316,7 @@ paths:
                             $ref: '#/components/schemas/RecoverableTaskClaimRequest'
             responses:
                 '200':
-                    description: Claimed tasks, already marked failed without rerunning provider work
+                    description: Tasks reserved for retryable Discord reconciliation without rerunning provider work
                     content:
                         application/json:
                             schema:
@@ -1849,7 +1849,7 @@ components:
                     enum: [image_generation]
                 state:
                     type: string
-                    enum: [started, complete, failed]
+                    enum: [started, recovering, complete, failed]
                 botProfileId:
                     type: string
                 discordChannelId:

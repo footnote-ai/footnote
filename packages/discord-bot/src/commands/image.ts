@@ -268,7 +268,6 @@ export async function runImageGenerationSession(
     );
     embed.addFields(statusFields);
 
-    await interaction.editReply({ embeds: [embed], components: [], files: [] });
     let recoverableTaskId: string | null = null;
 
     let editChain: Promise<void> = Promise.resolve();
@@ -289,7 +288,11 @@ export async function runImageGenerationSession(
     };
 
     try {
-        const initialReply = await interaction.fetchReply();
+        const initialReply = await interaction.editReply({
+            embeds: [embed],
+            components: [],
+            files: [],
+        });
         recoverableTaskId = await startRecoverableImageTask(initialReply);
 
         const rawMember = interaction.member;

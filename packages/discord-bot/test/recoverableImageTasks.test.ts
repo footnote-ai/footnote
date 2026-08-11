@@ -33,6 +33,7 @@ const createTask = (id: string, messageId: string): RecoverableTask => ({
 });
 
 type TestMessage = {
+    content: string;
     embeds: Array<{ footer?: { text?: string } }>;
     edit: (payload: unknown) => Promise<unknown>;
 };
@@ -75,12 +76,11 @@ const createInteraction = () => {
         deferReply: async () => undefined,
         editReply: async (payload: unknown) => {
             edits.push(payload);
-            return {};
+            return {
+                id: 'message-1',
+                channelId: 'channel-1',
+            };
         },
-        fetchReply: async () => ({
-            id: 'message-1',
-            channelId: 'channel-1',
-        }),
         followUp: async (payload: unknown) => {
             followUps.push(payload);
             return {};
@@ -149,16 +149,34 @@ test('image lifecycle helpers fail open while sending minimal task metadata', as
 
 test('startup recovery edits unfinished replies independently and preserves completed replies', async () => {
     const originalClaim = botApi.claimRecoverableTasks;
+    const originalComplete = botApi.completeRecoverableTask;
+    const originalFail = botApi.failRecoverableTask;
     const edited: Array<{ id: string; payload: unknown }> = [];
+    const terminalStates: string[] = [];
     botApi.claimRecoverableTasks = (async () => ({
         tasks: [
-            createTask('task-missing', 'missing'),
-            createTask('task-complete', 'complete'),
-            createTask('task-active', 'active'),
+            { ...createTask('task-missing', 'missing'), state: 'recovering' },
+            { ...createTask('task-complete', 'complete'), state: 'recovering' },
+            { ...createTask('task-active', 'active'), state: 'recovering' },
         ],
     })) as typeof botApi.claimRecoverableTasks;
+    botApi.completeRecoverableTask = (async (taskId) => {
+        terminalStates.push(`complete:${taskId}`);
+        return {
+            task: { ...createTask(taskId, 'complete'), state: 'complete' },
+            changed: true,
+        };
+    }) as typeof botApi.completeRecoverableTask;
+    botApi.failRecoverableTask = (async (taskId) => {
+        terminalStates.push(`failed:${taskId}`);
+        return {
+            task: createTask(taskId, 'active'),
+            changed: true,
+        };
+    }) as typeof botApi.failRecoverableTask;
     const messages = new Map<string, TestMessage>();
     messages.set('complete', {
+        content: 'Finished image',
         embeds: [{ footer: { text: 'Complete • $0.01' } }],
         edit: async (payload: unknown) => {
             edited.push({ id: 'complete', payload });
@@ -166,6 +184,7 @@ test('startup recovery edits unfinished replies independently and preserves comp
         },
     });
     messages.set('active', {
+        content: '',
         embeds: [{ footer: { text: 'Generating…' } }],
         edit: async (payload: unknown) => {
             edited.push({ id: 'active', payload });
@@ -189,7 +208,10 @@ test('startup recovery edits unfinished replies independently and preserves comp
     } as unknown as Client;
 
     try {
-        await recoverInterruptedImageTasks(client);
+        await recoverInterruptedImageTasks(client, {
+            claimRetryDelaysMs: [0],
+            replyRetryDelaysMs: [0],
+        });
         assert.equal(edited.length, 1);
         assert.equal(edited[0].id, 'active');
         assert.deepEqual(edited[0].payload, {
@@ -198,8 +220,74 @@ test('startup recovery edits unfinished replies independently and preserves comp
             components: [],
             files: [],
         });
+        assert.deepEqual(terminalStates, [
+            'complete:task-complete',
+            'failed:task-active',
+        ]);
     } finally {
         botApi.claimRecoverableTasks = originalClaim;
+        botApi.completeRecoverableTask = originalComplete;
+        botApi.failRecoverableTask = originalFail;
+    }
+});
+
+test('startup recovery retries temporary claim and Discord failures', async () => {
+    const originalClaim = botApi.claimRecoverableTasks;
+    const originalFail = botApi.failRecoverableTask;
+    let claimCalls = 0;
+    let fetchCalls = 0;
+    let finishCalls = 0;
+    botApi.claimRecoverableTasks = (async () => {
+        claimCalls += 1;
+        if (claimCalls === 1) {
+            throw new Error('backend starting');
+        }
+        return {
+            tasks: [
+                {
+                    ...createTask('task-retry', 'message-retry'),
+                    state: 'recovering',
+                },
+            ],
+        };
+    }) as typeof botApi.claimRecoverableTasks;
+    botApi.failRecoverableTask = (async (taskId) => {
+        finishCalls += 1;
+        return { task: createTask(taskId, 'message-retry'), changed: true };
+    }) as typeof botApi.failRecoverableTask;
+    const message: TestMessage = {
+        content: '',
+        embeds: [{ footer: { text: 'Generating…' } }],
+        edit: async () => ({}),
+    };
+    const client = {
+        channels: {
+            fetch: async () => ({
+                isTextBased: () => true,
+                messages: {
+                    fetch: async () => {
+                        fetchCalls += 1;
+                        if (fetchCalls === 1) {
+                            throw new Error('Discord temporarily unavailable');
+                        }
+                        return message;
+                    },
+                },
+            }),
+        },
+    } as unknown as Client;
+
+    try {
+        await recoverInterruptedImageTasks(client, {
+            claimRetryDelaysMs: [0, 0],
+            replyRetryDelaysMs: [0, 0],
+        });
+        assert.equal(claimCalls, 2);
+        assert.equal(fetchCalls, 2);
+        assert.equal(finishCalls, 1);
+    } finally {
+        botApi.claimRecoverableTasks = originalClaim;
+        botApi.failRecoverableTask = originalFail;
     }
 });
 

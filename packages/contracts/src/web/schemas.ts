@@ -2038,7 +2038,7 @@ const RecoverableTaskSchema = z
     .object({
         id: z.string().uuid(),
         kind: z.literal('image_generation'),
-        state: z.enum(['started', 'complete', 'failed']),
+        state: z.enum(['started', 'recovering', 'complete', 'failed']),
         botProfileId: z.string().min(1).max(128),
         discordChannelId: z.string().min(1).max(32),
         discordMessageId: z.string().min(1).max(32),

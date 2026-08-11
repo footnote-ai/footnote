@@ -14,6 +14,18 @@ import { logger } from '../../utils/logger.js';
 
 const INTERRUPTION_MESSAGE =
     '⚠️ Image generation was interrupted while the bot restarted. Please run `/image` again.';
+const DEFAULT_CLAIM_RETRY_DELAYS_MS = [0, 1_000, 3_000] as const;
+const DEFAULT_REPLY_RETRY_DELAYS_MS = [0, 1_000, 3_000] as const;
+
+export type RecoveryRetryOptions = {
+    claimRetryDelaysMs?: readonly number[];
+    replyRetryDelaysMs?: readonly number[];
+};
+
+const wait = async (delayMs: number): Promise<void> => {
+    if (delayMs <= 0) return;
+    await new Promise<void>((resolve) => setTimeout(resolve, delayMs));
+};
 
 const isUnfinishedImageReply = (message: Message): boolean =>
     message.embeds.some((embed) => {
@@ -52,8 +64,8 @@ export const startRecoverableImageTask = async (
 export const finishRecoverableImageTask = async (
     taskId: string | null,
     state: 'complete' | 'failed'
-): Promise<void> => {
-    if (!taskId) return;
+): Promise<boolean> => {
+    if (!taskId) return true;
     try {
         const response =
             state === 'complete'
@@ -64,28 +76,31 @@ export const finishRecoverableImageTask = async (
             state,
             changed: response.changed,
         });
+        return true;
     } catch (error) {
         logger.warn('Recoverable image task finish failed; continuing.', {
             taskId,
             state,
             error: error instanceof Error ? error.message : String(error),
         });
+        return false;
     }
 };
 
-const editRecoveredTaskReply = async (
+const reconcileRecoveredTaskReply = async (
     client: Client,
     task: RecoverableTask
-): Promise<void> => {
+): Promise<'complete' | 'failed'> => {
     const channel = await client.channels.fetch(task.discordChannelId);
     if (!channel?.isTextBased()) {
         throw new Error('Stored channel is not text-based or is unavailable.');
     }
     const message = await channel.messages.fetch(task.discordMessageId);
+    if (message.content === INTERRUPTION_MESSAGE) {
+        return 'failed';
+    }
     if (!isUnfinishedImageReply(message)) {
-        throw new Error(
-            'Stored reply no longer has an unfinished image-generation state.'
-        );
+        return 'complete';
     }
     await message.edit({
         content: INTERRUPTION_MESSAGE,
@@ -93,19 +108,92 @@ const editRecoveredTaskReply = async (
         components: [],
         files: [],
     });
+    return 'failed';
 };
 
-/** Claims stale tasks for this profile and updates each public reply independently. */
-export const recoverInterruptedImageTasks = async (
-    client: Client
+const claimTasksWithRetry = async (
+    retryDelaysMs: readonly number[],
+    waitForDelay: (delayMs: number) => Promise<void>
+): Promise<RecoverableTask[]> => {
+    let lastError: unknown;
+    for (const delayMs of retryDelaysMs) {
+        await waitForDelay(delayMs);
+        try {
+            return (
+                await botApi.claimRecoverableTasks({
+                    botProfileId: runtimeConfig.profile.id,
+                })
+            ).tasks;
+        } catch (error) {
+            lastError = error;
+            logger.warn('Recoverable image task claim attempt failed.', {
+                delayMs,
+                error: error instanceof Error ? error.message : String(error),
+            });
+        }
+    }
+    throw lastError ?? new Error('Recoverable image task claim failed.');
+};
+
+const reconcileTaskWithRetry = async (
+    client: Client,
+    task: RecoverableTask,
+    retryDelaysMs: readonly number[],
+    waitForDelay: (delayMs: number) => Promise<void>
 ): Promise<void> => {
+    let lastError: unknown;
+    for (const delayMs of retryDelaysMs) {
+        await waitForDelay(delayMs);
+        try {
+            const terminalState = await reconcileRecoveredTaskReply(
+                client,
+                task
+            );
+            const persisted = await finishRecoverableImageTask(
+                task.id,
+                terminalState
+            );
+            if (!persisted) {
+                throw new Error(
+                    'Backend did not persist the recovered task state.'
+                );
+            }
+            logger.info('Recovered interrupted image reply.', {
+                taskId: task.id,
+                botProfileId: task.botProfileId,
+                state: terminalState,
+            });
+            return;
+        } catch (error) {
+            lastError = error;
+            logger.warn('Recoverable image reply attempt failed.', {
+                taskId: task.id,
+                botProfileId: task.botProfileId,
+                delayMs,
+                error: error instanceof Error ? error.message : String(error),
+            });
+        }
+    }
+    throw lastError ?? new Error('Recoverable image reply failed.');
+};
+
+/**
+ * Claims stale tasks for this profile and updates each public reply independently.
+ * Bounded retries stay fail-open while giving temporary backend and Discord
+ * outages time to recover. Unresolved tasks remain reclaimable on later starts.
+ */
+export const recoverInterruptedImageTasks = async (
+    client: Client,
+    options: RecoveryRetryOptions = {}
+): Promise<void> => {
+    const claimRetryDelaysMs =
+        options.claimRetryDelaysMs ?? DEFAULT_CLAIM_RETRY_DELAYS_MS;
+    const replyRetryDelaysMs =
+        options.replyRetryDelaysMs ?? DEFAULT_REPLY_RETRY_DELAYS_MS;
+    const waitForDelay = wait;
     let tasks: RecoverableTask[];
     try {
-        tasks = (
-            await botApi.claimRecoverableTasks({
-                botProfileId: runtimeConfig.profile.id,
-            })
-        ).tasks;
+        tasks = await claimTasksWithRetry(claimRetryDelaysMs, waitForDelay);
     } catch (error) {
         logger.warn(
             'Recoverable image task claim failed; continuing startup.',
@@ -118,11 +206,12 @@ export const recoverInterruptedImageTasks = async (
 
     for (const task of tasks) {
         try {
-            await editRecoveredTaskReply(client, task);
-            logger.info('Recovered interrupted image reply.', {
-                taskId: task.id,
-                botProfileId: task.botProfileId,
-            });
+            await reconcileTaskWithRetry(
+                client,
+                task,
+                replyRetryDelaysMs,
+                waitForDelay
+            );
         } catch (error) {
             logger.warn('Could not recover interrupted image reply.', {
                 taskId: task.id,

@@ -167,7 +167,7 @@ test('trusted lifecycle creates, finishes, and claims profile-scoped tasks', asy
         };
         assert.deepEqual(
             claimed.tasks.map((task) => [task.botProfileId, task.state]),
-            [['bot-a', 'failed']]
+            [['bot-a', 'recovering']]
         );
     } finally {
         await server.close();

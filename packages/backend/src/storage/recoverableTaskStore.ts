@@ -67,7 +67,7 @@ export class SqliteRecoverableTaskStore {
                 created_at TEXT NOT NULL,
                 updated_at TEXT NOT NULL,
                 CHECK (kind IN ('image_generation')),
-                CHECK (state IN ('started', 'complete', 'failed'))
+                CHECK (state IN ('started', 'recovering', 'complete', 'failed'))
             );
             CREATE INDEX IF NOT EXISTS idx_recoverable_tasks_profile_state
                 ON recoverable_tasks (bot_profile_id, state);
@@ -118,7 +118,7 @@ export class SqliteRecoverableTaskStore {
         return task;
     }
 
-    /** Marks a started task terminally. Repeated terminal calls are idempotent. */
+    /** Marks an active task terminally. Repeated terminal calls are idempotent. */
     public finish(
         taskId: string,
         state: Extract<RecoverableTaskState, 'complete' | 'failed'>
@@ -135,7 +135,7 @@ export class SqliteRecoverableTaskStore {
                     .prepare(
                         `UPDATE recoverable_tasks
                          SET state = ?, updated_at = ?
-                         WHERE id = ? AND state = 'started'`
+                         WHERE id = ? AND state IN ('started', 'recovering')`
                     )
                     .run(terminalState, new Date().toISOString(), id);
                 const row = this.db
@@ -151,9 +151,9 @@ export class SqliteRecoverableTaskStore {
     }
 
     /**
-     * Atomically claims all unfinished tasks for one bot profile by making them
-     * terminal failures before Discord reconciliation begins. This makes a
-     * repeated startup safe and never re-runs provider work.
+     * Atomically moves new tasks into recovery and returns tasks already being
+     * recovered. A task remains reclaimable until Discord reconciliation writes
+     * a terminal state, so transient backend or Discord failures do not lose it.
      */
     public claimUnfinishedForBotProfile(
         botProfileId: string
@@ -163,7 +163,7 @@ export class SqliteRecoverableTaskStore {
             const rows = this.db
                 .prepare(
                     `SELECT * FROM recoverable_tasks
-                     WHERE bot_profile_id = ? AND state = 'started'
+                     WHERE bot_profile_id = ? AND state IN ('started', 'recovering')
                      ORDER BY created_at ASC`
                 )
                 .all(profileId) as RecoverableTaskRow[];
@@ -173,13 +173,21 @@ export class SqliteRecoverableTaskStore {
             const now = new Date().toISOString();
             const update = this.db.prepare(
                 `UPDATE recoverable_tasks
-                 SET state = 'failed', updated_at = ?
+                 SET state = 'recovering', updated_at = ?
                  WHERE id = ? AND state = 'started'`
             );
             return rows.flatMap((row) =>
-                update.run(now, row.id).changes > 0
-                    ? [toTask({ ...row, state: 'failed', updated_at: now })]
-                    : []
+                row.state === 'recovering'
+                    ? [toTask(row)]
+                    : update.run(now, row.id).changes > 0
+                      ? [
+                            toTask({
+                                ...row,
+                                state: 'recovering',
+                                updated_at: now,
+                            }),
+                        ]
+                      : []
             );
         });
         return claim(botProfileId);

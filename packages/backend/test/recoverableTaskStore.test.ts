@@ -52,7 +52,7 @@ test('recoverable task store transitions once and makes terminal retries idempot
     });
 });
 
-test('recoverable task claim is profile-scoped and terminalizes claimed stale tasks', async () => {
+test('recoverable task claim is profile-scoped and keeps failed reconciliation reclaimable', async () => {
     await withStore((store) => {
         const own = store.create({
             kind: 'image_generation',
@@ -71,7 +71,14 @@ test('recoverable task claim is profile-scoped and terminalizes claimed stale ta
             claimed.map((task) => task.id),
             [own.id]
         );
-        assert.equal(claimed[0]?.state, 'failed');
+        assert.equal(claimed[0]?.state, 'recovering');
+        assert.deepEqual(
+            store
+                .claimUnfinishedForBotProfile('bot-a')
+                .map((task) => [task.id, task.state]),
+            [[own.id, 'recovering']]
+        );
+        assert.equal(store.finish(own.id, 'failed').changed, true);
         assert.deepEqual(store.claimUnfinishedForBotProfile('bot-a'), []);
         assert.equal(store.finish(other.id, 'complete').changed, true);
     });

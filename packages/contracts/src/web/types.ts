@@ -1051,7 +1051,11 @@ export type PutAdminSettingsYamlResponse = {
 export type RecoverableTaskKind = 'image_generation';
 
 /** @api.operationId: postInternalRecoverableTask @api.path: POST /api/internal/recoverable-tasks */
-export type RecoverableTaskState = 'started' | 'complete' | 'failed';
+export type RecoverableTaskState =
+    | 'started'
+    | 'recovering'
+    | 'complete'
+    | 'failed';
 
 /**
  * Minimal delivery record used to reconcile a public Discord reply after a restart.

@@ -120,6 +120,7 @@ let realtimeVoiceRuntime: RealtimeVoiceRuntime | null = null;
 let ipRateLimiter: SimpleRateLimiter | null = null;
 let sessionRateLimiter: SimpleRateLimiter | null = null;
 let serviceRateLimiter: SimpleRateLimiter | null = null;
+let recoverableTaskRateLimiter: SimpleRateLimiter | null = null;
 let traceWriteLimiter: SimpleRateLimiter | null = null;
 const voltAgentLogger = createVoltAgentLogger({
     directory: VOLTAGENT_LOG_DIR,
@@ -376,6 +377,13 @@ const initializeServices = () => {
         window: runtimeConfig.rateLimits.chatService.windowMs,
     });
 
+    // Recovery bookkeeping is trusted but chatty: a completed task uses start
+    // and finish calls. Keep it from consuming the execution-service budget.
+    recoverableTaskRateLimiter = new SimpleRateLimiter({
+        limit: runtimeConfig.rateLimits.chatService.limit * 3,
+        window: runtimeConfig.rateLimits.chatService.windowMs,
+    });
+
     // Separate limiter for trace ingestion to avoid coupling to reflect limits.
     traceWriteLimiter = new SimpleRateLimiter({
         limit: runtimeConfig.rateLimits.traceApi.limit,
@@ -389,6 +397,7 @@ const initializeServices = () => {
             ipRateLimiter?.cleanup();
             sessionRateLimiter?.cleanup();
             serviceRateLimiter?.cleanup();
+            recoverableTaskRateLimiter?.cleanup();
             traceWriteLimiter?.cleanup();
         },
         2 * 60 * 1000
@@ -595,9 +604,9 @@ const {
     traceApiToken: runtimeConfig.trace.apiToken,
     serviceToken: runtimeConfig.reflect.serviceToken,
     serviceRateLimiter:
-        serviceRateLimiter ??
+        recoverableTaskRateLimiter ??
         new SimpleRateLimiter({
-            limit: runtimeConfig.rateLimits.chatService.limit,
+            limit: runtimeConfig.rateLimits.chatService.limit * 3,
             window: runtimeConfig.rateLimits.chatService.windowMs,
         }),
 });
