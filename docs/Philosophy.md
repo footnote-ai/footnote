@@ -1,16 +1,10 @@
 # Philosophy
 
-AI can be helpful. It can also sound sure of itself when it's guessing.
+AI can be helpful, but it can also sound sure of itself when it's guessing. The finished response rarely shows which information it relied on, what instructions shaped it, whether it used a tool or memory, or where it filled in a gap.
 
-That gap matters.
+Footnote is our attempt to make that relationship more honest. People should be able to see what their AI is doing, understand its limits, and remain in charge of it.
 
-When an AI gives you an answer, you usually see only the finished response. You don't see which information it relied on, what instructions shaped it, whether it used a tool, remembered an earlier conversation, checked its own work, or quietly filled in a gap. Footnote is our attempt to make that relationship more honest.
-
-We want AI that can explain what shaped an answer, work within limits the user understands, and leave room for a person to disagree. Here's the goal, in plain language:
-
-> **People should be able to see what their AI is doing and remain in charge of it.**
-
-Footnote is still being built. Some of what follows already exists in the software; some of it is the direction we're headed — promises we want the project to grow into.
+Footnote is still being built. This page describes both what the software does now and the direction we want it to take.
 
 ## An answer should come with receipts
 
@@ -52,17 +46,11 @@ Footnote is mainly being built for individuals right now, and we don't need to w
 
 ### People need a way to correct it
 
-AI will make mistakes. Good design starts by accepting that.
-
-Microsoft's research-backed guidelines for human-AI software include a practical instruction:
-
-> "Make it easy to edit, refine, or recover when the AI system is wrong."
-
-We agree.
+AI will make mistakes. Microsoft's guidelines for human-AI software recommend making it easy to edit, refine, or recover when the system is wrong.
 
 A thumbs-down button isn't enough. A user may need to correct a fact, remove a memory, challenge an assumption, question why a tool was used, or report that the assistant acted beyond its permission — and that correction should reach further than the wording on the screen. Where possible, the system should show what went wrong and let the user change the rule, memory, or setting that caused it.
 
-The [Council of Europe's AI Convention](https://www.coe.int/en/web/artificial-intelligence/the-framework-convention-on-artificial-intelligence) goes further than asking systems to explain themselves: it says people should get enough information to challenge both a decision and the use of the AI system behind it.
+The [Council of Europe's AI Convention](https://www.coe.int/en/web/artificial-intelligence/the-framework-convention-on-artificial-intelligence) makes a related point: people need enough information to challenge both a decision and the use of AI behind it.
 
 Footnote isn't a court or a public agency. Still, the principle carries over well — people should have some power after an AI gets something wrong.
 
@@ -74,11 +62,7 @@ Meaningful oversight requires three things: the person can understand what's hap
 
 Most Footnote conversations will never come close to that level of risk. The same common-sense rule still applies: a review button, an approval step, or a safety control should give the user real power.
 
-Footnote can gather information, compare viewpoints, flag uncertainty, and help someone think. The final judgment still belongs to a person.
-
-UNESCO puts this plainly:
-
-> "AI systems should not displace ultimate human responsibility and accountability."
+Footnote can gather information, compare viewpoints, flag uncertainty, and help someone think. It should not displace the user's responsibility or authority.
 
 ## Values and responsibility
 
@@ -88,9 +72,9 @@ Every AI system makes choices. Someone decides what the model is taught, which b
 
 We want the system to make room for more than one way of thinking, especially on questions of ethics, politics, relationships, or competing responsibilities — one person weighing rights, another weighing harm, fairness, duty, freedom, care, or the good of the wider community. Looking at a question through more than one of those lenses can surface something a single answer would miss.
 
-None of that means anything goes. Footnote is committed to human rights, and it rejects uses tied to torture, genocide, forced labour, or coercive state violence — commitments spelled out more fully in our [licensing strategy](./LICENSE_STRATEGY.md).
+Footnote is committed to human rights and rejects uses tied to torture, genocide, forced labour, or coercive state violence. Our [licensing strategy](./LICENSE_STRATEGY.md) describes those commitments in more detail.
 
-We'd rather say what we value than hide behind a claim of neutrality.
+These are stated values, not a claim of neutrality.
 
 ### Ethical failures belong in the security conversation
 
@@ -118,31 +102,27 @@ No model company or agent framework should become the permanent centre of Footno
 
 Footnote is developed openly and uses the MIT and Hippocratic License terms described in our [licensing documentation](./LICENSE_STRATEGY.md). Those licences come from two different traditions: MIT gives people broad freedom to use and change the software, while the Hippocratic License places human-rights conditions on its use. The [Open Source Definition](https://opensource.org/osd), meanwhile, says an open-source licence can't restrict a field of work.
 
-That's a genuine tension, and we shouldn't hide it behind cheerful language. We value open development, source code people can inspect and modify, self-hosting, and community participation. We also believe some uses cross a line a responsible project should name.
+This creates a genuine tension with the Open Source Definition. Footnote nevertheless values open development, source code people can inspect and modify, self-hosting, and community participation. We also believe a responsible project should name uses that violate its human-rights commitments.
 
-Our licence documents need to explain that position precisely. This page can state the reason behind it: technical freedom matters, and so does responsibility for how technology is used.
+Our licence documents need to explain the legal position precisely. This page explains why Footnote combines broad rights to inspect, modify, and self-host the code with restrictions on uses that violate human rights.
 
 ## We are building on other people's work
 
 Footnote did not invent transparency, provenance, human oversight, or responsible AI. The project draws on several areas of existing work:
 
-- [W3C PROV](https://www.w3.org/TR/prov-overview/) gives us a shared language for tracing where information came from and how it changed.
-- [Model Cards](https://research.google/pubs/model-cards-for-model-reporting/) and [Datasheets for Datasets](https://www.microsoft.com/en-us/research/publication/datasheets-for-datasets/) show how models and data can carry clearer records of their purpose and limits.
-- The [Microsoft Guidelines for Human-AI Interaction](https://www.microsoft.com/en-us/research/publication/guidelines-for-human-ai-interaction/) focus on what people need when an AI is introduced, makes mistakes, and changes over time.
-- [NIST](https://www.nist.gov/itl/ai-risk-management-framework) and international bodies such as the OECD, UNESCO, and the Council of Europe cover the broader ground of risk, rights, accountability, and human control.
+- [W3C PROV](https://www.w3.org/TR/prov-overview/) supplies the language Footnote uses to trace where information came from and how it changed.
+- [Model Cards](https://research.google/pubs/model-cards-for-model-reporting/) and [Datasheets for Datasets](https://www.microsoft.com/en-us/research/publication/datasheets-for-datasets/) inform how Footnote records purpose, limits, and context.
+- The [Microsoft Guidelines for Human-AI Interaction](https://www.microsoft.com/en-us/research/publication/guidelines-for-human-ai-interaction/) shape how Footnote approaches correction and recovery.
+- The [NIST AI Risk Management Framework](https://www.nist.gov/itl/ai-risk-management-framework) and principles from the OECD, UNESCO, and the Council of Europe guide its treatment of risk, rights, and human control.
 
-These efforts address different parts of the same problem. Footnote focuses on the interaction as a whole: what entered, what acted, what rules applied, and what reached the user.
-
-We expect this section to grow. The project should keep naming the work it learns from and stay open to ideas developed elsewhere.
+Footnote applies this work to the full interaction: what entered, what acted, what rules applied, and what reached the user.
 
 ## What we ask while building
 
 These ideas have to affect the code. For any feature with real power, we ask the same handful of questions: What is it allowed to do? Will the user understand that? What record will remain? Can the user stop, reverse, or correct it? Does it make Footnote harder to leave?
 
-Not every decision needs a grand ethical debate. These questions are here to catch the moments when a small technical change quietly gives the system more authority.
+These questions help catch small technical changes that quietly give the system more authority.
 
 ## What success looks like
 
-Footnote is working when someone can use AI without treating it like an oracle. They can see where an important answer came from, choose what the assistant is allowed to do, and correct it when it's wrong. They can change models, providers, and settings without giving up ownership, and when something serious does fail, there's enough of a record to make sense of it.
-
-> **Footnote is not an attempt to make AI unquestionable. It is an attempt to make questioning it part of the system.**
+Footnote is working when someone can use AI without treating it like an oracle. Important answers show where they came from. The user controls what the assistant may do and can correct it when it is wrong. They can change models or providers without giving up their records. Serious failures leave enough evidence to investigate.
