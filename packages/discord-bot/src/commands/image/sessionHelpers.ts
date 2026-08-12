@@ -552,17 +552,26 @@ export function buildImageResultPresentation(
             ? `${minutes}m${seconds.toString().padStart(2, '0')}s`
             : `${seconds}s`;
 
-    const { imagePercent, textPercent } = calculateCostPercentages(
-        artifacts.costs.image,
-        artifacts.costs.text
-    );
-
-    const footerParts = [
-        `⏱️ ${formattedDuration}`,
-        `💰${formatCostForFooter(artifacts.costs.total)}`,
-        `🖼️${imagePercent}%`,
-        `📝${textPercent}%`,
-    ];
+    const renderCostIsUnknown =
+        resolvedContext.quality === 'auto' || resolvedContext.size === 'auto';
+    const footerParts = renderCostIsUnknown
+        ? [
+              `⏱️ ${formattedDuration}`,
+              '💰 Render cost unavailable',
+              `📝${formatCostForFooter(artifacts.costs.text)}`,
+          ]
+        : (() => {
+              const { imagePercent, textPercent } = calculateCostPercentages(
+                  artifacts.costs.image,
+                  artifacts.costs.text
+              );
+              return [
+                  `⏱️ ${formattedDuration}`,
+                  `💰${formatCostForFooter(artifacts.costs.total)}`,
+                  `🖼️${imagePercent}%`,
+                  `📝${textPercent}%`,
+              ];
+          })();
 
     if (originalTruncated || refinedTruncated || activeTruncated) {
         footerParts.push('Prompt truncated');

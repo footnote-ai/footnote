@@ -307,3 +307,49 @@ test('buildImageResultPresentation shows only "Prompt" for variation outputs', (
     assert.ok(fieldNames.includes('Prompt'));
     assert.ok(!fieldNames.includes('Original prompt'));
 });
+
+test('buildImageResultPresentation does not represent unresolved render cost as zero', () => {
+    const presentation = buildImageResultPresentation(
+        {
+            ...createContext(),
+            aspectRatio: 'auto',
+            aspectRatioLabel: 'Auto',
+            size: 'auto',
+        },
+        {
+            responseId: 'resp_auto_cost',
+            textModel: 'gpt-5-mini',
+            imageModel: 'gpt-image-1-mini',
+            revisedPrompt: null,
+            finalStyle: 'vivid',
+            annotations: {
+                title: 'Auto cost test',
+                description: null,
+                note: null,
+            },
+            finalImageBuffer: Buffer.from('hello'),
+            finalImageFileName: 'auto-cost.png',
+            imageUrl: null,
+            outputFormat: 'png',
+            outputCompression: 100,
+            usage: {
+                inputTokens: 10,
+                outputTokens: 4,
+                totalTokens: 14,
+                imageCount: 1,
+            },
+            costs: {
+                text: 0.001,
+                image: 0,
+                total: 0.001,
+                perImage: 0,
+            },
+            generationTimeMs: 1000,
+        }
+    );
+
+    const footer = presentation.embed.toJSON().footer?.text ?? '';
+    assert.match(footer, /Render cost unavailable/);
+    assert.doesNotMatch(footer, /🖼️0%/);
+    assert.doesNotMatch(footer, /📝100%/);
+});
