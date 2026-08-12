@@ -85,6 +85,7 @@ export const buildInternalImageTraceMetadata = (input: {
         quality: input.request.quality,
         size: input.request.size,
         imageCount: input.response.result.usage.imageCount,
+        partialImageCount: input.response.result.usage.partialImageCount,
     });
 
     const imageGeneration: ImageGenerationMetadata = {
@@ -131,6 +132,7 @@ export const buildInternalImageTraceMetadata = (input: {
             outputTokens: input.response.result.usage.outputTokens,
             totalTokens: input.response.result.usage.totalTokens,
             imageCount: input.response.result.usage.imageCount,
+            partialImageCount: input.response.result.usage.partialImageCount,
             ...(input.response.result.usage.providerUsageAvailable !==
                 undefined && {
                 providerUsageAvailable:
@@ -169,6 +171,8 @@ export const buildInternalImageTraceMetadata = (input: {
             render: {
                 model: input.response.result.imageModel,
                 imageCount: input.response.result.usage.imageCount,
+                partialImageCount:
+                    input.response.result.usage.partialImageCount,
                 quality: input.request.quality,
                 size: input.request.size,
                 perImageCost: renderCost.perImageCost,

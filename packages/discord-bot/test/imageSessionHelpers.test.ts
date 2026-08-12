@@ -72,6 +72,7 @@ test('executeImageGeneration uses the streaming backend image task path when par
                     outputTokens: 18,
                     totalTokens: 60,
                     imageCount: 1,
+                    partialImageCount: 0,
                 },
                 costs: {
                     text: 0.000046,

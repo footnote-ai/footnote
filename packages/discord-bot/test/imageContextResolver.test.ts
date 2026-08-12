@@ -62,6 +62,7 @@ const createTraceMetadata = (): ResponseMetadata => ({
             outputTokens: 4,
             totalTokens: 16,
             imageCount: 1,
+            partialImageCount: 0,
         },
         costs: {
             text: 0.00001,
@@ -85,6 +86,7 @@ const createTraceMetadata = (): ResponseMetadata => ({
             render: {
                 model: 'gpt-image-1-mini',
                 imageCount: 1,
+                partialImageCount: 0,
                 quality: 'medium',
                 size: '1024x1024',
                 perImageCost: 0.001,
@@ -229,3 +231,27 @@ test('recoverContextDetailsFromMessage parses legacy embed fields for fallback c
     assert.equal(recovered?.responseId, 'resp_legacy_1');
     assert.equal(recovered?.inputId, 'resp_legacy_parent');
 });
+
+for (const fieldName of ['Text model', 'Text Model']) {
+    test(`recoverContextDetailsFromMessage recovers ${fieldName} from legacy embeds`, async () => {
+        const recovered = await recoverContextDetailsFromMessage({
+            id: `message-${fieldName}`,
+            embeds: [
+                {
+                    fields: [
+                        { name: 'Prompt', value: 'legacy prompt text' },
+                        { name: fieldName, value: 'gpt-5.6-terra' },
+                        {
+                            name: 'Image model',
+                            value: 'gpt-image-1-mini',
+                        },
+                    ],
+                },
+            ],
+            channel: null,
+            client: { user: { id: 'bot-user-1' } },
+        } as never);
+
+        assert.equal(recovered?.context.textModel, 'gpt-5.6-terra');
+    });
+}

@@ -44,6 +44,7 @@ export type BackendLLMCostRecord = {
         OpenAITextCostIncompleteReason | ImageGenerationCostIncompleteReason
     >;
     imageCount?: number;
+    partialImageCount?: number;
     imageQuality?: 'low' | 'medium' | 'high' | 'auto';
     imageSize?: '1024x1024' | '1024x1536' | '1536x1024' | 'auto';
     timestamp: number;
@@ -175,6 +176,9 @@ export const recordBackendLLMUsage = (record: BackendLLMCostRecord): void => {
             }),
             ...(record.imageCount !== undefined && {
                 imageCount: record.imageCount,
+            }),
+            ...(record.partialImageCount !== undefined && {
+                partialImageCount: record.partialImageCount,
             }),
             ...(record.imageQuality !== undefined && {
                 imageQuality: record.imageQuality,

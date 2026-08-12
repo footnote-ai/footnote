@@ -270,6 +270,7 @@ export const createInternalImageTaskService = ({
             quality: request.quality,
             size: request.size,
             imageCount: result.usage.imageCount,
+            partialImageCount: result.usage.partialImageCount,
         });
         const timestamp = Date.now();
         const imageCostRecords: BackendLLMCostRecord[] = [
@@ -300,6 +301,7 @@ export const createInternalImageTaskService = ({
                 costCompleteness: renderCost.completeness,
                 costIncompleteReasons: renderCost.incompleteReasons,
                 imageCount: result.usage.imageCount,
+                partialImageCount: result.usage.partialImageCount,
                 imageQuality: request.quality,
                 imageSize: request.size,
                 timestamp,

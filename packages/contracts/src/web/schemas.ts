@@ -1110,6 +1110,7 @@ const ImageGenerationMetadataSchema = z
                 outputTokens: z.number().int().nonnegative(),
                 totalTokens: z.number().int().nonnegative(),
                 imageCount: z.number().int().nonnegative(),
+                partialImageCount: z.number().int().nonnegative(),
                 providerUsageAvailable: z.boolean().optional(),
             })
             .strict(),
@@ -1156,6 +1157,7 @@ const ImageGenerationMetadataSchema = z
                     .object({
                         model: z.string().min(1),
                         imageCount: z.number().int().nonnegative(),
+                        partialImageCount: z.number().int().nonnegative(),
                         quality: z.enum(['low', 'medium', 'high', 'auto']),
                         size: z.enum([
                             'auto',
@@ -1580,6 +1582,7 @@ export const PostInternalImageGenerateResponseSchema = z
                         outputTokens: z.number().int().nonnegative(),
                         totalTokens: z.number().int().nonnegative(),
                         imageCount: z.number().int().nonnegative(),
+                        partialImageCount: z.number().int().nonnegative(),
                         providerUsageAvailable: z.boolean().optional(),
                     })
                     .strict(),

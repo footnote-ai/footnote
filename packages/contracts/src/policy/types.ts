@@ -1209,6 +1209,7 @@ export type ImageGenerationMetadata = {
         outputTokens: number;
         totalTokens: number;
         imageCount: number;
+        partialImageCount: number;
         providerUsageAvailable?: boolean;
     };
     costs: {
@@ -1246,6 +1247,7 @@ export type ImageGenerationMetadata = {
         render: {
             model: string;
             imageCount: number;
+            partialImageCount: number;
             quality: 'low' | 'medium' | 'high' | 'auto';
             size: 'auto' | '1024x1024' | '1024x1536' | '1536x1024';
             perImageCost: number;

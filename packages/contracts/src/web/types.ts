@@ -590,6 +590,7 @@ export type InternalImageGenerationArtifact = {
         outputTokens: number;
         totalTokens: number;
         imageCount: number;
+        partialImageCount: number;
         providerUsageAvailable?: boolean;
     };
     costs: {

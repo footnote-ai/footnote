@@ -484,6 +484,7 @@ const normalizeResponseToImageResult = (
             outputTokens,
             totalTokens,
             imageCount: successfulImageCount,
+            partialImageCount,
             providerUsageAvailable: response.usage !== undefined,
         },
         costs: {

@@ -136,6 +136,7 @@ test('internal image endpoint accepts trusted generate tasks and returns normali
                     outputTokens: 18,
                     totalTokens: 60,
                     imageCount: 1,
+                    partialImageCount: 0,
                 },
                 costs: {
                     text: 0.000046,
@@ -214,6 +215,7 @@ test('internal image endpoint streams partial previews and one terminal result w
                     outputTokens: 3,
                     totalTokens: 10,
                     imageCount: 1,
+                    partialImageCount: 0,
                 },
                 costs: {
                     text: 0.00001,
@@ -293,6 +295,7 @@ test('internal image endpoint returns 429 when the trusted service limiter is ex
                         outputTokens: 1,
                         totalTokens: 2,
                         imageCount: 1,
+                        partialImageCount: 0,
                     },
                     costs: {
                         text: 0,
@@ -384,6 +387,7 @@ test('internal image task service rejects unsupported runtime model identifiers'
                         outputTokens: 1,
                         totalTokens: 2,
                         imageCount: 1,
+                        partialImageCount: 0,
                     },
                     costs: {
                         text: 0,
@@ -490,6 +494,7 @@ test('internal image task service records usage after successful runtime executi
                         outputTokens: 8,
                         totalTokens: 20,
                         imageCount: 1,
+                        partialImageCount: 2,
                         providerUsageAvailable: true,
                     },
                     costs: {
@@ -544,11 +549,12 @@ test('internal image task service records usage after successful runtime executi
         completionTokens: 0,
         totalTokens: 0,
         inputCostUsd: 0,
-        outputCostUsd: 0.011,
-        totalCostUsd: 0.011,
+        outputCostUsd: 0.0126,
+        totalCostUsd: 0.0126,
         costCompleteness: 'complete',
         costIncompleteReasons: [],
         imageCount: 1,
+        partialImageCount: 2,
         imageQuality: 'medium',
         imageSize: '1024x1024',
         timestamp: renderRecord.timestamp,
@@ -581,6 +587,7 @@ test('internal image task service keeps a successful result when usage recording
                         outputTokens: 8,
                         totalTokens: 20,
                         imageCount: 1,
+                        partialImageCount: 0,
                     },
                     costs: {
                         text: 0.00002,
@@ -637,6 +644,7 @@ test('internal image task service stores trace metadata for image responses', as
                         outputTokens: 8,
                         totalTokens: 20,
                         imageCount: 1,
+                        partialImageCount: 2,
                         providerUsageAvailable: true,
                     },
                     costs: {
@@ -678,7 +686,8 @@ test('internal image task service stores trace metadata for image responses', as
     assert.equal(storedCostComponents?.prompt.completeness, 'complete');
     assert.equal(storedCostComponents?.render.model, 'gpt-image-1-mini');
     assert.equal(storedCostComponents?.render.imageCount, 1);
-    assert.equal(storedCostComponents?.render.totalCost, 0.011);
+    assert.equal(storedCostComponents?.render.partialImageCount, 2);
+    assert.equal(storedCostComponents?.render.totalCost, 0.0126);
 });
 
 test('internal image task service keeps success path when trace storage fails', async () => {
@@ -706,6 +715,7 @@ test('internal image task service keeps success path when trace storage fails', 
                         outputTokens: 8,
                         totalTokens: 20,
                         imageCount: 1,
+                        partialImageCount: 0,
                     },
                     costs: {
                         text: 0.00002,

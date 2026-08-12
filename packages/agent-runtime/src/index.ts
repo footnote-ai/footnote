@@ -377,6 +377,8 @@ export interface ImageGenerationUsage {
     outputTokens: number;
     totalTokens: number;
     imageCount: number;
+    /** Preview images emitted before the final render, which are billed separately. */
+    partialImageCount: number;
     /** Whether the provider supplied a usage payload for this request. */
     providerUsageAvailable?: boolean;
 }

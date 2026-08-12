@@ -78,6 +78,7 @@ test('runImageTaskViaApi posts to /api/internal/image with trusted headers and r
                         outputTokens: 18,
                         totalTokens: 60,
                         imageCount: 1,
+                        partialImageCount: 0,
                         providerUsageAvailable: true,
                     },
                     costs: {
@@ -172,6 +173,7 @@ test('runImageTaskStreamViaApi parses NDJSON events and returns the terminal res
                             outputTokens: 18,
                             totalTokens: 60,
                             imageCount: 1,
+                            partialImageCount: 0,
                         },
                         costs: {
                             text: 0.000046,

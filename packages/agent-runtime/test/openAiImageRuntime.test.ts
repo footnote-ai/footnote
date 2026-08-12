@@ -305,6 +305,7 @@ test('openai image runtime emits partial-image callbacks when streaming is enabl
         1
     );
     assert.equal(result.finalImageBase64, 'final-base64-image');
+    assert.equal(result.usage.partialImageCount, 2);
     assert.ok(Math.abs(result.costs.image - 0.0126) < 1e-12);
 });
 

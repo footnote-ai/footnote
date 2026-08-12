@@ -56,6 +56,7 @@ const createFinalResultEvent = (base64: string) => ({
             outputTokens: 18,
             totalTokens: 60,
             imageCount: 1,
+            partialImageCount: 0,
         },
         costs: {
             text: 0.000046,

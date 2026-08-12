@@ -2187,6 +2187,12 @@ components:
                 inputTokens:
                     type: integer
                     minimum: 0
+                cachedInputTokens:
+                    type: integer
+                    minimum: 0
+                cacheWriteTokens:
+                    type: integer
+                    minimum: 0
                 outputTokens:
                     type: integer
                     minimum: 0
@@ -2196,6 +2202,9 @@ components:
                 imageCount:
                     type: integer
                     minimum: 0
+                partialImageCount:
+                    type: integer
+                    minimum: 0
                 providerUsageAvailable:
                     type: boolean
             required:
@@ -2203,6 +2212,7 @@ components:
                 - outputTokens
                 - totalTokens
                 - imageCount
+                - partialImageCount
             additionalProperties: false
 
         InternalImageCosts:
