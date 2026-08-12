@@ -56,6 +56,12 @@ const logImageMemoryCheckpoint = (
     });
 };
 
+const canWriteStream = (
+    abortController: AbortController,
+    res: ServerResponse
+): boolean =>
+    !abortController.signal.aborted && !res.destroyed && !res.writableEnded;
+
 type CreateInternalImageHandlerOptions = {
     internalImageTaskService: InternalImageTaskService | null;
     logRequest: TrustedRouteLogRequest;
@@ -157,6 +163,7 @@ export const createInternalImageHandler = ({
         res: ServerResponse
     ): Promise<void> => {
         let streamStarted = false;
+        let streamAbortController: AbortController | null = null;
         try {
             if (req.method !== 'POST') {
                 sendJson(res, 405, { error: 'Method not allowed' });
@@ -259,6 +266,7 @@ export const createInternalImageHandler = ({
                 if (imageRequest.stream) {
                     streamStarted = true;
                     const abortController = new AbortController();
+                    streamAbortController = abortController;
                     let streamEnded = false;
                     const abortImageStream = () => {
                         if (streamEnded || abortController.signal.aborted) {
@@ -296,6 +304,9 @@ export const createInternalImageHandler = ({
                             {
                                 signal: abortController.signal,
                                 onPartialImage: async (event) => {
+                                    if (!canWriteStream(abortController, res)) {
+                                        return;
+                                    }
                                     logImageMemoryCheckpoint(
                                         'stream-partial-write',
                                         event.base64.length
@@ -308,6 +319,10 @@ export const createInternalImageHandler = ({
                         'stream-result-write',
                         response.result.finalImageBase64.length
                     );
+                    if (!canWriteStream(abortController, res)) {
+                        logRequest(req, res, 'internal image stream-cancelled');
+                        return;
+                    }
                     writeStreamEvent(res, {
                         type: 'result',
                         task: response.task,
@@ -358,10 +373,16 @@ export const createInternalImageHandler = ({
             });
             if (streamStarted) {
                 try {
-                    writeStreamEvent(res, {
-                        type: 'error',
-                        error: 'Failed to execute internal image task',
-                    });
+                    if (
+                        streamAbortController &&
+                        canWriteStream(streamAbortController, res)
+                    ) {
+                        writeStreamEvent(res, {
+                            type: 'error',
+                            error: 'Failed to execute internal image task',
+                        });
+                        res.end();
+                    }
                 } catch (streamWriteError) {
                     imageLogger.error(
                         'Internal image stream error write failed.',
@@ -373,7 +394,6 @@ export const createInternalImageHandler = ({
                         }
                     );
                 }
-                res.end();
                 logRequest(req, res, 'internal image stream-error');
                 return;
             }

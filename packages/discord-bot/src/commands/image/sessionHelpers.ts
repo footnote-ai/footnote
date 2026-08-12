@@ -168,9 +168,13 @@ const buildImageTaskRequest = (
 
 /**
  * Runs the backend-owned image pipeline, uploads the final asset, and returns
- * a normalized payload describing the generation. The caller is responsible
- * for presenting the result (embed, plain message, etc.) and for storing
- * short-lived retry context when needed.
+ * a normalized payload describing the generation. Streamed previews are passed
+ * through without retention; the final base64 is decoded once and released.
+ *
+ * The returned buffer remains caller-owned for Discord attachment fallback.
+ * After a successful Cloudinary upload, this function releases it because the
+ * result URL is sufficient for delivery. The caller owns final fallback-buffer
+ * cleanup after Discord accepts or rejects the response.
  */
 export async function executeImageGeneration(
     context: ImageGenerationContext,
@@ -291,7 +295,7 @@ export async function executeImageGeneration(
             total: imageResult.costs.total,
             perImage: imageResult.costs.perImage,
         },
-        generationTimeMs: imageResult.generationTimeMs || Date.now() - start,
+        generationTimeMs: imageResult.generationTimeMs ?? Date.now() - start,
     };
 
     return artifacts;

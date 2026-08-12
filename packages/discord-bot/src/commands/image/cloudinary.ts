@@ -92,7 +92,9 @@ function addChunkedContext(
 
 /**
  * Uploads a generated image to Cloudinary and stores generation metadata in the
- * asset context fields.
+ * asset context fields. It streams the caller-owned buffer without base64
+ * re-encoding and never mutates or releases that buffer. On failure, callers
+ * retain ownership so they can send the same buffer as a Discord attachment.
  */
 export async function uploadToCloudinary(
     imageBuffer: Buffer,

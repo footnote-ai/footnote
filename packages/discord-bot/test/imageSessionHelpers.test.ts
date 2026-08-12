@@ -79,7 +79,7 @@ test('executeImageGeneration uses the streaming backend image task path when par
                     total: 0.011046,
                     perImage: 0.011,
                 },
-                generationTimeMs: 2100,
+                generationTimeMs: 0,
             },
         };
     }) as typeof botApi.runImageTaskStreamViaApi;
@@ -124,6 +124,7 @@ test('executeImageGeneration uses the streaming backend image task path when par
         );
         assert.equal(artifacts.responseId, 'resp_123');
         assert.equal(artifacts.finalImageBuffer.toString('utf8'), 'hello');
+        assert.equal(artifacts.generationTimeMs, 0);
         assert.deepEqual(partials, [{ index: 0, base64: 'partial-one' }]);
     } finally {
         botApi.runImageTaskViaApi = originalRunImageTaskViaApi;

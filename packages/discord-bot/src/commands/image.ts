@@ -255,7 +255,10 @@ export interface ImageGenerationSessionResult {
 
 /**
  * Runs the end-to-end image generation flow and updates the interaction with
- * progress, results, and a follow-up button when successful.
+ * progress, results, and a follow-up button when successful. After final
+ * delivery completes or fails, this boundary clears presentation attachments
+ * and releases the caller-owned final image buffer. Do not retain image bytes
+ * outside this session after Discord has handled the response.
  */
 export async function runImageGenerationSession(
     interaction: RepliableInteraction,
