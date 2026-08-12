@@ -28,7 +28,6 @@
         "@openai/agents": "catalog:",
         "@sapphire/shapeshift": "catalog:",
         "bufferutil": "catalog:",
-        "body-parser": "catalog:",
         "cloudinary": "catalog:",
         "date-fns": "catalog:",
         "discord.js": "catalog:",
@@ -36,7 +35,7 @@
         "express": "catalog:",
         "flyio": "catalog:",
         "js-yaml": "catalog:",
-        "linkify-it": "^5.0.1",
+        "linkify-it": "^5.0.2",
         "mime-types": "catalog:",
         "node-fetch": "catalog:",
         "only": "catalog:",
@@ -52,7 +51,6 @@
         "ws": "catalog:"
     },
     "devDependencies": {
-        "@types/body-parser": "catalog:",
         "@types/express": "catalog:",
         "@types/linkify-it": "^5.0.0",
         "@types/mdast": "^4.0.4",
