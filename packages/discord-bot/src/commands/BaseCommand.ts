@@ -15,7 +15,15 @@ import {
 export type SlashCommand =
     | SlashCommandBuilder
     | SlashCommandOptionsOnlyBuilder
-    | SlashCommandSubcommandsOnlyBuilder;
+    | SlashCommandSubcommandsOnlyBuilder
+    | StaticSlashCommand;
+
+/** Serializable command schema used before a lazy executable module is loaded. */
+export type StaticSlashCommand = {
+    name: string;
+    description: string;
+    toJSON: () => ReturnType<SlashCommandBuilder['toJSON']>;
+};
 
 export interface Command {
     data: SlashCommand;

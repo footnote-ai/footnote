@@ -1,426 +1,85 @@
 /**
- * @description: Handles Discord voice state changes and coordinates voice session management.
+ * @description: Coordinates voice events without loading the audio and realtime subsystem until it is needed.
  * @footnote-scope: core
  * @footnote-module: VoiceStateHandler
- * @footnote-risk: high - Manages voice connections, audio handlers, and realtime session creation. Failures can break all voice functionality or leave orphaned connections.
- * @footnote-ethics: high - Controls when and how the AI participates in voice channels, affecting user privacy and consent in real-time audio interactions.
+ * @footnote-risk: high - A load error can delay voice, but cleanup and later calls remain retryable.
+ * @footnote-ethics: high - Voice processing starts only after the bot enters voice or an explicit call action requests it.
  */
 
-import {
-    Events,
-    Client,
-    VoiceState,
-    ClientEvents,
-    VoiceBasedChannel,
-    GuildMember,
-} from 'discord.js';
-import { Event } from './Event.js';
-import { getVoiceConnection, VoiceConnection } from '@discordjs/voice';
-import { RealtimeSession } from '../utils/realtimeService.js';
-import { logger } from '../utils/logger.js';
-import { runtimeConfig } from '../config.js';
-import { VoiceSessionManager } from '../voice/VoiceSessionManager.js';
-import { AudioCaptureHandler } from '../voice/AudioCaptureHandler.js';
-import { AudioPlaybackHandler } from '../voice/AudioPlaybackHandler.js';
-import { UserVoiceStateHandler } from '../voice/UserVoiceStateHandler.js';
-import { VoiceConnectionManager } from '../voice/VoiceConnectionManager.js';
-import {
-    RealtimeContextBuilder,
-    RealtimeContextParticipant,
-} from '../utils/prompting/RealtimeContextBuilder.js';
-import type { InternalVoiceRealtimeUsage } from '@footnote/contracts/voice';
+import type { Client, ClientEvents, VoiceState } from 'discord.js';
+import type { VoiceConnection } from '@discordjs/voice';
 import type { InternalTtsVoiceId } from '@footnote/contracts/providers';
+import { Events } from 'discord.js';
+import { Event } from './Event.js';
+import { createLoadOnce } from '../utils/loadOnce.js';
+import { VoiceConnectionManager } from '../voice/VoiceConnectionManager.js';
 
 type ClientWithHandlers = Client & {
-    handlers?: {
-        set: (key: string, handler: unknown) => void;
-    };
-};
-
-type RealtimeSessionWithListeners = RealtimeSession & {
-    listenersAttached?: boolean;
+    handlers?: { set: (key: string, handler: unknown) => void };
 };
 
 export class VoiceStateHandler extends Event {
-    private sessionManager: VoiceSessionManager;
-    private audioCaptureHandler: AudioCaptureHandler;
-    private audioPlaybackHandler: AudioPlaybackHandler;
-    private userVoiceStateHandler: UserVoiceStateHandler;
-    private connectionManager: VoiceConnectionManager;
-    private client: Client;
-    private realtimeContextBuilder: RealtimeContextBuilder;
-    private initiatingVoices: Map<string, InternalTtsVoiceId> = new Map();
+    private subsystemLoaded = false;
+    private readonly loadSubsystem = createLoadOnce(async () => {
+        const { VoiceSubsystem } = await import('./VoiceSubsystem.js');
+        const subsystem = new VoiceSubsystem(this.client);
+        this.subsystemLoaded = true;
+        return subsystem;
+    });
 
-    constructor(client: Client) {
+    constructor(private readonly client: Client) {
         super({
             name: Events.VoiceStateUpdate as keyof ClientEvents,
             once: false,
         });
-
-        this.client = client;
-        this.sessionManager = new VoiceSessionManager();
-        this.audioCaptureHandler = new AudioCaptureHandler();
-        this.audioPlaybackHandler = new AudioPlaybackHandler();
-        this.userVoiceStateHandler = new UserVoiceStateHandler(
-            this.sessionManager
-        );
-        this.connectionManager = new VoiceConnectionManager();
-        this.realtimeContextBuilder = new RealtimeContextBuilder();
-
-        try {
-            const clientWithHandlers = this.client as ClientWithHandlers;
-            if (
-                clientWithHandlers.handlers &&
-                typeof clientWithHandlers.handlers.set === 'function'
-            ) {
-                clientWithHandlers.handlers.set('voiceState', this);
-            }
-        } catch {
-            // Ignore errors during cleanup
-        }
+        (this.client as ClientWithHandlers).handlers?.set('voiceState', this);
     }
 
-    async execute(oldState: VoiceState, newState: VoiceState): Promise<void> {
-        try {
-            if (newState.member?.id === this.client.user?.id) {
-                await this.handleBotVoiceStateChange(oldState, newState);
-            } else {
-                await this.userVoiceStateHandler.handleUserVoiceChange(
-                    oldState,
-                    newState,
-                    this.client,
-                    this.startConversation.bind(this)
-                );
-            }
-        } catch (error) {
-            logger.error('Error in VoiceStateHandler execute:', error);
-        }
-    }
-
-    private async handleBotVoiceStateChange(
+    public async execute(
         oldState: VoiceState,
         newState: VoiceState
     ): Promise<void> {
-        if (!oldState.channelId && newState.channelId) {
-            await this.handleBotJoinedChannel(newState);
-        } else if (oldState.channelId && !newState.channelId) {
-            await this.handleBotLeftChannel(oldState);
-        }
-    }
-
-    private async handleBotJoinedChannel(newState: VoiceState): Promise<void> {
-        const guildId = newState.guild.id;
-        logger.info(
-            `Bot joined voice channel ${newState.channelId} in guild ${guildId}`
-        );
-
-        if (this.sessionManager.hasSession(guildId)) {
-            logger.debug(
-                `Active session already exists for guild ${guildId}, skipping initialization`
-            );
+        const botId = this.client.user?.id;
+        if (newState.member?.id !== botId && !this.subsystemLoaded) {
             return;
         }
-
-        const voiceChannel = newState.channel;
-        if (!voiceChannel) {
-            logger.warn(
-                `Bot joined voice channel in guild ${guildId} but no channel object was available`
-            );
-            return;
-        }
-
-        // The /call flow waits for the human participant to join before we
-        // create the realtime session. That keeps the session lifecycle tied
-        // to the actual conversation start instead of burning a socket while
-        // the bot sits alone in the channel.
-        logger.info(
-            `Bot joined voice channel ${voiceChannel.name} in guild ${guildId}; waiting for the initiating user to start the session.`
-        );
+        await (await this.loadSubsystem()).execute(oldState, newState);
     }
 
-    private collectVoiceParticipants(channel: VoiceBasedChannel | null): {
-        participantMap: Map<string, string>;
-        contextParticipants: RealtimeContextParticipant[];
-    } {
-        const participantMap = new Map<string, string>();
-        const contextParticipants: RealtimeContextParticipant[] = [];
-
-        if (!channel) {
-            return { participantMap, contextParticipants };
-        }
-
-        channel.members.forEach((member: GuildMember) => {
-            const displayName = member.displayName || member.user.username;
-            participantMap.set(member.id, displayName);
-            contextParticipants.push({
-                id: member.id,
-                displayName,
-                isBot: member.user.bot,
-            });
-        });
-
-        return { participantMap, contextParticipants };
+    public async registerInitiatingUser(
+        guildId: string,
+        userId: string
+    ): Promise<void> {
+        (await this.loadSubsystem()).registerInitiatingUser(guildId, userId);
     }
 
-    public registerInitiatingUser(guildId: string, userId: string): void {
-        this.userVoiceStateHandler.registerInitiatingUser(guildId, userId);
-    }
-
-    public registerInitiatingVoice(
+    public async registerInitiatingVoice(
         guildId: string,
         voice: InternalTtsVoiceId
-    ): void {
-        this.initiatingVoices.set(guildId, voice);
-    }
-
-    public async createSession(
-        guildId: string,
-        channelId: string
     ): Promise<void> {
-        if (this.sessionManager.hasSession(guildId)) {
-            logger.debug(
-                `Active session already exists for guild ${guildId}, skipping creation`
-            );
-            return;
-        }
-
-        const guild = this.client.guilds.cache.get(guildId);
-        if (!guild) throw new Error(`Guild ${guildId} not found`);
-
-        const voiceChannel = guild.channels.cache.get(channelId);
-        if (!voiceChannel?.isVoiceBased())
-            throw new Error(`Voice channel ${channelId} not found`);
-
-        const connection = getVoiceConnection(guildId);
-        if (!connection)
-            throw new Error('No voice connection found for this guild');
-
-        const { participantMap, contextParticipants } =
-            this.collectVoiceParticipants(voiceChannel);
-        const ignoredUserIds = new Set(
-            contextParticipants
-                .filter((participant) => participant.isBot)
-                .map((participant) => participant.id)
-        );
-        const realtimeSession = await this.createRealtimeSession(
-            guildId,
-            contextParticipants
-        );
-
-        const session = this.sessionManager.createSession(
-            connection,
-            realtimeSession,
-            this.audioCaptureHandler,
-            this.audioPlaybackHandler,
-            participantMap,
-            this.userVoiceStateHandler.getInitiatingUser(guildId)
-        );
-        this.sessionManager.addSession(guildId, session);
-
-        this.audioCaptureHandler.setupAudioCapture(
-            connection,
-            realtimeSession,
-            guildId,
-            ignoredUserIds
-        );
-        this.initiatingVoices.delete(guildId);
-
-        logger.info(
-            `Voice session created for guild ${guildId} in channel ${channelId}`
-        );
+        (await this.loadSubsystem()).registerInitiatingVoice(guildId, voice);
     }
 
-    private async handleBotLeftChannel(oldState: VoiceState): Promise<void> {
-        const guildId = oldState.guild.id;
-        logger.info(`Bot left voice channel in guild ${guildId}`);
-
-        const session = this.sessionManager.getSession(guildId);
-        if (session?.realtimeSession) {
-            this.removeRealtimeSessionListeners(session.realtimeSession);
-        }
-
-        this.sessionManager.removeSession(guildId);
-        this.userVoiceStateHandler.clearInitiatingUser(guildId);
-        this.initiatingVoices.delete(guildId);
-        this.audioCaptureHandler.cleanupGuild(guildId);
-        this.audioPlaybackHandler.cleanupGuild(guildId);
-    }
-
-    private async startConversation(guildId: string): Promise<void> {
-        let session = this.sessionManager.getSession(guildId);
-
-        if (!session) {
-            logger.info(
-                `[VoiceStateHandler] No session exists, creating for guild ${guildId}`
-            );
-            const connection = getVoiceConnection(guildId);
-            if (!connection)
-                throw new Error('No voice connection found for this guild');
-
-            const guild = this.client.guilds.cache.get(guildId);
-            const channelId = connection.joinConfig.channelId;
-            const voiceChannel = channelId
-                ? guild?.channels.cache.get(channelId)
-                : null;
-            const isVoiceChannel =
-                voiceChannel && voiceChannel.isVoiceBased()
-                    ? (voiceChannel as VoiceBasedChannel)
-                    : null;
-
-            const { participantMap, contextParticipants } =
-                this.collectVoiceParticipants(isVoiceChannel);
-            const ignoredUserIds = new Set(
-                contextParticipants
-                    .filter((participant) => participant.isBot)
-                    .map((participant) => participant.id)
-            );
-            const realtimeSession = await this.createRealtimeSession(
-                guildId,
-                contextParticipants
-            );
-            session = this.sessionManager.createSession(
-                connection,
-                realtimeSession,
-                this.audioCaptureHandler,
-                this.audioPlaybackHandler,
-                participantMap,
-                this.userVoiceStateHandler.getInitiatingUser(guildId)
-            );
-            this.sessionManager.addSession(guildId, session);
-            this.audioCaptureHandler.setupAudioCapture(
-                connection,
-                realtimeSession,
-                guildId,
-                ignoredUserIds
-            );
-            this.initiatingVoices.delete(guildId);
-        }
-
-        try {
-            logger.info(`Started conversation in guild ${guildId}`);
-            await session.realtimeSession.sendGreeting();
-        } catch (error) {
-            logger.error(
-                `Error starting conversation in guild ${guildId}:`,
-                error
-            );
-            throw error;
-        }
-    }
-
-    private async createRealtimeSession(
-        guildId: string,
-        participants: RealtimeContextParticipant[]
-    ): Promise<RealtimeSession> {
-        this.audioCaptureHandler.cleanupGuild(guildId);
-
-        const context = this.realtimeContextBuilder.buildContext({
-            participants,
-        });
-        const voiceOverride = this.initiatingVoices.get(guildId);
-        const realtimeSession = new RealtimeSession({
-            context: context.sessionContext,
-            model: runtimeConfig.realtime.defaultModel ?? undefined,
-            voice:
-                voiceOverride ??
-                runtimeConfig.realtime.defaultVoice ??
-                undefined,
-            turnDetection: runtimeConfig.realtime.turnDetection,
-            turnDetectionConfig:
-                runtimeConfig.realtime.turnDetectionConfig ?? undefined,
-        });
-
-        // Attach listeners only once
-        const sessionWithListeners =
-            realtimeSession as RealtimeSessionWithListeners;
-        if (!sessionWithListeners.listenersAttached) {
-            sessionWithListeners.listenersAttached = true;
-
-            realtimeSession.on('audio', (audioData: Buffer) => {
-                if (!audioData || audioData.length === 0) return;
-
-                const session = this.sessionManager.getSession(guildId);
-                if (!session) return;
-
-                void this.audioPlaybackHandler
-                    .playAudioToChannel(session.connection, audioData)
-                    .catch((error) => {
-                        logger.error(
-                            '[VoiceStateHandler] Error queuing realtime audio for playback:',
-                            error
-                        );
-                    });
-            });
-
-            realtimeSession.on('text', (text: string) =>
-                logger.debug(`[BOT TEXT] ${text}`)
-            );
-            realtimeSession.on('greeting', (text: string) =>
-                logger.info(`[BOT GREETING] ${text}`)
-            );
-            realtimeSession.on(
-                'response.done',
-                (event: {
-                    response_id?: string;
-                    usage?: InternalVoiceRealtimeUsage;
-                }) => {
-                    const usage = event.usage;
-                    const usageSummary = usage
-                        ? ` promptTokens=${usage.tokensPrompt ?? 'n/a'} ` +
-                          `completionTokens=${usage.tokensCompletion ?? 'n/a'} ` +
-                          `model=${usage.model ?? 'unknown'}`
-                        : '';
-                    logger.debug(
-                        `[BOT RESPONSE COMPLETED] Response ID: ${event.response_id || 'unknown'}${usageSummary}`
-                    );
-                }
-            );
-            realtimeSession.on('response.output_audio.done', (event: unknown) =>
-                logger.debug(
-                    `[BOT AUDIO DONE] Audio stream completed for ${String(event)}`
-                )
-            );
-            realtimeSession.on('error', (error: Error) =>
-                logger.error('[RealtimeSession] Error:', error)
-            );
-
-            realtimeSession.on('connected', () =>
-                logger.info(
-                    '[RealtimeSession] Connected to backend realtime voice boundary'
-                )
-            );
-        }
-
-        await realtimeSession.connect();
-        return realtimeSession;
-    }
-
-    private removeRealtimeSessionListeners(session: RealtimeSession) {
-        session.removeAllListeners();
-    }
-
+    /** Cleans up voice resources only when the subsystem was activated. */
     public async cleanupExistingConnections(): Promise<void> {
-        await this.connectionManager.cleanupExistingConnections(this.client);
+        if (this.subsystemLoaded) {
+            await (await this.loadSubsystem()).cleanupExistingConnections();
+        }
     }
 }
 
-/**
- * Builds the voice state handler with the real Discord client so it can
- * register itself into `client.handlers` during construction.
- */
-export const createEvent = (
-    client: Client,
-    _dependencies: Record<string, unknown> = {}
-): VoiceStateHandler => {
-    return new VoiceStateHandler(client);
-};
+export const createEvent = (client: Client): VoiceStateHandler =>
+    new VoiceStateHandler(client);
 
+/** Cleans a connection without constructing the realtime audio subsystem. */
 export async function cleanupVoiceConnection(
     connection: VoiceConnection | null,
     client: Client
 ): Promise<void> {
-    const manager = new VoiceConnectionManager();
-    return manager.cleanupVoiceConnection(connection, client);
+    return new VoiceConnectionManager().cleanupVoiceConnection(
+        connection,
+        client
+    );
 }
 
 export default VoiceStateHandler;

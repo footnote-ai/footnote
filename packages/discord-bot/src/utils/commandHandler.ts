@@ -8,10 +8,8 @@
 
 import { REST, Routes, Collection } from 'discord.js';
 import { Command } from '../commands/BaseCommand.js';
-import path from 'path';
-import { readdir } from 'fs/promises';
 import { logger } from './logger.js';
-import { runtimeConfig } from '../config.js';
+import { createLazyCommandCatalog } from '../commands/lazyCommands.js';
 
 /**
  * Handles loading and managing Discord slash commands.
@@ -32,64 +30,7 @@ export class CommandHandler {
         try {
             logger.debug('Loading commands...');
 
-            // In development, we need to look in the src directory for .ts files
-            const isDev = runtimeConfig.isDevelopment;
-            // In production, commands are in dist/commands
-            const basePath = isDev
-                ? path.join(process.cwd(), 'src/commands')
-                : path.join(process.cwd(), 'dist/commands');
-
-            logger.debug(`Loading commands from: ${basePath}`);
-
-            /**
-             * Filters and loads command files based on environment
-             * @type {string[]}
-             */
-            const commandFiles: string[] = (await readdir(basePath)).filter(
-                (file) => {
-                    // In development, look for .ts files, in production look for .js files
-                    const isCorrectExtension = isDev
-                        ? file.endsWith('.ts')
-                        : file.endsWith('.js');
-                    const isNotDeclaration = !file.endsWith('.d.ts');
-                    const isNotBaseCommand = !file.includes('BaseCommand');
-                    return (
-                        isCorrectExtension &&
-                        isNotDeclaration &&
-                        isNotBaseCommand
-                    );
-                }
-            );
-
-            logger.debug(
-                `Found ${commandFiles.length} command files in ${basePath}`
-            );
-
-            for (const file of commandFiles) {
-                try {
-                    const filePath = path.join(basePath, file);
-                    logger.debug(
-                        `Attempting to load command from: ${filePath}`
-                    );
-
-                    // Use dynamic import with file:// URL for Windows compatibility
-                    const fileUrl = new URL(
-                        `file://${filePath.replace(/\\/g, '/')}`
-                    );
-                    const { default: command } = await import(fileUrl.href);
-
-                    if (command?.data) {
-                        this.commands.set(command.data.name, command);
-                        logger.debug(`Loaded command: ${command.data.name}`);
-                    } else {
-                        logger.warn(
-                            `Command in ${file} is missing required 'data' property`
-                        );
-                    }
-                } catch (error) {
-                    logger.error(`Error loading command ${file}:`, error);
-                }
-            }
+            this.commands = createLazyCommandCatalog();
 
             logger.info(`Successfully loaded ${this.commands.size} commands.`);
             return this.commands;

@@ -161,3 +161,21 @@ For Fly, `pnpm settings` and `pnpm reset` issue links through `fly ssh console`
 against the app detected from `deployment.fly-app`, `FLY_APP_NAME`, `fly.toml`,
 or `deploy/fly/server.toml`. The backend operator-link endpoint only accepts
 loopback requests, so public web traffic cannot mint settings links.
+
+### Memory verification for multi-bot Machines
+
+Capture a same-configuration baseline before deployment. After deployment, wait
+ten minutes, complete one ordinary chat with each enabled bot, then wait five
+more minutes before sampling. Replace the placeholders with the Fly app and
+Machine ID:
+
+```bash
+fly machine list -a <app>
+fly ssh console -a <app> -s <machine-id> -C "grep MemAvailable /proc/meminfo; ps -o pid,rss,comm -C node"
+```
+
+`MemAvailable` is in KiB; divide by 1024 for MiB. Record each Node process RSS
+in KiB as well. For a three-bot 512 MB Machine, acceptance requires at least
+96 MiB `MemAvailable` and at least 15% less used memory than the fresh,
+same-config baseline. Treat active image-generation memory separately; its
+payload transport is outside this verification.

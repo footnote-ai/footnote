@@ -1,0 +1,832 @@
+{
+    "chat": {
+        "options": [
+            {
+                "type": 3,
+                "name": "prompt",
+                "description": "Prompt to send to backend chat",
+                "required": true
+            },
+            {
+                "type": 3,
+                "choices": [
+                    {
+                        "name": "Express",
+                        "value": "express"
+                    },
+                    {
+                        "name": "Grounded",
+                        "value": "grounded"
+                    },
+                    {
+                        "name": "Balanced",
+                        "value": "balanced"
+                    }
+                ],
+                "name": "mode",
+                "description": "Optional answer posture for this request",
+                "required": false
+            },
+            {
+                "type": 3,
+                "name": "planner_profile_id",
+                "description": "Optional planner model profile override",
+                "required": false
+            },
+            {
+                "type": 3,
+                "name": "generate_profile_id",
+                "description": "Optional generation model profile override",
+                "required": false
+            },
+            {
+                "type": 3,
+                "name": "assess_profile_id",
+                "description": "Optional assess model profile override",
+                "required": false
+            },
+            {
+                "min_value": 0,
+                "type": 4,
+                "name": "max_review_cycles",
+                "description": "Optional hard override for review cycle depth",
+                "required": false
+            },
+            {
+                "max_value": 5,
+                "min_value": 1,
+                "type": 4,
+                "name": "trace_tightness",
+                "description": "TRACE tightness axis target (1-5)",
+                "required": false
+            },
+            {
+                "max_value": 5,
+                "min_value": 1,
+                "type": 4,
+                "name": "trace_rationale",
+                "description": "TRACE rationale axis target (1-5)",
+                "required": false
+            },
+            {
+                "max_value": 5,
+                "min_value": 1,
+                "type": 4,
+                "name": "trace_attribution",
+                "description": "TRACE attribution axis target (1-5)",
+                "required": false
+            },
+            {
+                "max_value": 5,
+                "min_value": 1,
+                "type": 4,
+                "name": "trace_caution",
+                "description": "TRACE caution axis target (1-5)",
+                "required": false
+            },
+            {
+                "max_value": 5,
+                "min_value": 1,
+                "type": 4,
+                "name": "trace_extent",
+                "description": "TRACE extent axis target (1-5)",
+                "required": false
+            }
+        ],
+        "name": "chat",
+        "description": "Send a one-shot prompt with optional workflow and TRACE tweaks",
+        "type": 1
+    },
+    "image": {
+        "options": [
+            {
+                "type": 3,
+                "name": "prompt",
+                "description": "The prompt to generate the image from",
+                "required": true
+            },
+            {
+                "name": "adjust_prompt",
+                "description": "Allow the AI to adjust the prompt prior to generation (defaults to true)",
+                "required": false,
+                "type": 5
+            },
+            {
+                "type": 3,
+                "choices": [
+                    {
+                        "name": "Natural",
+                        "value": "natural"
+                    },
+                    {
+                        "name": "Vivid",
+                        "value": "vivid"
+                    },
+                    {
+                        "name": "Photorealistic",
+                        "value": "photorealistic"
+                    },
+                    {
+                        "name": "Cinematic",
+                        "value": "cinematic"
+                    },
+                    {
+                        "name": "Oil Painting",
+                        "value": "oil_painting"
+                    },
+                    {
+                        "name": "Watercolor",
+                        "value": "watercolor"
+                    },
+                    {
+                        "name": "Digital Painting",
+                        "value": "digital_painting"
+                    },
+                    {
+                        "name": "Line Art",
+                        "value": "line_art"
+                    },
+                    {
+                        "name": "Sketch",
+                        "value": "sketch"
+                    },
+                    {
+                        "name": "Cartoon",
+                        "value": "cartoon"
+                    },
+                    {
+                        "name": "Anime",
+                        "value": "anime"
+                    },
+                    {
+                        "name": "Comic Book",
+                        "value": "comic"
+                    },
+                    {
+                        "name": "Pixel Art",
+                        "value": "pixel_art"
+                    },
+                    {
+                        "name": "Cyberpunk",
+                        "value": "cyberpunk"
+                    },
+                    {
+                        "name": "Fantasy Art",
+                        "value": "fantasy_art"
+                    },
+                    {
+                        "name": "Surrealist",
+                        "value": "surrealist"
+                    },
+                    {
+                        "name": "Minimalist",
+                        "value": "minimalist"
+                    },
+                    {
+                        "name": "Vintage",
+                        "value": "vintage"
+                    },
+                    {
+                        "name": "Noir",
+                        "value": "noir"
+                    },
+                    {
+                        "name": "3D Render",
+                        "value": "3d_render"
+                    },
+                    {
+                        "name": "Steampunk",
+                        "value": "steampunk"
+                    },
+                    {
+                        "name": "Abstract",
+                        "value": "abstract"
+                    },
+                    {
+                        "name": "Pop Art",
+                        "value": "pop_art"
+                    },
+                    {
+                        "name": "Isometric",
+                        "value": "isometric"
+                    }
+                ],
+                "name": "style",
+                "description": "Image style preset (optional; defaults to unspecified)",
+                "required": false
+            },
+            {
+                "type": 3,
+                "choices": [
+                    {
+                        "name": "Square",
+                        "value": "square"
+                    },
+                    {
+                        "name": "Portrait",
+                        "value": "portrait"
+                    },
+                    {
+                        "name": "Landscape",
+                        "value": "landscape"
+                    }
+                ],
+                "name": "aspect_ratio",
+                "description": "The aspect ratio to use (optional; defaults to auto)",
+                "required": false
+            },
+            {
+                "type": 3,
+                "choices": [
+                    {
+                        "name": "Auto",
+                        "value": "auto"
+                    },
+                    {
+                        "name": "Transparent",
+                        "value": "transparent"
+                    },
+                    {
+                        "name": "Opaque",
+                        "value": "opaque"
+                    }
+                ],
+                "name": "background",
+                "description": "Image background (optional; defaults to auto)",
+                "required": false
+            },
+            {
+                "type": 3,
+                "choices": [
+                    {
+                        "name": "WebP",
+                        "value": "webp"
+                    },
+                    {
+                        "name": "PNG",
+                        "value": "png"
+                    },
+                    {
+                        "name": "JPEG",
+                        "value": "jpeg"
+                    }
+                ],
+                "name": "output_format",
+                "description": "Output format (defaults to PNG)",
+                "required": false
+            },
+            {
+                "max_value": 100,
+                "min_value": 1,
+                "type": 4,
+                "name": "output_compression",
+                "description": "Compression quality 1-100 (defaults to 100)",
+                "required": false
+            },
+            {
+                "type": 3,
+                "choices": [
+                    {
+                        "name": "Low",
+                        "value": "low"
+                    },
+                    {
+                        "name": "Medium",
+                        "value": "medium"
+                    },
+                    {
+                        "name": "High",
+                        "value": "high"
+                    }
+                ],
+                "name": "quality",
+                "description": "Image quality (tokens vary by model; defaults to low)",
+                "required": false
+            },
+            {
+                "type": 3,
+                "choices": [
+                    {
+                        "name": "gpt-image-2",
+                        "value": "gpt-image-2"
+                    },
+                    {
+                        "name": "gpt-image-1.5",
+                        "value": "gpt-image-1.5"
+                    },
+                    {
+                        "name": "chatgpt-image-latest",
+                        "value": "chatgpt-image-latest"
+                    },
+                    {
+                        "name": "gpt-image-1",
+                        "value": "gpt-image-1"
+                    },
+                    {
+                        "name": "gpt-image-1-mini",
+                        "value": "gpt-image-1-mini"
+                    },
+                    {
+                        "name": "dall-e-3",
+                        "value": "dall-e-3"
+                    },
+                    {
+                        "name": "dall-e-2",
+                        "value": "dall-e-2"
+                    }
+                ],
+                "name": "image_model",
+                "description": "The image model to render with (optional; defaults to gpt-image-1-mini)",
+                "required": false
+            },
+            {
+                "type": 3,
+                "choices": [
+                    {
+                        "name": "gpt-5.6-sol",
+                        "value": "gpt-5.6-sol"
+                    },
+                    {
+                        "name": "gpt-5.6-terra",
+                        "value": "gpt-5.6-terra"
+                    },
+                    {
+                        "name": "gpt-5.6-luna",
+                        "value": "gpt-5.6-luna"
+                    },
+                    {
+                        "name": "gpt-5.4",
+                        "value": "gpt-5.4"
+                    },
+                    {
+                        "name": "gpt-5.4-pro",
+                        "value": "gpt-5.4-pro"
+                    },
+                    {
+                        "name": "gpt-5.4-mini",
+                        "value": "gpt-5.4-mini"
+                    },
+                    {
+                        "name": "gpt-5.4-nano",
+                        "value": "gpt-5.4-nano"
+                    },
+                    {
+                        "name": "gpt-5-mini",
+                        "value": "gpt-5-mini"
+                    },
+                    {
+                        "name": "gpt-5-nano",
+                        "value": "gpt-5-nano"
+                    },
+                    {
+                        "name": "gpt-5",
+                        "value": "gpt-5"
+                    },
+                    {
+                        "name": "gpt-4.1",
+                        "value": "gpt-4.1"
+                    },
+                    {
+                        "name": "gpt-5-codex",
+                        "value": "gpt-5-codex"
+                    },
+                    {
+                        "name": "gpt-5.3-codex",
+                        "value": "gpt-5.3-codex"
+                    },
+                    {
+                        "name": "gpt-5.2",
+                        "value": "gpt-5.2"
+                    },
+                    {
+                        "name": "gpt-5.2-codex",
+                        "value": "gpt-5.2-codex"
+                    },
+                    {
+                        "name": "gpt-5.1",
+                        "value": "gpt-5.1"
+                    },
+                    {
+                        "name": "gpt-5.1-codex",
+                        "value": "gpt-5.1-codex"
+                    },
+                    {
+                        "name": "gpt-5.1-codex-max",
+                        "value": "gpt-5.1-codex-max"
+                    },
+                    {
+                        "name": "gpt-5.1-codex-mini",
+                        "value": "gpt-5.1-codex-mini"
+                    },
+                    {
+                        "name": "codex-mini-latest",
+                        "value": "codex-mini-latest"
+                    },
+                    {
+                        "name": "o3-deep-research",
+                        "value": "o3-deep-research"
+                    },
+                    {
+                        "name": "o4-mini-deep-research",
+                        "value": "o4-mini-deep-research"
+                    },
+                    {
+                        "name": "gpt-oss-120b",
+                        "value": "gpt-oss-120b"
+                    },
+                    {
+                        "name": "gpt-oss-20b",
+                        "value": "gpt-oss-20b"
+                    },
+                    {
+                        "name": "gpt-5.2-pro",
+                        "value": "gpt-5.2-pro"
+                    }
+                ],
+                "name": "text_model",
+                "description": "The text model to use for prompt adjustment (optional; defaults to gpt-4.1-mini)",
+                "required": false
+            },
+            {
+                "type": 3,
+                "name": "follow_up_response_id",
+                "description": "Response ID from a previous image generation for follow-up (optional)",
+                "required": false
+            }
+        ],
+        "name": "image",
+        "description": "Generate an image based on the prompt provided",
+        "type": 1
+    },
+    "call": {
+        "options": [
+            {
+                "channel_types": [2],
+                "name": "channel",
+                "description": "The voice channel to join",
+                "required": true,
+                "type": 7
+            },
+            {
+                "type": 3,
+                "choices": [
+                    {
+                        "name": "alloy",
+                        "value": "alloy"
+                    },
+                    {
+                        "name": "ash",
+                        "value": "ash"
+                    },
+                    {
+                        "name": "ballad",
+                        "value": "ballad"
+                    },
+                    {
+                        "name": "coral",
+                        "value": "coral"
+                    },
+                    {
+                        "name": "echo",
+                        "value": "echo"
+                    },
+                    {
+                        "name": "fable",
+                        "value": "fable"
+                    },
+                    {
+                        "name": "nova",
+                        "value": "nova"
+                    },
+                    {
+                        "name": "onyx",
+                        "value": "onyx"
+                    },
+                    {
+                        "name": "sage",
+                        "value": "sage"
+                    },
+                    {
+                        "name": "shimmer",
+                        "value": "shimmer"
+                    }
+                ],
+                "name": "voice",
+                "description": "Optional voice override for this call (defaults to the bot's configured voice)",
+                "required": false
+            },
+            {
+                "type": 3,
+                "choices": [
+                    {
+                        "name": "Exit",
+                        "value": "exit"
+                    },
+                    {
+                        "name": "ExitAll",
+                        "value": "exit_all"
+                    }
+                ],
+                "name": "debug_options",
+                "description": "Debug options only available to the bot owner/superuser",
+                "required": false
+            }
+        ],
+        "name": "call",
+        "description": "Have a voice conversation with the AI using Discord's voice features",
+        "type": 1
+    },
+    "help": {
+        "options": [],
+        "name": "help",
+        "description": "Show a list of available commands",
+        "type": 1
+    },
+    "incident": {
+        "options": [
+            {
+                "type": 1,
+                "name": "list",
+                "description": "List recent incidents.",
+                "options": [
+                    {
+                        "type": 3,
+                        "choices": [
+                            {
+                                "name": "new",
+                                "value": "new"
+                            },
+                            {
+                                "name": "under_review",
+                                "value": "under_review"
+                            },
+                            {
+                                "name": "confirmed",
+                                "value": "confirmed"
+                            },
+                            {
+                                "name": "dismissed",
+                                "value": "dismissed"
+                            },
+                            {
+                                "name": "resolved",
+                                "value": "resolved"
+                            }
+                        ],
+                        "name": "status",
+                        "description": "Optional status filter.",
+                        "required": false
+                    },
+                    {
+                        "type": 3,
+                        "name": "tag",
+                        "description": "Optional exact tag filter.",
+                        "required": false
+                    },
+                    {
+                        "type": 3,
+                        "name": "created_from",
+                        "description": "Optional ISO date lower bound.",
+                        "required": false
+                    },
+                    {
+                        "type": 3,
+                        "name": "created_to",
+                        "description": "Optional ISO date upper bound.",
+                        "required": false
+                    }
+                ]
+            },
+            {
+                "type": 1,
+                "name": "view",
+                "description": "View one incident by short ID.",
+                "options": [
+                    {
+                        "type": 3,
+                        "name": "incident_id",
+                        "description": "Incident short ID. Leave blank to pick from a menu.",
+                        "required": false
+                    }
+                ]
+            },
+            {
+                "type": 1,
+                "name": "status",
+                "description": "Update incident status.",
+                "options": [
+                    {
+                        "type": 3,
+                        "name": "incident_id",
+                        "description": "Incident short ID.",
+                        "required": true
+                    },
+                    {
+                        "type": 3,
+                        "choices": [
+                            {
+                                "name": "new",
+                                "value": "new"
+                            },
+                            {
+                                "name": "under_review",
+                                "value": "under_review"
+                            },
+                            {
+                                "name": "confirmed",
+                                "value": "confirmed"
+                            },
+                            {
+                                "name": "dismissed",
+                                "value": "dismissed"
+                            },
+                            {
+                                "name": "resolved",
+                                "value": "resolved"
+                            }
+                        ],
+                        "name": "status",
+                        "description": "New incident status.",
+                        "required": true
+                    },
+                    {
+                        "type": 3,
+                        "name": "note",
+                        "description": "Optional audit note for this change.",
+                        "required": false
+                    }
+                ]
+            },
+            {
+                "type": 1,
+                "name": "note",
+                "description": "Append an internal note to an incident.",
+                "options": [
+                    {
+                        "type": 3,
+                        "name": "incident_id",
+                        "description": "Incident short ID.",
+                        "required": true
+                    },
+                    {
+                        "type": 3,
+                        "name": "note",
+                        "description": "Internal note to append.",
+                        "required": true
+                    }
+                ]
+            }
+        ],
+        "name": "incident",
+        "description": "Review and update incident reports (superusers only).",
+        "type": 1
+    },
+    "news": {
+        "options": [
+            {
+                "type": 3,
+                "name": "query",
+                "description": "Search query (e.g. \"AI\", \"climate change\")",
+                "required": false
+            },
+            {
+                "type": 3,
+                "name": "category",
+                "description": "News category (e.g., tech, sports, politics)",
+                "required": false
+            },
+            {
+                "max_value": 5,
+                "min_value": 1,
+                "type": 4,
+                "name": "max_results",
+                "description": "Maximum number of news items to return",
+                "required": false
+            },
+            {
+                "type": 3,
+                "choices": [
+                    {
+                        "name": "None",
+                        "value": "none"
+                    },
+                    {
+                        "name": "Low",
+                        "value": "low"
+                    },
+                    {
+                        "name": "Medium",
+                        "value": "medium"
+                    },
+                    {
+                        "name": "High",
+                        "value": "high"
+                    },
+                    {
+                        "name": "Extra high",
+                        "value": "xhigh"
+                    },
+                    {
+                        "name": "Maximum",
+                        "value": "max"
+                    }
+                ],
+                "name": "reasoning_effort",
+                "description": "How much effort to put into reasoning",
+                "required": false
+            },
+            {
+                "type": 3,
+                "choices": [
+                    {
+                        "name": "Low",
+                        "value": "low"
+                    },
+                    {
+                        "name": "Medium",
+                        "value": "medium"
+                    },
+                    {
+                        "name": "High",
+                        "value": "high"
+                    }
+                ],
+                "name": "verbosity",
+                "description": "How verbose the response should be",
+                "required": false
+            }
+        ],
+        "name": "news",
+        "description": "Get the latest news",
+        "type": 1
+    },
+    "ping": {
+        "options": [],
+        "name": "ping",
+        "description": "Replies with Pong!",
+        "type": 1
+    },
+    "trace-preview": {
+        "options": [
+            {
+                "max_value": 5,
+                "min_value": 1,
+                "type": 4,
+                "name": "tightness",
+                "description": "T axis: concision and structural efficiency.",
+                "required": true
+            },
+            {
+                "max_value": 5,
+                "min_value": 1,
+                "type": 4,
+                "name": "rationale",
+                "description": "R axis: amount of visible rationale and trade-off explanation.",
+                "required": true
+            },
+            {
+                "max_value": 5,
+                "min_value": 1,
+                "type": 4,
+                "name": "attribution",
+                "description": "A axis: clarity between sourced and inferred content.",
+                "required": true
+            },
+            {
+                "max_value": 5,
+                "min_value": 1,
+                "type": 4,
+                "name": "caution",
+                "description": "C axis: safeguard posture and overclaim restraint.",
+                "required": true
+            },
+            {
+                "max_value": 5,
+                "min_value": 1,
+                "type": 4,
+                "name": "extent",
+                "description": "E axis: breadth of viable options and perspectives.",
+                "required": true
+            },
+            {
+                "max_value": 5,
+                "min_value": 1,
+                "type": 4,
+                "name": "evidence_score",
+                "description": "Evidence score for the metadata bar (1-5).",
+                "required": true
+            },
+            {
+                "max_value": 5,
+                "min_value": 1,
+                "type": 4,
+                "name": "freshness_score",
+                "description": "Freshness score for the metadata bar (1-5).",
+                "required": true
+            }
+        ],
+        "name": "trace-preview",
+        "description": "Render an experimental TRACE card image (developer only).",
+        "type": 1
+    }
+}

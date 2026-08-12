@@ -260,8 +260,10 @@ export async function resolveResponseAnchorMessage(
     const referencedId = message.reference?.messageId;
     if (referencedId && message.channel.isTextBased()) {
         try {
-            const referenced =
-                await message.channel.messages.fetch(referencedId);
+            const referenced = await message.channel.messages.fetch({
+                message: referencedId,
+                cache: false,
+            });
             if (referenced) {
                 return referenced;
             }
@@ -292,6 +294,7 @@ export async function resolveResponseAnchorMessage(
         const previousMessages = await message.channel.messages.fetch({
             before: message.id,
             limit: MAX_PRECEDING_RESPONSE_MESSAGES,
+            cache: false,
         });
         const ordered = Array.from(previousMessages.values()).sort(
             (a, b) => b.createdTimestamp - a.createdTimestamp
