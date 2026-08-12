@@ -175,7 +175,8 @@ fly ssh console -a <app> -s <machine-id> -C "grep MemAvailable /proc/meminfo; ps
 ```
 
 `MemAvailable` is in KiB; divide by 1024 for MiB. Record each Node process RSS
-in KiB as well. For a three-bot 512 MB Machine, acceptance requires at least
-96 MiB `MemAvailable` and at least 15% less used memory than the fresh,
-same-config baseline. Treat active image-generation memory separately; its
-payload transport is outside this verification.
+in KiB as well. For a three-bot 768 MB Machine, acceptance requires at least
+128 MiB `MemAvailable` and at least 15% less used memory than the fresh,
+same-config baseline. Also run the supported large image-generation case with
+previews enabled and disabled; it must complete without an OOM kill or task
+recovery.
