@@ -503,6 +503,7 @@ function buildContextFromEmbed(
         extractModelFromPromptLabel(currentPromptResult.fieldName) ??
         extractModelFromPromptLabel(refinedPromptField) ??
         extractModelFromPromptLabel(originalPromptResult.fieldName) ??
+        fieldMap.get('Image prompt model') ??
         fieldMap.get('Text model') ??
         fieldMap.get('Text Model') ??
         fieldMap.get('Model');

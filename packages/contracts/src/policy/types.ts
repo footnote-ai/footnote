@@ -1176,6 +1176,14 @@ export type ImageGenerationMetadata = {
     };
     request: {
         textModel: string;
+        reasoningEffort:
+            | 'none'
+            | 'low'
+            | 'medium'
+            | 'high'
+            | 'xhigh'
+            | 'max'
+            | null;
         imageModel: string;
         quality: 'low' | 'medium' | 'high' | 'auto';
         size: 'auto' | '1024x1024' | '1024x1536' | '1536x1024';
@@ -1196,15 +1204,57 @@ export type ImageGenerationMetadata = {
     };
     usage: {
         inputTokens: number;
+        cachedInputTokens?: number;
+        cacheWriteTokens?: number;
         outputTokens: number;
         totalTokens: number;
         imageCount: number;
+        partialImageCount: number;
+        providerUsageAvailable?: boolean;
     };
     costs: {
         text: number;
         image: number;
         total: number;
         perImage: number;
+    };
+    /**
+     * Backend-owned cost attribution. Prompt tokens never belong to the image
+     * renderer, while image settings and image cost remain on the renderer.
+     */
+    costComponents: {
+        prompt: {
+            model: string;
+            inputTokens: number;
+            cachedInputTokens?: number;
+            cacheWriteTokens?: number;
+            outputTokens: number;
+            totalTokens: number;
+            reasoningEffort:
+                | 'none'
+                | 'low'
+                | 'medium'
+                | 'high'
+                | 'xhigh'
+                | 'max'
+                | null;
+            inputCost: number;
+            outputCost: number;
+            totalCost: number;
+            completeness: 'complete' | 'partial' | 'unknown';
+            incompleteReasons: string[];
+        };
+        render: {
+            model: string;
+            imageCount: number;
+            partialImageCount: number;
+            quality: 'low' | 'medium' | 'high' | 'auto';
+            size: 'auto' | '1024x1024' | '1024x1536' | '1536x1024';
+            perImageCost: number;
+            totalCost: number;
+            completeness: 'complete' | 'unknown';
+            incompleteReasons: string[];
+        };
     };
 };
 

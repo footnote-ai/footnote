@@ -6,6 +6,7 @@
  * @footnote-ethics: medium - Backend-owned image execution affects cost visibility and image-generation transparency.
  */
 import type {
+    ImagePromptReasoningEffort,
     ImageGenerationPartialImage,
     ImageGenerationRuntime,
     ImageGenerationResult,
@@ -21,7 +22,9 @@ import {
     internalImageTextModels,
 } from '@footnote/contracts/providers';
 import { PostInternalImageGenerateResponseSchema } from '@footnote/contracts/web/schemas';
+import { estimateOpenAIImageGenerationCost } from '@footnote/contracts/pricing';
 import {
+    estimateBackendTextCost,
     recordBackendLLMUsage,
     type BackendLLMCostRecord,
 } from './llmCostRecorder.js';
@@ -77,6 +80,22 @@ const logImageMemoryCheckpoint = (
         arrayBuffersBytes: memory.arrayBuffers,
     });
 };
+
+const imagePromptReasoningModels = new Set([
+    'gpt-5.6-luna',
+    'gpt-5.6-terra',
+    'gpt-5.6-sol',
+]);
+
+/**
+ * Resolves the backend-owned reasoning policy for image-prompt Responses
+ * calls. Image rendering remains a separate tool operation, and this does not
+ * affect Workflow planner or response reasoning settings.
+ */
+export const resolveImagePromptReasoningEffort = (
+    textModel: string
+): ImagePromptReasoningEffort | undefined =>
+    imagePromptReasoningModels.has(textModel) ? 'low' : undefined;
 
 export type CreateInternalImageTaskServiceOptions = {
     imageGenerationRuntime: ImageGenerationRuntime;
@@ -143,6 +162,9 @@ const toInternalImageResponse = (
     result: {
         responseId: result.responseId,
         textModel: validateResponseTextModel(result.textModel),
+        ...(result.reasoningEffort !== undefined && {
+            reasoningEffort: result.reasoningEffort,
+        }),
         imageModel: validateResponseImageModel(result.imageModel),
         revisedPrompt: result.revisedPrompt,
         finalStyle: result.finalStyle,
@@ -194,6 +216,9 @@ export const createInternalImageTaskService = ({
             systemPrompt,
             developerPrompt,
             textModel: request.textModel,
+            reasoningEffort: resolveImagePromptReasoningEffort(
+                request.textModel
+            ),
             imageModel: request.imageModel,
             quality: request.quality,
             size: request.size,
@@ -229,22 +254,68 @@ export const createInternalImageTaskService = ({
             result.finalImageBase64.length
         );
 
-        try {
-            recordUsage({
-                feature: 'image',
-                model: result.imageModel,
+        const promptCost = estimateBackendTextCost(
+            result.textModel,
+            result.usage.inputTokens,
+            result.usage.outputTokens,
+            {
+                cachedInputTokens: result.usage.cachedInputTokens,
+                cacheWriteTokens: result.usage.cacheWriteTokens,
+                providerUsageAvailable:
+                    result.usage.providerUsageAvailable ?? false,
+            }
+        );
+        const renderCost = estimateOpenAIImageGenerationCost({
+            model: result.imageModel,
+            quality: request.quality,
+            size: request.size,
+            imageCount: result.usage.imageCount,
+            partialImageCount: result.usage.partialImageCount,
+        });
+        const timestamp = Date.now();
+        const imageCostRecords: BackendLLMCostRecord[] = [
+            {
+                feature: 'image_prompt',
+                model: result.textModel,
                 promptTokens: result.usage.inputTokens,
+                ...(result.usage.cachedInputTokens !== undefined && {
+                    cachedInputTokens: result.usage.cachedInputTokens,
+                }),
+                ...(result.usage.cacheWriteTokens !== undefined && {
+                    cacheWriteTokens: result.usage.cacheWriteTokens,
+                }),
                 completionTokens: result.usage.outputTokens,
                 totalTokens: result.usage.totalTokens,
-                inputCostUsd: result.costs.text,
-                outputCostUsd: result.costs.image,
-                totalCostUsd: result.costs.total,
-                timestamp: Date.now(),
-            });
-        } catch (error) {
-            imageTaskLogger.warn(
-                `Internal image task usage recording failed: ${error instanceof Error ? error.message : String(error)}`
-            );
+                ...promptCost,
+                timestamp,
+            },
+            {
+                feature: 'image_render',
+                model: result.imageModel,
+                promptTokens: 0,
+                completionTokens: 0,
+                totalTokens: 0,
+                inputCostUsd: 0,
+                outputCostUsd: renderCost.totalCost,
+                totalCostUsd: renderCost.totalCost,
+                costCompleteness: renderCost.completeness,
+                costIncompleteReasons: renderCost.incompleteReasons,
+                imageCount: result.usage.imageCount,
+                partialImageCount: result.usage.partialImageCount,
+                imageQuality: request.quality,
+                imageSize: request.size,
+                timestamp,
+            },
+        ];
+
+        for (const record of imageCostRecords) {
+            try {
+                recordUsage(record);
+            } catch (error) {
+                imageTaskLogger.warn(
+                    `Internal image ${record.feature} usage recording failed: ${error instanceof Error ? error.message : String(error)}`
+                );
+            }
         }
 
         assertImagePayloadLimit(

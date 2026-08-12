@@ -47,7 +47,7 @@ import type {
     ImageTextModel,
     ImageOutputFormat,
 } from './image/types.js';
-import { imageRenderModels, imageTextModels } from './image/types.js';
+import { imageRenderModels, imageTextModelChoices } from './image/types.js';
 import {
     saveRetryContext,
     type ImageGenerationContext,
@@ -82,7 +82,6 @@ type StatusField = { name: string; value: string; inline: boolean };
 type StringChoice = { name: string; value: string };
 
 const QUALITY_LEVELS: ImageQualityType[] = ['low', 'medium', 'high'];
-const DISCORD_CHOICE_LIMIT = 25;
 
 const logImageMemoryCheckpoint = (
     stage:
@@ -102,32 +101,32 @@ const logImageMemoryCheckpoint = (
     });
 };
 
-const clampChoicesForDiscord = (
-    label: string,
-    choices: StringChoice[]
-): StringChoice[] => {
-    if (choices.length > DISCORD_CHOICE_LIMIT) {
-        logger.warn(
-            `${label} exceeded Discord's ${DISCORD_CHOICE_LIMIT}-choice limit; truncating command choices.`
-        );
-    }
+const deprecatedImageRenderModels = new Set<ImageRenderModel>([
+    'gpt-image-1.5',
+    'chatgpt-image-latest',
+    'gpt-image-1',
+    'gpt-image-1-mini',
+    'dall-e-3',
+    'dall-e-2',
+]);
 
-    return choices.slice(0, DISCORD_CHOICE_LIMIT);
+const imageRenderModelDisplayNames: Record<ImageRenderModel, string> = {
+    'gpt-image-2': 'GPT Image 2',
+    'gpt-image-1.5': 'GPT Image 1.5',
+    'chatgpt-image-latest': 'ChatGPT Image (Latest)',
+    'gpt-image-1': 'GPT Image 1',
+    'gpt-image-1-mini': 'GPT Image 1 Mini',
+    'dall-e-3': 'DALL-E 3',
+    'dall-e-2': 'DALL-E 2',
 };
 
-const imageRenderModelChoices: StringChoice[] = clampChoicesForDiscord(
-    'imageRenderModels',
-    imageRenderModels.map((model) => ({
-        name: model,
+const imageRenderModelChoices: StringChoice[] = imageRenderModels.map(
+    (model) => ({
+        name: deprecatedImageRenderModels.has(model)
+            ? `${imageRenderModelDisplayNames[model]} (deprecated)`
+            : imageRenderModelDisplayNames[model],
         value: model,
-    }))
-);
-const imageTextModelChoices: StringChoice[] = clampChoicesForDiscord(
-    'imageTextModels',
-    imageTextModels.map((model) => ({
-        name: model,
-        value: model,
-    }))
+    })
 );
 
 const clampOutputCompression = (value: number | null): number => {
@@ -182,7 +181,7 @@ function buildInitialStatusFields(
             inline: true,
         },
         {
-            name: 'Text model',
+            name: 'Image prompt model',
             value: context.textModel,
             inline: true,
         },
@@ -575,9 +574,9 @@ const imageCommand: Command = {
         )
         .addStringOption((option) =>
             option
-                .setName('text_model')
+                .setName('image_prompt_model')
                 .setDescription(
-                    `The text model to use for prompt adjustment (optional; defaults to ${DEFAULT_TEXT_MODEL})`
+                    'Image prompt model for this request only; does not change Workflow or response models.'
                 )
                 .addChoices(...imageTextModelChoices)
                 .setRequired(false)
@@ -625,7 +624,7 @@ const imageCommand: Command = {
 
         const textModel =
             (interaction.options.getString(
-                'text_model'
+                'image_prompt_model'
             ) as ImageTextModel | null) ?? DEFAULT_TEXT_MODEL;
         const imageModel =
             (interaction.options.getString(

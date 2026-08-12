@@ -50,21 +50,21 @@ test('GPT-5.6 tiers use their documented base and cached token rates', () => {
     const cases = [
         {
             model: 'gpt-5.6-sol',
-            expectedInputCost: 0.55,
-            expectedOutputCost: 3,
-            expectedTotalCost: 3.55,
-        },
-        {
-            model: 'gpt-5.6-terra',
             expectedInputCost: 0.275,
             expectedOutputCost: 1.5,
             expectedTotalCost: 1.775,
         },
         {
-            model: 'gpt-5.6-luna',
+            model: 'gpt-5.6-terra',
             expectedInputCost: 0.11,
             expectedOutputCost: 0.6,
             expectedTotalCost: 0.71,
+        },
+        {
+            model: 'gpt-5.6-luna',
+            expectedInputCost: 0.011,
+            expectedOutputCost: 0.06,
+            expectedTotalCost: 0.071,
         },
     ] as const;
 
@@ -93,9 +93,9 @@ test('invalid GPT-5.6 input breakdowns cannot bill more tokens than reported', (
         cacheWriteTokens: 80_000,
     });
 
-    assert.equal(result.inputCost, 0.25);
+    assert.equal(result.inputCost, 0.1);
     assert.equal(result.outputCost, 0);
-    assert.equal(result.totalCost, 0.25);
+    assert.equal(result.totalCost, 0.1);
     assert.equal(result.completeness, 'partial');
     assert.deepEqual(result.appliedRules, []);
     assert.deepEqual(result.incompleteReasons, [
@@ -109,8 +109,8 @@ test('GPT-5.6 cache writes use 1.25 times the uncached input rate', () => {
         cacheWriteTokens: 200_000,
     });
 
-    assert.equal(result.inputCost, 0.625);
-    assert.equal(result.totalCost, 0.625);
+    assert.equal(result.inputCost, 0.25);
+    assert.equal(result.totalCost, 0.25);
     assert.equal(result.completeness, 'complete');
     assert.deepEqual(result.appliedRules, ['prompt_cache_write_multiplier']);
 });
@@ -121,9 +121,9 @@ test('GPT-5.6 long-context multipliers apply to the full request above 272K inpu
         cacheWriteTokens: 100_000,
     });
 
-    assert.ok(Math.abs(result.inputCost - 0.47) < 1e-12);
-    assert.ok(Math.abs(result.outputCost - 0.9) < 1e-12);
-    assert.ok(Math.abs(result.totalCost - 1.37) < 1e-12);
+    assert.ok(Math.abs(result.inputCost - 0.047) < 1e-12);
+    assert.ok(Math.abs(result.outputCost - 0.09) < 1e-12);
+    assert.ok(Math.abs(result.totalCost - 0.137) < 1e-12);
     assert.deepEqual(result.appliedRules, [
         'prompt_cache_read_discount',
         'prompt_cache_write_multiplier',
@@ -135,14 +135,24 @@ test('GPT-5.6 long-context multipliers apply to the full request above 272K inpu
 test('GPT-5.6 estimates stay fail-open but partial when cache usage is unavailable', () => {
     const result = estimateOpenAITextCost('gpt-5.6-terra', 200_000, 200_000);
 
-    assert.equal(result.inputCost, 0.5);
-    assert.equal(result.outputCost, 3);
-    assert.equal(result.totalCost, 3.5);
+    assert.ok(Math.abs(result.inputCost - 0.2) < 1e-12);
+    assert.ok(Math.abs(result.outputCost - 1.2) < 1e-12);
+    assert.ok(Math.abs(result.totalCost - 1.4) < 1e-12);
     assert.equal(result.completeness, 'partial');
     assert.deepEqual(result.incompleteReasons, [
         'cached_input_tokens_unavailable',
         'cache_write_tokens_unavailable',
     ]);
+});
+
+test('provider-absent text usage remains incomplete instead of becoming measured zero usage', () => {
+    const result = estimateOpenAITextCost('gpt-5.4-nano', 0, 0, {
+        providerUsageAvailable: false,
+    });
+
+    assert.equal(result.totalCost, 0);
+    assert.equal(result.completeness, 'partial');
+    assert.deepEqual(result.incompleteReasons, ['provider_usage_unavailable']);
 });
 
 test('estimateOpenAIImageGenerationCost keeps auto settings unresolved so callers can treat cost as unknown', () => {
@@ -156,6 +166,8 @@ test('estimateOpenAIImageGenerationCost keeps auto settings unresolved so caller
     assert.equal(result.effectiveSize, 'auto');
     assert.equal(result.perImageCost, 0);
     assert.equal(result.totalCost, 0);
+    assert.equal(result.completeness, 'unknown');
+    assert.deepEqual(result.incompleteReasons, ['auto_quality', 'auto_size']);
 });
 
 test('estimateOpenAIImageGenerationCost multiplies per-image cost by image count', () => {
@@ -168,6 +180,28 @@ test('estimateOpenAIImageGenerationCost multiplies per-image cost by image count
 
     assert.equal(result.perImageCost, 0.015);
     assert.equal(result.totalCost, 0.03);
+});
+
+test('image pricing resolves current and supported deprecated render models', () => {
+    const cases = [
+        { model: 'gpt-image-2', expectedCost: 0.006 },
+        { model: 'gpt-image-1.5', expectedCost: 0.009 },
+        { model: 'chatgpt-image-latest', expectedCost: 0.009 },
+        { model: 'gpt-image-1', expectedCost: 0.011 },
+        { model: 'gpt-image-1-mini', expectedCost: 0.005 },
+    ] as const;
+
+    for (const { model, expectedCost } of cases) {
+        const result = estimateOpenAIImageGenerationCost({
+            model,
+            quality: 'low',
+            size: '1024x1024',
+        });
+
+        assert.equal(result.perImageCost, expectedCost);
+        assert.equal(result.totalCost, expectedCost);
+        assert.equal(result.completeness, 'complete');
+    }
 });
 
 test('estimateOpenAIImageGenerationCost adds the partial preview surcharge', () => {

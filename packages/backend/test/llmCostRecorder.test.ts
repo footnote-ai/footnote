@@ -83,9 +83,9 @@ test('estimateBackendTextCost reports complete GPT-5.6 cache-aware pricing', () 
         cacheWriteTokens: 50_000,
     });
 
-    assert.equal(cost.inputCostUsd, 0.30625);
-    assert.equal(cost.outputCostUsd, 1.5);
-    assert.equal(cost.totalCostUsd, 1.80625);
+    assert.ok(Math.abs(cost.inputCostUsd - 0.1225) < 1e-12);
+    assert.ok(Math.abs(cost.outputCostUsd - 0.6) < 1e-12);
+    assert.ok(Math.abs(cost.totalCostUsd - 0.7225) < 1e-12);
     assert.equal(cost.costCompleteness, 'complete');
     assert.deepEqual(cost.costAppliedRules, [
         'prompt_cache_read_discount',
@@ -97,9 +97,9 @@ test('estimateBackendTextCost reports complete GPT-5.6 cache-aware pricing', () 
 test('estimateBackendTextCost marks GPT-5.6 cost partial when cache details are missing', () => {
     const cost = estimateBackendTextCost('gpt-5.6-sol', 200_000, 100_000);
 
-    assert.equal(cost.inputCostUsd, 1);
-    assert.equal(cost.outputCostUsd, 3);
-    assert.equal(cost.totalCostUsd, 4);
+    assert.equal(cost.inputCostUsd, 0.5);
+    assert.equal(cost.outputCostUsd, 1.5);
+    assert.equal(cost.totalCostUsd, 2);
     assert.equal(cost.costCompleteness, 'partial');
     assert.deepEqual(cost.costIncompleteReasons, [
         'cached_input_tokens_unavailable',

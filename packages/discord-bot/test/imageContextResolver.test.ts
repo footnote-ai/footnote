@@ -38,6 +38,7 @@ const createTraceMetadata = (): ResponseMetadata => ({
         },
         request: {
             textModel: 'gpt-5-mini',
+            reasoningEffort: null,
             imageModel: 'gpt-image-1-mini',
             quality: 'medium',
             size: '1024x1024',
@@ -61,12 +62,38 @@ const createTraceMetadata = (): ResponseMetadata => ({
             outputTokens: 4,
             totalTokens: 16,
             imageCount: 1,
+            partialImageCount: 0,
         },
         costs: {
             text: 0.00001,
             image: 0.001,
             total: 0.00101,
             perImage: 0.001,
+        },
+        costComponents: {
+            prompt: {
+                model: 'gpt-5-mini',
+                inputTokens: 12,
+                outputTokens: 4,
+                totalTokens: 16,
+                reasoningEffort: null,
+                inputCost: 0.00001,
+                outputCost: 0,
+                totalCost: 0.00001,
+                completeness: 'complete',
+                incompleteReasons: [],
+            },
+            render: {
+                model: 'gpt-image-1-mini',
+                imageCount: 1,
+                partialImageCount: 0,
+                quality: 'medium',
+                size: '1024x1024',
+                perImageCost: 0.001,
+                totalCost: 0.001,
+                completeness: 'complete',
+                incompleteReasons: [],
+            },
         },
     },
 });
@@ -180,7 +207,7 @@ test('recoverContextDetailsFromMessage parses legacy embed fields for fallback c
                 fields: [
                     { name: 'Prompt', value: 'legacy prompt text' },
                     { name: 'Image model', value: 'gpt-image-1-mini' },
-                    { name: 'Text model', value: 'gpt-5-mini' },
+                    { name: 'Image prompt model', value: 'gpt-5-mini' },
                     { name: 'Quality', value: 'Medium' },
                     { name: 'Aspect ratio', value: 'Square' },
                     { name: 'Resolution', value: '1024x1024' },
@@ -204,3 +231,27 @@ test('recoverContextDetailsFromMessage parses legacy embed fields for fallback c
     assert.equal(recovered?.responseId, 'resp_legacy_1');
     assert.equal(recovered?.inputId, 'resp_legacy_parent');
 });
+
+for (const fieldName of ['Text model', 'Text Model']) {
+    test(`recoverContextDetailsFromMessage recovers ${fieldName} from legacy embeds`, async () => {
+        const recovered = await recoverContextDetailsFromMessage({
+            id: `message-${fieldName}`,
+            embeds: [
+                {
+                    fields: [
+                        { name: 'Prompt', value: 'legacy prompt text' },
+                        { name: fieldName, value: 'gpt-5.6-terra' },
+                        {
+                            name: 'Image model',
+                            value: 'gpt-image-1-mini',
+                        },
+                    ],
+                },
+            ],
+            channel: null,
+            client: { user: { id: 'bot-user-1' } },
+        } as never);
+
+        assert.equal(recovered?.context.textModel, 'gpt-5.6-terra');
+    });
+}

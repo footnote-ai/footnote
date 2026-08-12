@@ -1071,6 +1071,9 @@ const ImageGenerationMetadataSchema = z
         request: z
             .object({
                 textModel: z.string().min(1),
+                reasoningEffort: z
+                    .enum(['none', 'low', 'medium', 'high', 'xhigh', 'max'])
+                    .nullable(),
                 imageModel: z.string().min(1),
                 quality: z.enum(['low', 'medium', 'high', 'auto']),
                 size: z.enum(['auto', '1024x1024', '1024x1536', '1536x1024']),
@@ -1102,9 +1105,72 @@ const ImageGenerationMetadataSchema = z
         usage: z
             .object({
                 inputTokens: z.number().int().nonnegative(),
+                cachedInputTokens: z.number().int().nonnegative().optional(),
+                cacheWriteTokens: z.number().int().nonnegative().optional(),
                 outputTokens: z.number().int().nonnegative(),
                 totalTokens: z.number().int().nonnegative(),
                 imageCount: z.number().int().nonnegative(),
+                partialImageCount: z.number().int().nonnegative(),
+                providerUsageAvailable: z.boolean().optional(),
+            })
+            .strict(),
+        costComponents: z
+            .object({
+                prompt: z
+                    .object({
+                        model: z.string().min(1),
+                        inputTokens: z.number().int().nonnegative(),
+                        cachedInputTokens: z
+                            .number()
+                            .int()
+                            .nonnegative()
+                            .optional(),
+                        cacheWriteTokens: z
+                            .number()
+                            .int()
+                            .nonnegative()
+                            .optional(),
+                        outputTokens: z.number().int().nonnegative(),
+                        totalTokens: z.number().int().nonnegative(),
+                        reasoningEffort: z
+                            .enum([
+                                'none',
+                                'low',
+                                'medium',
+                                'high',
+                                'xhigh',
+                                'max',
+                            ])
+                            .nullable(),
+                        inputCost: z.number().nonnegative(),
+                        outputCost: z.number().nonnegative(),
+                        totalCost: z.number().nonnegative(),
+                        completeness: z.enum([
+                            'complete',
+                            'partial',
+                            'unknown',
+                        ]),
+                        incompleteReasons: z.array(z.string()),
+                    })
+                    .strict(),
+                render: z
+                    .object({
+                        model: z.string().min(1),
+                        imageCount: z.number().int().nonnegative(),
+                        partialImageCount: z.number().int().nonnegative(),
+                        quality: z.enum(['low', 'medium', 'high', 'auto']),
+                        size: z.enum([
+                            'auto',
+                            '1024x1024',
+                            '1024x1536',
+                            '1536x1024',
+                        ]),
+                        perImageCost: z.number().nonnegative(),
+                        totalCost: z.number().nonnegative(),
+                        completeness: z.enum(['complete', 'unknown']),
+                        incompleteReasons: z.array(z.string()),
+                    })
+                    .strict(),
             })
             .strict(),
         costs: z
@@ -1492,6 +1558,7 @@ export const PostInternalImageGenerateResponseSchema = z
             .object({
                 responseId: z.string().min(1).nullable(),
                 textModel: z.enum(internalImageTextModels),
+                reasoningEffort: z.enum(supportedReasoningEfforts).optional(),
                 imageModel: z.enum(internalImageRenderModels),
                 revisedPrompt: z.string().nullable(),
                 finalStyle: z.string().min(1),
@@ -1502,9 +1569,21 @@ export const PostInternalImageGenerateResponseSchema = z
                 usage: z
                     .object({
                         inputTokens: z.number().int().nonnegative(),
+                        cachedInputTokens: z
+                            .number()
+                            .int()
+                            .nonnegative()
+                            .optional(),
+                        cacheWriteTokens: z
+                            .number()
+                            .int()
+                            .nonnegative()
+                            .optional(),
                         outputTokens: z.number().int().nonnegative(),
                         totalTokens: z.number().int().nonnegative(),
                         imageCount: z.number().int().nonnegative(),
+                        partialImageCount: z.number().int().nonnegative(),
+                        providerUsageAvailable: z.boolean().optional(),
                     })
                     .strict(),
                 costs: z

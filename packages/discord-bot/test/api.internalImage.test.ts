@@ -57,7 +57,8 @@ test('runImageTaskViaApi posts to /api/internal/image with trusted headers and r
                 task: 'generate',
                 result: {
                     responseId: 'resp_123',
-                    textModel: 'gpt-5-mini',
+                    textModel: 'gpt-5.6-luna',
+                    reasoningEffort: 'low',
                     imageModel: 'gpt-image-1-mini',
                     revisedPrompt: 'draw a reflective skyline at dusk',
                     finalStyle: 'vivid',
@@ -72,9 +73,13 @@ test('runImageTaskViaApi posts to /api/internal/image with trusted headers and r
                     outputCompression: 100,
                     usage: {
                         inputTokens: 42,
+                        cachedInputTokens: 10,
+                        cacheWriteTokens: 5,
                         outputTokens: 18,
                         totalTokens: 60,
                         imageCount: 1,
+                        partialImageCount: 0,
+                        providerUsageAvailable: true,
                     },
                     costs: {
                         text: 0.000046,
@@ -100,6 +105,14 @@ test('runImageTaskViaApi posts to /api/internal/image with trusted headers and r
     assert.deepEqual(capturedBody, request);
     assert.equal(response.task, 'generate');
     assert.equal(response.result.responseId, 'resp_123');
+    assert.equal(response.result.reasoningEffort, 'low');
+    assert.equal(response.result.costs.total, 0.011046);
+    assert.ok(
+        Math.abs(
+            response.result.costs.total -
+                (response.result.costs.text + response.result.costs.image)
+        ) < 1e-12
+    );
 });
 
 test('runImageTaskViaApi throws backend request errors so callers can handle them', async () => {
@@ -160,6 +173,7 @@ test('runImageTaskStreamViaApi parses NDJSON events and returns the terminal res
                             outputTokens: 18,
                             totalTokens: 60,
                             imageCount: 1,
+                            partialImageCount: 0,
                         },
                         costs: {
                             text: 0.000046,

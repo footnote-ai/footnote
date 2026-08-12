@@ -7,6 +7,10 @@
  */
 import { logger } from '../utils/logger.js';
 import { envDefaultValues } from '@footnote/config-spec';
+import {
+    internalImageTextModels,
+    type InternalImageTextModelId,
+} from '@footnote/contracts/providers';
 import type {
     ImageOutputCompression,
     ImageOutputFormat,
@@ -18,10 +22,11 @@ import {
     imageOutputFormats,
     imageQualities,
     imageRenderModels,
-    imageTextModels,
 } from '../commands/image/types.js';
 
-const VALID_TEXT_MODELS = new Set<ImageTextModel>(imageTextModels);
+const VALID_TEXT_MODELS = new Set<InternalImageTextModelId>(
+    internalImageTextModels
+);
 const VALID_IMAGE_MODELS = new Set<ImageRenderModel>(imageRenderModels);
 const VALID_IMAGE_QUALITIES = new Set<ImageQualityType>(imageQualities);
 const VALID_OUTPUT_FORMATS = new Set<ImageOutputFormat>(imageOutputFormats);

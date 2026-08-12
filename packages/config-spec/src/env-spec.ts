@@ -1277,8 +1277,9 @@ export const envEntries = [
         required: false,
         secret: false,
         kind: 'string',
-        description: 'Default text model used by image prompting flows.',
-        defaultValue: literal('gpt-4.1-mini'),
+        description:
+            'Default request-local image prompt model. Does not change Workflow or response models.',
+        defaultValue: literal('gpt-5.6-luna'),
         usedBy: ['packages/discord-bot/src/config/imageConfig.ts'],
     }),
 
@@ -1290,7 +1291,8 @@ export const envEntries = [
         required: false,
         secret: false,
         kind: 'string',
-        description: 'Default image render model.',
+        description:
+            'Cost-first default render model. gpt-image-1-mini is deprecated but supported; use gpt-image-2 for current quality-first rendering.',
         defaultValue: literal('gpt-image-1-mini'),
         usedBy: ['packages/discord-bot/src/config/imageConfig.ts'],
     }),

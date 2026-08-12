@@ -6,6 +6,10 @@
  * @footnote-ethics: high - Prompt-rich image provenance payloads affect transparency and future governance controls.
  */
 import { createHash } from 'node:crypto';
+import {
+    estimateOpenAIImageGenerationCost,
+    estimateOpenAITextCost,
+} from '@footnote/contracts/pricing';
 import type {
     ImageGenerationMetadata,
     ResponseMetadata,
@@ -65,6 +69,24 @@ export const buildInternalImageTraceMetadata = (input: {
     const policyTruncated = Boolean(
         input.request.promptPolicy?.policyTruncated
     );
+    const promptCost = estimateOpenAITextCost(
+        input.response.result.textModel,
+        input.response.result.usage.inputTokens,
+        input.response.result.usage.outputTokens,
+        {
+            cachedInputTokens: input.response.result.usage.cachedInputTokens,
+            cacheWriteTokens: input.response.result.usage.cacheWriteTokens,
+            providerUsageAvailable:
+                input.response.result.usage.providerUsageAvailable ?? false,
+        }
+    );
+    const renderCost = estimateOpenAIImageGenerationCost({
+        model: input.response.result.imageModel,
+        quality: input.request.quality,
+        size: input.request.size,
+        imageCount: input.response.result.usage.imageCount,
+        partialImageCount: input.response.result.usage.partialImageCount,
+    });
 
     const imageGeneration: ImageGenerationMetadata = {
         version: 'v1',
@@ -77,6 +99,7 @@ export const buildInternalImageTraceMetadata = (input: {
         },
         request: {
             textModel: input.request.textModel,
+            reasoningEffort: input.response.result.reasoningEffort ?? null,
             imageModel: input.request.imageModel,
             quality: input.request.quality,
             size: input.request.size,
@@ -99,15 +122,64 @@ export const buildInternalImageTraceMetadata = (input: {
         },
         usage: {
             inputTokens: input.response.result.usage.inputTokens,
+            ...(input.response.result.usage.cachedInputTokens !== undefined && {
+                cachedInputTokens:
+                    input.response.result.usage.cachedInputTokens,
+            }),
+            ...(input.response.result.usage.cacheWriteTokens !== undefined && {
+                cacheWriteTokens: input.response.result.usage.cacheWriteTokens,
+            }),
             outputTokens: input.response.result.usage.outputTokens,
             totalTokens: input.response.result.usage.totalTokens,
             imageCount: input.response.result.usage.imageCount,
+            partialImageCount: input.response.result.usage.partialImageCount,
+            ...(input.response.result.usage.providerUsageAvailable !==
+                undefined && {
+                providerUsageAvailable:
+                    input.response.result.usage.providerUsageAvailable,
+            }),
         },
         costs: {
             text: input.response.result.costs.text,
             image: input.response.result.costs.image,
             total: input.response.result.costs.total,
             perImage: input.response.result.costs.perImage,
+        },
+        costComponents: {
+            prompt: {
+                model: input.response.result.textModel,
+                inputTokens: input.response.result.usage.inputTokens,
+                ...(input.response.result.usage.cachedInputTokens !==
+                    undefined && {
+                    cachedInputTokens:
+                        input.response.result.usage.cachedInputTokens,
+                }),
+                ...(input.response.result.usage.cacheWriteTokens !==
+                    undefined && {
+                    cacheWriteTokens:
+                        input.response.result.usage.cacheWriteTokens,
+                }),
+                outputTokens: input.response.result.usage.outputTokens,
+                totalTokens: input.response.result.usage.totalTokens,
+                reasoningEffort: input.response.result.reasoningEffort ?? null,
+                inputCost: promptCost.inputCost,
+                outputCost: promptCost.outputCost,
+                totalCost: promptCost.totalCost,
+                completeness: promptCost.completeness,
+                incompleteReasons: promptCost.incompleteReasons,
+            },
+            render: {
+                model: input.response.result.imageModel,
+                imageCount: input.response.result.usage.imageCount,
+                partialImageCount:
+                    input.response.result.usage.partialImageCount,
+                quality: input.request.quality,
+                size: input.request.size,
+                perImageCost: renderCost.perImageCost,
+                totalCost: renderCost.totalCost,
+                completeness: renderCost.completeness,
+                incompleteReasons: renderCost.incompleteReasons,
+            },
         },
     };
 

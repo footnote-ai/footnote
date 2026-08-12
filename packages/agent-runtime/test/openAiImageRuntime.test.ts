@@ -125,6 +125,10 @@ test('openai image runtime maps request payload and normalizes response artifact
             input_tokens: 42,
             output_tokens: 18,
             total_tokens: 60,
+            input_tokens_details: {
+                cached_tokens: 10,
+                cache_write_tokens: 5,
+            },
         },
         error: null,
     } as unknown as Awaited<
@@ -142,11 +146,14 @@ test('openai image runtime maps request payload and normalizes response artifact
     const result = await runtime.generateImage(
         createRequest({
             followUpResponseId: 'resp_previous',
+            textModel: 'gpt-5.6-luna',
+            reasoningEffort: 'low',
         })
     );
 
-    assert.equal(seenPayload?.model, 'gpt-5-mini');
+    assert.equal(seenPayload?.model, 'gpt-5.6-luna');
     assert.equal(seenPayload?.previous_response_id, 'resp_previous');
+    assert.deepEqual(seenPayload?.reasoning, { effort: 'low' });
     assert.equal(result.responseId, 'resp_123');
     assert.equal(result.finalImageBase64, 'base64-image');
     assert.equal(result.revisedPrompt, 'draw a reflective skyline at dusk');
@@ -154,6 +161,10 @@ test('openai image runtime maps request payload and normalizes response artifact
     assert.equal(result.costs.image, 0.011);
     assert.equal(result.costs.perImage, 0.011);
     assert.equal(result.costs.total > result.costs.image, true);
+    assert.equal(result.reasoningEffort, 'low');
+    assert.equal(result.usage.cachedInputTokens, 10);
+    assert.equal(result.usage.cacheWriteTokens, 5);
+    assert.equal(result.usage.providerUsageAvailable, true);
     assert.equal(result.outputCompression, 100);
 });
 
@@ -294,6 +305,7 @@ test('openai image runtime emits partial-image callbacks when streaming is enabl
         1
     );
     assert.equal(result.finalImageBase64, 'final-base64-image');
+    assert.equal(result.usage.partialImageCount, 2);
     assert.ok(Math.abs(result.costs.image - 0.0126) < 1e-12);
 });
 

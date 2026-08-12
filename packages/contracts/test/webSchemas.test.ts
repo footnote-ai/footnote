@@ -2092,6 +2092,7 @@ test('internal image task schemas enforce a narrow generate-only task union', ()
                 outputTokens: 18,
                 totalTokens: 60,
                 imageCount: 0,
+                partialImageCount: 0,
             },
             costs: {
                 text: 0.000046,

@@ -377,6 +377,35 @@ const createRequestAbortContext = (
     };
 };
 
+type ResponseUsageWithCacheWriteTokens = {
+    cache_write_tokens?: unknown;
+    input_tokens_details?: {
+        cache_write_tokens?: unknown;
+    };
+};
+
+const readNonNegativeInteger = (value: unknown): number | undefined =>
+    typeof value === 'number' && Number.isInteger(value) && value >= 0
+        ? value
+        : undefined;
+
+/**
+ * Reads cache-write usage when a Responses provider payload includes it.
+ * The current SDK type only guarantees cached-token reads, so this stays
+ * deliberately defensive until the provider exposes a stable typed field.
+ */
+const readCacheWriteTokens = (
+    usage: Response['usage'] | undefined
+): number | undefined => {
+    const candidate = usage as unknown as ResponseUsageWithCacheWriteTokens;
+    return (
+        readNonNegativeInteger(candidate?.cache_write_tokens) ??
+        readNonNegativeInteger(
+            candidate?.input_tokens_details?.cache_write_tokens
+        )
+    );
+};
+
 const normalizeResponseToImageResult = (
     request: ImageGenerationRequest,
     response: Pick<Response, 'id' | 'error' | 'output' | 'usage'>,
@@ -408,12 +437,20 @@ const normalizeResponseToImageResult = (
     const outputTokens = response.usage?.output_tokens ?? 0;
     const totalTokens =
         response.usage?.total_tokens ?? inputTokens + outputTokens;
+    const cachedInputTokens =
+        response.usage?.input_tokens_details?.cached_tokens;
+    const cacheWriteTokens = readCacheWriteTokens(response.usage);
     const successfulImageCount =
         imageGenerationCalls.filter((call) => Boolean(call.result)).length || 1;
     const textCost = estimateOpenAITextCost(
         request.textModel,
         inputTokens,
-        outputTokens
+        outputTokens,
+        {
+            cachedInputTokens,
+            cacheWriteTokens,
+            providerUsageAvailable: response.usage !== undefined,
+        }
     );
     const imageCost = estimateOpenAIImageGenerationCost({
         model: request.imageModel,
@@ -426,6 +463,9 @@ const normalizeResponseToImageResult = (
     return {
         responseId: response.id ?? null,
         textModel: request.textModel,
+        ...(request.reasoningEffort !== undefined && {
+            reasoningEffort: request.reasoningEffort,
+        }),
         imageModel: request.imageModel,
         revisedPrompt:
             annotations.adjustedPrompt ?? imageCall.revised_prompt ?? null,
@@ -439,9 +479,13 @@ const normalizeResponseToImageResult = (
                 : clampOutputCompression(request.outputCompression),
         usage: {
             inputTokens,
+            ...(cachedInputTokens !== undefined && { cachedInputTokens }),
+            ...(cacheWriteTokens !== undefined && { cacheWriteTokens }),
             outputTokens,
             totalTokens,
             imageCount: successfulImageCount,
+            partialImageCount,
+            providerUsageAvailable: response.usage !== undefined,
         },
         costs: {
             text: textCost.totalCost,
@@ -522,6 +566,9 @@ const createOpenAiImageRuntime = ({
                 ],
                 tool_choice: toolChoice,
                 previous_response_id: request.followUpResponseId ?? null,
+                ...(request.reasoningEffort !== undefined && {
+                    reasoning: { effort: request.reasoningEffort },
+                }),
             };
 
             logger?.debug?.('Image runtime request payload (redacted).', {

@@ -7,7 +7,6 @@
  */
 import {
     internalImageRenderModels,
-    internalImageTextModels,
     supportedImageOutputFormats,
     type InternalImageRenderModelId,
     type InternalImageTextModelId,
@@ -27,12 +26,29 @@ export type ImageOutputFormat = SupportedImageOutputFormat;
 export type ImageOutputCompression = number;
 
 /**
- * Text models exposed by the Discord image command. This list comes from the
- * shared provider registry so the UI stays aligned with trusted-route
- * validation.
+ * Intentionally small, deterministic image-prompt choices shown in Discord.
+ * Backend validation remains broader through internalImageTextModels.
  */
-export const imageTextModels =
-    internalImageTextModels satisfies readonly ImageTextModel[];
+export const imageTextModels = [
+    'gpt-5.6-luna',
+    'gpt-5.6-terra',
+    'gpt-5.6-sol',
+    'gpt-5.4-nano',
+] as const satisfies readonly ImageTextModel[];
+
+/**
+ * Presentation metadata for the request-local image prompt selector.
+ * Provider ids remain in value and are never decorated for display.
+ */
+export const imageTextModelChoices = [
+    {
+        name: 'gpt-5.6-luna (recommended/default)',
+        value: 'gpt-5.6-luna',
+    },
+    { name: 'gpt-5.6-terra (higher quality)', value: 'gpt-5.6-terra' },
+    { name: 'gpt-5.6-sol (highest quality)', value: 'gpt-5.6-sol' },
+    { name: 'gpt-5.4-nano (lowest cost)', value: 'gpt-5.4-nano' },
+] as const satisfies ReadonlyArray<{ name: string; value: ImageTextModel }>;
 
 /**
  * Image render models exposed by the Discord image command.
