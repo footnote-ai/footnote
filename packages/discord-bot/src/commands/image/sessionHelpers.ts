@@ -105,6 +105,28 @@ function buildTraceViewerUrl(responseId: string | null): string | null {
     return `${baseUrl}/traces/${encodeURIComponent(responseId.trim())}`;
 }
 
+const logImageMemoryCheckpoint = (
+    stage:
+        | 'stream-handling-start'
+        | 'stream-handling-complete'
+        | 'stream-handling-failed'
+        | 'image-decode-start'
+        | 'image-decode-complete'
+        | 'image-base64-released'
+        | 'image-buffer-released-after-cloudinary',
+    fields: Record<string, number | boolean> = {}
+): void => {
+    const memory = process.memoryUsage();
+    logger.info('Image delivery memory checkpoint.', {
+        stage,
+        rssBytes: memory.rss,
+        heapUsedBytes: memory.heapUsed,
+        externalBytes: memory.external,
+        arrayBuffersBytes: memory.arrayBuffers,
+        ...fields,
+    });
+};
+
 const buildImageTaskRequest = (
     context: ImageGenerationContext,
     options: ExecuteImageGenerationOptions
@@ -146,9 +168,13 @@ const buildImageTaskRequest = (
 
 /**
  * Runs the backend-owned image pipeline, uploads the final asset, and returns
- * a normalized payload describing the generation. The caller is responsible
- * for presenting the result (embed, plain message, etc.) and for storing
- * short-lived retry context when needed.
+ * a normalized payload describing the generation. Streamed previews are passed
+ * through without retention; the final base64 is decoded once and released.
+ *
+ * The returned buffer remains caller-owned for Discord attachment fallback.
+ * After a successful Cloudinary upload, this function releases it because the
+ * result URL is sufficient for delivery. The caller owns final fallback-buffer
+ * cleanup after Discord accepts or rejects the response.
  */
 export async function executeImageGeneration(
     context: ImageGenerationContext,
@@ -156,56 +182,86 @@ export async function executeImageGeneration(
 ): Promise<ImageGenerationArtifacts> {
     const start = Date.now();
     const request = buildImageTaskRequest(context, options);
-    const generation = request.stream
-        ? await botApi.runImageTaskStreamViaApi(request, {
-              onPartialImage: options.onPartialImage,
-          })
-        : await botApi.runImageTaskViaApi(request);
+    logImageMemoryCheckpoint('stream-handling-start', {
+        previewsEnabled: Boolean(request.stream),
+    });
+    let finalImageBase64: string;
+    let imageResult: Omit<
+        Awaited<ReturnType<typeof botApi.runImageTaskViaApi>>['result'],
+        'finalImageBase64'
+    >;
+    try {
+        ({
+            result: { finalImageBase64, ...imageResult },
+        } = request.stream
+            ? await botApi.runImageTaskStreamViaApi(request, {
+                  onPartialImage: options.onPartialImage,
+              })
+            : await botApi.runImageTaskViaApi(request));
+        logImageMemoryCheckpoint('stream-handling-complete', {
+            finalImageBase64Chars: finalImageBase64.length,
+        });
+    } catch (error) {
+        logImageMemoryCheckpoint('stream-handling-failed');
+        throw error;
+    }
 
-    const finalImageBuffer = Buffer.from(
-        generation.result.finalImageBase64,
-        'base64'
-    );
-    const extension = generation.result.outputFormat ?? 'png';
+    logImageMemoryCheckpoint('image-decode-start', {
+        finalImageBase64Chars: finalImageBase64.length,
+    });
+    let finalImageBuffer = Buffer.from(finalImageBase64, 'base64');
+    logImageMemoryCheckpoint('image-decode-complete', {
+        finalImageBytes: finalImageBuffer.byteLength,
+    });
+    finalImageBase64 = '';
+    logImageMemoryCheckpoint('image-base64-released', {
+        finalImageBase64Chars: finalImageBase64.length,
+    });
+
+    const extension = imageResult.outputFormat ?? 'png';
     const finalImageFileName = `footnote-image-${Date.now()}.${extension}`;
     let imageUrl: string | null = null;
-    const revisedPrompt = generation.result.revisedPrompt ?? null;
+    const revisedPrompt = imageResult.revisedPrompt ?? null;
     const finalStyle =
-        (generation.result.finalStyle as ImageStylePreset) ?? context.style;
+        (imageResult.finalStyle as ImageStylePreset) ?? context.style;
 
     if (isCloudinaryConfigured) {
         try {
             imageUrl = await uploadToCloudinary(finalImageBuffer, {
                 originalPrompt: context.originalPrompt ?? context.prompt,
                 revisedPrompt,
-                title: generation.result.annotations.title,
-                description: generation.result.annotations.description,
-                noteMessage: generation.result.annotations.note,
-                textModel: generation.result.textModel,
-                imageModel: generation.result.imageModel,
-                outputFormat: generation.result.outputFormat,
-                outputCompression: generation.result.outputCompression,
+                title: imageResult.annotations.title,
+                description: imageResult.annotations.description,
+                noteMessage: imageResult.annotations.note,
+                textModel: imageResult.textModel,
+                imageModel: imageResult.imageModel,
+                outputFormat: imageResult.outputFormat,
+                outputCompression: imageResult.outputCompression,
                 quality: context.quality,
                 size: context.size,
                 background: context.background,
                 style: finalStyle,
                 startTime: start,
                 usage: {
-                    inputTokens: generation.result.usage.inputTokens,
-                    outputTokens: generation.result.usage.outputTokens,
-                    totalTokens: generation.result.usage.totalTokens,
-                    imageCount: generation.result.usage.imageCount,
-                    combinedInputTokens: generation.result.usage.inputTokens,
-                    combinedOutputTokens: generation.result.usage.outputTokens,
-                    combinedTotalTokens: generation.result.usage.totalTokens,
+                    inputTokens: imageResult.usage.inputTokens,
+                    outputTokens: imageResult.usage.outputTokens,
+                    totalTokens: imageResult.usage.totalTokens,
+                    imageCount: imageResult.usage.imageCount,
+                    combinedInputTokens: imageResult.usage.inputTokens,
+                    combinedOutputTokens: imageResult.usage.outputTokens,
+                    combinedTotalTokens: imageResult.usage.totalTokens,
                 },
                 cost: {
-                    text: generation.result.costs.text,
-                    image: generation.result.costs.image,
-                    total: generation.result.costs.total,
-                    perImage: generation.result.costs.perImage,
+                    text: imageResult.costs.text,
+                    image: imageResult.costs.image,
+                    total: imageResult.costs.total,
+                    perImage: imageResult.costs.perImage,
                 },
             });
+            // A Cloudinary URL is enough for the final Discord embed, so do
+            // not keep a fallback attachment buffer after a successful upload.
+            finalImageBuffer = Buffer.alloc(0);
+            logImageMemoryCheckpoint('image-buffer-released-after-cloudinary');
         } catch (error) {
             logger.error('Error uploading to Cloudinary:', error);
         }
@@ -216,31 +272,30 @@ export async function executeImageGeneration(
     }
 
     const artifacts: ImageGenerationArtifacts = {
-        responseId: generation.result.responseId,
-        textModel: generation.result.textModel as ImageTextModel,
-        imageModel: generation.result.imageModel as ImageRenderModel,
+        responseId: imageResult.responseId,
+        textModel: imageResult.textModel as ImageTextModel,
+        imageModel: imageResult.imageModel as ImageRenderModel,
         revisedPrompt,
         finalStyle,
-        annotations: generation.result.annotations,
+        annotations: imageResult.annotations,
         finalImageBuffer,
         finalImageFileName,
         imageUrl,
-        outputFormat: generation.result.outputFormat,
-        outputCompression: generation.result.outputCompression,
+        outputFormat: imageResult.outputFormat,
+        outputCompression: imageResult.outputCompression,
         usage: {
-            inputTokens: generation.result.usage.inputTokens,
-            outputTokens: generation.result.usage.outputTokens,
-            totalTokens: generation.result.usage.totalTokens,
-            imageCount: generation.result.usage.imageCount,
+            inputTokens: imageResult.usage.inputTokens,
+            outputTokens: imageResult.usage.outputTokens,
+            totalTokens: imageResult.usage.totalTokens,
+            imageCount: imageResult.usage.imageCount,
         },
         costs: {
-            text: generation.result.costs.text,
-            image: generation.result.costs.image,
-            total: generation.result.costs.total,
-            perImage: generation.result.costs.perImage,
+            text: imageResult.costs.text,
+            image: imageResult.costs.image,
+            total: imageResult.costs.total,
+            perImage: imageResult.costs.perImage,
         },
-        generationTimeMs:
-            generation.result.generationTimeMs || Date.now() - start,
+        generationTimeMs: imageResult.generationTimeMs ?? Date.now() - start,
     };
 
     return artifacts;

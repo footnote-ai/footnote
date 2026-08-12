@@ -610,7 +610,8 @@ test('internal image task service stores trace metadata for image responses', as
         storeTrace: async (metadata) => {
             storedResponseId = metadata.responseId;
             storedPrompt = metadata.imageGeneration?.prompts.original ?? null;
-            storedActivePrompt = metadata.imageGeneration?.prompts.active ?? null;
+            storedActivePrompt =
+                metadata.imageGeneration?.prompts.active ?? null;
             storedFollowUpResponseId =
                 metadata.imageGeneration?.linkage.followUpResponseId ?? null;
         },
@@ -670,4 +671,66 @@ test('internal image task service keeps success path when trace storage fails', 
     const response = await service.runImageTask(createImageRequestPayload());
 
     assert.equal(response.result.responseId, 'resp_trace_fail_open');
+});
+
+test('internal image endpoint returns a safe error when the provider fails', async () => {
+    const server = await createInternalImageServer({
+        kind: 'test-image-runtime',
+        async generateImage() {
+            throw new Error('provider unavailable');
+        },
+    });
+
+    try {
+        const response = await fetch(`${server.url}/api/internal/image`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-Trace-Token': 'trace-secret',
+            },
+            body: JSON.stringify(createImageRequestPayload()),
+        });
+
+        assert.equal(response.status, 502);
+        assert.deepEqual(await response.json(), {
+            error: 'Failed to execute internal image task',
+        });
+    } finally {
+        await server.close();
+    }
+});
+
+test('internal image task service forwards cancellation to the image runtime', async () => {
+    const controller = new AbortController();
+    let sawAbort = false;
+    let recordedUsage = 0;
+    const service = createInternalImageTaskService({
+        imageGenerationRuntime: {
+            kind: 'test-image-runtime',
+            async generateImage(request) {
+                return new Promise((_, reject) => {
+                    request.signal?.addEventListener(
+                        'abort',
+                        () => {
+                            sawAbort = true;
+                            reject(new Error('generation cancelled'));
+                        },
+                        { once: true }
+                    );
+                });
+            },
+        },
+        recordUsage: () => {
+            recordedUsage += 1;
+        },
+    });
+
+    const task = service.runImageTask(createImageRequestPayload(), {
+        signal: controller.signal,
+    });
+    controller.abort();
+
+    await assert.rejects(() => task, /generation cancelled/);
+    assert.equal(sawAbort, true);
+    assert.equal(recordedUsage, 0);
 });

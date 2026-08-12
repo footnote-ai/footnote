@@ -13,17 +13,28 @@ import { CLOUDINARY_CONTEXT_VALUE_LIMIT } from './constants.js';
 import type { UploadMetadata } from './types.js';
 import { imageConfig } from '../../config/imageConfig.js';
 
-const formatToMime: Record<string, string> = {
-    png: 'image/png',
-    jpg: 'image/jpeg',
-    jpeg: 'image/jpeg',
-    webp: 'image/webp',
-};
-
 const cloudinaryConfig = {
     cloud_name: imageConfig.cloudinary.cloudName,
     api_key: imageConfig.cloudinary.apiKey,
     api_secret: imageConfig.cloudinary.apiSecret,
+};
+
+const logImageMemoryCheckpoint = (
+    stage:
+        | 'cloudinary-upload-start'
+        | 'cloudinary-upload-complete'
+        | 'cloudinary-upload-failed',
+    imageBytes: number
+): void => {
+    const memory = process.memoryUsage();
+    logger.info('Image delivery memory checkpoint.', {
+        stage,
+        imageBytes,
+        rssBytes: memory.rss,
+        heapUsedBytes: memory.heapUsed,
+        externalBytes: memory.external,
+        arrayBuffersBytes: memory.arrayBuffers,
+    });
 };
 
 /**
@@ -81,7 +92,9 @@ function addChunkedContext(
 
 /**
  * Uploads a generated image to Cloudinary and stores generation metadata in the
- * asset context fields.
+ * asset context fields. It streams the caller-owned buffer without base64
+ * re-encoding and never mutates or releases that buffer. On failure, callers
+ * retain ownership so they can send the same buffer as a Discord attachment.
  */
 export async function uploadToCloudinary(
     imageBuffer: Buffer,
@@ -148,22 +161,63 @@ export async function uploadToCloudinary(
             }
         );
 
-        const mimeType = formatToMime[metadata.outputFormat] ?? 'image/png';
+        const uploadResult = await new Promise<{ secure_url: string }>(
+            (resolve, reject) => {
+                logImageMemoryCheckpoint(
+                    'cloudinary-upload-start',
+                    imageBuffer.byteLength
+                );
+                const uploadStream = cloudinary.uploader.upload_stream(
+                    {
+                        resource_type: 'image',
+                        public_id: `ai-image-${Date.now()}`,
+                        context,
+                        tags: [
+                            'ai-generated',
+                            'discord-bot',
+                            metadata.textModel,
+                            metadata.imageModel,
+                            metadata.quality,
+                            metadata.style,
+                        ],
+                    },
+                    (error, result) => {
+                        if (error) {
+                            logImageMemoryCheckpoint(
+                                'cloudinary-upload-failed',
+                                imageBuffer.byteLength
+                            );
+                            reject(error);
+                            return;
+                        }
+                        if (!result) {
+                            const uploadError = new Error(
+                                'Cloudinary upload completed without a result.'
+                            );
+                            logImageMemoryCheckpoint(
+                                'cloudinary-upload-failed',
+                                imageBuffer.byteLength
+                            );
+                            reject(uploadError);
+                            return;
+                        }
 
-        const uploadResult = await cloudinary.uploader.upload(
-            `data:${mimeType};base64,${imageBuffer.toString('base64')}`,
-            {
-                resource_type: 'image',
-                public_id: `ai-image-${Date.now()}`,
-                context,
-                tags: [
-                    'ai-generated',
-                    'discord-bot',
-                    metadata.textModel,
-                    metadata.imageModel,
-                    metadata.quality,
-                    metadata.style,
-                ],
+                        logImageMemoryCheckpoint(
+                            'cloudinary-upload-complete',
+                            imageBuffer.byteLength
+                        );
+                        resolve(result);
+                    }
+                );
+
+                uploadStream.once('error', (error) => {
+                    logImageMemoryCheckpoint(
+                        'cloudinary-upload-failed',
+                        imageBuffer.byteLength
+                    );
+                    reject(error);
+                });
+                uploadStream.end(imageBuffer);
             }
         );
 

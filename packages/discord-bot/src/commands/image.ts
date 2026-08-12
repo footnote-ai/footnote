@@ -84,6 +84,24 @@ type StringChoice = { name: string; value: string };
 const QUALITY_LEVELS: ImageQualityType[] = ['low', 'medium', 'high'];
 const DISCORD_CHOICE_LIMIT = 25;
 
+const logImageMemoryCheckpoint = (
+    stage:
+        | 'discord-delivery-start'
+        | 'discord-delivery-complete'
+        | 'discord-delivery-cleanup',
+    imageBytes: number
+): void => {
+    const memory = process.memoryUsage();
+    logger.info('Image delivery memory checkpoint.', {
+        stage,
+        imageBytes,
+        rssBytes: memory.rss,
+        heapUsedBytes: memory.heapUsed,
+        externalBytes: memory.external,
+        arrayBuffersBytes: memory.arrayBuffers,
+    });
+};
+
 const clampChoicesForDiscord = (
     label: string,
     choices: StringChoice[]
@@ -237,7 +255,10 @@ export interface ImageGenerationSessionResult {
 
 /**
  * Runs the end-to-end image generation flow and updates the interaction with
- * progress, results, and a follow-up button when successful.
+ * progress, results, and a follow-up button when successful. After final
+ * delivery completes or fails, this boundary clears presentation attachments
+ * and releases the caller-owned final image buffer. Do not retain image bytes
+ * outside this session after Discord has handled the response.
  */
 export async function runImageGenerationSession(
     interaction: RepliableInteraction,
@@ -323,6 +344,16 @@ export async function runImageGenerationSession(
             },
             onPartialImage: (payload) =>
                 queueEmbedUpdate(async () => {
+                    if (payload.index >= PARTIAL_IMAGE_LIMIT) {
+                        logger.debug(
+                            'Skipping partial image preview beyond the configured limit.',
+                            {
+                                index: payload.index,
+                                limit: PARTIAL_IMAGE_LIMIT,
+                            }
+                        );
+                        return;
+                    }
                     const previewName = `image-preview-${payload.index + 1}.png`;
                     const attachment = new AttachmentBuilder(
                         Buffer.from(payload.base64, 'base64'),
@@ -353,13 +384,30 @@ export async function runImageGenerationSession(
             followUpResponseId: followUpResponseId ?? undefined,
         });
 
-        await interaction.editReply({
-            content: presentation.content,
-            embeds: [presentation.embed],
-            files: presentation.attachments,
-            attachments: [],
-            components: presentation.components,
-        });
+        logImageMemoryCheckpoint(
+            'discord-delivery-start',
+            artifacts.finalImageBuffer.byteLength
+        );
+        try {
+            await interaction.editReply({
+                content: presentation.content,
+                embeds: [presentation.embed],
+                files: presentation.attachments,
+                attachments: [],
+                components: presentation.components,
+            });
+            logImageMemoryCheckpoint(
+                'discord-delivery-complete',
+                artifacts.finalImageBuffer.byteLength
+            );
+        } finally {
+            // Discord has accepted or rejected the payload at this point. Drop
+            // our references so a completed or failed delivery cannot keep a
+            // full generated image alive until the session returns.
+            presentation.attachments.length = 0;
+            artifacts.finalImageBuffer = Buffer.alloc(0);
+            logImageMemoryCheckpoint('discord-delivery-cleanup', 0);
+        }
 
         await finishRecoverableImageTask(recoverableTaskId, 'complete');
 

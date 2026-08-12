@@ -10,6 +10,7 @@ import type {
     InternalImageErrorEvent,
     InternalImagePartialImageEvent,
     PostInternalImageGenerateRequest,
+    PostInternalImageGenerateResponse,
 } from '@footnote/contracts/web';
 import {
     InternalImageStreamEventSchema,
@@ -36,6 +37,31 @@ const imageLogger =
         ? logger.child({ module: 'internalImageHandler' })
         : logger;
 
+const logImageMemoryCheckpoint = (
+    stage:
+        | 'stream-partial-write'
+        | 'stream-result-write'
+        | 'stream-cancelled'
+        | 'stream-closed',
+    imageBytes: number
+): void => {
+    const memory = process.memoryUsage();
+    imageLogger.info('Image delivery memory checkpoint.', {
+        stage,
+        imageBytes,
+        rssBytes: memory.rss,
+        heapUsedBytes: memory.heapUsed,
+        externalBytes: memory.external,
+        arrayBuffersBytes: memory.arrayBuffers,
+    });
+};
+
+const canWriteStream = (
+    abortController: AbortController,
+    res: ServerResponse
+): boolean =>
+    !abortController.signal.aborted && !res.destroyed && !res.writableEnded;
+
 type CreateInternalImageHandlerOptions = {
     internalImageTaskService: InternalImageTaskService | null;
     logRequest: TrustedRouteLogRequest;
@@ -43,6 +69,47 @@ type CreateInternalImageHandlerOptions = {
     traceApiToken: string | null;
     serviceToken: string | null;
     serviceRateLimiter: SimpleRateLimiter;
+};
+
+const writeImageResult = (
+    res: ServerResponse,
+    prefix: string,
+    result: PostInternalImageGenerateResponse['result'],
+    suffix: string
+): void => {
+    const { finalImageBase64, ...resultMetadata } = result;
+    const serializedMetadata = JSON.stringify(resultMetadata);
+    res.write(prefix);
+    res.write(serializedMetadata.slice(0, -1));
+    res.write(',"finalImageBase64":"');
+    if (/^[A-Za-z0-9+/]*={0,2}$/.test(finalImageBase64)) {
+        res.write(finalImageBase64);
+        res.write('"');
+        res.write(suffix);
+        return;
+    }
+
+    // Runtime adapters produce base64. Preserve the trusted route's existing
+    // behavior for a malformed adapter result without making a second copy of
+    // valid large payloads.
+    res.write(JSON.stringify(finalImageBase64).slice(1));
+    res.write(suffix);
+};
+
+const sendImageResponse = (
+    res: ServerResponse,
+    response: PostInternalImageGenerateResponse
+): void => {
+    res.statusCode = 200;
+    res.setHeader('Content-Type', 'application/json; charset=utf-8');
+    res.setHeader('Cache-Control', 'no-store');
+    writeImageResult(
+        res,
+        '{"task":"generate","result":',
+        response.result,
+        '}}'
+    );
+    res.end();
 };
 
 const writeStreamEvent = (
@@ -66,6 +133,16 @@ const writeStreamEvent = (
         );
     }
 
+    if (parsed.data.type === 'result') {
+        writeImageResult(
+            res,
+            '{"type":"result","task":"generate","result":',
+            parsed.data.result,
+            '}}\n'
+        );
+        return;
+    }
+
     res.write(`${JSON.stringify(parsed.data)}\n`);
 };
 
@@ -86,6 +163,7 @@ export const createInternalImageHandler = ({
         res: ServerResponse
     ): Promise<void> => {
         let streamStarted = false;
+        let streamAbortController: AbortController | null = null;
         try {
             if (req.method !== 'POST') {
                 sendJson(res, 405, { error: 'Method not allowed' });
@@ -187,6 +265,18 @@ export const createInternalImageHandler = ({
                 });
                 if (imageRequest.stream) {
                     streamStarted = true;
+                    const abortController = new AbortController();
+                    streamAbortController = abortController;
+                    let streamEnded = false;
+                    const abortImageStream = () => {
+                        if (streamEnded || abortController.signal.aborted) {
+                            return;
+                        }
+                        abortController.abort();
+                        logImageMemoryCheckpoint('stream-cancelled', 0);
+                    };
+                    req.once('aborted', abortImageStream);
+                    res.once('close', abortImageStream);
                     // NDJSON streaming is a transport contract for trusted image callers.
                     // Keep this path isolated from buffering middleware so partial events flush immediately.
                     res.statusCode = 200;
@@ -212,17 +302,35 @@ export const createInternalImageHandler = ({
                         await internalImageTaskService.runImageTask(
                             imageRequest,
                             {
+                                signal: abortController.signal,
                                 onPartialImage: async (event) => {
+                                    if (!canWriteStream(abortController, res)) {
+                                        return;
+                                    }
+                                    logImageMemoryCheckpoint(
+                                        'stream-partial-write',
+                                        event.base64.length
+                                    );
                                     writeStreamEvent(res, event);
                                 },
                             }
                         );
+                    logImageMemoryCheckpoint(
+                        'stream-result-write',
+                        response.result.finalImageBase64.length
+                    );
+                    if (!canWriteStream(abortController, res)) {
+                        logRequest(req, res, 'internal image stream-cancelled');
+                        return;
+                    }
                     writeStreamEvent(res, {
                         type: 'result',
                         task: response.task,
                         result: response.result,
                     });
+                    streamEnded = true;
                     res.end();
+                    logImageMemoryCheckpoint('stream-closed', 0);
                     imageLogger.info('Internal image stream completed.', {
                         task: response.task,
                     });
@@ -236,7 +344,7 @@ export const createInternalImageHandler = ({
 
                 const response =
                     await internalImageTaskService.runImageTask(imageRequest);
-                sendJson(res, 200, response);
+                sendImageResponse(res, response);
                 imageLogger.info('Internal image task completed.', {
                     task: response.task,
                 });
@@ -265,10 +373,16 @@ export const createInternalImageHandler = ({
             });
             if (streamStarted) {
                 try {
-                    writeStreamEvent(res, {
-                        type: 'error',
-                        error: 'Failed to execute internal image task',
-                    });
+                    if (
+                        streamAbortController &&
+                        canWriteStream(streamAbortController, res)
+                    ) {
+                        writeStreamEvent(res, {
+                            type: 'error',
+                            error: 'Failed to execute internal image task',
+                        });
+                        res.end();
+                    }
                 } catch (streamWriteError) {
                     imageLogger.error(
                         'Internal image stream error write failed.',
@@ -280,7 +394,6 @@ export const createInternalImageHandler = ({
                         }
                     );
                 }
-                res.end();
                 logRequest(req, res, 'internal image stream-error');
                 return;
             }
