@@ -307,6 +307,9 @@ test('buildImageResultPresentation shows only "Prompt" for variation outputs', (
     );
     assert.ok(fieldNames.includes('Prompt'));
     assert.ok(!fieldNames.includes('Original prompt'));
+    const footer = presentation.embed.toJSON().footer?.text ?? '';
+    assert.match(footer, /💰1\.1¢/);
+    assert.doesNotMatch(footer, /%/);
 });
 
 test('buildImageResultPresentation does not represent unresolved render cost as zero', () => {
@@ -350,7 +353,7 @@ test('buildImageResultPresentation does not represent unresolved render cost as 
     );
 
     const footer = presentation.embed.toJSON().footer?.text ?? '';
-    assert.match(footer, /Render cost unavailable/);
-    assert.doesNotMatch(footer, /🖼️0%/);
-    assert.doesNotMatch(footer, /📝100%/);
+    assert.match(footer, /Incomplete cost/);
+    assert.match(footer, /Render unavailable/);
+    assert.doesNotMatch(footer, /%/);
 });

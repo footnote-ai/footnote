@@ -557,21 +557,14 @@ export function buildImageResultPresentation(
     const footerParts = renderCostIsUnknown
         ? [
               `⏱️ ${formattedDuration}`,
-              '💰 Render cost unavailable',
+              '💰 Incomplete cost',
               `📝${formatCostForFooter(artifacts.costs.text)}`,
+              '🖼️ Render unavailable',
           ]
-        : (() => {
-              const { imagePercent, textPercent } = calculateCostPercentages(
-                  artifacts.costs.image,
-                  artifacts.costs.text
-              );
-              return [
-                  `⏱️ ${formattedDuration}`,
-                  `💰${formatCostForFooter(artifacts.costs.total)}`,
-                  `🖼️${imagePercent}%`,
-                  `📝${textPercent}%`,
-              ];
-          })();
+        : [
+              `⏱️ ${formattedDuration}`,
+              `💰${formatCostForFooter(artifacts.costs.total)}`,
+          ];
 
     if (originalTruncated || refinedTruncated || activeTruncated) {
         footerParts.push('Prompt truncated');
@@ -643,38 +636,6 @@ function formatCostForFooter(amount: number): string {
     }
 
     return formatUsd(amount, 2);
-}
-
-/**
- * Converts the raw image/text cost components into rounded percentages that
- * always add up to 100. This keeps the footer lightweight while still giving
- * users an intuitive sense of where their credits were spent.
- */
-function calculateCostPercentages(
-    imageCost: number,
-    textCost: number
-): { imagePercent: number; textPercent: number } {
-    const safeImageCost =
-        Number.isFinite(imageCost) && imageCost > 0 ? imageCost : 0;
-    const safeTextCost =
-        Number.isFinite(textCost) && textCost > 0 ? textCost : 0;
-    const combined = safeImageCost + safeTextCost;
-
-    if (combined <= 0) {
-        return { imagePercent: 100, textPercent: 0 };
-    }
-
-    const rawImageShare = (safeImageCost / combined) * 100;
-    let imagePercent = Math.round(rawImageShare);
-    imagePercent = Math.min(100, Math.max(0, imagePercent));
-    let textPercent = 100 - imagePercent;
-
-    if (textPercent < 0) {
-        textPercent = 0;
-        imagePercent = 100;
-    }
-
-    return { imagePercent, textPercent };
 }
 
 export function formatRetryCountdown(seconds: number): string {
