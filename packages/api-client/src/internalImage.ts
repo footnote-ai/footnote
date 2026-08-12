@@ -45,7 +45,28 @@ export type InternalImageApi = {
 
 const DEFAULT_TIMEOUT_MS = 60_000;
 const MAX_STREAM_ITERATIONS = 10_000;
-const MAX_STREAM_BYTES = 30 * 1024 * 1024;
+const MAX_DECODED_FINAL_IMAGE_BYTES = 12 * 1024 * 1024;
+const MAX_DECODED_PREVIEW_IMAGE_BYTES = 4 * 1024 * 1024;
+const MAX_NDJSON_EVENT_CHARS = 17 * 1024 * 1024;
+const MAX_STREAM_BYTES = 24 * 1024 * 1024;
+
+const estimateDecodedBase64Bytes = (value: string): number => {
+    const padding = value.endsWith('==') ? 2 : value.endsWith('=') ? 1 : 0;
+    return Math.floor((value.length * 3) / 4) - padding;
+};
+
+const assertBase64ImageLimit = (
+    value: string,
+    limit: number,
+    label: 'final image' | 'partial preview'
+): void => {
+    const decodedBytes = estimateDecodedBase64Bytes(value);
+    if (decodedBytes > limit) {
+        throw new Error(
+            `Internal image stream ${label} exceeded the decoded byte safety limit (${limit}).`
+        );
+    }
+};
 
 const buildTrustedHeaders = (
     traceApiToken?: string
@@ -199,6 +220,11 @@ export const createInternalImageApi = (
             let streamIterations = 0;
             let streamBytesRead = 0;
             const processEventLine = async (line: string): Promise<boolean> => {
+                if (line.length > MAX_NDJSON_EVENT_CHARS) {
+                    throw new Error(
+                        `Internal image stream event exceeded the character safety limit (${MAX_NDJSON_EVENT_CHARS}).`
+                    );
+                }
                 const trimmed = line.trim();
                 if (!trimmed) {
                     return false;
@@ -229,6 +255,11 @@ export const createInternalImageApi = (
 
                 const event = parsed.data;
                 if (event.type === 'partial_image') {
+                    assertBase64ImageLimit(
+                        event.base64,
+                        MAX_DECODED_PREVIEW_IMAGE_BYTES,
+                        'partial preview'
+                    );
                     await options?.onPartialImage?.({
                         index: event.index,
                         base64: event.base64,
@@ -240,6 +271,11 @@ export const createInternalImageApi = (
                     throw new Error(event.error);
                 }
 
+                assertBase64ImageLimit(
+                    event.result.finalImageBase64,
+                    MAX_DECODED_FINAL_IMAGE_BYTES,
+                    'final image'
+                );
                 finalResponse = {
                     task: event.task,
                     result: event.result,
@@ -247,6 +283,7 @@ export const createInternalImageApi = (
                 return true;
             };
 
+            let streamCompleted = false;
             try {
                 while (true) {
                     const { done, value } = await reader.read();
@@ -255,19 +292,11 @@ export const createInternalImageApi = (
                     streamBytesRead += chunk.byteLength;
 
                     if (streamIterations > MAX_STREAM_ITERATIONS) {
-                        await reader
-                            .cancel(
-                                'Internal image stream iteration limit exceeded'
-                            )
-                            .catch(() => undefined);
                         throw new Error(
                             `Internal image stream exceeded the iteration safety limit (${MAX_STREAM_ITERATIONS}).`
                         );
                     }
                     if (streamBytesRead > MAX_STREAM_BYTES) {
-                        await reader
-                            .cancel('Internal image stream byte limit exceeded')
-                            .catch(() => undefined);
                         throw new Error(
                             `Internal image stream exceeded the byte safety limit (${MAX_STREAM_BYTES}).`
                         );
@@ -279,6 +308,11 @@ export const createInternalImageApi = (
 
                     const lines = buffered.split('\n');
                     buffered = lines.pop() ?? '';
+                    if (buffered.length > MAX_NDJSON_EVENT_CHARS) {
+                        throw new Error(
+                            `Internal image stream event exceeded the character safety limit (${MAX_NDJSON_EVENT_CHARS}).`
+                        );
+                    }
                     let reachedFinalResult = false;
 
                     for (const line of lines) {
@@ -289,16 +323,28 @@ export const createInternalImageApi = (
                         }
                     }
 
-                    if (done || reachedFinalResult) {
+                    if (done) {
+                        streamCompleted = true;
+                        break;
+                    }
+                    if (reachedFinalResult) {
                         break;
                     }
                 }
             } finally {
+                if (!streamCompleted) {
+                    await reader
+                        .cancel(
+                            'Internal image stream closed before completion'
+                        )
+                        .catch(() => undefined);
+                }
                 reader.releaseLock();
             }
 
             if (!finalResponse && buffered.trim()) {
                 await processEventLine(buffered);
+                buffered = '';
             }
 
             if (!finalResponse) {
@@ -307,14 +353,7 @@ export const createInternalImageApi = (
                 );
             }
 
-            const validation = createSchemaResponseValidator(
-                PostInternalImageGenerateResponseSchema
-            )(finalResponse);
-            if (!validation.success) {
-                throw new Error(validation.error);
-            }
-
-            return validation.data;
+            return finalResponse;
         } finally {
             if (timeoutId) {
                 clearTimeout(timeoutId);

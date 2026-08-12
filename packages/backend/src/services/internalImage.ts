@@ -40,6 +40,44 @@ const imageTaskLogger =
         ? logger.child({ module: 'internalImageTaskService' })
         : logger;
 
+const MAX_DECODED_FINAL_IMAGE_BYTES = 12 * 1024 * 1024;
+const MAX_DECODED_PREVIEW_IMAGE_BYTES = 4 * 1024 * 1024;
+
+const estimateDecodedBase64Bytes = (value: string): number => {
+    const padding = value.endsWith('==') ? 2 : value.endsWith('=') ? 1 : 0;
+    return Math.floor((value.length * 3) / 4) - padding;
+};
+
+const assertImagePayloadLimit = (
+    value: string,
+    limit: number,
+    label: 'final image' | 'partial preview'
+): void => {
+    if (estimateDecodedBase64Bytes(value) > limit) {
+        throw new Error(
+            `Internal image ${label} exceeded the decoded byte safety limit (${limit}).`
+        );
+    }
+};
+
+const logImageMemoryCheckpoint = (
+    stage:
+        | 'provider-partial-received'
+        | 'provider-result-received'
+        | 'provider-result-released',
+    imageBytes: number
+): void => {
+    const memory = process.memoryUsage();
+    imageTaskLogger.info('Image delivery memory checkpoint.', {
+        stage,
+        imageBytes,
+        rssBytes: memory.rss,
+        heapUsedBytes: memory.heapUsed,
+        externalBytes: memory.external,
+        arrayBuffersBytes: memory.arrayBuffers,
+    });
+};
+
 export type CreateInternalImageTaskServiceOptions = {
     imageGenerationRuntime: ImageGenerationRuntime;
     recordUsage?: (record: BackendLLMCostRecord) => void;
@@ -47,6 +85,7 @@ export type CreateInternalImageTaskServiceOptions = {
 };
 
 export type RunInternalImageTaskOptions = {
+    signal?: AbortSignal;
     onPartialImage?: (
         payload: InternalImagePartialImageEvent
     ) => Promise<void> | void;
@@ -164,9 +203,19 @@ export const createInternalImageTaskService = ({
             outputFormat: request.outputFormat,
             outputCompression: request.outputCompression,
             followUpResponseId: request.followUpResponseId,
+            signal: options.signal,
             stream: request.stream,
             onPartialImage: options.onPartialImage
                 ? async (payload: ImageGenerationPartialImage) => {
+                      logImageMemoryCheckpoint(
+                          'provider-partial-received',
+                          payload.base64.length
+                      );
+                      assertImagePayloadLimit(
+                          payload.base64,
+                          MAX_DECODED_PREVIEW_IMAGE_BYTES,
+                          'partial preview'
+                      );
                       await options.onPartialImage?.({
                           type: 'partial_image',
                           index: payload.index,
@@ -175,6 +224,10 @@ export const createInternalImageTaskService = ({
                   }
                 : undefined,
         });
+        logImageMemoryCheckpoint(
+            'provider-result-received',
+            result.finalImageBase64.length
+        );
 
         try {
             recordUsage({
@@ -194,6 +247,12 @@ export const createInternalImageTaskService = ({
             );
         }
 
+        assertImagePayloadLimit(
+            result.finalImageBase64,
+            MAX_DECODED_FINAL_IMAGE_BYTES,
+            'final image'
+        );
+
         imageTaskLogger.info('Internal image task complete.', {
             imageModel: result.imageModel,
             textModel: result.textModel,
@@ -205,6 +264,8 @@ export const createInternalImageTaskService = ({
         });
 
         const response = toInternalImageResponse(result);
+        result.finalImageBase64 = '';
+        logImageMemoryCheckpoint('provider-result-released', 0);
         const parsed =
             PostInternalImageGenerateResponseSchema.safeParse(response);
         if (!parsed.success) {
