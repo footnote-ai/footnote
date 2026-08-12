@@ -63,10 +63,12 @@
         "lint": "pnpm run format:check && pnpm run lint-check",
         "lint:fix": "pnpm run format:write && pnpm exec eslint packages/ --fix",
         "lint-check": "pnpm exec eslint packages/",
-        "backend:prepare": "pnpm --filter @footnote/config-spec run build:dev && pnpm --filter @footnote/prompts run build:dev"
+        "backend:prepare": "pnpm --filter @footnote/config-spec run build:dev && pnpm --filter @footnote/prompts run build:dev",
+        "test:output": "pnpm exec playwright install chromium && pnpm exec playwright test && cross-env DISCORD_TOKEN=output-check-token DISCORD_CLIENT_ID=output-check-client DISCORD_USER_ID=output-check-user DISCORD_GUILD_IDS=output-check-guild INCIDENT_PSEUDONYMIZATION_SECRET=output-check-secret pnpm exec tsx --test packages/discord-bot/test/chatCommand.test.ts"
     },
     "devDependencies": {
         "@eslint/js": "catalog:",
+        "@playwright/test": "^1.61.0",
         "@swc/core": "catalog:",
         "@swc/helpers": "catalog:",
         "@types/better-sqlite3": "catalog:",

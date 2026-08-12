@@ -13,6 +13,7 @@ For contributors:
 
 - Source setup: [Run from source](../README.md#run-from-source-developers-and-contributors)
 - [CI](./ci/README.md)
+- [Output Testing](./output-testing.md): repeatable web and Discord answer checks.
 - [Architecture](./architecture/README.md)
 - [Proposals](./proposals/index.md)
 

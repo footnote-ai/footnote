@@ -75,3 +75,8 @@ opencode.json
 
 # Local startup snapshots
 .footnote-dev/
+
+# Playwright output checks
+/playwright-report/
+/test-results/
+/blob-report/

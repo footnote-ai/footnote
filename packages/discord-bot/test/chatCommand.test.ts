@@ -7,9 +7,26 @@
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 
+import type { PostChatResponse } from '@footnote/contracts/web';
 import { botApi } from '../src/api/botApi.js';
 import chatCommand from '../src/commands/chat.js';
+
+type BasicOutputFixture = {
+    question: string;
+    response: Extract<PostChatResponse, { action: 'message' }>;
+};
+
+const basicOutputFixture = JSON.parse(
+    readFileSync(
+        new URL(
+            '../../../test/basic-output-check/fixtures/ordinary-text-answer.json',
+            import.meta.url
+        ),
+        'utf8'
+    )
+) as BasicOutputFixture;
 
 const createInteraction = (overrides: {
     prompt?: string;
@@ -193,6 +210,95 @@ test('/chat forwards prompt/workflow options and renders message action', async 
         assert.equal(payload.components?.length, 1);
         assert.equal(Array.isArray(payload.files), true);
         assert.equal(payload.files?.length, 1);
+    } finally {
+        botApi.chatViaApi = originalChatViaApi;
+        botApi.postTraceCardFromTrace = originalPostTraceCardFromTrace;
+    }
+});
+
+test('/chat renders the shared basic output fixture', async () => {
+    const originalChatViaApi = botApi.chatViaApi;
+    const originalPostTraceCardFromTrace = botApi.postTraceCardFromTrace;
+    const seenRequests: unknown[] = [];
+    const seenTraceCardRequests: unknown[] = [];
+    botApi.chatViaApi = (async (request) => {
+        seenRequests.push(request);
+        return basicOutputFixture.response;
+    }) as typeof botApi.chatViaApi;
+    botApi.postTraceCardFromTrace = (async (request, _options) => {
+        seenTraceCardRequests.push(request);
+        return {
+            responseId: request.responseId,
+            pngBase64: Buffer.from('trace-card').toString('base64'),
+        };
+    }) as typeof botApi.postTraceCardFromTrace;
+
+    const { interaction, editReplyPayloads, deferReplyPayloads } =
+        createInteraction({
+            prompt: basicOutputFixture.question,
+        });
+
+    try {
+        await chatCommand.execute(interaction as never);
+        assert.equal(deferReplyPayloads.length, 1);
+        assert.equal(editReplyPayloads.length, 1);
+        assert.deepEqual(seenRequests, [
+            {
+                surface: 'discord',
+                botPersonaId: 'footnote',
+                trigger: {
+                    kind: 'submit',
+                    messageId: 'interaction-1',
+                },
+                latestUserInput: basicOutputFixture.question,
+                conversation: [
+                    {
+                        role: 'user',
+                        content: basicOutputFixture.question,
+                    },
+                ],
+                capabilities: {
+                    canReact: true,
+                    canGenerateImages: true,
+                    canUseTts: true,
+                },
+                surfaceContext: {
+                    channelId: 'channel-123',
+                    guildId: 'guild-456',
+                    userId: 'user-789',
+                },
+            },
+        ]);
+
+        const payload = editReplyPayloads[0] as {
+            content?: string;
+            components?: unknown[];
+            files?: Array<{ attachment?: unknown; name?: string }>;
+        };
+        assert.equal(payload.content, basicOutputFixture.response.message);
+        assert.deepEqual(seenTraceCardRequests, [
+            { responseId: basicOutputFixture.response.metadata.responseId },
+        ]);
+
+        const serializedComponents = JSON.parse(
+            JSON.stringify(payload.components)
+        ) as Array<{
+            components?: Array<{ custom_id?: string }>;
+        }>;
+        assert.deepEqual(
+            serializedComponents.flatMap(
+                (row) => row.components?.map((button) => button.custom_id) ?? []
+            ),
+            [
+                `details:${basicOutputFixture.response.metadata.responseId}`,
+                `report_issue:${basicOutputFixture.response.metadata.responseId}`,
+            ]
+        );
+        assert.deepEqual(
+            payload.files?.map((file) => file.name),
+            ['trace-card.png']
+        );
+        assert.equal(Buffer.isBuffer(payload.files?.[0]?.attachment), true);
     } finally {
         botApi.chatViaApi = originalChatViaApi;
         botApi.postTraceCardFromTrace = originalPostTraceCardFromTrace;
