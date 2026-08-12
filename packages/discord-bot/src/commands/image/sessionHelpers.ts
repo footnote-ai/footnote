@@ -77,6 +77,7 @@ export interface ImageGenerationArtifacts {
 
 interface ExecuteImageGenerationOptions {
     followUpResponseId?: string | null;
+    recoverableTaskId?: string;
     onPartialImage?: (payload: PartialImagePayload) => Promise<void> | void;
     stream?: boolean;
     user: {
@@ -137,6 +138,7 @@ const buildImageTaskRequest = (
         },
         user: options.user,
         followUpResponseId: options.followUpResponseId ?? undefined,
+        recoverableTaskId: options.recoverableTaskId,
         channelContext: options.channelContext,
         stream: shouldStream || undefined,
     };

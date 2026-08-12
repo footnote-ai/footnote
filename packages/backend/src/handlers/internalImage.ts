@@ -183,6 +183,7 @@ export const createInternalImageHandler = ({
                     hasFollowUpResponseId: Boolean(
                         imageRequest.followUpResponseId
                     ),
+                    recoverableTaskId: imageRequest.recoverableTaskId,
                 });
                 if (imageRequest.stream) {
                     streamStarted = true;

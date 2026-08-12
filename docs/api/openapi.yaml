@@ -264,6 +264,110 @@ paths:
                 '503':
                     $ref: '#/components/responses/ServiceUnavailable'
 
+    /api/internal/recoverable-tasks:
+        post:
+            operationId: postInternalRecoverableTask
+            x-codeRefs:
+                - packages/backend/src/handlers/recoverableTasks.ts#handleCreateRecoverableTaskRequest
+                - packages/backend/src/storage/recoverableTaskStore.ts#SqliteRecoverableTaskStore
+                - packages/api-client/src/recoverableTasks.ts#startRecoverableTask
+                - packages/contracts/src/web/types.ts#PostInternalRecoverableTaskCreateRequest
+            summary: Start a trusted recoverable task
+            security:
+                - TrustedServiceToken: []
+                - TraceToken: []
+            requestBody:
+                required: true
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/RecoverableTaskCreateRequest'
+            responses:
+                '201':
+                    description: Recoverable delivery task created
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/RecoverableTaskCreateResponse'
+                '400':
+                    $ref: '#/components/responses/BadRequest'
+                '401':
+                    $ref: '#/components/responses/Unauthorized'
+                '503':
+                    $ref: '#/components/responses/ServiceUnavailable'
+
+    /api/internal/recoverable-tasks/claim:
+        post:
+            operationId: postInternalRecoverableTaskClaim
+            x-codeRefs:
+                - packages/backend/src/handlers/recoverableTasks.ts#handleClaimRecoverableTasksRequest
+                - packages/backend/src/storage/recoverableTaskStore.ts#claimUnfinishedForBotProfile
+                - packages/api-client/src/recoverableTasks.ts#claimRecoverableTasks
+                - packages/contracts/src/web/types.ts#PostInternalRecoverableTaskClaimRequest
+            summary: Atomically claim unfinished tasks for one bot profile
+            security:
+                - TrustedServiceToken: []
+                - TraceToken: []
+            requestBody:
+                required: true
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/RecoverableTaskClaimRequest'
+            responses:
+                '200':
+                    description: Tasks reserved for retryable Discord reconciliation without rerunning provider work
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/RecoverableTaskClaimResponse'
+                '400':
+                    $ref: '#/components/responses/BadRequest'
+                '401':
+                    $ref: '#/components/responses/Unauthorized'
+                '503':
+                    $ref: '#/components/responses/ServiceUnavailable'
+
+    /api/internal/recoverable-tasks/{taskId}/finish:
+        post:
+            operationId: postInternalRecoverableTaskFinish
+            x-codeRefs:
+                - packages/backend/src/handlers/recoverableTasks.ts#handleFinishRecoverableTaskRequest
+                - packages/backend/src/storage/recoverableTaskStore.ts#finish
+                - packages/api-client/src/recoverableTasks.ts#completeRecoverableTask
+                - packages/api-client/src/recoverableTasks.ts#failRecoverableTask
+                - packages/contracts/src/web/types.ts#PostInternalRecoverableTaskFinishRequest
+            summary: Mark a recoverable task complete or failed
+            security:
+                - TrustedServiceToken: []
+                - TraceToken: []
+            parameters:
+                - name: taskId
+                  in: path
+                  required: true
+                  schema:
+                      type: string
+            requestBody:
+                required: true
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/RecoverableTaskFinishRequest'
+            responses:
+                '200':
+                    description: Terminal task state recorded idempotently
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/RecoverableTaskFinishResponse'
+                '400':
+                    $ref: '#/components/responses/BadRequest'
+                '401':
+                    $ref: '#/components/responses/Unauthorized'
+                '404':
+                    $ref: '#/components/responses/NotFound'
+                '503':
+                    $ref: '#/components/responses/ServiceUnavailable'
     /api/internal/voice/tts:
         post:
             operationId: postInternalVoiceTts
@@ -1722,6 +1826,98 @@ components:
                     news: '#/components/schemas/InternalNewsTaskResponse'
                     image_description: '#/components/schemas/InternalImageDescriptionTaskResponse'
 
+        RecoverableTask:
+            type: object
+            additionalProperties: false
+            required:
+                [
+                    id,
+                    kind,
+                    state,
+                    botProfileId,
+                    discordChannelId,
+                    discordMessageId,
+                    createdAt,
+                    updatedAt,
+                ]
+            properties:
+                id:
+                    type: string
+                    format: uuid
+                kind:
+                    type: string
+                    enum: [image_generation]
+                state:
+                    type: string
+                    enum: [started, recovering, complete, failed]
+                botProfileId:
+                    type: string
+                discordChannelId:
+                    type: string
+                discordMessageId:
+                    type: string
+                createdAt:
+                    type: string
+                    format: date-time
+                updatedAt:
+                    type: string
+                    format: date-time
+        RecoverableTaskCreateRequest:
+            type: object
+            additionalProperties: false
+            required: [kind, botProfileId, discordChannelId, discordMessageId]
+            properties:
+                kind:
+                    type: string
+                    enum: [image_generation]
+                botProfileId:
+                    type: string
+                discordChannelId:
+                    type: string
+                discordMessageId:
+                    type: string
+        RecoverableTaskCreateResponse:
+            type: object
+            additionalProperties: false
+            required: [task]
+            properties:
+                task:
+                    $ref: '#/components/schemas/RecoverableTask'
+        RecoverableTaskClaimRequest:
+            type: object
+            additionalProperties: false
+            required: [botProfileId]
+            properties:
+                botProfileId:
+                    type: string
+        RecoverableTaskClaimResponse:
+            type: object
+            additionalProperties: false
+            required: [tasks]
+            properties:
+                tasks:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/RecoverableTask'
+        RecoverableTaskFinishRequest:
+            type: object
+            additionalProperties: false
+            required: [state]
+            properties:
+                state:
+                    type: string
+                    enum: [complete, failed]
+        RecoverableTaskFinishResponse:
+            type: object
+            additionalProperties: false
+            required: [task, changed]
+            properties:
+                task:
+                    oneOf:
+                        - $ref: '#/components/schemas/RecoverableTask'
+                        - type: 'null'
+                changed:
+                    type: boolean
         InternalImageRequest:
             oneOf:
                 - $ref: '#/components/schemas/InternalImageGenerateTaskRequest'

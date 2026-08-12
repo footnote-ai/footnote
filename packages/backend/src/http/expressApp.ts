@@ -91,6 +91,19 @@ type CreateExpressAppDeps = {
         req: http.IncomingMessage,
         res: http.ServerResponse
     ) => Promise<void>;
+    handleCreateRecoverableTaskRequest?: (
+        req: http.IncomingMessage,
+        res: http.ServerResponse
+    ) => Promise<void>;
+    handleFinishRecoverableTaskRequest?: (
+        req: http.IncomingMessage,
+        res: http.ServerResponse,
+        taskId: string
+    ) => Promise<void>;
+    handleClaimRecoverableTasksRequest?: (
+        req: http.IncomingMessage,
+        res: http.ServerResponse
+    ) => Promise<void>;
     handleInternalVoiceTtsRequest: (
         req: http.IncomingMessage,
         res: http.ServerResponse
@@ -172,6 +185,9 @@ const createExpressApp = ({
     handleChatRequest,
     handleInternalTextRequest,
     handleInternalImageRequest,
+    handleCreateRecoverableTaskRequest,
+    handleFinishRecoverableTaskRequest,
+    handleClaimRecoverableTasksRequest,
     handleInternalVoiceTtsRequest,
     handleTraceUpsertRequest,
     handleTraceCardCreateRequest,
@@ -242,6 +258,9 @@ const createExpressApp = ({
         app,
         handleInternalTextRequest,
         handleInternalImageRequest,
+        handleCreateRecoverableTaskRequest,
+        handleFinishRecoverableTaskRequest,
+        handleClaimRecoverableTasksRequest,
         handleInternalVoiceTtsRequest,
         logRequest,
     });
