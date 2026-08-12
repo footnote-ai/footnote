@@ -344,7 +344,6 @@ export const createInternalImageApi = (
 
             if (!finalResponse && buffered.trim()) {
                 await processEventLine(buffered);
-                buffered = '';
             }
 
             if (!finalResponse) {
