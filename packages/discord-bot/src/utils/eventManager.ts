@@ -68,7 +68,12 @@ export class EventManager {
                 if (!isDev && !isJsFile) return false;
 
                 // Skip the base Event file
-                return file !== 'Event.ts' && file !== 'Event.js';
+                return (
+                    file !== 'Event.ts' &&
+                    file !== 'Event.js' &&
+                    file !== 'VoiceSubsystem.ts' &&
+                    file !== 'VoiceSubsystem.js'
+                );
             });
 
             logger.debug(

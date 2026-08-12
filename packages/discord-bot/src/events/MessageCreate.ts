@@ -9,14 +9,14 @@
 import { Message } from 'discord.js';
 import { Event } from './Event.js';
 import { logger } from '../utils/logger.js';
-import { MessageProcessor } from '../utils/MessageProcessor.js';
+import type { MessageProcessor } from '../utils/MessageProcessor.js';
 import { CatchupFilter } from '../utils/CatchupFilter.js';
 import {
     containsPlaintextBotAlias,
     resolveBotMentionAliases,
 } from '../utils/mentionAliases.js';
 import { runtimeConfig } from '../config.js';
-import { ResponseHandler } from '../utils/response/ResponseHandler.js';
+import type { ResponseHandler } from '../utils/response/ResponseHandler.js';
 import {
     ChannelContextManager,
     type StoredMessage,
@@ -27,6 +27,7 @@ import type {
     EngagementDecision,
     ChannelEngagementOverrides,
 } from '../engagement/RealtimeEngagementFilter.js';
+import { createLoadOnce } from '../utils/loadOnce.js';
 
 /**
  * @footnote-logger: messageCreate
@@ -116,7 +117,10 @@ type BotDirectInvocationAdmission = {
 export class MessageCreate extends Event {
     public readonly name = 'messageCreate' as const;
     public readonly once = false;
-    private readonly messageProcessor: MessageProcessor;
+    /** Lightweight seam: tests can replace this method without loading the processor. */
+    private readonly messageProcessor: Pick<MessageProcessor, 'processMessage'>;
+    private readonly loadMessageProcessor: () => Promise<MessageProcessor>;
+    private readonly loadResponseHandler: () => Promise<typeof ResponseHandler>;
     private readonly catchupFilter: CatchupFilter;
     private readonly CATCHUP_AFTER_MESSAGES =
         runtimeConfig.catchUp.afterMessages;
@@ -155,7 +159,20 @@ export class MessageCreate extends Event {
     constructor(dependencies: Dependencies) {
         super({ name: 'messageCreate', once: false });
 
-        this.messageProcessor = new MessageProcessor();
+        this.loadMessageProcessor = createLoadOnce(async () => {
+            const { MessageProcessor } =
+                await import('../utils/MessageProcessor.js');
+            return new MessageProcessor();
+        });
+        this.messageProcessor = {
+            processMessage: async (...args) =>
+                (await this.loadMessageProcessor()).processMessage(...args),
+        };
+        this.loadResponseHandler = createLoadOnce(async () => {
+            const { ResponseHandler } =
+                await import('../utils/response/ResponseHandler.js');
+            return ResponseHandler;
+        });
         this.catchupFilter = new CatchupFilter();
 
         if (dependencies.contextManager !== undefined) {
@@ -492,7 +509,7 @@ export class MessageCreate extends Event {
                                 ) {
                                     try {
                                         const responseHandler =
-                                            new ResponseHandler(
+                                            new (await this.loadResponseHandler())(
                                                 message,
                                                 message.channel,
                                                 message.author
@@ -762,6 +779,7 @@ export class MessageCreate extends Event {
                     await message.channel.messages.fetch({
                         limit: this.catchupFilter.RECENT_MESSAGE_WINDOW,
                         before: message.id,
+                        cache: false,
                     });
                 recentMessages = Array.from(
                     recentMessagesCollection.values()
@@ -1124,7 +1142,7 @@ export class MessageCreate extends Event {
                 return;
             }
 
-            const responseHandler = new ResponseHandler(
+            const responseHandler = new (await this.loadResponseHandler())(
                 message,
                 message.channel,
                 message.author

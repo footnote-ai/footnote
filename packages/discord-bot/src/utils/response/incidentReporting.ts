@@ -486,9 +486,10 @@ export const handleIncidentReportModal = async (
             if (session.targetMessageId && interaction.channel?.isTextBased()) {
                 try {
                     const fetchedTargetMessage =
-                        await interaction.channel.messages.fetch(
-                            session.targetMessageId
-                        );
+                        await interaction.channel.messages.fetch({
+                            message: session.targetMessageId,
+                            cache: false,
+                        });
 
                     if (!isMessageLike(fetchedTargetMessage)) {
                         remediationOutcome = {

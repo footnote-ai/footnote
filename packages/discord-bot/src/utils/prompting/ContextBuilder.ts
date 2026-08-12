@@ -90,7 +90,7 @@ export class ContextBuilder {
         // Get the message being replied to if this is a reply
         const repliedMessage = message.reference?.messageId
             ? await message.channel.messages
-                  .fetch(message.reference.messageId)
+                  .fetch({ message: message.reference.messageId, cache: false })
                   .catch((error) => {
                       logger.debug(
                           `Failed to fetch replied message ${message.reference?.messageId}: ${error.message}`
@@ -107,6 +107,7 @@ export class ContextBuilder {
         const recentMessages = await message.channel.messages.fetch({
             limit: repliedMessage ? Math.floor(maxMessages / 2) : maxMessages, // Use half the messages if this is a reply, as we'll fetch more messages before the replied-to message
             before: message.id,
+            cache: false,
         });
         logger.debug(
             `Fetched ${recentMessages.size} recent messages before current message`
@@ -118,6 +119,7 @@ export class ContextBuilder {
             const messagesBeforeReply = await message.channel.messages.fetch({
                 limit: maxMessages,
                 before: repliedMessage.id,
+                cache: false,
             });
             logger.debug(
                 `Fetched ${messagesBeforeReply.size} messages before replied message`

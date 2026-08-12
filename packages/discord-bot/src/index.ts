@@ -6,7 +6,13 @@
  * @footnote-ethics: high - Determines which modules (including cost tracking and audit systems) are initialized, affecting transparency and accountability across the bot.
  */
 
-import { Client, GatewayIntentBits, Events, Collection } from 'discord.js';
+import {
+    Client,
+    GatewayIntentBits,
+    Events,
+    Collection,
+    Options,
+} from 'discord.js';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { CommandHandler } from './utils/commandHandler.js';
@@ -59,6 +65,11 @@ const client = new Client({
         GatewayIntentBits.GuildVoiceStates,
     ],
     presence: { status: 'online' },
+    makeCache: Options.cacheWithLimits({
+        MessageManager: 0,
+        ReactionManager: 0,
+        ReactionUserManager: 0,
+    }),
 });
 
 // ====================
@@ -218,4 +229,25 @@ process.on('unhandledRejection', (error: Error) => {
 process.on('uncaughtException', (error: Error) => {
     logger.error(`Uncaught exception: ${error}`);
     process.exit(1);
+});
+
+const shutdown = async (signal: NodeJS.Signals): Promise<void> => {
+    logger.info('discord_bot_shutdown_signal', { signal });
+    try {
+        const voiceHandler = client.handlers?.get('voiceState') as
+            | { cleanupExistingConnections?: () => Promise<void> }
+            | undefined;
+        await voiceHandler?.cleanupExistingConnections?.();
+        client.destroy();
+    } catch (error) {
+        logger.error('Discord client shutdown failed.', { error });
+    }
+};
+
+process.once('SIGTERM', () => {
+    void shutdown('SIGTERM').finally(() => process.exit(143));
+});
+
+process.once('SIGINT', () => {
+    void shutdown('SIGINT').finally(() => process.exit(130));
 });

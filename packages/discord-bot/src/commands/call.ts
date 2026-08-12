@@ -265,12 +265,12 @@ const callCommand: Command = {
             }
 
             // Register the initiating user
-            voiceStateHandler.registerInitiatingUser(
+            await voiceStateHandler.registerInitiatingUser(
                 voiceChannel.guild.id,
                 interaction.user.id
             );
             if (voiceOption) {
-                voiceStateHandler.registerInitiatingVoice(
+                await voiceStateHandler.registerInitiatingVoice(
                     voiceChannel.guild.id,
                     voiceOption
                 );
