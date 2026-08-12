@@ -12,6 +12,13 @@ const { spawnSync } = require('node:child_process');
 
 const isWindows = process.platform === 'win32';
 
+const escapeForCmdExe = (value) => {
+    const stringValue = String(value);
+    const escapedQuotes = stringValue.replace(/(\\*)"/g, '$1$1\\"');
+    const escapedTrailingBackslashes = escapedQuotes.replace(/(\\+)$/g, '$1$1');
+    return `"${escapedTrailingBackslashes}"`;
+};
+
 const runCommand = (command, args = [], options = {}) => {
     const normalizedCommand = String(command).toLowerCase();
     const isWindowsBatchCommand =
@@ -22,7 +29,13 @@ const runCommand = (command, args = [], options = {}) => {
     // Windows batch files need `cmd.exe` for reliable spawn behavior.
     const executable = isWindowsBatchCommand ? 'cmd.exe' : command;
     const executableArgs = isWindowsBatchCommand
-        ? ['/d', '/s', '/c', command, ...args]
+        ? [
+              '/d',
+              '/s',
+              '/c',
+              escapeForCmdExe(command),
+              ...args.map(escapeForCmdExe),
+          ]
         : args;
 
     const spawnOptions = {
@@ -33,6 +46,10 @@ const runCommand = (command, args = [], options = {}) => {
 
     if (options.encoding) {
         spawnOptions.encoding = options.encoding;
+    }
+
+    if (isWindowsBatchCommand) {
+        spawnOptions.windowsVerbatimArguments = true;
     }
 
     return spawnSync(executable, executableArgs, spawnOptions);
