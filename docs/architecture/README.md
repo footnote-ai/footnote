@@ -14,15 +14,18 @@ detail once you have the main runtime shape in mind.
 2. [Answer Posture And Control Influence](./answer-posture-and-control-influence.md):
    use this when you need the metadata map for mode, TRACE, planner influence,
    control influence, and provenance.
-3. [Canonical Response Footnote](./canonical-response-footnote.md): the
+3. [Platform Experience Standard](./platform-experience-standard.md): the
+   behavior web and Discord must keep consistent, and where their presentation
+   can differ.
+4. [Canonical Response Footnote](./canonical-response-footnote.md): the
    portable response-inspection contract shared by future platform footnotes.
-4. [TRACE Temperament Contract](./trace-temperament-contract.md): canonical
+5. [TRACE Temperament Contract](./trace-temperament-contract.md): canonical
    TRACE defaults, level matrix semantics, and compact rubric rules.
-5. [Prompt Resolution Order](./prompt-resolution.md): how prompt layers and
+6. [Prompt Resolution Order](./prompt-resolution.md): how prompt layers and
    overrides resolve at runtime.
-6. [Bounded User Control Mapping](./bounded-user-control-mapping.md): what
+7. [Bounded User Control Mapping](./bounded-user-control-mapping.md): what
    users can steer directly and what stays backend-owned.
-7. [Context Integrations](./context-integrations/README.md): shared rules for
+8. [Context Integrations](./context-integrations/README.md): shared rules for
    external systems that can add context without taking execution authority.
 
 ## Context Integrations

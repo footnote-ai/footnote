@@ -8,6 +8,9 @@ pnpm test:output
 
 The command installs the required Playwright Chromium browser when needed.
 
+For the broader approach, see the
+[Platform Experience Standard](./architecture/platform-experience-standard.md).
+
 It checks one fixed text answer on the web chat page and in the Discord `/chat`
 command. The web check verifies the request, answer, citation, provenance, and
 trace link, then captures a screenshot in the Playwright test output for human
