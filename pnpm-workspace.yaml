@@ -44,7 +44,7 @@ catalog:
     autoprefixer: ^10.5.0
     better-sqlite3: ^12.10.0
     bufferutil: ^4.1.0
-    body-parser: ^2.2.2
+    body-parser: ^2.3.0
     cloudinary: ^2.10.0
     concurrently: ^10.0.3
     copyfiles: ^2.4.1
