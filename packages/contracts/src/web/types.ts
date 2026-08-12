@@ -574,6 +574,8 @@ export type PostInternalImageGenerateRequest = {
 export type InternalImageGenerationArtifact = {
     responseId: string | null;
     textModel: InternalImageTextModel;
+    /** Backend-selected effective effort for this request's image prompt. */
+    reasoningEffort?: SupportedReasoningEffort;
     imageModel: InternalImageRenderModel;
     revisedPrompt: string | null;
     finalStyle: string;
@@ -583,9 +585,12 @@ export type InternalImageGenerationArtifact = {
     outputCompression: number;
     usage: {
         inputTokens: number;
+        cachedInputTokens?: number;
+        cacheWriteTokens?: number;
         outputTokens: number;
         totalTokens: number;
         imageCount: number;
+        providerUsageAvailable?: boolean;
     };
     costs: {
         text: number;

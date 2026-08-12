@@ -8,6 +8,7 @@
 import {
     estimateOpenAITextCost,
     estimateOpenAIRealtimeCost,
+    type ImageGenerationCostIncompleteReason,
     resolveOpenAITextPricingModel,
     resolveOpenAIRealtimePricingModel,
     type OpenAITextCostAppliedRule,
@@ -23,6 +24,8 @@ export type BackendLLMCostRecord = {
         | 'chat_planner'
         | 'news'
         | 'image'
+        | 'image_prompt'
+        | 'image_render'
         | 'image_description'
         | 'tts'
         | 'voice_realtime';
@@ -37,7 +40,12 @@ export type BackendLLMCostRecord = {
     totalCostUsd: number;
     costCompleteness?: OpenAITextCostCompleteness;
     costAppliedRules?: OpenAITextCostAppliedRule[];
-    costIncompleteReasons?: OpenAITextCostIncompleteReason[];
+    costIncompleteReasons?: Array<
+        OpenAITextCostIncompleteReason | ImageGenerationCostIncompleteReason
+    >;
+    imageCount?: number;
+    imageQuality?: 'low' | 'medium' | 'high' | 'auto';
+    imageSize?: '1024x1024' | '1024x1536' | '1536x1024' | 'auto';
     timestamp: number;
 };
 
@@ -164,6 +172,15 @@ export const recordBackendLLMUsage = (record: BackendLLMCostRecord): void => {
             }),
             ...(record.costIncompleteReasons !== undefined && {
                 costIncompleteReasons: record.costIncompleteReasons,
+            }),
+            ...(record.imageCount !== undefined && {
+                imageCount: record.imageCount,
+            }),
+            ...(record.imageQuality !== undefined && {
+                imageQuality: record.imageQuality,
+            }),
+            ...(record.imageSize !== undefined && {
+                imageSize: record.imageSize,
             }),
             cumulativeTotalCostUsd: Number(
                 backendCostTotals.totalCostUsd.toFixed(6)

@@ -114,12 +114,12 @@ const ASPECT_OPTIONS: Array<{
 
 export const IMAGE_MODEL_LABELS: Record<ImageRenderModel, string> = {
     'gpt-image-2': 'GPT Image 2',
-    'chatgpt-image-latest': 'ChatGPT Image (Latest)',
-    'gpt-image-1-mini': 'GPT Image 1 Mini',
-    'gpt-image-1.5': 'GPT Image 1.5',
-    'gpt-image-1': 'GPT Image 1',
-    'dall-e-3': 'DALL-E 3',
-    'dall-e-2': 'DALL-E 2',
+    'chatgpt-image-latest': 'ChatGPT Image (Latest) (deprecated)',
+    'gpt-image-1-mini': 'GPT Image 1 Mini (deprecated)',
+    'gpt-image-1.5': 'GPT Image 1.5 (deprecated)',
+    'gpt-image-1': 'GPT Image 1 (deprecated)',
+    'dall-e-3': 'DALL-E 3 (deprecated)',
+    'dall-e-2': 'DALL-E 2 (deprecated)',
 };
 
 // Menu builders are kept as helpers so we can regenerate token-aware labels each
@@ -401,7 +401,7 @@ export function buildVariationConfiguratorView(
             inline: true,
         },
         {
-            name: 'Text model',
+            name: 'Image prompt model',
             value: session.textModel,
             inline: true,
         },

@@ -38,6 +38,14 @@ export type RuntimeMessageRole = 'system' | 'user' | 'assistant';
 export type GenerationReasoningEffort = SupportedReasoningEffort;
 
 /**
+ * Reasoning efforts currently supported by image-prompt Responses requests.
+ */
+export type ImagePromptReasoningEffort = Extract<
+    GenerationReasoningEffort,
+    'low'
+>;
+
+/**
  * Shared verbosity levels that runtime adapters may support.
  */
 export type GenerationVerbosity = 'low' | 'medium' | 'high';
@@ -326,6 +334,11 @@ export interface ImageGenerationRequest {
     systemPrompt: string;
     developerPrompt: string;
     textModel: SupportedOpenAITextModel;
+    /**
+     * Backend-selected effort for the image-prompt Responses request. This is
+     * deliberately separate from Workflow reasoning configuration.
+     */
+    reasoningEffort?: ImagePromptReasoningEffort;
     imageModel: SupportedOpenAIImageModel;
     quality: ImageGenerationQuality;
     size: ImageGenerationSize;
@@ -357,9 +370,15 @@ export interface ImageGenerationAnnotations {
  */
 export interface ImageGenerationUsage {
     inputTokens: number;
+    /** Input tokens read from the provider cache, when the provider reports them. */
+    cachedInputTokens?: number;
+    /** Input tokens written to the provider cache, when the provider reports them. */
+    cacheWriteTokens?: number;
     outputTokens: number;
     totalTokens: number;
     imageCount: number;
+    /** Whether the provider supplied a usage payload for this request. */
+    providerUsageAvailable?: boolean;
 }
 
 /**
@@ -378,6 +397,8 @@ export interface ImageGenerationCosts {
 export interface ImageGenerationResult {
     responseId: string | null;
     textModel: SupportedOpenAITextModel;
+    /** Effective backend-owned reasoning effort for the prompt request. */
+    reasoningEffort?: ImagePromptReasoningEffort;
     imageModel: SupportedOpenAIImageModel;
     revisedPrompt: string | null;
     finalStyle: string;

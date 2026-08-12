@@ -14,11 +14,13 @@ import {
 } from '@footnote/contracts/providers';
 import {
     imageRenderModels,
+    imageTextModelChoices,
     imageTextModels,
 } from '../src/commands/image/types.js';
 
 type CommandOptionWithChoices = {
-    choices?: Array<{ value: string }>;
+    description?: string;
+    choices?: Array<{ name: string; value: string }>;
 };
 
 const restoreProcessEnv = (originalEnv: NodeJS.ProcessEnv): void => {
@@ -38,12 +40,23 @@ const restoreProcessEnv = (originalEnv: NodeJS.ProcessEnv): void => {
     }
 };
 
-test('discord image model arrays match the shared registry', () => {
-    assert.deepEqual(imageTextModels, internalImageTextModels);
+test('Discord curates request-local image prompt choices without narrowing backend validation', () => {
+    assert.deepEqual(imageTextModels, [
+        'gpt-5.6-luna',
+        'gpt-5.6-terra',
+        'gpt-5.6-sol',
+        'gpt-5.4-nano',
+    ]);
+    assert.deepEqual(
+        imageTextModelChoices.map((choice) => choice.value),
+        imageTextModels
+    );
+    assert.ok(internalImageTextModels.length > imageTextModels.length);
+    assert.equal(internalImageTextModels.includes('gpt-4.1-mini'), true);
     assert.deepEqual(imageRenderModels, internalImageRenderModels);
 });
 
-test('slash command choices match the shared registry', async () => {
+test('slash command keeps model presentation separate from raw provider ids', async () => {
     const originalEnv = { ...process.env };
     process.env.DISCORD_TOKEN = 'token';
     process.env.DISCORD_CLIENT_ID = 'client-id';
@@ -65,7 +78,7 @@ test('slash command choices match the shared registry', async () => {
             (option) => option.name === 'image_model'
         ) as CommandOptionWithChoices | undefined;
         const textModelOption = commandJson.options?.find(
-            (option) => option.name === 'text_model'
+            (option) => option.name === 'image_prompt_model'
         ) as CommandOptionWithChoices | undefined;
 
         assert.deepEqual(
@@ -74,7 +87,27 @@ test('slash command choices match the shared registry', async () => {
         );
         assert.deepEqual(
             textModelOption?.choices?.map((choice) => choice.value),
-            [...internalImageTextModels]
+            [...imageTextModels]
+        );
+        assert.deepEqual(
+            textModelOption?.choices?.map((choice) => choice.name),
+            imageTextModelChoices.map((choice) => choice.name)
+        );
+        assert.equal(
+            textModelOption?.description,
+            'Image prompt model for this request only; does not change Workflow or response models.'
+        );
+        assert.equal(
+            imageModelOption?.choices?.find(
+                (choice) => choice.value === 'gpt-image-1-mini'
+            )?.name,
+            'GPT Image 1 Mini (deprecated)'
+        );
+        assert.equal(
+            imageModelOption?.choices?.find(
+                (choice) => choice.value === 'gpt-image-2'
+            )?.name,
+            'GPT Image 2'
         );
         assert.ok((imageModelOption?.choices?.length ?? 0) <= 25);
         assert.ok((textModelOption?.choices?.length ?? 0) <= 25);

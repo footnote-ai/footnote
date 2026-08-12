@@ -2092,6 +2092,12 @@ components:
                 inputTokens:
                     type: integer
                     minimum: 0
+                cachedInputTokens:
+                    type: integer
+                    minimum: 0
+                cacheWriteTokens:
+                    type: integer
+                    minimum: 0
                 outputTokens:
                     type: integer
                     minimum: 0
@@ -2190,6 +2196,8 @@ components:
                 imageCount:
                     type: integer
                     minimum: 0
+                providerUsageAvailable:
+                    type: boolean
             required:
                 - inputTokens
                 - outputTokens
@@ -2278,6 +2286,9 @@ components:
                             gpt-5.1-chat-latest,
                             gpt-5-chat-latest,
                         ]
+                reasoningEffort:
+                    type: string
+                    enum: [none, low, medium, high, xhigh, max]
                 imageModel:
                     type: string
                     enum:

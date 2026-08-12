@@ -13,6 +13,7 @@ import type {
     ImageGenerationRequest,
     ImageGenerationRuntime,
 } from '@footnote/agent-runtime';
+import type { ResponseMetadata } from '@footnote/contracts/policy';
 import type { BackendLLMCostRecord } from '../src/services/llmCostRecorder.js';
 import { createInternalImageHandler } from '../src/handlers/internalImage.js';
 import { createInternalImageTaskService } from '../src/services/internalImage.js';
@@ -460,13 +461,16 @@ test('internal image endpoint returns 503 when the internal image task service i
 
 test('internal image task service records usage after successful runtime execution', async () => {
     const recordedUsage: BackendLLMCostRecord[] = [];
+    let seenReasoningEffort: ImageGenerationRequest['reasoningEffort'];
     const service = createInternalImageTaskService({
         imageGenerationRuntime: {
             kind: 'test-image-runtime',
             async generateImage(request) {
+                seenReasoningEffort = request.reasoningEffort;
                 return {
                     responseId: 'resp_123',
                     textModel: request.textModel,
+                    reasoningEffort: request.reasoningEffort,
                     imageModel: request.imageModel,
                     revisedPrompt: null,
                     finalStyle: request.style,
@@ -481,9 +485,12 @@ test('internal image task service records usage after successful runtime executi
                     outputCompression: request.outputCompression,
                     usage: {
                         inputTokens: 12,
+                        cachedInputTokens: 2,
+                        cacheWriteTokens: 3,
                         outputTokens: 8,
                         totalTokens: 20,
                         imageCount: 1,
+                        providerUsageAvailable: true,
                     },
                     costs: {
                         text: 0.00002,
@@ -500,22 +507,51 @@ test('internal image task service records usage after successful runtime executi
         },
     });
 
-    const response = await service.runImageTask(createImageRequestPayload());
+    const response = await service.runImageTask({
+        ...createImageRequestPayload(),
+        textModel: 'gpt-5.6-luna',
+    });
 
-    assert.equal(recordedUsage.length, 1);
-    const usageRecord = recordedUsage[0];
-    assert.ok(usageRecord);
-    assert.equal(typeof usageRecord.timestamp, 'number');
-    assert.deepEqual(usageRecord, {
-        feature: 'image',
-        model: 'gpt-image-1-mini',
+    assert.equal(seenReasoningEffort, 'low');
+    assert.equal(recordedUsage.length, 2);
+    const [promptRecord, renderRecord] = recordedUsage;
+    assert.ok(promptRecord);
+    assert.ok(renderRecord);
+    assert.equal(typeof promptRecord.timestamp, 'number');
+    assert.deepEqual(promptRecord, {
+        feature: 'image_prompt',
+        model: 'gpt-5.6-luna',
         promptTokens: 12,
+        cachedInputTokens: 2,
+        cacheWriteTokens: 3,
         completionTokens: 8,
         totalTokens: 20,
-        inputCostUsd: 0.00002,
+        inputCostUsd: 0.000001095,
+        outputCostUsd: 0.0000048,
+        totalCostUsd: 0.000005895,
+        costCompleteness: 'complete',
+        costAppliedRules: [
+            'prompt_cache_read_discount',
+            'prompt_cache_write_multiplier',
+        ],
+        costIncompleteReasons: [],
+        timestamp: promptRecord.timestamp,
+    });
+    assert.deepEqual(renderRecord, {
+        feature: 'image_render',
+        model: 'gpt-image-1-mini',
+        promptTokens: 0,
+        completionTokens: 0,
+        totalTokens: 0,
+        inputCostUsd: 0,
         outputCostUsd: 0.011,
-        totalCostUsd: 0.01102,
-        timestamp: usageRecord.timestamp,
+        totalCostUsd: 0.011,
+        costCompleteness: 'complete',
+        costIncompleteReasons: [],
+        imageCount: 1,
+        imageQuality: 'medium',
+        imageSize: '1024x1024',
+        timestamp: renderRecord.timestamp,
     });
     assert.equal(response.result.responseId, 'resp_123');
 });
@@ -571,6 +607,9 @@ test('internal image task service stores trace metadata for image responses', as
     let storedPrompt: string | null = null;
     let storedActivePrompt: string | null = null;
     let storedFollowUpResponseId: string | null = null;
+    let storedCostComponents:
+        | NonNullable<ResponseMetadata['imageGeneration']>['costComponents']
+        | undefined;
     const service = createInternalImageTaskService({
         imageGenerationRuntime: {
             kind: 'test-image-runtime',
@@ -578,6 +617,7 @@ test('internal image task service stores trace metadata for image responses', as
                 return {
                     responseId: 'resp_trace_123',
                     textModel: request.textModel,
+                    reasoningEffort: request.reasoningEffort,
                     imageModel: request.imageModel,
                     revisedPrompt: 'draw a reflective skyline at dusk',
                     finalStyle: request.style,
@@ -592,9 +632,12 @@ test('internal image task service stores trace metadata for image responses', as
                     outputCompression: request.outputCompression,
                     usage: {
                         inputTokens: 12,
+                        cachedInputTokens: 2,
+                        cacheWriteTokens: 3,
                         outputTokens: 8,
                         totalTokens: 20,
                         imageCount: 1,
+                        providerUsageAvailable: true,
                     },
                     costs: {
                         text: 0.00002,
@@ -614,16 +657,28 @@ test('internal image task service stores trace metadata for image responses', as
                 metadata.imageGeneration?.prompts.active ?? null;
             storedFollowUpResponseId =
                 metadata.imageGeneration?.linkage.followUpResponseId ?? null;
+            storedCostComponents = metadata.imageGeneration?.costComponents;
         },
     });
 
-    const response = await service.runImageTask(createImageRequestPayload());
+    const response = await service.runImageTask({
+        ...createImageRequestPayload(),
+        textModel: 'gpt-5.6-luna',
+    });
 
     assert.equal(response.result.responseId, 'resp_trace_123');
     assert.equal(storedResponseId, 'resp_trace_123');
     assert.equal(storedPrompt, 'draw a reflective skyline');
     assert.equal(storedActivePrompt, 'draw a reflective skyline at dusk');
     assert.equal(storedFollowUpResponseId, 'resp_prev_123');
+    assert.equal(storedCostComponents?.prompt.model, 'gpt-5.6-luna');
+    assert.equal(storedCostComponents?.prompt.reasoningEffort, 'low');
+    assert.equal(storedCostComponents?.prompt.cachedInputTokens, 2);
+    assert.equal(storedCostComponents?.prompt.cacheWriteTokens, 3);
+    assert.equal(storedCostComponents?.prompt.completeness, 'complete');
+    assert.equal(storedCostComponents?.render.model, 'gpt-image-1-mini');
+    assert.equal(storedCostComponents?.render.imageCount, 1);
+    assert.equal(storedCostComponents?.render.totalCost, 0.011);
 });
 
 test('internal image task service keeps success path when trace storage fails', async () => {

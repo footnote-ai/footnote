@@ -307,31 +307,31 @@
                 "type": 3,
                 "choices": [
                     {
-                        "name": "gpt-image-2",
+                        "name": "GPT Image 2",
                         "value": "gpt-image-2"
                     },
                     {
-                        "name": "gpt-image-1.5",
+                        "name": "GPT Image 1.5 (deprecated)",
                         "value": "gpt-image-1.5"
                     },
                     {
-                        "name": "chatgpt-image-latest",
+                        "name": "ChatGPT Image (Latest) (deprecated)",
                         "value": "chatgpt-image-latest"
                     },
                     {
-                        "name": "gpt-image-1",
+                        "name": "GPT Image 1 (deprecated)",
                         "value": "gpt-image-1"
                     },
                     {
-                        "name": "gpt-image-1-mini",
+                        "name": "GPT Image 1 Mini (deprecated)",
                         "value": "gpt-image-1-mini"
                     },
                     {
-                        "name": "dall-e-3",
+                        "name": "DALL-E 3 (deprecated)",
                         "value": "dall-e-3"
                     },
                     {
-                        "name": "dall-e-2",
+                        "name": "DALL-E 2 (deprecated)",
                         "value": "dall-e-2"
                     }
                 ],
@@ -343,108 +343,24 @@
                 "type": 3,
                 "choices": [
                     {
-                        "name": "gpt-5.6-sol",
-                        "value": "gpt-5.6-sol"
-                    },
-                    {
-                        "name": "gpt-5.6-terra",
-                        "value": "gpt-5.6-terra"
-                    },
-                    {
-                        "name": "gpt-5.6-luna",
+                        "name": "gpt-5.6-luna (recommended/default)",
                         "value": "gpt-5.6-luna"
                     },
                     {
-                        "name": "gpt-5.4",
-                        "value": "gpt-5.4"
+                        "name": "gpt-5.6-terra (higher quality)",
+                        "value": "gpt-5.6-terra"
                     },
                     {
-                        "name": "gpt-5.4-pro",
-                        "value": "gpt-5.4-pro"
+                        "name": "gpt-5.6-sol (highest quality)",
+                        "value": "gpt-5.6-sol"
                     },
                     {
-                        "name": "gpt-5.4-mini",
-                        "value": "gpt-5.4-mini"
-                    },
-                    {
-                        "name": "gpt-5.4-nano",
+                        "name": "gpt-5.4-nano (lowest cost)",
                         "value": "gpt-5.4-nano"
-                    },
-                    {
-                        "name": "gpt-5-mini",
-                        "value": "gpt-5-mini"
-                    },
-                    {
-                        "name": "gpt-5-nano",
-                        "value": "gpt-5-nano"
-                    },
-                    {
-                        "name": "gpt-5",
-                        "value": "gpt-5"
-                    },
-                    {
-                        "name": "gpt-4.1",
-                        "value": "gpt-4.1"
-                    },
-                    {
-                        "name": "gpt-5-codex",
-                        "value": "gpt-5-codex"
-                    },
-                    {
-                        "name": "gpt-5.3-codex",
-                        "value": "gpt-5.3-codex"
-                    },
-                    {
-                        "name": "gpt-5.2",
-                        "value": "gpt-5.2"
-                    },
-                    {
-                        "name": "gpt-5.2-codex",
-                        "value": "gpt-5.2-codex"
-                    },
-                    {
-                        "name": "gpt-5.1",
-                        "value": "gpt-5.1"
-                    },
-                    {
-                        "name": "gpt-5.1-codex",
-                        "value": "gpt-5.1-codex"
-                    },
-                    {
-                        "name": "gpt-5.1-codex-max",
-                        "value": "gpt-5.1-codex-max"
-                    },
-                    {
-                        "name": "gpt-5.1-codex-mini",
-                        "value": "gpt-5.1-codex-mini"
-                    },
-                    {
-                        "name": "codex-mini-latest",
-                        "value": "codex-mini-latest"
-                    },
-                    {
-                        "name": "o3-deep-research",
-                        "value": "o3-deep-research"
-                    },
-                    {
-                        "name": "o4-mini-deep-research",
-                        "value": "o4-mini-deep-research"
-                    },
-                    {
-                        "name": "gpt-oss-120b",
-                        "value": "gpt-oss-120b"
-                    },
-                    {
-                        "name": "gpt-oss-20b",
-                        "value": "gpt-oss-20b"
-                    },
-                    {
-                        "name": "gpt-5.2-pro",
-                        "value": "gpt-5.2-pro"
                     }
                 ],
-                "name": "text_model",
-                "description": "The text model to use for prompt adjustment (optional; defaults to gpt-4.1-mini)",
+                "name": "image_prompt_model",
+                "description": "Image prompt model for this request only; does not change Workflow or response models.",
                 "required": false
             },
             {

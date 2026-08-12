@@ -14,3 +14,11 @@ test('OpenAI defaults use the balanced GPT-5.6 Terra profile', () => {
     assert.equal(envDefaultValues.DEFAULT_MODEL, 'gpt-5.6-terra');
     assert.equal(envDefaultValues.DEFAULT_PROFILE_ID, 'openai-text-medium');
 });
+
+test('image prompting defaults to the request-local GPT-5.6 Luna model', () => {
+    assert.equal(envDefaultValues.IMAGE_DEFAULT_TEXT_MODEL, 'gpt-5.6-luna');
+    assert.equal(
+        envDefaultValues.IMAGE_DEFAULT_IMAGE_MODEL,
+        'gpt-image-1-mini'
+    );
+});

@@ -97,7 +97,9 @@ export type PricedOpenAITtsModel =
  * OpenAI image model ids with shared backend pricing data.
  */
 export const supportedPricedOpenAIImageModels = [
+    'gpt-image-2',
     'gpt-image-1.5',
+    'chatgpt-image-latest',
     'gpt-image-1',
     'gpt-image-1-mini',
 ] as const;
@@ -192,12 +194,32 @@ export type OpenAITextCostIncompleteReason =
     | 'unpriced_model'
     | 'cached_input_tokens_unavailable'
     | 'cache_write_tokens_unavailable'
-    | 'invalid_input_token_breakdown';
+    | 'invalid_input_token_breakdown'
+    | 'provider_usage_unavailable';
 
 export interface OpenAITextUsageDetails {
     cachedInputTokens?: number;
     cacheWriteTokens?: number;
+    /**
+     * Whether the provider returned a token-usage payload. Callers that did
+     * not receive one must keep the estimate visibly incomplete rather than
+     * treating a zero fallback as measured usage.
+     */
+    providerUsageAvailable?: boolean;
 }
+
+/**
+ * Completeness labels for image-render cost estimates.
+ */
+export type ImageGenerationCostCompleteness = 'complete' | 'unknown';
+
+/**
+ * Reasons an image-render cost estimate cannot be treated as complete.
+ */
+export type ImageGenerationCostIncompleteReason =
+    | 'unpriced_model'
+    | 'auto_quality'
+    | 'auto_size';
 
 /**
  * Shared TTS-cost breakdown used by backend accounting and bot-side display
@@ -232,6 +254,8 @@ export interface ImageGenerationCostEstimate {
     partialImageCount: number;
     perImageCost: number;
     totalCost: number;
+    completeness: ImageGenerationCostCompleteness;
+    incompleteReasons: ImageGenerationCostIncompleteReason[];
 }
 
 export type OpenAITextPricingEntry = {
@@ -314,7 +338,7 @@ type OpenAIImageTokenPricingEntry = {
  * Canonical text pricing per 1M tokens (USD).
  * Sources: https://developers.openai.com/api/docs/models and
  * https://platform.openai.com/pricing
- * Last updated in-repo: 2026-07-22
+ * Last updated in-repo: 2026-08-12
  */
 export const openAITextPricingTable: Record<
     PricedOpenAITextModel,
@@ -332,17 +356,6 @@ export const openAITextPricingTable: Record<
         },
     },
     'gpt-5.6-sol': {
-        input: 5.0,
-        cachedInput: 0.5,
-        output: 30.0,
-        cacheWriteMultiplier: 1.25,
-        longContext: {
-            inputTokenThreshold: 272_000,
-            inputMultiplier: 2,
-            outputMultiplier: 1.5,
-        },
-    },
-    'gpt-5.6-terra': {
         input: 2.5,
         cachedInput: 0.25,
         output: 15.0,
@@ -353,10 +366,21 @@ export const openAITextPricingTable: Record<
             outputMultiplier: 1.5,
         },
     },
-    'gpt-5.6-luna': {
+    'gpt-5.6-terra': {
         input: 1.0,
         cachedInput: 0.1,
         output: 6.0,
+        cacheWriteMultiplier: 1.25,
+        longContext: {
+            inputTokenThreshold: 272_000,
+            inputMultiplier: 2,
+            outputMultiplier: 1.5,
+        },
+    },
+    'gpt-5.6-luna': {
+        input: 0.1,
+        cachedInput: 0.01,
+        output: 0.6,
         cacheWriteMultiplier: 1.25,
         longContext: {
             inputTokenThreshold: 272_000,
@@ -417,8 +441,9 @@ export const openAITtsPricingTable: Record<PricedOpenAITtsModel, number> = {
 
 /**
  * Canonical image pricing per generated image (USD).
- * Source: https://platform.openai.com/pricing
- * Last updated in-repo: 2025-12-18
+ * Source: https://developers.openai.com/api/docs/pricing and
+ * https://developers.openai.com/api/docs/guides/image-generation
+ * Last updated in-repo: 2026-08-12
  */
 export const openAIImageGenerationPricingTable: Record<
     PricedOpenAIImageModel,
@@ -427,7 +452,41 @@ export const openAIImageGenerationPricingTable: Record<
         Record<PricedImageGenerationSize, number>
     >
 > = {
+    'gpt-image-2': {
+        low: {
+            '1024x1024': 0.006,
+            '1024x1536': 0.005,
+            '1536x1024': 0.005,
+        },
+        medium: {
+            '1024x1024': 0.053,
+            '1024x1536': 0.041,
+            '1536x1024': 0.041,
+        },
+        high: {
+            '1024x1024': 0.211,
+            '1024x1536': 0.165,
+            '1536x1024': 0.165,
+        },
+    },
     'gpt-image-1.5': {
+        low: {
+            '1024x1024': 0.009,
+            '1024x1536': 0.013,
+            '1536x1024': 0.013,
+        },
+        medium: {
+            '1024x1024': 0.034,
+            '1024x1536': 0.05,
+            '1536x1024': 0.05,
+        },
+        high: {
+            '1024x1024': 0.133,
+            '1024x1536': 0.2,
+            '1536x1024': 0.2,
+        },
+    },
+    'chatgpt-image-latest': {
         low: {
             '1024x1024': 0.009,
             '1024x1536': 0.013,
@@ -482,14 +541,16 @@ export const openAIImageGenerationPricingTable: Record<
 
 /**
  * Canonical image token pricing per 1M tokens (USD).
- * Source: https://platform.openai.com/docs/pricing
- * Last updated in-repo: 2026-03-19
+ * Source: https://developers.openai.com/api/docs/pricing
+ * Last updated in-repo: 2026-08-12
  */
 const openAIImageTokenPricingTable: Record<
     PricedOpenAIImageModel,
     OpenAIImageTokenPricingEntry
 > = {
+    'gpt-image-2': { input: 8.0, output: 30.0 },
     'gpt-image-1.5': { input: 8.0, output: 32.0 },
+    'chatgpt-image-latest': { input: 8.0, output: 32.0 },
     'gpt-image-1': { input: 10.0, output: 40.0 },
     'gpt-image-1-mini': { input: 2.5, output: 8.0 },
 };
@@ -752,6 +813,10 @@ export const estimateOpenAITextCost = (
     const cachedInputTokens = usageDetails.cachedInputTokens;
     const cacheWriteTokens = usageDetails.cacheWriteTokens;
 
+    if (usageDetails.providerUsageAvailable === false) {
+        incompleteReasons.push('provider_usage_unavailable');
+    }
+
     if (hasAdvancedInputPricing && cachedInputTokens === undefined) {
         incompleteReasons.push('cached_input_tokens_unavailable');
     }
@@ -931,12 +996,18 @@ export const estimateOpenAIImageGenerationCost = (
         ? openAIImageTokenPricingTable[pricingModel]
         : null;
 
-    if (
-        !pricing ||
-        !tokenPricing ||
-        effectiveQuality === 'auto' ||
-        effectiveSize === 'auto'
-    ) {
+    const incompleteReasons: ImageGenerationCostIncompleteReason[] = [];
+    if (!pricing || !tokenPricing) {
+        incompleteReasons.push('unpriced_model');
+    }
+    if (effectiveQuality === 'auto') {
+        incompleteReasons.push('auto_quality');
+    }
+    if (effectiveSize === 'auto') {
+        incompleteReasons.push('auto_size');
+    }
+
+    if (incompleteReasons.length > 0) {
         return {
             effectiveQuality,
             effectiveSize,
@@ -944,12 +1015,21 @@ export const estimateOpenAIImageGenerationCost = (
             partialImageCount,
             perImageCost: 0,
             totalCost: 0,
+            completeness: 'unknown',
+            incompleteReasons,
         };
     }
 
-    const perImageCost = pricing[effectiveQuality][effectiveSize] ?? 0;
+    const resolvedPricing = pricing as Record<
+        PricedImageGenerationQuality,
+        Record<PricedImageGenerationSize, number>
+    >;
+    const resolvedTokenPricing = tokenPricing as OpenAIImageTokenPricingEntry;
+    const resolvedQuality = effectiveQuality as PricedImageGenerationQuality;
+    const resolvedSize = effectiveSize as PricedImageGenerationSize;
+    const perImageCost = resolvedPricing[resolvedQuality][resolvedSize] ?? 0;
     const partialImageCost =
-        (partialImageCount * 100 * tokenPricing.output) / 1_000_000;
+        (partialImageCount * 100 * resolvedTokenPricing.output) / 1_000_000;
 
     return {
         effectiveQuality,
@@ -958,5 +1038,7 @@ export const estimateOpenAIImageGenerationCost = (
         partialImageCount,
         perImageCost,
         totalCost: perImageCost * imageCount + partialImageCost,
+        completeness: 'complete',
+        incompleteReasons: [],
     };
 };

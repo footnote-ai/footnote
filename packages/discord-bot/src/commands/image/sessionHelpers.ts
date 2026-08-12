@@ -492,7 +492,9 @@ export function buildImageResultPresentation(
     }
 
     assertField('Image model', resolvedContext.imageModel, { inline: true });
-    assertField('Text model', resolvedContext.textModel, { inline: true });
+    assertField('Image prompt model', resolvedContext.textModel, {
+        inline: true,
+    });
     assertField('Quality', toTitleCase(resolvedContext.quality), {
         inline: true,
     });
