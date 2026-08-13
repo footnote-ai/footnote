@@ -494,6 +494,41 @@ test('ResponseMetadataSchema accepts workflow lineage metadata', () => {
     assert.equal(parsed.success, true);
 });
 
+test('ResponseMetadataSchema accepts style rewrite workflow reason codes', () => {
+    const now = new Date().toISOString();
+    const reasonCodes = [
+        'style_rewrite_skipped',
+        'style_rewrite_applied',
+        'style_rewrite_rejected',
+        'style_rewrite_failed',
+    ] as const;
+
+    for (const reasonCode of reasonCodes) {
+        const payload = createValidWorkflowMetadataPayload(now);
+        payload.workflow.steps.push({
+            stepId: `step_${reasonCode}`,
+            parentStepId: 'step_2',
+            attempt: 1,
+            stepKind: 'style_rewrite',
+            reasonCode,
+            startedAt: now,
+            finishedAt: now,
+            durationMs: 1,
+            outcome: {
+                status: 'executed',
+                summary: 'Style rewrite completed or preserved the draft.',
+            },
+        });
+        payload.workflow.stepCount = payload.workflow.steps.length;
+
+        assert.equal(
+            ResponseMetadataSchema.safeParse(payload).success,
+            true,
+            `${reasonCode} should serialize in workflow metadata`
+        );
+    }
+});
+
 test('ResponseMetadataSchema accepts normalized review runtime summary labels', () => {
     const parsed = ResponseMetadataSchema.safeParse({
         ...baseMetadata,

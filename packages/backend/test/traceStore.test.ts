@@ -70,6 +70,82 @@ test('TraceStore round trips metadata with citation URLs', async () => {
     }
 });
 
+test('TraceStore round trips style rewrite workflow metadata', async () => {
+    const tempRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'trace-store-'));
+    const dbPath = path.join(tempRoot, 'provenance.db');
+    const store = new SqliteTraceStore({ dbPath });
+    const now = new Date().toISOString();
+    const responseId = 'style_rewrite_trace_123';
+
+    const metadata: ResponseMetadata = {
+        responseId,
+        provenance: 'Inferred',
+        safetyTier: 'Low',
+        tradeoffCount: 1,
+        chainHash: 'style_rewrite_chain_hash',
+        licenseContext: 'MIT + HL3',
+        modelVersion: 'gpt-5-mini',
+        staleAfter: new Date(Date.now() + 60000).toISOString(),
+        citations: [],
+        trace_target: {},
+        trace_final: {},
+        workflow: {
+            workflowId: 'wf_style_rewrite_123',
+            workflowName: 'message_reviewed',
+            status: 'completed',
+            terminationReason: 'goal_satisfied',
+            stepCount: 1,
+            maxSteps: 4,
+            maxDurationMs: 15000,
+            steps: [
+                {
+                    stepId: 'step_style_rewrite_1',
+                    attempt: 1,
+                    stepKind: 'style_rewrite',
+                    reasonCode: 'style_rewrite_applied',
+                    startedAt: now,
+                    finishedAt: now,
+                    durationMs: 1,
+                    outcome: {
+                        status: 'executed',
+                        summary: 'Applied a presentation-only style rewrite.',
+                    },
+                },
+            ],
+        },
+        styleRewrite: {
+            step: 'style_rewrite',
+            outcome: 'applied',
+            attempted: true,
+            reasonCode: 'applied',
+            personaId: 'myuri',
+            profileId: 'ollama-text-gptoss',
+            provider: 'ollama',
+            model: 'gpt-oss:20b-cloud',
+            durationMs: 1,
+            validatorOutcome: 'equivalent',
+            editRatio: 0.1,
+            intensity: 'standard',
+            traceConstrained: false,
+        },
+    };
+
+    try {
+        await store.upsert(metadata);
+
+        const retrieved = await store.retrieve(responseId);
+        assert.ok(retrieved, 'style rewrite trace should be retrievable');
+        assert.equal(
+            retrieved.workflow?.steps[0]?.reasonCode,
+            'style_rewrite_applied'
+        );
+        assert.equal(retrieved.styleRewrite?.outcome, 'applied');
+    } finally {
+        store.close();
+        await fs.rm(tempRoot, { recursive: true, force: true });
+    }
+});
+
 test('TraceStore round trips trace-card SVG assets', async () => {
     const tempRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'trace-card-'));
     const dbPath = path.join(tempRoot, 'provenance.db');
