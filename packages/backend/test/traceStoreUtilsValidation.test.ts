@@ -26,6 +26,8 @@ const baseMetadata = {
             url: 'https://example.com/source',
         },
     ],
+    trace_target: {},
+    trace_final: {},
 };
 
 test('assertValidResponseMetadata accepts valid metadata with forward-compatible fields', () => {

@@ -105,6 +105,10 @@ to caution, uncertainty, attribution, scope, or other answer posture. Mapping
 tightness, rationale, attribution, or extent to presentation is explicitly out
 of scope pending evaluation evidence.
 
+When a rewrite record exists, the trace view shows its outcome, model,
+validator evidence, edit estimate, and opaque HMAC identifiers. It never shows
+or retains both answer versions for that display.
+
 ## Control influence records
 
 `steerabilityControls` records which backend controls materially affected a

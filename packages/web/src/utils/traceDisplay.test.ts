@@ -8,8 +8,14 @@
 
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import type { WorkflowRecord } from '@footnote/contracts/policy';
-import { sanitizeWorkflowForDisplay } from './traceDisplay.js';
+import type {
+    StyleRewriteMetadata,
+    WorkflowRecord,
+} from '@footnote/contracts/policy';
+import {
+    sanitizeStyleRewriteForDisplay,
+    sanitizeWorkflowForDisplay,
+} from './traceDisplay.js';
 
 test('sanitizeWorkflowForDisplay redacts artifacts and preserves outcome fields', () => {
     const workflow: WorkflowRecord = {
@@ -51,4 +57,33 @@ test('sanitizeWorkflowForDisplay redacts artifacts and preserves outcome fields'
         artifacts: ['[redacted:13 chars]', '[redacted:1 chars]'],
     });
     assert.equal(sanitized?.terminationReason, 'budget_exhausted_tokens');
+});
+
+test('sanitizeStyleRewriteForDisplay preserves text-free rewrite provenance', () => {
+    const styleRewrite: StyleRewriteMetadata = {
+        step: 'style_rewrite',
+        outcome: 'applied',
+        attempted: true,
+        reasonCode: 'applied',
+        personaId: 'myuri',
+        profileId: 'ollama-cloud-style',
+        provider: 'ollama',
+        model: 'style-model',
+        validatorProfileId: 'ollama-cloud-validator',
+        validatorModel: 'validator-model',
+        durationMs: 12,
+        validatorOutcome: 'equivalent',
+        originalHmacId: 'a'.repeat(64),
+        presentedHmacId: 'b'.repeat(64),
+        editRatio: 0.12,
+        caution: 2,
+        intensity: 'standard',
+        traceConstrained: false,
+    };
+
+    assert.deepEqual(
+        sanitizeStyleRewriteForDisplay(styleRewrite),
+        styleRewrite
+    );
+    assert.equal(sanitizeStyleRewriteForDisplay(undefined), null);
 });
