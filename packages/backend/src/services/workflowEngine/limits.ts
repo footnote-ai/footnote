@@ -74,7 +74,9 @@ export const checkExecutionLimits = (
     }
 
     const isNextStepDeliberative =
-        nextStepKind === 'plan' || nextStepKind === 'assess';
+        nextStepKind === 'plan' ||
+        nextStepKind === 'assess' ||
+        nextStepKind === 'style_rewrite';
     const maxPlanCycles =
         limits.maxPlanCycles ?? Math.max(0, limits.maxDeliberationCalls);
     const maxReviewCycles =

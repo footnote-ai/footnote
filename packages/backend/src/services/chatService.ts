@@ -23,6 +23,7 @@ import type {
     ToolExecutionContext,
     ToolInvocationRequest,
     WorkflowRecord,
+    StyleRewriteMetadata,
 } from '@footnote/contracts/policy';
 import type {
     ModelProfileCapabilities,
@@ -45,6 +46,10 @@ import {
     type BackendLLMCostRecord,
 } from './llmCostRecorder.js';
 import { buildRepoExplainerResponseHint } from './chatGenerationHints.js';
+import type {
+    StyleRewriteConfig,
+    StyleRewritePersona,
+} from './styleRewrite.js';
 import type { ChatGenerationPlan } from './chatGenerationTypes.js';
 import type { ExecutionContract } from './executionContract.js';
 import { renderConversationPromptLayers } from './prompts/conversationPromptLayers.js';
@@ -733,6 +738,7 @@ export type CreateChatServiceOptions = {
         input: Parameters<typeof runBoundedReviewWorkflow>[0]
     ) => Promise<RunBoundedReviewWorkflowResult>;
     executionContractTrustGraph?: ExecutionContractTrustGraphRuntimeOptions;
+    styleRewriteConfig?: StyleRewriteConfig;
 };
 
 /**
@@ -783,6 +789,8 @@ export type RunChatMessagesInput = {
     executionContractTrustGraphContext?: ExecutionContractTrustGraphContext;
     ExecutionContract?: ExecutionContract;
     steerabilityControls?: ResponseMetadata['steerabilityControls'];
+    /** Active backend persona source for optional presentation-only rewriting. */
+    styleRewritePersona?: StyleRewritePersona;
 };
 
 export type FinalToolExecutionTelemetry = {
@@ -839,7 +847,47 @@ export const createChatService = ({
     chatWorkflowConfig = runtimeConfig.chatWorkflow,
     runReviewWorkflow = runBoundedReviewWorkflow,
     executionContractTrustGraph,
+    styleRewriteConfig,
 }: CreateChatServiceOptions) => {
+    const configuredStyleRewriteProfileId =
+        styleRewriteConfig?.profileId ??
+        runtimeConfig.chatWorkflow.styleRewrite.profileId;
+    const configuredStyleRewriteProfile =
+        styleRewriteConfig?.profile ??
+        runtimeConfig.modelProfiles.catalog.find(
+            (profile) =>
+                profile.id === configuredStyleRewriteProfileId &&
+                profile.enabled
+        );
+    const configuredStyleRewriteValidatorProfileId =
+        styleRewriteConfig?.validatorProfileId ??
+        runtimeConfig.chatWorkflow.styleRewrite.validatorProfileId;
+    const configuredStyleRewriteValidatorProfile =
+        styleRewriteConfig?.validatorProfile ??
+        runtimeConfig.modelProfiles.catalog.find(
+            (profile) =>
+                profile.id === configuredStyleRewriteValidatorProfileId &&
+                profile.enabled
+        );
+    const effectiveStyleRewriteConfig: StyleRewriteConfig = {
+        enabled:
+            styleRewriteConfig?.enabled ??
+            runtimeConfig.chatWorkflow.styleRewrite.enabled,
+        profileId: configuredStyleRewriteProfileId,
+        validatorProfileId: configuredStyleRewriteValidatorProfileId,
+        timeoutMs:
+            styleRewriteConfig?.timeoutMs ??
+            runtimeConfig.chatWorkflow.styleRewrite.timeoutMs,
+        validatorTimeoutMs:
+            styleRewriteConfig?.validatorTimeoutMs ??
+            runtimeConfig.chatWorkflow.styleRewrite.validatorTimeoutMs,
+        ...(configuredStyleRewriteProfile !== undefined && {
+            profile: configuredStyleRewriteProfile,
+        }),
+        ...(configuredStyleRewriteValidatorProfile !== undefined && {
+            validatorProfile: configuredStyleRewriteValidatorProfile,
+        }),
+    };
     /**
      * Normalizes one runtime result into the metadata shape backend already
      * uses for provenance, trace storage, and cost accounting.
@@ -880,7 +928,8 @@ export const createChatService = ({
 
     const recordUsageForStep = (
         result: GenerationResult,
-        requestedModel: string | undefined
+        requestedModel: string | undefined,
+        feature: BackendLLMCostRecord['feature'] = 'chat'
     ): {
         model: string;
         promptTokens: number;
@@ -910,7 +959,7 @@ export const createChatService = ({
         if (recordUsage) {
             try {
                 recordUsage({
-                    feature: 'chat',
+                    feature,
                     model: usageModel,
                     promptTokens,
                     ...(result.usage?.cachedInputTokens !== undefined && {
@@ -969,6 +1018,7 @@ export const createChatService = ({
         executionContractTrustGraphContext,
         ExecutionContract,
         steerabilityControls,
+        styleRewritePersona,
     }: RunChatMessagesInput): Promise<RunChatMessagesResult> => {
         if (!contextEnvelope) {
             throw new Error(
@@ -1178,6 +1228,7 @@ export const createChatService = ({
                   workflowPlannerSummary?: AppliedPlanState;
                   workflowPlannerStepResult?: PlannerStepResult;
                   workflowConversationSnapshot?: string;
+                  styleRewriteMetadata?: StyleRewriteMetadata;
                   fallbackAfterInternalNoGeneration: boolean;
               }
         > => {
@@ -1189,6 +1240,7 @@ export const createChatService = ({
             let workflowPlannerSummary: AppliedPlanState | undefined;
             let workflowPlannerStepResult: PlannerStepResult | undefined;
             let workflowConversationSnapshot: string | undefined;
+            let styleRewriteMetadata: StyleRewriteMetadata | undefined;
             let fallbackAfterInternalNoGeneration = false;
 
             if (workflowExecutionEnabled) {
@@ -1277,6 +1329,22 @@ export const createChatService = ({
                         generateCandidates: generateProfileCandidates,
                         assessCandidates: assessProfileCandidates,
                     },
+                    styleRewrite: {
+                        config: effectiveStyleRewriteConfig,
+                        persona: styleRewritePersona ?? {
+                            id: 'footnote',
+                            presentationGuidance:
+                                'Use concise, neutral, clear prose. Preserve the original organization and avoid added emphasis.',
+                        },
+                        protectedContent:
+                            effectiveContextStepRequests.length > 0,
+                        captureUsage: (result, profile, feature) =>
+                            recordUsageForStep(
+                                result,
+                                profile.providerModel,
+                                feature
+                            ),
+                    },
                 });
                 workflowPlannerStepResult = workflowResult.plannerStepResult;
                 workflowPlannerSummary =
@@ -1306,6 +1374,7 @@ export const createChatService = ({
                     case 'generated': {
                         generationResult = workflowResult.generationResult;
                         workflowLineage = workflowResult.workflowLineage;
+                        styleRewriteMetadata = workflowResult.styleRewrite;
                         const generatedShortCircuit =
                             buildContextStepShortCircuit({
                                 workflowContextStepResult,
@@ -1562,6 +1631,7 @@ export const createChatService = ({
                 workflowPlannerSummary,
                 workflowPlannerStepResult,
                 workflowConversationSnapshot,
+                styleRewriteMetadata,
                 fallbackAfterInternalNoGeneration,
             };
         };
@@ -1584,6 +1654,7 @@ export const createChatService = ({
             generationPhase.workflowConversationSnapshot;
         const fallbackAfterInternalNoGeneration =
             generationPhase.fallbackAfterInternalNoGeneration;
+        const styleRewriteMetadata = generationPhase.styleRewriteMetadata;
 
         const effectiveContextStepResults = getEffectiveContextStepResults(
             workflowContextStepResults,
@@ -1618,6 +1689,7 @@ export const createChatService = ({
                 : workflowContextStepResult !== undefined
                   ? getContextStepSources(workflowContextStepResult)
                   : undefined;
+        const deliveredMessage = generationResult.text;
         const generationMetadata = buildGenerationMetadata(
             generationResult,
             effectiveNormalizedGeneration,
@@ -1854,6 +1926,7 @@ export const createChatService = ({
                 }),
             },
             ...(steerabilityControls !== undefined && { steerabilityControls }),
+            styleRewrite: styleRewriteMetadata,
             retrieval: {
                 requested: hasSearchIntent,
                 used: retrievalUsed,
@@ -1927,7 +2000,7 @@ export const createChatService = ({
 
         return {
             kind: 'message',
-            message: generationResult.text,
+            message: deliveredMessage,
             metadata: metadataWithTrustGraph,
             generationDurationMs,
             ...(workflowPlannerSummary !== undefined && {

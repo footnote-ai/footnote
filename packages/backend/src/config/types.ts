@@ -114,6 +114,18 @@ export type RuntimeConfig = {
         maxIterations: number;
         maxDurationMs: number;
         maxRequestReviewCycles: number;
+        styleRewrite: {
+            /** Optional presentation-only rewrite after successful text generation. */
+            enabled: boolean;
+            /** Deployment-owned model profile. Persona identity never selects this. */
+            profileId: string | null;
+            /** Separate deployment-owned profile for veto-only semantic validation. */
+            validatorProfileId: string | null;
+            /** Hard timeout for the one optional rewrite call. */
+            timeoutMs: number;
+            /** Hard timeout for the mandatory validator when a rewrite is attempted. */
+            validatorTimeoutMs: number;
+        };
         contextIntegrations: {
             /**
              * Web-search context integration controls for chat workflow execution.

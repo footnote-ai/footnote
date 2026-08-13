@@ -186,6 +186,10 @@ export type ExecutionReasonCode =
     | 'planner_invalid_output'
     | 'evaluator_runtime_error'
     | 'generation_runtime_error'
+    | 'style_rewrite_skipped'
+    | 'style_rewrite_applied'
+    | 'style_rewrite_rejected'
+    | 'style_rewrite_failed'
     | 'tool_not_requested'
     | 'tool_not_used'
     | 'search_rerouted_to_fallback_profile'
@@ -387,7 +391,8 @@ export type ExecutionEventKind =
     | 'planner'
     | 'evaluator'
     | 'tool'
-    | 'generation';
+    | 'generation'
+    | 'style_rewrite';
 
 type BaseExecutionEvent = {
     status: ExecutionStatus;
@@ -432,6 +437,61 @@ export type GenerationExecutionEvent = ProfileExecutionEvent & {
     reasonCode?: GenerationExecutionReasonCode;
 };
 
+/**
+ * Backend-owned record for the optional presentation-only rewrite that follows
+ * main generation. It records outcome without retaining either full text.
+ */
+export type StyleRewriteOutcome = 'applied' | 'skipped' | 'rejected' | 'failed';
+
+export type StyleRewriteReasonCode =
+    | 'applied'
+    | 'disabled'
+    | 'profile_not_configured'
+    | 'protected_content'
+    | 'structured_output'
+    | 'mechanical_preservation_failed'
+    | 'semantic_drift'
+    | 'validator_invalid'
+    | 'validator_unavailable'
+    | 'budget_unavailable'
+    | 'trace_caution_high'
+    | 'timeout'
+    | 'provider_error';
+
+export type StyleRewriteSemanticEvidence =
+    | 'not_attempted'
+    | 'equivalent'
+    | 'drift'
+    | 'uncertain'
+    | 'unavailable';
+
+export type StyleRewriteMetadata = {
+    step: 'style_rewrite';
+    outcome: StyleRewriteOutcome;
+    attempted: boolean;
+    reasonCode: StyleRewriteReasonCode;
+    personaId: string;
+    profileId?: string;
+    provider?: string;
+    model?: string;
+    validatorProfileId?: string;
+    validatorModel?: string;
+    durationMs?: number;
+    // Semantic comparison is evidence only, never proof of preservation.
+    validatorOutcome: StyleRewriteSemanticEvidence;
+    /** SHA-256 identifies the retained text without retaining a duplicate copy. */
+    originalSha256: string;
+    /** SHA-256 identifies the presented text; it does not prove equivalence. */
+    presentedSha256: string;
+    /** Conservative lexical edit estimate, not a semantic similarity claim. */
+    editRatio: number;
+    /** Final backend TRACE caution that constrained this presentation-only step. */
+    caution?: TraceAxisScore;
+    /** Caution-only v1 policy; other TRACE axes are intentionally unsupported. */
+    intensity: 'standard' | 'restrained' | 'skipped';
+    traceConstrained: boolean;
+};
+
 export const WORKFLOW_STEP_STATUSES = [
     'executed',
     'skipped',
@@ -446,6 +506,7 @@ export const WORKFLOW_STEP_KINDS = [
     'generate',
     'assess',
     'revise',
+    'style_rewrite',
     'finalize',
 ] as const;
 
@@ -1302,4 +1363,6 @@ export type ResponseMetadata = {
     trace_final_reason_code?: TraceFinalizationReasonCode;
     trustGraph?: TrustGraphMetadata;
     imageGeneration?: ImageGenerationMetadata;
+    // Optional presentation-only rewrite record. It never stores both answer texts.
+    styleRewrite?: StyleRewriteMetadata;
 };

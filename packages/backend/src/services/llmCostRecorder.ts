@@ -22,6 +22,8 @@ export type BackendLLMCostRecord = {
     feature:
         | 'chat'
         | 'chat_planner'
+        | 'chat_style_rewrite'
+        | 'chat_style_validation'
         | 'news'
         | 'image'
         | 'image_prompt'

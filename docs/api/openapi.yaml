@@ -3494,6 +3494,96 @@ components:
                         additionalProperties: false
                 workflow:
                     $ref: '#/components/schemas/WorkflowRecord'
+                styleRewrite:
+                    type: object
+                    description: Optional backend-owned presentation-only rewrite outcome. Full source and rewritten texts are not required to be retained.
+                    properties:
+                        step:
+                            type: string
+                            enum: [style_rewrite]
+                        outcome:
+                            type: string
+                            enum: [applied, skipped, rejected, failed]
+                        attempted:
+                            type: boolean
+                        reasonCode:
+                            type: string
+                            enum:
+                                [
+                                    applied,
+                                    disabled,
+                                    profile_not_configured,
+                                    protected_content,
+                                    structured_output,
+                                    mechanical_preservation_failed,
+                                    semantic_drift,
+                                    validator_invalid,
+                                    validator_unavailable,
+                                    budget_unavailable,
+                                    trace_caution_high,
+                                    timeout,
+                                    provider_error,
+                                ]
+                        personaId:
+                            type: string
+                        profileId:
+                            type: string
+                        provider:
+                            type: string
+                        model:
+                            type: string
+                        validatorProfileId:
+                            type: string
+                        validatorModel:
+                            type: string
+                        durationMs:
+                            type: integer
+                            minimum: 0
+                        validatorOutcome:
+                            type: string
+                            enum:
+                                [
+                                    not_attempted,
+                                    equivalent,
+                                    drift,
+                                    uncertain,
+                                    unavailable,
+                                ]
+                        originalSha256:
+                            type: string
+                            pattern: '^[a-f0-9]{64}$'
+                            description: SHA-256 identifier; not proof of equivalence.
+                        presentedSha256:
+                            type: string
+                            pattern: '^[a-f0-9]{64}$'
+                            description: SHA-256 identifier; not proof of equivalence.
+                        editRatio:
+                            type: number
+                            minimum: 0
+                            maximum: 1
+                        caution:
+                            type: integer
+                            enum: [1, 2, 3, 4, 5]
+                        intensity:
+                            type: string
+                            enum: [standard, restrained, skipped]
+                        traceConstrained:
+                            type: boolean
+                    required:
+                        [
+                            step,
+                            outcome,
+                            attempted,
+                            reasonCode,
+                            personaId,
+                            validatorOutcome,
+                            originalSha256,
+                            presentedSha256,
+                            editRatio,
+                            intensity,
+                            traceConstrained,
+                        ]
+                    additionalProperties: false
                 reviewRuntime:
                     $ref: '#/components/schemas/ReviewRuntimeSummary'
                 imageDescriptions:

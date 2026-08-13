@@ -26,6 +26,7 @@ import {
     resolveActiveProfileOverlayPrompt,
     resolveBotProfileDisplayName,
     resolveChatPersonaProfile,
+    resolvePersonaPresentationGuidance,
 } from './chatProfileOverlay.js';
 import { createModelProfileResolver } from './modelProfileResolver.js';
 import { listCapabilityProfileOptionsForStep } from './modelCapabilityPolicy.js';
@@ -857,6 +858,12 @@ export const createChatOrchestrator = ({
             }),
             executionContext: {
                 evaluator: evaluatorExecutionContext,
+            },
+            styleRewritePersona: {
+                id: personaProfile.id,
+                presentationGuidance: resolvePersonaPresentationGuidance(
+                    personaProfile.id
+                ),
             },
         });
         const plannerSummary =
