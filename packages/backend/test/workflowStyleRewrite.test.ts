@@ -38,6 +38,7 @@ const config: StyleRewriteConfig = {
     validatorProfile: profile,
     timeoutMs: 50,
     validatorTimeoutMs: 50,
+    traceHmacSecret: 'workflow-style-rewrite-test-secret',
 };
 const generated: GenerationResult = {
     text: 'According to Ada Lovelace, the release has 12 fixes. It may not resolve every issue.',
@@ -90,7 +91,7 @@ test('successful workflow applies one style_rewrite lineage step and records sep
             if (calls === 3)
                 return {
                     ...generated,
-                    text: 'The release has 12 fixes, according to Ada Lovelace. It may not resolve every issue.',
+                    text: 'According to Ada Lovelace, the release lists 12 fixes. It may not resolve every issue.',
                 };
             return {
                 ...generated,
@@ -142,7 +143,7 @@ test('successful workflow applies one style_rewrite lineage step and records sep
     );
     assert.equal(
         result.generationResult.text,
-        'The release has 12 fixes, according to Ada Lovelace. It may not resolve every issue.'
+        'According to Ada Lovelace, the release lists 12 fixes. It may not resolve every issue.'
     );
     assert.equal(
         result.workflowLineage.steps.at(-1)?.stepKind,

@@ -454,6 +454,7 @@ export type StyleRewriteReasonCode =
     | 'validator_invalid'
     | 'validator_unavailable'
     | 'budget_unavailable'
+    | 'transition_not_allowed'
     | 'trace_caution_high'
     | 'timeout'
     | 'provider_error';
@@ -479,10 +480,10 @@ export type StyleRewriteMetadata = {
     durationMs?: number;
     // Semantic comparison is evidence only, never proof of preservation.
     validatorOutcome: StyleRewriteSemanticEvidence;
-    /** SHA-256 identifies the retained text without retaining a duplicate copy. */
-    originalSha256: string;
-    /** SHA-256 identifies the presented text; it does not prove equivalence. */
-    presentedSha256: string;
+    /** Opaque backend-keyed HMAC for retained text, when a backend key is configured. */
+    originalHmacId?: string;
+    /** Opaque backend-keyed HMAC for presented text; it does not prove equivalence. */
+    presentedHmacId?: string;
     /** Conservative lexical edit estimate, not a semantic similarity claim. */
     editRatio: number;
     /** Final backend TRACE caution that constrained this presentation-only step. */

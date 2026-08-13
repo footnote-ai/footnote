@@ -59,7 +59,7 @@ const PERSONA_CATALOG: Record<string, PersonaCatalogEntry> = {
 };
 
 const DEFAULT_PERSONA_ID = 'footnote';
-const NEUTRAL_PRESENTATION_GUIDANCE =
+export const NEUTRAL_PRESENTATION_GUIDANCE =
     'Use concise, neutral, clear prose. Preserve the original organization and avoid added emphasis.';
 
 /** Returns explicit, text-only presentation guidance without scraping persona prompt files. */

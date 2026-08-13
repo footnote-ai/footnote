@@ -3137,7 +3137,16 @@ components:
                     minimum: 1
                 stepKind:
                     type: string
-                    enum: [plan, tool, generate, assess, revise, finalize]
+                    enum:
+                        [
+                            plan,
+                            tool,
+                            generate,
+                            assess,
+                            revise,
+                            style_rewrite,
+                            finalize,
+                        ]
                 reasonCode:
                     type: string
                     enum:
@@ -3299,7 +3308,15 @@ components:
                             type: string
                             description: Workflow step prevented by the exhausted limit.
                             enum:
-                                [plan, tool, generate, assess, revise, finalize]
+                                [
+                                    plan,
+                                    tool,
+                                    generate,
+                                    assess,
+                                    revise,
+                                    style_rewrite,
+                                    finalize,
+                                ]
                     required:
                         - stoppedByLimit
                         - terminationReason
@@ -3520,6 +3537,7 @@ components:
                                     validator_invalid,
                                     validator_unavailable,
                                     budget_unavailable,
+                                    transition_not_allowed,
                                     trace_caution_high,
                                     timeout,
                                     provider_error,
@@ -3549,14 +3567,14 @@ components:
                                     uncertain,
                                     unavailable,
                                 ]
-                        originalSha256:
+                        originalHmacId:
                             type: string
                             pattern: '^[a-f0-9]{64}$'
-                            description: SHA-256 identifier; not proof of equivalence.
-                        presentedSha256:
+                            description: Opaque backend-keyed HMAC identifier; not proof of equivalence.
+                        presentedHmacId:
                             type: string
                             pattern: '^[a-f0-9]{64}$'
-                            description: SHA-256 identifier; not proof of equivalence.
+                            description: Opaque backend-keyed HMAC identifier; not proof of equivalence.
                         editRatio:
                             type: number
                             minimum: 0
@@ -3577,8 +3595,6 @@ components:
                             reasonCode,
                             personaId,
                             validatorOutcome,
-                            originalSha256,
-                            presentedSha256,
                             editRatio,
                             intensity,
                             traceConstrained,

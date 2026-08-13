@@ -5,7 +5,6 @@
  * @footnote-risk: high - An unsafe rewrite could change the delivered answer, so uncertainty keeps the original.
  * @footnote-ethics: high - Styling has no authority over meaning, safety, evidence, or execution.
  */
-import { createHash } from 'node:crypto';
 import type {
     GenerationResult,
     GenerationRuntime,
@@ -15,6 +14,7 @@ import type {
     StyleRewriteMetadata,
     StyleRewriteReasonCode,
 } from '@footnote/contracts/policy';
+import { hmacId } from '../utils/pseudonymization.js';
 
 export type StyleRewriteConfig = {
     enabled: boolean;
@@ -22,6 +22,8 @@ export type StyleRewriteConfig = {
     validatorProfileId: string | null;
     timeoutMs: number;
     validatorTimeoutMs: number;
+    /** Backend-only secret for opaque trace identifiers. Never request-supplied. */
+    traceHmacSecret?: string | null;
     profile?: ModelProfile;
     validatorProfile?: ModelProfile;
 };
@@ -53,8 +55,14 @@ export type StyleRewriteResult = {
 
 type SemanticVerdict = 'equivalent' | 'drift' | 'uncertain';
 
-const sha256 = (text: string): string =>
-    createHash('sha256').update(text, 'utf8').digest('hex');
+const hmacIdentifier = (
+    secret: string | null | undefined,
+    text: string,
+    kind: 'original' | 'presented'
+): string | undefined =>
+    secret?.trim()
+        ? hmacId(secret, text, `style-rewrite:v1:${kind}`)
+        : undefined;
 
 const withTimeout = async <T>(
     timeoutMs: number,
@@ -140,6 +148,55 @@ export const passesStyleRewriteMechanicalChecks = (
     );
 };
 
+const restrainedMarkers = [
+    /\b(?:very|really|extremely|absolutely|definitely|clearly|obviously|undeniably)\b/giu,
+    /\b(?:at the end of the day|game changer|low-hanging fruit|hit the ground running|piece of cake|on the same page)\b/giu,
+    /!+/gu,
+    /(?:\*{1,3}|_{1,3})[^\s*_][^*_]*?(?:\*{1,3}|_{1,3})/gu,
+];
+
+const sentencePrefixes = (text: string): string[] =>
+    (text.match(/[^.!?]+[.!?]+|[^.!?]+$/gu) ?? []).map((sentence) =>
+        (sentence.toLocaleLowerCase().match(/[\p{L}\p{N}']+/gu) ?? [])
+            .slice(0, 3)
+            .join(' ')
+    );
+
+const hasNewMarker = (original: string, rewritten: string, marker: RegExp) => {
+    const originals = new Set(
+        occurrences(original, marker).map((value) => value.toLocaleLowerCase())
+    );
+    return occurrences(rewritten, marker).some(
+        (value) => !originals.has(value.toLocaleLowerCase())
+    );
+};
+
+/**
+ * Restrained mode rejects visible presentation escalation before the semantic
+ * validator runs. These checks are conservative signals, not a proof that a
+ * candidate is semantically safe.
+ */
+export const passesRestrainedStyleRewriteChecks = (
+    original: string,
+    rewritten: string
+): boolean => {
+    if (rewritten.length / Math.max(1, original.length) > 1.1) return false;
+    if (
+        restrainedMarkers.some((marker) =>
+            hasNewMarker(original, rewritten, marker)
+        )
+    )
+        return false;
+    const originalPrefixes = sentencePrefixes(original);
+    const rewrittenPrefixes = sentencePrefixes(rewritten);
+    return (
+        originalPrefixes.length === rewrittenPrefixes.length &&
+        originalPrefixes.every(
+            (prefix, index) => prefix === rewrittenPrefixes[index]
+        )
+    );
+};
+
 const parseSemanticVerdict = (text: string): SemanticVerdict | null => {
     try {
         const parsed: unknown = JSON.parse(text);
@@ -178,34 +235,47 @@ const metadata = (input: {
     validatorOutcome?: SemanticVerdict | 'unavailable';
     startedAt?: number;
     caution?: number;
-}): StyleRewriteMetadata => ({
-    step: 'style_rewrite',
-    outcome: input.outcome,
-    attempted: input.attempted,
-    reasonCode: input.reasonCode,
-    personaId: input.persona.id,
-    profileId: input.config.profile?.id,
-    provider: input.config.profile?.provider,
-    model: input.rewriteResult?.model ?? input.config.profile?.providerModel,
-    validatorProfileId: input.config.validatorProfile?.id,
-    validatorModel:
-        input.validatorResult?.model ??
-        input.config.validatorProfile?.providerModel,
-    validatorOutcome: input.validatorOutcome ?? 'not_attempted',
-    originalSha256: sha256(input.original),
-    presentedSha256: sha256(input.presented),
-    editRatio: Number(
-        wordEditRatio(input.original, input.presented).toFixed(4)
-    ),
-    ...(input.caution !== undefined && {
-        caution: input.caution as 1 | 2 | 3 | 4 | 5,
-    }),
-    intensity: resolveStyleRewriteIntensity(input.caution),
-    traceConstrained: input.caution === undefined || input.caution >= 4,
-    ...(input.startedAt !== undefined && {
-        durationMs: Math.max(0, Date.now() - input.startedAt),
-    }),
-});
+}): StyleRewriteMetadata => {
+    const originalHmacId = hmacIdentifier(
+        input.config.traceHmacSecret,
+        input.original,
+        'original'
+    );
+    const presentedHmacId = hmacIdentifier(
+        input.config.traceHmacSecret,
+        input.presented,
+        'presented'
+    );
+    return {
+        step: 'style_rewrite',
+        outcome: input.outcome,
+        attempted: input.attempted,
+        reasonCode: input.reasonCode,
+        personaId: input.persona.id,
+        profileId: input.config.profile?.id,
+        provider: input.config.profile?.provider,
+        model:
+            input.rewriteResult?.model ?? input.config.profile?.providerModel,
+        validatorProfileId: input.config.validatorProfile?.id,
+        validatorModel:
+            input.validatorResult?.model ??
+            input.config.validatorProfile?.providerModel,
+        validatorOutcome: input.validatorOutcome ?? 'not_attempted',
+        ...(originalHmacId !== undefined && { originalHmacId }),
+        ...(presentedHmacId !== undefined && { presentedHmacId }),
+        editRatio: Number(
+            wordEditRatio(input.original, input.presented).toFixed(4)
+        ),
+        ...(input.caution !== undefined && {
+            caution: input.caution as 1 | 2 | 3 | 4 | 5,
+        }),
+        intensity: resolveStyleRewriteIntensity(input.caution),
+        traceConstrained: input.caution === undefined || input.caution >= 4,
+        ...(input.startedAt !== undefined && {
+            durationMs: Math.max(0, Date.now() - input.startedAt),
+        }),
+    };
+};
 
 /** Builds a fail-open skip record when workflow policy prevents a model call. */
 export const createStyleRewriteSkipResult = (input: {
@@ -348,8 +418,7 @@ export const runStyleRewriteStep = async (input: {
                     messages: [
                         {
                             role: 'system',
-                            content:
-                                'Compare two plain-text answers. You may only veto. Return strict JSON: {"verdict":"equivalent"|"drift"|"uncertain","reasons":["short code"]}. Use uncertain unless factual meaning, uncertainty, attribution, scope, safety posture, and refusals are preserved.',
+                            content: `Compare two plain-text answers. You may only veto. Return strict JSON: {"verdict":"equivalent"|"drift"|"uncertain","reasons":["short code"]}. Use uncertain unless factual meaning, uncertainty, attribution, scope, safety posture, and refusals are preserved. Resolved presentation intensity: ${resolveStyleRewriteIntensity(input.caution)}.${resolveStyleRewriteIntensity(input.caution) === 'restrained' ? ' Veto any added emphasis, idiom, sentence reordering, or material expansion.' : ''}`,
                         },
                         {
                             role: 'user',
@@ -396,6 +465,30 @@ export const runStyleRewriteStep = async (input: {
                 rewriteResult,
                 validatorResult,
                 validatorOutcome: verdict ?? 'unavailable',
+                startedAt,
+                caution: input.caution,
+            }),
+        };
+    }
+    if (
+        resolveStyleRewriteIntensity(input.caution) === 'restrained' &&
+        !passesRestrainedStyleRewriteChecks(original, rewritten)
+    ) {
+        return {
+            text: original,
+            rewriteResult,
+            validatorResult,
+            metadata: metadata({
+                outcome: 'rejected',
+                attempted: true,
+                reasonCode: 'mechanical_preservation_failed',
+                persona: input.persona,
+                config: input.config,
+                original,
+                presented: original,
+                rewriteResult,
+                validatorResult,
+                validatorOutcome: verdict,
                 startedAt,
                 caution: input.caution,
             }),

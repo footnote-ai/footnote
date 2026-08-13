@@ -1155,6 +1155,12 @@ export const runBoundedReviewWorkflow = async ({
                 executionLimits.maxDeliberationCalls;
         const hasStepBudget =
             workflowState.stepCount < executionLimits.maxWorkflowSteps;
+        const hasRemainingWorkflowBudget = checkExecutionLimits(
+            workflowState,
+            executionLimits,
+            Date.now(),
+            'style_rewrite'
+        ).withinLimits;
         const finalAssessStep = [...workflowSteps]
             .reverse()
             .find((step) => step.stepKind === 'assess');
@@ -1166,7 +1172,12 @@ export const runBoundedReviewWorkflow = async ({
             assessedCaution <= 5
                 ? assessedCaution
                 : undefined;
-        if (canTransition && hasTwoCallBudget && hasStepBudget) {
+        if (
+            canTransition &&
+            hasTwoCallBudget &&
+            hasStepBudget &&
+            hasRemainingWorkflowBudget
+        ) {
             const styleStartedAt = Date.now();
             const styleResult = await runStyleRewriteStep({
                 original: draftResult,
@@ -1268,8 +1279,9 @@ export const runBoundedReviewWorkflow = async ({
                     reasonCode: styleResult.metadata.reasonCode,
                     personaId: styleResult.metadata.personaId,
                     validatorOutcome: styleResult.metadata.validatorOutcome,
-                    originalSha256: styleResult.metadata.originalSha256,
-                    presentedSha256: styleResult.metadata.presentedSha256,
+                    originalHmacId: styleResult.metadata.originalHmacId ?? null,
+                    presentedHmacId:
+                        styleResult.metadata.presentedHmacId ?? null,
                     editRatio: styleResult.metadata.editRatio,
                     caution: styleResult.metadata.caution ?? null,
                     intensity: styleResult.metadata.intensity,
@@ -1313,6 +1325,15 @@ export const runBoundedReviewWorkflow = async ({
                     },
                 });
             }
+        } else if (styleRewrite.config.enabled) {
+            const styleResult = createStyleRewriteSkipResult({
+                original: draftResult,
+                config: styleRewrite.config,
+                persona: styleRewrite.persona,
+                reasonCode: 'transition_not_allowed',
+                caution,
+            });
+            styleRewriteMetadata = styleResult.metadata;
         }
     }
 

@@ -14,6 +14,7 @@ import type {
 } from '@footnote/agent-runtime';
 import type { ModelProfile } from '@footnote/contracts';
 import { resolvePersonaPresentationGuidance } from '../src/services/chatProfileOverlay.js';
+import { hmacId } from '../src/utils/pseudonymization.js';
 import {
     passesStyleRewriteMechanicalChecks,
     resolveStyleRewriteIntensity,
@@ -42,6 +43,7 @@ const config: StyleRewriteConfig = {
     validatorProfile: profile,
     timeoutMs: 50,
     validatorTimeoutMs: 50,
+    traceHmacSecret: 'style-rewrite-test-secret',
 };
 const original: GenerationResult = {
     text: 'According to Ada Lovelace, the release has 12 fixes. It may not resolve every issue.',
@@ -119,7 +121,7 @@ test('mechanical checks reject negation, uncertainty, names, numbers, quotations
         );
 });
 
-test('equivalent validator applies a rewrite and records hashes without duplicate texts', async () => {
+test('equivalent validator applies a rewrite and records opaque HMAC identifiers without duplicate texts', async () => {
     let call = 0;
     const result = await runStyleRewriteStep({
         original,
@@ -138,12 +140,53 @@ test('equivalent validator applies a rewrite and records hashes without duplicat
         config,
         persona,
         eligibility: { protectedContent: false },
+        caution: 3,
     });
     assert.equal(result.metadata.outcome, 'applied');
     assert.equal(result.metadata.validatorOutcome, 'equivalent');
-    assert.equal(result.metadata.originalSha256.length, 64);
-    assert.equal(result.metadata.presentedSha256.length, 64);
+    assert.equal(result.metadata.originalHmacId?.length, 64);
+    assert.equal(result.metadata.presentedHmacId?.length, 64);
+    assert.equal(
+        result.metadata.originalHmacId,
+        hmacId(
+            config.traceHmacSecret ?? '',
+            original.text,
+            'style-rewrite:v1:original'
+        )
+    );
     assert.equal('original' in result.metadata, false);
+    assert.equal(call, 2);
+});
+
+test('restrained presentation rejects added emphasis or idioms despite equivalent validator evidence', async () => {
+    let call = 0;
+    const restrainedOriginal: GenerationResult = {
+        ...original,
+        text: 'The release includes 12 fixes for the current release cycle. It may not resolve every issue reported by users.',
+    };
+    const result = await runStyleRewriteStep({
+        original: restrainedOriginal,
+        generationRuntime: runtime(async () => {
+            call += 1;
+            return call === 1
+                ? {
+                      ...restrainedOriginal,
+                      text: 'The release includes 12 fixes for the current release cycle! At the end of the day, it may not resolve every issue reported by users.',
+                  }
+                : {
+                      ...restrainedOriginal,
+                      text: '{"verdict":"equivalent","reasons":["preserved"]}',
+                  };
+        }),
+        config,
+        persona,
+        eligibility: { protectedContent: false },
+        caution: 4,
+    });
+    assert.equal(result.text, restrainedOriginal.text);
+    assert.equal(result.metadata.outcome, 'rejected');
+    assert.equal(result.metadata.reasonCode, 'mechanical_preservation_failed');
+    assert.equal(result.metadata.validatorOutcome, 'equivalent');
     assert.equal(call, 2);
 });
 

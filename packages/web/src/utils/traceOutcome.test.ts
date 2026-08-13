@@ -107,6 +107,35 @@ test('buildRunOutcomeSummary distinguishes a generated answer from a pre-generat
     );
 });
 
+test('buildRunOutcomeSummary labels a stopped style rewrite for users', () => {
+    const workflow = createWorkflow('budget_exhausted_time');
+    workflow.stepCount = 1;
+    workflow.steps = [
+        {
+            stepId: 'step_1',
+            attempt: 1,
+            stepKind: 'generate',
+            startedAt: '2026-01-01T00:00:00.000Z',
+            finishedAt: '2026-01-01T00:00:01.000Z',
+            durationMs: 1000,
+            outcome: { status: 'executed', summary: 'Generated answer.' },
+        },
+    ];
+    workflow.limitStop = {
+        stoppedByLimit: true,
+        terminationReason: 'budget_exhausted_time',
+        exhaustedLimitKey: 'maxDurationMs',
+        stoppedBeforeStepKind: 'style_rewrite',
+    };
+
+    const summary = buildRunOutcomeSummary(createSource({ workflow }));
+
+    assert.equal(
+        summary?.explanation,
+        'Answer generation completed, but the workflow stopped before style rewrite. Workflow stopped after reaching the configured time budget.'
+    );
+});
+
 test('buildRunOutcomeSummary preserves fallback signal when stop reason exists', () => {
     const summary = buildRunOutcomeSummary(
         createSource({

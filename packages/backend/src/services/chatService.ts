@@ -46,6 +46,7 @@ import {
     type BackendLLMCostRecord,
 } from './llmCostRecorder.js';
 import { buildRepoExplainerResponseHint } from './chatGenerationHints.js';
+import { NEUTRAL_PRESENTATION_GUIDANCE } from './chatProfileOverlay.js';
 import type {
     StyleRewriteConfig,
     StyleRewritePersona,
@@ -881,6 +882,7 @@ export const createChatService = ({
         validatorTimeoutMs:
             styleRewriteConfig?.validatorTimeoutMs ??
             runtimeConfig.chatWorkflow.styleRewrite.validatorTimeoutMs,
+        traceHmacSecret: runtimeConfig.storage.incidentPseudonymizationSecret,
         ...(configuredStyleRewriteProfile !== undefined && {
             profile: configuredStyleRewriteProfile,
         }),
@@ -1333,8 +1335,7 @@ export const createChatService = ({
                         config: effectiveStyleRewriteConfig,
                         persona: styleRewritePersona ?? {
                             id: 'footnote',
-                            presentationGuidance:
-                                'Use concise, neutral, clear prose. Preserve the original organization and avoid added emphasis.',
+                            presentationGuidance: NEUTRAL_PRESENTATION_GUIDANCE,
                         },
                         protectedContent:
                             effectiveContextStepRequests.length > 0,

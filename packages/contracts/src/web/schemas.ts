@@ -364,6 +364,7 @@ const StyleRewriteReasonCodeSchema = z.enum([
     'validator_invalid',
     'validator_unavailable',
     'budget_unavailable',
+    'transition_not_allowed',
     'trace_caution_high',
     'timeout',
     'provider_error',
@@ -389,8 +390,14 @@ const StyleRewriteMetadataSchema = z
             'uncertain',
             'unavailable',
         ]),
-        originalSha256: z.string().regex(/^[a-f0-9]{64}$/u),
-        presentedSha256: z.string().regex(/^[a-f0-9]{64}$/u),
+        originalHmacId: z
+            .string()
+            .regex(/^[a-f0-9]{64}$/u)
+            .optional(),
+        presentedHmacId: z
+            .string()
+            .regex(/^[a-f0-9]{64}$/u)
+            .optional(),
         editRatio: z.number().min(0).max(1),
         caution: z
             .union([
