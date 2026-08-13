@@ -4,7 +4,7 @@ AI can be helpful, but it can also sound sure of itself when it's guessing. The 
 
 Footnote is our attempt to make that relationship more honest. People should be able to see what their AI is doing, understand its limits, and remain in charge of it.
 
-Footnote is still being built. This page describes both what the software does now and the direction we want it to take.
+This page describes the principles guiding Footnote as we build it.
 
 ## An answer should come with receipts
 
@@ -74,8 +74,6 @@ We want the system to make room for more than one way of thinking, especially on
 
 Footnote is committed to human rights and rejects uses tied to torture, genocide, forced labour, or coercive state violence. Our [licensing strategy](./LICENSE_STRATEGY.md) describes those commitments in more detail.
 
-These are stated values, not a claim of neutrality.
-
 ### Ethical failures belong in the security conversation
 
 A security problem is usually understood as stolen data, a broken login, or someone gaining access they shouldn't have. With AI, the boundary is wider: a system can be manipulated into using the wrong tool, leaking remembered information, following hostile instructions, or taking action outside the user's permission. It can even produce a false record of what happened afterward.
@@ -104,7 +102,7 @@ Footnote is developed openly and uses the MIT and Hippocratic License terms desc
 
 This creates a genuine tension with the Open Source Definition. Footnote nevertheless values open development, source code people can inspect and modify, self-hosting, and community participation. We also believe a responsible project should name uses that violate its human-rights commitments.
 
-Our licence documents need to explain the legal position precisely. This page explains why Footnote combines broad rights to inspect, modify, and self-host the code with restrictions on uses that violate human rights.
+Our licence documents need to explain the legal position precisely. This page explains why Footnote values broad software freedom alongside explicit human-rights commitments.
 
 ## We are building on other people's work
 
