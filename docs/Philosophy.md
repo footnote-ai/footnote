@@ -1,127 +1,126 @@
 # Philosophy
 
-Footnote is an experiment in **steerable AI**—assistants you can guide and inspect.
+AI can be helpful, but it can also sound sure of itself when it's guessing. The finished response rarely shows which information it relied on, what instructions shaped it, whether it used a tool or memory, or where it filled in a gap.
 
-(Last updated: 2026-03-20)
+Footnote is our attempt to make that relationship more honest. People should be able to see what their AI is doing, understand its limits, and remain in charge of it.
 
-This page describes the current product and its guiding principles rather than one specific migration branch or rollout snapshot.
+This page describes the principles guiding Footnote as we build it.
 
-## What Footnote is today
+## An answer should come with receipts
 
-Footnote today is:
+Imagine asking a friend where they heard something. A useful answer might be, "I read it on the city website this morning." A less useful one is, "Trust me."
 
-- a Discord bot,
-- a web interface, and
-- a backend API.
+AI should be held to the same basic standard. For anything that matters, you should be able to find out where the information came from, which tools were used, what assumptions were made, and what the system wasn't sure about — and you shouldn't need to be a programmer to follow along.
 
-Current features include stored response traces and provenance metadata, citations and risk tiering, and self-hosting support. The user-facing experience centers on Discord interaction (chat, voice, and commands), the web demo, and trace inspection (what shaped the reply, within privacy constraints).
+The [OECD AI Principles](https://oecd.ai/en/ai-principles) call for "plain and easy-to-understand information" about the sources and processes behind an AI result, and say people should have enough of it to challenge that result. That's close to what we mean by a **checkable answer**.
 
-Demo: [ai.jordanmakes.dev](https://ai.jordanmakes.dev)
+A Footnote response should help you answer a few ordinary questions: Where did this come from? What did the AI do? What was it unsure about? What would change the answer?
 
-## The goal
+A casual conversation may need only a small note. A factual or sensitive one may need sources, checks, and a fuller record. We want the detail there when it matters, without turning every chat into paperwork.
 
-### Steerable AI
+### More than citations
 
-In this project, “steerable” is the target shape:
+A citation tells you where a claim came from. That's useful, but an answer can be shaped by much more than a source.
 
-- Defaults and constraints are explicit.
-- Changing those settings predictably changes behavior.
+The AI may have searched the web, read a saved document, used a calculator, followed a special rule, asked another model for review, or remembered something from an earlier conversation. All of that is part of what we call **provenance** — the wider record of how an answer came to be. The World Wide Web Consortium describes it as information about the "entities, activities, and people involved in producing a piece of data or thing."
 
-Steerability is broader than transparency. The point isn’t just to see what happened after the fact, but to make it easier to guide the system on purpose.
+For Footnote, that can mean the sources and memories it drew on, the model and tools it used, the settings in effect, any checks or revisions along the way, actions it took outside the chat, and gaps it knows are still there.
 
-### Answers you can check
+The small footnote under an answer is the readable version of that record. Deeper technical detail can stay there for people who want it.
 
-“Checkable” means you can tell what an answer is based on, and what would change it.
+## Staying in control
 
-Depending on the question, that can include:
+### Permission should be clear
 
-- configuration/defaults,
-- sources used (if any),
-- key assumptions,
-- uncertainty when it’s filling in gaps.
+There's a big difference between asking an assistant to suggest an email and letting it send one. The same is true for reading a file, remembering personal information, spending money, changing a calendar, or contacting another person — each step hands the software more authority.
 
-**Not checkable:**
+Footnote should make those steps visible. A user should be able to decide what the assistant may do, which information it may use, what it may remember, and when it must ask first. Important permissions should be enforced by the software itself; a sentence buried in an AI prompt is too fragile to serve as a lock.
 
-> “Yes, that’s true.”
+We also want these choices to be reversible. You should be able to turn memory off, remove a tool, change providers, lower a spending limit, or take back permission you already gave.
 
-**More checkable:**
+The amount of care should match the amount of authority involved. Changing the page background needs little discussion. Giving an AI access to your files, or letting it act on your behalf, deserves more.
 
-> “Yes—based on the cited source and the stored trace. I’m assuming you mean the current implementation; if the deployed version or date is different, the answer changes.”
+Footnote is mainly being built for individuals right now, and we don't need to wrap personal software in the rituals of a large company. We do need to keep asking:
 
-Links: [trace page source](../packages/web/src/pages/TracePage.tsx), [OpenAPI trace definitions](./api/openapi.yaml), [runtime citation normalization](../packages/agent-runtime/src/voltagentRuntime.ts)
+> **What can this feature do, what happens when it goes wrong, and how does the user stop it?**
 
-## Why build it this way
+### People need a way to correct it
 
-A lot of assistants fail in a predictable way: they give an answer that sounds fine, but they don’t leave you anything to follow, and may be wrong in subtle ways. Footnote is about creating useful answers with a trail you can follow when it matters.
+AI will make mistakes. Microsoft's guidelines for human-AI software recommend making it easy to edit, refine, or recover when the system is wrong.
 
-## Design constraints
+A thumbs-down button isn't enough. A user may need to correct a fact, remove a memory, challenge an assumption, question why a tool was used, or report that the assistant acted beyond its permission — and that correction should reach further than the wording on the screen. Where possible, the system should show what went wrong and let the user change the rule, memory, or setting that caused it.
 
-This only works if the system is built with some constraints in mind:
+The [Council of Europe's AI Convention](https://www.coe.int/en/web/artificial-intelligence/the-framework-convention-on-artificial-intelligence) makes a related point: people need enough information to challenge both a decision and the use of AI behind it.
 
-- be plain about limits and uncertainty,
-- protect privacy and make review possible,
-- avoid coercive certainty on value-laden questions,
-- surface trade-offs and let the user choose when values are involved,
-- leave enough traceability that someone else can inspect what happened.
+Footnote isn't a court or a public agency. Still, the principle carries over well — people should have some power after an AI gets something wrong.
 
-### Openness and choice
+### Human oversight should mean something
 
-A few constraints matter beyond the assistant’s output:
+It's easy to say a human is "in the loop." Sometimes that only means a person was standing nearby while the computer made the real decision.
 
-- **Open development.** Footnote is developed in the open, with an emphasis on self-hosting and inspectability. (See [LICENSE_STRATEGY.md](./LICENSE_STRATEGY.md) for the exact terms)
-- **Plurality.** The system should make room for different value frameworks and user goals, especially when questions involve trade-offs.
-- **Accessibility.** Where possible, users should have practical options: how they host, which model/provider they use, and what costs they take on.
+Meaningful oversight requires three things: the person can understand what's happening, the person can step in, and the person has the authority to stop it. The European Union's AI Act uses similar language for high-risk systems — overseers should understand a system's abilities and limits, interpret its output, and be able to interrupt it safely.
 
-### Profiles as rulesets
+Most Footnote conversations will never come close to that level of risk. The same common-sense rule still applies: a review button, an approval step, or a safety control should give the user real power.
 
-**Footnote** is the current baseline configuration.
+Footnote can gather information, compare viewpoints, flag uncertainty, and help someone think. It should not displace the user's responsibility or authority.
 
-If/when a multi-profile system is shipped, a profile would be a bundle of defaults:
+## Values and responsibility
 
-- enforceable constraints (policy rules)
-- style guidance for the model.
+### Values should be visible
 
-Current baseline prompt reference as of 2026-03-20: [defaults.yaml](../packages/prompts/src/defaults.yaml)
+Every AI system makes choices. Someone decides what the model is taught, which behaviour gets rewarded, what it refuses, which sources it searches, and what its interface nudges people to do. Defaults carry values too, and Footnote should be honest about that.
 
-## What’s planned
+We want the system to make room for more than one way of thinking, especially on questions of ethics, politics, relationships, or competing responsibilities — one person weighing rights, another weighing harm, fairness, duty, freedom, care, or the good of the wider community. Looking at a question through more than one of those lenses can surface something a single answer would miss.
 
-Planned direction, subject to change as the project evolves:
+Footnote is committed to human rights and rejects uses tied to torture, genocide, forced labour, or coercive state violence. Our [licensing strategy](./LICENSE_STRATEGY.md) describes those commitments in more detail.
 
-- More checks and enforcement outside the model.
-- Stronger “lookup required” behavior for time-sensitive queries.
-- A multi-profile system with clearer policy controls, enforceable tool permissions, and export/diff/sharing.
-- Broader model/provider support over time, including paths for local or low-cost deployments where feasible.
+### Ethical failures belong in the security conversation
 
-## How to tell if it’s working
+A security problem is usually understood as stolen data, a broken login, or someone gaining access they shouldn't have. With AI, the boundary is wider: a system can be manipulated into using the wrong tool, leaking remembered information, following hostile instructions, or taking action outside the user's permission. It can even produce a false record of what happened afterward.
 
-Footnote is doing its job if you can answer:
+Footnote treats security, privacy, provenance, and ethical safety as one connected concern, and our [security policy](../SECURITY.md) is written to let people report any of them.
 
-- Why did it say this?
-- What did it use?
-- What did it assume?
-- What configuration was active?
-- What would I change to get a different result?
+We still draw a line between a poor answer and a serious incident. A clumsy sentence is a quality problem. Leaking private information or acting outside its permissions is a security incident.
 
-## Related work
+When a serious failure happens, we want enough of a record to understand it, fix it, and make the same failure less likely next time.
 
-There’s a lot of adjacent work in “explainability,” “transparency,” and “governance,” but it often targets a different object.
+## Freedom and ownership
 
-Many explainability tools focus on predictive ML models: “why did the model predict X?” That’s useful for supervised models and decision pipelines, where the goal is to understand feature influence and sensitivity.
+### Users should be able to leave
 
-Footnote’s focus is different: “why did the assistant say X, and what shaped that result?” Here the unit is the _interaction_: the prompt/context, any retrieval/citations, the assistant’s chosen framing, and the trace/provenance artifacts that let a human review what happened after the fact.
+Control also means freedom from the project itself. People should be able to run Footnote on hardware they control, use local models where practical, export important records, and switch providers without starting their digital life over.
 
-This puts Footnote closer to work on:
+Hosted services will often be easier, and some commercial models will be better at certain jobs — but local software brings its own setup, cost, and limits. Footnote doesn't need one answer for everyone. The choice should belong to the user.
 
-- **Provenance and audit trails**: capturing artifacts that let someone inspect a response later, especially when the answer matters or is disputed.
-- **Human-in-the-loop oversight**: designing systems that expect review, correction, and escalation instead of assuming a single-shot answer is enough.
-- **Model documentation practices** (e.g., model cards): making limits and intended use explicit, even when the underlying system is probabilistic.
+This is one reason we care about open development. The code, major decisions, policies, and limitations should be available for inspection. Publishing code alone is only a beginning — self-hosting and moving your data also need to be realistic for ordinary people.
 
-Some open-source projects (for example, initiatives like “Facet” in the explainability space) aim to make model behavior more interpretable. That work can complement Footnote: model interpretability helps answer “what patterns does this model rely on?”, while Footnote is primarily about making _assistant behavior and outputs_ reviewable and steerable through traces, provenance, and user-facing inspection surfaces.
+No model company or agent framework should become the permanent centre of Footnote. We want to use strong outside tools while keeping the rules, permissions, and record of what happened under Footnote's own control.
 
-## Where to go next
+### Licensing and its tension
 
-- Project history: [History.md](./History.md)
-- Architecture: [docs/architecture](./architecture/)
-- Key decisions: [docs/decisions](./decisions/)
-- Roadmap: [GitHub issues](https://github.com/footnote-ai/footnote/issues), [GitHub discussions](https://github.com/footnote-ai/footnote/discussions)
-- Licensing: [LICENSE_STRATEGY.md](./LICENSE_STRATEGY.md) (MIT + HL3)
+Footnote is developed openly and uses the MIT and Hippocratic License terms described in our [licensing documentation](./LICENSE_STRATEGY.md). Those licences come from two different traditions: MIT gives people broad freedom to use and change the software, while the Hippocratic License places human-rights conditions on its use. The [Open Source Definition](https://opensource.org/osd), meanwhile, says an open-source licence can't restrict a field of work.
+
+This creates a genuine tension with the Open Source Definition. Footnote nevertheless values open development, source code people can inspect and modify, self-hosting, and community participation. We also believe a responsible project should name uses that violate its human-rights commitments.
+
+Our licence documents need to explain the legal position precisely. This page explains why Footnote values broad software freedom alongside explicit human-rights commitments.
+
+## We are building on other people's work
+
+Footnote did not invent transparency, provenance, human oversight, or responsible AI. The project draws on several areas of existing work:
+
+- [W3C PROV](https://www.w3.org/TR/prov-overview/) supplies the language Footnote uses to trace where information came from and how it changed.
+- [Model Cards](https://research.google/pubs/model-cards-for-model-reporting/) and [Datasheets for Datasets](https://www.microsoft.com/en-us/research/publication/datasheets-for-datasets/) inform how Footnote records purpose, limits, and context.
+- The [Microsoft Guidelines for Human-AI Interaction](https://www.microsoft.com/en-us/research/publication/guidelines-for-human-ai-interaction/) shape how Footnote approaches correction and recovery.
+- The [NIST AI Risk Management Framework](https://www.nist.gov/itl/ai-risk-management-framework) and principles from the OECD, UNESCO, and the Council of Europe guide its treatment of risk, rights, and human control.
+
+Footnote applies this work to the full interaction: what entered, what acted, what rules applied, and what reached the user.
+
+## What we ask while building
+
+These ideas have to affect the code. For any feature with real power, we ask the same handful of questions: What is it allowed to do? Will the user understand that? What record will remain? Can the user stop, reverse, or correct it? Does it make Footnote harder to leave?
+
+These questions help catch small technical changes that quietly give the system more authority.
+
+## What success looks like
+
+Footnote is working when someone can use AI without treating it like an oracle. Important answers show where they came from. The user controls what the assistant may do and can correct it when it is wrong. They can change models or providers without giving up their records. Serious failures leave enough evidence to investigate.
