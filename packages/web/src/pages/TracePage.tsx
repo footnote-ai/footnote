@@ -957,9 +957,50 @@ const TracePage = (): JSX.Element => {
                                     </dd>
                                 </div>
                                 <div>
-                                    <dt>Provider</dt>
+                                    <dt>Requested provider</dt>
                                     <dd>
-                                        {styleRewrite.provider ?? 'Unavailable'}
+                                        {styleRewrite.requestedProvider ??
+                                            styleRewrite.provider ??
+                                            'Unavailable'}
+                                    </dd>
+                                </div>
+                                <div>
+                                    <dt>Requested model</dt>
+                                    <dd>
+                                        <code>
+                                            {styleRewrite.requestedModel ??
+                                                styleRewrite.model ??
+                                                'Unavailable'}
+                                        </code>
+                                    </dd>
+                                </div>
+                                <div>
+                                    <dt>Upstream routing</dt>
+                                    <dd>
+                                        {styleRewrite.upstreamInferenceProvider ??
+                                            'Unavailable'}
+                                        {styleRewrite.upstreamResolvedModel
+                                            ? ` · ${styleRewrite.upstreamResolvedModel}`
+                                            : ''}
+                                        {styleRewrite.upstreamRoutingAttempt !==
+                                        undefined
+                                            ? ` · attempt ${styleRewrite.upstreamRoutingAttempt}${styleRewrite.upstreamRoutingAttemptCount !== undefined ? `/${styleRewrite.upstreamRoutingAttemptCount}` : ''}`
+                                            : ''}
+                                    </dd>
+                                </div>
+                                <div>
+                                    <dt>Cost</dt>
+                                    <dd>
+                                        Backend estimate:{' '}
+                                        {styleRewrite.backendEstimatedCostUsd ===
+                                        undefined
+                                            ? 'Unavailable'
+                                            : `$${styleRewrite.backendEstimatedCostUsd.toFixed(6)}`}
+                                        {' · '}Upstream reported:{' '}
+                                        {styleRewrite.upstreamReportedCostUsd ===
+                                        undefined
+                                            ? 'Unavailable'
+                                            : `$${styleRewrite.upstreamReportedCostUsd.toFixed(6)}`}
                                     </dd>
                                 </div>
                                 <div>

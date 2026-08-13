@@ -10,6 +10,7 @@ import type {
     ImageGenerationQuality as ContractImageGenerationQuality,
     ImageGenerationSize as ContractImageGenerationSize,
     ModelProfileCapabilities,
+    ModelProfileProviderRouting,
     SupportedImageOutputFormat,
     SupportedOpenAIImageModel,
     SupportedOpenAITextModel,
@@ -137,6 +138,8 @@ export interface GenerationRequest {
      * Runtime capability flags resolved from the active model profile.
      */
     capabilities?: ModelProfileCapabilities;
+    /** Provider routing policy resolved from the selected backend profile. */
+    providerRouting?: ModelProfileProviderRouting;
     /**
      * Optional max token/output budget hint for the runtime.
      */
@@ -247,6 +250,17 @@ export interface GenerationResult {
      * Model identifier actually used by the runtime, when known.
      */
     model?: string;
+    /**
+     * Safe, upstream-reported execution facts. These are attribution signals,
+     * not independently verified Footnote facts, and never include text.
+     */
+    upstreamAttribution?: {
+        resolvedModel?: string;
+        inferenceProvider?: string;
+        routingAttempt?: number;
+        routingAttemptCount?: number;
+        upstreamReportedCostUsd?: number;
+    };
     /**
      * Optional provider/runtime finish reason for debugging or metadata
      * assembly.

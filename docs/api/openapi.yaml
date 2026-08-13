@@ -3560,14 +3560,42 @@ components:
                             type: string
                         profileId:
                             type: string
+                        requestedProvider:
+                            type: string
+                            description: Backend-requested writer provider; distinct from upstream routing facts.
+                        requestedModel:
+                            type: string
+                            description: Backend-requested writer model; distinct from an upstream-resolved model.
                         provider:
                             type: string
                         model:
                             type: string
                         validatorProfileId:
                             type: string
+                        validatorProvider:
+                            type: string
                         validatorModel:
                             type: string
+                        upstreamInferenceProvider:
+                            type: string
+                            description: Upstream-reported inference provider. Footnote does not independently verify this value.
+                        upstreamResolvedModel:
+                            type: string
+                            description: Upstream-reported resolved model. Footnote does not independently verify this value.
+                        upstreamRoutingAttempt:
+                            type: integer
+                            minimum: 1
+                        upstreamRoutingAttemptCount:
+                            type: integer
+                            minimum: 1
+                        backendEstimatedCostUsd:
+                            type: number
+                            minimum: 0
+                            description: Backend-calculated estimate for rewrite and validation calls, not an upstream charge.
+                        upstreamReportedCostUsd:
+                            type: number
+                            minimum: 0
+                            description: Upstream-reported charge, not independently verified by Footnote.
                         durationMs:
                             type: integer
                             minimum: 0

@@ -86,10 +86,15 @@ const withTimeout = async <T>(
 
 const isPlainProse = (text: string): boolean => {
     const trimmed = text.trim();
-    if (!trimmed || trimmed.includes('```') || /https?:\/\//u.test(trimmed))
+    if (!trimmed || trimmed.includes('```')) return false;
+    try {
+        JSON.parse(trimmed);
         return false;
-    if (/^\s*([-*+] |\d+[.)] |\|)/mu.test(trimmed)) return false;
-    if (/^\s*(?:[{[]|[\w-]+\s*:\s*[^\n]+$)/mu.test(trimmed)) return false;
+    } catch {
+        // Ordinary prose can contain links, labels, lists, and code names.
+        // Their literal values remain protected by the mechanical invariants
+        // and the independent semantic veto below.
+    }
     if (/\b(?:select|insert|update|delete|curl|npm|pnpm|git)\b/iu.test(trimmed))
         return false;
     if (
@@ -103,6 +108,9 @@ const isPlainProse = (text: string): boolean => {
 
 const occurrences = (text: string, expression: RegExp): string[] =>
     Array.from(text.matchAll(expression), (match) => match[0]);
+
+const canonicalUrl = (url: string): string =>
+    url.replace(/[.,!?;:]+$/u, '').toLocaleLowerCase();
 
 const wordEditRatio = (original: string, rewritten: string): number => {
     const before = original.toLowerCase().match(/[\p{L}\p{N}']+/gu) ?? [];
@@ -120,32 +128,19 @@ export const passesStyleRewriteMechanicalChecks = (
     const original = originalText.trim();
     const rewritten = rewrittenText.trim();
     if (!rewritten || rewritten === original) return false;
-    const ratio = rewritten.length / Math.max(1, original.length);
-    if (
-        ratio < 0.75 ||
-        ratio > 1.35 ||
-        wordEditRatio(original, rewritten) > 0.45
-    )
-        return false;
-    if (
-        original.split(/\n\s*\n/u).length !== rewritten.split(/\n\s*\n/u).length
-    )
-        return false;
-    const invariantExpressions = [
-        /\b\d+(?:[.,:]\d+)*%?\b/gu,
-        /(["']).{1,240}?\1/gu,
-        /https?:\/\/[^\s)]+/gu,
-        /\b[A-Z][a-z]+(?:\s+[A-Z][a-z]+)+\b/gu,
-        /\b(?:no|not|never|none|without|cannot|can't)\b/giu,
-        /\b(?:may|might|could|likely|unlikely|uncertain|possibly|perhaps)\b/giu,
-        /\b(?:must|should|can|will)\b/giu,
-        /\b(?:according to|reported by|said|states|based on|within|only|at least|at most)\b/giu,
-    ];
-    return invariantExpressions.every((expression) =>
-        occurrences(original, expression).every((token) =>
-            rewritten.toLocaleLowerCase().includes(token.toLocaleLowerCase())
-        )
+    const originalUrls = new Set(
+        occurrences(original, /https?:\/\/[^\s)]+/gu).map(canonicalUrl)
     );
+    if (
+        occurrences(rewritten, /https?:\/\/[^\s)]+/gu).some(
+            (url) => !originalUrls.has(canonicalUrl(url))
+        )
+    )
+        return false;
+    // The independent validator now owns semantic equivalence. Mechanical
+    // checks only reject malformed no-ops and newly introduced destinations,
+    // which avoids blocking legitimate persona-level rephrasing.
+    return true;
 };
 
 const restrainedMarkers = [
@@ -199,7 +194,21 @@ export const passesRestrainedStyleRewriteChecks = (
 
 const parseSemanticVerdict = (text: string): SemanticVerdict | null => {
     try {
-        const parsed: unknown = JSON.parse(text);
+        const trimmed = text.trim();
+        const directVerdict = trimmed
+            .match(/^(equivalent|drift|uncertain)[.!]?$/iu)?.[1]
+            ?.toLocaleLowerCase();
+        if (
+            directVerdict === 'equivalent' ||
+            directVerdict === 'drift' ||
+            directVerdict === 'uncertain'
+        )
+            return directVerdict;
+        // Some compliant text models wrap an otherwise valid JSON verdict in a
+        // single Markdown fence. Accept only that exact wrapper; surrounding
+        // prose remains invalid so the validator cannot smuggle in ambiguity.
+        const fencedJson = trimmed.match(/^```json\s*\n([\s\S]*?)\n?```$/iu);
+        const parsed: unknown = JSON.parse((fencedJson?.[1] ?? trimmed).trim());
         if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed))
             return null;
         const value = parsed as { verdict?: unknown; reasons?: unknown };
@@ -253,14 +262,42 @@ const metadata = (input: {
         reasonCode: input.reasonCode,
         personaId: input.persona.id,
         profileId: input.config.profile?.id,
+        requestedProvider: input.config.profile?.provider,
+        requestedModel: input.config.profile?.providerModel,
         provider: input.config.profile?.provider,
         model:
             input.rewriteResult?.model ?? input.config.profile?.providerModel,
         validatorProfileId: input.config.validatorProfile?.id,
+        validatorProvider: input.config.validatorProfile?.provider,
         validatorModel:
             input.validatorResult?.model ??
             input.config.validatorProfile?.providerModel,
         validatorOutcome: input.validatorOutcome ?? 'not_attempted',
+        ...(input.rewriteResult?.upstreamAttribution?.inferenceProvider !==
+            undefined && {
+            upstreamInferenceProvider:
+                input.rewriteResult.upstreamAttribution.inferenceProvider,
+        }),
+        ...(input.rewriteResult?.upstreamAttribution?.resolvedModel !==
+            undefined && {
+            upstreamResolvedModel:
+                input.rewriteResult.upstreamAttribution.resolvedModel,
+        }),
+        ...(input.rewriteResult?.upstreamAttribution?.routingAttempt !==
+            undefined && {
+            upstreamRoutingAttempt:
+                input.rewriteResult.upstreamAttribution.routingAttempt,
+        }),
+        ...(input.rewriteResult?.upstreamAttribution?.routingAttemptCount !==
+            undefined && {
+            upstreamRoutingAttemptCount:
+                input.rewriteResult.upstreamAttribution.routingAttemptCount,
+        }),
+        ...(input.rewriteResult?.upstreamAttribution
+            ?.upstreamReportedCostUsd !== undefined && {
+            upstreamReportedCostUsd:
+                input.rewriteResult.upstreamAttribution.upstreamReportedCostUsd,
+        }),
         ...(originalHmacId !== undefined && { originalHmacId }),
         ...(presentedHmacId !== undefined && { presentedHmacId }),
         editRatio: Number(
@@ -352,6 +389,7 @@ export const runStyleRewriteStep = async (input: {
                     model: input.config.profile?.providerModel,
                     provider: input.config.profile?.provider,
                     capabilities: input.config.profile?.capabilities,
+                    providerRouting: input.config.profile?.providerRouting,
                     signal,
                     messages: [
                         {
@@ -414,11 +452,17 @@ export const runStyleRewriteStep = async (input: {
                     model: input.config.validatorProfile?.providerModel,
                     provider: input.config.validatorProfile?.provider,
                     capabilities: input.config.validatorProfile?.capabilities,
+                    providerRouting:
+                        input.config.validatorProfile?.providerRouting,
                     signal,
                     messages: [
                         {
                             role: 'system',
-                            content: `Compare two plain-text answers. You may only veto. Return strict JSON: {"verdict":"equivalent"|"drift"|"uncertain","reasons":["short code"]}. Use uncertain unless factual meaning, uncertainty, attribution, scope, safety posture, and refusals are preserved. Resolved presentation intensity: ${resolveStyleRewriteIntensity(input.caution)}.${resolveStyleRewriteIntensity(input.caution) === 'restrained' ? ' Veto any added emphasis, idiom, sentence reordering, or material expansion.' : ''}`,
+                            content: `Act only as a contradiction detector for a presentation rewrite. Return exactly one uppercase token: EQUIVALENT, DRIFT, or UNCERTAIN. Do not use JSON, Markdown, reasons, or any other text.
+
+Return DRIFT only when the candidate contradicts or removes an explicit fact, number, name, quotation, uncertainty, attribution, link/citation, requested action or scope, safety boundary, or refusal in the original. Return UNCERTAIN only when you cannot determine whether one of those contradictions exists. Otherwise return EQUIVALENT.
+
+Treat tone, cadence, metaphors, sentence structure, conversational warmth, persona voice, and harmless elaboration as presentation changes, not drift. Do not require matching wording, length, paragraph shape, or exact factual coverage. Resolved presentation intensity: ${resolveStyleRewriteIntensity(input.caution)}.${resolveStyleRewriteIntensity(input.caution) === 'restrained' ? ' In restrained mode, return DRIFT for added emphasis, idiom, sentence reordering, or material expansion.' : ''}`,
                         },
                         {
                             role: 'user',

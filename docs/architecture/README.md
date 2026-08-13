@@ -67,3 +67,5 @@ detail once you have the main runtime shape in mind.
   host integration contract, and height-messaging expectations.
 - [Realtime Voice System](./realtime-voice.md): implementation-oriented
   walkthrough of the current backend-owned realtime voice boundary.
+- [OpenRouter Provider Boundary](./openrouter-provider.md): named-provider
+  routing, privacy posture, and trace cost provenance for OpenRouter models.

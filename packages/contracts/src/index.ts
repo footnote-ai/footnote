@@ -181,6 +181,7 @@ export type {
     ModelLatencyClass,
     ModelProfile,
     ModelProfileCapabilities,
+    ModelProfileProviderRouting,
     WorkflowModeProfileId,
     WorkflowModelStepKind,
     StepRoutingEntry,
@@ -190,6 +191,7 @@ export type {
 } from './model-profiles.js';
 export {
     ModelProfileCapabilitiesSchema,
+    ModelProfileProviderRoutingSchema,
     ModelProfileCatalogSchema,
     ModelProfileSchema,
     WorkflowModeProfileIdSchema,

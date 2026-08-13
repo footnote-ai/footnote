@@ -61,6 +61,33 @@ export const envEntries = [
     }),
 
     defineEnv({
+        key: 'OPENROUTER_API_KEY',
+        owner: 'backend',
+        stage: 'runtime',
+        section: 'openrouter',
+        required: false,
+        secret: true,
+        kind: 'string',
+        description:
+            'OpenRouter API key used by explicit OpenRouter-backed model profiles.',
+        defaultValue: noDefault(),
+        usedBy: ['packages/backend/src/config.ts'],
+    }),
+    defineEnv({
+        key: 'OPENROUTER_BASE_URL',
+        owner: 'backend',
+        stage: 'runtime',
+        section: 'openrouter',
+        required: false,
+        secret: false,
+        kind: 'string',
+        description:
+            'OpenRouter API base URL. Use an OpenRouter regional endpoint only when your account supports it.',
+        defaultValue: literal('https://openrouter.ai/api/v1'),
+        usedBy: ['packages/backend/src/config.ts'],
+    }),
+
+    defineEnv({
         key: 'OLLAMA_BASE_URL',
         owner: 'backend',
         stage: 'runtime',

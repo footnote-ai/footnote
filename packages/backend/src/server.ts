@@ -209,9 +209,14 @@ const initializeServices = () => {
     // --- Text generation runtime ---
     // Chat runtime can run when at least one provider is configured.
     const hasOpenAiProvider = Boolean(runtimeConfig.openai.apiKey);
+    const hasOpenRouterProvider = Boolean(runtimeConfig.openrouter.apiKey);
     const hasOllamaCatalogProfiles = runtimeConfig.modelProfiles.catalog.some(
         (profile) => profile.provider === 'ollama'
     );
+    const hasOpenRouterCatalogProfiles =
+        runtimeConfig.modelProfiles.catalog.some(
+            (profile) => profile.provider === 'openrouter'
+        );
     const ollamaHostname = (() => {
         if (!runtimeConfig.ollama.baseUrl) {
             return null;
@@ -253,9 +258,17 @@ const initializeServices = () => {
     logger.info(
         `Service - Ollama: ${renderServiceState(hasOllamaProvider, 'valid OLLAMA_BASE_URL (and OLLAMA_LOCAL_INFERENCE_ENABLED=true when local)')}`
     );
+    logger.info(
+        `Service - OpenRouter: ${renderServiceState(hasOpenRouterProvider, 'OPENROUTER_API_KEY')}`
+    );
     if (hasOllamaCatalogProfiles && !hasOllamaProvider) {
         logger.warn(
             'Ollama provider unavailable; ollama catalog profiles remain disabled.'
+        );
+    }
+    if (hasOpenRouterCatalogProfiles && !hasOpenRouterProvider) {
+        logger.warn(
+            'OpenRouter provider unavailable; openrouter catalog profiles remain disabled.'
         );
     }
     const startupModelProfileResolver = createModelProfileResolver({
@@ -269,7 +282,7 @@ const initializeServices = () => {
     logger.info(
         `Core generation runtime default profile: ${startupDefaultProfile.id} (${generationRuntimeDefaultModel}).`
     );
-    if (hasOpenAiProvider || hasOllamaProvider) {
+    if (hasOpenAiProvider || hasOllamaProvider || hasOpenRouterProvider) {
         generationRuntime = createVoltAgentRuntime({
             defaultModel: generationRuntimeDefaultModel,
             logger: voltAgentLogger,
@@ -278,6 +291,10 @@ const initializeServices = () => {
                 apiKey: runtimeConfig.ollama.apiKey ?? undefined,
                 localInferenceEnabled:
                     runtimeConfig.ollama.localInferenceEnabled,
+            },
+            openrouter: {
+                apiKey: runtimeConfig.openrouter.apiKey ?? undefined,
+                baseUrl: runtimeConfig.openrouter.baseUrl,
             },
             ...(runtimeConfig.voltagent.observabilityEnabled && {
                 voltOps: {
@@ -289,7 +306,7 @@ const initializeServices = () => {
     } else {
         generationRuntime = null;
         logger.warn(
-            'No text-generation provider is configured. Set OPENAI_API_KEY or OLLAMA_BASE_URL to enable /api/chat.'
+            'No text-generation provider is configured. Set OPENAI_API_KEY, OPENROUTER_API_KEY, or OLLAMA_BASE_URL to enable /api/chat.'
         );
     }
 

@@ -64,6 +64,33 @@ test('ModelProfileCatalogSchema parses serializable reasoning metadata', () => {
     ]);
 });
 
+test('ModelProfileCatalogSchema accepts arbitrary OpenRouter IDs with explicit routing', () => {
+    const parsed = ModelProfileCatalogSchema.parse([
+        {
+            id: 'openrouter-cydonia-24b-v4-1',
+            description: 'Pinned style writer',
+            provider: 'openrouter',
+            providerModel: 'thedrummer/cydonia-24b-v4.1',
+            enabled: true,
+            tierBindings: [],
+            capabilities: { canUseSearch: false },
+            providerRouting: {
+                openrouter: {
+                    only: ['parasail'],
+                    allowFallbacks: false,
+                    dataCollection: 'deny',
+                },
+            },
+        },
+    ]);
+
+    assert.deepEqual(parsed[0]?.providerRouting?.openrouter, {
+        only: ['parasail'],
+        allowFallbacks: false,
+        dataCollection: 'deny',
+    });
+});
+
 test('ModelProfileCatalogSchema rejects an unsupported default reasoning effort', () => {
     const parsed = ModelProfileCatalogSchema.safeParse([
         {

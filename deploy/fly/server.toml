@@ -10,6 +10,12 @@ primary_region = 'ord'
   ALLOWED_ORIGINS = 'https://ai.jordanmakes.dev'
   FRAME_ANCESTORS = 'https://ai.jordanmakes.dev'
   TURNSTILE_ALLOWED_HOSTNAMES = 'ai.jordanmakes.dev'
+  OLLAMA_BASE_URL = 'https://ollama.com'
+  # Both profile IDs remain unavailable until their provider configuration is present.
+  # The rewrite step then fails open to the original answer rather than selecting a fallback.
+  CHAT_STYLE_REWRITE_ENABLED = 'true'
+  CHAT_STYLE_REWRITE_PROFILE_ID = 'openrouter-cydonia-24b-v4-1'
+  CHAT_STYLE_REWRITE_VALIDATOR_PROFILE_ID = 'ollama-gemma4-31b'
 
 [[services]]
   internal_port = 3000

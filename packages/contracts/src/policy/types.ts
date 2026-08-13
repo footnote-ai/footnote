@@ -473,9 +473,21 @@ export type StyleRewriteMetadata = {
     reasonCode: StyleRewriteReasonCode;
     personaId: string;
     profileId?: string;
+    /** Deployment-requested writer target, distinct from upstream resolution. */
+    requestedProvider?: string;
+    requestedModel?: string;
     provider?: string;
     model?: string;
+    /** Upstream-reported routing facts; Footnote does not independently verify them. */
+    upstreamInferenceProvider?: string;
+    upstreamResolvedModel?: string;
+    upstreamRoutingAttempt?: number;
+    upstreamRoutingAttemptCount?: number;
+    /** Backend-estimated total for the rewrite and validator calls, when both usage records are available. */
+    backendEstimatedCostUsd?: number;
+    upstreamReportedCostUsd?: number;
     validatorProfileId?: string;
+    validatorProvider?: string;
     validatorModel?: string;
     durationMs?: number;
     // Semantic comparison is evidence only, never proof of preservation.

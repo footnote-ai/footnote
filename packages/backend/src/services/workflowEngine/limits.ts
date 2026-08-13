@@ -73,10 +73,12 @@ export const checkExecutionLimits = (
         };
     }
 
-    const isNextStepDeliberative =
-        nextStepKind === 'plan' ||
-        nextStepKind === 'assess' ||
-        nextStepKind === 'style_rewrite';
+    // `maxDeliberationCalls` reserves capacity for semantic planning and
+    // review. Style rewrite is a separately bounded presentation epilogue:
+    // it still consumes a workflow step, tokens, duration, and recorded cost,
+    // but it must not crowd out the plan/assess/revise allowance.
+    const isNextStepSemanticDeliberative =
+        nextStepKind === 'plan' || nextStepKind === 'assess';
     const maxPlanCycles =
         limits.maxPlanCycles ?? Math.max(0, limits.maxDeliberationCalls);
     const maxReviewCycles =
@@ -95,7 +97,7 @@ export const checkExecutionLimits = (
         };
     }
     if (
-        isNextStepDeliberative &&
+        isNextStepSemanticDeliberative &&
         state.deliberationCallCount >= limits.maxDeliberationCalls
     ) {
         return {

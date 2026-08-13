@@ -70,6 +70,10 @@ export type RuntimeConfig = {
         apiKey: string | null;
         localInferenceEnabled: boolean;
     };
+    openrouter: {
+        apiKey: string | null;
+        baseUrl: string;
+    };
     modelProfiles: {
         defaultProfileId: string;
         plannerProfileId: string;

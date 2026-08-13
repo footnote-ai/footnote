@@ -99,6 +99,74 @@ test('voltagent runtime prefixes model with requested provider when model id is 
     assert.equal(result.model, 'claude-3-5-sonnet');
 });
 
+test('voltagent runtime carries explicit OpenRouter routing and reported attribution', async () => {
+    let seenModel: string | undefined;
+    let seenOptions: VoltAgentGenerateTextOptions | undefined;
+    const runtime = createVoltAgentRuntime({
+        defaultModel: 'openrouter/thedrummer/cydonia-24b-v4.1',
+        openrouter: {
+            apiKey: 'test-openrouter-key',
+            baseUrl: 'https://openrouter.ai/api/v1',
+        },
+        createExecutor: ({ model }) => {
+            seenModel = model;
+            return {
+                async generateText(_messages, options) {
+                    seenOptions = options;
+                    return {
+                        text: 'A carefully phrased answer.',
+                        response: { modelId: model },
+                        providerMetadata: {
+                            openrouter: {
+                                routing: {
+                                    provider: 'Parasail',
+                                    model: 'thedrummer/cydonia-24b-v4.1',
+                                    attempt: 1,
+                                    attempts: 1,
+                                },
+                                usage: { cost: 0.000012 },
+                            },
+                        },
+                    };
+                },
+            };
+        },
+    });
+
+    const result = await runtime.generate({
+        messages: [{ role: 'user', content: 'Rewrite this carefully.' }],
+        provider: 'openrouter',
+        model: 'thedrummer/cydonia-24b-v4.1',
+        providerRouting: {
+            openrouter: {
+                only: ['parasail'],
+                allowFallbacks: false,
+                dataCollection: 'deny',
+            },
+        },
+    });
+
+    assert.equal(seenModel, 'openrouter/thedrummer/cydonia-24b-v4.1');
+    assert.deepEqual(seenOptions?.providerOptions, {
+        providerHints: {
+            openrouter: {
+                provider: {
+                    only: ['parasail'],
+                    allow_fallbacks: false,
+                    data_collection: 'deny',
+                },
+            },
+        },
+    });
+    assert.deepEqual(result.upstreamAttribution, {
+        inferenceProvider: 'Parasail',
+        resolvedModel: 'thedrummer/cydonia-24b-v4.1',
+        routingAttempt: 1,
+        routingAttemptCount: 1,
+        upstreamReportedCostUsd: 0.000012,
+    });
+});
+
 test('voltagent runtime uses default model when request model is blank', async () => {
     let seenModel: string | undefined;
     const runtime = createVoltAgentRuntime({

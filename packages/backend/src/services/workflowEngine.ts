@@ -326,11 +326,14 @@ export const runBoundedReviewWorkflow = async ({
     const workflowStartedAt = Date.now();
     const workflowId = `wf_${workflowStartedAt.toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
     const workflowSteps: StepRecord[] = [];
-    let stepCounter = 0;
+    // Both the engine and review-loop seam append lineage steps. Keep one
+    // shared counter so a post-review presentation step cannot reuse an
+    // assessment or planner-reentry id and invalidate trace persistence.
+    const workflowStepCounter = { value: 0 };
     let plannerRootStepId: string | undefined;
     if (plannerStepRecord?.stepKind === 'plan') {
         workflowSteps.push(plannerStepRecord);
-        stepCounter = 1;
+        workflowStepCounter.value = 1;
         plannerRootStepId = plannerStepRecord.stepId;
     }
     let plannerExecutionResult: PlannerStepResult | undefined;
@@ -449,8 +452,8 @@ export const runBoundedReviewWorkflow = async ({
         signals?: StepSignals;
         recommendations?: string[];
     }): string => {
-        stepCounter += 1;
-        const stepId = `step_${stepCounter}`;
+        workflowStepCounter.value += 1;
+        const stepId = `step_${workflowStepCounter.value}`;
         workflowSteps.push({
             stepId,
             ...(input.parentStepId !== undefined && {
@@ -585,7 +588,7 @@ export const runBoundedReviewWorkflow = async ({
                 },
             });
             workflowSteps.push(plannerStep);
-            stepCounter = 1;
+            workflowStepCounter.value = 1;
             plannerRootStepId = plannerStep.stepId;
             workflowState = applyStepExecutionToState(
                 workflowState,
@@ -1120,12 +1123,11 @@ export const runBoundedReviewWorkflow = async ({
         effectiveMessagesWithHints,
         effectiveContextEnvelope,
         effectiveRevisionPromptPrefix,
-        stepCounterRef: { value: stepCounter },
+        stepCounterRef: workflowStepCounter,
         workflowStepsRef: { value: workflowSteps },
         planContinuation,
         stepRoutingChainSet,
     });
-    stepCounter = reviewLoopResult.stepCounter;
     draftResult = reviewLoopResult.draftResult;
     terminationReason = reviewLoopResult.terminationReason;
     workflowStatus = reviewLoopResult.workflowStatus;
@@ -1134,33 +1136,17 @@ export const runBoundedReviewWorkflow = async ({
     stoppedBeforeStepKind = reviewLoopResult.stoppedBeforeStepKind;
     planContinuation = reviewLoopResult.planContinuation;
 
-    // Styling runs only after a completed reviewed workflow. It never changes a
-    // valid answer into a degraded workflow: no remaining step/call budget
-    // simply leaves the original draft in place.
+    // Styling is a best-effort presentation epilogue once text exists. It is
+    // intentionally independent of semantic workflow budgets: a retrieval,
+    // tool, or exhausted review budget must not silently suppress persona
+    // presentation. It remains fail-open and the validator can only veto.
     let styleRewriteMetadata: StyleRewriteMetadata | undefined;
-    if (
-        draftResult !== null &&
-        workflowStatus === 'completed' &&
-        terminationReason === 'goal_satisfied' &&
-        styleRewrite !== undefined
-    ) {
+    if (draftResult !== null && styleRewrite?.config.enabled === true) {
         const canTransition = isWorkflowTransitionAllowed(
             workflowState.currentStepKind,
             'style_rewrite',
             workflowPolicy
         );
-        const hasTwoCallBudget =
-            !styleRewrite.config.enabled ||
-            workflowState.deliberationCallCount + 2 <=
-                executionLimits.maxDeliberationCalls;
-        const hasStepBudget =
-            workflowState.stepCount < executionLimits.maxWorkflowSteps;
-        const hasRemainingWorkflowBudget = checkExecutionLimits(
-            workflowState,
-            executionLimits,
-            Date.now(),
-            'style_rewrite'
-        ).withinLimits;
         const finalAssessStep = [...workflowSteps]
             .reverse()
             .find((step) => step.stepKind === 'assess');
@@ -1171,13 +1157,8 @@ export const runBoundedReviewWorkflow = async ({
             assessedCaution >= 1 &&
             assessedCaution <= 5
                 ? assessedCaution
-                : undefined;
-        if (
-            canTransition &&
-            hasTwoCallBudget &&
-            hasStepBudget &&
-            hasRemainingWorkflowBudget
-        ) {
+                : 3;
+        if (canTransition) {
             const styleStartedAt = Date.now();
             const styleResult = await runStyleRewriteStep({
                 original: draftResult,
@@ -1185,11 +1166,7 @@ export const runBoundedReviewWorkflow = async ({
                 config: styleRewrite.config,
                 persona: styleRewrite.persona,
                 eligibility: {
-                    protectedContent:
-                        styleRewrite.protectedContent ||
-                        draftResult.retrieval?.used === true ||
-                        (draftResult.citations?.length ?? 0) > 0 ||
-                        draftResult.toolExecution?.status === 'executed',
+                    protectedContent: styleRewrite.protectedContent,
                 },
                 caution,
             });
@@ -1212,14 +1189,16 @@ export const runBoundedReviewWorkflow = async ({
                           'chat_style_validation'
                       )
                     : undefined;
+            const backendEstimatedCostUsd =
+                (rewriteUsage?.estimatedCost.totalCostUsd ?? 0) +
+                (validatorUsage?.estimatedCost.totalCostUsd ?? 0);
+            if (rewriteUsage !== undefined || validatorUsage !== undefined) {
+                styleResult.metadata.backendEstimatedCostUsd =
+                    backendEstimatedCostUsd;
+            }
             const totalTokens =
                 (rewriteUsage?.totalTokens ?? 0) +
                 (validatorUsage?.totalTokens ?? 0);
-            const deliberationCalls = styleResult.metadata.attempted
-                ? styleResult.metadata.validatorOutcome === 'not_attempted'
-                    ? 1
-                    : 2
-                : 0;
             captureStep({
                 stepKind: 'style_rewrite',
                 status:
@@ -1293,39 +1272,10 @@ export const runBoundedReviewWorkflow = async ({
                 'style_rewrite',
                 totalTokens,
                 0,
-                deliberationCalls
+                0
             );
             draftResult = { ...draftResult, text: styleResult.text };
-        } else if (styleRewrite.config.enabled && canTransition) {
-            const styleResult = createStyleRewriteSkipResult({
-                original: draftResult,
-                config: styleRewrite.config,
-                persona: styleRewrite.persona,
-                reasonCode: 'budget_unavailable',
-                caution,
-            });
-            styleRewriteMetadata = styleResult.metadata;
-            if (hasStepBudget) {
-                captureStep({
-                    stepKind: 'style_rewrite',
-                    status: 'skipped',
-                    summary:
-                        'Style rewrite skipped because workflow budget was unavailable.',
-                    reasonCode: 'style_rewrite_skipped',
-                    startedAtMs: Date.now(),
-                    finishedAtMs: Date.now(),
-                    parentStepId: draftParentStepId,
-                    attempt: 1,
-                    signals: {
-                        outcome: 'skipped',
-                        reasonCode: 'budget_unavailable',
-                        caution: caution ?? null,
-                        intensity: styleResult.metadata.intensity,
-                        traceConstrained: styleResult.metadata.traceConstrained,
-                    },
-                });
-            }
-        } else if (styleRewrite.config.enabled) {
+        } else {
             const styleResult = createStyleRewriteSkipResult({
                 original: draftResult,
                 config: styleRewrite.config,

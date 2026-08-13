@@ -83,6 +83,29 @@ profiles:
       latencyClass: high
 
     # ==========
+    # OpenRouter (manual selection only)
+    # ==========
+    # This writer is intentionally unbound from default routing. Operators opt
+    # into it through an explicit profile, such as CHAT_STYLE_REWRITE_PROFILE_ID.
+    # https://openrouter.ai/thedrummer/cydonia-24b-v4.1
+    - id: openrouter-cydonia-24b-v4-1
+      description: Presentation writer experiment with a pinned OpenRouter model and upstream endpoint.
+      provider: openrouter
+      providerModel: thedrummer/cydonia-24b-v4.1
+      enabled: true
+      tierBindings: []
+      capabilities:
+          canUseSearch: false
+      providerRouting:
+          openrouter:
+              only: [parasail]
+              allowFallbacks: false
+              dataCollection: deny
+      maxInputTokens: 131072
+      costClass: low
+      latencyClass: medium
+
+    # ==========
     # Ollama Cloud
     # ==========
     # https://ollama.com/library/qwen3.5

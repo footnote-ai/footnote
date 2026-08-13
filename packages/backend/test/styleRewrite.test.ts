@@ -105,20 +105,62 @@ test('explicit persona guidance covers Footnote, vendored personas, and neutral 
     );
 });
 
-test('mechanical checks reject negation, uncertainty, names, numbers, quotations, truncation, and excess edits', () => {
-    const guarded = 'Ada Lovelace said "do not deploy". It may take 12 days.';
-    for (const changed of [
-        'Ada Lovelace said "deploy". It may take 12 days.',
-        'Ada Lovelace said "do not deploy". It will take 12 days.',
-        'Grace Hopper said "do not deploy". It may take 12 days.',
-        'Ada Lovelace said "do not deploy". It may take 13 days.',
-        'Ada Lovelace said "do not deploy".',
-        'An unrelated answer with entirely different language and framing appears here.',
-    ])
-        assert.equal(
-            passesStyleRewriteMechanicalChecks(guarded, changed),
-            false
-        );
+test('mechanical checks reject only no-ops and newly introduced links', () => {
+    const originalText =
+        'The release notes are at https://example.com/release.';
+    assert.equal(
+        passesStyleRewriteMechanicalChecks(originalText, originalText),
+        false
+    );
+    assert.equal(
+        passesStyleRewriteMechanicalChecks(
+            originalText,
+            'The release notes are at https://example.com/release and https://example.com/other.'
+        ),
+        false
+    );
+});
+
+test('mechanical checks allow broad persona rephrasing for semantic validation', () => {
+    const originalText =
+        'The service will not launch until all 12 tests pass, and it may need another careful review before the final release.';
+    const rewrittenText =
+        'It may be possible for the service to launch only after 12 tests pass; without that review, it will not go live.';
+
+    assert.equal(
+        passesStyleRewriteMechanicalChecks(originalText, rewrittenText),
+        true
+    );
+});
+
+test('ordinary prose with a label, list, and link can reach the semantic validator', async () => {
+    let call = 0;
+    const labeledOriginal: GenerationResult = {
+        ...original,
+        text: 'Note: the release is ready.\n- See https://example.com/release for details.',
+    };
+    const result = await runStyleRewriteStep({
+        original: labeledOriginal,
+        generationRuntime: runtime(async () => {
+            call += 1;
+            return call === 1
+                ? {
+                      ...labeledOriginal,
+                      text: 'A quick note: the release is ready.\n- Details remain at https://example.com/release.',
+                  }
+                : {
+                      ...labeledOriginal,
+                      text: '{"verdict":"equivalent","reasons":["preserved"]}',
+                  };
+        }),
+        config,
+        persona,
+        eligibility: { protectedContent: false },
+        caution: 3,
+    });
+
+    assert.equal(result.metadata.outcome, 'applied');
+    assert.equal(call, 2);
 });
 
 test('equivalent validator applies a rewrite and records opaque HMAC identifiers without duplicate texts', async () => {
@@ -156,6 +198,67 @@ test('equivalent validator applies a rewrite and records opaque HMAC identifiers
     );
     assert.equal('original' in result.metadata, false);
     assert.equal(call, 2);
+});
+
+test('a standalone fenced JSON validator verdict remains a strict equivalent approval', async () => {
+    let call = 0;
+    const result = await runStyleRewriteStep({
+        original,
+        generationRuntime: runtime(async () => {
+            call += 1;
+            return call === 1
+                ? {
+                      ...original,
+                      text: 'The release has 12 fixes, according to Ada Lovelace. It may not resolve every issue.',
+                  }
+                : {
+                      ...original,
+                      text: '```json\n{"verdict":"equivalent","reasons":["preserved"]}\n```',
+                  };
+        }),
+        config,
+        persona,
+        eligibility: { protectedContent: false },
+        caution: 3,
+    });
+
+    assert.equal(result.metadata.outcome, 'applied');
+    assert.equal(result.metadata.validatorOutcome, 'equivalent');
+    assert.equal(call, 2);
+});
+
+test('a direct validator verdict applies a rewrite without JSON parsing', async () => {
+    let call = 0;
+    const requests: GenerationRequest[] = [];
+    const result = await runStyleRewriteStep({
+        original,
+        generationRuntime: runtime(async (request) => {
+            call += 1;
+            requests.push(request);
+            return call === 1
+                ? {
+                      ...original,
+                      text: 'The release has 12 fixes, according to Ada Lovelace. It may not resolve every issue.',
+                  }
+                : { ...original, text: 'EQUIVALENT' };
+        }),
+        config,
+        persona,
+        eligibility: { protectedContent: false },
+        caution: 3,
+    });
+
+    assert.equal(result.metadata.outcome, 'applied');
+    assert.equal(result.metadata.validatorOutcome, 'equivalent');
+    assert.equal(call, 2);
+    assert.match(
+        String(requests[1]?.messages[0]?.content),
+        /contradiction detector/u
+    );
+    assert.match(
+        String(requests[1]?.messages[0]?.content),
+        /harmless elaboration/u
+    );
 });
 
 test('restrained presentation rejects added emphasis or idioms despite equivalent validator evidence', async () => {
@@ -214,7 +317,10 @@ test('provider failures, timeout, malformed, drift, and uncertain validator evid
     for (const verdict of [
         '{"verdict":"drift","reasons":["meaning"]}',
         '{"verdict":"uncertain","reasons":[]}',
+        'DRIFT',
+        'UNCERTAIN',
         'not json',
+        'Here is the verdict:\n```json\n{"verdict":"equivalent","reasons":[]}\n```',
     ]) {
         let call = 0;
         const rejected = await runStyleRewriteStep({
@@ -246,6 +352,47 @@ test('structured output is never rewritten', async () => {
         eligibility: { protectedContent: false },
     });
     assert.equal(result.metadata.reasonCode, 'structured_output');
+});
+
+test('style rewrite labels router facts as upstream-reported provenance', async () => {
+    let calls = 0;
+    const result = await runStyleRewriteStep({
+        original,
+        generationRuntime: runtime(async () => {
+            calls += 1;
+            if (calls === 1) {
+                return {
+                    ...original,
+                    text: 'According to Ada Lovelace, the release lists 12 fixes. It may not resolve every issue.',
+                    upstreamAttribution: {
+                        inferenceProvider: 'parasail',
+                        resolvedModel: 'thedrummer/cydonia-24b-v4.1',
+                        routingAttempt: 1,
+                        routingAttemptCount: 1,
+                        upstreamReportedCostUsd: 0.002,
+                    },
+                };
+            }
+            return {
+                ...original,
+                text: '{"verdict":"equivalent","reasons":[]}',
+            };
+        }),
+        config: {
+            ...config,
+            profile: {
+                ...profile,
+                provider: 'openrouter',
+                providerModel: 'thedrummer/cydonia-24b-v4.1',
+            },
+        },
+        persona,
+        eligibility: { protectedContent: false },
+    });
+
+    assert.equal(result.metadata.requestedProvider, 'openrouter');
+    assert.equal(result.metadata.upstreamInferenceProvider, 'parasail');
+    assert.equal(result.metadata.upstreamReportedCostUsd, 0.002);
 });
 
 test('TRACE caution constrains intensity and skips high-caution answers', async () => {
