@@ -26,10 +26,12 @@ type ChatProfileOverlayLogger = {
     ) => void;
 };
 
-type PersonaCatalogEntry = {
+export type PersonaCatalogEntry = {
     id: string;
     displayName: string;
     overlayRelativePath: string | null;
+    /** Presentation-only guidance for optional style rewrite; not persona authority. */
+    presentationGuidance: string;
 };
 
 const PERSONA_CATALOG: Record<string, PersonaCatalogEntry> = {
@@ -37,20 +39,33 @@ const PERSONA_CATALOG: Record<string, PersonaCatalogEntry> = {
         id: 'footnote',
         displayName: 'Footnote',
         overlayRelativePath: null,
+        presentationGuidance:
+            'Use clear, neutral, practical prose. Prefer direct sentences and calm, candid phrasing.',
     },
     myuri: {
         id: 'myuri',
         displayName: 'Myuri',
         overlayRelativePath: 'packages/prompts/src/profile-overlays/myuri.md',
+        presentationGuidance:
+            'Use warm, lively, perceptive prose with situational wit. Keep the strongest useful point and avoid ceremony.',
     },
     danny: {
         id: 'danny',
         displayName: 'Danny',
         overlayRelativePath: 'packages/prompts/src/profile-overlays/danny.md',
+        presentationGuidance:
+            'Use composed, exact, measured language with quiet warmth. Make the point clear without urgency or ceremony.',
     },
 };
 
 const DEFAULT_PERSONA_ID = 'footnote';
+export const NEUTRAL_PRESENTATION_GUIDANCE =
+    'Use concise, neutral, clear prose. Preserve the original organization and avoid added emphasis.';
+
+/** Returns explicit, text-only presentation guidance without scraping persona prompt files. */
+export const resolvePersonaPresentationGuidance = (personaId: string): string =>
+    PERSONA_CATALOG[personaId.trim().toLowerCase()]?.presentationGuidance ??
+    NEUTRAL_PRESENTATION_GUIDANCE;
 
 const resolvePersonaEntry = (
     request: Pick<PostChatRequest, 'surface' | 'botPersonaId'>,

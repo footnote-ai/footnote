@@ -27,6 +27,7 @@ import type {
     SteerabilityControlId,
     ToolExecutionContext,
     WorkflowRecord,
+    StyleRewriteMetadata,
 } from '@footnote/contracts/policy';
 
 // Owns: provider-neutral metadata assembly input contracts.
@@ -113,5 +114,6 @@ export type ResponseMetadataRuntimeContext = {
         };
     };
     workflow?: WorkflowRecord;
+    styleRewrite?: StyleRewriteMetadata;
     steerabilityControls?: ResponseMetadata['steerabilityControls'];
 };

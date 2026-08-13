@@ -29,3 +29,38 @@ This is the canonical order Footnote uses to build runtime prompt text.
 - Copy/paste-ready persona overlay template paths:
     - `packages/prompts/src/profile-overlays/danny.md`
     - `packages/prompts/src/profile-overlays/myuri.md`
+
+## Optional Style Rewrite
+
+`style_rewrite` is one workflow-owned step after successful reviewed main text
+generation. It is disabled by default:
+
+```env
+CHAT_STYLE_REWRITE_ENABLED=false
+CHAT_STYLE_REWRITE_PROFILE_ID=
+CHAT_STYLE_REWRITE_TIMEOUT_MS=2000
+CHAT_STYLE_REWRITE_VALIDATOR_PROFILE_ID=
+CHAT_STYLE_REWRITE_VALIDATOR_TIMEOUT_MS=1500
+```
+
+When enabled, both model profile settings select enabled backend profiles. They
+are deployment policy, not persona identity. The rewrite and validator take only
+the completed answer and presentation guidance from the active persona:
+Footnote by default, or the selected Danny/Myuri profile for Discord. Future
+profiles use the same presentation-guidance seam.
+
+The rewrite has no tools and cannot alter actions, safety/refusal decisions,
+facts, uncertainty, attribution, citations, provenance, links, tool results,
+code, or structured output. Responses with protected tool-derived content,
+links, or structured output are skipped. Errors, timeouts, invalid output, and
+mechanical preservation failures deliver the original answer. A separate
+validator may only veto and must return `equivalent`; drift, uncertainty,
+malformed output, timeout, or missing configuration delivers the original.
+Trace metadata records hashes and bounded edit metrics without retaining both
+answer texts; hashes identify text and do not prove equivalence.
+
+Final backend TRACE caution constrains this step before persona guidance. Caution
+`5` skips it; `4` and unavailable caution use restrained edits; `1` through `3`
+use the standard bounded mode. Restrained mode forbids wit, idioms, added
+emphasis, sentence reordering, and material expansion. No other TRACE axis maps
+to presentation in v1.

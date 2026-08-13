@@ -353,6 +353,66 @@ const GenerationExecutionEventSchema = z
     .superRefine(requireReasonCodeWhenNotExecuted)
     .strict();
 
+const StyleRewriteReasonCodeSchema = z.enum([
+    'applied',
+    'disabled',
+    'profile_not_configured',
+    'protected_content',
+    'structured_output',
+    'mechanical_preservation_failed',
+    'semantic_drift',
+    'validator_invalid',
+    'validator_unavailable',
+    'budget_unavailable',
+    'transition_not_allowed',
+    'trace_caution_high',
+    'timeout',
+    'provider_error',
+]);
+
+const StyleRewriteMetadataSchema = z
+    .object({
+        step: z.literal('style_rewrite'),
+        outcome: z.enum(['applied', 'skipped', 'rejected', 'failed']),
+        attempted: z.boolean(),
+        reasonCode: StyleRewriteReasonCodeSchema,
+        personaId: z.string().min(1),
+        profileId: z.string().min(1).optional(),
+        provider: z.string().min(1).optional(),
+        model: z.string().min(1).optional(),
+        validatorProfileId: z.string().min(1).optional(),
+        validatorModel: z.string().min(1).optional(),
+        durationMs: z.number().int().nonnegative().optional(),
+        validatorOutcome: z.enum([
+            'not_attempted',
+            'equivalent',
+            'drift',
+            'uncertain',
+            'unavailable',
+        ]),
+        originalHmacId: z
+            .string()
+            .regex(/^[a-f0-9]{64}$/u)
+            .optional(),
+        presentedHmacId: z
+            .string()
+            .regex(/^[a-f0-9]{64}$/u)
+            .optional(),
+        editRatio: z.number().min(0).max(1),
+        caution: z
+            .union([
+                z.literal(1),
+                z.literal(2),
+                z.literal(3),
+                z.literal(4),
+                z.literal(5),
+            ])
+            .optional(),
+        intensity: z.enum(['standard', 'restrained', 'skipped']),
+        traceConstrained: z.boolean(),
+    })
+    .strict();
+
 const ExecutionEventSchema: z.ZodType<ExecutionEvent> = z.discriminatedUnion(
     'kind',
     [
@@ -1227,6 +1287,7 @@ const responseMetadataShape = {
     // TODO(auth-memory-governance): Apply user opt-in auth/memory/governance
     // policy before broad prompt-rich image metadata exposure/retention.
     imageGeneration: ImageGenerationMetadataSchema.optional(),
+    styleRewrite: StyleRewriteMetadataSchema.optional(),
 } as const;
 
 const requireTraceFinalReasonWhenChanged = (

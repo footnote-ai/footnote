@@ -5,7 +5,10 @@
  * @footnote-risk: medium - Incorrect transition or limit logic can cause invalid workflow routes or runaway execution.
  * @footnote-ethics: high - Workflow control determines whether model-deliberative paths remain bounded and auditable.
  */
-import type { WorkflowStepKind } from '@footnote/contracts/policy';
+import type {
+    StyleRewriteMetadata,
+    WorkflowStepKind,
+} from '@footnote/contracts/policy';
 import type { WorkflowTerminationReason } from '@footnote/contracts/policy';
 import type {
     ContextStepRequest as ContractContextStepRequest,
@@ -75,6 +78,12 @@ import {
 import type { ResolvedStepRoutingCandidate } from './stepRoutingChains.js';
 import { buildRoutingChainSignals } from './workflowEngine/routingSignals.js';
 import { toRoutingChainResult } from './routingChainResult.js';
+import {
+    createStyleRewriteSkipResult,
+    runStyleRewriteStep,
+    type StyleRewriteConfig,
+    type StyleRewritePersona,
+} from './styleRewrite.js';
 
 /**
  * Canonical Execution Contract workflow-policy surface.
@@ -166,6 +175,17 @@ export type RunBoundedReviewWorkflowInput = {
         generateCandidates: ResolvedStepRoutingCandidate[];
         assessCandidates: ResolvedStepRoutingCandidate[];
     };
+    /** Optional, backend-owned presentation step. It is never a generic transform pipeline. */
+    styleRewrite?: {
+        config: StyleRewriteConfig;
+        persona: StyleRewritePersona;
+        protectedContent: boolean;
+        captureUsage: (
+            result: GenerationResult,
+            profile: ModelProfile,
+            feature: 'chat_style_rewrite' | 'chat_style_validation'
+        ) => ReviewWorkflowUsageSummary;
+    };
 };
 
 export type RunBoundedReviewWorkflowResult =
@@ -173,6 +193,7 @@ export type RunBoundedReviewWorkflowResult =
           outcome: 'generated';
           generationResult: GenerationResult;
           workflowLineage: WorkflowRecord;
+          styleRewrite?: StyleRewriteMetadata;
           plannerStepResult?: PlannerStepResult;
           planContinuation?: PlanContinuation;
           contextStepResult?: ContextStepResult;
@@ -265,6 +286,7 @@ export const runBoundedReviewWorkflow = async ({
     contextStepExecutorRegistry,
     openAiNativeSearchFromHintsEnabled = false,
     stepRoutingChainSet,
+    styleRewrite,
 }: RunBoundedReviewWorkflowInput): Promise<RunBoundedReviewWorkflowResult> => {
     if (!contextEnvelope) {
         throw new Error(
@@ -1112,6 +1134,209 @@ export const runBoundedReviewWorkflow = async ({
     stoppedBeforeStepKind = reviewLoopResult.stoppedBeforeStepKind;
     planContinuation = reviewLoopResult.planContinuation;
 
+    // Styling runs only after a completed reviewed workflow. It never changes a
+    // valid answer into a degraded workflow: no remaining step/call budget
+    // simply leaves the original draft in place.
+    let styleRewriteMetadata: StyleRewriteMetadata | undefined;
+    if (
+        draftResult !== null &&
+        workflowStatus === 'completed' &&
+        terminationReason === 'goal_satisfied' &&
+        styleRewrite !== undefined
+    ) {
+        const canTransition = isWorkflowTransitionAllowed(
+            workflowState.currentStepKind,
+            'style_rewrite',
+            workflowPolicy
+        );
+        const hasTwoCallBudget =
+            !styleRewrite.config.enabled ||
+            workflowState.deliberationCallCount + 2 <=
+                executionLimits.maxDeliberationCalls;
+        const hasStepBudget =
+            workflowState.stepCount < executionLimits.maxWorkflowSteps;
+        const hasRemainingWorkflowBudget = checkExecutionLimits(
+            workflowState,
+            executionLimits,
+            Date.now(),
+            'style_rewrite'
+        ).withinLimits;
+        const finalAssessStep = [...workflowSteps]
+            .reverse()
+            .find((step) => step.stepKind === 'assess');
+        const assessedCaution =
+            finalAssessStep?.outcome.signals?.finalTemperamentCaution;
+        const caution =
+            typeof assessedCaution === 'number' &&
+            assessedCaution >= 1 &&
+            assessedCaution <= 5
+                ? assessedCaution
+                : undefined;
+        if (
+            canTransition &&
+            hasTwoCallBudget &&
+            hasStepBudget &&
+            hasRemainingWorkflowBudget
+        ) {
+            const styleStartedAt = Date.now();
+            const styleResult = await runStyleRewriteStep({
+                original: draftResult,
+                generationRuntime,
+                config: styleRewrite.config,
+                persona: styleRewrite.persona,
+                eligibility: {
+                    protectedContent:
+                        styleRewrite.protectedContent ||
+                        draftResult.retrieval?.used === true ||
+                        (draftResult.citations?.length ?? 0) > 0 ||
+                        draftResult.toolExecution?.status === 'executed',
+                },
+                caution,
+            });
+            styleRewriteMetadata = styleResult.metadata;
+            const rewriteUsage =
+                styleResult.rewriteResult !== undefined &&
+                styleRewrite.config.profile !== undefined
+                    ? styleRewrite.captureUsage(
+                          styleResult.rewriteResult,
+                          styleRewrite.config.profile,
+                          'chat_style_rewrite'
+                      )
+                    : undefined;
+            const validatorUsage =
+                styleResult.validatorResult !== undefined &&
+                styleRewrite.config.validatorProfile !== undefined
+                    ? styleRewrite.captureUsage(
+                          styleResult.validatorResult,
+                          styleRewrite.config.validatorProfile,
+                          'chat_style_validation'
+                      )
+                    : undefined;
+            const totalTokens =
+                (rewriteUsage?.totalTokens ?? 0) +
+                (validatorUsage?.totalTokens ?? 0);
+            const deliberationCalls = styleResult.metadata.attempted
+                ? styleResult.metadata.validatorOutcome === 'not_attempted'
+                    ? 1
+                    : 2
+                : 0;
+            captureStep({
+                stepKind: 'style_rewrite',
+                status:
+                    styleResult.metadata.outcome === 'applied'
+                        ? 'executed'
+                        : styleResult.metadata.outcome === 'skipped'
+                          ? 'skipped'
+                          : 'failed',
+                summary: `Style rewrite ${styleResult.metadata.outcome}: ${styleResult.metadata.reasonCode}.`,
+                reasonCode:
+                    styleResult.metadata.outcome === 'applied'
+                        ? 'style_rewrite_applied'
+                        : styleResult.metadata.outcome === 'skipped'
+                          ? 'style_rewrite_skipped'
+                          : styleResult.metadata.outcome === 'failed'
+                            ? 'style_rewrite_failed'
+                            : 'style_rewrite_rejected',
+                startedAtMs: styleStartedAt,
+                finishedAtMs: Date.now(),
+                model: rewriteUsage?.model,
+                usage:
+                    totalTokens > 0
+                        ? {
+                              promptTokens:
+                                  (rewriteUsage?.promptTokens ?? 0) +
+                                  (validatorUsage?.promptTokens ?? 0),
+                              completionTokens:
+                                  (rewriteUsage?.completionTokens ?? 0) +
+                                  (validatorUsage?.completionTokens ?? 0),
+                              totalTokens,
+                          }
+                        : undefined,
+                estimatedCost:
+                    rewriteUsage !== undefined || validatorUsage !== undefined
+                        ? {
+                              inputCostUsd:
+                                  (rewriteUsage?.estimatedCost.inputCostUsd ??
+                                      0) +
+                                  (validatorUsage?.estimatedCost.inputCostUsd ??
+                                      0),
+                              outputCostUsd:
+                                  (rewriteUsage?.estimatedCost.outputCostUsd ??
+                                      0) +
+                                  (validatorUsage?.estimatedCost
+                                      .outputCostUsd ?? 0),
+                              totalCostUsd:
+                                  (rewriteUsage?.estimatedCost.totalCostUsd ??
+                                      0) +
+                                  (validatorUsage?.estimatedCost.totalCostUsd ??
+                                      0),
+                          }
+                        : undefined,
+                parentStepId: draftParentStepId,
+                attempt: 1,
+                signals: {
+                    outcome: styleResult.metadata.outcome,
+                    reasonCode: styleResult.metadata.reasonCode,
+                    personaId: styleResult.metadata.personaId,
+                    validatorOutcome: styleResult.metadata.validatorOutcome,
+                    originalHmacId: styleResult.metadata.originalHmacId ?? null,
+                    presentedHmacId:
+                        styleResult.metadata.presentedHmacId ?? null,
+                    editRatio: styleResult.metadata.editRatio,
+                    caution: styleResult.metadata.caution ?? null,
+                    intensity: styleResult.metadata.intensity,
+                    traceConstrained: styleResult.metadata.traceConstrained,
+                },
+            });
+            workflowState = applyStepExecutionToState(
+                workflowState,
+                'style_rewrite',
+                totalTokens,
+                0,
+                deliberationCalls
+            );
+            draftResult = { ...draftResult, text: styleResult.text };
+        } else if (styleRewrite.config.enabled && canTransition) {
+            const styleResult = createStyleRewriteSkipResult({
+                original: draftResult,
+                config: styleRewrite.config,
+                persona: styleRewrite.persona,
+                reasonCode: 'budget_unavailable',
+                caution,
+            });
+            styleRewriteMetadata = styleResult.metadata;
+            if (hasStepBudget) {
+                captureStep({
+                    stepKind: 'style_rewrite',
+                    status: 'skipped',
+                    summary:
+                        'Style rewrite skipped because workflow budget was unavailable.',
+                    reasonCode: 'style_rewrite_skipped',
+                    startedAtMs: Date.now(),
+                    finishedAtMs: Date.now(),
+                    parentStepId: draftParentStepId,
+                    attempt: 1,
+                    signals: {
+                        outcome: 'skipped',
+                        reasonCode: 'budget_unavailable',
+                        caution: caution ?? null,
+                        intensity: styleResult.metadata.intensity,
+                        traceConstrained: styleResult.metadata.traceConstrained,
+                    },
+                });
+            }
+        } else if (styleRewrite.config.enabled) {
+            const styleResult = createStyleRewriteSkipResult({
+                original: draftResult,
+                config: styleRewrite.config,
+                persona: styleRewrite.persona,
+                reasonCode: 'transition_not_allowed',
+                caution,
+            });
+            styleRewriteMetadata = styleResult.metadata;
+        }
+    }
+
     const workflowLineage: WorkflowRecord = {
         workflowId,
         workflowName: workflowConfig.workflowName,
@@ -1176,6 +1401,9 @@ export const runBoundedReviewWorkflow = async ({
         outcome: 'generated',
         generationResult: draftResult,
         workflowLineage,
+        ...(styleRewriteMetadata !== undefined && {
+            styleRewrite: styleRewriteMetadata,
+        }),
         ...(plannerExecutionResult !== undefined && {
             plannerStepResult: plannerExecutionResult,
         }),
