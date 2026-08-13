@@ -105,7 +105,7 @@ test('explicit persona guidance covers Footnote, vendored personas, and neutral 
     );
 });
 
-test('mechanical checks reject only no-ops and newly introduced links', () => {
+test('mechanical checks reject no-ops and changed link destinations', () => {
     const originalText =
         'The release notes are at https://example.com/release.';
     assert.equal(
@@ -118,6 +118,20 @@ test('mechanical checks reject only no-ops and newly introduced links', () => {
             'The release notes are at https://example.com/release and https://example.com/other.'
         ),
         false
+    );
+    assert.equal(
+        passesStyleRewriteMechanicalChecks(
+            originalText,
+            'The release notes are ready.'
+        ),
+        false
+    );
+    assert.equal(
+        passesStyleRewriteMechanicalChecks(
+            originalText,
+            'The release notes are at HTTPS://EXAMPLE.COM/release.'
+        ),
+        true
     );
 });
 

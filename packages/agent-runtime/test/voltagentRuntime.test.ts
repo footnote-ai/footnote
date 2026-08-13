@@ -15,6 +15,8 @@ import {
     createVoltAgentRuntime,
     getToolForProvider,
     hasToolForProvider,
+    normalizeVoltAgentResult,
+    openRouterMetadataExtractor,
     resolveToolForProvider,
     type VoltAgentGenerateTextOptions,
     type VoltAgentLogger,
@@ -165,6 +167,81 @@ test('voltagent runtime carries explicit OpenRouter routing and reported attribu
         routingAttemptCount: 1,
         upstreamReportedCostUsd: 0.000012,
     });
+});
+
+test('voltagent runtime normalizes production OpenRouter metadata', async () => {
+    const metadata = await openRouterMetadataExtractor.extractMetadata({
+        parsedBody: {
+            openrouter_metadata: {
+                endpoints: {
+                    available: [
+                        {
+                            selected: true,
+                            provider: 'Parasail',
+                            model: 'thedrummer/cydonia-24b-v4.1',
+                        },
+                    ],
+                },
+                attempts: [{ provider: 'Parasail' }, { provider: 'Parasail' }],
+            },
+            usage: { cost: 0.000012 },
+        },
+    });
+    const result = normalizeVoltAgentResult(
+        'openrouter/thedrummer/cydonia-24b-v4.1',
+        { messages: [{ role: 'user', content: 'Rewrite this carefully.' }] },
+        {
+            text: 'A carefully phrased answer.',
+            response: { modelId: 'thedrummer/cydonia-24b-v4.1' },
+            providerMetadata: metadata,
+        }
+    );
+
+    assert.deepEqual(result.upstreamAttribution, {
+        inferenceProvider: 'Parasail',
+        resolvedModel: 'thedrummer/cydonia-24b-v4.1',
+        routingAttemptCount: 2,
+        upstreamReportedCostUsd: 0.000012,
+    });
+});
+
+test('voltagent runtime warns and skips absent OpenRouter credentials', async () => {
+    const warnings: string[] = [];
+    const logger: VoltAgentLogger = {
+        trace() {},
+        debug() {},
+        info() {},
+        warn(message) {
+            warnings.push(message);
+        },
+        error() {},
+        fatal() {},
+        child() {
+            return logger;
+        },
+    };
+    let seenOpenRouterConfig: unknown;
+    const runtime = createVoltAgentRuntime({
+        defaultModel: 'openrouter/thedrummer/cydonia-24b-v4.1',
+        logger,
+        createExecutor: ({ openrouter }) => {
+            seenOpenRouterConfig = openrouter;
+            return {
+                async generateText() {
+                    return { text: 'Fallback presentation.' };
+                },
+            };
+        },
+    });
+
+    await runtime.generate({
+        provider: 'openrouter',
+        model: 'thedrummer/cydonia-24b-v4.1',
+        messages: [{ role: 'user', content: 'Rewrite this carefully.' }],
+    });
+
+    assert.equal(seenOpenRouterConfig, undefined);
+    assert.match(warnings[0] ?? '', /API key is unavailable/u);
 });
 
 test('voltagent runtime uses default model when request model is blank', async () => {

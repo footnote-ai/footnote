@@ -153,6 +153,8 @@ test('successful workflow applies one style_rewrite lineage step and records sep
         result.workflowLineage.steps.at(-1)?.stepKind,
         'style_rewrite'
     );
+    assert.equal(result.workflowLineage.stepCount, 3);
+    assert.equal(result.workflowLineage.maxSteps, 4);
     assert.deepEqual(features, ['chat_style_rewrite', 'chat_style_validation']);
     assert.equal(calls, 4);
     assert.equal(result.styleRewrite?.backendEstimatedCostUsd, 0.006);
@@ -362,21 +364,19 @@ test('only protected content skips style; exhausted semantic budgets still run t
             },
         });
         assert.equal(result.outcome, 'generated');
-        if (result.outcome === 'generated') {
-            if (candidate.protectedContent) {
-                assert.equal(result.generationResult.text, generated.text);
-                assert.equal(result.styleRewrite?.outcome, 'skipped');
-                assert.equal(
-                    result.styleRewrite?.reasonCode,
-                    'protected_content'
-                );
-            } else {
-                assert.equal(result.styleRewrite?.outcome, 'applied');
-                assert.equal(
-                    result.generationResult.text,
-                    'According to Ada Lovelace, the release lists 12 fixes. It may not resolve every issue.'
-                );
-            }
+        if (result.outcome !== 'generated') {
+            throw new Error('Expected generated result.');
+        }
+        if (candidate.protectedContent) {
+            assert.equal(result.generationResult.text, generated.text);
+            assert.equal(result.styleRewrite?.outcome, 'skipped');
+            assert.equal(result.styleRewrite?.reasonCode, 'protected_content');
+        } else {
+            assert.equal(result.styleRewrite?.outcome, 'applied');
+            assert.equal(
+                result.generationResult.text,
+                'According to Ada Lovelace, the release lists 12 fixes. It may not resolve every issue.'
+            );
         }
         assert.equal(calls, candidate.protectedContent ? 1 : 3);
     }

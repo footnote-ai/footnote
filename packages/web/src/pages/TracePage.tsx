@@ -85,6 +85,27 @@ type SummarySignal = {
     explanation: string;
 };
 
+const formatRecordedUsd = (value: unknown): string =>
+    typeof value === 'number' && Number.isFinite(value)
+        ? `$${value.toFixed(6)}`
+        : 'Unavailable';
+
+const formatStyleRewriteRouting = (
+    styleRewrite: NonNullable<ServerMetadata['styleRewrite']>
+): string => {
+    const parts = [
+        styleRewrite.upstreamInferenceProvider,
+        styleRewrite.upstreamResolvedModel,
+        styleRewrite.upstreamRoutingAttempt !== undefined
+            ? `attempt ${styleRewrite.upstreamRoutingAttempt}${styleRewrite.upstreamRoutingAttemptCount !== undefined ? `/${styleRewrite.upstreamRoutingAttemptCount}` : ''}`
+            : undefined,
+    ].filter(
+        (part): part is string => typeof part === 'string' && part.length > 0
+    );
+
+    return parts.length > 0 ? parts.join(' · ') : 'Unavailable';
+};
+
 const resolveTraceModelLabel = (traceData: ServerMetadata): string => {
     // Prefer canonical generation event model first, then legacy mirrors.
     const generationEventModel = traceData.execution
@@ -977,30 +998,22 @@ const TracePage = (): JSX.Element => {
                                 <div>
                                     <dt>Upstream routing</dt>
                                     <dd>
-                                        {styleRewrite.upstreamInferenceProvider ??
-                                            'Unavailable'}
-                                        {styleRewrite.upstreamResolvedModel
-                                            ? ` · ${styleRewrite.upstreamResolvedModel}`
-                                            : ''}
-                                        {styleRewrite.upstreamRoutingAttempt !==
-                                        undefined
-                                            ? ` · attempt ${styleRewrite.upstreamRoutingAttempt}${styleRewrite.upstreamRoutingAttemptCount !== undefined ? `/${styleRewrite.upstreamRoutingAttemptCount}` : ''}`
-                                            : ''}
+                                        {formatStyleRewriteRouting(
+                                            styleRewrite
+                                        )}
                                     </dd>
                                 </div>
                                 <div>
                                     <dt>Cost</dt>
                                     <dd>
                                         Backend estimate:{' '}
-                                        {styleRewrite.backendEstimatedCostUsd ===
-                                        undefined
-                                            ? 'Unavailable'
-                                            : `$${styleRewrite.backendEstimatedCostUsd.toFixed(6)}`}
+                                        {formatRecordedUsd(
+                                            styleRewrite.backendEstimatedCostUsd
+                                        )}
                                         {' · '}Upstream reported:{' '}
-                                        {styleRewrite.upstreamReportedCostUsd ===
-                                        undefined
-                                            ? 'Unavailable'
-                                            : `$${styleRewrite.upstreamReportedCostUsd.toFixed(6)}`}
+                                        {formatRecordedUsd(
+                                            styleRewrite.upstreamReportedCostUsd
+                                        )}
                                     </dd>
                                 </div>
                                 <div>

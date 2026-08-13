@@ -107,7 +107,7 @@ export const styleRewriteEvaluationCorpus: StyleRewriteEvaluationCase[] = [
         personaId: 'danny',
         presentationGuidance: 'Keep this low-key.',
         original: 'The change can wait until tomorrow.',
-        writerOutput: 'The change can wait through tomorrow.',
+        writerOutput: 'The change can wait till tomorrow.',
         caution: 4,
         expectedOutcome: 'applied',
         expectedIntensity: 'restrained',

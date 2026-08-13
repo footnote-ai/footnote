@@ -1287,12 +1287,20 @@ export const runBoundedReviewWorkflow = async ({
         }
     }
 
+    // The presentation epilogue is deliberately outside the configured
+    // semantic-workflow budget, but it remains a real, persisted trace step.
+    // Include it in the trace capacity so `stepCount` and `maxSteps` describe
+    // the same recorded sequence; `effectiveLimits` retains the configured
+    // semantic budget for auditability.
+    const presentationStepCount = workflowSteps.filter(
+        (step) => step.stepKind === 'style_rewrite'
+    ).length;
     const workflowLineage: WorkflowRecord = {
         workflowId,
         workflowName: workflowConfig.workflowName,
         status: workflowStatus,
         stepCount: workflowSteps.length,
-        maxSteps: executionLimits.maxWorkflowSteps,
+        maxSteps: executionLimits.maxWorkflowSteps + presentationStepCount,
         maxDurationMs: executionLimits.maxDurationMs,
         effectiveLimits: resolveExecutionLimits({
             limits: executionLimits,

@@ -45,6 +45,16 @@ export type VoltAgentProviderOptions = {
     providerHints?: Record<string, unknown>;
 };
 
+type OpenRouterRouting = NonNullable<ModelProfileProviderRouting['openrouter']>;
+
+type OpenRouterProviderPayload = {
+    order?: string[];
+    only?: string[];
+    allow_fallbacks?: boolean;
+    data_collection?: 'allow' | 'deny';
+    zdr?: boolean;
+};
+
 /**
  * Narrow execution options the VoltAgent adapter passes into one text call.
  */
@@ -477,33 +487,42 @@ const toFootnoteModel = (model: string): string => {
 /**
  * Builds the provider option bag for one VoltAgent text call.
  */
+/** Converts the shared routing contract into OpenRouter's request payload. */
+const toOpenRouterProviderPayload = (
+    routing: OpenRouterRouting | undefined
+): OpenRouterProviderPayload | undefined => {
+    if (routing === undefined) return undefined;
+
+    const payload: OpenRouterProviderPayload = {
+        ...(routing.order !== undefined && { order: routing.order }),
+        ...(routing.only !== undefined && { only: routing.only }),
+        ...(routing.allowFallbacks !== undefined && {
+            allow_fallbacks: routing.allowFallbacks,
+        }),
+        ...(routing.dataCollection !== undefined && {
+            data_collection: routing.dataCollection,
+        }),
+        ...(routing.zdr !== undefined && { zdr: routing.zdr }),
+    };
+
+    return Object.keys(payload).length > 0 ? payload : undefined;
+};
+
 const buildVoltAgentProviderOptions = (
     request: GenerationRequest,
     provider: string
 ): VoltAgentProviderOptions | undefined => {
     if (provider === 'openrouter') {
-        const routing = request.providerRouting?.openrouter;
-        if (!routing) {
+        const routing = toOpenRouterProviderPayload(
+            request.providerRouting?.openrouter
+        );
+        if (routing === undefined) {
             return undefined;
         }
         return {
             providerHints: {
                 openrouter: {
-                    provider: {
-                        ...(routing.order !== undefined && {
-                            order: routing.order,
-                        }),
-                        ...(routing.only !== undefined && {
-                            only: routing.only,
-                        }),
-                        ...(routing.allowFallbacks !== undefined && {
-                            allow_fallbacks: routing.allowFallbacks,
-                        }),
-                        ...(routing.dataCollection !== undefined && {
-                            data_collection: routing.dataCollection,
-                        }),
-                        ...(routing.zdr !== undefined && { zdr: routing.zdr }),
-                    },
+                    provider: routing,
                 },
             },
         };
@@ -561,18 +580,22 @@ const extractOpenRouterAttribution = (value: unknown) => {
     const selected = isRecord(routing.selected) ? routing.selected : {};
     const usage = isRecord(openrouter.usage) ? openrouter.usage : {};
     const attempts = Array.isArray(routing.attempts) ? routing.attempts : [];
+    const resolvedModel =
+        nonEmptyString(selected.model) ?? nonEmptyString(routing.model);
+    const inferenceProvider =
+        nonEmptyString(selected.provider) ?? nonEmptyString(routing.provider);
+    const routingAttempt = finiteNumber(routing.attempt);
+    const routingAttemptCount =
+        attempts.length > 0 ? attempts.length : finiteNumber(routing.attempts);
+    const upstreamReportedCostUsd = finiteNumber(usage.cost);
     const attribution = {
-        resolvedModel:
-            nonEmptyString(selected.model) ?? nonEmptyString(routing.model),
-        inferenceProvider:
-            nonEmptyString(selected.provider) ??
-            nonEmptyString(routing.provider),
-        routingAttempt: finiteNumber(routing.attempt),
-        routingAttemptCount:
-            attempts.length > 0
-                ? attempts.length
-                : finiteNumber(routing.attempts),
-        upstreamReportedCostUsd: finiteNumber(usage.cost),
+        ...(resolvedModel !== undefined && { resolvedModel }),
+        ...(inferenceProvider !== undefined && { inferenceProvider }),
+        ...(routingAttempt !== undefined && { routingAttempt }),
+        ...(routingAttemptCount !== undefined && { routingAttemptCount }),
+        ...(upstreamReportedCostUsd !== undefined && {
+            upstreamReportedCostUsd,
+        }),
     };
     return Object.values(attribution).some((item) => item !== undefined)
         ? attribution
@@ -941,6 +964,8 @@ const createDefaultVoltAgentExecutor = ({
 }: Parameters<VoltAgentExecutorFactory>[0] & {
     agentFactory?: (input: CreateVoltAgentAgentFactoryInput) => VoltAgentLike;
 }): VoltAgentTextExecutor => {
+    const openRouterProviderPayload =
+        toOpenRouterProviderPayload(openrouterRouting);
     const openRouterModel =
         model.startsWith('openrouter/') && openrouter !== undefined
             ? createOpenAICompatible({
@@ -953,28 +978,8 @@ const createDefaultVoltAgentExecutor = ({
                   metadataExtractor: openRouterMetadataExtractor,
                   transformRequestBody: (body) => ({
                       ...body,
-                      ...(openrouterRouting !== undefined && {
-                          provider: {
-                              ...(openrouterRouting.order !== undefined && {
-                                  order: openrouterRouting.order,
-                              }),
-                              ...(openrouterRouting.only !== undefined && {
-                                  only: openrouterRouting.only,
-                              }),
-                              ...(openrouterRouting.allowFallbacks !==
-                                  undefined && {
-                                  allow_fallbacks:
-                                      openrouterRouting.allowFallbacks,
-                              }),
-                              ...(openrouterRouting.dataCollection !==
-                                  undefined && {
-                                  data_collection:
-                                      openrouterRouting.dataCollection,
-                              }),
-                              ...(openrouterRouting.zdr !== undefined && {
-                                  zdr: openrouterRouting.zdr,
-                              }),
-                          },
+                      ...(openRouterProviderPayload !== undefined && {
+                          provider: openRouterProviderPayload,
                       }),
                   }),
               })(model.slice('openrouter/'.length))
@@ -1142,6 +1147,16 @@ const createVoltAgentRuntime = ({
                               'https://openrouter.ai/api/v1',
                       }
                     : undefined;
+            if (
+                provider === 'openrouter' &&
+                executorOpenRouterConfig === undefined &&
+                logger !== undefined
+            ) {
+                logger.warn(
+                    'VoltAgent OpenRouter configuration was skipped because the API key is unavailable.',
+                    { provider, model: executedModel }
+                );
+            }
             const canUseSearch = request.capabilities?.canUseSearch === true;
             const searchToolMapping = resolveToolForProvider(
                 'web_search',
@@ -1234,6 +1249,7 @@ export {
     createDefaultVoltAgentExecutor,
     createVoltAgentRuntime,
     normalizeVoltAgentResult,
+    openRouterMetadataExtractor,
     toFootnoteModel,
     toVoltAgentMessages,
     toVoltAgentModel,

@@ -109,8 +109,14 @@ const isPlainProse = (text: string): boolean => {
 const occurrences = (text: string, expression: RegExp): string[] =>
     Array.from(text.matchAll(expression), (match) => match[0]);
 
-const canonicalUrl = (url: string): string =>
-    url.replace(/[.,!?;:]+$/u, '').toLocaleLowerCase();
+/** Normalizes only a URL's scheme and host; path, query, and fragment stay exact. */
+const canonicalUrl = (url: string): string => {
+    const trimmed = url.replace(/[.,!?;:]+$/u, '');
+    const parts = trimmed.match(/^(https?):\/\/([^/?#]+)(.*)$/iu);
+    return parts
+        ? `${parts[1].toLowerCase()}://${parts[2].toLowerCase()}${parts[3]}`
+        : trimmed;
+};
 
 const wordEditRatio = (original: string, rewritten: string): number => {
     const before = original.toLowerCase().match(/[\p{L}\p{N}']+/gu) ?? [];
@@ -129,12 +135,14 @@ export const passesStyleRewriteMechanicalChecks = (
     const rewritten = rewrittenText.trim();
     if (!rewritten || rewritten === original) return false;
     const originalUrls = new Set(
-        occurrences(original, /https?:\/\/[^\s)]+/gu).map(canonicalUrl)
+        occurrences(original, /https?:\/\/[^\s)]+/giu).map(canonicalUrl)
+    );
+    const rewrittenUrls = new Set(
+        occurrences(rewritten, /https?:\/\/[^\s)]+/giu).map(canonicalUrl)
     );
     if (
-        occurrences(rewritten, /https?:\/\/[^\s)]+/gu).some(
-            (url) => !originalUrls.has(canonicalUrl(url))
-        )
+        [...originalUrls].some((url) => !rewrittenUrls.has(url)) ||
+        [...rewrittenUrls].some((url) => !originalUrls.has(url))
     )
         return false;
     // The independent validator now owns semantic equivalence. Mechanical
@@ -197,7 +205,7 @@ const parseSemanticVerdict = (text: string): SemanticVerdict | null => {
         const trimmed = text.trim();
         const directVerdict = trimmed
             .match(/^(equivalent|drift|uncertain)[.!]?$/iu)?.[1]
-            ?.toLocaleLowerCase();
+            ?.toLowerCase();
         if (
             directVerdict === 'equivalent' ||
             directVerdict === 'drift' ||
