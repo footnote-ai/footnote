@@ -33,7 +33,10 @@ import {
     type RunOutcomeSummary,
 } from '../utils/traceOutcome';
 import { summarizeTraceAccounting } from '../utils/traceAccounting';
-import { sanitizeWorkflowForDisplay } from '../utils/traceDisplay';
+import {
+    sanitizeStyleRewriteForDisplay,
+    sanitizeWorkflowForDisplay,
+} from '../utils/traceDisplay';
 // Define the actual server response metadata structure
 type ServerMetadata = GetTraceResponse & {
     timestamp?: string;
@@ -69,6 +72,7 @@ type DisplayTrace = {
     execution: ServerMetadata['execution'];
     evaluator: ServerMetadata['evaluator'] | null;
     workflow: WorkflowRecord | null;
+    styleRewrite: ServerMetadata['styleRewrite'] | null;
     runtimeContext: {
         modelVersion: string | null;
         conversationSnapshot: string | null;
@@ -204,6 +208,7 @@ const buildDisplayTrace = (traceData: ServerMetadata): DisplayTrace => ({
     execution: traceData.execution ?? [],
     evaluator: traceData.evaluator ?? null,
     workflow: sanitizeWorkflowForDisplay(traceData.workflow),
+    styleRewrite: sanitizeStyleRewriteForDisplay(traceData.styleRewrite),
     runtimeContext: traceData.runtimeContext
         ? {
               modelVersion: traceData.runtimeContext.modelVersion ?? null,
@@ -726,6 +731,7 @@ const TracePage = (): JSX.Element => {
     const safetySummary = getSafetySummary(traceData, safetyLabel);
     const workflowSummary = getWorkflowSummary(traceData);
     const runOutcomeSummary = traceRunOutcomeSummary;
+    const styleRewrite = sanitizedTraceData.styleRewrite;
     const summarySignals: SummarySignal[] = [
         {
             label: 'Mode',
@@ -903,6 +909,105 @@ const TracePage = (): JSX.Element => {
                         {traceAccounting.modelStepCount} model steps (
                         {traceAccounting.costCoverage})
                     </p>
+                )}
+                {styleRewrite && (
+                    <>
+                        <p>
+                            <strong>Presentation rewrite:</strong>{' '}
+                            {styleRewrite.outcome.charAt(0).toUpperCase() +
+                                styleRewrite.outcome.slice(1)}
+                        </p>
+                        <p>
+                            <code>
+                                {styleRewrite.model ??
+                                    styleRewrite.profileId ??
+                                    'Unspecified'}
+                            </code>{' '}
+                            · {styleRewrite.personaId} persona ·{' '}
+                            {styleRewrite.intensity} intensity
+                        </p>
+                        <p>
+                            <strong>Validator:</strong>{' '}
+                            {styleRewrite.validatorModel ??
+                                styleRewrite.validatorProfileId ??
+                                'Not attempted'}{' '}
+                            — {styleRewrite.validatorOutcome}
+                        </p>
+                        <p>
+                            <strong>Edit:</strong>{' '}
+                            {Math.round(styleRewrite.editRatio * 100)}% · TRACE
+                            caution: {styleRewrite.caution ?? 'Unavailable'}
+                        </p>
+                        <details className="trace-details">
+                            <summary>Presentation rewrite details</summary>
+                            <dl className="trace-details__list">
+                                <div>
+                                    <dt>Reason code</dt>
+                                    <dd>
+                                        <code>{styleRewrite.reasonCode}</code>
+                                    </dd>
+                                </div>
+                                <div>
+                                    <dt>Profile</dt>
+                                    <dd>
+                                        <code>
+                                            {styleRewrite.profileId ??
+                                                'Unavailable'}
+                                        </code>
+                                    </dd>
+                                </div>
+                                <div>
+                                    <dt>Provider</dt>
+                                    <dd>
+                                        {styleRewrite.provider ?? 'Unavailable'}
+                                    </dd>
+                                </div>
+                                <div>
+                                    <dt>Duration</dt>
+                                    <dd>
+                                        {styleRewrite.durationMs === undefined
+                                            ? 'Unavailable'
+                                            : `${styleRewrite.durationMs}ms`}
+                                    </dd>
+                                </div>
+                                <div>
+                                    <dt>Validator profile</dt>
+                                    <dd>
+                                        <code>
+                                            {styleRewrite.validatorProfileId ??
+                                                'Unavailable'}
+                                        </code>
+                                    </dd>
+                                </div>
+                                <div>
+                                    <dt>TRACE constrained</dt>
+                                    <dd>
+                                        {styleRewrite.traceConstrained
+                                            ? 'Yes'
+                                            : 'No'}
+                                    </dd>
+                                </div>
+                                <div>
+                                    <dt>Original HMAC ID</dt>
+                                    <dd>
+                                        <code>
+                                            {styleRewrite.originalHmacId ??
+                                                'Unavailable'}
+                                        </code>
+                                    </dd>
+                                </div>
+                                <div>
+                                    <dt>Presented HMAC ID</dt>
+                                    <dd>
+                                        <code>
+                                            {styleRewrite.presentedHmacId ??
+                                                'Unavailable'}
+                                        </code>
+                                    </dd>
+                                </div>
+                            </dl>
+                        </details>
+                    </>
                 )}
                 <details className="trace-details">
                     <summary>Safety and evaluator details</summary>
