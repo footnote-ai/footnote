@@ -1,32 +1,32 @@
 # Philosophy
 
-AI can be helpful, but it can also sound sure of itself when it's guessing. The finished response rarely shows which information it relied on, what instructions shaped it, whether it used a tool or memory, or where it filled in a gap.
+AI can be helpful, but it can also sound sure of itself. You rarely get to know what information it relied on, which instructions shaped it, whether it relied on its memory or a particular tool, or when it decides to fill in a gap by guessing.
 
-Footnote is our attempt to make that relationship more honest. People should be able to see what their AI is doing, understand its limits, and remain in charge of it.
+*Footnote* is our attempt to make AI more honest, and kept within your control. 
 
-This page describes the principles guiding Footnote as we build it.
+## Bring the receipts
 
-## An answer should come with receipts
+"Trust me" is a bit less useful than "I read it on the city website this morning."
 
-Imagine asking a friend where they heard something. A useful answer might be, "I read it on the city website this morning." A less useful one is, "Trust me."
+We should hold AI to the same basic standard. [OECD AI Principles](https://oecd.ai/en/ai-principles) call for "plain and easy-to-understand information" about the sources and processes behind an AI result, and say people should have enough of it to challenge that result. We want answers that are **checkable**.
 
-AI should be held to the same basic standard. For anything that matters, you should be able to find out where the information came from, which tools were used, what assumptions were made, and what the system wasn't sure about — and you shouldn't need to be a programmer to follow along.
+Footnote's should help you answer questions like: 
+- Where did this come from?
+- What did the AI do?
+- What was it unsure about?
+- What would change the answer?
 
-The [OECD AI Principles](https://oecd.ai/en/ai-principles) call for "plain and easy-to-understand information" about the sources and processes behind an AI result, and say people should have enough of it to challenge that result. That's close to what we mean by a **checkable answer**.
-
-A Footnote response should help you answer a few ordinary questions: Where did this come from? What did the AI do? What was it unsure about? What would change the answer?
-
-A casual conversation may need only a small note. A factual or sensitive one may need sources, checks, and a fuller record. We want the detail there when it matters, without turning every chat into paperwork.
+A complex or sensitive question may need sources, checks, and a fuller record; A casual one, maybe just a small note. Either way, the detail is there if you need it.
 
 ### More than citations
 
-A citation tells you where a claim came from. That's useful, but an answer can be shaped by much more than a source.
+AI has gotten very good at using the tools at its disposal. Its no longer just about *what it knows*, but also *what it can *do* with what it knows*. It might may have searched the web, read a document, used a calculator, or remembered something from an earlier conversation. *Any* of that could be important — You'd probably want it to use that calculator if it was helping with your taxes!
 
-The AI may have searched the web, read a saved document, used a calculator, followed a special rule, asked another model for review, or remembered something from an earlier conversation. All of that is part of what we call **provenance** — the wider record of how an answer came to be. The World Wide Web Consortium describes it as information about the "entities, activities, and people involved in producing a piece of data or thing."
+All of this put together is **provenance** — the wider story of how an answer came to be. The World Wide Web Consortium describes it as information about the "entities, activities, and people involved in producing a piece of data or thing."
 
-For Footnote, that can mean the sources and memories it drew on, the model and tools it used, the settings in effect, any checks or revisions along the way, actions it took outside the chat, and gaps it knows are still there.
+For us, that story includes the sources Footnote read, what it remembered, the tools and models it used, the settings in effect, and checks or assumptions made along the way.
 
-The small footnote under an answer is the readable version of that record. Deeper technical detail can stay there for people who want it.
+We pack it all in a readable visual that comes with each answer, with more detail available when you want to dig deeper.
 
 ## Staying in control
 
