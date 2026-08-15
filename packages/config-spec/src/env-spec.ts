@@ -1976,7 +1976,7 @@ export const envEntries = [
         secret: false,
         kind: 'string',
         description:
-            'Enabled model profile ID for the veto-only presentation flow semantic validator.',
+            'Enabled model profile ID for the bounded presentation audit.',
         defaultValue: noDefault(),
         usedBy: ['packages/backend/src/config.ts'],
     }),
@@ -1989,7 +1989,7 @@ export const envEntries = [
         secret: false,
         kind: 'integer',
         description:
-            'Hard timeout in milliseconds for the veto-only presentation flow validator.',
+            'Hard timeout in milliseconds for the bounded presentation audit.',
         defaultValue: literal(1500),
         usedBy: ['packages/backend/src/config.ts'],
     }),

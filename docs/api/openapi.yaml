@@ -3137,16 +3137,7 @@ components:
                     minimum: 1
                 stepKind:
                     type: string
-                    enum:
-                        [
-                            plan,
-                            tool,
-                            generate,
-                            assess,
-                            revise,
-                            presentation,
-                            finalize,
-                        ]
+                    enum: [plan, tool, generate, assess, revise, finalize]
                 reasonCode:
                     type: string
                     enum:
@@ -3155,10 +3146,6 @@ components:
                             planner_invalid_output,
                             evaluator_runtime_error,
                             generation_runtime_error,
-                            presentation_fallback,
-                            presentation_finalized,
-                            presentation_fallback,
-                            presentation_fallback,
                             tool_not_requested,
                             tool_not_used,
                             search_rerouted_to_fallback_profile,
@@ -3496,10 +3483,6 @@ components:
                                         planner_invalid_output,
                                         evaluator_runtime_error,
                                         generation_runtime_error,
-                                        presentation_fallback,
-                                        presentation_finalized,
-                                        presentation_fallback,
-                                        presentation_fallback,
                                         tool_not_requested,
                                         tool_not_used,
                                         search_rerouted_to_fallback_profile,

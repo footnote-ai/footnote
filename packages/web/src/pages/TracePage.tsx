@@ -985,7 +985,6 @@ const TracePage = (): JSX.Element => {
                                     <dt>Requested provider</dt>
                                     <dd>
                                         {presentation.draftRequestedProvider ??
-                                            presentation.draftRequestedProvider ??
                                             'Unavailable'}
                                     </dd>
                                 </div>

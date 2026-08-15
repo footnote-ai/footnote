@@ -11,7 +11,7 @@ import type {
     GenerationRuntime,
     RuntimeMessage,
 } from '@footnote/agent-runtime';
-import type { ModelProfile } from '@footnote/contracts';
+import type { ModelProfile, TraceAxisScore } from '@footnote/contracts';
 import type {
     PresentationMetadata,
     PresentationReasonCode,
@@ -37,8 +37,11 @@ export type PresentationPersona = {
 
 export type PresentationIntensity = 'standard' | 'restrained' | 'skipped';
 
+type PresentationCaution = TraceAxisScore | undefined;
+type PresentationFinalizerAttemptCount = 0 | 1 | 2;
+
 export const resolvePresentationIntensity = (
-    caution: number | undefined
+    caution: PresentationCaution
 ): PresentationIntensity => {
     if (caution === 5) return 'skipped';
     if (caution === undefined || caution === 4) return 'restrained';
@@ -104,7 +107,7 @@ const isOrdinaryProse = (text: string): boolean => {
         // Ordinary prose can contain citations, labels, and markdown lists.
     }
     if (
-        /\b(?:i (?:can't|cannot)|unable to|cannot assist|i must refuse)\b/iu.test(
+        /^(?:i (?:can't|cannot)|unable to|cannot assist|i must refuse)\b/iu.test(
             trimmed
         )
     )
@@ -171,6 +174,10 @@ const parseAudit = (text: string): PresentationAudit | null => {
     return null;
 };
 
+const toFinalizerAttemptCount = (
+    count: number
+): PresentationFinalizerAttemptCount => (count === 0 ? 0 : count === 1 ? 1 : 2);
+
 const buildMetadata = (input: {
     outcome: PresentationMetadata['outcome'];
     attempted: boolean;
@@ -181,11 +188,23 @@ const buildMetadata = (input: {
     finalText?: string;
     audit?: PresentationAudit;
     auditResult?: GenerationResult;
-    finalizerAttemptCount: number;
+    finalizerAttemptCount: PresentationFinalizerAttemptCount;
     startedAt?: number;
-    caution?: number;
+    caution?: PresentationCaution;
 }): PresentationMetadata => {
     const draftText = input.draft?.text;
+    const draftHmacId =
+        draftText === undefined
+            ? undefined
+            : hmacIdentifier(input.config.traceHmacSecret, draftText, 'draft');
+    const finalHmacId =
+        input.finalText === undefined
+            ? undefined
+            : hmacIdentifier(
+                  input.config.traceHmacSecret,
+                  input.finalText,
+                  'final'
+              );
     return {
         step: 'presentation',
         outcome: input.outcome,
@@ -205,7 +224,7 @@ const buildMetadata = (input: {
             input.audit?.verdict ??
             (input.auditResult === undefined ? 'not_attempted' : 'invalid'),
         draftAttemptCount: input.draft === undefined ? 0 : 1,
-        finalizerAttemptCount: input.finalizerAttemptCount as 0 | 1 | 2,
+        finalizerAttemptCount: input.finalizerAttemptCount,
         auditAttemptCount: input.auditResult === undefined ? 0 : 1,
         ...(input.draft?.upstreamAttribution?.inferenceProvider !==
             undefined && {
@@ -230,20 +249,8 @@ const buildMetadata = (input: {
             upstreamReportedCostUsd:
                 input.draft.upstreamAttribution.upstreamReportedCostUsd,
         }),
-        ...(draftText !== undefined && {
-            draftHmacId: hmacIdentifier(
-                input.config.traceHmacSecret,
-                draftText,
-                'draft'
-            ),
-        }),
-        ...(input.finalText !== undefined && {
-            finalHmacId: hmacIdentifier(
-                input.config.traceHmacSecret,
-                input.finalText,
-                'final'
-            ),
-        }),
+        ...(draftHmacId !== undefined && { draftHmacId }),
+        ...(finalHmacId !== undefined && { finalHmacId }),
         ...(draftText !== undefined &&
             input.finalText !== undefined && {
                 styledDraftRetentionRatio: wordRetentionRatio(
@@ -251,9 +258,7 @@ const buildMetadata = (input: {
                     input.finalText
                 ),
             }),
-        ...(input.caution !== undefined && {
-            caution: input.caution as 1 | 2 | 3 | 4 | 5,
-        }),
+        ...(input.caution !== undefined && { caution: input.caution }),
         intensity: resolvePresentationIntensity(input.caution),
         traceConstrained: input.caution === undefined || input.caution >= 4,
         ...(input.startedAt !== undefined && {
@@ -267,7 +272,7 @@ export const createPresentationFallback = (input: {
     config: PresentationConfig;
     persona: PresentationPersona;
     reasonCode: PresentationReasonCode;
-    caution?: number;
+    caution?: PresentationCaution;
 }): PresentationResult => ({
     outcome: 'fallback',
     finalizerResults: [],
@@ -312,10 +317,13 @@ const buildFinalizerRequest = (
 export const runPresentationStep = async (input: {
     generationRuntime: GenerationRuntime;
     generationRequest: GenerationRequest;
-    finalize: (request: GenerationRequest) => Promise<GenerationResult>;
+    finalize: (
+        request: GenerationRequest,
+        signal: AbortSignal
+    ) => Promise<GenerationResult>;
     config: PresentationConfig;
     persona: PresentationPersona;
-    caution?: number;
+    caution?: PresentationCaution;
 }): Promise<PresentationResult> => {
     if (!input.config.enabled) {
         return createPresentationFallback({
@@ -350,11 +358,17 @@ export const runPresentationStep = async (input: {
     const startedAt = Date.now();
     let draftResult: GenerationResult;
     try {
+        const draftGenerationRequest: GenerationRequest = {
+            ...input.generationRequest,
+        };
+        // The draft is prose-only. It receives retrieved context but never
+        // initiates another provider-native search.
+        delete draftGenerationRequest.search;
         draftResult = await withTimeout(
             input.config.timeoutMs,
             (signal) =>
                 input.generationRuntime.generate({
-                    ...input.generationRequest,
+                    ...draftGenerationRequest,
                     model: input.config.profile?.providerModel,
                     provider: input.config.profile?.provider,
                     capabilities: input.config.profile?.capabilities,
@@ -409,13 +423,14 @@ export const runPresentationStep = async (input: {
     ): Promise<GenerationResult> => {
         const result = await withTimeout(
             input.config.timeoutMs,
-            () =>
+            (signal) =>
                 input.finalize(
                     buildFinalizerRequest(
                         input.generationRequest,
                         styledDraft,
                         repairFeedback
-                    )
+                    ),
+                    signal
                 ),
             'presentation_finalizer_timeout'
         );
@@ -442,7 +457,9 @@ export const runPresentationStep = async (input: {
                 persona: input.persona,
                 config: input.config,
                 draft: draftResult,
-                finalizerAttemptCount: finalizerResults.length,
+                finalizerAttemptCount: toFinalizerAttemptCount(
+                    finalizerResults.length
+                ),
                 startedAt,
                 caution: input.caution,
             }),
@@ -465,7 +482,9 @@ export const runPresentationStep = async (input: {
                 persona: input.persona,
                 config: input.config,
                 draft: draftResult,
-                finalizerAttemptCount: finalizerResults.length,
+                finalizerAttemptCount: toFinalizerAttemptCount(
+                    finalizerResults.length
+                ),
                 startedAt,
                 caution: input.caution,
             }),
@@ -514,7 +533,9 @@ export const runPresentationStep = async (input: {
                 config: input.config,
                 draft: draftResult,
                 finalText: initialFinal,
-                finalizerAttemptCount: finalizerResults.length,
+                finalizerAttemptCount: toFinalizerAttemptCount(
+                    finalizerResults.length
+                ),
                 startedAt,
                 caution: input.caution,
             }),
@@ -538,7 +559,9 @@ export const runPresentationStep = async (input: {
                 draft: draftResult,
                 finalText: initialFinal,
                 auditResult,
-                finalizerAttemptCount: finalizerResults.length,
+                finalizerAttemptCount: toFinalizerAttemptCount(
+                    finalizerResults.length
+                ),
                 startedAt,
                 caution: input.caution,
             }),
@@ -561,7 +584,9 @@ export const runPresentationStep = async (input: {
                 finalText: initialFinal,
                 audit,
                 auditResult,
-                finalizerAttemptCount: finalizerResults.length,
+                finalizerAttemptCount: toFinalizerAttemptCount(
+                    finalizerResults.length
+                ),
                 startedAt,
                 caution: input.caution,
             }),
@@ -586,7 +611,9 @@ export const runPresentationStep = async (input: {
                     draft: draftResult,
                     audit,
                     auditResult,
-                    finalizerAttemptCount: finalizerResults.length,
+                    finalizerAttemptCount: toFinalizerAttemptCount(
+                        finalizerResults.length
+                    ),
                     startedAt,
                     caution: input.caution,
                 }),
@@ -608,7 +635,9 @@ export const runPresentationStep = async (input: {
                 finalText: initialFinal,
                 audit,
                 auditResult,
-                finalizerAttemptCount: finalizerResults.length,
+                finalizerAttemptCount: toFinalizerAttemptCount(
+                    finalizerResults.length
+                ),
                 startedAt,
                 caution: input.caution,
             }),
@@ -634,7 +663,9 @@ export const runPresentationStep = async (input: {
                 draft: draftResult,
                 audit,
                 auditResult,
-                finalizerAttemptCount: finalizerResults.length,
+                finalizerAttemptCount: toFinalizerAttemptCount(
+                    finalizerResults.length
+                ),
                 startedAt,
                 caution: input.caution,
             }),
@@ -663,7 +694,9 @@ export const runPresentationStep = async (input: {
             finalText: repaired,
             audit,
             auditResult,
-            finalizerAttemptCount: finalizerResults.length,
+            finalizerAttemptCount: toFinalizerAttemptCount(
+                finalizerResults.length
+            ),
             startedAt,
             caution: input.caution,
         }),

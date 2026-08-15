@@ -10,6 +10,7 @@ import type {
     PresentationMetadata,
     WorkflowRecord,
 } from '@footnote/contracts/policy';
+import { PresentationMetadataSchema } from '@footnote/contracts/web';
 
 /**
  * Preserves workflow metadata while replacing artifact contents with length-only
@@ -41,10 +42,13 @@ export const sanitizeWorkflowForDisplay = (
         : null;
 
 /**
- * Style-rewrite metadata is already deliberately text-free. Preserve its
+ * Presentation metadata is already deliberately text-free. Preserve its
  * outcome and opaque lineage identifiers in the display payload without
  * introducing either answer version to the trace surface.
  */
 export const sanitizePresentationForDisplay = (
-    presentation: PresentationMetadata | undefined
-): PresentationMetadata | null => presentation ?? null;
+    presentation: unknown
+): PresentationMetadata | null => {
+    const parsed = PresentationMetadataSchema.safeParse(presentation);
+    return parsed.success ? parsed.data : null;
+};

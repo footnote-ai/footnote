@@ -12,7 +12,7 @@ primary_region = 'ord'
   TURNSTILE_ALLOWED_HOSTNAMES = 'ai.jordanmakes.dev'
   OLLAMA_BASE_URL = 'https://ollama.com'
   # Both profile IDs remain unavailable until their provider configuration is present.
-  # The rewrite step then fails open to the original answer rather than selecting a fallback.
+  # The presentation flow then records an unavailable draft and uses normal generation.
   CHAT_PRESENTATION_ENABLED = 'true'
   CHAT_PRESENTATION_PROFILE_ID = 'openrouter-cydonia-24b-v4-1'
   CHAT_PRESENTATION_VALIDATOR_PROFILE_ID = 'ollama-gemma4-31b'

@@ -70,11 +70,10 @@ test('TraceStore round trips metadata with citation URLs', async () => {
     }
 });
 
-test('TraceStore round trips presentation flow workflow metadata', async () => {
+test('TraceStore round trips a presentation receipt', async () => {
     const tempRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'trace-store-'));
     const dbPath = path.join(tempRoot, 'provenance.db');
     const store = new SqliteTraceStore({ dbPath });
-    const now = new Date().toISOString();
     const responseId = 'presentation_trace_123';
 
     const metadata: ResponseMetadata = {
@@ -89,31 +88,6 @@ test('TraceStore round trips presentation flow workflow metadata', async () => {
         citations: [],
         trace_target: {},
         trace_final: {},
-        workflow: {
-            workflowId: 'wf_presentation_123',
-            workflowName: 'message_reviewed',
-            status: 'completed',
-            terminationReason: 'goal_satisfied',
-            stepCount: 1,
-            maxSteps: 4,
-            maxDurationMs: 15000,
-            steps: [
-                {
-                    stepId: 'step_presentation_1',
-                    attempt: 1,
-                    stepKind: 'presentation',
-                    reasonCode: 'presentation_finalized',
-                    startedAt: now,
-                    finishedAt: now,
-                    durationMs: 1,
-                    outcome: {
-                        status: 'executed',
-                        summary:
-                            'Applied a presentation-only presentation flow.',
-                    },
-                },
-            ],
-        },
         presentation: {
             step: 'presentation',
             outcome: 'finalized',
@@ -134,10 +108,6 @@ test('TraceStore round trips presentation flow workflow metadata', async () => {
 
         const retrieved = await store.retrieve(responseId);
         assert.ok(retrieved, 'presentation flow trace should be retrievable');
-        assert.equal(
-            retrieved.workflow?.steps[0]?.reasonCode,
-            'presentation_finalized'
-        );
         assert.equal(retrieved.presentation?.outcome, 'finalized');
     } finally {
         store.close();

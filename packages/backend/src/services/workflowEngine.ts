@@ -919,7 +919,7 @@ export const runBoundedReviewWorkflow = async ({
                         ? await runPresentationStep({
                               generationRuntime,
                               generationRequest: generationRequestForAttempt,
-                              finalize: async (request) => {
+                              finalize: async (request, signal) => {
                                   if (
                                       stepRoutingChainSet?.generateCandidates &&
                                       stepRoutingChainSet.generateCandidates
@@ -948,6 +948,7 @@ export const runBoundedReviewWorkflow = async ({
                                                               request.reasoningEffort,
                                                               logger
                                                           ),
+                                                      signal,
                                                   }),
                                           });
                                       const routingResult =
@@ -959,7 +960,10 @@ export const runBoundedReviewWorkflow = async ({
                                       }
                                       return routingResult.value.value;
                                   }
-                                  return generationRuntime.generate(request);
+                                  return generationRuntime.generate({
+                                      ...request,
+                                      signal,
+                                  });
                               },
                               config: activePresentation.config,
                               persona: activePresentation.persona,
@@ -986,6 +990,18 @@ export const runBoundedReviewWorkflow = async ({
                     };
                     presentationMetadata = presentationResult.metadata;
                     presentationFinalized = true;
+                    // The final result is billed below as the generated
+                    // response. A repair replaces, rather than erases, the
+                    // first main-model finalizer call.
+                    for (const supersededFinalizerResult of presentationResult.finalizerResults.slice(
+                        0,
+                        -1
+                    )) {
+                        captureUsage(
+                            supersededFinalizerResult,
+                            effectiveGenerationRequest.model
+                        );
+                    }
                     const draftUsage =
                         presentationResult.draftResult !== undefined &&
                         activePresentation.config.profile !== undefined
@@ -1190,7 +1206,10 @@ export const runBoundedReviewWorkflow = async ({
             }
         }
     }
-    if (!shouldStop && effectiveMaxIterations === 0) {
+    if (
+        !shouldStop &&
+        (effectiveMaxIterations === 0 || presentationFinalized)
+    ) {
         terminationReason = 'goal_satisfied';
         workflowStatus = 'completed';
     }
@@ -1238,21 +1257,14 @@ export const runBoundedReviewWorkflow = async ({
     stoppedBeforeStepKind = reviewLoopResult.stoppedBeforeStepKind;
     planContinuation = reviewLoopResult.planContinuation;
 
-    // Presentation runs before final wording. Its receipt is preserved even when
-    // the main model falls back to the normal generation route.
-
-    // The presentation epilogue is deliberately outside the configured
-    // semantic-workflow budget, but it remains a real, persisted trace step.
-    // Include it in the trace capacity so `stepCount` and `maxSteps` describe
-    // the same recorded sequence; `effectiveLimits` retains the configured
-    // semantic budget for auditability.
-    const presentationStepCount = 0;
+    // Presentation runs before final wording. Its receipt is serialized
+    // separately, so semantic workflow limits only describe recorded steps.
     const workflowLineage: WorkflowRecord = {
         workflowId,
         workflowName: workflowConfig.workflowName,
         status: workflowStatus,
         stepCount: workflowSteps.length,
-        maxSteps: executionLimits.maxWorkflowSteps + presentationStepCount,
+        maxSteps: executionLimits.maxWorkflowSteps,
         maxDurationMs: executionLimits.maxDurationMs,
         effectiveLimits: resolveExecutionLimits({
             limits: executionLimits,

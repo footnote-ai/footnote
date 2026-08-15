@@ -882,6 +882,8 @@ export const createChatService = ({
         validatorTimeoutMs:
             presentationConfig?.validatorTimeoutMs ??
             runtimeConfig.chatWorkflow.presentation.validatorTimeoutMs,
+        // Trace identifiers are backend-owned. Do not accept a caller-supplied
+        // key for this incident-pseudonymization boundary.
         traceHmacSecret: runtimeConfig.storage.incidentPseudonymizationSecret,
         ...(configuredPresentationProfile !== undefined && {
             profile: configuredPresentationProfile,
@@ -1925,7 +1927,9 @@ export const createChatService = ({
                 }),
             },
             ...(steerabilityControls !== undefined && { steerabilityControls }),
-            presentation: presentationMetadata,
+            ...(presentationMetadata !== undefined && {
+                presentation: presentationMetadata,
+            }),
             retrieval: {
                 requested: hasSearchIntent,
                 used: retrievalUsed,

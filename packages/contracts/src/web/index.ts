@@ -249,5 +249,6 @@ export {
     PostTracesRequestSchema,
     PostTracesResponseSchema,
     ResponseMetadataSchema,
+    PresentationMetadataSchema,
     createSchemaResponseValidator,
 } from './schemas.js';

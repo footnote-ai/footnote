@@ -73,7 +73,7 @@ test('persona tone overlay remains presentation-only and non-authoritative', () 
         personaOverlaySource: 'file',
     });
 
-    assert.equal(resolved.personaToneOverlay.state, 'presentation_finalized');
+    assert.equal(resolved.personaToneOverlay.state, 'presentation_applied');
     assert.equal(resolved.personaToneOverlay.overlayApplied, true);
     assert.equal(
         resolved.personaToneOverlay.canEscalateIntoExecutionPolicyAuthority,

@@ -202,6 +202,148 @@ test('records an unavailable audit without suppressing the finalized presentatio
     assert.equal(presentation.metadata.reasonCode, 'audit_unavailable');
 });
 
+test('keeps provider-native search out of the prose-only presentation draft', async () => {
+    const requests: GenerationRequest[] = [];
+    const presentation = await runPresentationStep({
+        generationRuntime: runtime(async (input) => {
+            requests.push(input);
+            return requests.length === 1
+                ? result(
+                      'A colorful update: Ada Lovelace confirmed 12 fixes at https://example.com/release.'
+                  )
+                : result('{"verdict":"clear","feedback":""}');
+        }),
+        generationRequest: {
+            ...request,
+            capabilities: { canUseSearch: true },
+            search: {
+                query: 'Ada Lovelace release fixes',
+                contextSize: 'low',
+                intent: 'current_facts',
+            },
+        },
+        finalize: async () =>
+            result(
+                'A colorful update: Ada Lovelace confirmed 12 fixes at https://example.com/release.'
+            ),
+        config,
+        persona,
+    });
+
+    assert.equal(presentation.outcome, 'finalized');
+    assert.equal(requests[0]?.search, undefined);
+});
+
+test('records draft and finalizer timeouts as bounded presentation fallbacks', async () => {
+    const timeoutConfig: PresentationConfig = {
+        ...config,
+        timeoutMs: 5,
+    };
+    const draftTimeout = await runPresentationStep({
+        generationRuntime: runtime(async () => {
+            await new Promise((resolve) => setTimeout(resolve, 20));
+            return result('Late draft.');
+        }),
+        generationRequest: request,
+        finalize: async () => result('Unused.'),
+        config: timeoutConfig,
+        persona,
+    });
+    let draftCalls = 0;
+    let finalizerSignal: AbortSignal | undefined;
+    const finalizerTimeout = await runPresentationStep({
+        generationRuntime: runtime(async () => {
+            draftCalls += 1;
+            return draftCalls === 1
+                ? result(
+                      'A colorful update: Ada Lovelace confirmed 12 fixes at https://example.com/release.'
+                  )
+                : result('{"verdict":"clear","feedback":""}');
+        }),
+        generationRequest: request,
+        finalize: async (_request, signal) => {
+            finalizerSignal = signal;
+            await new Promise((resolve) => setTimeout(resolve, 20));
+            return result('Late finalizer.');
+        },
+        config: timeoutConfig,
+        persona,
+    });
+
+    assert.equal(draftTimeout.metadata.reasonCode, 'draft_timeout');
+    assert.equal(finalizerTimeout.metadata.reasonCode, 'finalizer_timeout');
+    assert.equal(finalizerSignal?.aborted, true);
+});
+
+test('uses normal fallback for structured drafts and mechanical preservation failures', async () => {
+    const structuredDraft = await runPresentationStep({
+        generationRuntime: runtime(async () =>
+            result('{"answer":"not prose"}')
+        ),
+        generationRequest: request,
+        finalize: async () => result('Unused.'),
+        config,
+        persona,
+    });
+    let runtimeCalls = 0;
+    const droppedUrl = await runPresentationStep({
+        generationRuntime: runtime(async () => {
+            runtimeCalls += 1;
+            return runtimeCalls === 1
+                ? result(
+                      'A colorful update: Ada Lovelace confirmed 12 fixes at https://example.com/release.'
+                  )
+                : result('{"verdict":"clear","feedback":""}');
+        }),
+        generationRequest: request,
+        finalize: async () => result('A colorful update: 12 fixes confirmed.'),
+        config,
+        persona,
+    });
+
+    assert.equal(structuredDraft.outcome, 'fallback');
+    assert.equal(structuredDraft.metadata.reasonCode, 'structured_output');
+    assert.equal(droppedUrl.outcome, 'fallback');
+    assert.equal(
+        droppedUrl.metadata.reasonCode,
+        'mechanical_preservation_failed'
+    );
+});
+
+test('suppresses an unrepairable evidence issue instead of displaying the stale finalizer text', async () => {
+    let runtimeCalls = 0;
+    const presentation = await runPresentationStep({
+        generationRuntime: runtime(async () => {
+            runtimeCalls += 1;
+            return runtimeCalls === 1
+                ? result(
+                      'A colorful update: Ada Lovelace confirmed 12 fixes at https://example.com/release.'
+                  )
+                : result(
+                      '{"verdict":"evidence_issue","feedback":"Restore the attribution."}'
+                  );
+        }),
+        generationRequest: request,
+        finalize: async () => {
+            if (runtimeCalls === 1) {
+                return result(
+                    'A colorful update: 12 fixes at https://example.com/release.'
+                );
+            }
+            throw new Error('repair unavailable');
+        },
+        config,
+        persona,
+    });
+
+    assert.equal(presentation.outcome, 'fallback');
+    assert.equal(
+        presentation.metadata.reasonCode,
+        'evidence_repair_unavailable'
+    );
+    assert.equal(presentation.text, undefined);
+});
+
 test('preserves literal URLs across the styled draft and final response', () => {
     assert.equal(
         preservesPresentationUrls(

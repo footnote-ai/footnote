@@ -83,6 +83,25 @@ const policy = {
 
 test('workflow asks for a styled draft before main-model finalization and records the receipt', async () => {
     const calls: GenerationRequest[] = [];
+    const generationUsageTexts: string[] = [];
+    const presentationUsageCalls: Array<{
+        feature: 'chat_presentation_draft' | 'chat_presentation_audit';
+        profileId: string;
+    }> = [];
+    const captureGenerationUsage = (
+        value: GenerationResult
+    ): ReviewWorkflowUsageSummary => {
+        generationUsageTexts.push(value.text);
+        return usage(value);
+    };
+    const capturePresentationUsage = (
+        value: GenerationResult,
+        profile: ModelProfile,
+        feature: 'chat_presentation_draft' | 'chat_presentation_audit'
+    ): ReviewWorkflowUsageSummary => {
+        presentationUsageCalls.push({ feature, profileId: profile.id });
+        return usage(value);
+    };
     const runtime: GenerationRuntime = {
         kind: 'test',
         generate: async (request) => {
@@ -95,7 +114,13 @@ test('workflow asks for a styled draft before main-model finalization and record
                 return generated(
                     'A lively update: Ada Lovelace confirmed 12 fixes at https://example.com/release.'
                 );
-            return generated('{"verdict":"clear","feedback":""}');
+            if (calls.length === 3)
+                return generated(
+                    '{"verdict":"evidence_issue","feedback":"Restore the attribution."}'
+                );
+            return generated(
+                'A lively update: Ada Lovelace confirmed 12 fixes at https://example.com/release.'
+            );
         },
     };
     const result = await runBoundedReviewWorkflow({
@@ -117,17 +142,21 @@ test('workflow asks for a styled draft before main-model finalization and record
             },
         },
         workflowPolicy: policy,
-        captureUsage: usage,
+        captureUsage: captureGenerationUsage,
         presentation: {
             config,
             persona: { id: 'myuri', presentationGuidance: 'Lively prose.' },
-            captureUsage: usage,
+            captureUsage: capturePresentationUsage,
         },
     });
     assert.equal(result.outcome, 'generated');
     if (result.outcome !== 'generated')
         throw new Error('Expected generated result.');
-    assert.equal(result.presentation?.outcome, 'finalized');
+    assert.equal(
+        result.presentation?.outcome,
+        'finalized_after_evidence_repair'
+    );
+    assert.equal(result.presentation?.reasonCode, 'evidence_repaired');
     assert.match(
         String(calls[0]?.messages[0]?.content),
         /Write the full presentation draft/u
@@ -136,8 +165,69 @@ test('workflow asks for a styled draft before main-model finalization and record
         String(calls[1]?.messages.at(-2)?.content),
         /prose authority/u
     );
+    assert.match(
+        String(calls[3]?.messages.at(-2)?.content),
+        /Restore the attribution/u
+    );
+    assert.deepEqual(presentationUsageCalls, [
+        { feature: 'chat_presentation_draft', profileId: profile.id },
+        { feature: 'chat_presentation_audit', profileId: profile.id },
+    ]);
+    assert.equal(result.presentation?.backendEstimatedCostUsd, 0.006);
+    assert.equal(result.workflowLineage.terminationReason, 'goal_satisfied');
+    assert.deepEqual(generationUsageTexts, [
+        'A lively update: Ada Lovelace confirmed 12 fixes at https://example.com/release.',
+        'A lively update: Ada Lovelace confirmed 12 fixes at https://example.com/release.',
+    ]);
     assert.equal(
         result.generationResult.text,
         'A lively update: Ada Lovelace confirmed 12 fixes at https://example.com/release.'
     );
+});
+
+test('workflow falls back to normal generation after a structured presentation draft', async () => {
+    let calls = 0;
+    const runtime: GenerationRuntime = {
+        kind: 'test',
+        generate: async () => {
+            calls += 1;
+            return calls === 1
+                ? generated('```json\n{"answer":"not prose"}\n```')
+                : generated('Normal main-model response.');
+        },
+    };
+
+    const result = await runBoundedReviewWorkflow({
+        generationRuntime: runtime,
+        generationRequest: { messages: [{ role: 'user', content: 'status' }] },
+        messagesWithHints: [{ role: 'user', content: 'status' }],
+        contextEnvelope,
+        generationStartedAtMs: Date.now(),
+        workflowConfig: {
+            workflowName: 'test',
+            maxIterations: 1,
+            maxDurationMs: 1000,
+            executionLimits: {
+                maxWorkflowSteps: 2,
+                maxToolCalls: 0,
+                maxDeliberationCalls: 0,
+                maxTokensTotal: 100,
+                maxDurationMs: 1000,
+            },
+        },
+        workflowPolicy: policy,
+        captureUsage: usage,
+        presentation: {
+            config,
+            persona: { id: 'myuri', presentationGuidance: 'Lively prose.' },
+            captureUsage: usage,
+        },
+    });
+
+    assert.equal(result.outcome, 'generated');
+    if (result.outcome !== 'generated')
+        throw new Error('Expected generated result.');
+    assert.equal(result.presentation?.outcome, 'fallback');
+    assert.equal(result.presentation?.reasonCode, 'structured_output');
+    assert.equal(result.generationResult.text, 'Normal main-model response.');
 });

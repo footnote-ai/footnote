@@ -12,7 +12,7 @@ export type { ProviderPreferenceOutcomeState } from '@footnote/contracts/policy'
 type ProfilePreferenceSource = 'request_override' | 'planner_output';
 
 export type PersonaToneOverlayOutcomeState =
-    | 'presentation_finalized'
+    | 'presentation_applied'
     | 'presentation_not_applied';
 
 export type SteerabilityAuthorityClass =
@@ -147,7 +147,7 @@ const resolvePersonaToneOverlayConflict = (
     return {
         authorityClass: 'presentation_only',
         state: overlayApplied
-            ? 'presentation_finalized'
+            ? 'presentation_applied'
             : 'presentation_not_applied',
         overlaySource: personaOverlaySource,
         overlayApplied,

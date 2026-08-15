@@ -186,10 +186,6 @@ export type ExecutionReasonCode =
     | 'planner_invalid_output'
     | 'evaluator_runtime_error'
     | 'generation_runtime_error'
-    | 'presentation_fallback'
-    | 'presentation_finalized'
-    | 'presentation_fallback'
-    | 'presentation_fallback'
     | 'tool_not_requested'
     | 'tool_not_used'
     | 'search_rerouted_to_fallback_profile'
@@ -391,8 +387,7 @@ export type ExecutionEventKind =
     | 'planner'
     | 'evaluator'
     | 'tool'
-    | 'generation'
-    | 'presentation';
+    | 'generation';
 
 type BaseExecutionEvent = {
     status: ExecutionStatus;
@@ -525,7 +520,6 @@ export const WORKFLOW_STEP_KINDS = [
     'generate',
     'assess',
     'revise',
-    'presentation',
     'finalize',
 ] as const;
 
@@ -1382,6 +1376,6 @@ export type ResponseMetadata = {
     trace_final_reason_code?: TraceFinalizationReasonCode;
     trustGraph?: TrustGraphMetadata;
     imageGeneration?: ImageGenerationMetadata;
-    // Optional presentation-only rewrite record. It never stores both answer texts.
+    // Optional presentation record. It never stores both answer texts.
     presentation?: PresentationMetadata;
 };

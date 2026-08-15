@@ -107,7 +107,7 @@ test('buildRunOutcomeSummary distinguishes a generated answer from a pre-generat
     );
 });
 
-test('buildRunOutcomeSummary labels a stopped presentation flow for users', () => {
+test('buildRunOutcomeSummary labels a stopped finalization step for users', () => {
     const workflow = createWorkflow('budget_exhausted_time');
     workflow.stepCount = 1;
     workflow.steps = [
@@ -125,14 +125,14 @@ test('buildRunOutcomeSummary labels a stopped presentation flow for users', () =
         stoppedByLimit: true,
         terminationReason: 'budget_exhausted_time',
         exhaustedLimitKey: 'maxDurationMs',
-        stoppedBeforeStepKind: 'presentation',
+        stoppedBeforeStepKind: 'finalize',
     };
 
     const summary = buildRunOutcomeSummary(createSource({ workflow }));
 
     assert.equal(
         summary?.explanation,
-        'Answer generation completed, but the workflow stopped before presentation flow. Workflow stopped after reaching the configured time budget.'
+        'Answer generation completed, but the workflow stopped before finalization. Workflow stopped after reaching the configured time budget.'
     );
 });
 

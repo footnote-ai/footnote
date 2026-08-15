@@ -494,39 +494,25 @@ test('ResponseMetadataSchema accepts workflow lineage metadata', () => {
     assert.equal(parsed.success, true);
 });
 
-test('ResponseMetadataSchema accepts presentation flow workflow reason codes', () => {
-    const now = new Date().toISOString();
-    const reasonCodes = [
-        'presentation_fallback',
-        'presentation_finalized',
-        'presentation_fallback',
-        'presentation_fallback',
-    ] as const;
+test('ResponseMetadataSchema accepts a presentation receipt separately from workflow steps', () => {
+    const parsed = ResponseMetadataSchema.safeParse({
+        ...baseMetadata,
+        presentation: {
+            step: 'presentation',
+            outcome: 'finalized_after_evidence_repair',
+            attempted: true,
+            reasonCode: 'evidence_repaired',
+            personaId: 'myuri',
+            auditOutcome: 'evidence_issue',
+            draftAttemptCount: 1,
+            finalizerAttemptCount: 2,
+            auditAttemptCount: 1,
+            intensity: 'standard',
+            traceConstrained: false,
+        },
+    });
 
-    for (const reasonCode of reasonCodes) {
-        const payload = createValidWorkflowMetadataPayload(now);
-        payload.workflow.steps.push({
-            stepId: `step_${reasonCode}`,
-            parentStepId: 'step_2',
-            attempt: 1,
-            stepKind: 'presentation',
-            reasonCode,
-            startedAt: now,
-            finishedAt: now,
-            durationMs: 1,
-            outcome: {
-                status: 'executed',
-                summary: 'Presentation flow completed or preserved the draft.',
-            },
-        });
-        payload.workflow.stepCount = payload.workflow.steps.length;
-
-        assert.equal(
-            ResponseMetadataSchema.safeParse(payload).success,
-            true,
-            `${reasonCode} should serialize in workflow metadata`
-        );
-    }
+    assert.equal(parsed.success, true);
 });
 
 test('ResponseMetadataSchema accepts normalized review runtime summary labels', () => {

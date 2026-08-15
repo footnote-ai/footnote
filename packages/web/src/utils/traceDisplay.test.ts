@@ -97,4 +97,11 @@ test('sanitizePresentationForDisplay preserves text-free rewrite provenance', ()
         presentation
     );
     assert.equal(sanitizePresentationForDisplay(undefined), null);
+    assert.equal(
+        sanitizePresentationForDisplay({
+            ...presentation,
+            outcome: 42,
+        }),
+        null
+    );
 });

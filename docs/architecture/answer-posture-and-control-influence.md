@@ -100,13 +100,14 @@ The optional backend workflow step may read only final TRACE `caution` as a
 constraint. Backend caution takes precedence over persona presentation guidance:
 `5` skips styling, `4` or unavailable caution permits restrained lexical and
 cadence edits only, and `1` to `3` permits the standard conservative budget.
-The style model cannot generate or modify TRACE. The validator must veto changes
-to caution, uncertainty, attribution, scope, or other answer posture. Mapping
+The style model cannot generate or modify TRACE. The audit may request one
+bounded finalizer repair for changes to caution, uncertainty, attribution,
+scope, or other answer posture. Mapping
 tightness, rationale, attribution, or extent to presentation is explicitly out
 of scope pending evaluation evidence.
 
-When a rewrite record exists, the trace view shows its outcome, model,
-validator evidence, edit estimate, and opaque HMAC identifiers. It never shows
+When a presentation record exists, the trace view shows its outcome, model,
+audit evidence, edit estimate, and opaque HMAC identifiers. It never shows
 or retains both answer versions for that display.
 
 ## Control influence records
@@ -238,7 +239,7 @@ For `provider_preference`, the trace should preserve visible state:
 
 For `persona_tone_overlay`, the trace should preserve presentation state:
 
-- `presentation_finalized`
+- `presentation_applied`
 - `presentation_not_applied`
 
 ## Planner events
