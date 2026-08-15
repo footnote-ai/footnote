@@ -117,6 +117,7 @@ const formatWorkflowStep = (
 const isIncludedWorkflowStep = (step: StepRecord): boolean =>
     step.stepKind === 'plan' ||
     step.stepKind === 'assess' ||
+    step.stepKind === 'presentation' ||
     isRefinementGenerateStep(step);
 
 const normalizeWorkflowStepEntry = (

@@ -864,17 +864,19 @@ export const runBoundedReviewWorkflow = async ({
 
     let presentationMetadata: PresentationMetadata | undefined;
     let presentationFinalized = false;
+    const initialResponseStepKind: WorkflowStepKind =
+        presentation?.config.enabled === true ? 'presentation' : 'generate';
     if (!shouldStop) {
         if (
             !isWorkflowTransitionAllowed(
                 workflowState.currentStepKind,
-                'generate',
+                initialResponseStepKind,
                 workflowPolicy
             )
         ) {
             terminationReason = 'transition_blocked_by_policy';
             shouldStop = true;
-        } else if (!stopIfOverLimits('generate').stopped) {
+        } else if (!stopIfOverLimits(initialResponseStepKind).stopped) {
             const initialDraftStartedAt = generationStartedAtMs;
             messagesWithContext = injectContextMessagesIntoPrompt(
                 effectiveMessagesWithHints,
@@ -914,6 +916,7 @@ export const runBoundedReviewWorkflow = async ({
                         }),
                 };
                 const activePresentation = presentation;
+                const presentationStartedAt = Date.now();
                 const presentationResult =
                     activePresentation?.config.enabled === true
                         ? await runPresentationStep({
@@ -971,37 +974,10 @@ export const runBoundedReviewWorkflow = async ({
                           })
                         : undefined;
                 if (
-                    presentationResult?.outcome === 'finalized' &&
+                    presentationResult !== undefined &&
                     activePresentation !== undefined
                 ) {
-                    const finalizerResult =
-                        presentationResult.finalizerResults.at(-1);
-                    if (
-                        finalizerResult === undefined ||
-                        presentationResult.text === undefined
-                    ) {
-                        throw new Error(
-                            'Presentation finalization completed without a final result.'
-                        );
-                    }
-                    draftResult = {
-                        ...finalizerResult,
-                        text: presentationResult.text,
-                    };
                     presentationMetadata = presentationResult.metadata;
-                    presentationFinalized = true;
-                    // The final result is billed below as the generated
-                    // response. A repair replaces, rather than erases, the
-                    // first main-model finalizer call.
-                    for (const supersededFinalizerResult of presentationResult.finalizerResults.slice(
-                        0,
-                        -1
-                    )) {
-                        captureUsage(
-                            supersededFinalizerResult,
-                            effectiveGenerationRequest.model
-                        );
-                    }
                     const draftUsage =
                         presentationResult.draftResult !== undefined &&
                         activePresentation.config.profile !== undefined
@@ -1020,16 +996,154 @@ export const runBoundedReviewWorkflow = async ({
                                   'chat_presentation_audit'
                               )
                             : undefined;
-                    if (draftUsage !== undefined || auditUsage !== undefined) {
+                    const finalizerUsages =
+                        presentationResult.finalizerResults.map((result) =>
+                            captureUsage(
+                                result,
+                                effectiveGenerationRequest.model
+                            )
+                        );
+                    const usageSummaries = [
+                        draftUsage,
+                        ...finalizerUsages,
+                        auditUsage,
+                    ].filter(
+                        (usage): usage is ReviewWorkflowUsageSummary =>
+                            usage !== undefined
+                    );
+                    const presentationUsage =
+                        usageSummaries.length === 0
+                            ? undefined
+                            : {
+                                  promptTokens: usageSummaries.reduce(
+                                      (total, usage) =>
+                                          total + usage.promptTokens,
+                                      0
+                                  ),
+                                  completionTokens: usageSummaries.reduce(
+                                      (total, usage) =>
+                                          total + usage.completionTokens,
+                                      0
+                                  ),
+                                  totalTokens: usageSummaries.reduce(
+                                      (total, usage) =>
+                                          total + usage.totalTokens,
+                                      0
+                                  ),
+                              };
+                    const presentationCost =
+                        usageSummaries.length === 0
+                            ? undefined
+                            : {
+                                  inputCostUsd: usageSummaries.reduce(
+                                      (total, usage) =>
+                                          total +
+                                          usage.estimatedCost.inputCostUsd,
+                                      0
+                                  ),
+                                  outputCostUsd: usageSummaries.reduce(
+                                      (total, usage) =>
+                                          total +
+                                          usage.estimatedCost.outputCostUsd,
+                                      0
+                                  ),
+                                  totalCostUsd: usageSummaries.reduce(
+                                      (total, usage) =>
+                                          total +
+                                          usage.estimatedCost.totalCostUsd,
+                                      0
+                                  ),
+                              };
+                    if (presentationCost !== undefined) {
                         presentationMetadata.backendEstimatedCostUsd =
-                            (draftUsage?.estimatedCost.totalCostUsd ?? 0) +
-                            (auditUsage?.estimatedCost.totalCostUsd ?? 0);
+                            presentationCost.totalCostUsd;
                     }
-                } else if (presentationResult !== undefined) {
-                    presentationMetadata = presentationResult.metadata;
+                    const finalizerResult =
+                        presentationResult.finalizerResults.at(-1);
+                    const presentationSucceeded =
+                        presentationResult.outcome === 'finalized' &&
+                        finalizerResult !== undefined &&
+                        presentationResult.text !== undefined;
+                    const presentationStepId = captureStep({
+                        stepKind: 'presentation',
+                        status: presentationSucceeded
+                            ? 'executed'
+                            : presentationResult.metadata.attempted
+                              ? 'failed'
+                              : 'skipped',
+                        summary: presentationSucceeded
+                            ? 'Finalized presentation draft with evidence-aware editing.'
+                            : 'Presentation draft was unavailable; workflow used normal generation fallback.',
+                        reasonCode: presentationSucceeded
+                            ? 'presentation_finalized'
+                            : 'presentation_fallback',
+                        startedAtMs: presentationStartedAt,
+                        finishedAtMs: Date.now(),
+                        model:
+                            finalizerUsages.at(-1)?.model ??
+                            draftUsage?.model ??
+                            auditUsage?.model,
+                        usage: presentationUsage,
+                        estimatedCost: presentationCost,
+                        parentStepId: plannerRootStepId,
+                        attempt: 1,
+                        signals: {
+                            presentationOutcome:
+                                presentationResult.metadata.outcome,
+                            presentationReasonCode:
+                                presentationResult.metadata.reasonCode,
+                            presentationAttempted:
+                                presentationResult.metadata.attempted,
+                            draftAttemptCount:
+                                presentationResult.metadata.draftAttemptCount,
+                            finalizerAttemptCount:
+                                presentationResult.metadata
+                                    .finalizerAttemptCount,
+                            auditAttemptCount:
+                                presentationResult.metadata.auditAttemptCount,
+                            auditOutcome:
+                                presentationResult.metadata.auditOutcome,
+                            draftProfileId:
+                                presentationResult.metadata.draftProfileId ??
+                                null,
+                            auditProfileId:
+                                presentationResult.metadata.auditProfileId ??
+                                null,
+                        },
+                    });
+                    workflowState = applyStepExecutionToState(
+                        workflowState,
+                        'presentation',
+                        presentationUsage?.totalTokens ?? 0,
+                        0,
+                        0
+                    );
+                    if (
+                        presentationSucceeded &&
+                        finalizerResult !== undefined &&
+                        presentationResult.text !== undefined
+                    ) {
+                        draftResult = {
+                            ...finalizerResult,
+                            text: presentationResult.text,
+                        };
+                        draftParentStepId = presentationStepId;
+                        presentationFinalized = true;
+                    }
                 }
-                if (
+                const canRunNormalGeneration =
                     draftResult === null &&
+                    isWorkflowTransitionAllowed(
+                        workflowState.currentStepKind,
+                        'generate',
+                        workflowPolicy
+                    );
+                if (draftResult === null && !canRunNormalGeneration) {
+                    terminationReason = 'transition_blocked_by_policy';
+                    shouldStop = true;
+                } else if (
+                    draftResult === null &&
+                    !stopIfOverLimits('generate').stopped &&
                     stepRoutingChainSet?.generateCandidates &&
                     stepRoutingChainSet.generateCandidates.length > 0
                 ) {
@@ -1112,12 +1226,19 @@ export const runBoundedReviewWorkflow = async ({
                         };
                         draftResult = routingResult.value.value;
                     }
-                } else if (draftResult === null) {
+                } else if (
+                    canRunNormalGeneration &&
+                    !stopIfOverLimits('generate').stopped
+                ) {
                     draftResult = await generationRuntime.generate(
                         generationRequestForAttempt
                     );
                 }
-                if (!shouldStop && draftResult !== null) {
+                if (
+                    !shouldStop &&
+                    draftResult !== null &&
+                    !presentationFinalized
+                ) {
                     const initialDraftFinishedAt = Date.now();
                     const initialDraftUsage = captureUsage(
                         draftResult,
@@ -1160,7 +1281,7 @@ export const runBoundedReviewWorkflow = async ({
                         0,
                         0
                     );
-                } else if (!shouldStop) {
+                } else if (!shouldStop && draftResult === null) {
                     throw new Error(
                         'Initial generation completed without a draft result.'
                     );

@@ -186,6 +186,8 @@ export type ExecutionReasonCode =
     | 'planner_invalid_output'
     | 'evaluator_runtime_error'
     | 'generation_runtime_error'
+    | 'presentation_finalized'
+    | 'presentation_fallback'
     | 'tool_not_requested'
     | 'tool_not_used'
     | 'search_rerouted_to_fallback_profile'
@@ -484,7 +486,7 @@ export type PresentationMetadata = {
     upstreamResolvedModel?: string;
     upstreamRoutingAttempt?: number;
     upstreamRoutingAttemptCount?: number;
-    /** Backend-estimated total for presentation draft and audit calls. */
+    /** Backend-estimated total for all bounded presentation calls. */
     backendEstimatedCostUsd?: number;
     upstreamReportedCostUsd?: number;
     auditProfileId?: string;
@@ -520,6 +522,7 @@ export const WORKFLOW_STEP_KINDS = [
     'generate',
     'assess',
     'revise',
+    'presentation',
     'finalize',
 ] as const;
 

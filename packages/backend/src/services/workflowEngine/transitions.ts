@@ -13,11 +13,12 @@ const LEGAL_TRANSITIONS: Record<
     WorkflowStepKind,
     ReadonlySet<WorkflowStepKind>
 > = {
-    plan: new Set(['tool', 'generate', 'assess', 'finalize']),
-    tool: new Set(['tool', 'generate', 'assess', 'finalize']),
-    generate: new Set(['assess', 'finalize']),
-    assess: new Set(['plan', 'tool', 'generate', 'finalize']),
-    revise: new Set(['assess', 'generate', 'finalize']),
+    plan: new Set(['tool', 'generate', 'assess', 'presentation', 'finalize']),
+    tool: new Set(['tool', 'generate', 'assess', 'presentation', 'finalize']),
+    generate: new Set(['assess', 'presentation', 'finalize']),
+    assess: new Set(['plan', 'tool', 'generate', 'presentation', 'finalize']),
+    revise: new Set(['assess', 'generate', 'presentation', 'finalize']),
+    presentation: new Set(['generate', 'finalize']),
     finalize: new Set([]),
 };
 
@@ -57,7 +58,8 @@ export const isWorkflowTransitionAllowed = (
         return (
             toStepKind === 'plan' ||
             toStepKind === 'tool' ||
-            toStepKind === 'generate'
+            toStepKind === 'generate' ||
+            toStepKind === 'presentation'
         );
     }
 

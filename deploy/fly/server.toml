@@ -11,11 +11,6 @@ primary_region = 'ord'
   FRAME_ANCESTORS = 'https://ai.jordanmakes.dev'
   TURNSTILE_ALLOWED_HOSTNAMES = 'ai.jordanmakes.dev'
   OLLAMA_BASE_URL = 'https://ollama.com'
-  # Both profile IDs remain unavailable until their provider configuration is present.
-  # The presentation flow then records an unavailable draft and uses normal generation.
-  CHAT_PRESENTATION_ENABLED = 'true'
-  CHAT_PRESENTATION_PROFILE_ID = 'openrouter-cydonia-24b-v4-1'
-  CHAT_PRESENTATION_VALIDATOR_PROFILE_ID = 'ollama-gemma4-31b'
 
 [[services]]
   internal_port = 3000

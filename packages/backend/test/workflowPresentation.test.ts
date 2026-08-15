@@ -173,8 +173,45 @@ test('workflow asks for a styled draft before main-model finalization and record
         { feature: 'chat_presentation_draft', profileId: profile.id },
         { feature: 'chat_presentation_audit', profileId: profile.id },
     ]);
-    assert.equal(result.presentation?.backendEstimatedCostUsd, 0.006);
+    assert.equal(result.presentation?.backendEstimatedCostUsd, 0.012);
     assert.equal(result.workflowLineage.terminationReason, 'goal_satisfied');
+    assert.equal(result.workflowLineage.steps.length, 1);
+    assert.deepEqual(result.workflowLineage.steps[0], {
+        stepId: 'step_1',
+        attempt: 1,
+        stepKind: 'presentation',
+        reasonCode: 'presentation_finalized',
+        startedAt: result.workflowLineage.steps[0]?.startedAt,
+        finishedAt: result.workflowLineage.steps[0]?.finishedAt,
+        durationMs: result.workflowLineage.steps[0]?.durationMs,
+        model: 'gpt-5-mini',
+        usage: {
+            promptTokens: 32,
+            completionTokens: 16,
+            totalTokens: 48,
+        },
+        cost: {
+            inputCostUsd: 0.004,
+            outputCostUsd: 0.008,
+            totalCostUsd: 0.012,
+        },
+        outcome: {
+            status: 'executed',
+            summary:
+                'Finalized presentation draft with evidence-aware editing.',
+            signals: {
+                presentationOutcome: 'finalized_after_evidence_repair',
+                presentationReasonCode: 'evidence_repaired',
+                presentationAttempted: true,
+                draftAttemptCount: 1,
+                finalizerAttemptCount: 2,
+                auditAttemptCount: 1,
+                auditOutcome: 'evidence_issue',
+                draftProfileId: 'presentation',
+                auditProfileId: 'presentation',
+            },
+        },
+    });
     assert.deepEqual(generationUsageTexts, [
         'A lively update: Ada Lovelace confirmed 12 fixes at https://example.com/release.',
         'A lively update: Ada Lovelace confirmed 12 fixes at https://example.com/release.',
@@ -230,4 +267,11 @@ test('workflow falls back to normal generation after a structured presentation d
     assert.equal(result.presentation?.outcome, 'fallback');
     assert.equal(result.presentation?.reasonCode, 'structured_output');
     assert.equal(result.generationResult.text, 'Normal main-model response.');
+    assert.equal(result.workflowLineage.steps[0]?.stepKind, 'presentation');
+    assert.equal(result.workflowLineage.steps[0]?.outcome.status, 'failed');
+    assert.equal(
+        result.workflowLineage.steps[0]?.reasonCode,
+        'presentation_fallback'
+    );
+    assert.equal(result.workflowLineage.steps[1]?.stepKind, 'generate');
 });
