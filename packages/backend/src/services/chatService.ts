@@ -23,7 +23,7 @@ import type {
     ToolExecutionContext,
     ToolInvocationRequest,
     WorkflowRecord,
-    StyleRewriteMetadata,
+    PresentationMetadata,
 } from '@footnote/contracts/policy';
 import type {
     ModelProfileCapabilities,
@@ -48,9 +48,9 @@ import {
 import { buildRepoExplainerResponseHint } from './chatGenerationHints.js';
 import { NEUTRAL_PRESENTATION_GUIDANCE } from './chatProfileOverlay.js';
 import type {
-    StyleRewriteConfig,
-    StyleRewritePersona,
-} from './styleRewrite.js';
+    PresentationConfig,
+    PresentationPersona,
+} from './presentation.js';
 import type { ChatGenerationPlan } from './chatGenerationTypes.js';
 import type { ExecutionContract } from './executionContract.js';
 import { renderConversationPromptLayers } from './prompts/conversationPromptLayers.js';
@@ -739,7 +739,7 @@ export type CreateChatServiceOptions = {
         input: Parameters<typeof runBoundedReviewWorkflow>[0]
     ) => Promise<RunBoundedReviewWorkflowResult>;
     executionContractTrustGraph?: ExecutionContractTrustGraphRuntimeOptions;
-    styleRewriteConfig?: StyleRewriteConfig;
+    presentationConfig?: PresentationConfig;
 };
 
 /**
@@ -791,7 +791,7 @@ export type RunChatMessagesInput = {
     ExecutionContract?: ExecutionContract;
     steerabilityControls?: ResponseMetadata['steerabilityControls'];
     /** Active backend persona source for optional presentation-only rewriting. */
-    styleRewritePersona?: StyleRewritePersona;
+    presentationPersona?: PresentationPersona;
 };
 
 export type FinalToolExecutionTelemetry = {
@@ -848,46 +848,46 @@ export const createChatService = ({
     chatWorkflowConfig = runtimeConfig.chatWorkflow,
     runReviewWorkflow = runBoundedReviewWorkflow,
     executionContractTrustGraph,
-    styleRewriteConfig,
+    presentationConfig,
 }: CreateChatServiceOptions) => {
-    const configuredStyleRewriteProfileId =
-        styleRewriteConfig?.profileId ??
-        runtimeConfig.chatWorkflow.styleRewrite.profileId;
-    const configuredStyleRewriteProfile =
-        styleRewriteConfig?.profile ??
+    const configuredPresentationProfileId =
+        presentationConfig?.profileId ??
+        runtimeConfig.chatWorkflow.presentation.profileId;
+    const configuredPresentationProfile =
+        presentationConfig?.profile ??
         runtimeConfig.modelProfiles.catalog.find(
             (profile) =>
-                profile.id === configuredStyleRewriteProfileId &&
+                profile.id === configuredPresentationProfileId &&
                 profile.enabled
         );
-    const configuredStyleRewriteValidatorProfileId =
-        styleRewriteConfig?.validatorProfileId ??
-        runtimeConfig.chatWorkflow.styleRewrite.validatorProfileId;
-    const configuredStyleRewriteValidatorProfile =
-        styleRewriteConfig?.validatorProfile ??
+    const configuredPresentationValidatorProfileId =
+        presentationConfig?.validatorProfileId ??
+        runtimeConfig.chatWorkflow.presentation.validatorProfileId;
+    const configuredPresentationValidatorProfile =
+        presentationConfig?.validatorProfile ??
         runtimeConfig.modelProfiles.catalog.find(
             (profile) =>
-                profile.id === configuredStyleRewriteValidatorProfileId &&
+                profile.id === configuredPresentationValidatorProfileId &&
                 profile.enabled
         );
-    const effectiveStyleRewriteConfig: StyleRewriteConfig = {
+    const effectivePresentationConfig: PresentationConfig = {
         enabled:
-            styleRewriteConfig?.enabled ??
-            runtimeConfig.chatWorkflow.styleRewrite.enabled,
-        profileId: configuredStyleRewriteProfileId,
-        validatorProfileId: configuredStyleRewriteValidatorProfileId,
+            presentationConfig?.enabled ??
+            runtimeConfig.chatWorkflow.presentation.enabled,
+        profileId: configuredPresentationProfileId,
+        validatorProfileId: configuredPresentationValidatorProfileId,
         timeoutMs:
-            styleRewriteConfig?.timeoutMs ??
-            runtimeConfig.chatWorkflow.styleRewrite.timeoutMs,
+            presentationConfig?.timeoutMs ??
+            runtimeConfig.chatWorkflow.presentation.timeoutMs,
         validatorTimeoutMs:
-            styleRewriteConfig?.validatorTimeoutMs ??
-            runtimeConfig.chatWorkflow.styleRewrite.validatorTimeoutMs,
+            presentationConfig?.validatorTimeoutMs ??
+            runtimeConfig.chatWorkflow.presentation.validatorTimeoutMs,
         traceHmacSecret: runtimeConfig.storage.incidentPseudonymizationSecret,
-        ...(configuredStyleRewriteProfile !== undefined && {
-            profile: configuredStyleRewriteProfile,
+        ...(configuredPresentationProfile !== undefined && {
+            profile: configuredPresentationProfile,
         }),
-        ...(configuredStyleRewriteValidatorProfile !== undefined && {
-            validatorProfile: configuredStyleRewriteValidatorProfile,
+        ...(configuredPresentationValidatorProfile !== undefined && {
+            validatorProfile: configuredPresentationValidatorProfile,
         }),
     };
     /**
@@ -1020,7 +1020,7 @@ export const createChatService = ({
         executionContractTrustGraphContext,
         ExecutionContract,
         steerabilityControls,
-        styleRewritePersona,
+        presentationPersona,
     }: RunChatMessagesInput): Promise<RunChatMessagesResult> => {
         if (!contextEnvelope) {
             throw new Error(
@@ -1230,7 +1230,7 @@ export const createChatService = ({
                   workflowPlannerSummary?: AppliedPlanState;
                   workflowPlannerStepResult?: PlannerStepResult;
                   workflowConversationSnapshot?: string;
-                  styleRewriteMetadata?: StyleRewriteMetadata;
+                  presentationMetadata?: PresentationMetadata;
                   fallbackAfterInternalNoGeneration: boolean;
               }
         > => {
@@ -1242,7 +1242,7 @@ export const createChatService = ({
             let workflowPlannerSummary: AppliedPlanState | undefined;
             let workflowPlannerStepResult: PlannerStepResult | undefined;
             let workflowConversationSnapshot: string | undefined;
-            let styleRewriteMetadata: StyleRewriteMetadata | undefined;
+            let presentationMetadata: PresentationMetadata | undefined;
             let fallbackAfterInternalNoGeneration = false;
 
             if (workflowExecutionEnabled) {
@@ -1331,14 +1331,12 @@ export const createChatService = ({
                         generateCandidates: generateProfileCandidates,
                         assessCandidates: assessProfileCandidates,
                     },
-                    styleRewrite: {
-                        config: effectiveStyleRewriteConfig,
-                        persona: styleRewritePersona ?? {
+                    presentation: {
+                        config: effectivePresentationConfig,
+                        persona: presentationPersona ?? {
                             id: 'footnote',
                             presentationGuidance: NEUTRAL_PRESENTATION_GUIDANCE,
                         },
-                        protectedContent:
-                            effectiveContextStepRequests.length > 0,
                         captureUsage: (result, profile, feature) =>
                             recordUsageForStep(
                                 result,
@@ -1375,7 +1373,7 @@ export const createChatService = ({
                     case 'generated': {
                         generationResult = workflowResult.generationResult;
                         workflowLineage = workflowResult.workflowLineage;
-                        styleRewriteMetadata = workflowResult.styleRewrite;
+                        presentationMetadata = workflowResult.presentation;
                         const generatedShortCircuit =
                             buildContextStepShortCircuit({
                                 workflowContextStepResult,
@@ -1632,7 +1630,7 @@ export const createChatService = ({
                 workflowPlannerSummary,
                 workflowPlannerStepResult,
                 workflowConversationSnapshot,
-                styleRewriteMetadata,
+                presentationMetadata,
                 fallbackAfterInternalNoGeneration,
             };
         };
@@ -1655,7 +1653,7 @@ export const createChatService = ({
             generationPhase.workflowConversationSnapshot;
         const fallbackAfterInternalNoGeneration =
             generationPhase.fallbackAfterInternalNoGeneration;
-        const styleRewriteMetadata = generationPhase.styleRewriteMetadata;
+        const presentationMetadata = generationPhase.presentationMetadata;
 
         const effectiveContextStepResults = getEffectiveContextStepResults(
             workflowContextStepResults,
@@ -1927,7 +1925,7 @@ export const createChatService = ({
                 }),
             },
             ...(steerabilityControls !== undefined && { steerabilityControls }),
-            styleRewrite: styleRewriteMetadata,
+            presentation: presentationMetadata,
             retrieval: {
                 requested: hasSearchIntent,
                 used: retrievalUsed,

@@ -234,7 +234,7 @@ test('persona_tone_overlay rationale stays non-authoritative over execution poli
     );
     assert.match(
         personaControl?.value ?? '',
-        /^state:presentation_applied;persona:myuri;source:file$/
+        /^state:presentation_finalized;persona:myuri;source:file$/
     );
 });
 

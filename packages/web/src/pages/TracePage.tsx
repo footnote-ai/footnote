@@ -34,7 +34,7 @@ import {
 } from '../utils/traceOutcome';
 import { summarizeTraceAccounting } from '../utils/traceAccounting';
 import {
-    sanitizeStyleRewriteForDisplay,
+    sanitizePresentationForDisplay,
     sanitizeWorkflowForDisplay,
 } from '../utils/traceDisplay';
 // Define the actual server response metadata structure
@@ -72,7 +72,7 @@ type DisplayTrace = {
     execution: ServerMetadata['execution'];
     evaluator: ServerMetadata['evaluator'] | null;
     workflow: WorkflowRecord | null;
-    styleRewrite: ServerMetadata['styleRewrite'] | null;
+    presentation: ServerMetadata['presentation'] | null;
     runtimeContext: {
         modelVersion: string | null;
         conversationSnapshot: string | null;
@@ -90,14 +90,14 @@ const formatRecordedUsd = (value: unknown): string =>
         ? `$${value.toFixed(6)}`
         : 'Unavailable';
 
-const formatStyleRewriteRouting = (
-    styleRewrite: NonNullable<ServerMetadata['styleRewrite']>
+const formatPresentationRouting = (
+    presentation: NonNullable<ServerMetadata['presentation']>
 ): string => {
     const parts = [
-        styleRewrite.upstreamInferenceProvider,
-        styleRewrite.upstreamResolvedModel,
-        styleRewrite.upstreamRoutingAttempt !== undefined
-            ? `attempt ${styleRewrite.upstreamRoutingAttempt}${styleRewrite.upstreamRoutingAttemptCount !== undefined ? `/${styleRewrite.upstreamRoutingAttemptCount}` : ''}`
+        presentation.upstreamInferenceProvider,
+        presentation.upstreamResolvedModel,
+        presentation.upstreamRoutingAttempt !== undefined
+            ? `attempt ${presentation.upstreamRoutingAttempt}${presentation.upstreamRoutingAttemptCount !== undefined ? `/${presentation.upstreamRoutingAttemptCount}` : ''}`
             : undefined,
     ].filter(
         (part): part is string => typeof part === 'string' && part.length > 0
@@ -229,7 +229,7 @@ const buildDisplayTrace = (traceData: ServerMetadata): DisplayTrace => ({
     execution: traceData.execution ?? [],
     evaluator: traceData.evaluator ?? null,
     workflow: sanitizeWorkflowForDisplay(traceData.workflow),
-    styleRewrite: sanitizeStyleRewriteForDisplay(traceData.styleRewrite),
+    presentation: sanitizePresentationForDisplay(traceData.presentation),
     runtimeContext: traceData.runtimeContext
         ? {
               modelVersion: traceData.runtimeContext.modelVersion ?? null,
@@ -752,7 +752,7 @@ const TracePage = (): JSX.Element => {
     const safetySummary = getSafetySummary(traceData, safetyLabel);
     const workflowSummary = getWorkflowSummary(traceData);
     const runOutcomeSummary = traceRunOutcomeSummary;
-    const styleRewrite = sanitizedTraceData.styleRewrite;
+    const presentation = sanitizedTraceData.presentation;
     const summarySignals: SummarySignal[] = [
         {
             label: 'Mode',
@@ -931,48 +931,52 @@ const TracePage = (): JSX.Element => {
                         {traceAccounting.costCoverage})
                     </p>
                 )}
-                {styleRewrite && (
+                {presentation && (
                     <>
                         <p>
-                            <strong>Presentation rewrite:</strong>{' '}
-                            {styleRewrite.outcome.charAt(0).toUpperCase() +
-                                styleRewrite.outcome.slice(1)}
+                            <strong>Presentation:</strong>{' '}
+                            {presentation.outcome.charAt(0).toUpperCase() +
+                                presentation.outcome.slice(1)}
                         </p>
                         <p>
                             <code>
-                                {styleRewrite.model ??
-                                    styleRewrite.profileId ??
+                                {presentation.draftModel ??
+                                    presentation.draftProfileId ??
                                     'Unspecified'}
                             </code>{' '}
-                            · {styleRewrite.personaId} persona ·{' '}
-                            {styleRewrite.intensity} intensity
+                            · {presentation.personaId} persona ·{' '}
+                            {presentation.intensity} intensity
                         </p>
                         <p>
-                            <strong>Validator:</strong>{' '}
-                            {styleRewrite.validatorModel ??
-                                styleRewrite.validatorProfileId ??
+                            <strong>Audit:</strong>{' '}
+                            {presentation.auditModel ??
+                                presentation.auditProfileId ??
                                 'Not attempted'}{' '}
-                            — {styleRewrite.validatorOutcome}
+                            — {presentation.auditOutcome}
                         </p>
                         <p>
-                            <strong>Edit:</strong>{' '}
-                            {Math.round(styleRewrite.editRatio * 100)}% · TRACE
-                            caution: {styleRewrite.caution ?? 'Unavailable'}
+                            <strong>Draft retention:</strong>{' '}
+                            {Math.round(
+                                (presentation.styledDraftRetentionRatio ?? 0) *
+                                    100
+                            )}
+                            % · TRACE caution:{' '}
+                            {presentation.caution ?? 'Unavailable'}
                         </p>
                         <details className="trace-details">
-                            <summary>Presentation rewrite details</summary>
+                            <summary>Presentation details</summary>
                             <dl className="trace-details__list">
                                 <div>
                                     <dt>Reason code</dt>
                                     <dd>
-                                        <code>{styleRewrite.reasonCode}</code>
+                                        <code>{presentation.reasonCode}</code>
                                     </dd>
                                 </div>
                                 <div>
                                     <dt>Profile</dt>
                                     <dd>
                                         <code>
-                                            {styleRewrite.profileId ??
+                                            {presentation.draftProfileId ??
                                                 'Unavailable'}
                                         </code>
                                     </dd>
@@ -980,8 +984,8 @@ const TracePage = (): JSX.Element => {
                                 <div>
                                     <dt>Requested provider</dt>
                                     <dd>
-                                        {styleRewrite.requestedProvider ??
-                                            styleRewrite.provider ??
+                                        {presentation.draftRequestedProvider ??
+                                            presentation.draftRequestedProvider ??
                                             'Unavailable'}
                                     </dd>
                                 </div>
@@ -989,8 +993,8 @@ const TracePage = (): JSX.Element => {
                                     <dt>Requested model</dt>
                                     <dd>
                                         <code>
-                                            {styleRewrite.requestedModel ??
-                                                styleRewrite.model ??
+                                            {presentation.draftRequestedModel ??
+                                                presentation.draftModel ??
                                                 'Unavailable'}
                                         </code>
                                     </dd>
@@ -998,8 +1002,8 @@ const TracePage = (): JSX.Element => {
                                 <div>
                                     <dt>Upstream routing</dt>
                                     <dd>
-                                        {formatStyleRewriteRouting(
-                                            styleRewrite
+                                        {formatPresentationRouting(
+                                            presentation
                                         )}
                                     </dd>
                                 </div>
@@ -1008,27 +1012,36 @@ const TracePage = (): JSX.Element => {
                                     <dd>
                                         Backend estimate:{' '}
                                         {formatRecordedUsd(
-                                            styleRewrite.backendEstimatedCostUsd
+                                            presentation.backendEstimatedCostUsd
                                         )}
                                         {' · '}Upstream reported:{' '}
                                         {formatRecordedUsd(
-                                            styleRewrite.upstreamReportedCostUsd
+                                            presentation.upstreamReportedCostUsd
                                         )}
                                     </dd>
                                 </div>
                                 <div>
                                     <dt>Duration</dt>
                                     <dd>
-                                        {styleRewrite.durationMs === undefined
+                                        {presentation.durationMs === undefined
                                             ? 'Unavailable'
-                                            : `${styleRewrite.durationMs}ms`}
+                                            : `${presentation.durationMs}ms`}
                                     </dd>
                                 </div>
                                 <div>
-                                    <dt>Validator profile</dt>
+                                    <dt>Attempts</dt>
+                                    <dd>
+                                        Draft {presentation.draftAttemptCount} ·
+                                        Finalizer{' '}
+                                        {presentation.finalizerAttemptCount} ·
+                                        Audit {presentation.auditAttemptCount}
+                                    </dd>
+                                </div>
+                                <div>
+                                    <dt>Audit profile</dt>
                                     <dd>
                                         <code>
-                                            {styleRewrite.validatorProfileId ??
+                                            {presentation.auditProfileId ??
                                                 'Unavailable'}
                                         </code>
                                     </dd>
@@ -1036,25 +1049,25 @@ const TracePage = (): JSX.Element => {
                                 <div>
                                     <dt>TRACE constrained</dt>
                                     <dd>
-                                        {styleRewrite.traceConstrained
+                                        {presentation.traceConstrained
                                             ? 'Yes'
                                             : 'No'}
                                     </dd>
                                 </div>
                                 <div>
-                                    <dt>Original HMAC ID</dt>
+                                    <dt>Draft HMAC ID</dt>
                                     <dd>
                                         <code>
-                                            {styleRewrite.originalHmacId ??
+                                            {presentation.draftHmacId ??
                                                 'Unavailable'}
                                         </code>
                                     </dd>
                                 </div>
                                 <div>
-                                    <dt>Presented HMAC ID</dt>
+                                    <dt>Final HMAC ID</dt>
                                     <dd>
                                         <code>
-                                            {styleRewrite.presentedHmacId ??
+                                            {presentation.finalHmacId ??
                                                 'Unavailable'}
                                         </code>
                                     </dd>

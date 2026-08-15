@@ -7,7 +7,7 @@
  */
 
 import type {
-    StyleRewriteMetadata,
+    PresentationMetadata,
     WorkflowRecord,
 } from '@footnote/contracts/policy';
 
@@ -45,6 +45,6 @@ export const sanitizeWorkflowForDisplay = (
  * outcome and opaque lineage identifiers in the display payload without
  * introducing either answer version to the trace surface.
  */
-export const sanitizeStyleRewriteForDisplay = (
-    styleRewrite: StyleRewriteMetadata | undefined
-): StyleRewriteMetadata | null => styleRewrite ?? null;
+export const sanitizePresentationForDisplay = (
+    presentation: PresentationMetadata | undefined
+): PresentationMetadata | null => presentation ?? null;

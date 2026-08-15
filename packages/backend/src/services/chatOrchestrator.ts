@@ -859,7 +859,7 @@ export const createChatOrchestrator = ({
             executionContext: {
                 evaluator: evaluatorExecutionContext,
             },
-            styleRewritePersona: {
+            presentationPersona: {
                 id: personaProfile.id,
                 presentationGuidance: resolvePersonaPresentationGuidance(
                     personaProfile.id

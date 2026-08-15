@@ -494,13 +494,13 @@ test('ResponseMetadataSchema accepts workflow lineage metadata', () => {
     assert.equal(parsed.success, true);
 });
 
-test('ResponseMetadataSchema accepts style rewrite workflow reason codes', () => {
+test('ResponseMetadataSchema accepts presentation flow workflow reason codes', () => {
     const now = new Date().toISOString();
     const reasonCodes = [
-        'style_rewrite_skipped',
-        'style_rewrite_applied',
-        'style_rewrite_rejected',
-        'style_rewrite_failed',
+        'presentation_fallback',
+        'presentation_finalized',
+        'presentation_fallback',
+        'presentation_fallback',
     ] as const;
 
     for (const reasonCode of reasonCodes) {
@@ -509,14 +509,14 @@ test('ResponseMetadataSchema accepts style rewrite workflow reason codes', () =>
             stepId: `step_${reasonCode}`,
             parentStepId: 'step_2',
             attempt: 1,
-            stepKind: 'style_rewrite',
+            stepKind: 'presentation',
             reasonCode,
             startedAt: now,
             finishedAt: now,
             durationMs: 1,
             outcome: {
                 status: 'executed',
-                summary: 'Style rewrite completed or preserved the draft.',
+                summary: 'Presentation flow completed or preserved the draft.',
             },
         });
         payload.workflow.stepCount = payload.workflow.steps.length;

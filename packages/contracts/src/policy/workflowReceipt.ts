@@ -31,6 +31,13 @@ export const WORKFLOW_RECEIPT_LABELS = {
     noSourcesAvailable: 'No sources available',
     searchUnavailable: 'Search unavailable',
     noGroundingEvidenceRecorded: 'No grounding evidence recorded',
+    presentationFinalized: 'Presentation draft finalized',
+    presentationEvidenceRepair:
+        'Presentation finalized after one evidence repair',
+    presentationStyleRepair: 'Presentation finalized after one voice repair',
+    presentationAuditUnavailable:
+        'Presentation finalized with audit unavailable',
+    presentationFallback: 'Presentation flow used normal fallback',
 } as const;
 
 const SEARCH_UNSUPPORTED_REASON_CODE =
@@ -177,6 +184,26 @@ export const summarizeGroundingEvidence = (
     };
 };
 
+/** Returns the backend-recorded presentation outcome without implying a rewrite. */
+export const resolvePresentationReceipt = (
+    metadata: ResponseMetadata
+): string | null => {
+    switch (metadata.presentation?.outcome) {
+        case 'finalized':
+            return WORKFLOW_RECEIPT_LABELS.presentationFinalized;
+        case 'finalized_after_evidence_repair':
+            return WORKFLOW_RECEIPT_LABELS.presentationEvidenceRepair;
+        case 'finalized_after_presentation_repair':
+            return WORKFLOW_RECEIPT_LABELS.presentationStyleRepair;
+        case 'finalized_with_audit_unavailable':
+            return WORKFLOW_RECEIPT_LABELS.presentationAuditUnavailable;
+        case 'fallback':
+            return WORKFLOW_RECEIPT_LABELS.presentationFallback;
+        default:
+            return null;
+    }
+};
+
 /**
  * Builds receipt lines in a stable order for UI rendering.
  *
@@ -189,6 +216,7 @@ export const buildWorkflowReceiptItems = (
     [
         resolveReviewReceipt(metadata),
         resolvePlannerFallbackReceipt(metadata),
+        resolvePresentationReceipt(metadata),
         (() => {
             const groundingEvidenceSummary =
                 summarizeGroundingEvidence(metadata);

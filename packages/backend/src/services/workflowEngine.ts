@@ -6,7 +6,7 @@
  * @footnote-ethics: high - Workflow control determines whether model-deliberative paths remain bounded and auditable.
  */
 import type {
-    StyleRewriteMetadata,
+    PresentationMetadata,
     WorkflowStepKind,
 } from '@footnote/contracts/policy';
 import type { WorkflowTerminationReason } from '@footnote/contracts/policy';
@@ -79,11 +79,10 @@ import type { ResolvedStepRoutingCandidate } from './stepRoutingChains.js';
 import { buildRoutingChainSignals } from './workflowEngine/routingSignals.js';
 import { toRoutingChainResult } from './routingChainResult.js';
 import {
-    createStyleRewriteSkipResult,
-    runStyleRewriteStep,
-    type StyleRewriteConfig,
-    type StyleRewritePersona,
-} from './styleRewrite.js';
+    runPresentationStep,
+    type PresentationConfig,
+    type PresentationPersona,
+} from './presentation.js';
 
 /**
  * Canonical Execution Contract workflow-policy surface.
@@ -176,14 +175,13 @@ export type RunBoundedReviewWorkflowInput = {
         assessCandidates: ResolvedStepRoutingCandidate[];
     };
     /** Optional, backend-owned presentation step. It is never a generic transform pipeline. */
-    styleRewrite?: {
-        config: StyleRewriteConfig;
-        persona: StyleRewritePersona;
-        protectedContent: boolean;
+    presentation?: {
+        config: PresentationConfig;
+        persona: PresentationPersona;
         captureUsage: (
             result: GenerationResult,
             profile: ModelProfile,
-            feature: 'chat_style_rewrite' | 'chat_style_validation'
+            feature: 'chat_presentation_draft' | 'chat_presentation_audit'
         ) => ReviewWorkflowUsageSummary;
     };
 };
@@ -193,7 +191,7 @@ export type RunBoundedReviewWorkflowResult =
           outcome: 'generated';
           generationResult: GenerationResult;
           workflowLineage: WorkflowRecord;
-          styleRewrite?: StyleRewriteMetadata;
+          presentation?: PresentationMetadata;
           plannerStepResult?: PlannerStepResult;
           planContinuation?: PlanContinuation;
           contextStepResult?: ContextStepResult;
@@ -286,7 +284,7 @@ export const runBoundedReviewWorkflow = async ({
     contextStepExecutorRegistry,
     openAiNativeSearchFromHintsEnabled = false,
     stepRoutingChainSet,
-    styleRewrite,
+    presentation,
 }: RunBoundedReviewWorkflowInput): Promise<RunBoundedReviewWorkflowResult> => {
     if (!contextEnvelope) {
         throw new Error(
@@ -864,6 +862,8 @@ export const runBoundedReviewWorkflow = async ({
         }
     }
 
+    let presentationMetadata: PresentationMetadata | undefined;
+    let presentationFinalized = false;
     if (!shouldStop) {
         if (
             !isWorkflowTransitionAllowed(
@@ -913,7 +913,107 @@ export const runBoundedReviewWorkflow = async ({
                             },
                         }),
                 };
+                const activePresentation = presentation;
+                const presentationResult =
+                    activePresentation?.config.enabled === true
+                        ? await runPresentationStep({
+                              generationRuntime,
+                              generationRequest: generationRequestForAttempt,
+                              finalize: async (request) => {
+                                  if (
+                                      stepRoutingChainSet?.generateCandidates &&
+                                      stepRoutingChainSet.generateCandidates
+                                          .length > 0
+                                  ) {
+                                      const chainResult =
+                                          await executeStepRoutingChain({
+                                              step: 'generate',
+                                              candidates:
+                                                  stepRoutingChainSet.generateCandidates,
+                                              enabledProfilesById:
+                                                  stepRoutingChainSet.enabledProfilesById,
+                                              requiresSearch:
+                                                  request.search !== undefined,
+                                              runWithProfile: async (profile) =>
+                                                  generationRuntime.generate({
+                                                      ...request,
+                                                      model: profile.providerModel,
+                                                      provider:
+                                                          profile.provider,
+                                                      capabilities:
+                                                          profile.capabilities,
+                                                      reasoningEffort:
+                                                          resolveProfileReasoningEffort(
+                                                              profile,
+                                                              request.reasoningEffort,
+                                                              logger
+                                                          ),
+                                                  }),
+                                          });
+                                      const routingResult =
+                                          toRoutingChainResult(chainResult);
+                                      if (routingResult.isErr()) {
+                                          throw new Error(
+                                              `presentation_finalizer_${routingResult.error.reasonCode}`
+                                          );
+                                      }
+                                      return routingResult.value.value;
+                                  }
+                                  return generationRuntime.generate(request);
+                              },
+                              config: activePresentation.config,
+                              persona: activePresentation.persona,
+                              caution: 3,
+                          })
+                        : undefined;
                 if (
+                    presentationResult?.outcome === 'finalized' &&
+                    activePresentation !== undefined
+                ) {
+                    const finalizerResult =
+                        presentationResult.finalizerResults.at(-1);
+                    if (
+                        finalizerResult === undefined ||
+                        presentationResult.text === undefined
+                    ) {
+                        throw new Error(
+                            'Presentation finalization completed without a final result.'
+                        );
+                    }
+                    draftResult = {
+                        ...finalizerResult,
+                        text: presentationResult.text,
+                    };
+                    presentationMetadata = presentationResult.metadata;
+                    presentationFinalized = true;
+                    const draftUsage =
+                        presentationResult.draftResult !== undefined &&
+                        activePresentation.config.profile !== undefined
+                            ? activePresentation.captureUsage(
+                                  presentationResult.draftResult,
+                                  activePresentation.config.profile,
+                                  'chat_presentation_draft'
+                              )
+                            : undefined;
+                    const auditUsage =
+                        presentationResult.auditResult !== undefined &&
+                        activePresentation.config.validatorProfile !== undefined
+                            ? activePresentation.captureUsage(
+                                  presentationResult.auditResult,
+                                  activePresentation.config.validatorProfile,
+                                  'chat_presentation_audit'
+                              )
+                            : undefined;
+                    if (draftUsage !== undefined || auditUsage !== undefined) {
+                        presentationMetadata.backendEstimatedCostUsd =
+                            (draftUsage?.estimatedCost.totalCostUsd ?? 0) +
+                            (auditUsage?.estimatedCost.totalCostUsd ?? 0);
+                    }
+                } else if (presentationResult !== undefined) {
+                    presentationMetadata = presentationResult.metadata;
+                }
+                if (
+                    draftResult === null &&
                     stepRoutingChainSet?.generateCandidates &&
                     stepRoutingChainSet.generateCandidates.length > 0
                 ) {
@@ -996,7 +1096,7 @@ export const runBoundedReviewWorkflow = async ({
                         };
                         draftResult = routingResult.value.value;
                     }
-                } else {
+                } else if (draftResult === null) {
                     draftResult = await generationRuntime.generate(
                         generationRequestForAttempt
                     );
@@ -1096,7 +1196,9 @@ export const runBoundedReviewWorkflow = async ({
     }
 
     const reviewLoopResult = await executeReviewLoop({
-        effectiveMaxIterations,
+        effectiveMaxIterations: presentationFinalized
+            ? 0
+            : effectiveMaxIterations,
         workflowPolicy,
         stopIfOverLimits,
         selectedReviewModuleIds,
@@ -1136,165 +1238,15 @@ export const runBoundedReviewWorkflow = async ({
     stoppedBeforeStepKind = reviewLoopResult.stoppedBeforeStepKind;
     planContinuation = reviewLoopResult.planContinuation;
 
-    // Styling is a best-effort presentation epilogue once text exists. It is
-    // intentionally independent of semantic workflow budgets: a retrieval,
-    // tool, or exhausted review budget must not silently suppress persona
-    // presentation. It remains fail-open and the validator can only veto.
-    let styleRewriteMetadata: StyleRewriteMetadata | undefined;
-    if (draftResult !== null && styleRewrite?.config.enabled === true) {
-        const canTransition = isWorkflowTransitionAllowed(
-            workflowState.currentStepKind,
-            'style_rewrite',
-            workflowPolicy
-        );
-        const finalAssessStep = [...workflowSteps]
-            .reverse()
-            .find((step) => step.stepKind === 'assess');
-        const assessedCaution =
-            finalAssessStep?.outcome.signals?.finalTemperamentCaution;
-        const caution =
-            typeof assessedCaution === 'number' &&
-            assessedCaution >= 1 &&
-            assessedCaution <= 5
-                ? assessedCaution
-                : 3;
-        if (canTransition) {
-            const styleStartedAt = Date.now();
-            const styleResult = await runStyleRewriteStep({
-                original: draftResult,
-                generationRuntime,
-                config: styleRewrite.config,
-                persona: styleRewrite.persona,
-                eligibility: {
-                    protectedContent: styleRewrite.protectedContent,
-                },
-                caution,
-            });
-            styleRewriteMetadata = styleResult.metadata;
-            const rewriteUsage =
-                styleResult.rewriteResult !== undefined &&
-                styleRewrite.config.profile !== undefined
-                    ? styleRewrite.captureUsage(
-                          styleResult.rewriteResult,
-                          styleRewrite.config.profile,
-                          'chat_style_rewrite'
-                      )
-                    : undefined;
-            const validatorUsage =
-                styleResult.validatorResult !== undefined &&
-                styleRewrite.config.validatorProfile !== undefined
-                    ? styleRewrite.captureUsage(
-                          styleResult.validatorResult,
-                          styleRewrite.config.validatorProfile,
-                          'chat_style_validation'
-                      )
-                    : undefined;
-            const backendEstimatedCostUsd =
-                (rewriteUsage?.estimatedCost.totalCostUsd ?? 0) +
-                (validatorUsage?.estimatedCost.totalCostUsd ?? 0);
-            if (rewriteUsage !== undefined || validatorUsage !== undefined) {
-                styleResult.metadata.backendEstimatedCostUsd =
-                    backendEstimatedCostUsd;
-            }
-            const totalTokens =
-                (rewriteUsage?.totalTokens ?? 0) +
-                (validatorUsage?.totalTokens ?? 0);
-            captureStep({
-                stepKind: 'style_rewrite',
-                status:
-                    styleResult.metadata.outcome === 'applied'
-                        ? 'executed'
-                        : styleResult.metadata.outcome === 'skipped'
-                          ? 'skipped'
-                          : 'failed',
-                summary: `Style rewrite ${styleResult.metadata.outcome}: ${styleResult.metadata.reasonCode}.`,
-                reasonCode:
-                    styleResult.metadata.outcome === 'applied'
-                        ? 'style_rewrite_applied'
-                        : styleResult.metadata.outcome === 'skipped'
-                          ? 'style_rewrite_skipped'
-                          : styleResult.metadata.outcome === 'failed'
-                            ? 'style_rewrite_failed'
-                            : 'style_rewrite_rejected',
-                startedAtMs: styleStartedAt,
-                finishedAtMs: Date.now(),
-                model: rewriteUsage?.model,
-                usage:
-                    totalTokens > 0
-                        ? {
-                              promptTokens:
-                                  (rewriteUsage?.promptTokens ?? 0) +
-                                  (validatorUsage?.promptTokens ?? 0),
-                              completionTokens:
-                                  (rewriteUsage?.completionTokens ?? 0) +
-                                  (validatorUsage?.completionTokens ?? 0),
-                              totalTokens,
-                          }
-                        : undefined,
-                estimatedCost:
-                    rewriteUsage !== undefined || validatorUsage !== undefined
-                        ? {
-                              inputCostUsd:
-                                  (rewriteUsage?.estimatedCost.inputCostUsd ??
-                                      0) +
-                                  (validatorUsage?.estimatedCost.inputCostUsd ??
-                                      0),
-                              outputCostUsd:
-                                  (rewriteUsage?.estimatedCost.outputCostUsd ??
-                                      0) +
-                                  (validatorUsage?.estimatedCost
-                                      .outputCostUsd ?? 0),
-                              totalCostUsd:
-                                  (rewriteUsage?.estimatedCost.totalCostUsd ??
-                                      0) +
-                                  (validatorUsage?.estimatedCost.totalCostUsd ??
-                                      0),
-                          }
-                        : undefined,
-                parentStepId: draftParentStepId,
-                attempt: 1,
-                signals: {
-                    outcome: styleResult.metadata.outcome,
-                    reasonCode: styleResult.metadata.reasonCode,
-                    personaId: styleResult.metadata.personaId,
-                    validatorOutcome: styleResult.metadata.validatorOutcome,
-                    originalHmacId: styleResult.metadata.originalHmacId ?? null,
-                    presentedHmacId:
-                        styleResult.metadata.presentedHmacId ?? null,
-                    editRatio: styleResult.metadata.editRatio,
-                    caution: styleResult.metadata.caution ?? null,
-                    intensity: styleResult.metadata.intensity,
-                    traceConstrained: styleResult.metadata.traceConstrained,
-                },
-            });
-            workflowState = applyStepExecutionToState(
-                workflowState,
-                'style_rewrite',
-                totalTokens,
-                0,
-                0
-            );
-            draftResult = { ...draftResult, text: styleResult.text };
-        } else {
-            const styleResult = createStyleRewriteSkipResult({
-                original: draftResult,
-                config: styleRewrite.config,
-                persona: styleRewrite.persona,
-                reasonCode: 'transition_not_allowed',
-                caution,
-            });
-            styleRewriteMetadata = styleResult.metadata;
-        }
-    }
+    // Presentation runs before final wording. Its receipt is preserved even when
+    // the main model falls back to the normal generation route.
 
     // The presentation epilogue is deliberately outside the configured
     // semantic-workflow budget, but it remains a real, persisted trace step.
     // Include it in the trace capacity so `stepCount` and `maxSteps` describe
     // the same recorded sequence; `effectiveLimits` retains the configured
     // semantic budget for auditability.
-    const presentationStepCount = workflowSteps.filter(
-        (step) => step.stepKind === 'style_rewrite'
-    ).length;
+    const presentationStepCount = 0;
     const workflowLineage: WorkflowRecord = {
         workflowId,
         workflowName: workflowConfig.workflowName,
@@ -1359,8 +1311,8 @@ export const runBoundedReviewWorkflow = async ({
         outcome: 'generated',
         generationResult: draftResult,
         workflowLineage,
-        ...(styleRewriteMetadata !== undefined && {
-            styleRewrite: styleRewriteMetadata,
+        ...(presentationMetadata !== undefined && {
+            presentation: presentationMetadata,
         }),
         ...(plannerExecutionResult !== undefined && {
             plannerStepResult: plannerExecutionResult,

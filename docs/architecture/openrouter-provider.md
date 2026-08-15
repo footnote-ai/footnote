@@ -23,7 +23,7 @@ metadata remains unavailable rather than inferred. See OpenRouter's
 
 ## Privacy and cost provenance
 
-OpenRouter receives the style-rewrite request and may route it to the selected
+OpenRouter receives the presentation request and may route it to the selected
 upstream provider. OpenRouter's retention and provider data policies apply in
 addition to Footnote's own handling. Operators should review OpenRouter's
 [privacy policy](https://openrouter.ai/privacy) and provider data policy before
@@ -40,6 +40,6 @@ as proof of the other.
 Set the secret with the backend deployment's normal secret mechanism, for
 example `fly secrets set OPENROUTER_API_KEY=... -a <server-app>`. Do not put it
 in browser configuration or bot-only configuration. Configure an enabled
-OpenRouter model profile and the existing style-rewrite profile selector before
+OpenRouter model profile and the existing presentation profile selector before
 the writer can run. If the key or profile is unavailable, the presentation
 rewrite fails open and returns the original answer.

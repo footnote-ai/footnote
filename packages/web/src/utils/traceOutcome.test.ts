@@ -107,7 +107,7 @@ test('buildRunOutcomeSummary distinguishes a generated answer from a pre-generat
     );
 });
 
-test('buildRunOutcomeSummary labels a stopped style rewrite for users', () => {
+test('buildRunOutcomeSummary labels a stopped presentation flow for users', () => {
     const workflow = createWorkflow('budget_exhausted_time');
     workflow.stepCount = 1;
     workflow.steps = [
@@ -125,14 +125,14 @@ test('buildRunOutcomeSummary labels a stopped style rewrite for users', () => {
         stoppedByLimit: true,
         terminationReason: 'budget_exhausted_time',
         exhaustedLimitKey: 'maxDurationMs',
-        stoppedBeforeStepKind: 'style_rewrite',
+        stoppedBeforeStepKind: 'presentation',
     };
 
     const summary = buildRunOutcomeSummary(createSource({ workflow }));
 
     assert.equal(
         summary?.explanation,
-        'Answer generation completed, but the workflow stopped before style rewrite. Workflow stopped after reaching the configured time budget.'
+        'Answer generation completed, but the workflow stopped before presentation flow. Workflow stopped after reaching the configured time budget.'
     );
 });
 

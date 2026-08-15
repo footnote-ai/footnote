@@ -15,10 +15,10 @@ const LEGAL_TRANSITIONS: Record<
 > = {
     plan: new Set(['tool', 'generate', 'assess', 'finalize']),
     tool: new Set(['tool', 'generate', 'assess', 'finalize']),
-    generate: new Set(['assess', 'style_rewrite', 'finalize']),
-    assess: new Set(['plan', 'tool', 'generate', 'style_rewrite', 'finalize']),
+    generate: new Set(['assess', 'presentation', 'finalize']),
+    assess: new Set(['plan', 'tool', 'generate', 'presentation', 'finalize']),
     revise: new Set(['assess', 'generate', 'finalize']),
-    style_rewrite: new Set(['finalize']),
+    presentation: new Set(['finalize']),
     finalize: new Set([]),
 };
 

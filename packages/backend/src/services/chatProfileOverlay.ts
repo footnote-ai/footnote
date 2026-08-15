@@ -30,7 +30,7 @@ export type PersonaCatalogEntry = {
     id: string;
     displayName: string;
     overlayRelativePath: string | null;
-    /** Presentation-only guidance for optional style rewrite; not persona authority. */
+    /** Presentation-only guidance for optional presentation flow; not persona authority. */
     presentationGuidance: string;
 };
 

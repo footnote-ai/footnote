@@ -3144,7 +3144,7 @@ components:
                             generate,
                             assess,
                             revise,
-                            style_rewrite,
+                            presentation,
                             finalize,
                         ]
                 reasonCode:
@@ -3155,10 +3155,10 @@ components:
                             planner_invalid_output,
                             evaluator_runtime_error,
                             generation_runtime_error,
-                            style_rewrite_skipped,
-                            style_rewrite_applied,
-                            style_rewrite_rejected,
-                            style_rewrite_failed,
+                            presentation_fallback,
+                            presentation_finalized,
+                            presentation_fallback,
+                            presentation_fallback,
                             tool_not_requested,
                             tool_not_used,
                             search_rerouted_to_fallback_profile,
@@ -3319,7 +3319,7 @@ components:
                                     generate,
                                     assess,
                                     revise,
-                                    style_rewrite,
+                                    presentation,
                                     finalize,
                                 ]
                     required:
@@ -3496,10 +3496,10 @@ components:
                                         planner_invalid_output,
                                         evaluator_runtime_error,
                                         generation_runtime_error,
-                                        style_rewrite_skipped,
-                                        style_rewrite_applied,
-                                        style_rewrite_rejected,
-                                        style_rewrite_failed,
+                                        presentation_fallback,
+                                        presentation_finalized,
+                                        presentation_fallback,
+                                        presentation_fallback,
                                         tool_not_requested,
                                         tool_not_used,
                                         search_rerouted_to_fallback_profile,
@@ -3525,63 +3525,67 @@ components:
                         additionalProperties: false
                 workflow:
                     $ref: '#/components/schemas/WorkflowRecord'
-                styleRewrite:
+                presentation:
                     type: object
-                    description: Optional backend-owned presentation-only rewrite outcome. Full source and rewritten texts are not required to be retained.
+                    description: Optional backend-owned draft-first presentation receipt. It records bounded attempts and outcomes without retaining either full response text.
                     properties:
                         step:
                             type: string
-                            enum: [style_rewrite]
+                            enum: [presentation]
                         outcome:
                             type: string
-                            enum: [applied, skipped, rejected, failed]
+                            enum:
+                                [
+                                    finalized,
+                                    finalized_after_evidence_repair,
+                                    finalized_after_presentation_repair,
+                                    finalized_with_audit_unavailable,
+                                    fallback,
+                                ]
                         attempted:
                             type: boolean
                         reasonCode:
                             type: string
                             enum:
                                 [
-                                    applied,
+                                    finalized,
+                                    evidence_repaired,
+                                    presentation_repaired,
+                                    audit_unavailable,
+                                    audit_invalid,
+                                    presentation_repair_unavailable,
+                                    evidence_repair_unavailable,
                                     disabled,
                                     profile_not_configured,
-                                    protected_content,
                                     structured_output,
                                     mechanical_preservation_failed,
-                                    semantic_drift,
-                                    validator_invalid,
-                                    validator_unavailable,
-                                    budget_unavailable,
-                                    transition_not_allowed,
                                     trace_caution_high,
-                                    timeout,
-                                    provider_error,
+                                    draft_timeout,
+                                    draft_provider_error,
+                                    finalizer_timeout,
+                                    finalizer_provider_error,
                                 ]
                         personaId:
                             type: string
-                        profileId:
+                        draftProfileId:
                             type: string
-                        requestedProvider:
+                        draftRequestedProvider:
                             type: string
-                            description: Backend-requested writer provider; distinct from upstream routing facts.
-                        requestedModel:
+                        draftRequestedModel:
                             type: string
-                            description: Backend-requested writer model; distinct from an upstream-resolved model.
-                        provider:
+                        draftModel:
                             type: string
-                        model:
+                        auditProfileId:
                             type: string
-                        validatorProfileId:
+                        auditProvider:
                             type: string
-                        validatorProvider:
-                            type: string
-                        validatorModel:
+                        auditModel:
                             type: string
                         upstreamInferenceProvider:
                             type: string
-                            description: Upstream-reported inference provider. Footnote does not independently verify this value.
+                            description: Upstream-reported style-draft inference provider. Footnote does not independently verify this value.
                         upstreamResolvedModel:
                             type: string
-                            description: Upstream-reported resolved model. Footnote does not independently verify this value.
                         upstreamRoutingAttempt:
                             type: integer
                             minimum: 1
@@ -3591,33 +3595,39 @@ components:
                         backendEstimatedCostUsd:
                             type: number
                             minimum: 0
-                            description: Backend-calculated estimate for rewrite and validation calls, not an upstream charge.
+                            description: Backend-calculated estimate for presentation draft and audit calls.
                         upstreamReportedCostUsd:
                             type: number
                             minimum: 0
-                            description: Upstream-reported charge, not independently verified by Footnote.
                         durationMs:
                             type: integer
                             minimum: 0
-                        validatorOutcome:
+                        auditOutcome:
                             type: string
                             enum:
                                 [
                                     not_attempted,
-                                    equivalent,
-                                    drift,
-                                    uncertain,
-                                    unavailable,
+                                    clear,
+                                    evidence_issue,
+                                    presentation_flattened,
+                                    invalid,
                                 ]
-                        originalHmacId:
+                        draftAttemptCount:
+                            type: integer
+                            enum: [0, 1]
+                        finalizerAttemptCount:
+                            type: integer
+                            enum: [0, 1, 2]
+                        auditAttemptCount:
+                            type: integer
+                            enum: [0, 1]
+                        draftHmacId:
                             type: string
                             pattern: '^[a-f0-9]{64}$'
-                            description: Opaque backend-keyed HMAC identifier; not proof of equivalence.
-                        presentedHmacId:
+                        finalHmacId:
                             type: string
                             pattern: '^[a-f0-9]{64}$'
-                            description: Opaque backend-keyed HMAC identifier; not proof of equivalence.
-                        editRatio:
+                        styledDraftRetentionRatio:
                             type: number
                             minimum: 0
                             maximum: 1
@@ -3636,8 +3646,10 @@ components:
                             attempted,
                             reasonCode,
                             personaId,
-                            validatorOutcome,
-                            editRatio,
+                            auditOutcome,
+                            draftAttemptCount,
+                            finalizerAttemptCount,
+                            auditAttemptCount,
                             intensity,
                             traceConstrained,
                         ]

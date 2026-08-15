@@ -1929,7 +1929,7 @@ export const envEntries = [
         usedBy: ['packages/backend/src/config.ts'],
     }),
     defineEnv({
-        key: 'CHAT_STYLE_REWRITE_ENABLED',
+        key: 'CHAT_PRESENTATION_ENABLED',
         owner: 'backend',
         stage: 'runtime',
         section: 'chat-workflow',
@@ -1937,12 +1937,12 @@ export const envEntries = [
         secret: false,
         kind: 'boolean',
         description:
-            'Enables one optional, presentation-only style rewrite after successful main text generation. Disabled by default.',
+            'Enables the optional draft-first presentation flow after planning and context collection. Disabled by default.',
         defaultValue: literal(false),
         usedBy: ['packages/backend/src/config.ts'],
     }),
     defineEnv({
-        key: 'CHAT_STYLE_REWRITE_PROFILE_ID',
+        key: 'CHAT_PRESENTATION_PROFILE_ID',
         owner: 'backend',
         stage: 'runtime',
         section: 'chat-workflow',
@@ -1950,12 +1950,12 @@ export const envEntries = [
         secret: false,
         kind: 'string',
         description:
-            'Enabled model profile ID for the optional style rewrite. This is deployment policy, not persona identity.',
+            'Enabled model profile ID for the optional presentation flow. This is deployment policy, not persona identity.',
         defaultValue: noDefault(),
         usedBy: ['packages/backend/src/config.ts'],
     }),
     defineEnv({
-        key: 'CHAT_STYLE_REWRITE_TIMEOUT_MS',
+        key: 'CHAT_PRESENTATION_TIMEOUT_MS',
         owner: 'backend',
         stage: 'runtime',
         section: 'chat-workflow',
@@ -1963,12 +1963,12 @@ export const envEntries = [
         secret: false,
         kind: 'integer',
         description:
-            'Hard timeout in milliseconds for the optional style rewrite call.',
+            'Hard timeout in milliseconds for the optional presentation flow call.',
         defaultValue: literal(2000),
         usedBy: ['packages/backend/src/config.ts'],
     }),
     defineEnv({
-        key: 'CHAT_STYLE_REWRITE_VALIDATOR_PROFILE_ID',
+        key: 'CHAT_PRESENTATION_VALIDATOR_PROFILE_ID',
         owner: 'backend',
         stage: 'runtime',
         section: 'chat-workflow',
@@ -1976,12 +1976,12 @@ export const envEntries = [
         secret: false,
         kind: 'string',
         description:
-            'Enabled model profile ID for the veto-only style rewrite semantic validator.',
+            'Enabled model profile ID for the veto-only presentation flow semantic validator.',
         defaultValue: noDefault(),
         usedBy: ['packages/backend/src/config.ts'],
     }),
     defineEnv({
-        key: 'CHAT_STYLE_REWRITE_VALIDATOR_TIMEOUT_MS',
+        key: 'CHAT_PRESENTATION_VALIDATOR_TIMEOUT_MS',
         owner: 'backend',
         stage: 'runtime',
         section: 'chat-workflow',
@@ -1989,7 +1989,7 @@ export const envEntries = [
         secret: false,
         kind: 'integer',
         description:
-            'Hard timeout in milliseconds for the veto-only style rewrite validator.',
+            'Hard timeout in milliseconds for the veto-only presentation flow validator.',
         defaultValue: literal(1500),
         usedBy: ['packages/backend/src/config.ts'],
     }),

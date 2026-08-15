@@ -388,3 +388,29 @@ test('buildWorkflowReceiptItems falls back to deterministic review derivation fo
         'Review skipped',
     ]);
 });
+
+test('buildWorkflowReceiptItems carries backend presentation receipt states for web and Discord renderers', () => {
+    const metadata: ResponseMetadata = {
+        ...createBaseMetadata(),
+        presentation: {
+            step: 'presentation',
+            outcome: 'finalized_with_audit_unavailable',
+            attempted: true,
+            reasonCode: 'audit_unavailable',
+            personaId: 'myuri',
+            auditOutcome: 'not_attempted',
+            draftAttemptCount: 1,
+            finalizerAttemptCount: 1,
+            auditAttemptCount: 0,
+            intensity: 'standard',
+            traceConstrained: false,
+        },
+    };
+    assert.deepEqual(buildWorkflowReceiptItems(metadata), [
+        'Presentation finalized with audit unavailable',
+    ]);
+    assert.equal(
+        buildWorkflowReceiptSummary(metadata),
+        'Presentation finalized with audit unavailable'
+    );
+});

@@ -70,19 +70,19 @@ test('TraceStore round trips metadata with citation URLs', async () => {
     }
 });
 
-test('TraceStore round trips style rewrite workflow metadata', async () => {
+test('TraceStore round trips presentation flow workflow metadata', async () => {
     const tempRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'trace-store-'));
     const dbPath = path.join(tempRoot, 'provenance.db');
     const store = new SqliteTraceStore({ dbPath });
     const now = new Date().toISOString();
-    const responseId = 'style_rewrite_trace_123';
+    const responseId = 'presentation_trace_123';
 
     const metadata: ResponseMetadata = {
         responseId,
         provenance: 'Inferred',
         safetyTier: 'Low',
         tradeoffCount: 1,
-        chainHash: 'style_rewrite_chain_hash',
+        chainHash: 'presentation_chain_hash',
         licenseContext: 'MIT + HL3',
         modelVersion: 'gpt-5-mini',
         staleAfter: new Date(Date.now() + 60000).toISOString(),
@@ -90,7 +90,7 @@ test('TraceStore round trips style rewrite workflow metadata', async () => {
         trace_target: {},
         trace_final: {},
         workflow: {
-            workflowId: 'wf_style_rewrite_123',
+            workflowId: 'wf_presentation_123',
             workflowName: 'message_reviewed',
             status: 'completed',
             terminationReason: 'goal_satisfied',
@@ -99,32 +99,31 @@ test('TraceStore round trips style rewrite workflow metadata', async () => {
             maxDurationMs: 15000,
             steps: [
                 {
-                    stepId: 'step_style_rewrite_1',
+                    stepId: 'step_presentation_1',
                     attempt: 1,
-                    stepKind: 'style_rewrite',
-                    reasonCode: 'style_rewrite_applied',
+                    stepKind: 'presentation',
+                    reasonCode: 'presentation_finalized',
                     startedAt: now,
                     finishedAt: now,
                     durationMs: 1,
                     outcome: {
                         status: 'executed',
-                        summary: 'Applied a presentation-only style rewrite.',
+                        summary:
+                            'Applied a presentation-only presentation flow.',
                     },
                 },
             ],
         },
-        styleRewrite: {
-            step: 'style_rewrite',
-            outcome: 'applied',
+        presentation: {
+            step: 'presentation',
+            outcome: 'finalized',
             attempted: true,
-            reasonCode: 'applied',
+            reasonCode: 'finalized',
             personaId: 'myuri',
-            profileId: 'ollama-text-gptoss',
-            provider: 'ollama',
-            model: 'gpt-oss:20b-cloud',
-            durationMs: 1,
-            validatorOutcome: 'equivalent',
-            editRatio: 0.1,
+            auditOutcome: 'clear',
+            draftAttemptCount: 1,
+            finalizerAttemptCount: 1,
+            auditAttemptCount: 1,
             intensity: 'standard',
             traceConstrained: false,
         },
@@ -134,12 +133,12 @@ test('TraceStore round trips style rewrite workflow metadata', async () => {
         await store.upsert(metadata);
 
         const retrieved = await store.retrieve(responseId);
-        assert.ok(retrieved, 'style rewrite trace should be retrievable');
+        assert.ok(retrieved, 'presentation flow trace should be retrievable');
         assert.equal(
             retrieved.workflow?.steps[0]?.reasonCode,
-            'style_rewrite_applied'
+            'presentation_finalized'
         );
-        assert.equal(retrieved.styleRewrite?.outcome, 'applied');
+        assert.equal(retrieved.presentation?.outcome, 'finalized');
     } finally {
         store.close();
         await fs.rm(tempRoot, { recursive: true, force: true });

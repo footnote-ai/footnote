@@ -32,15 +32,15 @@ This is the canonical order Footnote uses to build runtime prompt text.
 
 ## Optional Style Rewrite
 
-`style_rewrite` is one workflow-owned step after successful reviewed main text
+`presentation` is one workflow-owned step after successful reviewed main text
 generation. It is disabled by default:
 
 ```env
-CHAT_STYLE_REWRITE_ENABLED=false
-CHAT_STYLE_REWRITE_PROFILE_ID=
-CHAT_STYLE_REWRITE_TIMEOUT_MS=2000
-CHAT_STYLE_REWRITE_VALIDATOR_PROFILE_ID=
-CHAT_STYLE_REWRITE_VALIDATOR_TIMEOUT_MS=1500
+CHAT_PRESENTATION_ENABLED=false
+CHAT_PRESENTATION_PROFILE_ID=
+CHAT_PRESENTATION_TIMEOUT_MS=2000
+CHAT_PRESENTATION_VALIDATOR_PROFILE_ID=
+CHAT_PRESENTATION_VALIDATOR_TIMEOUT_MS=1500
 ```
 
 When enabled, both model profile settings select enabled backend profiles. They

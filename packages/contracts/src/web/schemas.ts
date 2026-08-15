@@ -172,10 +172,10 @@ const ExecutionReasonCodeSchema = z.enum([
     'planner_invalid_output',
     'evaluator_runtime_error',
     'generation_runtime_error',
-    'style_rewrite_skipped',
-    'style_rewrite_applied',
-    'style_rewrite_rejected',
-    'style_rewrite_failed',
+    'presentation_fallback',
+    'presentation_finalized',
+    'presentation_fallback',
+    'presentation_fallback',
     'tool_not_requested',
     'tool_not_used',
     'search_rerouted_to_fallback_profile',
@@ -358,38 +358,45 @@ const GenerationExecutionEventSchema = z
     .superRefine(requireReasonCodeWhenNotExecuted)
     .strict();
 
-const StyleRewriteReasonCodeSchema = z.enum([
-    'applied',
+const PresentationReasonCodeSchema = z.enum([
+    'finalized',
+    'evidence_repaired',
+    'presentation_repaired',
+    'audit_unavailable',
+    'audit_invalid',
+    'presentation_repair_unavailable',
+    'evidence_repair_unavailable',
     'disabled',
     'profile_not_configured',
-    'protected_content',
     'structured_output',
     'mechanical_preservation_failed',
-    'semantic_drift',
-    'validator_invalid',
-    'validator_unavailable',
-    'budget_unavailable',
-    'transition_not_allowed',
     'trace_caution_high',
-    'timeout',
-    'provider_error',
+    'draft_timeout',
+    'draft_provider_error',
+    'finalizer_timeout',
+    'finalizer_provider_error',
 ]);
 
-const StyleRewriteMetadataSchema = z
+const PresentationMetadataSchema = z
     .object({
-        step: z.literal('style_rewrite'),
-        outcome: z.enum(['applied', 'skipped', 'rejected', 'failed']),
+        step: z.literal('presentation'),
+        outcome: z.enum([
+            'finalized',
+            'finalized_after_evidence_repair',
+            'finalized_after_presentation_repair',
+            'finalized_with_audit_unavailable',
+            'fallback',
+        ]),
         attempted: z.boolean(),
-        reasonCode: StyleRewriteReasonCodeSchema,
+        reasonCode: PresentationReasonCodeSchema,
         personaId: z.string().min(1),
-        profileId: z.string().min(1).optional(),
-        requestedProvider: z.string().min(1).optional(),
-        requestedModel: z.string().min(1).optional(),
-        provider: z.string().min(1).optional(),
-        model: z.string().min(1).optional(),
-        validatorProfileId: z.string().min(1).optional(),
-        validatorProvider: z.string().min(1).optional(),
-        validatorModel: z.string().min(1).optional(),
+        draftProfileId: z.string().min(1).optional(),
+        draftRequestedProvider: z.string().min(1).optional(),
+        draftRequestedModel: z.string().min(1).optional(),
+        draftModel: z.string().min(1).optional(),
+        auditProfileId: z.string().min(1).optional(),
+        auditProvider: z.string().min(1).optional(),
+        auditModel: z.string().min(1).optional(),
         upstreamInferenceProvider: z.string().min(1).optional(),
         upstreamResolvedModel: z.string().min(1).optional(),
         upstreamRoutingAttempt: z.number().int().positive().optional(),
@@ -397,22 +404,29 @@ const StyleRewriteMetadataSchema = z
         backendEstimatedCostUsd: z.number().nonnegative().optional(),
         upstreamReportedCostUsd: z.number().nonnegative().optional(),
         durationMs: z.number().int().nonnegative().optional(),
-        validatorOutcome: z.enum([
+        auditOutcome: z.enum([
             'not_attempted',
-            'equivalent',
-            'drift',
-            'uncertain',
-            'unavailable',
+            'clear',
+            'evidence_issue',
+            'presentation_flattened',
+            'invalid',
         ]),
-        originalHmacId: z
+        draftAttemptCount: z.union([z.literal(0), z.literal(1)]),
+        finalizerAttemptCount: z.union([
+            z.literal(0),
+            z.literal(1),
+            z.literal(2),
+        ]),
+        auditAttemptCount: z.union([z.literal(0), z.literal(1)]),
+        draftHmacId: z
             .string()
             .regex(/^[a-f0-9]{64}$/u)
             .optional(),
-        presentedHmacId: z
+        finalHmacId: z
             .string()
             .regex(/^[a-f0-9]{64}$/u)
             .optional(),
-        editRatio: z.number().min(0).max(1),
+        styledDraftRetentionRatio: z.number().min(0).max(1).optional(),
         caution: z
             .union([
                 z.literal(1),
@@ -1301,7 +1315,7 @@ const responseMetadataShape = {
     // TODO(auth-memory-governance): Apply user opt-in auth/memory/governance
     // policy before broad prompt-rich image metadata exposure/retention.
     imageGeneration: ImageGenerationMetadataSchema.optional(),
-    styleRewrite: StyleRewriteMetadataSchema.optional(),
+    presentation: PresentationMetadataSchema.optional(),
 } as const;
 
 const requireTraceFinalReasonWhenChanged = (
