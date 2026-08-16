@@ -28,7 +28,7 @@ import type {
     GenerationRuntime,
     RuntimeMessage,
 } from '@footnote/agent-runtime';
-import type { ModelProfile } from '@footnote/contracts';
+import type { ModelProfile, TraceAxisScore } from '@footnote/contracts';
 import { logger } from '../utils/logger.js';
 import { resolveProfileReasoningEffort } from './runtimeRequestControls.js';
 import type {
@@ -178,6 +178,8 @@ export type RunBoundedReviewWorkflowInput = {
     presentation?: {
         config: PresentationConfig;
         persona: PresentationPersona;
+        /** Resolved TRACE caution from the planning path before presentation runs. */
+        caution?: TraceAxisScore;
         captureUsage: (
             result: GenerationResult,
             profile: ModelProfile,
@@ -917,6 +919,13 @@ export const runBoundedReviewWorkflow = async ({
                 };
                 const activePresentation = presentation;
                 const presentationStartedAt = Date.now();
+                const presentationCaution =
+                    planContinuation?.continuation === 'continue_message'
+                        ? (planContinuation.plannerTemperament?.caution ??
+                          planContinuation.plannerSummary.executionPlan
+                              .generation.temperament?.caution ??
+                          activePresentation?.caution)
+                        : activePresentation?.caution;
                 const presentationResult =
                     activePresentation?.config.enabled === true
                         ? await runPresentationStep({
@@ -970,7 +979,7 @@ export const runBoundedReviewWorkflow = async ({
                               },
                               config: activePresentation.config,
                               persona: activePresentation.persona,
-                              caution: 3,
+                              caution: presentationCaution,
                           })
                         : undefined;
                 if (

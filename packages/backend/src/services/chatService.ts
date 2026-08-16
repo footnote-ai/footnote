@@ -1339,6 +1339,7 @@ export const createChatService = ({
                             id: 'footnote',
                             presentationGuidance: NEUTRAL_PRESENTATION_GUIDANCE,
                         },
+                        caution: effectivePlannerTemperament?.caution,
                         captureUsage: (result, profile, feature) =>
                             recordUsageForStep(
                                 result,

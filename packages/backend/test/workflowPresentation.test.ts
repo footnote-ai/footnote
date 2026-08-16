@@ -275,3 +275,61 @@ test('workflow falls back to normal generation after a structured presentation d
     );
     assert.equal(result.workflowLineage.steps[1]?.stepKind, 'generate');
 });
+
+test('skips presentation before drafting when resolved TRACE caution is high', async () => {
+    const calls: GenerationRequest[] = [];
+    const runtime: GenerationRuntime = {
+        kind: 'test',
+        generate: async (request) => {
+            calls.push(request);
+            return generated('Normal main-model response.');
+        },
+    };
+
+    const result = await runBoundedReviewWorkflow({
+        generationRuntime: runtime,
+        generationRequest: { messages: [{ role: 'user', content: 'status' }] },
+        messagesWithHints: [{ role: 'user', content: 'status' }],
+        contextEnvelope,
+        generationStartedAtMs: Date.now(),
+        workflowConfig: {
+            workflowName: 'test',
+            maxIterations: 1,
+            maxDurationMs: 1000,
+            executionLimits: {
+                maxWorkflowSteps: 2,
+                maxToolCalls: 0,
+                maxDeliberationCalls: 0,
+                maxTokensTotal: 100,
+                maxDurationMs: 1000,
+            },
+        },
+        workflowPolicy: policy,
+        captureUsage: usage,
+        presentation: {
+            config,
+            persona: { id: 'myuri', presentationGuidance: 'Lively prose.' },
+            caution: 5,
+            captureUsage: usage,
+        },
+    });
+
+    assert.equal(result.outcome, 'generated');
+    if (result.outcome !== 'generated')
+        throw new Error('Expected generated result.');
+    assert.equal(result.presentation?.reasonCode, 'trace_caution_high');
+    assert.equal(result.presentation?.attempted, false);
+    assert.equal(calls.length, 1);
+    assert.equal(
+        calls.some((call) =>
+            call.messages.some((message) =>
+                String(message.content).includes(
+                    'Write the full presentation draft'
+                )
+            )
+        ),
+        false
+    );
+    assert.equal(result.workflowLineage.steps[0]?.stepKind, 'presentation');
+    assert.equal(result.workflowLineage.steps[0]?.outcome.status, 'skipped');
+});

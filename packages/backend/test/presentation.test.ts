@@ -200,6 +200,7 @@ test('records an unavailable audit without suppressing the finalized presentatio
         'finalized_with_audit_unavailable'
     );
     assert.equal(presentation.metadata.reasonCode, 'audit_unavailable');
+    assert.equal(presentation.metadata.auditAttemptCount, 1);
 });
 
 test('keeps provider-native search out of the prose-only presentation draft', async () => {
@@ -272,6 +273,13 @@ test('records draft and finalizer timeouts as bounded presentation fallbacks', a
 
     assert.equal(draftTimeout.metadata.reasonCode, 'draft_timeout');
     assert.equal(finalizerTimeout.metadata.reasonCode, 'finalizer_timeout');
+    assert.equal(draftTimeout.metadata.attempted, true);
+    assert.equal(draftTimeout.metadata.draftAttemptCount, 1);
+    assert.equal(draftTimeout.metadata.finalizerAttemptCount, 0);
+    assert.equal(draftTimeout.metadata.auditAttemptCount, 0);
+    assert.equal(finalizerTimeout.metadata.draftAttemptCount, 1);
+    assert.equal(finalizerTimeout.metadata.finalizerAttemptCount, 1);
+    assert.equal(finalizerTimeout.metadata.auditAttemptCount, 0);
     assert.equal(finalizerSignal?.aborted, true);
 });
 

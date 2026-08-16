@@ -1964,7 +1964,7 @@ export const envEntries = [
         kind: 'integer',
         description:
             'Hard timeout in milliseconds for the optional presentation flow call.',
-        defaultValue: literal(2000),
+        defaultValue: literal(10000),
         usedBy: ['packages/backend/src/config.ts'],
     }),
     defineEnv({
@@ -1990,7 +1990,7 @@ export const envEntries = [
         kind: 'integer',
         description:
             'Hard timeout in milliseconds for the bounded presentation audit.',
-        defaultValue: literal(1500),
+        defaultValue: literal(10000),
         usedBy: ['packages/backend/src/config.ts'],
     }),
 
