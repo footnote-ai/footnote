@@ -115,10 +115,12 @@ export interface GenerationSearchRequest {
 }
 
 /**
- * Serializable schema constraint for one structured generation result.
- *
- * Runtime adapters map this to a provider-native response format when the
- * selected provider supports it. Backend owns when the constraint is used.
+ * @description: Serializable schema constraint for one structured generation result.
+ * Runtime adapters map it to a provider-native response format, while backend owns when it is used.
+ * @footnote-scope: core
+ * @footnote-module: AgentRuntimeBoundary
+ * @footnote-risk: medium - An invalid structured-output mapping can make a provider response unusable.
+ * @footnote-ethics: medium - Backend ownership prevents provider adapters from deciding Footnote review semantics.
  */
 export interface GenerationStructuredOutput {
     schema: JSONSchema7;

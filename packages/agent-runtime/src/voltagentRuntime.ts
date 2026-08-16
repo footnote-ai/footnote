@@ -934,10 +934,12 @@ const normalizeVoltAgentResult = (
 };
 
 /**
- * Default executor factory backed by a real VoltAgent `Agent`.
- *
- * This stays intentionally narrow: no memory, no server, and no extra runtime
- * wiring yet. The adapter only needs plain text generation for now.
+ * @description: Creates the VoltAgent executor for plain-text generation.
+ * Keeps OpenRouter routing and attribution provider-specific while backend retains workflow authority.
+ * @footnote-scope: core
+ * @footnote-module: VoltAgentRuntime
+ * @footnote-risk: high - Incorrect request mapping can change routing or hide provider attribution.
+ * @footnote-ethics: high - This adapter must not take ownership of Footnote provenance or review decisions.
  */
 const createDefaultVoltAgentExecutor = ({
     model,
