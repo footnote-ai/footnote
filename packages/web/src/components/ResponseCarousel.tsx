@@ -68,9 +68,13 @@ const ResponseCarousel = <T,>({
         return null;
     }
 
+    // Item changes render before the effect synchronizes state. Clamp here so
+    // a removed final item cannot be read with a stale selected index.
+    const activeIndex = normalizeInitialIndex(items.length, selectedIndex);
+
     const selectIndex = (nextIndex: number): void => {
         if (
-            nextIndex === selectedIndex ||
+            nextIndex === activeIndex ||
             transitionTimeoutRef.current !== null ||
             nextIndex < 0 ||
             nextIndex >= items.length
@@ -85,7 +89,7 @@ const ResponseCarousel = <T,>({
         }, 180);
     };
 
-    const selectedItem = items[selectedIndex]!;
+    const selectedItem = items[activeIndex]!;
     return (
         <div
             className="response-carousel"
@@ -93,18 +97,18 @@ const ResponseCarousel = <T,>({
             onKeyDown={(event) => {
                 if (event.key === 'ArrowLeft') {
                     event.preventDefault();
-                    selectIndex(selectedIndex - 1);
+                    selectIndex(activeIndex - 1);
                 }
                 if (event.key === 'ArrowRight') {
                     event.preventDefault();
-                    selectIndex(selectedIndex + 1);
+                    selectIndex(activeIndex + 1);
                 }
             }}
         >
             <div
                 className={`${className}${isTransitioning ? ` ${className}--transitioning` : ''}`}
             >
-                {renderItem(selectedItem, selectedIndex)}
+                {renderItem(selectedItem, activeIndex)}
             </div>
             <div className="response-carousel__navigation">
                 {showPreviousNextControls && (
@@ -112,15 +116,15 @@ const ResponseCarousel = <T,>({
                         type="button"
                         className="response-carousel__control"
                         aria-label={previousLabel}
-                        disabled={isTransitioning || selectedIndex === 0}
-                        onClick={() => selectIndex(selectedIndex - 1)}
+                        disabled={isTransitioning || activeIndex === 0}
+                        onClick={() => selectIndex(activeIndex - 1)}
                     >
                         Previous
                     </button>
                 )}
                 <div className={dotsClassName} aria-label={ariaLabel}>
                     {items.map((item, index) => {
-                        const isSelected = index === selectedIndex;
+                        const isSelected = index === activeIndex;
                         return (
                             <button
                                 key={getKey(item, index)}
@@ -140,10 +144,9 @@ const ResponseCarousel = <T,>({
                         className="response-carousel__control"
                         aria-label={nextLabel}
                         disabled={
-                            isTransitioning ||
-                            selectedIndex === items.length - 1
+                            isTransitioning || activeIndex === items.length - 1
                         }
-                        onClick={() => selectIndex(selectedIndex + 1)}
+                        onClick={() => selectIndex(activeIndex + 1)}
                     >
                         Next
                     </button>

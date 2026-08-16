@@ -24,7 +24,7 @@ import {
     PostTraceCardResponseSchema,
     PostTracesResponseSchema,
     createSchemaResponseValidator,
-} from '@footnote/contracts/web/schemas';
+} from '@footnote/contracts/web';
 import type { ApiJsonResult, ApiRequester } from './client.js';
 
 export type CreateTraceApiOptions = {

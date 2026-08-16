@@ -267,6 +267,7 @@ export const executeReviewLoop = async (ctx: {
                                   model: profile.providerModel,
                                   provider: profile.provider,
                                   capabilities: profile.capabilities,
+                                  providerRouting: profile.providerRouting,
                                   reasoningEffort:
                                       resolveProfileReasoningEffort(
                                           profile,
@@ -595,6 +596,7 @@ export const executeReviewLoop = async (ctx: {
                                   model: profile.providerModel,
                                   provider: profile.provider,
                                   capabilities: profile.capabilities,
+                                  providerRouting: profile.providerRouting,
                                   reasoningEffort:
                                       resolveProfileReasoningEffort(
                                           profile,

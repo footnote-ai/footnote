@@ -58,6 +58,8 @@ test('response carousel owns the preserved transition and accessible dot control
     assert.match(source, /ArrowLeft/);
     assert.match(source, /ArrowRight/);
     assert.match(source, /showPreviousNextControls/);
+    assert.match(source, /const activeIndex = normalizeInitialIndex/);
+    assert.match(source, /items\[activeIndex\]/);
 });
 
 test('public cutover removes the design-lab route', async () => {

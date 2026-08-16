@@ -959,6 +959,8 @@ export const runBoundedReviewWorkflow = async ({
                                                           profile.provider,
                                                       capabilities:
                                                           profile.capabilities,
+                                                      providerRouting:
+                                                          profile.providerRouting,
                                                       reasoningEffort:
                                                           resolveProfileReasoningEffort(
                                                               profile,
@@ -1214,6 +1216,7 @@ export const runBoundedReviewWorkflow = async ({
                                 model: profile.providerModel,
                                 provider: profile.provider,
                                 capabilities: profile.capabilities,
+                                providerRouting: profile.providerRouting,
                                 reasoningEffort: resolveProfileReasoningEffort(
                                     profile,
                                     generationRequestForAttempt.reasoningEffort,

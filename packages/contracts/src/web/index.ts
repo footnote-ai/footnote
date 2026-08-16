@@ -261,5 +261,6 @@ export {
     PostTracesResponseSchema,
     ResponseMetadataSchema,
     PresentationMetadataSchema,
+    GetResponseVersionsApiResponseSchema,
     createSchemaResponseValidator,
 } from './schemas.js';

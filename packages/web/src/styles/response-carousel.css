@@ -42,7 +42,7 @@
 .response-versions__dot {
     width: 0.7rem;
     height: 0.7rem;
-    border: 1px solid currentColor;
+    border: 1px solid currentcolor;
     border-radius: 50%;
     background: transparent;
     cursor: pointer;
@@ -50,7 +50,7 @@
 }
 
 .response-versions__dot--selected {
-    background: currentColor;
+    background: currentcolor;
 }
 
 .response-versions__warning {

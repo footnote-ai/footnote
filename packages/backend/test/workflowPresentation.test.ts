@@ -32,6 +32,7 @@ const profile: ModelProfile = {
     maxOutputTokens: 500,
     costClass: 'low',
     latencyClass: 'low',
+    providerRouting: { openrouter: { only: ['openai'] } },
 };
 const config: PresentationConfig = {
     enabled: true,
@@ -142,6 +143,13 @@ test('workflow asks for a styled draft before main-model finalization and record
             },
         },
         workflowPolicy: policy,
+        stepRoutingChainSet: {
+            enabledProfilesById: new Map([[profile.id, profile]]),
+            generateCandidates: [
+                { profileId: profile.id, chooseOneUsed: false },
+            ],
+            assessCandidates: [],
+        },
         captureUsage: captureGenerationUsage,
         presentation: {
             config,
@@ -168,6 +176,15 @@ test('workflow asks for a styled draft before main-model finalization and record
     assert.match(
         String(calls[3]?.messages.at(-2)?.content),
         /Restore the attribution/u
+    );
+    assert.deepEqual(
+        calls.map((call) => call.providerRouting),
+        [
+            { openrouter: { only: ['openai'] } },
+            { openrouter: { only: ['openai'] } },
+            { openrouter: { only: ['openai'] } },
+            { openrouter: { only: ['openai'] } },
+        ]
     );
     assert.deepEqual(presentationUsageCalls, [
         { feature: 'chat_presentation_draft', profileId: profile.id },

@@ -1168,6 +1168,7 @@ export const createChatService = ({
                             model: profile.providerModel,
                             provider: profile.provider,
                             capabilities: profile.capabilities,
+                            providerRouting: profile.providerRouting,
                             reasoningEffort: resolveProfileReasoningEffort(
                                 profile,
                                 request.reasoningEffort,
