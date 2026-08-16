@@ -40,11 +40,11 @@ Morty only makes sense if the models involved behave roughly as intended.
 
 Local models and selected OpenRouter routes are obvious places to start. A Morty response that quietly falls back to a much more restrictive provider is no longer the same experiment.
 
-This matters beyond the main answer model. Footnote can involve other models in planning, review, or presentation, and some of those stages can change what the user eventually sees.
+This matters beyond the main answer model. Footnote can involve other models in planning, review, or preparing a style draft, and those stages can influence what the user eventually sees.
 
 How tightly those routes should be constrained, what counts as a suitable model, and what happens when one is unavailable are still implementation questions. I would rather work those out through review and an initial implementation than settle them in this proposal.
 
-The same goes for presentation rewriting. The current path can affect refusal behavior, so it needs special attention, but this proposal does not need to decide its final treatment.
+The same goes for the style draft that guides the main answer model. It can affect refusal behavior, so it needs special attention, but this proposal does not need to decide its final treatment.
 
 ## What Is Still Open
 
@@ -54,7 +54,7 @@ There are several questions I expect the PR discussion to sharpen:
 - which models and provider routes make sense
 - how fallback should behave
 - where Morty is available and how users enable him
-- which later review or presentation steps should participate
+- which review steps should participate and how the style draft should guide the main answer model
 - how much of the experiment should appear in the response receipt and deeper trace
 - how Morty should interact with future tools that can take real-world actions
 
