@@ -6,6 +6,7 @@
  * @footnote-risk: high - An incorrect runtime seam can leak framework assumptions or block later runtime migration work.
  * @footnote-ethics: high - This boundary protects Footnote-owned provenance and review semantics from being swallowed by framework-specific code.
  */
+import type { JSONSchema7 } from 'ai';
 import type {
     ImageGenerationQuality as ContractImageGenerationQuality,
     ImageGenerationSize as ContractImageGenerationSize,
@@ -114,6 +115,18 @@ export interface GenerationSearchRequest {
 }
 
 /**
+ * Serializable schema constraint for one structured generation result.
+ *
+ * Runtime adapters map this to a provider-native response format when the
+ * selected provider supports it. Backend owns when the constraint is used.
+ */
+export interface GenerationStructuredOutput {
+    schema: JSONSchema7;
+    name?: string;
+    description?: string;
+}
+
+/**
  * Backend-to-runtime input for one generation attempt.
  *
  * The request only carries generation concerns. Planner state, auth,
@@ -158,6 +171,10 @@ export interface GenerationRequest {
      * Requested verbosity level for the generation attempt.
      */
     verbosity?: GenerationVerbosity;
+    /**
+     * Optional provider-enforced schema constraint for structured output.
+     */
+    structuredOutput?: GenerationStructuredOutput;
     /**
      * Retrieval settings. Omit this field when search should stay disabled.
      */

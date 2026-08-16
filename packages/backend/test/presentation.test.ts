@@ -110,6 +110,25 @@ test('passes the styled draft and authoritative context into evidence-aware fina
         String(finalizerRequest?.messages.at(-2)?.content),
         /prose authority/u
     );
+    const auditRequest = requests[2];
+    assert.equal(requests[0]?.structuredOutput, undefined);
+    assert.equal(auditRequest?.maxOutputTokens, 160);
+    assert.deepEqual(auditRequest?.structuredOutput, {
+        name: 'presentation_audit',
+        description: 'Bounded audit of a finalized presentation response.',
+        schema: {
+            type: 'object',
+            properties: {
+                verdict: {
+                    type: 'string',
+                    enum: ['clear', 'evidence_issue', 'presentation_flattened'],
+                },
+                feedback: { type: 'string', maxLength: 320 },
+            },
+            required: ['verdict', 'feedback'],
+            additionalProperties: false,
+        },
+    });
 });
 
 test('keeps the styled candidate when the finalizer has no authority reason to change it', async () => {

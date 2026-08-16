@@ -54,6 +54,15 @@ test('voltagent runtime maps transcript and generation settings into executor op
         reasoningEffort: 'max',
         verbosity: 'high',
         safetyIdentifier: 'derived-safety-id',
+        structuredOutput: {
+            name: 'test_output',
+            schema: {
+                type: 'object',
+                properties: { ready: { type: 'boolean' } },
+                required: ['ready'],
+                additionalProperties: false,
+            },
+        },
         signal,
     };
 
@@ -63,6 +72,7 @@ test('voltagent runtime maps transcript and generation settings into executor op
     assert.deepEqual(seenMessages, request.messages);
     assert.equal(seenOptions?.maxOutputTokens, 800);
     assert.equal(seenOptions?.signal, signal);
+    assert.deepEqual(seenOptions?.structuredOutput, request.structuredOutput);
     assert.deepEqual(seenOptions?.providerOptions, {
         reasoningEffort: 'max',
         verbosity: 'high',
@@ -847,6 +857,103 @@ test('voltagent runtime requires a request model or configured default model', a
             }),
         /VoltAgent runtime requires request\.model or a configured defaultModel\./
     );
+});
+
+test('default VoltAgent executor maps structured output to a validated JSON result', async () => {
+    let sawOutput = false;
+    const fakeAgent = {
+        generateText: async (
+            ...args: Parameters<Agent['generateText']>
+        ): Promise<Awaited<ReturnType<Agent['generateText']>>> => {
+            sawOutput = args[1]?.output !== undefined;
+            return {
+                content: [],
+                text: 'untrusted raw text',
+                reasoning: [],
+                reasoningText: undefined,
+                files: [],
+                sources: [],
+                toolCalls: [],
+                staticToolCalls: [],
+                dynamicToolCalls: [],
+                toolResults: [],
+                staticToolResults: [],
+                dynamicToolResults: [],
+                finishReason: 'stop',
+                rawFinishReason: 'stop',
+                usage: {
+                    inputTokens: 0,
+                    inputTokenDetails: {
+                        noCacheTokens: 0,
+                        cacheReadTokens: 0,
+                        cacheWriteTokens: 0,
+                    },
+                    outputTokens: 0,
+                    outputTokenDetails: {
+                        textTokens: 0,
+                        reasoningTokens: 0,
+                    },
+                    totalTokens: 0,
+                },
+                totalUsage: {
+                    inputTokens: 0,
+                    inputTokenDetails: {
+                        noCacheTokens: 0,
+                        cacheReadTokens: 0,
+                        cacheWriteTokens: 0,
+                    },
+                    outputTokens: 0,
+                    outputTokenDetails: {
+                        textTokens: 0,
+                        reasoningTokens: 0,
+                    },
+                    totalTokens: 0,
+                },
+                warnings: undefined,
+                request: {},
+                response: {
+                    modelId: 'ollama/gemma4:31b',
+                    id: 'response_1',
+                    timestamp: new Date(0),
+                    messages: [],
+                },
+                providerMetadata: undefined,
+                steps: [],
+                experimental_output: {
+                    verdict: 'clear',
+                    feedback: '',
+                },
+                output: { verdict: 'clear', feedback: '' },
+                context: new Map(),
+                feedback: null,
+            } as unknown as Awaited<ReturnType<Agent['generateText']>>;
+        },
+    } satisfies Pick<Agent, 'generateText'>;
+    const executor = createDefaultVoltAgentExecutor({
+        model: 'ollama/gemma4:31b',
+        agentFactory: () => fakeAgent,
+    });
+
+    const result = await executor.generateText(
+        [{ role: 'user', content: 'Return the audit.' }],
+        {
+            structuredOutput: {
+                name: 'presentation_audit',
+                schema: {
+                    type: 'object',
+                    properties: {
+                        verdict: { type: 'string' },
+                        feedback: { type: 'string' },
+                    },
+                    required: ['verdict', 'feedback'],
+                    additionalProperties: false,
+                },
+            },
+        }
+    );
+
+    assert.equal(sawOutput, true);
+    assert.equal(result.text, '{"verdict":"clear","feedback":""}');
 });
 
 test('default VoltAgent executor maps usage from the installed AI SDK token fields', async () => {

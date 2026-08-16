@@ -9,6 +9,7 @@ import type {
     GenerationRequest,
     GenerationResult,
     GenerationRuntime,
+    GenerationStructuredOutput,
     RuntimeMessage,
 } from '@footnote/agent-runtime';
 import type { ModelProfile, TraceAxisScore } from '@footnote/contracts';
@@ -58,6 +59,23 @@ type PresentationAuditVerdict =
 type PresentationAudit = {
     verdict: PresentationAuditVerdict;
     feedback: string;
+};
+
+const PRESENTATION_AUDIT_STRUCTURED_OUTPUT: GenerationStructuredOutput = {
+    name: 'presentation_audit',
+    description: 'Bounded audit of a finalized presentation response.',
+    schema: {
+        type: 'object',
+        properties: {
+            verdict: {
+                type: 'string',
+                enum: ['clear', 'evidence_issue', 'presentation_flattened'],
+            },
+            feedback: { type: 'string', maxLength: 320 },
+        },
+        required: ['verdict', 'feedback'],
+        additionalProperties: false,
+    },
 };
 
 export type PresentationResult = {
@@ -523,6 +541,8 @@ export const runPresentationStep = async (input: {
                     capabilities: input.config.validatorProfile?.capabilities,
                     providerRouting:
                         input.config.validatorProfile?.providerRouting,
+                    maxOutputTokens: 160,
+                    structuredOutput: PRESENTATION_AUDIT_STRUCTURED_OUTPUT,
                     signal,
                     messages: [
                         {

@@ -13,12 +13,14 @@ import {
     type ProviderTool,
 } from '@voltagent/core';
 import { createOpenAICompatible } from '@ai-sdk/openai-compatible';
+import { jsonSchema, Output } from 'ai';
 import type {
     GenerationCitation,
     GenerationRequest,
     GenerationResult,
     GenerationRuntime,
     GenerationSearchRequest,
+    GenerationStructuredOutput,
     GenerationUsage,
     RuntimeMessage,
 } from './index.js';
@@ -62,6 +64,7 @@ export interface VoltAgentGenerateTextOptions {
     maxOutputTokens?: number;
     providerOptions?: VoltAgentProviderOptions;
     search?: GenerationSearchRequest;
+    structuredOutput?: GenerationStructuredOutput;
     signal?: AbortSignal;
 }
 
@@ -1023,6 +1026,18 @@ const createDefaultVoltAgentExecutor = ({
                     toolChoice:
                         'required' as VoltAgentCallOptions['toolChoice'],
                 }),
+                ...(options.structuredOutput !== undefined && {
+                    output: Output.object({
+                        schema: jsonSchema(options.structuredOutput.schema),
+                        ...(options.structuredOutput.name !== undefined && {
+                            name: options.structuredOutput.name,
+                        }),
+                        ...(options.structuredOutput.description !==
+                            undefined && {
+                            description: options.structuredOutput.description,
+                        }),
+                    }),
+                }),
                 ...(options.signal !== undefined && {
                     signal: options.signal,
                 }),
@@ -1045,8 +1060,20 @@ const createDefaultVoltAgentExecutor = ({
                 callOptions
             );
 
+            if (
+                options.structuredOutput !== undefined &&
+                result.output === undefined
+            ) {
+                throw new Error(
+                    'VoltAgent structured generation completed without a validated output.'
+                );
+            }
+
             return {
-                text: result.text,
+                text:
+                    options.structuredOutput === undefined
+                        ? result.text
+                        : JSON.stringify(result.output),
                 finishReason: result.finishReason,
                 usage: {
                     promptTokens: result.usage.inputTokens,
@@ -1229,6 +1256,9 @@ const createVoltAgentRuntime = ({
                 }),
                 ...(shouldForwardSearch && {
                     search: request.search,
+                }),
+                ...(request.structuredOutput !== undefined && {
+                    structuredOutput: request.structuredOutput,
                 }),
                 ...(request.signal !== undefined && { signal: request.signal }),
                 ...(providerOptions !== undefined && { providerOptions }),
