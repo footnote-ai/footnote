@@ -10,6 +10,8 @@ import type {
     GetChatProfilesResponse,
     GetTraceResponse,
     GetTraceStaleResponse,
+    GetResponseVersionsResponse,
+    GetResponseVersionsStaleResponse,
     PostChatResponse,
 } from '@footnote/contracts/web';
 import type { ApiResponseValidator } from '@footnote/contracts/web/client-core';
@@ -25,6 +27,11 @@ let postChatResponseValidatorPromise: Promise<
 > | null = null;
 let getTraceApiResponseValidatorPromise: Promise<
     ApiResponseValidator<GetTraceResponse | GetTraceStaleResponse>
+> | null = null;
+let getResponseVersionsApiResponseValidatorPromise: Promise<
+    ApiResponseValidator<
+        GetResponseVersionsResponse | GetResponseVersionsStaleResponse
+    >
 > | null = null;
 
 const loadWebSchemasModule = async (): Promise<WebSchemasModule> => {
@@ -95,4 +102,29 @@ export const loadGetTraceApiResponseValidator = async (): Promise<
     }
 
     return getTraceApiResponseValidatorPromise;
+};
+
+export const loadGetResponseVersionsApiResponseValidator = async (): Promise<
+    ApiResponseValidator<
+        GetResponseVersionsResponse | GetResponseVersionsStaleResponse
+    >
+> => {
+    if (!getResponseVersionsApiResponseValidatorPromise) {
+        getResponseVersionsApiResponseValidatorPromise = loadWebSchemasModule()
+            .then(
+                ({
+                    GetResponseVersionsApiResponseSchema,
+                    createSchemaResponseValidator,
+                }) =>
+                    createSchemaResponseValidator(
+                        GetResponseVersionsApiResponseSchema
+                    )
+            )
+            .catch((error) => {
+                getResponseVersionsApiResponseValidatorPromise = null;
+                throw error;
+            });
+    }
+
+    return getResponseVersionsApiResponseValidatorPromise;
 };

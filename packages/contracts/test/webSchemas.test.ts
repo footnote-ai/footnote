@@ -36,6 +36,7 @@ import {
     PostInternalTextRequestSchema,
     PostInternalTextResponseSchema,
     GetTraceApiResponseSchema,
+    GetResponseVersionsApiResponseSchema,
     GetTraceStaleResponseSchema,
     PostIncidentNotesRequestSchema,
     PostIncidentRemediationRequestSchema,
@@ -67,6 +68,7 @@ import type {
     PostInternalTextResponse,
     GetTraceResponse,
     GetTraceStaleResponse,
+    GetResponseVersionsResponse,
     PostIncidentReportResponse,
     PostChatResponse,
 } from '../src/web/types';
@@ -494,39 +496,25 @@ test('ResponseMetadataSchema accepts workflow lineage metadata', () => {
     assert.equal(parsed.success, true);
 });
 
-test('ResponseMetadataSchema accepts style rewrite workflow reason codes', () => {
-    const now = new Date().toISOString();
-    const reasonCodes = [
-        'style_rewrite_skipped',
-        'style_rewrite_applied',
-        'style_rewrite_rejected',
-        'style_rewrite_failed',
-    ] as const;
+test('ResponseMetadataSchema accepts a presentation receipt separately from workflow steps', () => {
+    const parsed = ResponseMetadataSchema.safeParse({
+        ...baseMetadata,
+        presentation: {
+            step: 'presentation',
+            outcome: 'finalized_after_evidence_repair',
+            attempted: true,
+            reasonCode: 'evidence_repaired',
+            personaId: 'myuri',
+            auditOutcome: 'evidence_issue',
+            draftAttemptCount: 1,
+            finalizerAttemptCount: 2,
+            auditAttemptCount: 1,
+            intensity: 'standard',
+            traceConstrained: false,
+        },
+    });
 
-    for (const reasonCode of reasonCodes) {
-        const payload = createValidWorkflowMetadataPayload(now);
-        payload.workflow.steps.push({
-            stepId: `step_${reasonCode}`,
-            parentStepId: 'step_2',
-            attempt: 1,
-            stepKind: 'style_rewrite',
-            reasonCode,
-            startedAt: now,
-            finishedAt: now,
-            durationMs: 1,
-            outcome: {
-                status: 'executed',
-                summary: 'Style rewrite completed or preserved the draft.',
-            },
-        });
-        payload.workflow.stepCount = payload.workflow.steps.length;
-
-        assert.equal(
-            ResponseMetadataSchema.safeParse(payload).success,
-            true,
-            `${reasonCode} should serialize in workflow metadata`
-        );
-    }
+    assert.equal(parsed.success, true);
 });
 
 test('ResponseMetadataSchema accepts normalized review runtime summary labels', () => {
@@ -1548,6 +1536,49 @@ test('GetTraceApiResponseSchema accepts both live and stale trace payloads', () 
             metadata: baseMetadata,
         }).success,
         true
+    );
+});
+
+test('response-version schemas serialize ordered candidate history and stale envelopes', () => {
+    const payload: GetResponseVersionsResponse = {
+        responseId: baseMetadata.responseId,
+        candidates: [
+            {
+                id: 'candidate_1',
+                workflowStepId: 'step_1',
+                sequence: 0,
+                stage: 'initial_generation',
+                state: 'superseded',
+                text: 'Initial answer.',
+            },
+            {
+                id: 'candidate_2',
+                parentCandidateId: 'candidate_1',
+                workflowStepId: 'step_2',
+                sequence: 1,
+                stage: 'revision',
+                state: 'selected',
+                text: 'Final answer.',
+            },
+        ],
+    };
+    assert.equal(
+        GetResponseVersionsApiResponseSchema.safeParse(payload).success,
+        true
+    );
+    assert.equal(
+        GetResponseVersionsApiResponseSchema.safeParse({
+            message: 'Trace is stale',
+            ...payload,
+        }).success,
+        true
+    );
+    assert.equal(
+        GetResponseVersionsApiResponseSchema.safeParse({
+            ...payload,
+            candidates: [{ ...payload.candidates[0], state: 'unknown' }],
+        }).success,
+        false
     );
 });
 

@@ -12,16 +12,20 @@ import {
     type BaseMessage,
     type ProviderTool,
 } from '@voltagent/core';
+import { createOpenAICompatible } from '@ai-sdk/openai-compatible';
+import { jsonSchema, Output } from 'ai';
 import type {
     GenerationCitation,
     GenerationRequest,
     GenerationResult,
     GenerationRuntime,
     GenerationSearchRequest,
+    GenerationStructuredOutput,
     GenerationUsage,
     RuntimeMessage,
 } from './index.js';
 import { extractMarkdownLinkCitations } from './citationRecovery.js';
+import type { ModelProfileProviderRouting } from '@footnote/contracts';
 import type { ToolExecutionContext } from '@footnote/contracts/policy';
 
 type VoltAgentOpenAiProviderOptions = {
@@ -43,6 +47,16 @@ export type VoltAgentProviderOptions = {
     providerHints?: Record<string, unknown>;
 };
 
+type OpenRouterRouting = NonNullable<ModelProfileProviderRouting['openrouter']>;
+
+type OpenRouterProviderPayload = {
+    order?: string[];
+    only?: string[];
+    allow_fallbacks?: boolean;
+    data_collection?: 'allow' | 'deny';
+    zdr?: boolean;
+};
+
 /**
  * Narrow execution options the VoltAgent adapter passes into one text call.
  */
@@ -50,6 +64,7 @@ export interface VoltAgentGenerateTextOptions {
     maxOutputTokens?: number;
     providerOptions?: VoltAgentProviderOptions;
     search?: GenerationSearchRequest;
+    structuredOutput?: GenerationStructuredOutput;
     signal?: AbortSignal;
 }
 
@@ -93,6 +108,7 @@ export interface VoltAgentTextResult {
     usage?: VoltAgentUsage;
     response?: VoltAgentResponseMetadata;
     sources?: VoltAgentSource[];
+    providerMetadata?: unknown;
 }
 
 /**
@@ -130,6 +146,8 @@ export type VoltAgentExecutorFactory = (input: {
     logger?: VoltAgentLogger;
     voltOpsClient?: VoltOpsClient;
     ollama?: VoltAgentExecutorOllamaConfig;
+    openrouter?: VoltAgentExecutorOpenRouterConfig;
+    openrouterRouting?: ModelProfileProviderRouting['openrouter'];
 }) => VoltAgentTextExecutor;
 
 export type VoltAgentExecutorOllamaConfig = {
@@ -139,10 +157,15 @@ export type VoltAgentExecutorOllamaConfig = {
     localInferenceEnabled: boolean;
 };
 
+export type VoltAgentExecutorOpenRouterConfig = {
+    apiKey: string;
+    baseUrl: string;
+};
+
 type VoltAgentLike = Pick<Agent, 'generateText'>;
 
 type CreateVoltAgentAgentFactoryInput = {
-    model: string;
+    model: NonNullable<AgentOptions['model']>;
     tools?: NonNullable<AgentOptions['tools']>;
     logger?: VoltAgentLogger;
     voltOpsClient?: VoltOpsClient;
@@ -160,6 +183,10 @@ export interface CreateVoltAgentRuntimeOptions {
         baseUrl?: string;
         apiKey?: string;
         localInferenceEnabled?: boolean;
+    };
+    openrouter?: {
+        apiKey?: string;
+        baseUrl?: string;
     };
     voltOps?: {
         publicKey: string;
@@ -183,14 +210,13 @@ const toVoltAgentMessages = (messages: RuntimeMessage[]): BaseMessage[] =>
  * VoltAgent's model router expects provider-prefixed model ids.
  */
 const toVoltAgentModel = (model: string, provider?: string): string => {
-    if (model.includes('/')) {
-        return model;
-    }
-
     const normalizedProvider = provider?.trim().toLowerCase();
-    return normalizedProvider
-        ? `${normalizedProvider}/${model}`
-        : `openai/${model}`;
+    if (normalizedProvider) {
+        return model.startsWith(`${normalizedProvider}/`)
+            ? model
+            : `${normalizedProvider}/${model}`;
+    }
+    return model.includes('/') ? model : `openai/${model}`;
 };
 
 const inferProviderFromModelId = (model?: string): string | undefined => {
@@ -464,10 +490,46 @@ const toFootnoteModel = (model: string): string => {
 /**
  * Builds the provider option bag for one VoltAgent text call.
  */
+/** Converts the shared routing contract into OpenRouter's request payload. */
+const toOpenRouterProviderPayload = (
+    routing: OpenRouterRouting | undefined
+): OpenRouterProviderPayload | undefined => {
+    if (routing === undefined) return undefined;
+
+    const payload: OpenRouterProviderPayload = {
+        ...(routing.order !== undefined && { order: routing.order }),
+        ...(routing.only !== undefined && { only: routing.only }),
+        ...(routing.allowFallbacks !== undefined && {
+            allow_fallbacks: routing.allowFallbacks,
+        }),
+        ...(routing.dataCollection !== undefined && {
+            data_collection: routing.dataCollection,
+        }),
+        ...(routing.zdr !== undefined && { zdr: routing.zdr }),
+    };
+
+    return Object.keys(payload).length > 0 ? payload : undefined;
+};
+
 const buildVoltAgentProviderOptions = (
     request: GenerationRequest,
     provider: string
 ): VoltAgentProviderOptions | undefined => {
+    if (provider === 'openrouter') {
+        const routing = toOpenRouterProviderPayload(
+            request.providerRouting?.openrouter
+        );
+        if (routing === undefined) {
+            return undefined;
+        }
+        return {
+            providerHints: {
+                openrouter: {
+                    provider: routing,
+                },
+            },
+        };
+    }
     if (provider === 'ollama') {
         return undefined;
     }
@@ -499,6 +561,111 @@ const buildVoltAgentProviderOptions = (
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
     typeof value === 'object' && value !== null && !Array.isArray(value);
+
+const nonEmptyString = (value: unknown): string | undefined =>
+    typeof value === 'string' && value.trim().length > 0
+        ? value.trim()
+        : undefined;
+
+const finiteNumber = (value: unknown): number | undefined =>
+    typeof value === 'number' && Number.isFinite(value) ? value : undefined;
+
+/**
+ * Keeps only stable, text-free OpenRouter routing and charging signals. The
+ * router reports these facts; Footnote does not treat them as verification.
+ */
+const extractOpenRouterAttribution = (value: unknown) => {
+    if (!isRecord(value)) {
+        return undefined;
+    }
+    const openrouter = isRecord(value.openrouter) ? value.openrouter : value;
+    const routing = isRecord(openrouter.routing) ? openrouter.routing : {};
+    const selected = isRecord(routing.selected) ? routing.selected : {};
+    const usage = isRecord(openrouter.usage) ? openrouter.usage : {};
+    const attempts = Array.isArray(routing.attempts) ? routing.attempts : [];
+    const resolvedModel =
+        nonEmptyString(selected.model) ?? nonEmptyString(routing.model);
+    const inferenceProvider =
+        nonEmptyString(selected.provider) ?? nonEmptyString(routing.provider);
+    const routingAttempt = finiteNumber(routing.attempt);
+    const routingAttemptCount =
+        attempts.length > 0 ? attempts.length : finiteNumber(routing.attempts);
+    const upstreamReportedCostUsd = finiteNumber(usage.cost);
+    const attribution = {
+        ...(resolvedModel !== undefined && { resolvedModel }),
+        ...(inferenceProvider !== undefined && { inferenceProvider }),
+        ...(routingAttempt !== undefined && { routingAttempt }),
+        ...(routingAttemptCount !== undefined && { routingAttemptCount }),
+        ...(upstreamReportedCostUsd !== undefined && {
+            upstreamReportedCostUsd,
+        }),
+    };
+    return Object.values(attribution).some((item) => item !== undefined)
+        ? attribution
+        : undefined;
+};
+
+const openRouterMetadataExtractor = {
+    async extractMetadata({ parsedBody }: { parsedBody: unknown }) {
+        if (!isRecord(parsedBody)) {
+            return undefined;
+        }
+        const routing = isRecord(parsedBody.openrouter_metadata)
+            ? parsedBody.openrouter_metadata
+            : undefined;
+        const usage = isRecord(parsedBody.usage) ? parsedBody.usage : undefined;
+        if (routing === undefined && usage === undefined) {
+            return undefined;
+        }
+        const endpoints = isRecord(routing?.endpoints)
+            ? routing.endpoints
+            : undefined;
+        const selectedEndpoint = Array.isArray(endpoints?.available)
+            ? endpoints.available.find(
+                  (endpoint): endpoint is Record<string, unknown> =>
+                      isRecord(endpoint) && endpoint.selected === true
+              )
+            : undefined;
+        const attempts = Array.isArray(routing?.attempts)
+            ? routing.attempts.filter(
+                  (attempt): attempt is Record<string, unknown> =>
+                      isRecord(attempt)
+              )
+            : [];
+        return {
+            openrouter: {
+                routing: {
+                    ...(nonEmptyString(selectedEndpoint?.provider) !==
+                        undefined && {
+                        provider: nonEmptyString(selectedEndpoint?.provider),
+                    }),
+                    ...(nonEmptyString(selectedEndpoint?.model) !==
+                        undefined && {
+                        model: nonEmptyString(selectedEndpoint?.model),
+                    }),
+                    ...(finiteNumber(routing?.attempt) !== undefined && {
+                        attempt: finiteNumber(routing?.attempt),
+                    }),
+                    ...(attempts.length > 0 && { attempts: attempts.length }),
+                },
+                ...(finiteNumber(usage?.cost) !== undefined && {
+                    usage: { cost: finiteNumber(usage?.cost) },
+                }),
+            },
+        };
+    },
+    createStreamExtractor() {
+        return {
+            processChunk(_chunk: unknown): void {
+                // Non-streaming generation is used by Footnote today. Keep the
+                // hook permissive until a streaming boundary consumes it.
+            },
+            buildMetadata() {
+                return undefined;
+            },
+        };
+    },
+};
 
 const toVoltAgentCallProviderOptions = (
     providerOptions: VoltAgentProviderOptions | undefined
@@ -704,6 +871,9 @@ const normalizeVoltAgentResult = (
     fallbackToolExecution?: ToolExecutionContext
 ): GenerationResult => {
     const responseModel = result.response?.modelId ?? executedModel;
+    const upstreamAttribution = extractOpenRouterAttribution(
+        result.providerMetadata
+    );
     const usage: GenerationUsage | undefined = result.usage
         ? {
               promptTokens: result.usage.promptTokens,
@@ -746,6 +916,7 @@ const normalizeVoltAgentResult = (
     return {
         text: result.text,
         model: toFootnoteModel(responseModel),
+        ...(upstreamAttribution !== undefined && { upstreamAttribution }),
         finishReason: result.finishReason,
         usage,
         citations,
@@ -763,16 +934,20 @@ const normalizeVoltAgentResult = (
 };
 
 /**
- * Default executor factory backed by a real VoltAgent `Agent`.
- *
- * This stays intentionally narrow: no memory, no server, and no extra runtime
- * wiring yet. The adapter only needs plain text generation for now.
+ * @description: Creates the VoltAgent executor for plain-text generation.
+ * Keeps OpenRouter routing and attribution provider-specific while backend retains workflow authority.
+ * @footnote-scope: core
+ * @footnote-module: VoltAgentRuntime
+ * @footnote-risk: high - Incorrect request mapping can change routing or hide provider attribution.
+ * @footnote-ethics: high - This adapter must not take ownership of Footnote provenance or review decisions.
  */
 const createDefaultVoltAgentExecutor = ({
     model,
     logger,
     voltOpsClient,
     ollama: _ollama,
+    openrouter,
+    openrouterRouting,
     agentFactory = ({
         model: agentModel,
         tools,
@@ -791,16 +966,32 @@ const createDefaultVoltAgentExecutor = ({
             }),
             ...(tools !== undefined && { tools }),
         }),
-}: {
-    model: string;
-    logger?: VoltAgentLogger;
-    voltOpsClient?: VoltOpsClient;
-    ollama?: VoltAgentExecutorOllamaConfig;
+}: Parameters<VoltAgentExecutorFactory>[0] & {
     agentFactory?: (input: CreateVoltAgentAgentFactoryInput) => VoltAgentLike;
 }): VoltAgentTextExecutor => {
+    const openRouterProviderPayload =
+        toOpenRouterProviderPayload(openrouterRouting);
+    const openRouterModel =
+        model.startsWith('openrouter/') && openrouter !== undefined
+            ? createOpenAICompatible({
+                  name: 'openrouter',
+                  apiKey: openrouter.apiKey,
+                  baseURL: openrouter.baseUrl,
+                  headers: {
+                      'X-OpenRouter-Metadata': 'enabled',
+                  },
+                  metadataExtractor: openRouterMetadataExtractor,
+                  transformRequestBody: (body) => ({
+                      ...body,
+                      ...(openRouterProviderPayload !== undefined && {
+                          provider: openRouterProviderPayload,
+                      }),
+                  }),
+              })(model.slice('openrouter/'.length))
+            : undefined;
     const createAgent = (tools?: NonNullable<AgentOptions['tools']>) =>
         agentFactory({
-            model,
+            model: openRouterModel ?? model,
             ...(logger !== undefined && { logger }),
             ...(voltOpsClient !== undefined && { voltOpsClient }),
             ...(tools !== undefined && { tools }),
@@ -837,6 +1028,18 @@ const createDefaultVoltAgentExecutor = ({
                     toolChoice:
                         'required' as VoltAgentCallOptions['toolChoice'],
                 }),
+                ...(options.structuredOutput !== undefined && {
+                    output: Output.object({
+                        schema: jsonSchema(options.structuredOutput.schema),
+                        ...(options.structuredOutput.name !== undefined && {
+                            name: options.structuredOutput.name,
+                        }),
+                        ...(options.structuredOutput.description !==
+                            undefined && {
+                            description: options.structuredOutput.description,
+                        }),
+                    }),
+                }),
                 ...(options.signal !== undefined && {
                     signal: options.signal,
                 }),
@@ -859,8 +1062,20 @@ const createDefaultVoltAgentExecutor = ({
                 callOptions
             );
 
+            if (
+                options.structuredOutput !== undefined &&
+                result.output === undefined
+            ) {
+                throw new Error(
+                    'VoltAgent structured generation completed without a validated output.'
+                );
+            }
+
             return {
-                text: result.text,
+                text:
+                    options.structuredOutput === undefined
+                        ? result.text
+                        : JSON.stringify(result.output),
                 finishReason: result.finishReason,
                 usage: {
                     promptTokens: result.usage.inputTokens,
@@ -875,6 +1090,7 @@ const createDefaultVoltAgentExecutor = ({
                     modelId: result.response.modelId,
                     body: result.response.body,
                 },
+                providerMetadata: result.providerMetadata,
                 sources:
                     result.sources
                         ?.filter(
@@ -905,6 +1121,7 @@ const createVoltAgentRuntime = ({
     kind = 'voltagent',
     logger,
     ollama,
+    openrouter,
     voltOps,
 }: CreateVoltAgentRuntimeOptions): GenerationRuntime => {
     const voltOpsClient =
@@ -950,6 +1167,25 @@ const createVoltAgentRuntime = ({
                 provider,
                 ollama
             );
+            const executorOpenRouterConfig =
+                provider === 'openrouter' && openrouter?.apiKey?.trim()
+                    ? {
+                          apiKey: openrouter.apiKey.trim(),
+                          baseUrl:
+                              openrouter.baseUrl?.trim() ||
+                              'https://openrouter.ai/api/v1',
+                      }
+                    : undefined;
+            if (
+                provider === 'openrouter' &&
+                executorOpenRouterConfig === undefined &&
+                logger !== undefined
+            ) {
+                logger.warn(
+                    'VoltAgent OpenRouter configuration was skipped because the API key is unavailable.',
+                    { provider, model: executedModel }
+                );
+            }
             const canUseSearch = request.capabilities?.canUseSearch === true;
             const searchToolMapping = resolveToolForProvider(
                 'web_search',
@@ -1005,6 +1241,12 @@ const createVoltAgentRuntime = ({
                 ...(executorOllamaConfig !== undefined && {
                     ollama: executorOllamaConfig,
                 }),
+                ...(executorOpenRouterConfig !== undefined && {
+                    openrouter: executorOpenRouterConfig,
+                }),
+                ...(provider === 'openrouter' && {
+                    openrouterRouting: request.providerRouting?.openrouter,
+                }),
             });
             const providerOptions = buildVoltAgentProviderOptions(
                 request,
@@ -1016,6 +1258,9 @@ const createVoltAgentRuntime = ({
                 }),
                 ...(shouldForwardSearch && {
                     search: request.search,
+                }),
+                ...(request.structuredOutput !== undefined && {
+                    structuredOutput: request.structuredOutput,
                 }),
                 ...(request.signal !== undefined && { signal: request.signal }),
                 ...(providerOptions !== undefined && { providerOptions }),
@@ -1036,6 +1281,7 @@ export {
     createDefaultVoltAgentExecutor,
     createVoltAgentRuntime,
     normalizeVoltAgentResult,
+    openRouterMetadataExtractor,
     toFootnoteModel,
     toVoltAgentMessages,
     toVoltAgentModel,

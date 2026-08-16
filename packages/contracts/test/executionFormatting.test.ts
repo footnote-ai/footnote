@@ -361,3 +361,34 @@ test('formatExecutionTimelineSummary appends workflow assess and refinement step
         'planner:workflow(executed, 10ms) -> generation:gpt-5-mini(executed, 120ms) -> assess:workflow(executed, 20ms) -> generate:workflow(executed, 40ms)'
     );
 });
+
+test('formatExecutionTimelineSummary includes the persisted presentation step for shared web and Discord timelines', () => {
+    const summary = formatExecutionTimelineSummary(undefined, {
+        workflowId: 'wf_presentation_1',
+        workflowName: 'message_grounded',
+        status: 'completed',
+        terminationReason: 'goal_satisfied',
+        stepCount: 1,
+        maxSteps: 4,
+        maxDurationMs: 15000,
+        steps: [
+            {
+                stepId: 'step_presentation_1',
+                attempt: 1,
+                stepKind: 'presentation',
+                reasonCode: 'presentation_finalized',
+                startedAt: '2026-08-15T00:00:00.000Z',
+                finishedAt: '2026-08-15T00:00:00.120Z',
+                durationMs: 120,
+                model: 'gpt-5-mini',
+                outcome: {
+                    status: 'executed',
+                    summary:
+                        'Finalized presentation draft with evidence-aware editing.',
+                },
+            },
+        ],
+    });
+
+    assert.equal(summary, 'presentation:gpt-5-mini(executed, 120ms)');
+});

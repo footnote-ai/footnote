@@ -289,6 +289,9 @@ importers:
 
   packages/agent-runtime:
     dependencies:
+      '@ai-sdk/openai-compatible':
+        specifier: 2.0.59
+        version: 2.0.59(zod@4.4.3)
       '@footnote/contracts':
         specifier: workspace:*
         version: link:../contracts

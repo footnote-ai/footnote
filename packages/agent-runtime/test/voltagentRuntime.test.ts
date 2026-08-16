@@ -15,6 +15,8 @@ import {
     createVoltAgentRuntime,
     getToolForProvider,
     hasToolForProvider,
+    normalizeVoltAgentResult,
+    openRouterMetadataExtractor,
     resolveToolForProvider,
     type VoltAgentGenerateTextOptions,
     type VoltAgentLogger,
@@ -52,6 +54,15 @@ test('voltagent runtime maps transcript and generation settings into executor op
         reasoningEffort: 'max',
         verbosity: 'high',
         safetyIdentifier: 'derived-safety-id',
+        structuredOutput: {
+            name: 'test_output',
+            schema: {
+                type: 'object',
+                properties: { ready: { type: 'boolean' } },
+                required: ['ready'],
+                additionalProperties: false,
+            },
+        },
         signal,
     };
 
@@ -61,6 +72,7 @@ test('voltagent runtime maps transcript and generation settings into executor op
     assert.deepEqual(seenMessages, request.messages);
     assert.equal(seenOptions?.maxOutputTokens, 800);
     assert.equal(seenOptions?.signal, signal);
+    assert.deepEqual(seenOptions?.structuredOutput, request.structuredOutput);
     assert.deepEqual(seenOptions?.providerOptions, {
         reasoningEffort: 'max',
         verbosity: 'high',
@@ -97,6 +109,149 @@ test('voltagent runtime prefixes model with requested provider when model id is 
 
     assert.equal(seenModel, 'openai/claude-3-5-sonnet');
     assert.equal(result.model, 'claude-3-5-sonnet');
+});
+
+test('voltagent runtime carries explicit OpenRouter routing and reported attribution', async () => {
+    let seenModel: string | undefined;
+    let seenOptions: VoltAgentGenerateTextOptions | undefined;
+    const runtime = createVoltAgentRuntime({
+        defaultModel: 'openrouter/thedrummer/cydonia-24b-v4.1',
+        openrouter: {
+            apiKey: 'test-openrouter-key',
+            baseUrl: 'https://openrouter.ai/api/v1',
+        },
+        createExecutor: ({ model }) => {
+            seenModel = model;
+            return {
+                async generateText(_messages, options) {
+                    seenOptions = options;
+                    return {
+                        text: 'A carefully phrased answer.',
+                        response: { modelId: model },
+                        providerMetadata: {
+                            openrouter: {
+                                routing: {
+                                    provider: 'Parasail',
+                                    model: 'thedrummer/cydonia-24b-v4.1',
+                                    attempt: 1,
+                                    attempts: 1,
+                                },
+                                usage: { cost: 0.000012 },
+                            },
+                        },
+                    };
+                },
+            };
+        },
+    });
+
+    const result = await runtime.generate({
+        messages: [{ role: 'user', content: 'Rewrite this carefully.' }],
+        provider: 'openrouter',
+        model: 'thedrummer/cydonia-24b-v4.1',
+        providerRouting: {
+            openrouter: {
+                only: ['parasail'],
+                allowFallbacks: false,
+                dataCollection: 'deny',
+            },
+        },
+    });
+
+    assert.equal(seenModel, 'openrouter/thedrummer/cydonia-24b-v4.1');
+    assert.deepEqual(seenOptions?.providerOptions, {
+        providerHints: {
+            openrouter: {
+                provider: {
+                    only: ['parasail'],
+                    allow_fallbacks: false,
+                    data_collection: 'deny',
+                },
+            },
+        },
+    });
+    assert.deepEqual(result.upstreamAttribution, {
+        inferenceProvider: 'Parasail',
+        resolvedModel: 'thedrummer/cydonia-24b-v4.1',
+        routingAttempt: 1,
+        routingAttemptCount: 1,
+        upstreamReportedCostUsd: 0.000012,
+    });
+});
+
+test('voltagent runtime normalizes production OpenRouter metadata', async () => {
+    const metadata = await openRouterMetadataExtractor.extractMetadata({
+        parsedBody: {
+            openrouter_metadata: {
+                endpoints: {
+                    available: [
+                        {
+                            selected: true,
+                            provider: 'Parasail',
+                            model: 'thedrummer/cydonia-24b-v4.1',
+                        },
+                    ],
+                },
+                attempts: [{ provider: 'Parasail' }, { provider: 'Parasail' }],
+            },
+            usage: { cost: 0.000012 },
+        },
+    });
+    const result = normalizeVoltAgentResult(
+        'openrouter/thedrummer/cydonia-24b-v4.1',
+        { messages: [{ role: 'user', content: 'Rewrite this carefully.' }] },
+        {
+            text: 'A carefully phrased answer.',
+            response: { modelId: 'thedrummer/cydonia-24b-v4.1' },
+            providerMetadata: metadata,
+        }
+    );
+
+    assert.deepEqual(result.upstreamAttribution, {
+        inferenceProvider: 'Parasail',
+        resolvedModel: 'thedrummer/cydonia-24b-v4.1',
+        routingAttemptCount: 2,
+        upstreamReportedCostUsd: 0.000012,
+    });
+});
+
+test('voltagent runtime warns and skips absent OpenRouter credentials', async () => {
+    const warnings: string[] = [];
+    const logger: VoltAgentLogger = {
+        trace() {},
+        debug() {},
+        info() {},
+        warn(message) {
+            warnings.push(message);
+        },
+        error() {},
+        fatal() {},
+        child() {
+            return logger;
+        },
+    };
+    let seenOpenRouterConfig: unknown;
+    const runtime = createVoltAgentRuntime({
+        defaultModel: 'openrouter/thedrummer/cydonia-24b-v4.1',
+        logger,
+        createExecutor: ({ openrouter }) => {
+            seenOpenRouterConfig = openrouter;
+            return {
+                async generateText() {
+                    return { text: 'Fallback presentation.' };
+                },
+            };
+        },
+    });
+
+    await runtime.generate({
+        provider: 'openrouter',
+        model: 'thedrummer/cydonia-24b-v4.1',
+        messages: [{ role: 'user', content: 'Rewrite this carefully.' }],
+    });
+
+    assert.equal(seenOpenRouterConfig, undefined);
+    assert.match(warnings[0] ?? '', /API key is unavailable/u);
 });
 
 test('voltagent runtime uses default model when request model is blank', async () => {
@@ -702,6 +857,103 @@ test('voltagent runtime requires a request model or configured default model', a
             }),
         /VoltAgent runtime requires request\.model or a configured defaultModel\./
     );
+});
+
+test('default VoltAgent executor maps structured output to a validated JSON result', async () => {
+    let sawOutput = false;
+    const fakeAgent = {
+        generateText: async (
+            ...args: Parameters<Agent['generateText']>
+        ): Promise<Awaited<ReturnType<Agent['generateText']>>> => {
+            sawOutput = args[1]?.output !== undefined;
+            return {
+                content: [],
+                text: 'untrusted raw text',
+                reasoning: [],
+                reasoningText: undefined,
+                files: [],
+                sources: [],
+                toolCalls: [],
+                staticToolCalls: [],
+                dynamicToolCalls: [],
+                toolResults: [],
+                staticToolResults: [],
+                dynamicToolResults: [],
+                finishReason: 'stop',
+                rawFinishReason: 'stop',
+                usage: {
+                    inputTokens: 0,
+                    inputTokenDetails: {
+                        noCacheTokens: 0,
+                        cacheReadTokens: 0,
+                        cacheWriteTokens: 0,
+                    },
+                    outputTokens: 0,
+                    outputTokenDetails: {
+                        textTokens: 0,
+                        reasoningTokens: 0,
+                    },
+                    totalTokens: 0,
+                },
+                totalUsage: {
+                    inputTokens: 0,
+                    inputTokenDetails: {
+                        noCacheTokens: 0,
+                        cacheReadTokens: 0,
+                        cacheWriteTokens: 0,
+                    },
+                    outputTokens: 0,
+                    outputTokenDetails: {
+                        textTokens: 0,
+                        reasoningTokens: 0,
+                    },
+                    totalTokens: 0,
+                },
+                warnings: undefined,
+                request: {},
+                response: {
+                    modelId: 'ollama/gemma4:31b',
+                    id: 'response_1',
+                    timestamp: new Date(0),
+                    messages: [],
+                },
+                providerMetadata: undefined,
+                steps: [],
+                experimental_output: {
+                    verdict: 'clear',
+                    feedback: '',
+                },
+                output: { verdict: 'clear', feedback: '' },
+                context: new Map(),
+                feedback: null,
+            } as unknown as Awaited<ReturnType<Agent['generateText']>>;
+        },
+    } satisfies Pick<Agent, 'generateText'>;
+    const executor = createDefaultVoltAgentExecutor({
+        model: 'ollama/gemma4:31b',
+        agentFactory: () => fakeAgent,
+    });
+
+    const result = await executor.generateText(
+        [{ role: 'user', content: 'Return the audit.' }],
+        {
+            structuredOutput: {
+                name: 'presentation_audit',
+                schema: {
+                    type: 'object',
+                    properties: {
+                        verdict: { type: 'string' },
+                        feedback: { type: 'string' },
+                    },
+                    required: ['verdict', 'feedback'],
+                    additionalProperties: false,
+                },
+            },
+        }
+    );
+
+    assert.equal(sawOutput, true);
+    assert.equal(result.text, '{"verdict":"clear","feedback":""}');
 });
 
 test('default VoltAgent executor maps usage from the installed AI SDK token fields', async () => {

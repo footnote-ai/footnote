@@ -61,6 +61,33 @@ export const envEntries = [
     }),
 
     defineEnv({
+        key: 'OPENROUTER_API_KEY',
+        owner: 'backend',
+        stage: 'runtime',
+        section: 'openrouter',
+        required: false,
+        secret: true,
+        kind: 'string',
+        description:
+            'OpenRouter API key used by explicit OpenRouter-backed model profiles.',
+        defaultValue: noDefault(),
+        usedBy: ['packages/backend/src/config.ts'],
+    }),
+    defineEnv({
+        key: 'OPENROUTER_BASE_URL',
+        owner: 'backend',
+        stage: 'runtime',
+        section: 'openrouter',
+        required: false,
+        secret: false,
+        kind: 'string',
+        description:
+            'OpenRouter API base URL. Use an OpenRouter regional endpoint only when your account supports it.',
+        defaultValue: literal('https://openrouter.ai/api/v1'),
+        usedBy: ['packages/backend/src/config.ts'],
+    }),
+
+    defineEnv({
         key: 'OLLAMA_BASE_URL',
         owner: 'backend',
         stage: 'runtime',
@@ -1902,7 +1929,7 @@ export const envEntries = [
         usedBy: ['packages/backend/src/config.ts'],
     }),
     defineEnv({
-        key: 'CHAT_STYLE_REWRITE_ENABLED',
+        key: 'CHAT_PRESENTATION_ENABLED',
         owner: 'backend',
         stage: 'runtime',
         section: 'chat-workflow',
@@ -1910,12 +1937,12 @@ export const envEntries = [
         secret: false,
         kind: 'boolean',
         description:
-            'Enables one optional, presentation-only style rewrite after successful main text generation. Disabled by default.',
+            'Enables the optional draft-first presentation flow after planning and context collection. Disabled by default.',
         defaultValue: literal(false),
         usedBy: ['packages/backend/src/config.ts'],
     }),
     defineEnv({
-        key: 'CHAT_STYLE_REWRITE_PROFILE_ID',
+        key: 'CHAT_PRESENTATION_PROFILE_ID',
         owner: 'backend',
         stage: 'runtime',
         section: 'chat-workflow',
@@ -1923,12 +1950,12 @@ export const envEntries = [
         secret: false,
         kind: 'string',
         description:
-            'Enabled model profile ID for the optional style rewrite. This is deployment policy, not persona identity.',
+            'Enabled model profile ID for the optional presentation flow. This is deployment policy, not persona identity.',
         defaultValue: noDefault(),
         usedBy: ['packages/backend/src/config.ts'],
     }),
     defineEnv({
-        key: 'CHAT_STYLE_REWRITE_TIMEOUT_MS',
+        key: 'CHAT_PRESENTATION_TIMEOUT_MS',
         owner: 'backend',
         stage: 'runtime',
         section: 'chat-workflow',
@@ -1936,12 +1963,12 @@ export const envEntries = [
         secret: false,
         kind: 'integer',
         description:
-            'Hard timeout in milliseconds for the optional style rewrite call.',
-        defaultValue: literal(2000),
+            'Hard timeout in milliseconds for the optional presentation flow call.',
+        defaultValue: literal(10000),
         usedBy: ['packages/backend/src/config.ts'],
     }),
     defineEnv({
-        key: 'CHAT_STYLE_REWRITE_VALIDATOR_PROFILE_ID',
+        key: 'CHAT_PRESENTATION_VALIDATOR_PROFILE_ID',
         owner: 'backend',
         stage: 'runtime',
         section: 'chat-workflow',
@@ -1949,12 +1976,12 @@ export const envEntries = [
         secret: false,
         kind: 'string',
         description:
-            'Enabled model profile ID for the veto-only style rewrite semantic validator.',
+            'Enabled model profile ID for the bounded presentation audit.',
         defaultValue: noDefault(),
         usedBy: ['packages/backend/src/config.ts'],
     }),
     defineEnv({
-        key: 'CHAT_STYLE_REWRITE_VALIDATOR_TIMEOUT_MS',
+        key: 'CHAT_PRESENTATION_VALIDATOR_TIMEOUT_MS',
         owner: 'backend',
         stage: 'runtime',
         section: 'chat-workflow',
@@ -1962,8 +1989,8 @@ export const envEntries = [
         secret: false,
         kind: 'integer',
         description:
-            'Hard timeout in milliseconds for the veto-only style rewrite validator.',
-        defaultValue: literal(1500),
+            'Hard timeout in milliseconds for the bounded presentation audit.',
+        defaultValue: literal(10000),
         usedBy: ['packages/backend/src/config.ts'],
     }),
 

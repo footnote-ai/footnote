@@ -9,11 +9,11 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import type {
-    StyleRewriteMetadata,
+    PresentationMetadata,
     WorkflowRecord,
 } from '@footnote/contracts/policy';
 import {
-    sanitizeStyleRewriteForDisplay,
+    sanitizePresentationForDisplay,
     sanitizeWorkflowForDisplay,
 } from './traceDisplay.js';
 
@@ -59,31 +59,49 @@ test('sanitizeWorkflowForDisplay redacts artifacts and preserves outcome fields'
     assert.equal(sanitized?.terminationReason, 'budget_exhausted_tokens');
 });
 
-test('sanitizeStyleRewriteForDisplay preserves text-free rewrite provenance', () => {
-    const styleRewrite: StyleRewriteMetadata = {
-        step: 'style_rewrite',
-        outcome: 'applied',
+test('sanitizePresentationForDisplay preserves text-free rewrite provenance', () => {
+    const presentation: PresentationMetadata = {
+        step: 'presentation',
+        outcome: 'finalized',
         attempted: true,
-        reasonCode: 'applied',
+        reasonCode: 'finalized',
         personaId: 'myuri',
-        profileId: 'ollama-cloud-style',
-        provider: 'ollama',
-        model: 'style-model',
-        validatorProfileId: 'ollama-cloud-validator',
-        validatorModel: 'validator-model',
+        draftProfileId: 'ollama-cloud-style',
+        draftRequestedProvider: 'openrouter',
+        draftRequestedModel: 'thedrummer/cydonia-24b-v4.1',
+        draftModel: 'style-model',
+        auditProfileId: 'ollama-cloud-validator',
+        auditProvider: 'ollama',
+        auditModel: 'validator-model',
+        upstreamInferenceProvider: 'parasail',
+        upstreamResolvedModel: 'thedrummer/cydonia-24b-v4.1',
+        upstreamRoutingAttempt: 1,
+        upstreamRoutingAttemptCount: 1,
+        backendEstimatedCostUsd: 0.001,
+        upstreamReportedCostUsd: 0.002,
         durationMs: 12,
-        validatorOutcome: 'equivalent',
-        originalHmacId: 'a'.repeat(64),
-        presentedHmacId: 'b'.repeat(64),
-        editRatio: 0.12,
+        auditOutcome: 'clear',
+        draftAttemptCount: 1,
+        finalizerAttemptCount: 1,
+        auditAttemptCount: 1,
+        draftHmacId: 'a'.repeat(64),
+        finalHmacId: 'b'.repeat(64),
+        styledDraftRetentionRatio: 0.12,
         caution: 2,
         intensity: 'standard',
         traceConstrained: false,
     };
 
     assert.deepEqual(
-        sanitizeStyleRewriteForDisplay(styleRewrite),
-        styleRewrite
+        sanitizePresentationForDisplay(presentation),
+        presentation
     );
-    assert.equal(sanitizeStyleRewriteForDisplay(undefined), null);
+    assert.equal(sanitizePresentationForDisplay(undefined), null);
+    assert.equal(
+        sanitizePresentationForDisplay({
+            ...presentation,
+            outcome: 42,
+        }),
+        null
+    );
 });

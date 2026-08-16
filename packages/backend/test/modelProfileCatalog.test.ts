@@ -370,6 +370,46 @@ test('buildModelProfilesSection keeps ollama profiles enabled for cloud ollama e
     }
 });
 
+test('buildModelProfilesSection enables OpenRouter profiles only with its configured key', () => {
+    const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'model-catalog-'));
+    const yamlPath = path.join(tempDir, 'catalog.yaml');
+    try {
+        fs.writeFileSync(
+            yamlPath,
+            [
+                'profiles:',
+                '  - id: openrouter-cydonia-24b-v4-1',
+                '    description: Pinned style writer',
+                '    provider: openrouter',
+                '    providerModel: thedrummer/cydonia-24b-v4.1',
+                '    enabled: true',
+                '    tierBindings: []',
+                '    capabilities:',
+                '      canUseSearch: false',
+            ].join('\n')
+        );
+
+        const disabled = buildModelProfilesSection(
+            { MODEL_PROFILE_CATALOG_PATH: yamlPath },
+            process.cwd(),
+            () => undefined
+        );
+        const enabled = buildModelProfilesSection(
+            {
+                MODEL_PROFILE_CATALOG_PATH: yamlPath,
+                OPENROUTER_API_KEY: 'test-key',
+            },
+            process.cwd(),
+            () => undefined
+        );
+
+        assert.equal(disabled.catalog[0]?.enabled, false);
+        assert.equal(enabled.catalog[0]?.enabled, true);
+    } finally {
+        fs.rmSync(tempDir, { recursive: true, force: true });
+    }
+});
+
 test('model profile resolver handles id, tier, and raw selectors with fail-open fallback', () => {
     const warnings: Array<{ message: string; meta?: Record<string, unknown> }> =
         [];

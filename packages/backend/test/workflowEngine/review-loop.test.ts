@@ -7,7 +7,10 @@
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import type { GenerationRuntime } from '@footnote/agent-runtime';
+import type {
+    GenerationRequest,
+    GenerationRuntime,
+} from '@footnote/agent-runtime';
 import type { ModelProfile } from '@footnote/contracts';
 import { ok } from 'neverthrow';
 import { runBoundedReviewWorkflowForTest } from './helpers.js';
@@ -1489,10 +1492,12 @@ test('runBoundedReviewWorkflow can use independent generate and assess model cha
 
 test('runBoundedReviewWorkflow applies assess hints to revision routing order', async () => {
     const seenModels: string[] = [];
+    const seenRequests: GenerationRequest[] = [];
     let generationCalls = 0;
     const generationRuntime: GenerationRuntime = {
         kind: 'test-runtime',
         async generate(input) {
+            seenRequests.push(input);
             seenModels.push(input.model ?? 'unknown-model');
             generationCalls += 1;
             if (generationCalls === 1) {
@@ -1544,6 +1549,7 @@ test('runBoundedReviewWorkflow applies assess hints to revision routing order', 
         tierBindings: ['text-medium'],
         capabilities: { canUseSearch: true },
         costClass: 'medium',
+        providerRouting: { openrouter: { only: ['openai'] } },
     };
     const ollamaGenerateProfile: ModelProfile = {
         id: 'ollama-text-gptoss',
@@ -1554,6 +1560,7 @@ test('runBoundedReviewWorkflow applies assess hints to revision routing order', 
         tierBindings: ['text-medium'],
         capabilities: { canUseSearch: false },
         costClass: 'low',
+        providerRouting: { openrouter: { only: ['google'] } },
     };
     const assessProfile: ModelProfile = {
         id: 'openai-json-optimized',
@@ -1564,6 +1571,7 @@ test('runBoundedReviewWorkflow applies assess hints to revision routing order', 
         tierBindings: [],
         capabilities: { canUseSearch: true },
         costClass: 'low',
+        providerRouting: { openrouter: { only: ['anthropic'] } },
     };
     const enabledProfilesById = new Map<string, ModelProfile>([
         [openAiGenerateProfile.id, openAiGenerateProfile],
@@ -1629,6 +1637,15 @@ test('runBoundedReviewWorkflow applies assess hints to revision routing order', 
     assert.equal(seenModels[1], 'gpt-5.4-nano');
     // logic + style hints => logic precedence => OpenAI first for revision
     assert.equal(seenModels[2], 'gpt-5.4-mini');
+    assert.deepEqual(seenRequests[0]?.providerRouting, {
+        openrouter: { only: ['google'] },
+    });
+    assert.deepEqual(seenRequests[1]?.providerRouting, {
+        openrouter: { only: ['anthropic'] },
+    });
+    assert.deepEqual(seenRequests[2]?.providerRouting, {
+        openrouter: { only: ['openai'] },
+    });
 
     const revisionStep = result.workflowLineage.steps.find(
         (step) =>

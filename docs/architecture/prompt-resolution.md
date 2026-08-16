@@ -30,34 +30,37 @@ This is the canonical order Footnote uses to build runtime prompt text.
     - `packages/prompts/src/profile-overlays/danny.md`
     - `packages/prompts/src/profile-overlays/myuri.md`
 
-## Optional Style Rewrite
+## Optional Presentation
 
-`style_rewrite` is one workflow-owned step after successful reviewed main text
-generation. It is disabled by default:
+`presentation` is a backend-owned final-wording flow after normal planning,
+retrieval, tool, citation, and safety context collection. It is disabled by
+default:
 
 ```env
-CHAT_STYLE_REWRITE_ENABLED=false
-CHAT_STYLE_REWRITE_PROFILE_ID=
-CHAT_STYLE_REWRITE_TIMEOUT_MS=2000
-CHAT_STYLE_REWRITE_VALIDATOR_PROFILE_ID=
-CHAT_STYLE_REWRITE_VALIDATOR_TIMEOUT_MS=1500
+CHAT_PRESENTATION_ENABLED=false
+CHAT_PRESENTATION_PROFILE_ID=
+CHAT_PRESENTATION_TIMEOUT_MS=2000
+CHAT_PRESENTATION_VALIDATOR_PROFILE_ID=
+CHAT_PRESENTATION_VALIDATOR_TIMEOUT_MS=1500
 ```
 
 When enabled, both model profile settings select enabled backend profiles. They
-are deployment policy, not persona identity. The rewrite and validator take only
-the completed answer and presentation guidance from the active persona:
-Footnote by default, or the selected Danny/Myuri profile for Discord. Future
-profiles use the same presentation-guidance seam.
+are deployment policy, not persona identity. The presentation profile writes a
+full styled draft from the collected authoritative context and active persona
+guidance. The main model then finalizes that draft with the same context,
+preserving its voice by default and changing only facts, citations, uncertainty,
+scope, intent, or safety. Footnote is the default persona; Discord can select
+Danny or Myuri. Future profiles use the same presentation-guidance seam.
 
-The rewrite has no tools and cannot alter actions, safety/refusal decisions,
+The draft has no tools and cannot alter actions, safety/refusal decisions,
 facts, uncertainty, attribution, citations, provenance, links, tool results,
-code, or structured output. Responses with protected tool-derived content,
-links, or structured output are skipped. Errors, timeouts, invalid output, and
-mechanical preservation failures deliver the original answer. A separate
-validator may only veto and must return `equivalent`; drift, uncertainty,
-malformed output, timeout, or missing configuration delivers the original.
-Trace metadata records hashes and bounded edit metrics without retaining both
-answer texts; hashes identify text and do not prove equivalence.
+code, or structured output. Invalid drafts, finalizer failures, and mechanical
+preservation failures use the normal main-model generation path. The audit is a
+bounded repair signal, not a veto: one evidence or presentation repair may run;
+unavailable or malformed audit output remains visible in the receipt without
+suppressing an otherwise finalized response. Trace metadata records hashes and
+bounded edit metrics without retaining both answer texts; hashes identify text
+and do not prove equivalence.
 
 Final backend TRACE caution constrains this step before persona guidance. Caution
 `5` skips it; `4` and unavailable caution use restrained edits; `1` through `3`

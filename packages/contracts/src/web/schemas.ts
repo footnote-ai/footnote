@@ -172,10 +172,8 @@ const ExecutionReasonCodeSchema = z.enum([
     'planner_invalid_output',
     'evaluator_runtime_error',
     'generation_runtime_error',
-    'style_rewrite_skipped',
-    'style_rewrite_applied',
-    'style_rewrite_rejected',
-    'style_rewrite_failed',
+    'presentation_finalized',
+    'presentation_fallback',
     'tool_not_requested',
     'tool_not_used',
     'search_rerouted_to_fallback_profile',
@@ -358,52 +356,83 @@ const GenerationExecutionEventSchema = z
     .superRefine(requireReasonCodeWhenNotExecuted)
     .strict();
 
-const StyleRewriteReasonCodeSchema = z.enum([
-    'applied',
+const PresentationReasonCodeSchema = z.enum([
+    'finalized',
+    'evidence_repaired',
+    'presentation_repaired',
+    'audit_unavailable',
+    'audit_invalid',
+    'presentation_repair_unavailable',
+    'evidence_repair_unavailable',
     'disabled',
     'profile_not_configured',
-    'protected_content',
     'structured_output',
     'mechanical_preservation_failed',
-    'semantic_drift',
-    'validator_invalid',
-    'validator_unavailable',
-    'budget_unavailable',
-    'transition_not_allowed',
     'trace_caution_high',
-    'timeout',
-    'provider_error',
+    'draft_timeout',
+    'draft_provider_error',
+    'finalizer_timeout',
+    'finalizer_provider_error',
 ]);
 
-const StyleRewriteMetadataSchema = z
+export const PresentationMetadataSchema = z
     .object({
-        step: z.literal('style_rewrite'),
-        outcome: z.enum(['applied', 'skipped', 'rejected', 'failed']),
-        attempted: z.boolean(),
-        reasonCode: StyleRewriteReasonCodeSchema,
-        personaId: z.string().min(1),
-        profileId: z.string().min(1).optional(),
-        provider: z.string().min(1).optional(),
-        model: z.string().min(1).optional(),
-        validatorProfileId: z.string().min(1).optional(),
-        validatorModel: z.string().min(1).optional(),
-        durationMs: z.number().int().nonnegative().optional(),
-        validatorOutcome: z.enum([
-            'not_attempted',
-            'equivalent',
-            'drift',
-            'uncertain',
-            'unavailable',
+        step: z.literal('presentation'),
+        outcome: z.enum([
+            'finalized',
+            'finalized_after_evidence_repair',
+            'finalized_after_presentation_repair',
+            'finalized_with_audit_unavailable',
+            'fallback',
         ]),
-        originalHmacId: z
+        attempted: z.boolean(),
+        reasonCode: PresentationReasonCodeSchema,
+        personaId: z.string().min(1),
+        draftProfileId: z.string().min(1).optional(),
+        draftRequestedProvider: z.string().min(1).optional(),
+        draftRequestedModel: z.string().min(1).optional(),
+        draftModel: z.string().min(1).optional(),
+        auditProfileId: z.string().min(1).optional(),
+        auditProvider: z.string().min(1).optional(),
+        auditModel: z.string().min(1).optional(),
+        upstreamInferenceProvider: z.string().min(1).optional(),
+        upstreamResolvedModel: z.string().min(1).optional(),
+        upstreamRoutingAttempt: z.number().int().positive().optional(),
+        upstreamRoutingAttemptCount: z.number().int().positive().optional(),
+        backendEstimatedCostUsd: z.number().nonnegative().optional(),
+        upstreamReportedCostUsd: z.number().nonnegative().optional(),
+        durationMs: z.number().int().nonnegative().optional(),
+        auditOutcome: z.enum([
+            'not_attempted',
+            'clear',
+            'evidence_issue',
+            'presentation_flattened',
+            'invalid',
+        ]),
+        auditFailureCategory: z
+            .enum([
+                'timeout',
+                'provider_failure',
+                'invalid_structured_output',
+                'unavailable',
+            ])
+            .optional(),
+        draftAttemptCount: z.union([z.literal(0), z.literal(1)]),
+        finalizerAttemptCount: z.union([
+            z.literal(0),
+            z.literal(1),
+            z.literal(2),
+        ]),
+        auditAttemptCount: z.union([z.literal(0), z.literal(1)]),
+        draftHmacId: z
             .string()
             .regex(/^[a-f0-9]{64}$/u)
             .optional(),
-        presentedHmacId: z
+        finalHmacId: z
             .string()
             .regex(/^[a-f0-9]{64}$/u)
             .optional(),
-        editRatio: z.number().min(0).max(1),
+        styledDraftRetentionRatio: z.number().min(0).max(1).optional(),
         caution: z
             .union([
                 z.literal(1),
@@ -1292,7 +1321,7 @@ const responseMetadataShape = {
     // TODO(auth-memory-governance): Apply user opt-in auth/memory/governance
     // policy before broad prompt-rich image metadata exposure/retention.
     imageGeneration: ImageGenerationMetadataSchema.optional(),
-    styleRewrite: StyleRewriteMetadataSchema.optional(),
+    presentation: PresentationMetadataSchema.optional(),
 } as const;
 
 const requireTraceFinalReasonWhenChanged = (
@@ -1813,6 +1842,48 @@ export const GetTraceStaleResponseSchema: z.ZodType<GetTraceStaleResponse> = z
         metadata: ResponseMetadataSchema,
     })
     .passthrough();
+
+/** @api.operationId: getResponseVersions @api.path: GET /api/traces/{responseId}/response-versions */
+export const ResponseCandidateSchema = z
+    .object({
+        id: z.string().min(1),
+        parentCandidateId: z.string().min(1).optional(),
+        workflowStepId: z.string().min(1),
+        sequence: z.number().int().nonnegative(),
+        stage: z.enum([
+            'initial_generation',
+            'revision',
+            'presentation_draft',
+            'presentation_finalization',
+            'presentation_repair',
+            'fallback',
+        ]),
+        state: z.enum(['selected', 'superseded']),
+        text: z.string().min(1),
+    })
+    .strict();
+
+/** @api.operationId: getResponseVersions @api.path: GET /api/traces/{responseId}/response-versions */
+export const GetResponseVersionsResponseSchema = z
+    .object({
+        responseId: z.string().min(1),
+        candidates: z.array(ResponseCandidateSchema),
+    })
+    .strict();
+
+/** @api.operationId: getResponseVersions @api.path: GET /api/traces/{responseId}/response-versions */
+export const GetResponseVersionsStaleResponseSchema = z
+    .object({
+        message: z.literal('Trace is stale'),
+        responseId: z.string().min(1),
+        candidates: z.array(ResponseCandidateSchema),
+    })
+    .strict();
+
+export const GetResponseVersionsApiResponseSchema = z.union([
+    GetResponseVersionsResponseSchema,
+    GetResponseVersionsStaleResponseSchema,
+]);
 
 /**
  * Trace reads can return either live metadata or a stale envelope depending on status.

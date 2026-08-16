@@ -70,6 +70,10 @@ export type RuntimeConfig = {
         apiKey: string | null;
         localInferenceEnabled: boolean;
     };
+    openrouter: {
+        apiKey: string | null;
+        baseUrl: string;
+    };
     modelProfiles: {
         defaultProfileId: string;
         plannerProfileId: string;
@@ -114,16 +118,16 @@ export type RuntimeConfig = {
         maxIterations: number;
         maxDurationMs: number;
         maxRequestReviewCycles: number;
-        styleRewrite: {
-            /** Optional presentation-only rewrite after successful text generation. */
+        presentation: {
+            /** Optional draft-first presentation flow after planning and context collection. */
             enabled: boolean;
             /** Deployment-owned model profile. Persona identity never selects this. */
             profileId: string | null;
-            /** Separate deployment-owned profile for veto-only semantic validation. */
+            /** Separate deployment-owned profile for bounded presentation audits. */
             validatorProfileId: string | null;
-            /** Hard timeout for the one optional rewrite call. */
+            /** Hard timeout for one presentation-draft call. */
             timeoutMs: number;
-            /** Hard timeout for the mandatory validator when a rewrite is attempted. */
+            /** Hard timeout for the bounded audit when a presentation draft is finalized. */
             validatorTimeoutMs: number;
         };
         contextIntegrations: {

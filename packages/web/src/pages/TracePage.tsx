@@ -19,6 +19,7 @@ import {
 import type {
     GetTraceResponse,
     GetTraceStaleResponse,
+    ResponseCandidate,
 } from '@footnote/contracts/web';
 import type {
     ImageGenerationMetadata,
@@ -26,6 +27,8 @@ import type {
     WorkflowStepKind,
 } from '@footnote/contracts/policy';
 import PublicPageLayout from '@components/PublicPageLayout';
+import MarkdownResponse from '@components/MarkdownResponse';
+import ResponseCarousel from '@components/ResponseCarousel';
 import { api, isApiClientError } from '../utils/api';
 import { createScopedLogger } from '../utils/logger';
 import {
@@ -34,7 +37,7 @@ import {
 } from '../utils/traceOutcome';
 import { summarizeTraceAccounting } from '../utils/traceAccounting';
 import {
-    sanitizeStyleRewriteForDisplay,
+    sanitizePresentationForDisplay,
     sanitizeWorkflowForDisplay,
 } from '../utils/traceDisplay';
 // Define the actual server response metadata structure
@@ -72,7 +75,7 @@ type DisplayTrace = {
     execution: ServerMetadata['execution'];
     evaluator: ServerMetadata['evaluator'] | null;
     workflow: WorkflowRecord | null;
-    styleRewrite: ServerMetadata['styleRewrite'] | null;
+    presentation: ServerMetadata['presentation'] | null;
     runtimeContext: {
         modelVersion: string | null;
         conversationSnapshot: string | null;
@@ -83,6 +86,27 @@ type SummarySignal = {
     label: string;
     value: string;
     explanation: string;
+};
+
+const formatRecordedUsd = (value: unknown): string =>
+    typeof value === 'number' && Number.isFinite(value)
+        ? `$${value.toFixed(6)}`
+        : 'Unavailable';
+
+const formatPresentationRouting = (
+    presentation: NonNullable<ServerMetadata['presentation']>
+): string => {
+    const parts = [
+        presentation.upstreamInferenceProvider,
+        presentation.upstreamResolvedModel,
+        presentation.upstreamRoutingAttempt !== undefined
+            ? `attempt ${presentation.upstreamRoutingAttempt}${presentation.upstreamRoutingAttemptCount !== undefined ? `/${presentation.upstreamRoutingAttemptCount}` : ''}`
+            : undefined,
+    ].filter(
+        (part): part is string => typeof part === 'string' && part.length > 0
+    );
+
+    return parts.length > 0 ? parts.join(' · ') : 'Unavailable';
 };
 
 const resolveTraceModelLabel = (traceData: ServerMetadata): string => {
@@ -109,6 +133,21 @@ const PROVENANCE_EXPLANATIONS: Record<string, string> = {
     Speculative:
         'This answer may include uncertain reasoning; treat it as a starting point and verify before relying on it.',
 };
+
+const RESPONSE_CANDIDATE_STAGE_LABELS: Record<
+    ResponseCandidate['stage'],
+    string
+> = {
+    initial_generation: 'Initial answer',
+    revision: 'Revised answer',
+    presentation_draft: 'Style draft',
+    presentation_finalization: 'Finalized answer',
+    presentation_repair: 'Repaired final answer',
+    fallback: 'Fallback answer',
+};
+
+const getResponseCandidateStageLabel = (candidate: ResponseCandidate): string =>
+    RESPONSE_CANDIDATE_STAGE_LABELS[candidate.stage];
 
 const getProvenanceExplanation = (provenance: string): string =>
     PROVENANCE_EXPLANATIONS[provenance] ??
@@ -208,7 +247,7 @@ const buildDisplayTrace = (traceData: ServerMetadata): DisplayTrace => ({
     execution: traceData.execution ?? [],
     evaluator: traceData.evaluator ?? null,
     workflow: sanitizeWorkflowForDisplay(traceData.workflow),
-    styleRewrite: sanitizeStyleRewriteForDisplay(traceData.styleRewrite),
+    presentation: sanitizePresentationForDisplay(traceData.presentation),
     runtimeContext: traceData.runtimeContext
         ? {
               modelVersion: traceData.runtimeContext.modelVersion ?? null,
@@ -454,6 +493,11 @@ const TracePage = (): JSX.Element => {
     const [loadingState, setLoadingState] = useState<LoadingState>('loading');
     const [traceData, setTraceData] = useState<ServerMetadata | null>(null);
     const [errorMessage, setErrorMessage] = useState<string>('');
+    const [responseCandidates, setResponseCandidates] = useState<
+        ResponseCandidate[] | null
+    >(null);
+    const [responseVersionsUnavailable, setResponseVersionsUnavailable] =
+        useState(false);
 
     useEffect(() => {
         if (!responseId) {
@@ -468,6 +512,8 @@ const TracePage = (): JSX.Element => {
             setLoadingState('loading');
             setErrorMessage('');
             setTraceData(null);
+            setResponseCandidates(null);
+            setResponseVersionsUnavailable(false);
 
             try {
                 const traceResult = await api.getTrace(responseId);
@@ -490,6 +536,36 @@ const TracePage = (): JSX.Element => {
                     }
                     setTraceData(payload);
                     setLoadingState('success');
+                    try {
+                        const versionsResult =
+                            await api.getResponseVersions(responseId);
+                        if (!isMounted) {
+                            return;
+                        }
+                        if (
+                            versionsResult.status === 200 ||
+                            versionsResult.status === 410
+                        ) {
+                            setResponseCandidates(
+                                versionsResult.data.candidates
+                            );
+                        }
+                    } catch (versionsError) {
+                        if (!isMounted) {
+                            return;
+                        }
+                        tracePageLogger.debug(
+                            'Response candidate history unavailable.',
+                            {
+                                responseId,
+                                errorMessage:
+                                    versionsError instanceof Error
+                                        ? versionsError.message
+                                        : String(versionsError),
+                            }
+                        );
+                        setResponseVersionsUnavailable(true);
+                    }
                     return;
                 }
 
@@ -731,7 +807,11 @@ const TracePage = (): JSX.Element => {
     const safetySummary = getSafetySummary(traceData, safetyLabel);
     const workflowSummary = getWorkflowSummary(traceData);
     const runOutcomeSummary = traceRunOutcomeSummary;
-    const styleRewrite = sanitizedTraceData.styleRewrite;
+    const presentation = sanitizedTraceData.presentation;
+    const selectedCandidateIndex =
+        responseCandidates?.findIndex(
+            (candidate) => candidate.state === 'selected'
+        ) ?? -1;
     const summarySignals: SummarySignal[] = [
         {
             label: 'Mode',
@@ -795,6 +875,110 @@ const TracePage = (): JSX.Element => {
                     <a href="#trace-runtime">review model/runtime details</a>,
                     or <a href="#trace-raw">open raw trace JSON</a>.
                 </p>
+            </article>
+
+            <article
+                className="card trace-card response-versions"
+                aria-label="Response versions"
+            >
+                <h2>Response versions</h2>
+                <p>
+                    The final answer opens first. Earlier versions are kept for
+                    inspection and do not replace it.
+                </p>
+                {responseCandidates === null &&
+                    !responseVersionsUnavailable && (
+                        <p role="status">Loading response history…</p>
+                    )}
+                {responseVersionsUnavailable && (
+                    <p role="status">
+                        Response history is unavailable for this trace.
+                    </p>
+                )}
+                {responseCandidates !== null &&
+                    responseCandidates.length === 0 && (
+                        <p role="status">
+                            This trace has no retained response history.
+                        </p>
+                    )}
+                {responseCandidates !== null &&
+                    responseCandidates.length > 0 && (
+                        <ResponseCarousel
+                            items={responseCandidates}
+                            initialIndex={
+                                selectedCandidateIndex >= 0
+                                    ? selectedCandidateIndex
+                                    : responseCandidates.length - 1
+                            }
+                            ariaLabel="Response versions"
+                            getKey={(candidate) => candidate.id}
+                            getDotLabel={(candidate, index) =>
+                                `Show response version ${index + 1}: ${getResponseCandidateStageLabel(candidate)}`
+                            }
+                            className="response-versions__content"
+                            dotsClassName="response-versions__dots"
+                            dotClassName="response-versions__dot"
+                            selectedDotClassName="response-versions__dot--selected"
+                            showPreviousNextControls
+                            renderItem={(candidate, index) => (
+                                <>
+                                    <p className="response-versions__label">
+                                        <strong>
+                                            Version {index + 1} of{' '}
+                                            {responseCandidates.length}:
+                                        </strong>{' '}
+                                        {getResponseCandidateStageLabel(
+                                            candidate
+                                        )}{' '}
+                                        {candidate.state === 'selected'
+                                            ? '(final answer)'
+                                            : '(superseded)'}
+                                    </p>
+                                    {candidate.state === 'superseded' && (
+                                        <p className="response-versions__warning">
+                                            This version was superseded. The
+                                            final answer remains authoritative.
+                                        </p>
+                                    )}
+                                    <div className="response-versions__answer">
+                                        <MarkdownResponse
+                                            markdown={candidate.text}
+                                        />
+                                    </div>
+                                    <details className="trace-details">
+                                        <summary>Technical details</summary>
+                                        <dl className="trace-details__list">
+                                            <div>
+                                                <dt>Candidate ID</dt>
+                                                <dd>
+                                                    <code>{candidate.id}</code>
+                                                </dd>
+                                            </div>
+                                            <div>
+                                                <dt>Workflow step</dt>
+                                                <dd>
+                                                    <code>
+                                                        {
+                                                            candidate.workflowStepId
+                                                        }
+                                                    </code>
+                                                </dd>
+                                            </div>
+                                            <div>
+                                                <dt>Parent candidate</dt>
+                                                <dd>
+                                                    <code>
+                                                        {candidate.parentCandidateId ??
+                                                            'None'}
+                                                    </code>
+                                                </dd>
+                                            </div>
+                                        </dl>
+                                    </details>
+                                </>
+                            )}
+                        />
+                    )}
             </article>
 
             {traceData.imageGeneration &&
@@ -910,71 +1094,116 @@ const TracePage = (): JSX.Element => {
                         {traceAccounting.costCoverage})
                     </p>
                 )}
-                {styleRewrite && (
+                {presentation && (
                     <>
                         <p>
-                            <strong>Presentation rewrite:</strong>{' '}
-                            {styleRewrite.outcome.charAt(0).toUpperCase() +
-                                styleRewrite.outcome.slice(1)}
+                            <strong>Presentation:</strong>{' '}
+                            {presentation.outcome.charAt(0).toUpperCase() +
+                                presentation.outcome.slice(1)}
                         </p>
                         <p>
                             <code>
-                                {styleRewrite.model ??
-                                    styleRewrite.profileId ??
+                                {presentation.draftModel ??
+                                    presentation.draftProfileId ??
                                     'Unspecified'}
                             </code>{' '}
-                            · {styleRewrite.personaId} persona ·{' '}
-                            {styleRewrite.intensity} intensity
+                            · {presentation.personaId} persona ·{' '}
+                            {presentation.intensity} intensity
                         </p>
                         <p>
-                            <strong>Validator:</strong>{' '}
-                            {styleRewrite.validatorModel ??
-                                styleRewrite.validatorProfileId ??
+                            <strong>Audit:</strong>{' '}
+                            {presentation.auditModel ??
+                                presentation.auditProfileId ??
                                 'Not attempted'}{' '}
-                            — {styleRewrite.validatorOutcome}
+                            — {presentation.auditOutcome}
                         </p>
                         <p>
-                            <strong>Edit:</strong>{' '}
-                            {Math.round(styleRewrite.editRatio * 100)}% · TRACE
-                            caution: {styleRewrite.caution ?? 'Unavailable'}
+                            <strong>Draft retention:</strong>{' '}
+                            {Math.round(
+                                (presentation.styledDraftRetentionRatio ?? 0) *
+                                    100
+                            )}
+                            % · TRACE caution:{' '}
+                            {presentation.caution ?? 'Unavailable'}
                         </p>
                         <details className="trace-details">
-                            <summary>Presentation rewrite details</summary>
+                            <summary>Presentation details</summary>
                             <dl className="trace-details__list">
                                 <div>
                                     <dt>Reason code</dt>
                                     <dd>
-                                        <code>{styleRewrite.reasonCode}</code>
+                                        <code>{presentation.reasonCode}</code>
                                     </dd>
                                 </div>
                                 <div>
                                     <dt>Profile</dt>
                                     <dd>
                                         <code>
-                                            {styleRewrite.profileId ??
+                                            {presentation.draftProfileId ??
                                                 'Unavailable'}
                                         </code>
                                     </dd>
                                 </div>
                                 <div>
-                                    <dt>Provider</dt>
+                                    <dt>Requested provider</dt>
                                     <dd>
-                                        {styleRewrite.provider ?? 'Unavailable'}
+                                        {presentation.draftRequestedProvider ??
+                                            'Unavailable'}
+                                    </dd>
+                                </div>
+                                <div>
+                                    <dt>Requested model</dt>
+                                    <dd>
+                                        <code>
+                                            {presentation.draftRequestedModel ??
+                                                presentation.draftModel ??
+                                                'Unavailable'}
+                                        </code>
+                                    </dd>
+                                </div>
+                                <div>
+                                    <dt>Upstream routing</dt>
+                                    <dd>
+                                        {formatPresentationRouting(
+                                            presentation
+                                        )}
+                                    </dd>
+                                </div>
+                                <div>
+                                    <dt>Cost</dt>
+                                    <dd>
+                                        Backend estimate:{' '}
+                                        {formatRecordedUsd(
+                                            presentation.backendEstimatedCostUsd
+                                        )}
+                                        {' · '}Upstream reported:{' '}
+                                        {formatRecordedUsd(
+                                            presentation.upstreamReportedCostUsd
+                                        )}
                                     </dd>
                                 </div>
                                 <div>
                                     <dt>Duration</dt>
                                     <dd>
-                                        {styleRewrite.durationMs === undefined
+                                        {presentation.durationMs === undefined
                                             ? 'Unavailable'
-                                            : `${styleRewrite.durationMs}ms`}
+                                            : `${presentation.durationMs}ms`}
                                     </dd>
                                 </div>
                                 <div>
-                                    <dt>Validator profile</dt>
+                                    <dt>Attempts</dt>
+                                    <dd>
+                                        Draft {presentation.draftAttemptCount} ·
+                                        Finalizer{' '}
+                                        {presentation.finalizerAttemptCount} ·
+                                        Audit {presentation.auditAttemptCount}
+                                    </dd>
+                                </div>
+                                <div>
+                                    <dt>Audit profile</dt>
                                     <dd>
                                         <code>
-                                            {styleRewrite.validatorProfileId ??
+                                            {presentation.auditProfileId ??
                                                 'Unavailable'}
                                         </code>
                                     </dd>
@@ -982,25 +1211,25 @@ const TracePage = (): JSX.Element => {
                                 <div>
                                     <dt>TRACE constrained</dt>
                                     <dd>
-                                        {styleRewrite.traceConstrained
+                                        {presentation.traceConstrained
                                             ? 'Yes'
                                             : 'No'}
                                     </dd>
                                 </div>
                                 <div>
-                                    <dt>Original HMAC ID</dt>
+                                    <dt>Draft HMAC ID</dt>
                                     <dd>
                                         <code>
-                                            {styleRewrite.originalHmacId ??
+                                            {presentation.draftHmacId ??
                                                 'Unavailable'}
                                         </code>
                                     </dd>
                                 </div>
                                 <div>
-                                    <dt>Presented HMAC ID</dt>
+                                    <dt>Final HMAC ID</dt>
                                     <dd>
                                         <code>
-                                            {styleRewrite.presentedHmacId ??
+                                            {presentation.finalHmacId ??
                                                 'Unavailable'}
                                         </code>
                                     </dd>

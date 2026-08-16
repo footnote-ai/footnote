@@ -12,6 +12,7 @@ import os from 'node:os';
 import path from 'node:path';
 
 import type { ResponseMetadata } from '@footnote/contracts/policy';
+import type { ResponseCandidate } from '@footnote/contracts/web';
 import { SqliteTraceStore } from '../src/storage/traces/sqliteTraceStore.js';
 
 test('TraceStore round trips metadata with citation URLs', async () => {
@@ -70,61 +71,34 @@ test('TraceStore round trips metadata with citation URLs', async () => {
     }
 });
 
-test('TraceStore round trips style rewrite workflow metadata', async () => {
+test('TraceStore round trips a presentation receipt', async () => {
     const tempRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'trace-store-'));
     const dbPath = path.join(tempRoot, 'provenance.db');
     const store = new SqliteTraceStore({ dbPath });
-    const now = new Date().toISOString();
-    const responseId = 'style_rewrite_trace_123';
+    const responseId = 'presentation_trace_123';
 
     const metadata: ResponseMetadata = {
         responseId,
         provenance: 'Inferred',
         safetyTier: 'Low',
         tradeoffCount: 1,
-        chainHash: 'style_rewrite_chain_hash',
+        chainHash: 'presentation_chain_hash',
         licenseContext: 'MIT + HL3',
         modelVersion: 'gpt-5-mini',
         staleAfter: new Date(Date.now() + 60000).toISOString(),
         citations: [],
         trace_target: {},
         trace_final: {},
-        workflow: {
-            workflowId: 'wf_style_rewrite_123',
-            workflowName: 'message_reviewed',
-            status: 'completed',
-            terminationReason: 'goal_satisfied',
-            stepCount: 1,
-            maxSteps: 4,
-            maxDurationMs: 15000,
-            steps: [
-                {
-                    stepId: 'step_style_rewrite_1',
-                    attempt: 1,
-                    stepKind: 'style_rewrite',
-                    reasonCode: 'style_rewrite_applied',
-                    startedAt: now,
-                    finishedAt: now,
-                    durationMs: 1,
-                    outcome: {
-                        status: 'executed',
-                        summary: 'Applied a presentation-only style rewrite.',
-                    },
-                },
-            ],
-        },
-        styleRewrite: {
-            step: 'style_rewrite',
-            outcome: 'applied',
+        presentation: {
+            step: 'presentation',
+            outcome: 'finalized',
             attempted: true,
-            reasonCode: 'applied',
+            reasonCode: 'finalized',
             personaId: 'myuri',
-            profileId: 'ollama-text-gptoss',
-            provider: 'ollama',
-            model: 'gpt-oss:20b-cloud',
-            durationMs: 1,
-            validatorOutcome: 'equivalent',
-            editRatio: 0.1,
+            auditOutcome: 'clear',
+            draftAttemptCount: 1,
+            finalizerAttemptCount: 1,
+            auditAttemptCount: 1,
             intensity: 'standard',
             traceConstrained: false,
         },
@@ -134,12 +108,101 @@ test('TraceStore round trips style rewrite workflow metadata', async () => {
         await store.upsert(metadata);
 
         const retrieved = await store.retrieve(responseId);
-        assert.ok(retrieved, 'style rewrite trace should be retrievable');
-        assert.equal(
-            retrieved.workflow?.steps[0]?.reasonCode,
-            'style_rewrite_applied'
+        assert.ok(retrieved, 'presentation flow trace should be retrievable');
+        assert.equal(retrieved.presentation?.outcome, 'finalized');
+    } finally {
+        store.close();
+        await fs.rm(tempRoot, { recursive: true, force: true });
+    }
+});
+
+test('TraceStore persists ordered candidate links with the trace and cascades deletion', async () => {
+    const tempRoot = await fs.mkdtemp(
+        path.join(os.tmpdir(), 'trace-candidates-')
+    );
+    const store = new SqliteTraceStore({
+        dbPath: path.join(tempRoot, 'provenance.db'),
+    });
+    const responseId = 'response_candidates_123';
+    const candidates: ResponseCandidate[] = [
+        {
+            id: 'candidate_draft',
+            workflowStepId: 'step_1',
+            sequence: 0,
+            stage: 'presentation_draft',
+            state: 'superseded',
+            text: 'Draft response.',
+        },
+        {
+            id: 'candidate_final',
+            parentCandidateId: 'candidate_draft',
+            workflowStepId: 'step_1',
+            sequence: 1,
+            stage: 'presentation_finalization',
+            state: 'selected',
+            text: 'Final response.',
+        },
+    ];
+
+    try {
+        await store.upsert(
+            {
+                responseId,
+                provenance: 'Inferred',
+                safetyTier: 'Low',
+                tradeoffCount: 1,
+                chainHash: 'candidate_chain_hash',
+                licenseContext: 'MIT + HL3',
+                modelVersion: 'gpt-5-mini',
+                staleAfter: new Date(Date.now() + 60000).toISOString(),
+                citations: [],
+                trace_target: {},
+                trace_final: {},
+            },
+            candidates
         );
-        assert.equal(retrieved.styleRewrite?.outcome, 'applied');
+
+        assert.deepEqual(
+            await store.retrieveResponseCandidates(responseId),
+            candidates
+        );
+        await store.delete(responseId);
+        assert.deepEqual(
+            await store.retrieveResponseCandidates(responseId),
+            []
+        );
+    } finally {
+        store.close();
+        await fs.rm(tempRoot, { recursive: true, force: true });
+    }
+});
+
+test('TraceStore returns no candidate history for older traces', async () => {
+    const tempRoot = await fs.mkdtemp(
+        path.join(os.tmpdir(), 'trace-no-candidates-')
+    );
+    const store = new SqliteTraceStore({
+        dbPath: path.join(tempRoot, 'provenance.db'),
+    });
+    const responseId = 'old_trace_123';
+    try {
+        await store.upsert({
+            responseId,
+            provenance: 'Inferred',
+            safetyTier: 'Low',
+            tradeoffCount: 1,
+            chainHash: 'old_chain_hash',
+            licenseContext: 'MIT + HL3',
+            modelVersion: 'gpt-5-mini',
+            staleAfter: new Date(Date.now() + 60000).toISOString(),
+            citations: [],
+            trace_target: {},
+            trace_final: {},
+        });
+        assert.deepEqual(
+            await store.retrieveResponseCandidates(responseId),
+            []
+        );
     } finally {
         store.close();
         await fs.rm(tempRoot, { recursive: true, force: true });

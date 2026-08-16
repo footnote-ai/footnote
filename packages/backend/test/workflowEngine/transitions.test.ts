@@ -56,6 +56,29 @@ test('isWorkflowTransitionAllowed allows plan to generate in permissive policy',
     );
 });
 
+test('isWorkflowTransitionAllowed permits the bounded presentation step before finalization', () => {
+    assert.equal(
+        isWorkflowTransitionAllowed('plan', 'presentation', permissivePolicy),
+        true
+    );
+    assert.equal(
+        isWorkflowTransitionAllowed(
+            'presentation',
+            'finalize',
+            permissivePolicy
+        ),
+        true
+    );
+    assert.equal(
+        isWorkflowTransitionAllowed(
+            'presentation',
+            'generate',
+            permissivePolicy
+        ),
+        true
+    );
+});
+
 test('isWorkflowTransitionAllowed enforces policy capability toggles', () => {
     assert.equal(
         isWorkflowTransitionAllowed(null, 'plan', strictPolicy),

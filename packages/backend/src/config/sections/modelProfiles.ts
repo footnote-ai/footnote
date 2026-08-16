@@ -15,6 +15,7 @@ import {
     type WorkflowModeProfileId,
     type StepRoutingChainsConfig,
 } from '@footnote/contracts';
+import { type SupportedProvider } from '@footnote/contracts/providers';
 import yaml from 'js-yaml';
 import { parseBooleanFlag, parseOptionalTrimmedString } from '../parsers.js';
 import type { RuntimeConfig, WarningSink } from '../types.js';
@@ -115,13 +116,16 @@ const isLocalOllamaHost = (hostname: string): boolean =>
 const buildProviderAvailability = (
     env: NodeJS.ProcessEnv,
     warn: WarningSink
-): Record<'openai' | 'ollama', boolean> => {
+): Record<SupportedProvider, boolean> => {
     const openAiEnabled = Boolean(
         parseOptionalTrimmedString(env.OPENAI_API_KEY)
     );
     const ollamaBaseUrl = parseOptionalTrimmedString(env.OLLAMA_BASE_URL);
     const ollamaLocalInferenceEnabled = parseBooleanFlag(
         env.OLLAMA_LOCAL_INFERENCE_ENABLED
+    );
+    const openrouterEnabled = Boolean(
+        parseOptionalTrimmedString(env.OPENROUTER_API_KEY)
     );
 
     let ollamaEnabled = false;
@@ -146,15 +150,16 @@ const buildProviderAvailability = (
     return {
         openai: openAiEnabled,
         ollama: ollamaEnabled,
+        openrouter: openrouterEnabled,
     };
 };
 
 const applyProviderAvailability = (
     catalog: RuntimeConfig['modelProfiles']['catalog'],
-    providerAvailability: Record<'openai' | 'ollama', boolean>,
+    providerAvailability: Record<SupportedProvider, boolean>,
     warn: WarningSink
 ): RuntimeConfig['modelProfiles']['catalog'] => {
-    const disabledCountsByProvider = new Map<'openai' | 'ollama', number>();
+    const disabledCountsByProvider = new Map<SupportedProvider, number>();
 
     const normalizedCatalog = catalog.map((profile) => {
         if (!profile.enabled) {
@@ -268,7 +273,8 @@ const pruneStepRoutingChains = (
     pools: Record<string, string[]>,
     profileIds: Set<string>,
     sourcePath: string,
-    warn: WarningSink
+    warn: WarningSink,
+    warnOnUnknownEntries = true
 ): StepRoutingChainsConfig => {
     const resolved = JSON.parse(
         JSON.stringify(chains)
@@ -289,9 +295,11 @@ const pruneStepRoutingChains = (
                     if (pooled) {
                         return true;
                     }
-                    warn(
-                        `Skipping unknown stepRoutingChains.${mode}.${step} entry "${entry}" from "${sourcePath}".`
-                    );
+                    if (warnOnUnknownEntries) {
+                        warn(
+                            `Skipping unknown stepRoutingChains.${mode}.${step} entry "${entry}" from "${sourcePath}".`
+                        );
+                    }
                     return false;
                 }
 
@@ -299,16 +307,20 @@ const pruneStepRoutingChains = (
                     if (profileIds.has(id) || pools[id]) {
                         return true;
                     }
-                    warn(
-                        `Skipping unknown chooseOne candidate "${id}" in stepRoutingChains.${mode}.${step} from "${sourcePath}".`
-                    );
+                    if (warnOnUnknownEntries) {
+                        warn(
+                            `Skipping unknown chooseOne candidate "${id}" in stepRoutingChains.${mode}.${step} from "${sourcePath}".`
+                        );
+                    }
                     return false;
                 });
                 entry.chooseOne = candidateIds;
                 if (entry.chooseOne.length === 0) {
-                    warn(
-                        `Skipping empty chooseOne candidate list in stepRoutingChains.${mode}.${step} from "${sourcePath}".`
-                    );
+                    if (warnOnUnknownEntries) {
+                        warn(
+                            `Skipping empty chooseOne candidate list in stepRoutingChains.${mode}.${step} from "${sourcePath}".`
+                        );
+                    }
                     return false;
                 }
                 return true;
@@ -331,7 +343,8 @@ const validateStepRoutingChains = (
         pools,
         profileIds,
         sourcePath,
-        warn
+        warn,
+        false
     );
     if (value === undefined) {
         return prunedDefaults;

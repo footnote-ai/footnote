@@ -170,29 +170,29 @@ export const buildServiceSections = (
             'CHAT_MAX_REQUEST_REVIEW_CYCLES',
             warn
         ),
-        styleRewrite: {
+        presentation: {
             enabled: parseBooleanEnv(
-                env.CHAT_STYLE_REWRITE_ENABLED,
+                env.CHAT_PRESENTATION_ENABLED,
                 false,
-                'CHAT_STYLE_REWRITE_ENABLED',
+                'CHAT_PRESENTATION_ENABLED',
                 warn
             ),
             profileId: parseOptionalTrimmedString(
-                env.CHAT_STYLE_REWRITE_PROFILE_ID
+                env.CHAT_PRESENTATION_PROFILE_ID
             ),
             validatorProfileId: parseOptionalTrimmedString(
-                env.CHAT_STYLE_REWRITE_VALIDATOR_PROFILE_ID
+                env.CHAT_PRESENTATION_VALIDATOR_PROFILE_ID
             ),
             timeoutMs: parsePositiveIntEnv(
-                env.CHAT_STYLE_REWRITE_TIMEOUT_MS,
+                env.CHAT_PRESENTATION_TIMEOUT_MS,
                 2000,
-                'CHAT_STYLE_REWRITE_TIMEOUT_MS',
+                'CHAT_PRESENTATION_TIMEOUT_MS',
                 warn
             ),
             validatorTimeoutMs: parsePositiveIntEnv(
-                env.CHAT_STYLE_REWRITE_VALIDATOR_TIMEOUT_MS,
+                env.CHAT_PRESENTATION_VALIDATOR_TIMEOUT_MS,
                 1500,
-                'CHAT_STYLE_REWRITE_VALIDATOR_TIMEOUT_MS',
+                'CHAT_PRESENTATION_VALIDATOR_TIMEOUT_MS',
                 warn
             ),
         },

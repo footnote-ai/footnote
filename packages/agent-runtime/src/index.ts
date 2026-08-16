@@ -6,10 +6,12 @@
  * @footnote-risk: high - An incorrect runtime seam can leak framework assumptions or block later runtime migration work.
  * @footnote-ethics: high - This boundary protects Footnote-owned provenance and review semantics from being swallowed by framework-specific code.
  */
+import type { JSONSchema7 } from 'ai';
 import type {
     ImageGenerationQuality as ContractImageGenerationQuality,
     ImageGenerationSize as ContractImageGenerationSize,
     ModelProfileCapabilities,
+    ModelProfileProviderRouting,
     SupportedImageOutputFormat,
     SupportedOpenAIImageModel,
     SupportedOpenAITextModel,
@@ -113,6 +115,20 @@ export interface GenerationSearchRequest {
 }
 
 /**
+ * @description: Serializable schema constraint for one structured generation result.
+ * Runtime adapters map it to a provider-native response format, while backend owns when it is used.
+ * @footnote-scope: core
+ * @footnote-module: AgentRuntimeBoundary
+ * @footnote-risk: medium - An invalid structured-output mapping can make a provider response unusable.
+ * @footnote-ethics: medium - Backend ownership prevents provider adapters from deciding Footnote review semantics.
+ */
+export interface GenerationStructuredOutput {
+    schema: JSONSchema7;
+    name?: string;
+    description?: string;
+}
+
+/**
  * Backend-to-runtime input for one generation attempt.
  *
  * The request only carries generation concerns. Planner state, auth,
@@ -137,6 +153,8 @@ export interface GenerationRequest {
      * Runtime capability flags resolved from the active model profile.
      */
     capabilities?: ModelProfileCapabilities;
+    /** Provider routing policy resolved from the selected backend profile. */
+    providerRouting?: ModelProfileProviderRouting;
     /**
      * Optional max token/output budget hint for the runtime.
      */
@@ -155,6 +173,10 @@ export interface GenerationRequest {
      * Requested verbosity level for the generation attempt.
      */
     verbosity?: GenerationVerbosity;
+    /**
+     * Optional provider-enforced schema constraint for structured output.
+     */
+    structuredOutput?: GenerationStructuredOutput;
     /**
      * Retrieval settings. Omit this field when search should stay disabled.
      */
@@ -247,6 +269,17 @@ export interface GenerationResult {
      * Model identifier actually used by the runtime, when known.
      */
     model?: string;
+    /**
+     * Safe, upstream-reported execution facts. These are attribution signals,
+     * not independently verified Footnote facts, and never include text.
+     */
+    upstreamAttribution?: {
+        resolvedModel?: string;
+        inferenceProvider?: string;
+        routingAttempt?: number;
+        routingAttemptCount?: number;
+        upstreamReportedCostUsd?: number;
+    };
     /**
      * Optional provider/runtime finish reason for debugging or metadata
      * assembly.

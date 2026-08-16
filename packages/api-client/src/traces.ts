@@ -8,6 +8,8 @@
 import type {
     GetTraceResponse,
     GetTraceStaleResponse,
+    GetResponseVersionsResponse,
+    GetResponseVersionsStaleResponse,
     PostTraceCardFromTraceRequest,
     PostTraceCardFromTraceResponse,
     PostTraceCardRequest,
@@ -17,11 +19,12 @@ import type {
 } from '@footnote/contracts/web';
 import {
     GetTraceApiResponseSchema,
+    GetResponseVersionsApiResponseSchema,
     PostTraceCardFromTraceResponseSchema,
     PostTraceCardResponseSchema,
     PostTracesResponseSchema,
     createSchemaResponseValidator,
-} from '@footnote/contracts/web/schemas';
+} from '@footnote/contracts/web';
 import type { ApiJsonResult, ApiRequester } from './client.js';
 
 export type CreateTraceApiOptions = {
@@ -37,6 +40,14 @@ export type TraceApi = {
         responseId: string,
         options?: { signal?: AbortSignal }
     ) => Promise<ApiJsonResult<GetTraceResponse | GetTraceStaleResponse>>;
+    getResponseVersions: (
+        responseId: string,
+        options?: { signal?: AbortSignal }
+    ) => Promise<
+        ApiJsonResult<
+            GetResponseVersionsResponse | GetResponseVersionsStaleResponse
+        >
+    >;
     postTraceCard: (
         request: PostTraceCardRequest,
         options?: { signal?: AbortSignal }
@@ -107,6 +118,31 @@ export const createTraceApi = (
     };
 
     /**
+     * @api.operationId: getResponseVersions
+     * @api.path: GET /api/traces/{responseId}/response-versions
+     */
+    const getResponseVersions = async (
+        responseId: string,
+        options?: { signal?: AbortSignal }
+    ): Promise<
+        ApiJsonResult<
+            GetResponseVersionsResponse | GetResponseVersionsStaleResponse
+        >
+    > => {
+        const encodedResponseId = encodeURIComponent(responseId);
+        return requestJson<
+            GetResponseVersionsResponse | GetResponseVersionsStaleResponse
+        >(`/api/traces/${encodedResponseId}/response-versions`, {
+            method: 'GET',
+            signal: options?.signal,
+            acceptedStatusCodes: [410],
+            validateResponse: createSchemaResponseValidator(
+                GetResponseVersionsApiResponseSchema
+            ),
+        });
+    };
+
+    /**
      * @api.operationId: postTraceCards
      * @api.path: POST /api/trace-cards
      */
@@ -161,6 +197,7 @@ export const createTraceApi = (
     return {
         postTraces,
         getTrace,
+        getResponseVersions,
         postTraceCard,
         postTraceCardFromTrace,
     };

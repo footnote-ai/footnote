@@ -480,6 +480,73 @@ const createTraceHandlers = ({
         }
     };
 
+    /**
+     * @api.operationId: getResponseVersions
+     * @api.path: GET /api/traces/{responseId}/response-versions
+     */
+    const handleResponseVersionsRequest = async (
+        req: IncomingMessage,
+        res: ServerResponse,
+        parsedUrl: URL
+    ): Promise<void> => {
+        try {
+            if (req.method !== 'GET') {
+                sendJson(res, 405, { error: 'Method not allowed' });
+                logRequest(req, res, 'response versions method-not-allowed');
+                return;
+            }
+            const pathMatch = parsedUrl.pathname.match(
+                /^\/api\/traces\/([^/]+)\/response-versions\/?$/
+            );
+            if (!pathMatch) {
+                sendJson(res, 400, {
+                    error: 'Invalid response versions request format',
+                });
+                logRequest(req, res, 'response versions invalid-format');
+                return;
+            }
+            const responseId = pathMatch[1];
+            if (
+                !requireTraceStore(
+                    traceStore,
+                    req,
+                    res,
+                    'response versions store-unavailable'
+                )
+            ) {
+                return;
+            }
+            const readResult = await readTraceMetadata(traceStore, responseId);
+            if (readResult.status === 'not-found') {
+                sendJson(res, 404, { error: 'Trace not found' });
+                logRequest(req, res, 'response versions not-found');
+                return;
+            }
+            if (readResult.status === 'error') {
+                sendJson(res, 500, { error: 'Failed to read trace' });
+                logRequest(req, res, 'response versions read-error');
+                return;
+            }
+            const candidates =
+                await traceStore.retrieveResponseCandidates(responseId);
+            const payload = { responseId, candidates };
+            const staleAfterDate = getStaleAfterDate(readResult.metadata);
+            if (staleAfterDate && staleAfterDate < new Date()) {
+                sendJson(res, 410, { message: 'Trace is stale', ...payload });
+                logRequest(req, res, 'response versions stale');
+                return;
+            }
+            sendJson(res, 200, payload);
+            logRequest(req, res, 'response versions success');
+        } catch (error) {
+            logger.error(
+                `Failed to retrieve response versions: ${error instanceof Error ? error.message : String(error)}`
+            );
+            sendJson(res, 500, { error: 'Failed to read response versions' });
+            logRequest(req, res, 'response versions error');
+        }
+    };
+
     // Write handler: validate, rate limit, then store the trace payload.
     /**
      * @api.operationId: postTraces
@@ -821,6 +888,7 @@ const createTraceHandlers = ({
 
     return {
         handleTraceRequest,
+        handleResponseVersionsRequest,
         handleTraceUpsertRequest,
         handleTraceCardCreateRequest,
         handleTraceCardFromTraceRequest,

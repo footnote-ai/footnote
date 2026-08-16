@@ -10,6 +10,7 @@ primary_region = 'ord'
   ALLOWED_ORIGINS = 'https://ai.jordanmakes.dev'
   FRAME_ANCESTORS = 'https://ai.jordanmakes.dev'
   TURNSTILE_ALLOWED_HOSTNAMES = 'ai.jordanmakes.dev'
+  OLLAMA_BASE_URL = 'https://ollama.com'
 
 [[services]]
   internal_port = 3000

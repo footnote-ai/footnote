@@ -46,6 +46,20 @@ export interface ModelProfileCapabilities {
 }
 
 /**
+ * Optional provider routing policy attached to a profile. These values express
+ * deployment selection, never persona or Footnote governance policy.
+ */
+export interface ModelProfileProviderRouting {
+    openrouter?: {
+        order?: string[];
+        only?: string[];
+        allowFallbacks?: boolean;
+        dataCollection?: 'allow' | 'deny';
+        zdr?: boolean;
+    };
+}
+
+/**
  * One catalog entry describing how backend routing should target a concrete
  * provider model.
  */
@@ -57,6 +71,7 @@ export interface ModelProfile {
     enabled: boolean;
     tierBindings: ModelTierAlias[];
     capabilities: ModelProfileCapabilities;
+    providerRouting?: ModelProfileProviderRouting;
     /** Fallback effort used only when the caller does not request one. */
     defaultReasoningEffort?: SupportedReasoningEffort;
     maxInputTokens?: number;
@@ -117,6 +132,22 @@ export const ModelProfileCapabilitiesSchema = z
     })
     .strict();
 
+export const ModelProfileProviderRoutingSchema: z.ZodType<ModelProfileProviderRouting> =
+    z
+        .object({
+            openrouter: z
+                .object({
+                    order: z.array(z.string().min(1)).min(1).optional(),
+                    only: z.array(z.string().min(1)).min(1).optional(),
+                    allowFallbacks: z.boolean().optional(),
+                    dataCollection: z.enum(['allow', 'deny']).optional(),
+                    zdr: z.boolean().optional(),
+                })
+                .strict()
+                .optional(),
+        })
+        .strict();
+
 /**
  * Schema for one model profile entry.
  */
@@ -129,6 +160,7 @@ export const ModelProfileSchema: z.ZodType<ModelProfile> = z
         enabled: z.boolean(),
         tierBindings: z.array(z.enum(modelTierAliases)).default([]),
         capabilities: ModelProfileCapabilitiesSchema,
+        providerRouting: ModelProfileProviderRoutingSchema.optional(),
         defaultReasoningEffort: z.enum(supportedReasoningEfforts).optional(),
         maxInputTokens: z.number().int().positive().optional(),
         maxOutputTokens: z.number().int().positive().optional(),
@@ -207,8 +239,20 @@ export const StepRoutingModeMapSchema: z.ZodType<StepRoutingModeMap> = z
 export const StepRoutingChainsConfigSchema: z.ZodType<StepRoutingChainsConfig> =
     z
         .object({
-            express: StepRoutingModeMapSchema,
-            balanced: StepRoutingModeMapSchema,
-            grounded: StepRoutingModeMapSchema,
+            express: StepRoutingModeMapSchema.default({
+                planner: [],
+                generate: [],
+                assess: [],
+            }),
+            balanced: StepRoutingModeMapSchema.default({
+                planner: [],
+                generate: [],
+                assess: [],
+            }),
+            grounded: StepRoutingModeMapSchema.default({
+                planner: [],
+                generate: [],
+                assess: [],
+            }),
         })
         .strict();

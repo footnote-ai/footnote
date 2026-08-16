@@ -104,7 +104,6 @@ const STEP_KIND_LABELS: Partial<Record<WorkflowStepKind, string>> = {
     generate: 'generation',
     assess: 'assessment',
     revise: 'revision',
-    style_rewrite: 'style rewrite',
     finalize: 'finalization',
 };
 

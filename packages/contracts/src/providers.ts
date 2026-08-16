@@ -9,7 +9,7 @@
 /**
  * Provider backends currently recognized by shared Footnote packages.
  */
-export const supportedProviders = ['openai', 'ollama'] as const;
+export const supportedProviders = ['openai', 'ollama', 'openrouter'] as const;
 
 /**
  * One known provider identifier.

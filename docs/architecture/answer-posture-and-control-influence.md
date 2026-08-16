@@ -92,21 +92,22 @@ That means:
 - TRACE is not parsed from assistant footer text
 - persona overlays do not own TRACE meaning
 - presentation changes do not become execution authority
-- optional `style_rewrite` records remain structural execution facts, not TRACE or provenance authority
+- optional `presentation` records remain structural execution facts, not TRACE or provenance authority
 
-### Caution and style rewrite
+### Caution and presentation flow
 
 The optional backend workflow step may read only final TRACE `caution` as a
 constraint. Backend caution takes precedence over persona presentation guidance:
 `5` skips styling, `4` or unavailable caution permits restrained lexical and
 cadence edits only, and `1` to `3` permits the standard conservative budget.
-The style model cannot generate or modify TRACE. The validator must veto changes
-to caution, uncertainty, attribution, scope, or other answer posture. Mapping
+The style model cannot generate or modify TRACE. The audit may request one
+bounded finalizer repair for changes to caution, uncertainty, attribution,
+scope, or other answer posture. Mapping
 tightness, rationale, attribution, or extent to presentation is explicitly out
 of scope pending evaluation evidence.
 
-When a rewrite record exists, the trace view shows its outcome, model,
-validator evidence, edit estimate, and opaque HMAC identifiers. It never shows
+When a presentation record exists, the trace view shows its outcome, model,
+audit evidence, edit estimate, and opaque HMAC identifiers. It never shows
 or retains both answer versions for that display.
 
 ## Control influence records
@@ -383,7 +384,7 @@ These rules should stay true:
   proof
 - planner influence does not become workflow or policy authority
 - persona overlays and style instructions must not corrupt metadata generation
-- `style_rewrite` may change expression only and fails open to the main generated text
+- `presentation` may change expression only and fails open to the main generated text
 - tone and provider preference must stay bounded under execution-policy rules
 
 ## Related docs

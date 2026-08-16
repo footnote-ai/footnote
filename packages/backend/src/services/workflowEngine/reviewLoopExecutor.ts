@@ -57,6 +57,7 @@ import {
 } from './routingSignals.js';
 import { logger } from '../../utils/logger.js';
 import { resolveProfileReasoningEffort } from '../runtimeRequestControls.js';
+import type { ResponseCandidateCollector } from '../responseCandidates.js';
 
 type CaptureStep = (input: {
     stepKind: 'plan' | 'tool' | 'generate' | 'assess' | 'revise' | 'finalize';
@@ -128,6 +129,8 @@ export const executeReviewLoop = async (ctx: {
     effectiveParseReviewDecision: (text: string) => ReviewDecisionParseResult;
     captureStep: CaptureStep;
     draftParentStepId?: string;
+    draftCandidateId?: string;
+    responseCandidates: ResponseCandidateCollector;
     terminationReason: WorkflowTerminationReason;
     workflowStatus: 'completed' | 'degraded';
     shouldStop: boolean;
@@ -155,6 +158,7 @@ export const executeReviewLoop = async (ctx: {
     messagesWithContext: RuntimeMessage[];
     draftResult: GenerationResult | null;
     draftParentStepId?: string;
+    draftCandidateId?: string;
     terminationReason: WorkflowTerminationReason;
     workflowStatus: 'completed' | 'degraded';
     shouldStop: boolean;
@@ -170,6 +174,7 @@ export const executeReviewLoop = async (ctx: {
         messagesWithContext,
         draftResult,
         draftParentStepId,
+        draftCandidateId,
         terminationReason,
         workflowStatus,
         shouldStop,
@@ -262,6 +267,7 @@ export const executeReviewLoop = async (ctx: {
                                   model: profile.providerModel,
                                   provider: profile.provider,
                                   capabilities: profile.capabilities,
+                                  providerRouting: profile.providerRouting,
                                   reasoningEffort:
                                       resolveProfileReasoningEffort(
                                           profile,
@@ -590,6 +596,7 @@ export const executeReviewLoop = async (ctx: {
                                   model: profile.providerModel,
                                   provider: profile.provider,
                                   capabilities: profile.capabilities,
+                                  providerRouting: profile.providerRouting,
                                   reasoningEffort:
                                       resolveProfileReasoningEffort(
                                           profile,
@@ -647,6 +654,11 @@ export const executeReviewLoop = async (ctx: {
                 revisionResult,
                 revisionUsageModel
             );
+            const revisionCandidateId = ctx.responseCandidates.record({
+                stage: 'revision',
+                text: revisionResult.text,
+                parentCandidateId: draftCandidateId,
+            });
             const revisionStepId = ctx.captureStep({
                 stepKind: 'generate',
                 status: 'executed',
@@ -658,6 +670,9 @@ export const executeReviewLoop = async (ctx: {
                 estimatedCost: revisionUsage.estimatedCost,
                 parentStepId: input.reviewStepId,
                 attempt: input.iteration,
+                ...(revisionCandidateId !== undefined && {
+                    artifacts: [revisionCandidateId],
+                }),
                 signals: {
                     refinementApplied: true,
                     refinementSourceStepId: input.reviewStepId,
@@ -681,6 +696,12 @@ export const executeReviewLoop = async (ctx: {
                     }),
                 },
             });
+            if (revisionCandidateId !== undefined) {
+                ctx.responseCandidates.linkToWorkflowStep(
+                    revisionCandidateId,
+                    revisionStepId
+                );
+            }
             workflowState = applyStepExecutionToState(
                 workflowState,
                 'generate',
@@ -690,6 +711,7 @@ export const executeReviewLoop = async (ctx: {
             );
             draftResult = revisionResult;
             draftParentStepId = revisionStepId;
+            draftCandidateId = revisionCandidateId;
         } catch {
             const revisionFinishedAt = Date.now();
             ctx.captureStep({
@@ -802,6 +824,7 @@ export const executeReviewLoop = async (ctx: {
         messagesWithContext,
         draftResult,
         draftParentStepId,
+        draftCandidateId,
         terminationReason,
         workflowStatus,
         shouldStop,

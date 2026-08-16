@@ -894,6 +894,41 @@ paths:
                 '503':
                     $ref: '#/components/responses/ServiceUnavailable'
 
+    # Response candidate history fetch (public).
+    /api/traces/{responseId}/response-versions:
+        get:
+            operationId: getResponseVersions
+            x-codeRefs:
+                - packages/backend/src/handlers/trace.ts#handleResponseVersionsRequest
+                - packages/api-client/src/traces.ts#getResponseVersions
+                - packages/api-client/src/web.ts#getResponseVersions
+                - packages/discord-bot/src/api/traces.ts#getResponseVersions
+                - packages/web/src/utils/api.ts#getResponseVersions
+                - packages/contracts/src/web/types.ts#GetResponseVersionsResponse
+                - packages/contracts/src/web/types.ts#GetResponseVersionsStaleResponse
+            summary: Fetch stored response candidate history
+            description: |
+                Return model-produced response candidates for a stored trace.
+                Candidate text is excluded from the normal trace response.
+                Public endpoint; no auth or rate limits.
+            tags:
+                - Traces
+            parameters:
+                - $ref: '#/components/parameters/TraceResponseId'
+            responses:
+                '200':
+                    $ref: '#/components/responses/ResponseVersionsFetchOk'
+                '400':
+                    $ref: '#/components/responses/BadRequest'
+                '404':
+                    $ref: '#/components/responses/NotFound'
+                '410':
+                    $ref: '#/components/responses/ResponseVersionsStale'
+                '500':
+                    $ref: '#/components/responses/InternalServerError'
+                '503':
+                    $ref: '#/components/responses/ServiceUnavailable'
+
     # Trace-card SVG fetch (public).
     /api/traces/{responseId}/assets/trace-card.svg:
         get:
@@ -3144,7 +3179,7 @@ components:
                             generate,
                             assess,
                             revise,
-                            style_rewrite,
+                            presentation,
                             finalize,
                         ]
                 reasonCode:
@@ -3155,10 +3190,8 @@ components:
                             planner_invalid_output,
                             evaluator_runtime_error,
                             generation_runtime_error,
-                            style_rewrite_skipped,
-                            style_rewrite_applied,
-                            style_rewrite_rejected,
-                            style_rewrite_failed,
+                            presentation_finalized,
+                            presentation_fallback,
                             tool_not_requested,
                             tool_not_used,
                             search_rerouted_to_fallback_profile,
@@ -3319,7 +3352,7 @@ components:
                                     generate,
                                     assess,
                                     revise,
-                                    style_rewrite,
+                                    presentation,
                                     finalize,
                                 ]
                     required:
@@ -3496,10 +3529,6 @@ components:
                                         planner_invalid_output,
                                         evaluator_runtime_error,
                                         generation_runtime_error,
-                                        style_rewrite_skipped,
-                                        style_rewrite_applied,
-                                        style_rewrite_rejected,
-                                        style_rewrite_failed,
                                         tool_not_requested,
                                         tool_not_used,
                                         search_rerouted_to_fallback_profile,
@@ -3525,71 +3554,119 @@ components:
                         additionalProperties: false
                 workflow:
                     $ref: '#/components/schemas/WorkflowRecord'
-                styleRewrite:
+                presentation:
                     type: object
-                    description: Optional backend-owned presentation-only rewrite outcome. Full source and rewritten texts are not required to be retained.
+                    description: Optional backend-owned draft-first presentation receipt. It records bounded attempts and outcomes without retaining either full response text.
                     properties:
                         step:
                             type: string
-                            enum: [style_rewrite]
+                            enum: [presentation]
                         outcome:
                             type: string
-                            enum: [applied, skipped, rejected, failed]
+                            enum:
+                                [
+                                    finalized,
+                                    finalized_after_evidence_repair,
+                                    finalized_after_presentation_repair,
+                                    finalized_with_audit_unavailable,
+                                    fallback,
+                                ]
                         attempted:
                             type: boolean
                         reasonCode:
                             type: string
                             enum:
                                 [
-                                    applied,
+                                    finalized,
+                                    evidence_repaired,
+                                    presentation_repaired,
+                                    audit_unavailable,
+                                    audit_invalid,
+                                    presentation_repair_unavailable,
+                                    evidence_repair_unavailable,
                                     disabled,
                                     profile_not_configured,
-                                    protected_content,
                                     structured_output,
                                     mechanical_preservation_failed,
-                                    semantic_drift,
-                                    validator_invalid,
-                                    validator_unavailable,
-                                    budget_unavailable,
-                                    transition_not_allowed,
                                     trace_caution_high,
-                                    timeout,
-                                    provider_error,
+                                    draft_timeout,
+                                    draft_provider_error,
+                                    finalizer_timeout,
+                                    finalizer_provider_error,
                                 ]
                         personaId:
                             type: string
-                        profileId:
+                        draftProfileId:
                             type: string
-                        provider:
+                        draftRequestedProvider:
                             type: string
-                        model:
+                        draftRequestedModel:
                             type: string
-                        validatorProfileId:
+                        draftModel:
                             type: string
-                        validatorModel:
+                        auditProfileId:
                             type: string
+                        auditProvider:
+                            type: string
+                        auditModel:
+                            type: string
+                        upstreamInferenceProvider:
+                            type: string
+                            description: Upstream-reported style-draft inference provider. Footnote does not independently verify this value.
+                        upstreamResolvedModel:
+                            type: string
+                        upstreamRoutingAttempt:
+                            type: integer
+                            minimum: 1
+                        upstreamRoutingAttemptCount:
+                            type: integer
+                            minimum: 1
+                        backendEstimatedCostUsd:
+                            type: number
+                            minimum: 0
+                            description: Backend-calculated estimate for presentation draft and audit calls.
+                        upstreamReportedCostUsd:
+                            type: number
+                            minimum: 0
                         durationMs:
                             type: integer
                             minimum: 0
-                        validatorOutcome:
+                        auditOutcome:
                             type: string
                             enum:
                                 [
                                     not_attempted,
-                                    equivalent,
-                                    drift,
-                                    uncertain,
+                                    clear,
+                                    evidence_issue,
+                                    presentation_flattened,
+                                    invalid,
+                                ]
+                        auditFailureCategory:
+                            type: string
+                            description: Safe category only; raw audit feedback and provider errors are never stored here.
+                            enum:
+                                [
+                                    timeout,
+                                    provider_failure,
+                                    invalid_structured_output,
                                     unavailable,
                                 ]
-                        originalHmacId:
+                        draftAttemptCount:
+                            type: integer
+                            enum: [0, 1]
+                        finalizerAttemptCount:
+                            type: integer
+                            enum: [0, 1, 2]
+                        auditAttemptCount:
+                            type: integer
+                            enum: [0, 1]
+                        draftHmacId:
                             type: string
                             pattern: '^[a-f0-9]{64}$'
-                            description: Opaque backend-keyed HMAC identifier; not proof of equivalence.
-                        presentedHmacId:
+                        finalHmacId:
                             type: string
                             pattern: '^[a-f0-9]{64}$'
-                            description: Opaque backend-keyed HMAC identifier; not proof of equivalence.
-                        editRatio:
+                        styledDraftRetentionRatio:
                             type: number
                             minimum: 0
                             maximum: 1
@@ -3608,8 +3685,10 @@ components:
                             attempted,
                             reasonCode,
                             personaId,
-                            validatorOutcome,
-                            editRatio,
+                            auditOutcome,
+                            draftAttemptCount,
+                            finalizerAttemptCount,
+                            auditAttemptCount,
                             intensity,
                             traceConstrained,
                         ]
@@ -4030,6 +4109,65 @@ components:
             required:
                 - message
                 - metadata
+            additionalProperties: false
+
+        ResponseCandidate:
+            type: object
+            description: One model-produced answer candidate retained with a trace. Plans, prompts, tools, audit output, and hidden reasoning are excluded.
+            properties:
+                id:
+                    type: string
+                parentCandidateId:
+                    type: string
+                workflowStepId:
+                    type: string
+                sequence:
+                    type: integer
+                    minimum: 0
+                stage:
+                    type: string
+                    enum:
+                        [
+                            initial_generation,
+                            revision,
+                            presentation_draft,
+                            presentation_finalization,
+                            presentation_repair,
+                            fallback,
+                        ]
+                state:
+                    type: string
+                    enum: [selected, superseded]
+                text:
+                    type: string
+            required: [id, workflowStepId, sequence, stage, state, text]
+            additionalProperties: false
+
+        ResponseVersionsResponse:
+            type: object
+            properties:
+                responseId:
+                    type: string
+                candidates:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/ResponseCandidate'
+            required: [responseId, candidates]
+            additionalProperties: false
+
+        ResponseVersionsStaleResponse:
+            type: object
+            properties:
+                message:
+                    type: string
+                    enum: [Trace is stale]
+                responseId:
+                    type: string
+                candidates:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/ResponseCandidate'
+            required: [message, responseId, candidates]
             additionalProperties: false
 
         # Runtime config.
@@ -4500,6 +4638,18 @@ components:
                 application/json:
                     schema:
                         $ref: '#/components/schemas/ResponseMetadata'
+        ResponseVersionsFetchOk:
+            description: Ordered model-produced response candidate history.
+            content:
+                application/json:
+                    schema:
+                        $ref: '#/components/schemas/ResponseVersionsResponse'
+        ResponseVersionsStale:
+            description: Trace has expired; candidate history is included with the stale envelope.
+            content:
+                application/json:
+                    schema:
+                        $ref: '#/components/schemas/ResponseVersionsStaleResponse'
         TraceCardCreateOk:
             description: Trace-card generated and stored.
             content:

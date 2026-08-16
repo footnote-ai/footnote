@@ -147,8 +147,8 @@ const buildResponseMetadata = (
         ...(runtimeContext.steerabilityControls !== undefined && {
             steerabilityControls: runtimeContext.steerabilityControls,
         }),
-        ...(runtimeContext.styleRewrite !== undefined && {
-            styleRewrite: runtimeContext.styleRewrite,
+        ...(runtimeContext.presentation !== undefined && {
+            presentation: runtimeContext.presentation,
         }),
         ...(evaluatorExecution?.outcome !== undefined && {
             evaluator: evaluatorExecution.outcome,

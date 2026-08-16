@@ -9,9 +9,14 @@ import type {
     GetRuntimeConfigResponse,
     GetTraceResponse,
     GetTraceStaleResponse,
+    GetResponseVersionsResponse,
+    GetResponseVersionsStaleResponse,
 } from '@footnote/contracts/web';
 import type { ApiJsonResult, ApiRequester } from './client.js';
-import { loadGetTraceApiResponseValidator } from './lazyWebValidators.js';
+import {
+    loadGetResponseVersionsApiResponseValidator,
+    loadGetTraceApiResponseValidator,
+} from './lazyWebValidators.js';
 
 export type WebReadApi = {
     getRuntimeConfig: (
@@ -21,6 +26,14 @@ export type WebReadApi = {
         responseId: string,
         signal?: AbortSignal
     ) => Promise<ApiJsonResult<GetTraceResponse | GetTraceStaleResponse>>;
+    getResponseVersions: (
+        responseId: string,
+        signal?: AbortSignal
+    ) => Promise<
+        ApiJsonResult<
+            GetResponseVersionsResponse | GetResponseVersionsStaleResponse
+        >
+    >;
 };
 
 export const createWebReadApi = (requestJson: ApiRequester): WebReadApi => {
@@ -66,8 +79,35 @@ export const createWebReadApi = (requestJson: ApiRequester): WebReadApi => {
         );
     };
 
+    /**
+     * @api.operationId: getResponseVersions
+     * @api.path: GET /api/traces/{responseId}/response-versions
+     */
+    const getResponseVersions = async (
+        responseId: string,
+        signal?: AbortSignal
+    ): Promise<
+        ApiJsonResult<
+            GetResponseVersionsResponse | GetResponseVersionsStaleResponse
+        >
+    > => {
+        const validateResponse =
+            await loadGetResponseVersionsApiResponseValidator();
+        const encodedResponseId = encodeURIComponent(responseId);
+        return requestJson<
+            GetResponseVersionsResponse | GetResponseVersionsStaleResponse
+        >(`/api/traces/${encodedResponseId}/response-versions`, {
+            method: 'GET',
+            signal,
+            headers: { Accept: 'application/json' },
+            acceptedStatusCodes: [410],
+            validateResponse,
+        });
+    };
+
     return {
         getRuntimeConfig,
         getTrace,
+        getResponseVersions,
     };
 };

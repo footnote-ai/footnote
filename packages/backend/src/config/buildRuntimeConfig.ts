@@ -11,6 +11,7 @@ import { buildLitestreamSection } from './sections/litestream.js';
 import { buildModelProfilesSection } from './sections/modelProfiles.js';
 import { buildOllamaSection } from './sections/ollama.js';
 import { buildOpenAISection } from './sections/openai.js';
+import { buildOpenRouterSection } from './sections/openrouter.js';
 import { buildExecutionContractTrustGraphSection } from './sections/executionContractTrustGraph.js';
 import { readBotProfileConfig } from './profile.js';
 import { buildRateLimitsSection } from './sections/rateLimits.js';
@@ -41,6 +42,7 @@ export const buildRuntimeConfig = (
     const { runtime, server } = buildRuntimeSections(effectiveEnv, warn);
     const openai = buildOpenAISection(effectiveEnv, warn);
     const ollama = buildOllamaSection(effectiveEnv);
+    const openrouter = buildOpenRouterSection(effectiveEnv);
     const modelProfiles = buildModelProfilesSection(
         effectiveEnv,
         runtime.projectRoot,
@@ -76,6 +78,7 @@ export const buildRuntimeConfig = (
         server,
         openai,
         ollama,
+        openrouter,
         modelProfiles,
         voltagent,
         cors: web.cors,

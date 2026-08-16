@@ -6,7 +6,7 @@
  * @footnote-ethics: high - Workflow control determines whether model-deliberative paths remain bounded and auditable.
  */
 import type {
-    StyleRewriteMetadata,
+    PresentationMetadata,
     WorkflowStepKind,
 } from '@footnote/contracts/policy';
 import type { WorkflowTerminationReason } from '@footnote/contracts/policy';
@@ -28,7 +28,8 @@ import type {
     GenerationRuntime,
     RuntimeMessage,
 } from '@footnote/agent-runtime';
-import type { ModelProfile } from '@footnote/contracts';
+import type { ModelProfile, TraceAxisScore } from '@footnote/contracts';
+import type { ResponseCandidate } from '@footnote/contracts/web';
 import { logger } from '../utils/logger.js';
 import { resolveProfileReasoningEffort } from './runtimeRequestControls.js';
 import type {
@@ -79,11 +80,11 @@ import type { ResolvedStepRoutingCandidate } from './stepRoutingChains.js';
 import { buildRoutingChainSignals } from './workflowEngine/routingSignals.js';
 import { toRoutingChainResult } from './routingChainResult.js';
 import {
-    createStyleRewriteSkipResult,
-    runStyleRewriteStep,
-    type StyleRewriteConfig,
-    type StyleRewritePersona,
-} from './styleRewrite.js';
+    runPresentationStep,
+    type PresentationConfig,
+    type PresentationPersona,
+} from './presentation.js';
+import { createResponseCandidateCollector } from './responseCandidates.js';
 
 /**
  * Canonical Execution Contract workflow-policy surface.
@@ -176,14 +177,15 @@ export type RunBoundedReviewWorkflowInput = {
         assessCandidates: ResolvedStepRoutingCandidate[];
     };
     /** Optional, backend-owned presentation step. It is never a generic transform pipeline. */
-    styleRewrite?: {
-        config: StyleRewriteConfig;
-        persona: StyleRewritePersona;
-        protectedContent: boolean;
+    presentation?: {
+        config: PresentationConfig;
+        persona: PresentationPersona;
+        /** Resolved TRACE caution from the planning path before presentation runs. */
+        caution?: TraceAxisScore;
         captureUsage: (
             result: GenerationResult,
             profile: ModelProfile,
-            feature: 'chat_style_rewrite' | 'chat_style_validation'
+            feature: 'chat_presentation_draft' | 'chat_presentation_audit'
         ) => ReviewWorkflowUsageSummary;
     };
 };
@@ -193,7 +195,8 @@ export type RunBoundedReviewWorkflowResult =
           outcome: 'generated';
           generationResult: GenerationResult;
           workflowLineage: WorkflowRecord;
-          styleRewrite?: StyleRewriteMetadata;
+          responseCandidates?: ResponseCandidate[];
+          presentation?: PresentationMetadata;
           plannerStepResult?: PlannerStepResult;
           planContinuation?: PlanContinuation;
           contextStepResult?: ContextStepResult;
@@ -286,7 +289,7 @@ export const runBoundedReviewWorkflow = async ({
     contextStepExecutorRegistry,
     openAiNativeSearchFromHintsEnabled = false,
     stepRoutingChainSet,
-    styleRewrite,
+    presentation,
 }: RunBoundedReviewWorkflowInput): Promise<RunBoundedReviewWorkflowResult> => {
     if (!contextEnvelope) {
         throw new Error(
@@ -326,11 +329,14 @@ export const runBoundedReviewWorkflow = async ({
     const workflowStartedAt = Date.now();
     const workflowId = `wf_${workflowStartedAt.toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
     const workflowSteps: StepRecord[] = [];
-    let stepCounter = 0;
+    // Both the engine and review-loop seam append lineage steps. Keep one
+    // shared counter so a post-review presentation step cannot reuse an
+    // assessment or planner-reentry id and invalidate trace persistence.
+    const workflowStepCounter = { value: 0 };
     let plannerRootStepId: string | undefined;
     if (plannerStepRecord?.stepKind === 'plan') {
         workflowSteps.push(plannerStepRecord);
-        stepCounter = 1;
+        workflowStepCounter.value = 1;
         plannerRootStepId = plannerStepRecord.stepId;
     }
     let plannerExecutionResult: PlannerStepResult | undefined;
@@ -419,6 +425,7 @@ export const runBoundedReviewWorkflow = async ({
         workflowName: workflowConfig.workflowName,
         startedAtMs: workflowStartedAt,
     });
+    const responseCandidates = createResponseCandidateCollector();
 
     if (plannerStepRecord?.stepKind === 'plan') {
         const plannerStepUsageTokens =
@@ -449,8 +456,8 @@ export const runBoundedReviewWorkflow = async ({
         signals?: StepSignals;
         recommendations?: string[];
     }): string => {
-        stepCounter += 1;
-        const stepId = `step_${stepCounter}`;
+        workflowStepCounter.value += 1;
+        const stepId = `step_${workflowStepCounter.value}`;
         workflowSteps.push({
             stepId,
             ...(input.parentStepId !== undefined && {
@@ -585,7 +592,7 @@ export const runBoundedReviewWorkflow = async ({
                 },
             });
             workflowSteps.push(plannerStep);
-            stepCounter = 1;
+            workflowStepCounter.value = 1;
             plannerRootStepId = plannerStep.stepId;
             workflowState = applyStepExecutionToState(
                 workflowState,
@@ -861,17 +868,22 @@ export const runBoundedReviewWorkflow = async ({
         }
     }
 
+    let presentationMetadata: PresentationMetadata | undefined;
+    let presentationFinalized = false;
+    let draftCandidateId: string | undefined;
+    const initialResponseStepKind: WorkflowStepKind =
+        presentation?.config.enabled === true ? 'presentation' : 'generate';
     if (!shouldStop) {
         if (
             !isWorkflowTransitionAllowed(
                 workflowState.currentStepKind,
-                'generate',
+                initialResponseStepKind,
                 workflowPolicy
             )
         ) {
             terminationReason = 'transition_blocked_by_policy';
             shouldStop = true;
-        } else if (!stopIfOverLimits('generate').stopped) {
+        } else if (!stopIfOverLimits(initialResponseStepKind).stopped) {
             const initialDraftStartedAt = generationStartedAtMs;
             messagesWithContext = injectContextMessagesIntoPrompt(
                 effectiveMessagesWithHints,
@@ -910,7 +922,284 @@ export const runBoundedReviewWorkflow = async ({
                             },
                         }),
                 };
+                const activePresentation = presentation;
+                const presentationStartedAt = Date.now();
+                const presentationCaution =
+                    planContinuation?.continuation === 'continue_message'
+                        ? (planContinuation.plannerTemperament?.caution ??
+                          planContinuation.plannerSummary.executionPlan
+                              .generation.temperament?.caution ??
+                          activePresentation?.caution)
+                        : activePresentation?.caution;
+                const presentationResult =
+                    activePresentation?.config.enabled === true
+                        ? await runPresentationStep({
+                              generationRuntime,
+                              generationRequest: generationRequestForAttempt,
+                              finalize: async (request, signal) => {
+                                  if (
+                                      stepRoutingChainSet?.generateCandidates &&
+                                      stepRoutingChainSet.generateCandidates
+                                          .length > 0
+                                  ) {
+                                      const chainResult =
+                                          await executeStepRoutingChain({
+                                              step: 'generate',
+                                              candidates:
+                                                  stepRoutingChainSet.generateCandidates,
+                                              enabledProfilesById:
+                                                  stepRoutingChainSet.enabledProfilesById,
+                                              requiresSearch:
+                                                  request.search !== undefined,
+                                              runWithProfile: async (profile) =>
+                                                  generationRuntime.generate({
+                                                      ...request,
+                                                      model: profile.providerModel,
+                                                      provider:
+                                                          profile.provider,
+                                                      capabilities:
+                                                          profile.capabilities,
+                                                      providerRouting:
+                                                          profile.providerRouting,
+                                                      reasoningEffort:
+                                                          resolveProfileReasoningEffort(
+                                                              profile,
+                                                              request.reasoningEffort,
+                                                              logger
+                                                          ),
+                                                      signal,
+                                                  }),
+                                          });
+                                      const routingResult =
+                                          toRoutingChainResult(chainResult);
+                                      if (routingResult.isErr()) {
+                                          throw new Error(
+                                              `presentation_finalizer_${routingResult.error.reasonCode}`
+                                          );
+                                      }
+                                      return routingResult.value.value;
+                                  }
+                                  return generationRuntime.generate({
+                                      ...request,
+                                      signal,
+                                  });
+                              },
+                              config: activePresentation.config,
+                              persona: activePresentation.persona,
+                              caution: presentationCaution,
+                          })
+                        : undefined;
                 if (
+                    presentationResult !== undefined &&
+                    activePresentation !== undefined
+                ) {
+                    presentationMetadata = presentationResult.metadata;
+                    const draftUsage =
+                        presentationResult.draftResult !== undefined &&
+                        activePresentation.config.profile !== undefined
+                            ? activePresentation.captureUsage(
+                                  presentationResult.draftResult,
+                                  activePresentation.config.profile,
+                                  'chat_presentation_draft'
+                              )
+                            : undefined;
+                    const auditUsage =
+                        presentationResult.auditResult !== undefined &&
+                        activePresentation.config.validatorProfile !== undefined
+                            ? activePresentation.captureUsage(
+                                  presentationResult.auditResult,
+                                  activePresentation.config.validatorProfile,
+                                  'chat_presentation_audit'
+                              )
+                            : undefined;
+                    const finalizerUsages =
+                        presentationResult.finalizerResults.map((result) =>
+                            captureUsage(
+                                result,
+                                effectiveGenerationRequest.model
+                            )
+                        );
+                    const usageSummaries = [
+                        draftUsage,
+                        ...finalizerUsages,
+                        auditUsage,
+                    ].filter(
+                        (usage): usage is ReviewWorkflowUsageSummary =>
+                            usage !== undefined
+                    );
+                    const presentationUsage =
+                        usageSummaries.length === 0
+                            ? undefined
+                            : {
+                                  promptTokens: usageSummaries.reduce(
+                                      (total, usage) =>
+                                          total + usage.promptTokens,
+                                      0
+                                  ),
+                                  completionTokens: usageSummaries.reduce(
+                                      (total, usage) =>
+                                          total + usage.completionTokens,
+                                      0
+                                  ),
+                                  totalTokens: usageSummaries.reduce(
+                                      (total, usage) =>
+                                          total + usage.totalTokens,
+                                      0
+                                  ),
+                              };
+                    const presentationCost =
+                        usageSummaries.length === 0
+                            ? undefined
+                            : {
+                                  inputCostUsd: usageSummaries.reduce(
+                                      (total, usage) =>
+                                          total +
+                                          usage.estimatedCost.inputCostUsd,
+                                      0
+                                  ),
+                                  outputCostUsd: usageSummaries.reduce(
+                                      (total, usage) =>
+                                          total +
+                                          usage.estimatedCost.outputCostUsd,
+                                      0
+                                  ),
+                                  totalCostUsd: usageSummaries.reduce(
+                                      (total, usage) =>
+                                          total +
+                                          usage.estimatedCost.totalCostUsd,
+                                      0
+                                  ),
+                              };
+                    if (presentationCost !== undefined) {
+                        presentationMetadata.backendEstimatedCostUsd =
+                            presentationCost.totalCostUsd;
+                    }
+                    const finalizerResult =
+                        presentationResult.finalizerResults.at(-1);
+                    const presentationSucceeded =
+                        presentationResult.outcome === 'finalized' &&
+                        finalizerResult !== undefined &&
+                        presentationResult.text !== undefined;
+                    const presentationDraftCandidateId =
+                        presentationResult.draftResult !== undefined
+                            ? responseCandidates.record({
+                                  stage: 'presentation_draft',
+                                  text: presentationResult.draftResult.text,
+                              })
+                            : undefined;
+                    const presentationCandidateIds = [
+                        ...(presentationDraftCandidateId !== undefined
+                            ? [presentationDraftCandidateId]
+                            : []),
+                        ...presentationResult.finalizerResults.flatMap(
+                            (result, index) => {
+                                const candidateId = responseCandidates.record({
+                                    stage:
+                                        index === 0
+                                            ? 'presentation_finalization'
+                                            : 'presentation_repair',
+                                    text: result.text,
+                                    parentCandidateId:
+                                        index === 0
+                                            ? presentationDraftCandidateId
+                                            : responseCandidates.latestCandidateId(),
+                                });
+                                return candidateId === undefined
+                                    ? []
+                                    : [candidateId];
+                            }
+                        ),
+                    ];
+                    const presentationStepId = captureStep({
+                        stepKind: 'presentation',
+                        status: presentationSucceeded
+                            ? 'executed'
+                            : presentationResult.metadata.attempted
+                              ? 'failed'
+                              : 'skipped',
+                        summary: presentationSucceeded
+                            ? 'Finalized presentation draft with evidence-aware editing.'
+                            : 'Presentation draft was unavailable; workflow used normal generation fallback.',
+                        reasonCode: presentationSucceeded
+                            ? 'presentation_finalized'
+                            : 'presentation_fallback',
+                        startedAtMs: presentationStartedAt,
+                        finishedAtMs: Date.now(),
+                        model:
+                            finalizerUsages.at(-1)?.model ??
+                            draftUsage?.model ??
+                            auditUsage?.model,
+                        usage: presentationUsage,
+                        estimatedCost: presentationCost,
+                        parentStepId: plannerRootStepId,
+                        attempt: 1,
+                        ...(presentationCandidateIds.length > 0 && {
+                            artifacts: presentationCandidateIds,
+                        }),
+                        signals: {
+                            presentationOutcome:
+                                presentationResult.metadata.outcome,
+                            presentationReasonCode:
+                                presentationResult.metadata.reasonCode,
+                            presentationAttempted:
+                                presentationResult.metadata.attempted,
+                            draftAttemptCount:
+                                presentationResult.metadata.draftAttemptCount,
+                            finalizerAttemptCount:
+                                presentationResult.metadata
+                                    .finalizerAttemptCount,
+                            auditAttemptCount:
+                                presentationResult.metadata.auditAttemptCount,
+                            auditOutcome:
+                                presentationResult.metadata.auditOutcome,
+                            draftProfileId:
+                                presentationResult.metadata.draftProfileId ??
+                                null,
+                            auditProfileId:
+                                presentationResult.metadata.auditProfileId ??
+                                null,
+                        },
+                    });
+                    for (const candidateId of presentationCandidateIds) {
+                        responseCandidates.linkToWorkflowStep(
+                            candidateId,
+                            presentationStepId
+                        );
+                    }
+                    workflowState = applyStepExecutionToState(
+                        workflowState,
+                        'presentation',
+                        presentationUsage?.totalTokens ?? 0,
+                        0,
+                        0
+                    );
+                    if (
+                        presentationSucceeded &&
+                        finalizerResult !== undefined &&
+                        presentationResult.text !== undefined
+                    ) {
+                        draftResult = {
+                            ...finalizerResult,
+                            text: presentationResult.text,
+                        };
+                        draftParentStepId = presentationStepId;
+                        draftCandidateId = presentationCandidateIds.at(-1);
+                        presentationFinalized = true;
+                    }
+                }
+                const canRunNormalGeneration =
+                    draftResult === null &&
+                    isWorkflowTransitionAllowed(
+                        workflowState.currentStepKind,
+                        'generate',
+                        workflowPolicy
+                    );
+                if (draftResult === null && !canRunNormalGeneration) {
+                    terminationReason = 'transition_blocked_by_policy';
+                    shouldStop = true;
+                } else if (
+                    draftResult === null &&
+                    !stopIfOverLimits('generate').stopped &&
                     stepRoutingChainSet?.generateCandidates &&
                     stepRoutingChainSet.generateCandidates.length > 0
                 ) {
@@ -927,6 +1216,7 @@ export const runBoundedReviewWorkflow = async ({
                                 model: profile.providerModel,
                                 provider: profile.provider,
                                 capabilities: profile.capabilities,
+                                providerRouting: profile.providerRouting,
                                 reasoningEffort: resolveProfileReasoningEffort(
                                     profile,
                                     generationRequestForAttempt.reasoningEffort,
@@ -993,17 +1283,33 @@ export const runBoundedReviewWorkflow = async ({
                         };
                         draftResult = routingResult.value.value;
                     }
-                } else {
+                } else if (
+                    canRunNormalGeneration &&
+                    !stopIfOverLimits('generate').stopped
+                ) {
                     draftResult = await generationRuntime.generate(
                         generationRequestForAttempt
                     );
                 }
-                if (!shouldStop && draftResult !== null) {
+                if (
+                    !shouldStop &&
+                    draftResult !== null &&
+                    !presentationFinalized
+                ) {
                     const initialDraftFinishedAt = Date.now();
                     const initialDraftUsage = captureUsage(
                         draftResult,
                         effectiveGenerationRequest.model
                     );
+                    const initialDraftCandidateId = responseCandidates.record({
+                        stage:
+                            presentationMetadata?.outcome === 'fallback'
+                                ? 'fallback'
+                                : 'initial_generation',
+                        text: draftResult.text,
+                        parentCandidateId:
+                            responseCandidates.latestCandidateId(),
+                    });
                     const initialDraftStepId = captureStep({
                         stepKind: 'generate',
                         status: 'executed',
@@ -1015,6 +1321,9 @@ export const runBoundedReviewWorkflow = async ({
                         estimatedCost: initialDraftUsage.estimatedCost,
                         parentStepId: plannerRootStepId,
                         attempt: 1,
+                        ...(initialDraftCandidateId !== undefined && {
+                            artifacts: [initialDraftCandidateId],
+                        }),
                         ...(initialRoutingChainAttempts !== undefined && {
                             signals: {
                                 ...buildRoutingChainSignals({
@@ -1033,7 +1342,14 @@ export const runBoundedReviewWorkflow = async ({
                             },
                         }),
                     });
+                    if (initialDraftCandidateId !== undefined) {
+                        responseCandidates.linkToWorkflowStep(
+                            initialDraftCandidateId,
+                            initialDraftStepId
+                        );
+                    }
                     draftParentStepId = initialDraftStepId;
+                    draftCandidateId = initialDraftCandidateId;
                     workflowState = applyStepExecutionToState(
                         workflowState,
                         'generate',
@@ -1041,7 +1357,7 @@ export const runBoundedReviewWorkflow = async ({
                         0,
                         0
                     );
-                } else if (!shouldStop) {
+                } else if (!shouldStop && draftResult === null) {
                     throw new Error(
                         'Initial generation completed without a draft result.'
                     );
@@ -1087,13 +1403,18 @@ export const runBoundedReviewWorkflow = async ({
             }
         }
     }
-    if (!shouldStop && effectiveMaxIterations === 0) {
+    if (
+        !shouldStop &&
+        (effectiveMaxIterations === 0 || presentationFinalized)
+    ) {
         terminationReason = 'goal_satisfied';
         workflowStatus = 'completed';
     }
 
     const reviewLoopResult = await executeReviewLoop({
-        effectiveMaxIterations,
+        effectiveMaxIterations: presentationFinalized
+            ? 0
+            : effectiveMaxIterations,
         workflowPolicy,
         stopIfOverLimits,
         selectedReviewModuleIds,
@@ -1106,6 +1427,8 @@ export const runBoundedReviewWorkflow = async ({
         effectiveParseReviewDecision,
         captureStep,
         draftParentStepId,
+        draftCandidateId,
+        responseCandidates,
         terminationReason,
         workflowStatus,
         shouldStop,
@@ -1120,13 +1443,13 @@ export const runBoundedReviewWorkflow = async ({
         effectiveMessagesWithHints,
         effectiveContextEnvelope,
         effectiveRevisionPromptPrefix,
-        stepCounterRef: { value: stepCounter },
+        stepCounterRef: workflowStepCounter,
         workflowStepsRef: { value: workflowSteps },
         planContinuation,
         stepRoutingChainSet,
     });
-    stepCounter = reviewLoopResult.stepCounter;
     draftResult = reviewLoopResult.draftResult;
+    draftCandidateId = reviewLoopResult.draftCandidateId;
     terminationReason = reviewLoopResult.terminationReason;
     workflowStatus = reviewLoopResult.workflowStatus;
     workflowState = reviewLoopResult.workflowState;
@@ -1134,209 +1457,8 @@ export const runBoundedReviewWorkflow = async ({
     stoppedBeforeStepKind = reviewLoopResult.stoppedBeforeStepKind;
     planContinuation = reviewLoopResult.planContinuation;
 
-    // Styling runs only after a completed reviewed workflow. It never changes a
-    // valid answer into a degraded workflow: no remaining step/call budget
-    // simply leaves the original draft in place.
-    let styleRewriteMetadata: StyleRewriteMetadata | undefined;
-    if (
-        draftResult !== null &&
-        workflowStatus === 'completed' &&
-        terminationReason === 'goal_satisfied' &&
-        styleRewrite !== undefined
-    ) {
-        const canTransition = isWorkflowTransitionAllowed(
-            workflowState.currentStepKind,
-            'style_rewrite',
-            workflowPolicy
-        );
-        const hasTwoCallBudget =
-            !styleRewrite.config.enabled ||
-            workflowState.deliberationCallCount + 2 <=
-                executionLimits.maxDeliberationCalls;
-        const hasStepBudget =
-            workflowState.stepCount < executionLimits.maxWorkflowSteps;
-        const hasRemainingWorkflowBudget = checkExecutionLimits(
-            workflowState,
-            executionLimits,
-            Date.now(),
-            'style_rewrite'
-        ).withinLimits;
-        const finalAssessStep = [...workflowSteps]
-            .reverse()
-            .find((step) => step.stepKind === 'assess');
-        const assessedCaution =
-            finalAssessStep?.outcome.signals?.finalTemperamentCaution;
-        const caution =
-            typeof assessedCaution === 'number' &&
-            assessedCaution >= 1 &&
-            assessedCaution <= 5
-                ? assessedCaution
-                : undefined;
-        if (
-            canTransition &&
-            hasTwoCallBudget &&
-            hasStepBudget &&
-            hasRemainingWorkflowBudget
-        ) {
-            const styleStartedAt = Date.now();
-            const styleResult = await runStyleRewriteStep({
-                original: draftResult,
-                generationRuntime,
-                config: styleRewrite.config,
-                persona: styleRewrite.persona,
-                eligibility: {
-                    protectedContent:
-                        styleRewrite.protectedContent ||
-                        draftResult.retrieval?.used === true ||
-                        (draftResult.citations?.length ?? 0) > 0 ||
-                        draftResult.toolExecution?.status === 'executed',
-                },
-                caution,
-            });
-            styleRewriteMetadata = styleResult.metadata;
-            const rewriteUsage =
-                styleResult.rewriteResult !== undefined &&
-                styleRewrite.config.profile !== undefined
-                    ? styleRewrite.captureUsage(
-                          styleResult.rewriteResult,
-                          styleRewrite.config.profile,
-                          'chat_style_rewrite'
-                      )
-                    : undefined;
-            const validatorUsage =
-                styleResult.validatorResult !== undefined &&
-                styleRewrite.config.validatorProfile !== undefined
-                    ? styleRewrite.captureUsage(
-                          styleResult.validatorResult,
-                          styleRewrite.config.validatorProfile,
-                          'chat_style_validation'
-                      )
-                    : undefined;
-            const totalTokens =
-                (rewriteUsage?.totalTokens ?? 0) +
-                (validatorUsage?.totalTokens ?? 0);
-            const deliberationCalls = styleResult.metadata.attempted
-                ? styleResult.metadata.validatorOutcome === 'not_attempted'
-                    ? 1
-                    : 2
-                : 0;
-            captureStep({
-                stepKind: 'style_rewrite',
-                status:
-                    styleResult.metadata.outcome === 'applied'
-                        ? 'executed'
-                        : styleResult.metadata.outcome === 'skipped'
-                          ? 'skipped'
-                          : 'failed',
-                summary: `Style rewrite ${styleResult.metadata.outcome}: ${styleResult.metadata.reasonCode}.`,
-                reasonCode:
-                    styleResult.metadata.outcome === 'applied'
-                        ? 'style_rewrite_applied'
-                        : styleResult.metadata.outcome === 'skipped'
-                          ? 'style_rewrite_skipped'
-                          : styleResult.metadata.outcome === 'failed'
-                            ? 'style_rewrite_failed'
-                            : 'style_rewrite_rejected',
-                startedAtMs: styleStartedAt,
-                finishedAtMs: Date.now(),
-                model: rewriteUsage?.model,
-                usage:
-                    totalTokens > 0
-                        ? {
-                              promptTokens:
-                                  (rewriteUsage?.promptTokens ?? 0) +
-                                  (validatorUsage?.promptTokens ?? 0),
-                              completionTokens:
-                                  (rewriteUsage?.completionTokens ?? 0) +
-                                  (validatorUsage?.completionTokens ?? 0),
-                              totalTokens,
-                          }
-                        : undefined,
-                estimatedCost:
-                    rewriteUsage !== undefined || validatorUsage !== undefined
-                        ? {
-                              inputCostUsd:
-                                  (rewriteUsage?.estimatedCost.inputCostUsd ??
-                                      0) +
-                                  (validatorUsage?.estimatedCost.inputCostUsd ??
-                                      0),
-                              outputCostUsd:
-                                  (rewriteUsage?.estimatedCost.outputCostUsd ??
-                                      0) +
-                                  (validatorUsage?.estimatedCost
-                                      .outputCostUsd ?? 0),
-                              totalCostUsd:
-                                  (rewriteUsage?.estimatedCost.totalCostUsd ??
-                                      0) +
-                                  (validatorUsage?.estimatedCost.totalCostUsd ??
-                                      0),
-                          }
-                        : undefined,
-                parentStepId: draftParentStepId,
-                attempt: 1,
-                signals: {
-                    outcome: styleResult.metadata.outcome,
-                    reasonCode: styleResult.metadata.reasonCode,
-                    personaId: styleResult.metadata.personaId,
-                    validatorOutcome: styleResult.metadata.validatorOutcome,
-                    originalHmacId: styleResult.metadata.originalHmacId ?? null,
-                    presentedHmacId:
-                        styleResult.metadata.presentedHmacId ?? null,
-                    editRatio: styleResult.metadata.editRatio,
-                    caution: styleResult.metadata.caution ?? null,
-                    intensity: styleResult.metadata.intensity,
-                    traceConstrained: styleResult.metadata.traceConstrained,
-                },
-            });
-            workflowState = applyStepExecutionToState(
-                workflowState,
-                'style_rewrite',
-                totalTokens,
-                0,
-                deliberationCalls
-            );
-            draftResult = { ...draftResult, text: styleResult.text };
-        } else if (styleRewrite.config.enabled && canTransition) {
-            const styleResult = createStyleRewriteSkipResult({
-                original: draftResult,
-                config: styleRewrite.config,
-                persona: styleRewrite.persona,
-                reasonCode: 'budget_unavailable',
-                caution,
-            });
-            styleRewriteMetadata = styleResult.metadata;
-            if (hasStepBudget) {
-                captureStep({
-                    stepKind: 'style_rewrite',
-                    status: 'skipped',
-                    summary:
-                        'Style rewrite skipped because workflow budget was unavailable.',
-                    reasonCode: 'style_rewrite_skipped',
-                    startedAtMs: Date.now(),
-                    finishedAtMs: Date.now(),
-                    parentStepId: draftParentStepId,
-                    attempt: 1,
-                    signals: {
-                        outcome: 'skipped',
-                        reasonCode: 'budget_unavailable',
-                        caution: caution ?? null,
-                        intensity: styleResult.metadata.intensity,
-                        traceConstrained: styleResult.metadata.traceConstrained,
-                    },
-                });
-            }
-        } else if (styleRewrite.config.enabled) {
-            const styleResult = createStyleRewriteSkipResult({
-                original: draftResult,
-                config: styleRewrite.config,
-                persona: styleRewrite.persona,
-                reasonCode: 'transition_not_allowed',
-                caution,
-            });
-            styleRewriteMetadata = styleResult.metadata;
-        }
-    }
-
+    // Presentation runs before final wording. Its receipt is serialized
+    // separately, so semantic workflow limits only describe recorded steps.
     const workflowLineage: WorkflowRecord = {
         workflowId,
         workflowName: workflowConfig.workflowName,
@@ -1397,12 +1519,17 @@ export const runBoundedReviewWorkflow = async ({
         };
     }
 
+    if (draftCandidateId !== undefined) {
+        responseCandidates.markSelected(draftCandidateId);
+    }
+
     return {
         outcome: 'generated',
         generationResult: draftResult,
         workflowLineage,
-        ...(styleRewriteMetadata !== undefined && {
-            styleRewrite: styleRewriteMetadata,
+        responseCandidates: responseCandidates.finalize(),
+        ...(presentationMetadata !== undefined && {
+            presentation: presentationMetadata,
         }),
         ...(plannerExecutionResult !== undefined && {
             plannerStepResult: plannerExecutionResult,

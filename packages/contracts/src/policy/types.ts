@@ -186,10 +186,8 @@ export type ExecutionReasonCode =
     | 'planner_invalid_output'
     | 'evaluator_runtime_error'
     | 'generation_runtime_error'
-    | 'style_rewrite_skipped'
-    | 'style_rewrite_applied'
-    | 'style_rewrite_rejected'
-    | 'style_rewrite_failed'
+    | 'presentation_finalized'
+    | 'presentation_fallback'
     | 'tool_not_requested'
     | 'tool_not_used'
     | 'search_rerouted_to_fallback_profile'
@@ -391,8 +389,7 @@ export type ExecutionEventKind =
     | 'planner'
     | 'evaluator'
     | 'tool'
-    | 'generation'
-    | 'style_rewrite';
+    | 'generation';
 
 type BaseExecutionEvent = {
     status: ExecutionStatus;
@@ -438,57 +435,84 @@ export type GenerationExecutionEvent = ProfileExecutionEvent & {
 };
 
 /**
- * Backend-owned record for the optional presentation-only rewrite that follows
- * main generation. It records outcome without retaining either full text.
+ * Backend-owned receipt for the optional draft-first presentation flow. It
+ * records only bounded operational facts, never either full response text.
  */
-export type StyleRewriteOutcome = 'applied' | 'skipped' | 'rejected' | 'failed';
+export type PresentationOutcome =
+    | 'finalized'
+    | 'finalized_after_evidence_repair'
+    | 'finalized_after_presentation_repair'
+    | 'finalized_with_audit_unavailable'
+    | 'fallback';
 
-export type StyleRewriteReasonCode =
-    | 'applied'
+export type PresentationReasonCode =
+    | 'finalized'
+    | 'evidence_repaired'
+    | 'presentation_repaired'
+    | 'audit_unavailable'
+    | 'audit_invalid'
+    | 'presentation_repair_unavailable'
+    | 'evidence_repair_unavailable'
     | 'disabled'
     | 'profile_not_configured'
-    | 'protected_content'
     | 'structured_output'
     | 'mechanical_preservation_failed'
-    | 'semantic_drift'
-    | 'validator_invalid'
-    | 'validator_unavailable'
-    | 'budget_unavailable'
-    | 'transition_not_allowed'
     | 'trace_caution_high'
-    | 'timeout'
-    | 'provider_error';
+    | 'draft_timeout'
+    | 'draft_provider_error'
+    | 'finalizer_timeout'
+    | 'finalizer_provider_error';
 
-export type StyleRewriteSemanticEvidence =
+export type PresentationAuditOutcome =
     | 'not_attempted'
-    | 'equivalent'
-    | 'drift'
-    | 'uncertain'
+    | 'clear'
+    | 'evidence_issue'
+    | 'presentation_flattened'
+    | 'invalid';
+
+/** Safe operational category for an audit result that could not guide finalization. */
+export type PresentationAuditFailureCategory =
+    | 'timeout'
+    | 'provider_failure'
+    | 'invalid_structured_output'
     | 'unavailable';
 
-export type StyleRewriteMetadata = {
-    step: 'style_rewrite';
-    outcome: StyleRewriteOutcome;
+export type PresentationMetadata = {
+    step: 'presentation';
+    outcome: PresentationOutcome;
     attempted: boolean;
-    reasonCode: StyleRewriteReasonCode;
+    reasonCode: PresentationReasonCode;
     personaId: string;
-    profileId?: string;
-    provider?: string;
-    model?: string;
-    validatorProfileId?: string;
-    validatorModel?: string;
+    draftProfileId?: string;
+    /** Deployment-requested style-draft provider, distinct from upstream resolution. */
+    draftRequestedProvider?: string;
+    draftRequestedModel?: string;
+    draftModel?: string;
+    /** Upstream-reported routing facts; Footnote does not independently verify them. */
+    upstreamInferenceProvider?: string;
+    upstreamResolvedModel?: string;
+    upstreamRoutingAttempt?: number;
+    upstreamRoutingAttemptCount?: number;
+    /** Backend-estimated total for all bounded presentation calls. */
+    backendEstimatedCostUsd?: number;
+    upstreamReportedCostUsd?: number;
+    auditProfileId?: string;
+    auditProvider?: string;
+    auditModel?: string;
     durationMs?: number;
-    // Semantic comparison is evidence only, never proof of preservation.
-    validatorOutcome: StyleRewriteSemanticEvidence;
-    /** Opaque backend-keyed HMAC for retained text, when a backend key is configured. */
-    originalHmacId?: string;
-    /** Opaque backend-keyed HMAC for presented text; it does not prove equivalence. */
-    presentedHmacId?: string;
-    /** Conservative lexical edit estimate, not a semantic similarity claim. */
-    editRatio: number;
-    /** Final backend TRACE caution that constrained this presentation-only step. */
+    /** Audit is a bounded repair signal, not a display veto. */
+    auditOutcome: PresentationAuditOutcome;
+    /** Never contains audit feedback or provider error text. */
+    auditFailureCategory?: PresentationAuditFailureCategory;
+    draftAttemptCount: 0 | 1;
+    finalizerAttemptCount: 0 | 1 | 2;
+    auditAttemptCount: 0 | 1;
+    /** Opaque backend-keyed HMAC identifiers. They do not prove semantic equivalence. */
+    draftHmacId?: string;
+    finalHmacId?: string;
+    /** Lexical retention from styled draft to final response, not a semantic guarantee. */
+    styledDraftRetentionRatio?: number;
     caution?: TraceAxisScore;
-    /** Caution-only v1 policy; other TRACE axes are intentionally unsupported. */
     intensity: 'standard' | 'restrained' | 'skipped';
     traceConstrained: boolean;
 };
@@ -507,7 +531,7 @@ export const WORKFLOW_STEP_KINDS = [
     'generate',
     'assess',
     'revise',
-    'style_rewrite',
+    'presentation',
     'finalize',
 ] as const;
 
@@ -1364,6 +1388,6 @@ export type ResponseMetadata = {
     trace_final_reason_code?: TraceFinalizationReasonCode;
     trustGraph?: TrustGraphMetadata;
     imageGeneration?: ImageGenerationMetadata;
-    // Optional presentation-only rewrite record. It never stores both answer texts.
-    styleRewrite?: StyleRewriteMetadata;
+    // Optional presentation record. It never stores both answer texts.
+    presentation?: PresentationMetadata;
 };

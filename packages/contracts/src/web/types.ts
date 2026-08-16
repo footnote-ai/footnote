@@ -911,6 +911,45 @@ export type GetTraceStaleResponse = {
 };
 
 /**
+ * One model-produced response candidate retained with its parent trace.
+ * Candidate text is available only from the dedicated history endpoint.
+ *
+ * @api.operationId: getResponseVersions
+ * @api.path: GET /api/traces/{responseId}/response-versions
+ */
+export type ResponseCandidateStage =
+    | 'initial_generation'
+    | 'revision'
+    | 'presentation_draft'
+    | 'presentation_finalization'
+    | 'presentation_repair'
+    | 'fallback';
+
+/** @api.operationId: getResponseVersions @api.path: GET /api/traces/{responseId}/response-versions */
+export type ResponseCandidate = {
+    id: string;
+    parentCandidateId?: string;
+    workflowStepId: string;
+    sequence: number;
+    stage: ResponseCandidateStage;
+    state: 'selected' | 'superseded';
+    text: string;
+};
+
+/** @api.operationId: getResponseVersions @api.path: GET /api/traces/{responseId}/response-versions */
+export type GetResponseVersionsResponse = {
+    responseId: string;
+    candidates: ResponseCandidate[];
+};
+
+/** @api.operationId: getResponseVersions @api.path: GET /api/traces/{responseId}/response-versions */
+export type GetResponseVersionsStaleResponse = {
+    message: 'Trace is stale';
+    responseId: string;
+    candidates: ResponseCandidate[];
+};
+
+/**
  * @api.operationId: getRuntimeConfig
  * @api.path: GET /config.json
  */
