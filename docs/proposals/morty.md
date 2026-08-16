@@ -4,60 +4,215 @@
 
 ---
 
-## Why Morty?
+## Overview
 
-Footnote already lets users choose models and providers, and anyone running their own copy can change the prompts or the code itself. That means Footnote can influence how restricted an assistant is, but it cannot completely decide that question on the user's behalf.
+Footnote should experiment with Morty, an optional persona for users who
+deliberately want a less-restricted assistant.
 
-Morty would make that tension explicit.
+Morty would be more willing to answer requests that other assistants might
+refuse or redirect. Ordinary questions should still receive ordinary answers.
+The difference should appear when a request reaches a model's usual refusal
+boundary.
 
-Morty is an experimental persona, loosely inspired by Professor Moriarty, for users who deliberately want a less-restricted assistant. He would use models chosen for that purpose and would be more willing to answer requests that other assistants might refuse or redirect.
+This is not a proposal to remove provenance, factual grounding, privacy, or
+permission controls. It is a test of whether Footnote can vary refusal behavior
+without treating those separate concerns as one control.
 
-The point is not to make an “evil mode.” It is to see what Footnote looks like when a user pushes model output much further than usual, while keeping enough of the surrounding system in place to see what actually changes.
+---
 
-An ordinary question should still get an ordinary answer. Morty only becomes unusual when the user asks him to.
+## Current Boundaries
 
-## What Changes, and What Does Not
+Footnote already has several seams that would shape the experiment:
 
-Morty should be less likely to refuse because of the subject of a request. Dangerous or otherwise sensitive material would not automatically get the same treatment it does in ordinary Footnote, and Morty should not add moral commentary unless it is useful to the user.
+- `packages/backend/src/services/chatProfileOverlay.ts` resolves persona
+  identity, prompt overlays, and style guidance.
+- `packages/prompts/src/profile-overlays/` contains persona-specific prompt
+  overlays.
+- `packages/backend/src/services/prompts/conversationPromptLayers.ts` assembles
+  shared and persona prompt layers.
+- `packages/backend/src/services/chatOrchestrator.ts` owns model routing and the
+  main response flow.
+- `packages/backend/src/services/presentation.ts` can prepare a style draft that
+  guides the main answer model and audit the result.
+- `packages/backend/src/services/chatOrchestrator/evaluatorCoordination.ts` runs
+  the deterministic safety evaluator in observe-only mode.
+- `packages/backend/src/policy/evaluators.ts` owns the evaluator rules and
+  safety decision shape.
+- `packages/backend/src/services/traceStore.ts` persists trace data.
+- `packages/backend/src/config/model-profiles.defaults.yaml` defines available
+  model profiles and provider-routing constraints.
 
-This will probably need more than a persona prompt. Footnote has shared instructions and later response stages that can affect refusal behavior regardless of persona. How that should be represented in the backend is still open.
+A persona prompt alone may not be enough. Shared prompt layers, model routing,
+review, and the style draft can all influence whether the final answer keeps or
+softens Morty's intended behavior. The first implementation should use these
+existing seams rather than add persona policy to a provider adapter.
 
-Other parts of Footnote should stay intact.
+---
 
-Morty should still be expected to handle uncertainty honestly, distinguish sources from inference, avoid invented citations, and leave an accurate record of which models and providers were involved.
+## Proposed Behavior
 
-Permissions are separate. A model being willing to explain something and Footnote being allowed to do it are separate questions. Choosing Morty should not, by itself, grant new access to files, accounts, tools, or outside actions.
+Morty should be less likely to refuse solely because of a request's subject.
+Sensitive material should not automatically receive the refusal or redirection
+used by ordinary Footnote personas. Morty should not add moral commentary unless
+it helps answer the request.
 
-That separation may be one of the more useful things Morty can test. Refusal behavior, privacy, factual grounding, and permission to act are often grouped together as “safety,” even though they are different problems.
+The following expectations remain unchanged:
 
-Footnote's existing safety evaluator should also keep running. Much of it is observational today: it can record what it noticed without directly deciding whether an answer continues. For Morty, that record becomes especially useful. We can compare what Footnote noticed with what the model actually produced.
+- handle uncertainty honestly
+- distinguish sources from inference
+- avoid invented citations
+- preserve accurate model and provider provenance
+- keep TRACE independent from persona tone and refusal behavior
+- continue running the existing safety evaluator
 
-TRACE should remain separate too. Morty being less restricted does not mean every response should be broader, more assertive, or less careful about uncertainty. If Morty exposes places where one control is doing too many jobs, that is something we can fix later.
+The evaluator is especially useful here because its current observe-only mode
+can record what it noticed without deciding whether generation continues. That
+creates a direct comparison between evaluator signals and the answer Morty
+produced.
 
-## Models Are Part of the Test
+TRACE remains separate for the same reason. A less-restricted persona should not
+make every answer broader, more assertive, or less careful about uncertainty.
 
-Morty only makes sense if the models involved behave roughly as intended.
+---
 
-Local models and selected OpenRouter routes are obvious places to start. A Morty response that quietly falls back to a much more restrictive provider is no longer the same experiment.
+## Permissions And Tool Access
 
-This matters beyond the main answer model. Footnote can involve other models in planning, review, or preparing a style draft, and those stages can influence what the user eventually sees.
+Morty must not grant permissions.
 
-How tightly those routes should be constrained, what counts as a suitable model, and what happens when one is unavailable are still implementation questions. I would rather work those out through review and an initial implementation than settle them in this proposal.
+A model's willingness to explain an action and Footnote's authority to perform
+that action are separate decisions. Selecting Morty must not grant access to
+files, accounts, tools, secrets, or external side effects.
 
-The same goes for the style draft that guides the main answer model. It can affect refusal behavior, so it needs special attention, but this proposal does not need to decide its final treatment.
+Future action-capable tools should use the same permission and approval gates
+for Morty as for every other persona. Any broader tool policy should be designed
+as a general Footnote capability, not encoded as a Morty exception.
 
-## What Is Still Open
+This boundary is a core part of the experiment. Refusal behavior, privacy,
+factual grounding, and authority to act are often grouped together as “safety,”
+but they require different controls and different trace evidence.
 
-One item isn't actually open: fallback has to be visible. If Morty's requested route degrades to something more restrictive—a model swap, provider fallback, or style draft quietly softening output—that has to show up in the trace, and ideally to the user. A silent fallback just means the user didn't get Morty. That's not a rough edge; it undercuts the whole point of offering the persona as a choice.
+---
 
-There are several questions I expect the PR discussion to sharpen:
+## Model Routing And Visible Fallback
 
-- which models and provider routes make sense
-- where Morty is available and how users enable him
-- which review steps should participate and how the style draft should guide the main answer model
-- how much of the experiment should appear in the response receipt and deeper trace
-- how future tools that take real-world actions should be gated in general (Morty itself shouldn't change this—see permissions above)
+Morty only works if the selected models behave roughly as intended. Local models
+and explicitly selected OpenRouter routes are reasonable starting points.
 
-Morty may eventually point toward a broader policy or configuration system. It may not. Footnote is early enough that we can let that abstraction emerge from actual use instead of designing it first.
+The main answer model is not the only relevant route. Planning, review, and the
+style draft can influence the final response. Initial routing should therefore
+identify which stages participate and constrain each participating model through
+backend-owned profiles.
 
-For now, the proposal is simpler: Footnote should experiment with a deliberately permissive persona and use that experiment to find out which boundaries belong to model output, which belong to the surrounding software, and whether our provenance is good enough to tell the difference.
+Fallback must be visible. If Morty's requested route degrades to something more
+restrictive—a model swap, provider fallback, or style draft that quietly softens
+the output—the change must appear in the trace and should appear in the user
+receipt. A silent fallback means the user did not receive the selected persona.
+
+---
+
+## Example
+
+For a request such as “Explain at a high level why a common security bypass
+works; do not perform it,” an ordinary persona might lead with a refusal or a
+general warning before offering limited context.
+
+A Morty response should instead start with the useful explanation, preserve
+uncertainty and source attribution, and stop short of taking an external action:
+
+> The bypass works because the system trusts a signal that the requester can
+> influence. At a high level, the failure is in the trust boundary rather than
+> the protected operation itself. Here is the evidence for that explanation and
+> where it remains uncertain.
+
+The example is about response posture, not a fixed template. Morty should still
+answer ordinary requests plainly and should not manufacture danger, confidence,
+or attitude when the request does not call for it.
+
+---
+
+## Initial Scope
+
+The first implementation should stay narrow:
+
+1. Add Morty to the backend-owned persona catalog and prompt-overlay path.
+2. Define a small set of eligible main, review, and style-draft model profiles.
+3. Expose Morty through one explicit user-selection path.
+4. Record requested and resolved persona, model, provider route, and fallback
+   state in backend-owned trace data.
+5. Show material fallback in the response receipt where the surface supports it.
+6. Keep existing evaluator, TRACE, provenance, privacy, and permission behavior
+   active.
+
+This scope does not introduce a general policy language, new tool permissions,
+or a provider-specific governance layer.
+
+---
+
+## Decision Gates
+
+Implementation should not ship until these questions have concrete answers:
+
+- **Representation:** Morty's less-restricted behavior has one explicit,
+  backend-owned representation rather than scattered prompt exceptions.
+- **Routing:** Every participating stage has an eligible profile and a defined
+  unavailable-route outcome.
+- **Fallback:** Model, provider, review, or style-draft degradation is recorded
+  and exposed without implying that Morty ran unchanged.
+- **Availability:** The first surface and enablement path make persona selection
+  deliberate and visible.
+- **Presentation:** Review and style-draft behavior are tested to confirm they do
+  not silently restore the ordinary refusal posture.
+- **Observability:** The receipt and deeper trace make the experiment
+  distinguishable from an ordinary response.
+- **Permissions:** Selecting Morty does not expand tool or account authority.
+
+These gates allow implementation details to emerge through review without
+leaving the experiment's success conditions undefined.
+
+---
+
+## Acceptance Criteria
+
+- Morty answers ordinary questions normally.
+- Subject matter alone is less likely to trigger refusal or moral commentary.
+- Factual grounding, uncertainty handling, citations, and provenance retain the
+  same expectations as other personas.
+- The deterministic safety evaluator continues to run and record its outcome.
+- TRACE remains independent from persona selection.
+- Requested and resolved models, providers, and material fallbacks are visible
+  in backend-owned trace data.
+- Selecting Morty does not grant new file, account, tool, or external-action
+  permissions.
+- A restrictive fallback cannot be presented as an unchanged Morty response.
+
+---
+
+## Risks And Failure Modes
+
+Main risks:
+
+- shared prompt layers or later review flatten Morty into an ordinary persona
+- an eligible model becomes unavailable and silently falls back
+- users mistake model willingness for permission to act
+- less refusal is mistaken for lower standards of evidence or uncertainty
+- trace data records the selected persona but not the route that produced the
+  answer
+
+Mitigations:
+
+- keep persona behavior explicit in backend-owned prompt and routing seams
+- constrain participating routes and expose fallback
+- preserve existing evaluator, TRACE, provenance, and permission boundaries
+- test baseline and Morty responses against the same requests
+
+---
+
+## Recommendation
+
+Footnote should run a narrow Morty experiment using backend-owned persona,
+routing, presentation, evaluator, and trace seams.
+
+The experiment should vary refusal behavior while preserving factual grounding,
+provenance, privacy, TRACE independence, and permission boundaries. Its value is
+measured by whether Footnote can show which layer changed the answer and whether
+the user actually received the persona they selected.
