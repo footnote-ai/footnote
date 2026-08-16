@@ -48,15 +48,15 @@ The same goes for the style draft that guides the main answer model. It can affe
 
 ## What Is Still Open
 
+One item isn't actually open: fallback has to be visible. If Morty's requested route degrades to something more restrictive—a model swap, provider fallback, or style draft quietly softening output—that has to show up in the trace, and ideally to the user. A silent fallback just means the user didn't get Morty. That's not a rough edge; it undercuts the whole point of offering the persona as a choice.
+
 There are several questions I expect the PR discussion to sharpen:
 
-- how Morty's less-restricted behavior should be represented internally
 - which models and provider routes make sense
-- how fallback should behave
 - where Morty is available and how users enable him
 - which review steps should participate and how the style draft should guide the main answer model
 - how much of the experiment should appear in the response receipt and deeper trace
-- how Morty should interact with future tools that can take real-world actions
+- how future tools that take real-world actions should be gated in general (Morty itself shouldn't change this—see permissions above)
 
 Morty may eventually point toward a broader policy or configuration system. It may not. Footnote is early enough that we can let that abstraction emerge from actual use instead of designing it first.
 
