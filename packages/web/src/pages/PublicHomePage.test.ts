@@ -27,9 +27,8 @@ test('public homepage keeps approved prepared-response content and destinations'
     assert.match(source, /<Link to="\/chat">Chat<\/Link>/);
     assert.doesNotMatch(source, /ai\.jordanmakes\.dev\/ask/);
     assert.match(source, /TraceFooterPlaceholder/);
-    assert.match(source, /landingScenarios\.map/);
-    assert.match(source, /public-home__scenario-dot--selected/);
-    assert.match(source, /setIsTransitioning\(true\)/);
+    assert.match(source, /ResponseCarousel/);
+    assert.match(source, /items=\{landingScenarios\}/);
     assert.match(
         source,
         /https:\/\/github\.com\/footnote-ai\/footnote\/releases/
@@ -46,6 +45,19 @@ test('public homepage keeps approved prepared-response content and destinations'
     );
     assert.doesNotMatch(source, /Download Footnote/);
     assert.doesNotMatch(source, /Quickstart/);
+});
+
+test('response carousel owns the preserved transition and accessible dot controls', async () => {
+    const source = await readFile(
+        `${webSourceDirectory}components${path.sep}ResponseCarousel.tsx`,
+        'utf8'
+    );
+
+    assert.match(source, /setIsTransitioning\(true\)/);
+    assert.match(source, /aria-pressed/);
+    assert.match(source, /ArrowLeft/);
+    assert.match(source, /ArrowRight/);
+    assert.match(source, /showPreviousNextControls/);
 });
 
 test('public cutover removes the design-lab route', async () => {

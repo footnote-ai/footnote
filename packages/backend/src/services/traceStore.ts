@@ -6,6 +6,7 @@
  * @footnote-ethics: high - Missing provenance data reduces transparency guarantees.
  */
 import type { ResponseMetadata } from '@footnote/contracts/policy';
+import type { ResponseCandidate } from '@footnote/contracts/web';
 import {
     createTraceStoreFromConfig,
     type TraceStore,
@@ -54,7 +55,8 @@ const createTraceStore = (): TraceStore => createTraceStoreFromConfig();
 // --- Trace persistence wrapper ---
 const storeTrace = async (
     traceStore: TraceStore,
-    metadata: ResponseMetadata
+    metadata: ResponseMetadata,
+    candidates?: readonly ResponseCandidate[]
 ): Promise<void> => {
     try {
         // --- Response identifier guard ---
@@ -65,7 +67,7 @@ const storeTrace = async (
         }
 
         // --- Write-through ---
-        await traceStore.upsert(metadata);
+        await traceStore.upsert(metadata, candidates);
         logger.debug(`Trace stored successfully: ${responseId}`);
 
         await mirrorTraceMetadata(metadata);

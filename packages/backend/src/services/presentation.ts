@@ -204,6 +204,7 @@ const buildMetadata = (input: {
     finalText?: string;
     audit?: PresentationAudit;
     auditResult?: GenerationResult;
+    auditFailureCategory?: PresentationMetadata['auditFailureCategory'];
     draftAttemptCount: PresentationDraftAttemptCount;
     finalizerAttemptCount: PresentationFinalizerAttemptCount;
     auditAttemptCount: PresentationAuditAttemptCount;
@@ -241,6 +242,9 @@ const buildMetadata = (input: {
         auditOutcome:
             input.audit?.verdict ??
             (input.auditResult === undefined ? 'not_attempted' : 'invalid'),
+        ...(input.auditFailureCategory !== undefined && {
+            auditFailureCategory: input.auditFailureCategory,
+        }),
         draftAttemptCount: input.draftAttemptCount,
         finalizerAttemptCount: input.finalizerAttemptCount,
         auditAttemptCount: input.auditAttemptCount,
@@ -560,7 +564,7 @@ export const runPresentationStep = async (input: {
                 }),
             'presentation_audit_timeout'
         );
-    } catch {
+    } catch (error) {
         return {
             outcome: 'finalized',
             text: initialFinal,
@@ -574,6 +578,11 @@ export const runPresentationStep = async (input: {
                 config: input.config,
                 draft: draftResult,
                 finalText: initialFinal,
+                auditFailureCategory:
+                    error instanceof Error &&
+                    error.message === 'presentation_audit_timeout'
+                        ? 'timeout'
+                        : 'provider_failure',
                 draftAttemptCount,
                 finalizerAttemptCount,
                 auditAttemptCount,
@@ -600,6 +609,7 @@ export const runPresentationStep = async (input: {
                 draft: draftResult,
                 finalText: initialFinal,
                 auditResult,
+                auditFailureCategory: 'invalid_structured_output',
                 draftAttemptCount,
                 finalizerAttemptCount,
                 auditAttemptCount,

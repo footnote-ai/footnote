@@ -174,7 +174,11 @@ test('details action renders markdown sections with execution table and trace vi
         assert.match(content, /\/traces\/resp_details_sections/);
         assert.match(content, /Review fallback/);
         assert.match(content, /Planner fallback/);
-        assert.match(content, /Presentation finalized with audit unavailable/);
+        assert.match(
+            content,
+            /Audit did not return a usable result; the finalized answer was kept/
+        );
+        assert.doesNotMatch(content, /candidate_.*Final answer/u);
         assert.match(content, /Sources available/);
         assert.match(content, /Target Attribution: `5`/);
         assert.match(content, /Final Attribution: `3`/);

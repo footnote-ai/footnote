@@ -66,6 +66,11 @@ const createTestServer = async (): Promise<TestServer> => {
             return;
         }
 
+        if (parsedUrl.pathname.endsWith('/response-versions')) {
+            void handlers.handleResponseVersionsRequest(req, res, parsedUrl);
+            return;
+        }
+
         res.statusCode = 404;
         res.end();
     });
@@ -148,6 +153,104 @@ test('POST /api/trace-cards returns PNG payload and stores SVG asset', async () 
         const svg = await assetResponse.text();
         assert.match(svg, /<svg[^>]*>/);
         assert.match(svg, /TRACE card/);
+    } finally {
+        await server.close();
+        await server.cleanup();
+    }
+});
+
+test('GET /api/traces/:responseId/response-versions returns ordered candidates and stale envelopes', async () => {
+    const server = await createTestServer();
+    const responseId = 'response_versions_123';
+    try {
+        await server.store.upsert(
+            {
+                responseId,
+                provenance: 'Inferred',
+                safetyTier: 'Low',
+                tradeoffCount: 1,
+                chainHash: 'versions_hash',
+                licenseContext: 'MIT + HL3',
+                modelVersion: 'gpt-5-mini',
+                staleAfter: new Date(Date.now() + 60000).toISOString(),
+                citations: [],
+                trace_target: {},
+                trace_final: {},
+            },
+            [
+                {
+                    id: 'candidate_earlier',
+                    workflowStepId: 'step_1',
+                    sequence: 0,
+                    stage: 'initial_generation',
+                    state: 'superseded',
+                    text: 'Earlier answer.',
+                },
+                {
+                    id: 'candidate_final',
+                    parentCandidateId: 'candidate_earlier',
+                    workflowStepId: 'step_2',
+                    sequence: 1,
+                    stage: 'revision',
+                    state: 'selected',
+                    text: 'Final answer.',
+                },
+            ]
+        );
+        const response = await fetch(
+            `${server.url}/api/traces/${responseId}/response-versions`
+        );
+        assert.equal(response.status, 200);
+        const payload = (await response.json()) as {
+            responseId: string;
+            candidates: Array<{ id: string; text: string; state: string }>;
+        };
+        assert.equal(payload.responseId, responseId);
+        assert.deepEqual(payload.candidates, [
+            {
+                id: 'candidate_earlier',
+                workflowStepId: 'step_1',
+                sequence: 0,
+                stage: 'initial_generation',
+                state: 'superseded',
+                text: 'Earlier answer.',
+            },
+            {
+                id: 'candidate_final',
+                parentCandidateId: 'candidate_earlier',
+                workflowStepId: 'step_2',
+                sequence: 1,
+                stage: 'revision',
+                state: 'selected',
+                text: 'Final answer.',
+            },
+        ]);
+        await server.store.upsert({
+            responseId,
+            provenance: 'Inferred',
+            safetyTier: 'Low',
+            tradeoffCount: 1,
+            chainHash: 'versions_hash',
+            licenseContext: 'MIT + HL3',
+            modelVersion: 'gpt-5-mini',
+            staleAfter: new Date(Date.now() - 1000).toISOString(),
+            citations: [],
+            trace_target: {},
+            trace_final: {},
+        });
+        const staleResponse = await fetch(
+            `${server.url}/api/traces/${responseId}/response-versions`
+        );
+        assert.equal(staleResponse.status, 410);
+        const stalePayload = (await staleResponse.json()) as {
+            message: string;
+            candidates: Array<{ id: string }>;
+        };
+        assert.equal(stalePayload.message, 'Trace is stale');
+        assert.deepEqual(
+            stalePayload.candidates.map((candidate) => candidate.id),
+            ['candidate_earlier', 'candidate_final']
+        );
     } finally {
         await server.close();
         await server.cleanup();

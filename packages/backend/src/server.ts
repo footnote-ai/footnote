@@ -21,6 +21,7 @@ import {
     type RealtimeVoiceRuntime,
 } from '@footnote/agent-runtime';
 import type { ResponseMetadata } from '@footnote/contracts/policy';
+import type { ResponseCandidate } from '@footnote/contracts/web';
 
 import { runtimeConfig } from './config.js';
 import { buildResponseMetadata } from './services/responseMetadata.js';
@@ -433,17 +434,21 @@ try {
 }
 
 // --- Trace storage wrapper ---
-const storeTraceWithStore = (metadata: ResponseMetadata) => {
+const storeTraceWithStore = (
+    metadata: ResponseMetadata,
+    candidates?: readonly ResponseCandidate[]
+) => {
     // Prevent trace writes when the store failed to initialize.
     if (!traceStore) {
         return Promise.reject(new Error('Trace store is not initialized'));
     }
-    return storeTrace(traceStore, metadata);
+    return storeTrace(traceStore, metadata, candidates);
 };
 
 // --- Handler wiring ---
 const {
     handleTraceRequest,
+    handleResponseVersionsRequest,
     handleTraceUpsertRequest,
     handleTraceCardCreateRequest,
     handleTraceCardFromTraceRequest,
@@ -676,6 +681,7 @@ const handleChatRequest = createChatHandler({
 const { dispatchHttpRoute, dispatchUpgradeRoute } = createRouteDispatcher({
     handlers: {
         handleTraceRequest,
+        handleResponseVersionsRequest,
     },
     onTraceRouteMatched: (pathname) => {
         logger.debug(`Trace route matched: ${pathname}`);

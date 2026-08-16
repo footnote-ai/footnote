@@ -407,10 +407,10 @@ test('buildWorkflowReceiptItems carries backend presentation receipt states for 
         },
     };
     assert.deepEqual(buildWorkflowReceiptItems(metadata), [
-        'Presentation finalized with audit unavailable',
+        'Audit did not return a usable result; the finalized answer was kept',
     ]);
     assert.equal(
         buildWorkflowReceiptSummary(metadata),
-        'Presentation finalized with audit unavailable'
+        'Audit did not return a usable result; the finalized answer was kept'
     );
 });

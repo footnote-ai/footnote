@@ -894,6 +894,41 @@ paths:
                 '503':
                     $ref: '#/components/responses/ServiceUnavailable'
 
+    # Response candidate history fetch (public).
+    /api/traces/{responseId}/response-versions:
+        get:
+            operationId: getResponseVersions
+            x-codeRefs:
+                - packages/backend/src/handlers/trace.ts#handleResponseVersionsRequest
+                - packages/api-client/src/traces.ts#getResponseVersions
+                - packages/api-client/src/web.ts#getResponseVersions
+                - packages/discord-bot/src/api/traces.ts#getResponseVersions
+                - packages/web/src/utils/api.ts#getResponseVersions
+                - packages/contracts/src/web/types.ts#GetResponseVersionsResponse
+                - packages/contracts/src/web/types.ts#GetResponseVersionsStaleResponse
+            summary: Fetch stored response candidate history
+            description: |
+                Return model-produced response candidates for a stored trace.
+                Candidate text is excluded from the normal trace response.
+                Public endpoint; no auth or rate limits.
+            tags:
+                - Traces
+            parameters:
+                - $ref: '#/components/parameters/TraceResponseId'
+            responses:
+                '200':
+                    $ref: '#/components/responses/ResponseVersionsFetchOk'
+                '400':
+                    $ref: '#/components/responses/BadRequest'
+                '404':
+                    $ref: '#/components/responses/NotFound'
+                '410':
+                    $ref: '#/components/responses/ResponseVersionsStale'
+                '500':
+                    $ref: '#/components/responses/InternalServerError'
+                '503':
+                    $ref: '#/components/responses/ServiceUnavailable'
+
     # Trace-card SVG fetch (public).
     /api/traces/{responseId}/assets/trace-card.svg:
         get:
@@ -3595,6 +3630,16 @@ components:
                                     presentation_flattened,
                                     invalid,
                                 ]
+                        auditFailureCategory:
+                            type: string
+                            description: Safe category only; raw audit feedback and provider errors are never stored here.
+                            enum:
+                                [
+                                    timeout,
+                                    provider_failure,
+                                    invalid_structured_output,
+                                    unavailable,
+                                ]
                         draftAttemptCount:
                             type: integer
                             enum: [0, 1]
@@ -4053,6 +4098,65 @@ components:
             required:
                 - message
                 - metadata
+            additionalProperties: false
+
+        ResponseCandidate:
+            type: object
+            description: One model-produced answer candidate retained with a trace. Plans, prompts, tools, audit output, and hidden reasoning are excluded.
+            properties:
+                id:
+                    type: string
+                parentCandidateId:
+                    type: string
+                workflowStepId:
+                    type: string
+                sequence:
+                    type: integer
+                    minimum: 0
+                stage:
+                    type: string
+                    enum:
+                        [
+                            initial_generation,
+                            revision,
+                            presentation_draft,
+                            presentation_finalization,
+                            presentation_repair,
+                            fallback,
+                        ]
+                state:
+                    type: string
+                    enum: [selected, superseded]
+                text:
+                    type: string
+            required: [id, workflowStepId, sequence, stage, state, text]
+            additionalProperties: false
+
+        ResponseVersionsResponse:
+            type: object
+            properties:
+                responseId:
+                    type: string
+                candidates:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/ResponseCandidate'
+            required: [responseId, candidates]
+            additionalProperties: false
+
+        ResponseVersionsStaleResponse:
+            type: object
+            properties:
+                message:
+                    type: string
+                    enum: [Trace is stale]
+                responseId:
+                    type: string
+                candidates:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/ResponseCandidate'
+            required: [message, responseId, candidates]
             additionalProperties: false
 
         # Runtime config.
@@ -4523,6 +4627,18 @@ components:
                 application/json:
                     schema:
                         $ref: '#/components/schemas/ResponseMetadata'
+        ResponseVersionsFetchOk:
+            description: Ordered model-produced response candidate history.
+            content:
+                application/json:
+                    schema:
+                        $ref: '#/components/schemas/ResponseVersionsResponse'
+        ResponseVersionsStale:
+            description: Trace has expired; candidate history is included with the stale envelope.
+            content:
+                application/json:
+                    schema:
+                        $ref: '#/components/schemas/ResponseVersionsStaleResponse'
         TraceCardCreateOk:
             description: Trace-card generated and stored.
             content:

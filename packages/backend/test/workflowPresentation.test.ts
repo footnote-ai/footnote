@@ -176,42 +176,84 @@ test('workflow asks for a styled draft before main-model finalization and record
     assert.equal(result.presentation?.backendEstimatedCostUsd, 0.012);
     assert.equal(result.workflowLineage.terminationReason, 'goal_satisfied');
     assert.equal(result.workflowLineage.steps.length, 1);
-    assert.deepEqual(result.workflowLineage.steps[0], {
-        stepId: 'step_1',
-        attempt: 1,
-        stepKind: 'presentation',
-        reasonCode: 'presentation_finalized',
-        startedAt: result.workflowLineage.steps[0]?.startedAt,
-        finishedAt: result.workflowLineage.steps[0]?.finishedAt,
-        durationMs: result.workflowLineage.steps[0]?.durationMs,
-        model: 'gpt-5-mini',
-        usage: {
-            promptTokens: 32,
-            completionTokens: 16,
-            totalTokens: 48,
-        },
-        cost: {
-            inputCostUsd: 0.004,
-            outputCostUsd: 0.008,
-            totalCostUsd: 0.012,
-        },
-        outcome: {
-            status: 'executed',
-            summary:
-                'Finalized presentation draft with evidence-aware editing.',
-            signals: {
-                presentationOutcome: 'finalized_after_evidence_repair',
-                presentationReasonCode: 'evidence_repaired',
-                presentationAttempted: true,
-                draftAttemptCount: 1,
-                finalizerAttemptCount: 2,
-                auditAttemptCount: 1,
-                auditOutcome: 'evidence_issue',
-                draftProfileId: 'presentation',
-                auditProfileId: 'presentation',
+    const [presentationStep] = result.workflowLineage.steps;
+    assert.deepEqual(
+        presentationStep?.outcome.artifacts?.map((artifact) =>
+            artifact.startsWith('candidate_')
+        ),
+        [true, true, true]
+    );
+    const responseCandidates = result.responseCandidates;
+    assert.ok(responseCandidates);
+    assert.deepEqual(
+        responseCandidates.map((candidate) => ({
+            stage: candidate.stage,
+            state: candidate.state,
+            workflowStepId: candidate.workflowStepId,
+            parentCandidateId: candidate.parentCandidateId,
+        })),
+        [
+            {
+                stage: 'presentation_draft',
+                state: 'superseded',
+                workflowStepId: 'step_1',
+                parentCandidateId: undefined,
             },
-        },
-    });
+            {
+                stage: 'presentation_finalization',
+                state: 'superseded',
+                workflowStepId: 'step_1',
+                parentCandidateId: responseCandidates[0]?.id,
+            },
+            {
+                stage: 'presentation_repair',
+                state: 'selected',
+                workflowStepId: 'step_1',
+                parentCandidateId: responseCandidates[1]?.id,
+            },
+        ]
+    );
+    const { artifacts: _artifacts, ...outcomeWithoutArtifacts } =
+        presentationStep!.outcome;
+    assert.deepEqual(
+        { ...presentationStep, outcome: outcomeWithoutArtifacts },
+        {
+            stepId: 'step_1',
+            attempt: 1,
+            stepKind: 'presentation',
+            reasonCode: 'presentation_finalized',
+            startedAt: result.workflowLineage.steps[0]?.startedAt,
+            finishedAt: result.workflowLineage.steps[0]?.finishedAt,
+            durationMs: result.workflowLineage.steps[0]?.durationMs,
+            model: 'gpt-5-mini',
+            usage: {
+                promptTokens: 32,
+                completionTokens: 16,
+                totalTokens: 48,
+            },
+            cost: {
+                inputCostUsd: 0.004,
+                outputCostUsd: 0.008,
+                totalCostUsd: 0.012,
+            },
+            outcome: {
+                status: 'executed',
+                summary:
+                    'Finalized presentation draft with evidence-aware editing.',
+                signals: {
+                    presentationOutcome: 'finalized_after_evidence_repair',
+                    presentationReasonCode: 'evidence_repaired',
+                    presentationAttempted: true,
+                    draftAttemptCount: 1,
+                    finalizerAttemptCount: 2,
+                    auditAttemptCount: 1,
+                    auditOutcome: 'evidence_issue',
+                    draftProfileId: 'presentation',
+                    auditProfileId: 'presentation',
+                },
+            },
+        }
+    );
     assert.deepEqual(generationUsageTexts, [
         'A lively update: Ada Lovelace confirmed 12 fixes at https://example.com/release.',
         'A lively update: Ada Lovelace confirmed 12 fixes at https://example.com/release.',
@@ -274,6 +316,27 @@ test('workflow falls back to normal generation after a structured presentation d
         'presentation_fallback'
     );
     assert.equal(result.workflowLineage.steps[1]?.stepKind, 'generate');
+    const responseCandidates = result.responseCandidates;
+    assert.ok(responseCandidates);
+    assert.deepEqual(responseCandidates, [
+        {
+            id: responseCandidates[0]?.id,
+            workflowStepId: 'step_1',
+            sequence: 0,
+            stage: 'presentation_draft',
+            state: 'superseded',
+            text: '```json\n{"answer":"not prose"}\n```',
+        },
+        {
+            id: responseCandidates[1]?.id,
+            parentCandidateId: responseCandidates[0]?.id,
+            workflowStepId: 'step_2',
+            sequence: 1,
+            stage: 'fallback',
+            state: 'selected',
+            text: 'Normal main-model response.',
+        },
+    ]);
 });
 
 test('skips presentation before drafting when resolved TRACE caution is high', async () => {

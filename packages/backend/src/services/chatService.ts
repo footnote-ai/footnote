@@ -33,6 +33,7 @@ import type {
 import type {
     PostChatRequest,
     PostChatResponse,
+    ResponseCandidate,
 } from '@footnote/contracts/web';
 import type { Result } from 'neverthrow';
 import type {
@@ -716,7 +717,10 @@ const pickTrustGraphResultFromContextSteps = (
  */
 export type CreateChatServiceOptions = {
     generationRuntime: GenerationRuntime;
-    storeTrace: (metadata: ResponseMetadata) => Promise<void>;
+    storeTrace: (
+        metadata: ResponseMetadata,
+        candidates?: readonly ResponseCandidate[]
+    ) => Promise<void>;
     buildResponseMetadata: (
         generationMetadata: ResponseMetadataGenerationInput,
         runtimeContext: ResponseMetadataRuntimeContext
@@ -1233,6 +1237,7 @@ export const createChatService = ({
                   workflowPlannerStepResult?: PlannerStepResult;
                   workflowConversationSnapshot?: string;
                   presentationMetadata?: PresentationMetadata;
+                  responseCandidates?: ResponseCandidate[];
                   fallbackAfterInternalNoGeneration: boolean;
               }
         > => {
@@ -1245,6 +1250,7 @@ export const createChatService = ({
             let workflowPlannerStepResult: PlannerStepResult | undefined;
             let workflowConversationSnapshot: string | undefined;
             let presentationMetadata: PresentationMetadata | undefined;
+            let responseCandidates: ResponseCandidate[] | undefined;
             let fallbackAfterInternalNoGeneration = false;
 
             if (workflowExecutionEnabled) {
@@ -1377,6 +1383,7 @@ export const createChatService = ({
                         generationResult = workflowResult.generationResult;
                         workflowLineage = workflowResult.workflowLineage;
                         presentationMetadata = workflowResult.presentation;
+                        responseCandidates = workflowResult.responseCandidates;
                         const generatedShortCircuit =
                             buildContextStepShortCircuit({
                                 workflowContextStepResult,
@@ -1634,6 +1641,7 @@ export const createChatService = ({
                 workflowPlannerStepResult,
                 workflowConversationSnapshot,
                 presentationMetadata,
+                responseCandidates,
                 fallbackAfterInternalNoGeneration,
             };
         };
@@ -1657,6 +1665,7 @@ export const createChatService = ({
         const fallbackAfterInternalNoGeneration =
             generationPhase.fallbackAfterInternalNoGeneration;
         const presentationMetadata = generationPhase.presentationMetadata;
+        const responseCandidates = generationPhase.responseCandidates;
 
         const effectiveContextStepResults = getEffectiveContextStepResults(
             workflowContextStepResults,
@@ -1996,11 +2005,13 @@ export const createChatService = ({
                 : normalizedResponseMetadata;
 
         // Trace writes stay fire-and-forget so a storage hiccup does not block the user response.
-        storeTrace(metadataWithTrustGraph).catch((error) => {
-            logger.error(
-                `Background trace storage error: ${error instanceof Error ? error.message : String(error)}`
-            );
-        });
+        storeTrace(metadataWithTrustGraph, responseCandidates).catch(
+            (error) => {
+                logger.error(
+                    `Background trace storage error: ${error instanceof Error ? error.message : String(error)}`
+                );
+            }
+        );
 
         return {
             kind: 'message',

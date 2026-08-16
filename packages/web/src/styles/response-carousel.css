@@ -1,0 +1,63 @@
+/**
+ * @description: Styles reusable response selectors for prepared and retained answer versions.
+ * @footnote-scope: web
+ * @footnote-module: ResponseCarouselStyles
+ * @footnote-risk: low - Styling affects readability but not response authority.
+ * @footnote-ethics: medium - Superseded versions need a clear visual warning to avoid authority confusion.
+ */
+.response-carousel__navigation {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.75rem;
+}
+
+.response-carousel__control {
+    border: 1px solid var(--color-border, #a9a9a9);
+    border-radius: 0.35rem;
+    background: transparent;
+    color: inherit;
+    cursor: pointer;
+    padding: 0.35rem 0.6rem;
+}
+
+.response-carousel__control:disabled {
+    cursor: not-allowed;
+    opacity: 0.55;
+}
+
+.response-versions__content {
+    transition: opacity 180ms ease;
+}
+
+.response-versions__content--transitioning {
+    opacity: 0.28;
+}
+
+.response-versions__dots {
+    display: flex;
+    gap: 0.45rem;
+}
+
+.response-versions__dot {
+    width: 0.7rem;
+    height: 0.7rem;
+    border: 1px solid currentColor;
+    border-radius: 50%;
+    background: transparent;
+    cursor: pointer;
+    padding: 0;
+}
+
+.response-versions__dot--selected {
+    background: currentColor;
+}
+
+.response-versions__warning {
+    border-left: 0.25rem solid #b45309;
+    padding-left: 0.75rem;
+}
+
+.response-versions__answer {
+    margin: 1rem 0;
+}

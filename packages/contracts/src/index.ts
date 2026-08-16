@@ -133,6 +133,10 @@ export type {
     PostTracesResponse,
     GetTraceResponse,
     GetTraceStaleResponse,
+    ResponseCandidateStage,
+    ResponseCandidate,
+    GetResponseVersionsResponse,
+    GetResponseVersionsStaleResponse,
     GetRuntimeConfigResponse,
 } from './web/index.js';
 

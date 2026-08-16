@@ -36,6 +36,7 @@ import {
     PostInternalTextRequestSchema,
     PostInternalTextResponseSchema,
     GetTraceApiResponseSchema,
+    GetResponseVersionsApiResponseSchema,
     GetTraceStaleResponseSchema,
     PostIncidentNotesRequestSchema,
     PostIncidentRemediationRequestSchema,
@@ -67,6 +68,7 @@ import type {
     PostInternalTextResponse,
     GetTraceResponse,
     GetTraceStaleResponse,
+    GetResponseVersionsResponse,
     PostIncidentReportResponse,
     PostChatResponse,
 } from '../src/web/types';
@@ -1534,6 +1536,49 @@ test('GetTraceApiResponseSchema accepts both live and stale trace payloads', () 
             metadata: baseMetadata,
         }).success,
         true
+    );
+});
+
+test('response-version schemas serialize ordered candidate history and stale envelopes', () => {
+    const payload: GetResponseVersionsResponse = {
+        responseId: baseMetadata.responseId,
+        candidates: [
+            {
+                id: 'candidate_1',
+                workflowStepId: 'step_1',
+                sequence: 0,
+                stage: 'initial_generation',
+                state: 'superseded',
+                text: 'Initial answer.',
+            },
+            {
+                id: 'candidate_2',
+                parentCandidateId: 'candidate_1',
+                workflowStepId: 'step_2',
+                sequence: 1,
+                stage: 'revision',
+                state: 'selected',
+                text: 'Final answer.',
+            },
+        ],
+    };
+    assert.equal(
+        GetResponseVersionsApiResponseSchema.safeParse(payload).success,
+        true
+    );
+    assert.equal(
+        GetResponseVersionsApiResponseSchema.safeParse({
+            message: 'Trace is stale',
+            ...payload,
+        }).success,
+        true
+    );
+    assert.equal(
+        GetResponseVersionsApiResponseSchema.safeParse({
+            ...payload,
+            candidates: [{ ...payload.candidates[0], state: 'unknown' }],
+        }).success,
+        false
     );
 });
 

@@ -10,7 +10,11 @@ import {
     type Citation,
     type ResponseMetadata,
 } from '@footnote/contracts/policy';
-import { ResponseMetadataSchema } from '@footnote/contracts/web/schemas';
+import type { ResponseCandidate } from '@footnote/contracts/web';
+import {
+    ResponseCandidateSchema,
+    ResponseMetadataSchema,
+} from '@footnote/contracts/web/schemas';
 import Database from 'better-sqlite3';
 import fs from 'fs';
 import path from 'path';
@@ -149,9 +153,11 @@ export class SqliteTraceStore {
     private readonly upsertStatement: Database.Statement;
     private readonly retrieveStatement: Database.Statement;
     private readonly deleteStatement: Database.Statement;
-    private readonly deleteTraceCardStatement: Database.Statement;
     private readonly upsertTraceCardStatement: Database.Statement;
     private readonly retrieveTraceCardStatement: Database.Statement;
+    private readonly deleteResponseCandidatesStatement: Database.Statement;
+    private readonly insertResponseCandidateStatement: Database.Statement;
+    private readonly retrieveResponseCandidatesStatement: Database.Statement;
 
     constructor(config: SqliteTraceStoreConfig) {
         const resolvedPath = path.resolve(config.dbPath);
@@ -175,6 +181,19 @@ export class SqliteTraceStore {
         response_id TEXT PRIMARY KEY REFERENCES provenance_traces(response_id) ON DELETE CASCADE,
         trace_card_svg TEXT NOT NULL
       );
+      CREATE TABLE IF NOT EXISTS provenance_response_candidates (
+        candidate_id TEXT PRIMARY KEY,
+        response_id TEXT NOT NULL REFERENCES provenance_traces(response_id) ON DELETE CASCADE,
+        parent_candidate_id TEXT,
+        workflow_step_id TEXT NOT NULL,
+        sequence_number INTEGER NOT NULL,
+        stage TEXT NOT NULL,
+        selection_state TEXT NOT NULL,
+        text TEXT NOT NULL,
+        UNIQUE(response_id, sequence_number)
+      );
+      CREATE INDEX IF NOT EXISTS idx_provenance_response_candidates_response_sequence
+        ON provenance_response_candidates (response_id, sequence_number);
     `);
         this.ensureTraceCardForeignKey();
 
@@ -192,9 +211,6 @@ export class SqliteTraceStore {
         this.deleteStatement = this.db.prepare(
             `DELETE FROM provenance_traces WHERE response_id = ?`
         );
-        this.deleteTraceCardStatement = this.db.prepare(
-            `DELETE FROM provenance_trace_cards WHERE response_id = ?`
-        );
         this.upsertTraceCardStatement = this.db.prepare(`
       INSERT INTO provenance_trace_cards (response_id, trace_card_svg)
       VALUES (@response_id, @trace_card_svg)
@@ -204,6 +220,25 @@ export class SqliteTraceStore {
         this.retrieveTraceCardStatement = this.db.prepare(
             `SELECT trace_card_svg FROM provenance_trace_cards WHERE response_id = ? LIMIT 1`
         );
+        this.deleteResponseCandidatesStatement = this.db.prepare(
+            `DELETE FROM provenance_response_candidates WHERE response_id = ?`
+        );
+        this.insertResponseCandidateStatement = this.db.prepare(`
+            INSERT INTO provenance_response_candidates (
+                candidate_id, response_id, parent_candidate_id, workflow_step_id,
+                sequence_number, stage, selection_state, text
+            ) VALUES (
+                @candidate_id, @response_id, @parent_candidate_id, @workflow_step_id,
+                @sequence_number, @stage, @selection_state, @text
+            )
+        `);
+        this.retrieveResponseCandidatesStatement = this.db.prepare(`
+            SELECT candidate_id, parent_candidate_id, workflow_step_id,
+                   sequence_number, stage, selection_state, text
+            FROM provenance_response_candidates
+            WHERE response_id = ?
+            ORDER BY sequence_number ASC
+        `);
         traceLogger.info(`Initialized SQLite trace store at ${resolvedPath}`);
     }
 
@@ -393,8 +428,59 @@ export class SqliteTraceStore {
         });
     }
 
-    async upsert(metadata: ResponseMetadata): Promise<void> {
-        await this.withRetry(() => this.upsertMetadataSync(metadata));
+    private replaceResponseCandidatesSync(
+        responseId: string,
+        candidates: readonly ResponseCandidate[]
+    ): void {
+        const normalizedCandidates = candidates.map((candidate) => {
+            const parsed = ResponseCandidateSchema.parse(candidate);
+            return {
+                candidate_id: parsed.id,
+                response_id: responseId,
+                parent_candidate_id: parsed.parentCandidateId ?? null,
+                workflow_step_id: parsed.workflowStepId,
+                sequence_number: parsed.sequence,
+                stage: parsed.stage,
+                selection_state: parsed.state,
+                text: parsed.text,
+            };
+        });
+        const selectedCount = normalizedCandidates.filter(
+            (candidate) => candidate.selection_state === 'selected'
+        ).length;
+        if (normalizedCandidates.length > 0 && selectedCount !== 1) {
+            throw new Error(
+                `Response candidate chain for "${responseId}" must have exactly one selected candidate.`
+            );
+        }
+
+        this.deleteResponseCandidatesStatement.run(responseId);
+        for (const candidate of normalizedCandidates) {
+            this.insertResponseCandidateStatement.run(candidate);
+        }
+    }
+
+    async upsert(
+        metadata: ResponseMetadata,
+        candidates?: readonly ResponseCandidate[]
+    ): Promise<void> {
+        await this.withRetry(() => {
+            const upsertTrace = this.db.transaction(
+                (
+                    traceMetadata: ResponseMetadata,
+                    traceCandidates: readonly ResponseCandidate[] | undefined
+                ) => {
+                    this.upsertMetadataSync(traceMetadata);
+                    if (traceCandidates !== undefined) {
+                        this.replaceResponseCandidatesSync(
+                            traceMetadata.responseId,
+                            traceCandidates
+                        );
+                    }
+                }
+            );
+            upsertTrace(metadata, candidates);
+        });
         traceLogger.info(`Trace stored in SQLite: ${metadata.responseId}`);
     }
 
@@ -415,10 +501,8 @@ export class SqliteTraceStore {
     async delete(responseId: string): Promise<void> {
         await this.withRetry(() => {
             const deleteTrace = this.deleteStatement;
-            const deleteTraceCard = this.deleteTraceCardStatement;
             const transaction = this.db.transaction((id: string) => {
                 deleteTrace.run(id);
-                deleteTraceCard.run(id);
             });
             transaction(responseId);
         });
@@ -450,6 +534,48 @@ export class SqliteTraceStore {
         );
 
         return row?.trace_card_svg ?? null;
+    }
+
+    /** Loads ordered candidate history without exposing it through normal trace reads. */
+    async retrieveResponseCandidates(
+        responseId: string
+    ): Promise<ResponseCandidate[]> {
+        const rows = await this.withRetry(
+            () =>
+                this.retrieveResponseCandidatesStatement.all(
+                    responseId
+                ) as Array<{
+                    candidate_id: string;
+                    parent_candidate_id: string | null;
+                    workflow_step_id: string;
+                    sequence_number: number;
+                    stage: string;
+                    selection_state: string;
+                    text: string;
+                }>
+        );
+        const candidates: ResponseCandidate[] = [];
+        for (const row of rows) {
+            const parsed = ResponseCandidateSchema.safeParse({
+                id: row.candidate_id,
+                ...(row.parent_candidate_id !== null && {
+                    parentCandidateId: row.parent_candidate_id,
+                }),
+                workflowStepId: row.workflow_step_id,
+                sequence: row.sequence_number,
+                stage: row.stage,
+                state: row.selection_state,
+                text: row.text,
+            });
+            if (!parsed.success) {
+                traceLogger.warn(
+                    `Response candidate for trace "${responseId}" failed schema validation; returning no candidate history fail-open.`
+                );
+                return [];
+            }
+            candidates.push(parsed.data);
+        }
+        return candidates;
     }
 
     /**

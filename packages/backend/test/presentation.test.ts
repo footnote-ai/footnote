@@ -219,6 +219,10 @@ test('records an unavailable audit without suppressing the finalized presentatio
         'finalized_with_audit_unavailable'
     );
     assert.equal(presentation.metadata.reasonCode, 'audit_unavailable');
+    assert.equal(
+        presentation.metadata.auditFailureCategory,
+        'provider_failure'
+    );
     assert.equal(presentation.metadata.auditAttemptCount, 1);
 });
 

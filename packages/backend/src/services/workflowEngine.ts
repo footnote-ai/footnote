@@ -29,6 +29,7 @@ import type {
     RuntimeMessage,
 } from '@footnote/agent-runtime';
 import type { ModelProfile, TraceAxisScore } from '@footnote/contracts';
+import type { ResponseCandidate } from '@footnote/contracts/web';
 import { logger } from '../utils/logger.js';
 import { resolveProfileReasoningEffort } from './runtimeRequestControls.js';
 import type {
@@ -83,6 +84,7 @@ import {
     type PresentationConfig,
     type PresentationPersona,
 } from './presentation.js';
+import { createResponseCandidateCollector } from './responseCandidates.js';
 
 /**
  * Canonical Execution Contract workflow-policy surface.
@@ -193,6 +195,7 @@ export type RunBoundedReviewWorkflowResult =
           outcome: 'generated';
           generationResult: GenerationResult;
           workflowLineage: WorkflowRecord;
+          responseCandidates?: ResponseCandidate[];
           presentation?: PresentationMetadata;
           plannerStepResult?: PlannerStepResult;
           planContinuation?: PlanContinuation;
@@ -422,6 +425,7 @@ export const runBoundedReviewWorkflow = async ({
         workflowName: workflowConfig.workflowName,
         startedAtMs: workflowStartedAt,
     });
+    const responseCandidates = createResponseCandidateCollector();
 
     if (plannerStepRecord?.stepKind === 'plan') {
         const plannerStepUsageTokens =
@@ -866,6 +870,7 @@ export const runBoundedReviewWorkflow = async ({
 
     let presentationMetadata: PresentationMetadata | undefined;
     let presentationFinalized = false;
+    let draftCandidateId: string | undefined;
     const initialResponseStepKind: WorkflowStepKind =
         presentation?.config.enabled === true ? 'presentation' : 'generate';
     if (!shouldStop) {
@@ -1073,6 +1078,36 @@ export const runBoundedReviewWorkflow = async ({
                         presentationResult.outcome === 'finalized' &&
                         finalizerResult !== undefined &&
                         presentationResult.text !== undefined;
+                    const presentationDraftCandidateId =
+                        presentationResult.draftResult !== undefined
+                            ? responseCandidates.record({
+                                  stage: 'presentation_draft',
+                                  text: presentationResult.draftResult.text,
+                              })
+                            : undefined;
+                    const presentationCandidateIds = [
+                        ...(presentationDraftCandidateId !== undefined
+                            ? [presentationDraftCandidateId]
+                            : []),
+                        ...presentationResult.finalizerResults.flatMap(
+                            (result, index) => {
+                                const candidateId = responseCandidates.record({
+                                    stage:
+                                        index === 0
+                                            ? 'presentation_finalization'
+                                            : 'presentation_repair',
+                                    text: result.text,
+                                    parentCandidateId:
+                                        index === 0
+                                            ? presentationDraftCandidateId
+                                            : responseCandidates.latestCandidateId(),
+                                });
+                                return candidateId === undefined
+                                    ? []
+                                    : [candidateId];
+                            }
+                        ),
+                    ];
                     const presentationStepId = captureStep({
                         stepKind: 'presentation',
                         status: presentationSucceeded
@@ -1096,6 +1131,9 @@ export const runBoundedReviewWorkflow = async ({
                         estimatedCost: presentationCost,
                         parentStepId: plannerRootStepId,
                         attempt: 1,
+                        ...(presentationCandidateIds.length > 0 && {
+                            artifacts: presentationCandidateIds,
+                        }),
                         signals: {
                             presentationOutcome:
                                 presentationResult.metadata.outcome,
@@ -1120,6 +1158,12 @@ export const runBoundedReviewWorkflow = async ({
                                 null,
                         },
                     });
+                    for (const candidateId of presentationCandidateIds) {
+                        responseCandidates.linkToWorkflowStep(
+                            candidateId,
+                            presentationStepId
+                        );
+                    }
                     workflowState = applyStepExecutionToState(
                         workflowState,
                         'presentation',
@@ -1137,6 +1181,7 @@ export const runBoundedReviewWorkflow = async ({
                             text: presentationResult.text,
                         };
                         draftParentStepId = presentationStepId;
+                        draftCandidateId = presentationCandidateIds.at(-1);
                         presentationFinalized = true;
                     }
                 }
@@ -1253,6 +1298,15 @@ export const runBoundedReviewWorkflow = async ({
                         draftResult,
                         effectiveGenerationRequest.model
                     );
+                    const initialDraftCandidateId = responseCandidates.record({
+                        stage:
+                            presentationMetadata?.outcome === 'fallback'
+                                ? 'fallback'
+                                : 'initial_generation',
+                        text: draftResult.text,
+                        parentCandidateId:
+                            responseCandidates.latestCandidateId(),
+                    });
                     const initialDraftStepId = captureStep({
                         stepKind: 'generate',
                         status: 'executed',
@@ -1264,6 +1318,9 @@ export const runBoundedReviewWorkflow = async ({
                         estimatedCost: initialDraftUsage.estimatedCost,
                         parentStepId: plannerRootStepId,
                         attempt: 1,
+                        ...(initialDraftCandidateId !== undefined && {
+                            artifacts: [initialDraftCandidateId],
+                        }),
                         ...(initialRoutingChainAttempts !== undefined && {
                             signals: {
                                 ...buildRoutingChainSignals({
@@ -1282,7 +1339,14 @@ export const runBoundedReviewWorkflow = async ({
                             },
                         }),
                     });
+                    if (initialDraftCandidateId !== undefined) {
+                        responseCandidates.linkToWorkflowStep(
+                            initialDraftCandidateId,
+                            initialDraftStepId
+                        );
+                    }
                     draftParentStepId = initialDraftStepId;
+                    draftCandidateId = initialDraftCandidateId;
                     workflowState = applyStepExecutionToState(
                         workflowState,
                         'generate',
@@ -1360,6 +1424,8 @@ export const runBoundedReviewWorkflow = async ({
         effectiveParseReviewDecision,
         captureStep,
         draftParentStepId,
+        draftCandidateId,
+        responseCandidates,
         terminationReason,
         workflowStatus,
         shouldStop,
@@ -1380,6 +1446,7 @@ export const runBoundedReviewWorkflow = async ({
         stepRoutingChainSet,
     });
     draftResult = reviewLoopResult.draftResult;
+    draftCandidateId = reviewLoopResult.draftCandidateId;
     terminationReason = reviewLoopResult.terminationReason;
     workflowStatus = reviewLoopResult.workflowStatus;
     workflowState = reviewLoopResult.workflowState;
@@ -1449,10 +1516,15 @@ export const runBoundedReviewWorkflow = async ({
         };
     }
 
+    if (draftCandidateId !== undefined) {
+        responseCandidates.markSelected(draftCandidateId);
+    }
+
     return {
         outcome: 'generated',
         generationResult: draftResult,
         workflowLineage,
+        responseCandidates: responseCandidates.finalize(),
         ...(presentationMetadata !== undefined && {
             presentation: presentationMetadata,
         }),

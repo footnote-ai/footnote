@@ -31,13 +31,15 @@ export const WORKFLOW_RECEIPT_LABELS = {
     noSourcesAvailable: 'No sources available',
     searchUnavailable: 'Search unavailable',
     noGroundingEvidenceRecorded: 'No grounding evidence recorded',
-    presentationFinalized: 'Presentation draft finalized',
+    presentationFinalized: 'Style draft finalized',
     presentationEvidenceRepair:
-        'Presentation finalized after one evidence repair',
-    presentationStyleRepair: 'Presentation finalized after one voice repair',
+        'Style draft finalized after one evidence repair',
+    presentationStyleRepair:
+        'Style draft finalized after one voice-preservation repair',
     presentationAuditUnavailable:
-        'Presentation finalized with audit unavailable',
-    presentationFallback: 'Presentation flow used normal fallback',
+        'Audit did not return a usable result; the finalized answer was kept',
+    presentationFallback:
+        'Style draft was unavailable; the normal answer was kept',
 } as const;
 
 const SEARCH_UNSUPPORTED_REASON_CODE =

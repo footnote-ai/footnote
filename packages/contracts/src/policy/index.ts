@@ -53,6 +53,7 @@ export type {
     PresentationOutcome,
     PresentationReasonCode,
     PresentationAuditOutcome,
+    PresentationAuditFailureCategory,
     PresentationMetadata,
     WorkflowStepStatus,
     WorkflowStepKind,

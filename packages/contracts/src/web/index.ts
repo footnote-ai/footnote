@@ -105,6 +105,17 @@ export type {
 export type { GetTraceResponse, GetTraceStaleResponse } from './types.js';
 
 /**
+ * @api.operationId: getResponseVersions
+ * @api.path: GET /api/traces/{responseId}/response-versions
+ */
+export type {
+    ResponseCandidateStage,
+    ResponseCandidate,
+    GetResponseVersionsResponse,
+    GetResponseVersionsStaleResponse,
+} from './types.js';
+
+/**
  * @api.operationId: getRuntimeConfig
  * @api.path: GET /config.json
  */

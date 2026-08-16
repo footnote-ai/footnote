@@ -470,6 +470,13 @@ export type PresentationAuditOutcome =
     | 'presentation_flattened'
     | 'invalid';
 
+/** Safe operational category for an audit result that could not guide finalization. */
+export type PresentationAuditFailureCategory =
+    | 'timeout'
+    | 'provider_failure'
+    | 'invalid_structured_output'
+    | 'unavailable';
+
 export type PresentationMetadata = {
     step: 'presentation';
     outcome: PresentationOutcome;
@@ -495,6 +502,8 @@ export type PresentationMetadata = {
     durationMs?: number;
     /** Audit is a bounded repair signal, not a display veto. */
     auditOutcome: PresentationAuditOutcome;
+    /** Never contains audit feedback or provider error text. */
+    auditFailureCategory?: PresentationAuditFailureCategory;
     draftAttemptCount: 0 | 1;
     finalizerAttemptCount: 0 | 1 | 2;
     auditAttemptCount: 0 | 1;

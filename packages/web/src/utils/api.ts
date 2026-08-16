@@ -17,6 +17,8 @@ import type {
     GetRuntimeConfigResponse,
     GetTraceResponse,
     GetTraceStaleResponse,
+    GetResponseVersionsResponse,
+    GetResponseVersionsStaleResponse,
     PostChatRequest,
     PostChatResponse,
 } from '@footnote/contracts/web';
@@ -37,6 +39,14 @@ export type WebApiClient = {
         responseId: string,
         signal?: AbortSignal
     ) => Promise<ApiJsonResult<GetTraceResponse | GetTraceStaleResponse>>;
+    getResponseVersions: (
+        responseId: string,
+        signal?: AbortSignal
+    ) => Promise<
+        ApiJsonResult<
+            GetResponseVersionsResponse | GetResponseVersionsStaleResponse
+        >
+    >;
 };
 
 // Keep this thin local wrapper so web can add surface-specific behavior later
@@ -49,12 +59,14 @@ export const createWebApiClient = (
     const chatQuestion = shared.chatQuestion;
     const getRuntimeConfig = shared.getRuntimeConfig;
     const getTrace = shared.getTrace;
+    const getResponseVersions = shared.getResponseVersions;
 
     return {
         requestJson: shared.requestJson,
         chatQuestion,
         getRuntimeConfig,
         getTrace,
+        getResponseVersions,
     };
 };
 
@@ -89,5 +101,15 @@ export const getTrace = (
     signal?: AbortSignal
 ): Promise<ApiJsonResult<GetTraceResponse | GetTraceStaleResponse>> =>
     api.getTrace(responseId, signal);
+
+/** Loads model-produced response candidate history for the trace viewer only. */
+export const getResponseVersions = (
+    responseId: string,
+    signal?: AbortSignal
+): Promise<
+    ApiJsonResult<
+        GetResponseVersionsResponse | GetResponseVersionsStaleResponse
+    >
+> => api.getResponseVersions(responseId, signal);
 
 export type { ApiClientError, ApiErrorResponse };

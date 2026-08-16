@@ -31,6 +31,7 @@ type DispatchOutcome = 'handled' | 'fallthrough';
 
 type RouteDispatchHandlers = {
     handleTraceRequest: ParsedUrlHandler;
+    handleResponseVersionsRequest: ParsedUrlHandler;
 };
 
 /**
@@ -58,6 +59,14 @@ const createRouteDispatcher = ({
         // --- Special dual-use trace route ---
         // This path also doubles as a browser route for the trace page.
         // Keep JSON-vs-HTML behavior exactly as-is.
+        if (
+            /^\/api\/traces\/[^/]+\/response-versions\/?$/u.test(
+                normalizedPathname
+            )
+        ) {
+            await handlers.handleResponseVersionsRequest(req, res, parsedUrl);
+            return 'handled';
+        }
         if (normalizedPathname.startsWith('/api/traces/')) {
             // Tell caches to keep JSON and HTML variants separate.
             res.setHeader('Vary', 'Accept');

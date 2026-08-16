@@ -409,6 +409,14 @@ export const PresentationMetadataSchema = z
             'presentation_flattened',
             'invalid',
         ]),
+        auditFailureCategory: z
+            .enum([
+                'timeout',
+                'provider_failure',
+                'invalid_structured_output',
+                'unavailable',
+            ])
+            .optional(),
         draftAttemptCount: z.union([z.literal(0), z.literal(1)]),
         finalizerAttemptCount: z.union([
             z.literal(0),
@@ -1834,6 +1842,48 @@ export const GetTraceStaleResponseSchema: z.ZodType<GetTraceStaleResponse> = z
         metadata: ResponseMetadataSchema,
     })
     .passthrough();
+
+/** @api.operationId: getResponseVersions @api.path: GET /api/traces/{responseId}/response-versions */
+export const ResponseCandidateSchema = z
+    .object({
+        id: z.string().min(1),
+        parentCandidateId: z.string().min(1).optional(),
+        workflowStepId: z.string().min(1),
+        sequence: z.number().int().nonnegative(),
+        stage: z.enum([
+            'initial_generation',
+            'revision',
+            'presentation_draft',
+            'presentation_finalization',
+            'presentation_repair',
+            'fallback',
+        ]),
+        state: z.enum(['selected', 'superseded']),
+        text: z.string().min(1),
+    })
+    .strict();
+
+/** @api.operationId: getResponseVersions @api.path: GET /api/traces/{responseId}/response-versions */
+export const GetResponseVersionsResponseSchema = z
+    .object({
+        responseId: z.string().min(1),
+        candidates: z.array(ResponseCandidateSchema),
+    })
+    .strict();
+
+/** @api.operationId: getResponseVersions @api.path: GET /api/traces/{responseId}/response-versions */
+export const GetResponseVersionsStaleResponseSchema = z
+    .object({
+        message: z.literal('Trace is stale'),
+        responseId: z.string().min(1),
+        candidates: z.array(ResponseCandidateSchema),
+    })
+    .strict();
+
+export const GetResponseVersionsApiResponseSchema = z.union([
+    GetResponseVersionsResponseSchema,
+    GetResponseVersionsStaleResponseSchema,
+]);
 
 /**
  * Trace reads can return either live metadata or a stale envelope depending on status.

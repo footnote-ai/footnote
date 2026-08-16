@@ -24,6 +24,10 @@ export const createTraceApi = (
         shared.postTraces(request, options);
     const getTrace: TraceApi['getTrace'] = (responseId, options) =>
         shared.getTrace(responseId, options);
+    const getResponseVersions: TraceApi['getResponseVersions'] = (
+        responseId,
+        options
+    ) => shared.getResponseVersions(responseId, options);
     const postTraceCard: TraceApi['postTraceCard'] = (request, options) =>
         shared.postTraceCard(request, options);
     const postTraceCardFromTrace: TraceApi['postTraceCardFromTrace'] = (
@@ -34,6 +38,7 @@ export const createTraceApi = (
     return {
         postTraces,
         getTrace,
+        getResponseVersions,
         postTraceCard,
         postTraceCardFromTrace,
     };

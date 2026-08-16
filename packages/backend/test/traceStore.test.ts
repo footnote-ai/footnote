@@ -12,6 +12,7 @@ import os from 'node:os';
 import path from 'node:path';
 
 import type { ResponseMetadata } from '@footnote/contracts/policy';
+import type { ResponseCandidate } from '@footnote/contracts/web';
 import { SqliteTraceStore } from '../src/storage/traces/sqliteTraceStore.js';
 
 test('TraceStore round trips metadata with citation URLs', async () => {
@@ -109,6 +110,99 @@ test('TraceStore round trips a presentation receipt', async () => {
         const retrieved = await store.retrieve(responseId);
         assert.ok(retrieved, 'presentation flow trace should be retrievable');
         assert.equal(retrieved.presentation?.outcome, 'finalized');
+    } finally {
+        store.close();
+        await fs.rm(tempRoot, { recursive: true, force: true });
+    }
+});
+
+test('TraceStore persists ordered candidate links with the trace and cascades deletion', async () => {
+    const tempRoot = await fs.mkdtemp(
+        path.join(os.tmpdir(), 'trace-candidates-')
+    );
+    const store = new SqliteTraceStore({
+        dbPath: path.join(tempRoot, 'provenance.db'),
+    });
+    const responseId = 'response_candidates_123';
+    const candidates: ResponseCandidate[] = [
+        {
+            id: 'candidate_draft',
+            workflowStepId: 'step_1',
+            sequence: 0,
+            stage: 'presentation_draft',
+            state: 'superseded',
+            text: 'Draft response.',
+        },
+        {
+            id: 'candidate_final',
+            parentCandidateId: 'candidate_draft',
+            workflowStepId: 'step_1',
+            sequence: 1,
+            stage: 'presentation_finalization',
+            state: 'selected',
+            text: 'Final response.',
+        },
+    ];
+
+    try {
+        await store.upsert(
+            {
+                responseId,
+                provenance: 'Inferred',
+                safetyTier: 'Low',
+                tradeoffCount: 1,
+                chainHash: 'candidate_chain_hash',
+                licenseContext: 'MIT + HL3',
+                modelVersion: 'gpt-5-mini',
+                staleAfter: new Date(Date.now() + 60000).toISOString(),
+                citations: [],
+                trace_target: {},
+                trace_final: {},
+            },
+            candidates
+        );
+
+        assert.deepEqual(
+            await store.retrieveResponseCandidates(responseId),
+            candidates
+        );
+        await store.delete(responseId);
+        assert.deepEqual(
+            await store.retrieveResponseCandidates(responseId),
+            []
+        );
+    } finally {
+        store.close();
+        await fs.rm(tempRoot, { recursive: true, force: true });
+    }
+});
+
+test('TraceStore returns no candidate history for older traces', async () => {
+    const tempRoot = await fs.mkdtemp(
+        path.join(os.tmpdir(), 'trace-no-candidates-')
+    );
+    const store = new SqliteTraceStore({
+        dbPath: path.join(tempRoot, 'provenance.db'),
+    });
+    const responseId = 'old_trace_123';
+    try {
+        await store.upsert({
+            responseId,
+            provenance: 'Inferred',
+            safetyTier: 'Low',
+            tradeoffCount: 1,
+            chainHash: 'old_chain_hash',
+            licenseContext: 'MIT + HL3',
+            modelVersion: 'gpt-5-mini',
+            staleAfter: new Date(Date.now() + 60000).toISOString(),
+            citations: [],
+            trace_target: {},
+            trace_final: {},
+        });
+        assert.deepEqual(
+            await store.retrieveResponseCandidates(responseId),
+            []
+        );
     } finally {
         store.close();
         await fs.rm(tempRoot, { recursive: true, force: true });
