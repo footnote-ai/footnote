@@ -185,6 +185,84 @@ test('GitHub context fails open for private access, HTTP failures, malformed bod
     }
 });
 
+test('GitHub context sends Authorization only for allowlisted repositories and never for others', async () => {
+    const captured: string[] = [];
+    const allowlistExecutor = createGitHubContextStepExecutor({
+        enabled: true,
+        token: 'secret-token',
+        timeoutMs: 5000,
+        maxRecordsPerSection: 5,
+        privateRepositoryAllowlist: ['acme/repo'],
+        cacheTtlMs: 60_000,
+        staleResultLimitMs: 900_000,
+        fetchImpl: async (url, init) => {
+            captured.push(init.headers.Authorization ?? '(none)');
+            return successfulFetch(url);
+        },
+    });
+    const allowed = await allowlistExecutor(request(['repository']));
+    assert.equal(allowed.outcome, 'executed');
+
+    const deniedExecutor = createGitHubContextStepExecutor({
+        enabled: true,
+        token: 'secret-token',
+        timeoutMs: 5000,
+        maxRecordsPerSection: 5,
+        privateRepositoryAllowlist: ['other/repo'],
+        cacheTtlMs: 60_000,
+        staleResultLimitMs: 900_000,
+        fetchImpl: async (url, init) => {
+            captured.push(init.headers.Authorization ?? '(none)');
+            return successfulFetch(url);
+        },
+    });
+    const denied = await deniedExecutor(request(['repository']));
+    assert.equal(denied.outcome, 'executed');
+
+    assert.equal(captured[0], 'Bearer secret-token');
+    assert.equal(captured[1], '(none)');
+});
+
+test('GitHub context caches per repository and requested section list', async () => {
+    let repoCalls = 0;
+    let issuesCalls = 0;
+    const fetchImpl = async (url: string) => {
+        if (url.endsWith('/acme/repo')) {
+            repoCalls += 1;
+            return response(200, repository);
+        }
+        if (url.includes('/issues')) {
+            issuesCalls += 1;
+            return response(200, list('issues'));
+        }
+        throw new Error('unexpected section');
+    };
+    const executor = createGitHubContextStepExecutor({
+        enabled: true,
+        token: null,
+        timeoutMs: 5000,
+        maxRecordsPerSection: 5,
+        privateRepositoryAllowlist: [],
+        cacheTtlMs: 60_000,
+        staleResultLimitMs: 900_000,
+        fetchImpl,
+    });
+
+    const first = await executor(request(['repository', 'issues']));
+    assert.equal(first.outcome, 'executed');
+    assert.equal(repoCalls, 1);
+    assert.equal(issuesCalls, 1);
+
+    const sameSections = await executor(request(['repository', 'issues']));
+    assert.equal(sameSections.outcome, 'executed');
+    assert.equal(repoCalls, 1, 'matching section set served from cache');
+    assert.equal(issuesCalls, 1, 'matching section set served from cache');
+
+    const differentSections = await executor(request(['repository']));
+    assert.equal(differentSections.outcome, 'executed');
+    assert.equal(repoCalls, 2, 'section-scoped cache key misses on subset');
+});
+
 test('GitHub context preserves partial success and uses stale cache only after a live failure', async () => {
     let calls = 0;
     let clock = 0;
