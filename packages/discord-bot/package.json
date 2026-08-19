@@ -33,7 +33,6 @@
         "discord.js": "catalog:",
         "dotenv": "catalog:",
         "express": "catalog:",
-        "flyio": "catalog:",
         "js-yaml": "catalog:",
         "linkify-it": "^5.0.2",
         "mime-types": "catalog:",
