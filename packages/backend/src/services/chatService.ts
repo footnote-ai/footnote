@@ -610,7 +610,7 @@ const logTrustGraphRuntimeOutcome = (
         return;
     }
 
-    logger.info(logPayload);
+    logger.debug(logPayload);
 };
 
 const TRUSTGRAPH_CONTEXT_STEP_NAME = 'trustgraph';
@@ -659,11 +659,9 @@ const mergeContextStepRequests = (input: {
  */
 const buildTrustGraphContextStepRequest = (
     executionContractTrustGraph:
-        | ExecutionContractTrustGraphRuntimeOptions
-        | undefined,
+        ExecutionContractTrustGraphRuntimeOptions | undefined,
     executionContractTrustGraphContext:
-        | ExecutionContractTrustGraphContext
-        | undefined
+        ExecutionContractTrustGraphContext | undefined
 ): ContextStepRequest | undefined => {
     if (
         executionContractTrustGraph === undefined ||
@@ -1682,7 +1680,7 @@ export const createChatService = ({
         }
 
         if (ExecutionContract !== undefined) {
-            logger.info({
+            logger.debug({
                 event: 'chat.runtime.execution_policy',
                 policyId: ExecutionContract.policyId,
                 policyVersion: ExecutionContract.policyVersion,
@@ -1800,58 +1798,59 @@ export const createChatService = ({
               upstreamGenerationExecutionContext?.profileId ??
               workflowGenerationProfileId);
         const effectiveGenerationExecutionContext:
-            | GenerationExecutionContext
-            | undefined = upstreamGenerationExecutionContext
-            ? {
-                  ...upstreamGenerationExecutionContext,
-                  ...(upstreamGenerationExecutionContext.originalProfileId !==
-                      undefined && {
-                      originalProfileId:
-                          upstreamGenerationExecutionContext.originalProfileId,
-                  }),
-                  ...(effectiveGenerationProfileId !== undefined && {
-                      profileId: effectiveGenerationProfileId,
-                      effectiveProfileId: effectiveGenerationProfileId,
-                  }),
-                  model: usageModel,
-                  durationMs: generationDurationMs,
-              }
-            : fallbackAfterInternalNoGeneration
-              ? ({
-                    status: 'executed',
-                    profileId: 'workflow_internal_fallback',
-                    effectiveProfileId: 'workflow_internal_fallback',
-                    provider: 'internal',
-                    model: usageModel,
-                    durationMs: generationDurationMs,
-                } satisfies GenerationExecutionContext)
-              : workflowGenerationProfileId !== undefined
-                ? ({
-                      status: 'executed',
-                      profileId: workflowGenerationProfileId,
-                      ...(workflowPlannerSummary?.originalSelectedProfileId !==
+            GenerationExecutionContext | undefined =
+            upstreamGenerationExecutionContext
+                ? {
+                      ...upstreamGenerationExecutionContext,
+                      ...(upstreamGenerationExecutionContext.originalProfileId !==
                           undefined && {
                           originalProfileId:
-                              workflowPlannerSummary.originalSelectedProfileId,
+                              upstreamGenerationExecutionContext.originalProfileId,
                       }),
-                      effectiveProfileId: workflowGenerationProfileId,
-                      provider:
-                          workflowSelectedGenerationProfile?.provider ??
-                          effectiveGenerationRequest.provider ??
-                          'internal',
+                      ...(effectiveGenerationProfileId !== undefined && {
+                          profileId: effectiveGenerationProfileId,
+                          effectiveProfileId: effectiveGenerationProfileId,
+                      }),
                       model: usageModel,
                       durationMs: generationDurationMs,
-                  } satisfies GenerationExecutionContext)
-                : routedGenerationSelectedProfile !== undefined
+                  }
+                : fallbackAfterInternalNoGeneration
                   ? ({
                         status: 'executed',
-                        profileId: routedGenerationSelectedProfile.id,
-                        effectiveProfileId: routedGenerationSelectedProfile.id,
-                        provider: routedGenerationSelectedProfile.provider,
+                        profileId: 'workflow_internal_fallback',
+                        effectiveProfileId: 'workflow_internal_fallback',
+                        provider: 'internal',
                         model: usageModel,
                         durationMs: generationDurationMs,
                     } satisfies GenerationExecutionContext)
-                  : undefined;
+                  : workflowGenerationProfileId !== undefined
+                    ? ({
+                          status: 'executed',
+                          profileId: workflowGenerationProfileId,
+                          ...(workflowPlannerSummary?.originalSelectedProfileId !==
+                              undefined && {
+                              originalProfileId:
+                                  workflowPlannerSummary.originalSelectedProfileId,
+                          }),
+                          effectiveProfileId: workflowGenerationProfileId,
+                          provider:
+                              workflowSelectedGenerationProfile?.provider ??
+                              effectiveGenerationRequest.provider ??
+                              'internal',
+                          model: usageModel,
+                          durationMs: generationDurationMs,
+                      } satisfies GenerationExecutionContext)
+                    : routedGenerationSelectedProfile !== undefined
+                      ? ({
+                            status: 'executed',
+                            profileId: routedGenerationSelectedProfile.id,
+                            effectiveProfileId:
+                                routedGenerationSelectedProfile.id,
+                            provider: routedGenerationSelectedProfile.provider,
+                            model: usageModel,
+                            durationMs: generationDurationMs,
+                        } satisfies GenerationExecutionContext)
+                      : undefined;
         const effectivePlannerExecutionContext =
             executionContext?.planner ??
             (workflowPlannerStepResult !== undefined
@@ -1951,8 +1950,7 @@ export const createChatService = ({
             trustGraphEvidenceUsed,
         };
         const finalToolExecutionTelemetry:
-            | FinalToolExecutionTelemetry
-            | undefined =
+            FinalToolExecutionTelemetry | undefined =
             effectiveToolExecutionContext !== undefined
                 ? {
                       toolName: effectiveToolExecutionContext.toolName,

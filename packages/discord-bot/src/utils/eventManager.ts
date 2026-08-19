@@ -97,8 +97,7 @@ export class EventManager {
                     const module = await import(importPath);
 
                     const createEvent = module.createEvent as
-                        | EventFactory
-                        | undefined;
+                        EventFactory | undefined;
                     if (typeof createEvent === 'function') {
                         const event = createEvent(
                             this.client,
@@ -175,7 +174,7 @@ export class EventManager {
                 }
             }
 
-            logger.info(`Successfully loaded ${this.events.length} events.`);
+            logger.debug(`Successfully loaded ${this.events.length} events.`);
         } catch (error) {
             logger.error('Failed to load events:', error);
             throw error;
@@ -214,7 +213,7 @@ export class EventManager {
             );
         }
 
-        logger.info(`Registered ${this.events.length} events.`);
+        logger.debug(`Registered ${this.events.length} events.`);
     }
 
     /**

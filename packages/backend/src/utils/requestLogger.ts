@@ -8,6 +8,18 @@
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { logger } from './logger.js';
 
+export type RequestLogLevel = 'debug' | 'error' | 'warn';
+
+export const selectRequestLogLevel = (statusCode: number): RequestLogLevel => {
+    if (statusCode >= 500) {
+        return 'error';
+    }
+    if (statusCode >= 400) {
+        return 'warn';
+    }
+    return 'debug';
+};
+
 /**
  * Builds a short log entry for monitoring within Fly.io logs.
  */
@@ -33,9 +45,16 @@ function logRequest(
 
     // --- Emit ---
     // Keep format consistent for ingestion into log tooling.
-    logger.info(
-        `[${timestamp}] ${req.method} ${logUrl} -> ${res.statusCode} ${extra}`.trim()
-    );
+    const message =
+        `[${timestamp}] ${req.method} ${logUrl} -> ${res.statusCode} ${extra}`.trim();
+    const level = selectRequestLogLevel(res.statusCode);
+    if (level === 'error') {
+        logger.error(message);
+    } else if (level === 'warn') {
+        logger.warn(message);
+    } else {
+        logger.debug(message);
+    }
 }
 
 export { logRequest };

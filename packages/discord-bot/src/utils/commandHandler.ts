@@ -96,7 +96,7 @@ export class CommandHandler {
                     Routes.applicationGuildCommands(clientId, guildId),
                     { body: commands }
                 )) as unknown[];
-                logger.info(
+                logger.debug(
                     `Successfully reloaded ${data.length} guild commands.`
                 );
             } else {
@@ -106,7 +106,7 @@ export class CommandHandler {
                     Routes.applicationCommands(clientId),
                     { body: commands }
                 )) as unknown[];
-                logger.info(
+                logger.debug(
                     `Successfully reloaded ${data.length} global commands.`
                 );
             }

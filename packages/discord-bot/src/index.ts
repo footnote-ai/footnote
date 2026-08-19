@@ -17,7 +17,7 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import { CommandHandler } from './utils/commandHandler.js';
 import { EventManager } from './utils/eventManager.js';
-import { logger } from './utils/logger.js';
+import { logger, logRuntimeLifecycleEvent } from './utils/logger.js';
 import { runtimeConfig } from './config.js';
 import type { Command } from './commands/BaseCommand.js';
 import { ChannelContextManager } from './state/ChannelContextManager.js';
@@ -89,6 +89,7 @@ client.handlers = new Collection();
 // Load and Register Commands
 // ====================
 // Use an async IIFE to handle top-level await
+logRuntimeLifecycleEvent('starting');
 (async () => {
     try {
         // Load commands first
@@ -118,7 +119,7 @@ client.handlers = new Collection();
             }
         }
 
-        logger.info('Guild command deployment completed.', {
+        logger.debug('Guild command deployment completed.', {
             successfulGuildDeployments,
             failedGuildDeployments,
             totalGuilds: runtimeConfig.guildIds.length,
@@ -151,7 +152,9 @@ client.handlers = new Collection();
         // Login to Discord after everything is set up
         logger.debug('Logging in to Discord...');
         await client.login(runtimeConfig.token);
-        logger.info('Bot is now connected to Discord and ready!');
+        logger.debug(
+            'Discord client login completed; waiting for ClientReady.'
+        );
     } catch (error) {
         logger.error('Failed to initialize bot:' + error);
         process.exit(1);
@@ -163,8 +166,8 @@ client.handlers = new Collection();
 // ====================
 // Client ready handler
 client.once(Events.ClientReady, async () => {
-    logger.info(`Logged in as ${client.user?.tag}`);
     await recoverInterruptedImageTasks(client);
+    logRuntimeLifecycleEvent('ready', 'discord_client');
 });
 
 // Slash commands handler
@@ -181,7 +184,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
             return;
         }
 
-        logger.info(`Executing command: ${interaction.commandName}`);
+        logger.debug(`Executing command: ${interaction.commandName}`);
 
         try {
             await command.execute(interaction);
@@ -235,8 +238,7 @@ const shutdown = async (signal: NodeJS.Signals): Promise<void> => {
     logger.info('discord_bot_shutdown_signal', { signal });
     try {
         const voiceHandler = client.handlers?.get('voiceState') as
-            | { cleanupExistingConnections?: () => Promise<void> }
-            | undefined;
+            { cleanupExistingConnections?: () => Promise<void> } | undefined;
         await voiceHandler?.cleanupExistingConnections?.();
         client.destroy();
     } catch (error) {

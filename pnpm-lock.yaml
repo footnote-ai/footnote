@@ -550,6 +550,9 @@ importers:
       '@footnote/config-spec':
         specifier: workspace:*
         version: link:../config-spec
+      '@footnote/contracts':
+        specifier: workspace:*
+        version: link:../contracts
     devDependencies:
       '@types/node':
         specifier: 'catalog:'

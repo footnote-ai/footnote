@@ -7,6 +7,12 @@
  */
 
 import fs from 'fs';
+import {
+    createRuntimeLifecycleEvent,
+    type RuntimeIdentity,
+    type RuntimeLifecyclePhase,
+    type RuntimeReadinessBoundary,
+} from '@footnote/contracts';
 import { envDefaultValues } from '@footnote/config-spec';
 import {
     supportedLogLevels,
@@ -139,6 +145,15 @@ try {
  */
 export const logger = createLogger({
     level: parseLogLevel(process.env.LOG_LEVEL),
+    defaultMeta: {
+        service: 'discord-bot',
+        ...(process.env.LOCAL_DISCORD_NODE_ID
+            ? { nodeId: process.env.LOCAL_DISCORD_NODE_ID }
+            : {}),
+        ...(process.env.BOT_PROFILE_ID
+            ? { profileId: process.env.BOT_PROFILE_ID }
+            : {}),
+    },
     format: combine(
         sanitizeFormat(),
         timestamp({ format: 'YYYY-MM-DD HH:mm:ss' }),
@@ -164,6 +179,32 @@ export const logger = createLogger({
     ],
     exitOnError: false,
 });
+
+const discordRuntimeIdentity: RuntimeIdentity = {
+    service: 'discord-bot',
+    ...(process.env.LOCAL_DISCORD_NODE_ID
+        ? { nodeId: process.env.LOCAL_DISCORD_NODE_ID }
+        : {}),
+    ...(process.env.BOT_PROFILE_ID
+        ? { profileId: process.env.BOT_PROFILE_ID }
+        : {}),
+};
+
+/**
+ * Emits one bounded lifecycle record for the Discord process.
+ * Logging failures must not prevent the bot from starting.
+ */
+export const logRuntimeLifecycleEvent = (
+    phase: RuntimeLifecyclePhase,
+    readiness?: RuntimeReadinessBoundary
+): void => {
+    const event = createRuntimeLifecycleEvent(
+        discordRuntimeIdentity,
+        phase,
+        readiness
+    );
+    logger.info(`${event.event} service=${event.service}`, event);
+};
 
 // Use this logger during config/bootstrap work that happens before runtimeConfig
 // exists. It keeps the normal log formatting without creating a config cycle.

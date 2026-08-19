@@ -8,12 +8,14 @@
         "baseUrl": ".",
         "paths": {
             "@footnote/config-spec": ["../config-spec/src/index.ts"],
-            "@footnote/config-spec/*": ["../config-spec/src/*"]
+            "@footnote/config-spec/*": ["../config-spec/src/*"],
+            "@footnote/contracts": ["../contracts/src/index.ts"],
+            "@footnote/contracts/*": ["../contracts/src/*"]
         },
         "types": ["node"],
         "noEmitOnError": true
     },
     "include": ["src/**/*.ts"],
     "exclude": ["node_modules", "dist"],
-    "references": [{ "path": "../config-spec" }]
+    "references": [{ "path": "../config-spec" }, { "path": "../contracts" }]
 }

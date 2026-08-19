@@ -7,6 +7,11 @@
  */
 
 import fs from 'fs';
+import {
+    createRuntimeLifecycleEvent,
+    type RuntimeLifecyclePhase,
+    type RuntimeReadinessBoundary,
+} from '@footnote/contracts';
 import { createLogger, format, transports } from 'winston';
 import { runtimeConfig } from '../config.js';
 
@@ -137,6 +142,7 @@ try {
  */
 export const logger = createLogger({
     level: runtimeConfig.logging.level,
+    defaultMeta: { service: 'backend' },
     format: combine(
         sanitizeFormat(),
         timestamp({ format: 'YYYY-MM-DD HH:mm:ss' }),
@@ -163,6 +169,22 @@ export const logger = createLogger({
     ],
     exitOnError: false,
 });
+
+/**
+ * Emits one operator-searchable lifecycle record with a truthful readiness boundary.
+ * This is best-effort: logger failures must never block backend startup.
+ */
+export const logRuntimeLifecycleEvent = (
+    phase: RuntimeLifecyclePhase,
+    readiness?: RuntimeReadinessBoundary
+): void => {
+    const event = createRuntimeLifecycleEvent(
+        { service: 'backend' },
+        phase,
+        readiness
+    );
+    logger.info(`${event.event} service=${event.service}`, event);
+};
 
 // --- LLM cost tracking utilities ---
 

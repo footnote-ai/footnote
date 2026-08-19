@@ -221,10 +221,7 @@ test('chat request build does not log profile overlay injection details', async 
                 channelId: 'channel-1',
                 guildId: 'guild-1',
                 attachments: {
-                    filter: () => ({
-                        size: 0,
-                        map: () => [],
-                    }),
+                    map: () => [],
                 },
                 mentions: {
                     users: {

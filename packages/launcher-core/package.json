@@ -15,7 +15,8 @@
         "build": "tsc -b tsconfig.json"
     },
     "dependencies": {
-        "@footnote/config-spec": "workspace:*"
+        "@footnote/config-spec": "workspace:*",
+        "@footnote/contracts": "workspace:*"
     },
     "devDependencies": {
         "@types/node": "catalog:",
