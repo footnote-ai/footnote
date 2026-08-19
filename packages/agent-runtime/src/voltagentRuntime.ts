@@ -166,6 +166,11 @@ type VoltAgentLike = Pick<Agent, 'generateText'>;
 
 type CreateVoltAgentAgentFactoryInput = {
     model: NonNullable<AgentOptions['model']>;
+    /**
+     * Trusted system-level instructions derived from leading system-role
+     * transcript messages. Backend-composed content only; never user input.
+     */
+    instructions?: string;
     tools?: NonNullable<AgentOptions['tools']>;
     logger?: VoltAgentLogger;
     voltOpsClient?: VoltOpsClient;
@@ -205,6 +210,36 @@ const toVoltAgentMessages = (messages: RuntimeMessage[]): BaseMessage[] =>
         role: message.role,
         content: message.content,
     }));
+
+/**
+ * Splits a transcript into a trusted system prompt and the remaining
+ * conversation. Only a contiguous run of leading system-role messages is
+ * promoted to instructions; any system message that appears after user or
+ * assistant content is left in place so generation never blocks and no
+ * user-visible content is dropped.
+ *
+ * @returns Instructions built from leading system messages (joined with a blank
+ * line), and the remaining transcript with those messages removed.
+ */
+const splitLeadingSystemMessages = (
+    messages: RuntimeMessage[]
+): { instructions: string | undefined; transcript: RuntimeMessage[] } => {
+    const instructionParts: string[] = [];
+    let index = 0;
+    while (index < messages.length && messages[index]?.role === 'system') {
+        const content = messages[index]?.content;
+        if (content !== undefined && content.trim().length > 0) {
+            instructionParts.push(content);
+        }
+        index += 1;
+    }
+    const instructions =
+        instructionParts.length > 0 ? instructionParts.join('\n\n') : undefined;
+    return {
+        instructions,
+        transcript: messages.slice(index),
+    };
+};
 
 /**
  * VoltAgent's model router expects provider-prefixed model ids.
@@ -951,12 +986,14 @@ const createDefaultVoltAgentExecutor = ({
     agentFactory = ({
         model: agentModel,
         tools,
+        instructions,
         logger: agentLogger,
         voltOpsClient: agentVoltOpsClient,
     }: CreateVoltAgentAgentFactoryInput): VoltAgentLike =>
         new Agent({
             name: 'footnote-generation-runtime',
             instructions:
+                instructions ??
                 'Continue the provided conversation transcript and follow any system messages included in it.',
             model: agentModel,
             memory: false,
@@ -989,32 +1026,36 @@ const createDefaultVoltAgentExecutor = ({
                   }),
               })(model.slice('openrouter/'.length))
             : undefined;
-    const createAgent = (tools?: NonNullable<AgentOptions['tools']>) =>
+    const createAgent = (
+        instructions: string | undefined,
+        tools?: NonNullable<AgentOptions['tools']>
+    ) =>
         agentFactory({
             model: openRouterModel ?? model,
+            ...(instructions !== undefined && { instructions }),
             ...(logger !== undefined && { logger }),
             ...(voltOpsClient !== undefined && { voltOpsClient }),
             ...(tools !== undefined && { tools }),
         });
-
-    const agent = createAgent();
 
     return {
         async generateText(
             messages: RuntimeMessage[],
             options: VoltAgentGenerateTextOptions
         ): Promise<VoltAgentTextResult> {
-            const runtimeMessages = options.search
-                ? [
-                      ...messages,
-                      {
-                          role: 'system' as const,
-                          content: buildVoltAgentSearchInstruction(
-                              options.search
-                          ),
-                      },
-                  ]
-                : messages;
+            const { instructions, transcript } =
+                splitLeadingSystemMessages(messages);
+            const searchInstruction = options.search
+                ? buildVoltAgentSearchInstruction(options.search)
+                : undefined;
+            const mergedInstructions = [instructions, searchInstruction]
+                .filter(
+                    (part): part is string =>
+                        part !== undefined && part.trim().length > 0
+                )
+                .join('\n\n');
+            const resolvedInstructions =
+                mergedInstructions.length > 0 ? mergedInstructions : undefined;
             const callOptions: VoltAgentCallOptions = {
                 ...(options.maxOutputTokens !== undefined && {
                     maxOutputTokens: options.maxOutputTokens,
@@ -1047,6 +1088,7 @@ const createDefaultVoltAgentExecutor = ({
             const activeAgent =
                 options.search !== undefined
                     ? createAgent(
+                          resolvedInstructions,
                           toVoltAgentAgentTools(
                               toVoltAgentProviderTool(
                                   createVoltAgentSearchTool(
@@ -1056,9 +1098,9 @@ const createDefaultVoltAgentExecutor = ({
                               )
                           )
                       )
-                    : agent;
+                    : createAgent(resolvedInstructions);
             const result = await activeAgent.generateText(
-                toVoltAgentMessages(runtimeMessages),
+                toVoltAgentMessages(transcript),
                 callOptions
             );
 

@@ -1130,3 +1130,257 @@ test('default VoltAgent executor passes the configured logger into Agent creatio
 
     assert.deepEqual(seenLoggers, [logger]);
 });
+
+test('default executor strips leading system messages into Agent instructions', async () => {
+    const seenInstructions: Array<string | undefined> = [];
+    let seenGenerateMessages: RuntimeMessage[] | undefined;
+    const fakeAgent = {
+        async generateText(
+            messages: RuntimeMessage[]
+        ): Promise<Awaited<ReturnType<Agent['generateText']>>> {
+            seenGenerateMessages = messages;
+            return {
+                content: [],
+                text: 'instructions reply',
+                reasoning: [],
+                reasoningText: undefined,
+                files: [],
+                sources: [],
+                toolCalls: [],
+                staticToolCalls: [],
+                dynamicToolCalls: [],
+                toolResults: [],
+                staticToolResults: [],
+                dynamicToolResults: [],
+                finishReason: 'stop',
+                rawFinishReason: 'stop',
+                usage: {
+                    inputTokens: 0,
+                    inputTokenDetails: {
+                        noCacheTokens: 0,
+                        cacheReadTokens: 0,
+                        cacheWriteTokens: 0,
+                    },
+                    outputTokens: 0,
+                    outputTokenDetails: { textTokens: 0, reasoningTokens: 0 },
+                    totalTokens: 0,
+                },
+                totalUsage: {
+                    inputTokens: 0,
+                    inputTokenDetails: {
+                        noCacheTokens: 0,
+                        cacheReadTokens: 0,
+                        cacheWriteTokens: 0,
+                    },
+                    outputTokens: 0,
+                    outputTokenDetails: { textTokens: 0, reasoningTokens: 0 },
+                    totalTokens: 0,
+                },
+                warnings: undefined,
+                request: {},
+                response: {
+                    modelId: 'openai/gpt-5-mini',
+                    id: 'response_1',
+                    timestamp: new Date(0),
+                    messages: [],
+                },
+                providerMetadata: undefined,
+                steps: [],
+                experimental_output: undefined,
+                output: undefined,
+                context: new Map(),
+                feedback: null,
+            };
+        },
+    } satisfies Pick<Agent, 'generateText'>;
+    const executor = createDefaultVoltAgentExecutor({
+        model: 'openai/gpt-5-mini',
+        agentFactory: ({ instructions }) => {
+            seenInstructions.push(instructions);
+            return fakeAgent;
+        },
+    });
+
+    const result = await executor.generateText(
+        [
+            { role: 'system', content: 'First instruction.' },
+            { role: 'system', content: 'Second instruction.' },
+            { role: 'user', content: 'Hello' },
+            { role: 'assistant', content: 'Hi' },
+        ],
+        {}
+    );
+
+    assert.equal(result.text, 'instructions reply');
+    assert.deepEqual(seenInstructions, [
+        'First instruction.\n\nSecond instruction.',
+    ]);
+    assert.deepEqual(seenGenerateMessages, [
+        { role: 'user', content: 'Hello' },
+        { role: 'assistant', content: 'Hi' },
+    ]);
+});
+
+test('default executor merges search instructions with system instructions', async () => {
+    const seenInstructions: Array<string | undefined> = [];
+    const fakeAgent = {
+        async generateText(): Promise<
+            Awaited<ReturnType<Agent['generateText']>>
+        > {
+            return {
+                content: [],
+                text: 'search reply',
+                reasoning: [],
+                reasoningText: undefined,
+                files: [],
+                sources: [],
+                toolCalls: [],
+                staticToolCalls: [],
+                dynamicToolCalls: [],
+                toolResults: [],
+                staticToolResults: [],
+                dynamicToolResults: [],
+                finishReason: 'stop',
+                rawFinishReason: 'stop',
+                usage: {
+                    inputTokens: 0,
+                    inputTokenDetails: {
+                        noCacheTokens: 0,
+                        cacheReadTokens: 0,
+                        cacheWriteTokens: 0,
+                    },
+                    outputTokens: 0,
+                    outputTokenDetails: { textTokens: 0, reasoningTokens: 0 },
+                    totalTokens: 0,
+                },
+                totalUsage: {
+                    inputTokens: 0,
+                    inputTokenDetails: {
+                        noCacheTokens: 0,
+                        cacheReadTokens: 0,
+                        cacheWriteTokens: 0,
+                    },
+                    outputTokens: 0,
+                    outputTokenDetails: { textTokens: 0, reasoningTokens: 0 },
+                    totalTokens: 0,
+                },
+                warnings: undefined,
+                request: {},
+                response: {
+                    modelId: 'openai/gpt-5-mini',
+                    id: 'response_1',
+                    timestamp: new Date(0),
+                    messages: [],
+                },
+                providerMetadata: undefined,
+                steps: [],
+                experimental_output: undefined,
+                output: undefined,
+                context: new Map(),
+                feedback: null,
+            };
+        },
+    } satisfies Pick<Agent, 'generateText'>;
+    const executor = createDefaultVoltAgentExecutor({
+        model: 'openai/gpt-5-mini',
+        agentFactory: ({ instructions }) => {
+            seenInstructions.push(instructions);
+            return fakeAgent;
+        },
+    });
+
+    await executor.generateText(
+        [{ role: 'system', content: 'System context.' }],
+        {
+            search: {
+                query: 'latest news',
+                contextSize: 'low',
+                intent: 'current_facts',
+            },
+        }
+    );
+
+    assert.equal(seenInstructions.length, 1);
+    assert.match(seenInstructions[0] ?? '', /^System context\.\n\n/);
+    assert.match(seenInstructions[0] ?? '', /latest news/);
+});
+
+test('default executor leaves non-leading system messages in the transcript', async () => {
+    let seenGenerateMessages: RuntimeMessage[] | undefined;
+    const fakeAgent = {
+        async generateText(
+            messages: RuntimeMessage[]
+        ): Promise<Awaited<ReturnType<Agent['generateText']>>> {
+            seenGenerateMessages = messages;
+            return {
+                content: [],
+                text: 'fail open',
+                reasoning: [],
+                reasoningText: undefined,
+                files: [],
+                sources: [],
+                toolCalls: [],
+                staticToolCalls: [],
+                dynamicToolCalls: [],
+                toolResults: [],
+                staticToolResults: [],
+                dynamicToolResults: [],
+                finishReason: 'stop',
+                rawFinishReason: 'stop',
+                usage: {
+                    inputTokens: 0,
+                    inputTokenDetails: {
+                        noCacheTokens: 0,
+                        cacheReadTokens: 0,
+                        cacheWriteTokens: 0,
+                    },
+                    outputTokens: 0,
+                    outputTokenDetails: { textTokens: 0, reasoningTokens: 0 },
+                    totalTokens: 0,
+                },
+                totalUsage: {
+                    inputTokens: 0,
+                    inputTokenDetails: {
+                        noCacheTokens: 0,
+                        cacheReadTokens: 0,
+                        cacheWriteTokens: 0,
+                    },
+                    outputTokens: 0,
+                    outputTokenDetails: { textTokens: 0, reasoningTokens: 0 },
+                    totalTokens: 0,
+                },
+                warnings: undefined,
+                request: {},
+                response: {
+                    modelId: 'openai/gpt-5-mini',
+                    id: 'response_1',
+                    timestamp: new Date(0),
+                    messages: [],
+                },
+                providerMetadata: undefined,
+                steps: [],
+                experimental_output: undefined,
+                output: undefined,
+                context: new Map(),
+                feedback: null,
+            };
+        },
+    } satisfies Pick<Agent, 'generateText'>;
+    const executor = createDefaultVoltAgentExecutor({
+        model: 'openai/gpt-5-mini',
+        agentFactory: () => fakeAgent,
+    });
+
+    await executor.generateText(
+        [
+            { role: 'user', content: 'Hello' },
+            { role: 'system', content: 'Late system note.' },
+        ],
+        {}
+    );
+
+    assert.deepEqual(seenGenerateMessages, [
+        { role: 'user', content: 'Hello' },
+        { role: 'system', content: 'Late system note.' },
+    ]);
+});
