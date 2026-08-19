@@ -106,7 +106,7 @@ reviewed workflow modes.
 
 ### Workflow context-step execution
 
-`weather_forecast`, `file_scan`, `web_search`, `trustgraph`, and
+`weather_forecast`, `file_scan`, `web_search`, `trustgraph`,
 `reverse_image_search`, and `github_context` use the workflow context-step execution path for
 workflow modes (`express`, `balanced`, and `grounded`) when workflow execution
 is active. In this pattern:

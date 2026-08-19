@@ -6,7 +6,9 @@ Issue #491 adds a backend-owned, read-only `github_context` workflow
 integration. Supported sections are repository metadata, open issues, open
 pull requests, releases, and recent commits. Retrieval is disabled by default
 and uses bounded GET-only requests, sanitization, fail-open execution, short
-in-process caching, citations, and typed response metadata.
+in-process caching, citations, and typed response metadata. GitHub response
+metadata is propagated into response details as part of the public response
+metadata contract.
 
 ## Limitations
 

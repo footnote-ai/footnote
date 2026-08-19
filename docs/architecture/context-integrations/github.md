@@ -2,10 +2,11 @@
 
 ## Purpose
 
-`github_context` adds bounded, current GitHub repository state to a response. It
-is not web search: web search discovers broad public sources, while this
-integration reads a single user-named `owner/repo` through fixed GitHub REST
-endpoints.
+`github_context` adds bounded GitHub repository state to a response. Results
+reflect current repository state when retrieval succeeds, but may also be
+partial, stale, or unavailable. It is not web search: web search discovers
+broad public sources, while this integration reads a single user-named
+`owner/repo` through fixed GitHub REST endpoints.
 
 ## Scope and access
 
