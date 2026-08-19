@@ -190,11 +190,15 @@
         },
         {
             "title": "Observability",
-            "purpose": "Document how Footnote records operational context and model usage through structured logging, logging hygiene, and cost tracking.",
+            "purpose": "Document how Footnote records operational context and model usage through structured logging, lifecycle events, logging hygiene, and cost tracking.",
             "parent": "Foundations",
             "entrypoints": [
+                "packages/contracts/src/logging.ts",
                 "packages/discord-bot/src/utils/logger.ts",
                 "packages/backend/src/utils/logger.ts",
+                "packages/backend/src/server.ts",
+                "packages/launcher-cli/src/cli/lifecycle.ts",
+                "packages/discord-bot/src/supervisor/serverNodeSupervisor.ts",
                 "packages/discord-bot/src/state/ChannelContextManager.ts",
                 "docs/architecture/langfuse-metadata-mirror.md",
                 "AGENTS.md",
@@ -202,11 +206,11 @@
             ],
             "page_notes": [
                 {
-                    "content": "Focus on structured logging, privacy-aware log content, and where LLM costs are recorded and surfaced.",
+                    "content": "Focus on structured logging, the footnote.runtime.starting and footnote.runtime.ready events, privacy-aware log content, and where LLM costs are recorded and surfaced.",
                     "author": "Maintainer"
                 },
                 {
-                    "content": "Include failure modes and where to look when debugging trace, provenance, or cost-accounting issues.",
+                    "content": "Include failure modes and where to look when debugging lifecycle, trace, provenance, or cost-accounting issues. Explain that supervisor readiness means supervision is active, while backend and Discord report their own readiness.",
                     "author": "Maintainer"
                 },
                 {
@@ -837,6 +841,10 @@
                 "scripts/lib/operator-link.cjs",
                 "packages/launcher-core",
                 "packages/launcher-cli",
+                "packages/launcher-cli/src/cli/lifecycle.ts",
+                "packages/contracts/src/logging.ts",
+                "packages/backend/src/server.ts",
+                "packages/discord-bot/src/supervisor/serverNodeSupervisor.ts",
                 ".github/workflows/launcher-package.yml",
                 "docs/status/launcher-canary-releases.md"
             ],
@@ -863,7 +871,7 @@
                 },
                 {
                     "author": "Maintainer",
-                    "content": "Include the local operator setup link, settings command, reset command, and launcher path. Launcher canaries publish from main for early verification; setup and settings stay server-owned and local-only, and Discord nodes remain supervised adapters."
+                    "content": "Include the local operator setup link, settings command, reset command, and launcher path. Explain the runtime starting and ready events, including that supervisor readiness does not mean every Discord child is ready. Launcher canaries publish from main for early verification; setup and settings stay server-owned and local-only, and Discord nodes remain supervised adapters."
                 }
             ]
         }
