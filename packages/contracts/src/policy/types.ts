@@ -172,8 +172,7 @@ export const isTraceTemperamentEqual = (
  * divergence classes become contract-stable.
  */
 export type TraceFinalizationReasonCode =
-    | 'runtime_posture_adjustment'
-    | 'assess_trace_misalignment';
+    'runtime_posture_adjustment' | 'assess_trace_misalignment';
 
 export type ExecutionStatus = 'executed' | 'skipped' | 'failed';
 
@@ -223,18 +222,14 @@ export type PlannerExecutionPurpose = 'chat_orchestrator_action_selection';
  * Planner contract execution style used for this invocation.
  */
 export type PlannerExecutionContractType =
-    | 'structured'
-    | 'text_json'
-    | 'fallback';
+    'structured' | 'text_json' | 'fallback';
 
 /**
  * How planner output was applied by workflow-owned policy/routing.
  * This records execution effect, not planner authority.
  */
 export type PlannerExecutionApplyOutcome =
-    | 'applied'
-    | 'adjusted_by_policy'
-    | 'not_applied';
+    'applied' | 'adjusted_by_policy' | 'not_applied';
 
 export type EvaluatorExecutionReasonCode = Extract<
     ExecutionReasonCode,
@@ -253,11 +248,7 @@ export type EvaluatorAuthorityLevel = 'observe' | 'influence' | 'enforce';
 export type EvaluatorDecisionMode = 'observe_only' | 'enforced';
 
 export type SafetyAction =
-    | 'allow'
-    | 'block'
-    | 'redirect'
-    | 'safe_partial'
-    | 'human_review';
+    'allow' | 'block' | 'redirect' | 'safe_partial' | 'human_review';
 
 export type SafetyReasonCode =
     | 'self_harm_crisis_intent'
@@ -345,6 +336,7 @@ export type ToolInvocationName =
     | 'web_search'
     | 'weather_forecast'
     | 'reverse_image_search'
+    | 'github_context'
     | (string & {});
 
 export type WeatherToolInputLocation =
@@ -386,10 +378,7 @@ export type ToolInvocationReasonCode = Extract<
 >;
 
 export type ExecutionEventKind =
-    | 'planner'
-    | 'evaluator'
-    | 'tool'
-    | 'generation';
+    'planner' | 'evaluator' | 'tool' | 'generation';
 
 type BaseExecutionEvent = {
     status: ExecutionStatus;
@@ -622,10 +611,7 @@ export type WorkflowTerminalAction = 'react' | 'ignore' | 'image';
  * not override backend routing policy, capability checks, or fail-open limits.
  */
 export type WorkflowRoutingHintLane =
-    | 'openai_first_logic'
-    | 'ollama_first_style'
-    | 'cheaper_first'
-    | 'none';
+    'openai_first_logic' | 'ollama_first_style' | 'cheaper_first' | 'none';
 
 export type WorkflowRoutingHintConflictResolution = 'logic_over_style';
 
@@ -636,10 +622,7 @@ export type WorkflowRoutingHintConflictResolution = 'logic_over_style';
  * termination without storing raw model output.
  */
 export type WorkflowReviewParseFailureReason =
-    | 'empty_output'
-    | 'non_json_object'
-    | 'invalid_json'
-    | 'schema_invalid';
+    'empty_output' | 'non_json_object' | 'invalid_json' | 'schema_invalid';
 
 /**
  * Bounded routing-chain attempt telemetry stored as JSON in step signals.
@@ -1263,13 +1246,7 @@ export type ImageGenerationMetadata = {
     request: {
         textModel: string;
         reasoningEffort:
-            | 'none'
-            | 'low'
-            | 'medium'
-            | 'high'
-            | 'xhigh'
-            | 'max'
-            | null;
+            'none' | 'low' | 'medium' | 'high' | 'xhigh' | 'max' | null;
         imageModel: string;
         quality: 'low' | 'medium' | 'high' | 'auto';
         size: 'auto' | '1024x1024' | '1024x1536' | '1536x1024';
@@ -1317,13 +1294,7 @@ export type ImageGenerationMetadata = {
             outputTokens: number;
             totalTokens: number;
             reasoningEffort:
-                | 'none'
-                | 'low'
-                | 'medium'
-                | 'high'
-                | 'xhigh'
-                | 'max'
-                | null;
+                'none' | 'low' | 'medium' | 'high' | 'xhigh' | 'max' | null;
             inputCost: number;
             outputCost: number;
             totalCost: number;
@@ -1351,6 +1322,36 @@ export type ImageGenerationMetadata = {
  * some are best-effort summaries, and a few are only here to keep older
  * consumers working while newer fields roll out.
  */
+export type GitHubContextMetadata = {
+    repository: string;
+    requestedSections: Array<
+        'repository' | 'issues' | 'pulls' | 'releases' | 'commits'
+    >;
+    status: 'current' | 'partial' | 'stale' | 'unavailable';
+    fetchTimestamp?: string;
+    returnedCounts: Partial<
+        Record<
+            'repository' | 'issues' | 'pulls' | 'releases' | 'commits',
+            number
+        >
+    >;
+    failedSections: Array<
+        'repository' | 'issues' | 'pulls' | 'releases' | 'commits'
+    >;
+    reasonCodes: Array<
+        | 'disabled'
+        | 'invalid_repository'
+        | 'not_in_conversation'
+        | 'private_access_denied'
+        | 'unauthorized'
+        | 'not_found'
+        | 'rate_limited'
+        | 'timeout'
+        | 'malformed_response'
+        | 'network_error'
+    >;
+};
+
 export type ResponseMetadata = {
     // TODO(metadata-stability-tiers): Publish explicit stability tiers
     // (structural, heuristic, transitional) in one machine-readable contract
@@ -1387,6 +1388,7 @@ export type ResponseMetadata = {
     trace_final: PartialResponseTemperament;
     trace_final_reason_code?: TraceFinalizationReasonCode;
     trustGraph?: TrustGraphMetadata;
+    githubContext?: GitHubContextMetadata;
     imageGeneration?: ImageGenerationMetadata;
     // Optional presentation record. It never stores both answer texts.
     presentation?: PresentationMetadata;

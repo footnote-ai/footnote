@@ -12,3 +12,4 @@ work is done.
 - [Launcher canary releases](./launcher-canary-releases.md)
 - [Repository context and TrustGraph](./repository-context-status.md)
 - [Web search grounding recovery](./web-search-grounding-recovery-status.md)
+- [GitHub context](./github-context-status.md)

@@ -46,6 +46,7 @@ import { createFileScanningContextStepExecutor } from './contextIntegrations/fil
 import { createReverseImageSearchContextStepExecutor } from './contextIntegrations/reverseImageSearch/index.js';
 import { createSerpApiReverseImageSearchProvider } from './contextIntegrations/reverseImageSearch/index.js';
 import { createWebSearchContextStepExecutor } from './contextIntegrations/webSearch/index.js';
+import { createGitHubContextStepExecutor } from './contextIntegrations/github/index.js';
 import { createPlannerResultApplier } from './chatOrchestrator/plannerResultApplier.js';
 import { resolveStepRoutingChain } from './stepRoutingChains.js';
 import { executeStepRoutingChain } from './stepRoutingExecutor.js';
@@ -591,6 +592,11 @@ export const createChatOrchestrator = ({
                 onWarn: (message, meta) => {
                     chatOrchestratorLogger.warn(message, meta);
                 },
+            }),
+            github_context: createGitHubContextStepExecutor({
+                ...runtimeConfig.chatWorkflow.contextIntegrations.github,
+                onWarn: (message, meta) =>
+                    chatOrchestratorLogger.warn(message, meta),
             }),
             file_scan: fileScanningContextStepExecutor,
             reverse_image_search: createReverseImageSearchContextStepExecutor({

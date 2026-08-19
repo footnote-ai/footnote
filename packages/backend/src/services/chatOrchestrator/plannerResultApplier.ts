@@ -14,6 +14,7 @@ import { coercePlanForSurface } from '../chatSurfacePolicy.js';
 import { applySingleToolPolicy } from '../tools/toolPolicy.js';
 import { resolveToolSelection } from '../tools/toolRegistry.js';
 import type { WeatherForecastTool } from '../contextIntegrations/weather/index.js';
+import { GITHUB_CONTEXT_NAME } from '../contextIntegrations/github/index.js';
 import { FILE_SCAN_INTEGRATION_NAME } from '../contextIntegrations/fileScanning/index.js';
 import { REVERSE_IMAGE_SEARCH_INTEGRATION_NAME } from '../contextIntegrations/reverseImageSearch/index.js';
 import { isImageAttachment } from '../attachments/attachmentContext.js';
@@ -261,7 +262,28 @@ export const createPlannerResultApplier = (
                       plannerInput.normalizedRequest.latestUserInput,
               })
             : undefined;
+        // GitHub scope and section selection originate in the normalized planner
+        // suggestion, but the backend creates the executable context request.
+        const githubContextStepRequest = generationForExecution.githubContext
+            ? {
+                  integrationName: GITHUB_CONTEXT_NAME,
+                  requested: true,
+                  eligible: true,
+                  input: {
+                      repository:
+                          generationForExecution.githubContext.repository,
+                      ...(generationForExecution.githubContext.sections !==
+                          undefined && {
+                          sections:
+                              generationForExecution.githubContext.sections,
+                      }),
+                  },
+              }
+            : undefined;
         const contextStepRequests = [
+            ...(githubContextStepRequest !== undefined
+                ? [githubContextStepRequest]
+                : []),
             ...(toolContextStepRequest !== undefined
                 ? [toolContextStepRequest]
                 : []),

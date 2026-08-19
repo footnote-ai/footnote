@@ -77,10 +77,19 @@ export type ChatGenerationResponseIntentHint = {
  * Contract response intent. `responseIntentHint` is advisory only and
  * non-authoritative.
  */
+export type ChatGenerationGitHubContext = {
+    repository: string;
+    sections?: Array<
+        'repository' | 'issues' | 'pulls' | 'releases' | 'commits'
+    >;
+};
+
 export type ChatGenerationPlan = {
     reasoningEffort: NonNullable<GenerationRequest['reasoningEffort']>;
     verbosity: NonNullable<GenerationRequest['verbosity']>;
     search?: ChatGenerationSearch;
+    /** Planner suggestion only; backend validates the slug against user conversation. */
+    githubContext?: ChatGenerationGitHubContext;
     toolIntent?: ChatGenerationToolIntent;
     responseIntentHint?: ChatGenerationResponseIntentHint;
     temperament?: ResponseTemperament;

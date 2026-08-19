@@ -261,6 +261,22 @@ test('ResponseMetadataSchema remains tolerant for forward-compatible responses',
     assert.equal(parsed.success, true);
 });
 
+test('ResponseMetadataSchema accepts typed GitHub context metadata', () => {
+    const parsed = ResponseMetadataSchema.safeParse({
+        ...baseMetadata,
+        githubContext: {
+            repository: 'acme/repo',
+            requestedSections: ['repository', 'issues'],
+            status: 'partial',
+            fetchTimestamp: new Date().toISOString(),
+            returnedCounts: { repository: 1 },
+            failedSections: ['issues'],
+            reasonCodes: ['rate_limited'],
+        },
+    });
+    assert.equal(parsed.success, true);
+});
+
 test('ResponseMetadataSchema accepts execution timeline events', () => {
     const parsed = ResponseMetadataSchema.safeParse({
         ...baseMetadata,

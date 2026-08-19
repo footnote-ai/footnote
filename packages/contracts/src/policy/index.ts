@@ -118,6 +118,7 @@ export type {
     ExecutionEvent,
     TrustGraphMetadata,
     ImageGenerationMetadata,
+    GitHubContextMetadata,
     ResponseMetadata,
 } from './types.js';
 export type {

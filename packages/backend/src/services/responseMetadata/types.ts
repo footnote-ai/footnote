@@ -28,6 +28,7 @@ import type {
     ToolExecutionContext,
     WorkflowRecord,
     PresentationMetadata,
+    GitHubContextMetadata,
 } from '@footnote/contracts/policy';
 
 // Owns: provider-neutral metadata assembly input contracts.
@@ -74,6 +75,7 @@ export type ResponseMetadataRuntimeContext = {
     retrieval?: ResponseMetadataRetrievalContext;
     trustGraphEvidenceAvailable?: boolean;
     trustGraphEvidenceUsed?: boolean;
+    githubContext?: GitHubContextMetadata;
     executionContext?: {
         planner?: {
             status: ExecutionStatus;
