@@ -29,6 +29,8 @@ import { recoverInterruptedImageTasks } from './commands/image/recoverableTasks.
 //import express from 'express'; // For webhook
 //import bodyParser from "body-parser"; // For webhook
 
+logRuntimeLifecycleEvent('starting');
+
 type ClientWithCommands = Client & {
     commands?: Map<string, Command>;
 };
@@ -89,7 +91,6 @@ client.handlers = new Collection();
 // Load and Register Commands
 // ====================
 // Use an async IIFE to handle top-level await
-logRuntimeLifecycleEvent('starting');
 (async () => {
     try {
         // Load commands first
