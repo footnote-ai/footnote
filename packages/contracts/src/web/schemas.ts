@@ -1292,14 +1292,30 @@ type _AssertImageGenerationMetadata =
 const _assertImageGenerationMetadata: _AssertImageGenerationMetadata = true;
 void _assertImageGenerationMetadata;
 
+const GitHubContextSectionSchema = z.enum([
+    'repository',
+    'issues',
+    'pulls',
+    'releases',
+    'commits',
+]);
+const GitHubContextReasonCodeSchema = z.enum([
+    'disabled',
+    'invalid_repository',
+    'not_in_conversation',
+    'private_access_denied',
+    'unauthorized',
+    'not_found',
+    'rate_limited',
+    'timeout',
+    'malformed_response',
+    'network_error',
+]);
+
 const GitHubContextMetadataSchema: z.ZodType<GitHubContextMetadata> = z
     .object({
         repository: z.string().regex(/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/),
-        requestedSections: z
-            .array(
-                z.enum(['repository', 'issues', 'pulls', 'releases', 'commits'])
-            )
-            .max(5),
+        requestedSections: z.array(GitHubContextSectionSchema).max(5),
         status: z.enum(['current', 'partial', 'stale', 'unavailable']),
         fetchTimestamp: z.string().datetime().optional(),
         returnedCounts: z
@@ -1311,27 +1327,8 @@ const GitHubContextMetadataSchema: z.ZodType<GitHubContextMetadata> = z
                 commits: z.number().int().nonnegative().optional(),
             })
             .strict(),
-        failedSections: z
-            .array(
-                z.enum(['repository', 'issues', 'pulls', 'releases', 'commits'])
-            )
-            .max(5),
-        reasonCodes: z
-            .array(
-                z.enum([
-                    'disabled',
-                    'invalid_repository',
-                    'not_in_conversation',
-                    'private_access_denied',
-                    'unauthorized',
-                    'not_found',
-                    'rate_limited',
-                    'timeout',
-                    'malformed_response',
-                    'network_error',
-                ])
-            )
-            .max(5),
+        failedSections: z.array(GitHubContextSectionSchema).max(5),
+        reasonCodes: z.array(GitHubContextReasonCodeSchema).max(5),
     })
     .strict();
 

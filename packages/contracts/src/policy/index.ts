@@ -119,6 +119,7 @@ export type {
     TrustGraphMetadata,
     ImageGenerationMetadata,
     GitHubContextMetadata,
+    GitHubContextSection,
     ResponseMetadata,
 } from './types.js';
 export type {

@@ -1322,22 +1322,17 @@ export type ImageGenerationMetadata = {
  * some are best-effort summaries, and a few are only here to keep older
  * consumers working while newer fields roll out.
  */
+/** The fixed display sections a GitHub context request may include. */
+export type GitHubContextSection =
+    'repository' | 'issues' | 'pulls' | 'releases' | 'commits';
+
 export type GitHubContextMetadata = {
     repository: string;
-    requestedSections: Array<
-        'repository' | 'issues' | 'pulls' | 'releases' | 'commits'
-    >;
+    requestedSections: Array<GitHubContextSection>;
     status: 'current' | 'partial' | 'stale' | 'unavailable';
     fetchTimestamp?: string;
-    returnedCounts: Partial<
-        Record<
-            'repository' | 'issues' | 'pulls' | 'releases' | 'commits',
-            number
-        >
-    >;
-    failedSections: Array<
-        'repository' | 'issues' | 'pulls' | 'releases' | 'commits'
-    >;
+    returnedCounts: Partial<Record<GitHubContextSection, number>>;
+    failedSections: Array<GitHubContextSection>;
     reasonCodes: Array<
         | 'disabled'
         | 'invalid_repository'
