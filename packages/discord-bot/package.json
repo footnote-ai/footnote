@@ -35,7 +35,7 @@
         "express": "catalog:",
         "flyio": "catalog:",
         "js-yaml": "catalog:",
-        "linkify-it": "^5.0.2",
+        "linkify-it": "^6.1.0",
         "mime-types": "catalog:",
         "node-fetch": "catalog:",
         "only": "catalog:",

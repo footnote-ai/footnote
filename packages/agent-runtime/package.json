@@ -24,10 +24,10 @@
         "typescript": "catalog:"
     },
     "dependencies": {
-        "@ai-sdk/openai-compatible": "2.0.59",
+        "@ai-sdk/openai-compatible": "3.0.30",
         "@footnote/contracts": "workspace:*",
-        "@voltagent/core": "2.8.1",
-        "ai": "6.0.224",
+        "@voltagent/core": "2.9.2",
+        "ai": "7.0.66",
         "openai": "catalog:",
         "ws": "catalog:"
     }
