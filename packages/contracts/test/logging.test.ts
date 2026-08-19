@@ -27,8 +27,12 @@ test('creates a starting event with only bounded runtime identity', () => {
 });
 
 test('creates a ready event with its declared readiness boundary', () => {
+    const identity = {
+        service: 'backend' as const,
+        apiKey: 'secret-api-key',
+    };
     const event = createRuntimeLifecycleEvent(
-        { service: 'backend' },
+        identity,
         'ready',
         'http_listener'
     );
@@ -40,4 +44,6 @@ test('creates a ready event with its declared readiness boundary', () => {
         readiness: 'http_listener',
     });
     assert.equal(JSON.stringify(event).includes('secret'), false);
+    assert.equal('apiKey' in event, false);
+    assert.equal(JSON.stringify(event).includes('apiKey'), false);
 });

@@ -105,8 +105,24 @@ const sanitizeFormat = format((info) => {
  * @param {Object} log - Log entry object
  * @returns {string} Formatted log string
  */
-const logFormat = printf(({ level, message, timestamp }) => {
-    return `${timestamp} [${level}]: ${message}`;
+const logFormat = printf((info) => {
+    const { level, message, timestamp } = info;
+    const isLifecycleEvent =
+        info.event === 'footnote.runtime.starting' ||
+        info.event === 'footnote.runtime.ready';
+    const lifecycleDetails = isLifecycleEvent
+        ? [
+              typeof info.phase === 'string'
+                  ? `phase=${info.phase}`
+                  : undefined,
+              typeof info.readiness === 'string'
+                  ? `readiness=${info.readiness}`
+                  : undefined,
+          ].filter((value): value is string => value !== undefined)
+        : [];
+    const suffix =
+        lifecycleDetails.length > 0 ? ` ${lifecycleDetails.join(' ')}` : '';
+    return `${timestamp} [${level}]: ${message}${suffix}`;
 });
 
 const parseLogLevel = (value: string | undefined): SupportedLogLevel => {

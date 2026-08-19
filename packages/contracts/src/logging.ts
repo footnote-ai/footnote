@@ -47,7 +47,12 @@ export const createRuntimeLifecycleEvent = (
     phase: RuntimeLifecyclePhase,
     readiness?: RuntimeReadinessBoundary
 ): RuntimeLifecycleEvent => ({
-    ...identity,
+    service: identity.service,
+    ...(identity.nodeId !== undefined ? { nodeId: identity.nodeId } : {}),
+    ...(identity.profileId !== undefined
+        ? { profileId: identity.profileId }
+        : {}),
+    ...(identity.module !== undefined ? { module: identity.module } : {}),
     event: EVENT_NAME_BY_PHASE[phase],
     phase,
     ...(readiness ? { readiness } : {}),
