@@ -29,7 +29,7 @@ catalogs:
       specifier: ^4.0.0
       version: 4.0.0
     '@swc/core':
-      specifier: 1.15.41
+      specifier: ^1.15.41
       version: 1.15.41
     '@swc/helpers':
       specifier: ^0.5.23
