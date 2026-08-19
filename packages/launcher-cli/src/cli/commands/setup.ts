@@ -28,6 +28,7 @@ import {
     readUsableSetupEventFromMetadata,
     resolveSetupUrlForLauncher,
 } from '../setupEvents.js';
+import { writeRuntimeLifecycleEvent } from '../lifecycle.js';
 import type { CommandContext } from '../types.js';
 import { writeLine } from '../writeLine.js';
 
@@ -129,6 +130,7 @@ export const handleSetupCommand = async (
     ) {
         const preferredPort =
             metadata.lastKnown?.port ?? DEFAULT_PREFERRED_PORT;
+        writeRuntimeLifecycleEvent(context, 'starting');
         const startResult = await runtime.start({
             configRoot,
             configRootHash,
@@ -146,6 +148,7 @@ export const handleSetupCommand = async (
             headless: true,
             readinessTimeoutMs: DEFAULT_READINESS_TIMEOUT_MS,
         });
+        writeRuntimeLifecycleEvent(context, 'ready', 'docker_probe');
 
         activeMetadata = {
             ...metadata,

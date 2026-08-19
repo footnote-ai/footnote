@@ -7,6 +7,11 @@
  */
 
 import fs from 'fs';
+import {
+    createRuntimeLifecycleEvent,
+    type RuntimeLifecyclePhase,
+    type RuntimeReadinessBoundary,
+} from '@footnote/contracts';
 import { createLogger, format, transports } from 'winston';
 import { runtimeConfig } from '../config.js';
 
@@ -90,8 +95,24 @@ const sanitizeFormat = format((info) => {
  * @param {Object} log - Log entry object
  * @returns {string} Formatted log string
  */
-const logFormat = printf(({ level, message, timestamp }) => {
-    return `${timestamp} [${level}]: ${message}`;
+const logFormat = printf((info) => {
+    const { level, message, timestamp } = info;
+    const isLifecycleEvent =
+        info.event === 'footnote.runtime.starting' ||
+        info.event === 'footnote.runtime.ready';
+    const lifecycleDetails = isLifecycleEvent
+        ? [
+              typeof info.phase === 'string'
+                  ? `phase=${info.phase}`
+                  : undefined,
+              typeof info.readiness === 'string'
+                  ? `readiness=${info.readiness}`
+                  : undefined,
+          ].filter((value): value is string => value !== undefined)
+        : [];
+    const suffix =
+        lifecycleDetails.length > 0 ? ` ${lifecycleDetails.join(' ')}` : '';
+    return `${timestamp} [${level}]: ${message}${suffix}`;
 });
 
 // --- Logger output configuration ---
@@ -137,6 +158,7 @@ try {
  */
 export const logger = createLogger({
     level: runtimeConfig.logging.level,
+    defaultMeta: { service: 'backend' },
     format: combine(
         sanitizeFormat(),
         timestamp({ format: 'YYYY-MM-DD HH:mm:ss' }),
@@ -163,6 +185,22 @@ export const logger = createLogger({
     ],
     exitOnError: false,
 });
+
+/**
+ * Emits one operator-searchable lifecycle record with a truthful readiness boundary.
+ * This is best-effort: logger failures must never block backend startup.
+ */
+export const logRuntimeLifecycleEvent = (
+    phase: RuntimeLifecyclePhase,
+    readiness?: RuntimeReadinessBoundary
+): void => {
+    const event = createRuntimeLifecycleEvent(
+        { service: 'backend' },
+        phase,
+        readiness
+    );
+    logger.info(`${event.event} service=${event.service}`, event);
+};
 
 // --- LLM cost tracking utilities ---
 

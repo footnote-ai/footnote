@@ -760,7 +760,7 @@ export class MessageProcessor {
             const reasonDetails = getSafetyReasonDetails(
                 preSendSafetyOutcome.decision.safetyDecision
             );
-            logger.info('discord.chat.breaker_action_applied', {
+            logger.debug('discord.chat.breaker_action_applied', {
                 event: 'discord.chat.breaker_action_applied',
                 messageId: message.id,
                 plannerAction: chatResponse.action,

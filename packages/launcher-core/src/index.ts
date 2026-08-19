@@ -31,6 +31,15 @@ export {
     type SetupBootstrapEvent,
 } from './setupEvent.js';
 export { ensureWebLocalUrlInSettings } from './settings.js';
+export {
+    createRuntimeLifecycleEvent,
+    type RuntimeIdentity,
+    type RuntimeLifecycleEvent,
+    type RuntimeLifecycleEventName,
+    type RuntimeLifecyclePhase,
+    type RuntimeReadinessBoundary,
+    type RuntimeService,
+} from '@footnote/contracts';
 export type {
     BootstrapResult,
     FootnoteRuntime,

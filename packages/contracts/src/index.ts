@@ -269,3 +269,13 @@ export {
     chatRepoSearchHints,
     chatTopicHintQueryTerms,
 } from './chat-search-hints.js';
+
+export {
+    createRuntimeLifecycleEvent,
+    type RuntimeIdentity,
+    type RuntimeLifecycleEvent,
+    type RuntimeLifecycleEventName,
+    type RuntimeLifecyclePhase,
+    type RuntimeReadinessBoundary,
+    type RuntimeService,
+} from './logging.js';

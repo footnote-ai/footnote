@@ -42,7 +42,7 @@ import {
 import { handleStaticTransportRequest } from './http/staticTransport.js';
 import { handleUpgradeBoundary } from './http/upgradeBoundary.js';
 import { logRequest } from './utils/requestLogger.js';
-import { logger } from './utils/logger.js';
+import { logger, logRuntimeLifecycleEvent } from './utils/logger.js';
 import { createVoltAgentLogger } from './utils/voltagentLogger.js';
 import { createChatHandler } from './handlers/chat.js';
 import { createTraceHandlers } from './handlers/trace.js';
@@ -424,6 +424,7 @@ const initializeServices = () => {
     logger.info('Services initialized successfully');
 };
 
+logRuntimeLifecycleEvent('starting');
 try {
     initializeServices();
 } catch (error) {
@@ -885,6 +886,7 @@ const port = runtimeConfig.server.port;
 const host = runtimeConfig.server.host;
 server.listen(port, host, () => {
     logger.info(`Simple server available on ${host}:${port}`);
+    logRuntimeLifecycleEvent('ready', 'http_listener');
     void (async () => {
         const setupRequiredNow =
             await setupBootstrapService.isSetupRequiredNow();

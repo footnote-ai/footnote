@@ -48,6 +48,29 @@ Canonical artifacts:
 - `deploy/compose.dev-build.yml`
 - `deploy/fly/server.toml`
 
+## Runtime Lifecycle Logs
+
+Footnote writes two structured lifecycle events for its runtime paths:
+
+- `footnote.runtime.starting` when a process begins startup.
+- `footnote.runtime.ready` when that process reaches its own readiness point.
+
+The readiness field has a specific meaning:
+
+- `http_listener`: the backend is accepting HTTP requests.
+- `discord_client`: the Discord client is ready and startup recovery is done.
+- `docker_probe`: the launcher has passed its Docker readiness check.
+- `supervision_active`: the supervisor is watching its child processes. This
+  does not mean that every child is ready.
+
+Each event identifies its service. Discord logs may also include the stable
+node and profile IDs. These logs do not contain prompts, responses, secrets, or
+user, guild, channel, or request IDs. Routine detail is kept at `debug` so the
+normal `info` output stays easy to scan; warnings and errors remain visible.
+
+Use `footnote logs` or the deployment platform's log viewer to search for the
+event names when checking startup.
+
 ## First Setup
 
 1. Run local start once:

@@ -10,6 +10,10 @@
 import { spawn, type ChildProcess } from 'node:child_process';
 import fs from 'node:fs';
 import { createRequire } from 'node:module';
+import {
+    createRuntimeLifecycleEvent,
+    type RuntimeLifecyclePhase,
+} from '@footnote/contracts';
 import { logger } from '../utils/logger.js';
 import { isRecord } from './valueGuards.js';
 import {
@@ -31,6 +35,20 @@ const DEFAULT_BACKEND_PORT = '3000';
 const NODE_RESTART_DELAY_MS = 1000;
 const PROCESS_STOP_TIMEOUT_MS = 10_000;
 const DEFAULT_SERVER_SETTINGS_PATH = '/data/config/footnote.yaml';
+
+const supervisorLogger =
+    typeof logger.child === 'function'
+        ? logger.child({ service: 'supervisor' })
+        : logger;
+
+const logSupervisorLifecycleEvent = (phase: RuntimeLifecyclePhase): void => {
+    const event = createRuntimeLifecycleEvent(
+        { service: 'supervisor' },
+        phase,
+        phase === 'ready' ? 'supervision_active' : undefined
+    );
+    supervisorLogger.info(`${event.event} service=${event.service}`, event);
+};
 
 type YamlModule = { load(input: string): unknown };
 const require = createRequire(import.meta.url);
@@ -233,6 +251,7 @@ class ServerNodeSupervisor {
     constructor(private readonly env: NodeJS.ProcessEnv = process.env) {}
 
     async start(): Promise<void> {
+        logSupervisorLifecycleEvent('starting');
         const localNodeDefinitions = loadCanonicalLocalNodeDefinitions(
             this.env
         );
@@ -285,6 +304,10 @@ class ServerNodeSupervisor {
             this.nodeStates.set(nodeConfig.id, state);
             this.startNodeProcess(state, backendBaseUrl);
         }
+
+        // This means supervision is active, not that every child has finished
+        // its own startup. Backend and Discord emit their own ready events.
+        logSupervisorLifecycleEvent('ready');
     }
 
     private startBackendProcess(): void {
@@ -333,7 +356,7 @@ class ServerNodeSupervisor {
         });
         state.child = child;
 
-        logger.info('discord_bot_started', {
+        logger.debug('discord_bot_started', {
             nodeId: state.config.id,
             pid: child.pid,
             required: state.config.required,

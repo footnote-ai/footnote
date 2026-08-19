@@ -868,8 +868,7 @@ test('runChatMessages passes non-retrieval facts for plain VoltAgent-backed runs
 
 test('runChatMessages forwards execution context into metadata runtime context (metadata extension seam)', async () => {
     let capturedExecutionContext:
-        | ResponseMetadataRuntimeContext['executionContext']
-        | undefined;
+        ResponseMetadataRuntimeContext['executionContext'] | undefined;
 
     const chatService = createChatService({
         generationRuntime: createRuntime(),
@@ -1042,8 +1041,7 @@ test('runChatMessages records planner lineage in workflow steps for reviewed run
 
 test('runChatMessages marks tool execution as executed when retrieval was used', async () => {
     let capturedExecutionContext:
-        | ResponseMetadataRuntimeContext['executionContext']
-        | undefined;
+        ResponseMetadataRuntimeContext['executionContext'] | undefined;
 
     const chatService = createChatService({
         generationRuntime: createRuntime({
@@ -1080,8 +1078,7 @@ test('runChatMessages marks tool execution as executed when retrieval was used',
 
 test('runChatMessages preserves non-search tool execution context when search is absent', async () => {
     let capturedExecutionContext:
-        | ResponseMetadataRuntimeContext['executionContext']
-        | undefined;
+        ResponseMetadataRuntimeContext['executionContext'] | undefined;
 
     const chatService = createChatService({
         generationRuntime: createRuntime({
@@ -1122,8 +1119,7 @@ test('runChatMessages preserves non-search tool execution context when search is
 
 test('runChatMessages preserves explicit failed web_search tool context when citations exist', async () => {
     let capturedExecutionContext:
-        | ResponseMetadataRuntimeContext['executionContext']
-        | undefined;
+        ResponseMetadataRuntimeContext['executionContext'] | undefined;
     let capturedRuntimeContext: ResponseMetadataRuntimeContext | undefined;
 
     const chatService = createChatService({
@@ -1286,8 +1282,7 @@ test('runChatMessages adds a backend repo-explainer response hint', async () => 
 
 test('runChatMessages forwards planner-selected generation settings to GenerationRuntime', async () => {
     let seenRequest:
-        | import('@footnote/agent-runtime').GenerationRequest
-        | undefined;
+        import('@footnote/agent-runtime').GenerationRequest | undefined;
     const generationRuntime: GenerationRuntime = {
         kind: 'test-runtime',
         async generate(request) {
@@ -1372,8 +1367,7 @@ test('runChatMessages tolerates optional memory retrievals field on runtime resu
 
 test('runChatMessages drops blank search queries before building the runtime request', async () => {
     let seenRequest:
-        | import('@footnote/agent-runtime').GenerationRequest
-        | undefined;
+        import('@footnote/agent-runtime').GenerationRequest | undefined;
     let capturedRetrieval: ResponseMetadataRetrievalContext | undefined;
     const generationRuntime: GenerationRuntime = {
         kind: 'test-runtime',
@@ -1560,8 +1554,7 @@ test('runChatMessages stores evidence and freshness chips for retrieved search r
 test('runChatMessages executes Reviewed loop and forwards workflow lineage', async () => {
     let callCount = 0;
     let capturedWorkflow:
-        | ResponseMetadataRuntimeContext['workflow']
-        | undefined;
+        ResponseMetadataRuntimeContext['workflow'] | undefined;
     const generationRuntime: GenerationRuntime = {
         kind: 'test-runtime',
         async generate(_request) {
@@ -1642,8 +1635,7 @@ test('runChatMessages executes Reviewed loop and forwards workflow lineage', asy
 test('runChatMessages fails open when review output is invalid', async () => {
     let callCount = 0;
     let capturedWorkflow:
-        | ResponseMetadataRuntimeContext['workflow']
-        | undefined;
+        ResponseMetadataRuntimeContext['workflow'] | undefined;
     const generationRuntime: GenerationRuntime = {
         kind: 'test-runtime',
         async generate() {
@@ -1758,8 +1750,7 @@ test('runChatMessages skips review loop when enabled but maxIterations is zero',
 
 test('runChatMessages falls back to reviewed workflow behavior for unknown workflow mode id', async () => {
     let capturedWorkflow:
-        | ResponseMetadataRuntimeContext['workflow']
-        | undefined;
+        ResponseMetadataRuntimeContext['workflow'] | undefined;
     let capturedWorkflowRunConfig:
         | {
               workflowName: string;
@@ -2068,8 +2059,7 @@ test('runChatMessages forwards planner seams into workflow runtime for reviewed 
 test('runChatMessages executes fast workflow mode as minimal workflow with one generate step', async () => {
     let generationCalls = 0;
     let capturedWorkflow:
-        | ResponseMetadataRuntimeContext['workflow']
-        | undefined;
+        ResponseMetadataRuntimeContext['workflow'] | undefined;
     let capturedWorkflowRunConfig:
         | {
               workflowName: string;
@@ -2265,6 +2255,11 @@ test('runChatMessages handles internal no-generation reasons with fallback gener
 
     for (const terminationReason of internalReasons) {
         let generationCalls = 0;
+        let capturedGenerationExecution:
+            | NonNullable<
+                  ResponseMetadataRuntimeContext['executionContext']
+              >['generation']
+            | undefined;
         const usageRecords: BackendLLMCostRecord[] = [];
         let traceMetadata: ResponseMetadata | undefined;
         const generationRuntime: GenerationRuntime = {
@@ -2290,7 +2285,14 @@ test('runChatMessages handles internal no-generation reasons with fallback gener
             storeTrace: async (metadata) => {
                 traceMetadata = metadata;
             },
-            buildResponseMetadata,
+            buildResponseMetadata: (_generationMetadata, runtimeContext) => {
+                capturedGenerationExecution =
+                    runtimeContext.executionContext?.generation;
+                return buildResponseMetadata(
+                    _generationMetadata,
+                    runtimeContext
+                );
+            },
             defaultModel: 'gpt-5-mini',
             recordUsage: (record) => {
                 usageRecords.push(record);
@@ -2333,12 +2335,22 @@ test('runChatMessages handles internal no-generation reasons with fallback gener
             terminationReason
         );
         const fallbackExecution = response.metadata.execution?.find(
-            (event) =>
-                event.kind === 'generation' &&
-                event.profileId === 'workflow_internal_fallback' &&
-                event.provider === 'internal'
+            (event) => event.kind === 'generation'
         );
         assert.ok(fallbackExecution);
+        assert.ok(capturedGenerationExecution);
+        assert.notEqual(
+            fallbackExecution.profileId,
+            'workflow_internal_fallback'
+        );
+        assert.equal(
+            fallbackExecution.profileId,
+            capturedGenerationExecution.profileId
+        );
+        assert.equal(
+            fallbackExecution.provider,
+            capturedGenerationExecution.provider
+        );
     }
 });
 

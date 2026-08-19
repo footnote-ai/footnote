@@ -889,8 +889,8 @@ export const createChatOrchestrator = ({
         };
         const fallbackRollupSelectionSource =
             (plannerSummary?.fallbackRollupSelectionSource as
-                | PlannerSelectionSource
-                | undefined) ?? fallbackRollupSelectionSourceRef.value;
+                PlannerSelectionSource | undefined) ??
+            fallbackRollupSelectionSourceRef.value;
         const weatherRouting = {
             weatherLikeRequest: isWeatherLikeRequest(
                 normalizedRequest.latestUserInput
@@ -1134,7 +1134,7 @@ export const createChatOrchestrator = ({
             responseAction: 'message',
             responseModality: executionPlan.modality,
         });
-        chatOrchestratorLogger.info({
+        chatOrchestratorLogger.debug({
             event: 'chat.orchestration.timing',
             surface: normalizedRequest.surface,
             plannerStatus: plannerStepResult?.execution.status,

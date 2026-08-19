@@ -21,6 +21,7 @@ import {
     LAUNCHER_ID,
 } from '../../constants.js';
 import { resolveMetadataWithDefaults } from '../metadata.js';
+import { writeRuntimeLifecycleEvent } from '../lifecycle.js';
 import type { CommandContext } from '../types.js';
 
 const writeLine = (context: CommandContext, line: string): void => {
@@ -77,6 +78,7 @@ export const handleUpdateCommand = async (
     writeLine(context, formatMessage('info', stopResult.message));
 
     const preferredPort = metadata.lastKnown?.port ?? DEFAULT_PREFERRED_PORT;
+    writeRuntimeLifecycleEvent(context, 'starting');
     const startResult = await runtime.start({
         configRoot,
         configRootHash,
@@ -93,6 +95,7 @@ export const handleUpdateCommand = async (
         headless: true,
         readinessTimeoutMs: DEFAULT_READINESS_TIMEOUT_MS,
     });
+    writeRuntimeLifecycleEvent(context, 'ready', 'docker_probe');
 
     const updatedMetadata: LauncherMetadata = {
         ...metadata,
