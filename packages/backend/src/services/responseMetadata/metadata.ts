@@ -150,6 +150,9 @@ const buildResponseMetadata = (
         ...(runtimeContext.presentation !== undefined && {
             presentation: runtimeContext.presentation,
         }),
+        ...(runtimeContext.githubContext !== undefined && {
+            githubContext: runtimeContext.githubContext,
+        }),
         ...(evaluatorExecution?.outcome !== undefined && {
             evaluator: evaluatorExecution.outcome,
         }),

@@ -9,16 +9,10 @@ import { chatRepoSearchHints } from '@footnote/contracts';
 import { capabilityProfileIds } from './modelCapabilityPolicy.js';
 
 export type PlannerOutputApplyOutcome =
-    | 'accepted'
-    | 'partially_applied'
-    | 'rejected';
+    'accepted' | 'partially_applied' | 'rejected';
 
 export type PlannerContractShapeName =
-    | 'message'
-    | 'react'
-    | 'ignore'
-    | 'image'
-    | 'unknown';
+    'message' | 'react' | 'ignore' | 'image' | 'unknown';
 
 export type PlannerContractAssessment = {
     shape: PlannerContractShapeName;
@@ -59,6 +53,10 @@ const PLANNER_ALLOWED_FIELD_TREE: AllowedFieldTree = {
             attribution: true,
             caution: true,
             extent: true,
+        },
+        githubContext: {
+            repository: true,
+            sections: true,
         },
         search: {
             query: true,
@@ -319,6 +317,32 @@ export const chatPlannerDecisionParametersSchema: Record<string, unknown> = {
                         'caution',
                         'extent',
                     ],
+                },
+                githubContext: {
+                    type: 'object',
+                    additionalProperties: false,
+                    properties: {
+                        repository: {
+                            type: 'string',
+                            minLength: 3,
+                            maxLength: 202,
+                        },
+                        sections: {
+                            type: 'array',
+                            maxItems: 5,
+                            items: {
+                                type: 'string',
+                                enum: [
+                                    'repository',
+                                    'issues',
+                                    'pulls',
+                                    'releases',
+                                    'commits',
+                                ],
+                            },
+                        },
+                    },
+                    required: ['repository'],
                 },
                 search: {
                     type: 'object',

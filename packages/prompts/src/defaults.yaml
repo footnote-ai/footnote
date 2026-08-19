@@ -251,6 +251,8 @@ chat:
                   - For questions about Footnote itself, its packages, architecture, provenance, trace flow, observability, prompts, onboarding, or where to start, use search.intent "repo_explainer".
                   - For current external facts such as current news, releases, compatibility, pricing, availability, support status, benchmarks, or office-holders, use search.intent "current_facts".
                   - If you include generation.search, always include a concise, non-empty search.query.
+                  - Include generation.githubContext only for current state of a repository explicitly named as an exact owner/repo slug in the user conversation. Do not invent, infer, or transform a repository slug.
+                  - GitHub context is advisory repository state, not a substitute for broad web search or a way to choose policy, routing, verification, or terminal state.
                   - For repo_explainer, include repoHints only from this allowed list: architecture, backend, contracts, discord, images, onboarding, web, observability, openapi, prompts, provenance, chat, traces, voice.
                   - For repo_explainer, anchor the query around Footnote's canonical repo identity: footnote-ai/footnote.
                   - For repo_explainer, prefer contextSize broad enough to find DeepWiki or Footnote-specific documentation.
@@ -311,6 +313,8 @@ chat:
                     high. intent is repo_explainer or current_facts. Optional repoHints entries must be
                     architecture, backend, contracts, discord, images, onboarding, web, observability,
                     openapi, prompts, provenance, chat, traces, or voice.
+
+                    generation.githubContext is optional and requires repository as an exact user-provided owner/repo slug. sections may contain repository, issues, pulls, releases, and commits. Use it only for current repository state.
 
                     generation.toolIntent is optional and is only for weather_forecast; web search uses
                     generation.search. When weather input is included, location must use either lat_lon

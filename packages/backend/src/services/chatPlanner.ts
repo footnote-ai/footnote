@@ -62,6 +62,11 @@ export type {
     ChatPlannerInvocationPurpose,
 } from './chatPlannerInvocation.js';
 import { runtimeConfig } from '../config.js';
+import {
+    isRepositorySlugInConversation,
+    normalizeGitHubSections,
+    parseGitHubRepositorySlug,
+} from './contextIntegrations/github/index.js';
 import { logger } from '../utils/logger.js';
 
 type ChatPlannerAction = 'message' | 'react' | 'ignore' | 'image';
@@ -114,9 +119,7 @@ export type PlannerToolIntentDiagnostics = {
 type PlannerFallbackTier = 'none' | 'field_corrections' | 'safe_default_plan';
 type PlannerContextNeed = 'sufficient' | 'needs_more_context';
 type PlannerContextTier =
-    | 'current_window'
-    | 'expanded_recent'
-    | 'expanded_with_summary';
+    'current_window' | 'expanded_recent' | 'expanded_with_summary';
 type PlannerSelectedAttempt = 'initial' | 'expanded';
 type PlannerContextReasonCode =
     | 'planner_context_expanded'
@@ -256,6 +259,7 @@ export type PlannerCandidate = Partial<ChatPlan> & {
         };
         weather?: unknown;
         temperament?: unknown;
+        githubContext?: unknown;
     };
 };
 
@@ -415,6 +419,27 @@ const normalizeTopicHints = (value: unknown): string[] => {
     return normalized;
 };
 
+const normalizeGitHubContext = (
+    value: unknown,
+    request: PostChatRequest
+): ChatGenerationPlan['githubContext'] | undefined => {
+    if (!value || typeof value !== 'object' || Array.isArray(value))
+        return undefined;
+    const candidate = value as Record<string, unknown>;
+    const repository = parseGitHubRepositorySlug(candidate.repository);
+    if (!repository) return undefined;
+    const conversationText = [
+        request.latestUserInput,
+        ...request.conversation
+            .filter((message) => message.role === 'user')
+            .map((message) => message.content),
+    ];
+    if (!isRepositorySlugInConversation(repository, conversationText))
+        return undefined;
+    const sections = normalizeGitHubSections(candidate.sections);
+    return { repository, sections };
+};
+
 const normalizeWeatherLocation = (
     value: unknown
 ): ChatGenerationWeatherLocation | undefined => {
@@ -489,8 +514,7 @@ const normalizeToolIntent = (
 
     if (toolName === 'weather_forecast') {
         const input = candidate.input as
-            | { location?: unknown; horizonPeriods?: unknown }
-            | undefined;
+            { location?: unknown; horizonPeriods?: unknown } | undefined;
         const hasLocation = input?.location !== undefined;
         const locationInput = hasLocation
             ? input.location
@@ -950,7 +974,8 @@ const normalizeImageRequest = (
  */
 const normalizeGeneration = (
     candidate: PlannerCandidate['generation'],
-    reasoning: string
+    reasoning: string,
+    request: PostChatRequest
 ): {
     generation: ChatGenerationPlan;
     reasoningSuffix?: string;
@@ -965,6 +990,15 @@ const normalizeGeneration = (
     const normalizedTemperament = normalizeTemperament(candidate?.temperament);
     if (normalizedTemperament) {
         baseGeneration.temperament = normalizedTemperament;
+    }
+    const normalizedGitHubContext = normalizeGitHubContext(
+        candidate?.githubContext,
+        request
+    );
+    if (normalizedGitHubContext) {
+        baseGeneration.githubContext = normalizedGitHubContext;
+    } else if (candidate?.githubContext !== undefined) {
+        correctionCodes.push('github_context_invalid');
     }
     const normalizedToolIntent = normalizeToolIntent(candidate?.toolIntent);
     if (normalizedToolIntent) {
@@ -1180,7 +1214,8 @@ const normalizePlan = (
 
     const normalizedGeneration = normalizeGeneration(
         candidate.generation,
-        normalizedPlan.reasoning
+        normalizedPlan.reasoning,
+        request
     );
     normalizedPlan.generation = normalizedGeneration.generation;
     correctionCodes.push(...normalizedGeneration.correctionCodes);
@@ -1246,6 +1281,7 @@ const normalizePlan = (
                     ...normalizedPlan.generation,
                     search: undefined,
                     toolIntent: undefined,
+                    githubContext: undefined,
                 },
             },
             fallbackTier:
@@ -1266,6 +1302,7 @@ const normalizePlan = (
                     ...normalizedPlan.generation,
                     search: undefined,
                     toolIntent: undefined,
+                    githubContext: undefined,
                 },
             },
             fallbackTier:
@@ -1318,6 +1355,7 @@ const normalizePlan = (
                     ...normalizedPlan.generation,
                     search: undefined,
                     toolIntent: undefined,
+                    githubContext: undefined,
                 },
             },
             fallbackTier:

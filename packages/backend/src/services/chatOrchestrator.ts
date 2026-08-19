@@ -46,6 +46,7 @@ import { createFileScanningContextStepExecutor } from './contextIntegrations/fil
 import { createReverseImageSearchContextStepExecutor } from './contextIntegrations/reverseImageSearch/index.js';
 import { createSerpApiReverseImageSearchProvider } from './contextIntegrations/reverseImageSearch/index.js';
 import { createWebSearchContextStepExecutor } from './contextIntegrations/webSearch/index.js';
+import { createGitHubContextStepExecutor } from './contextIntegrations/github/index.js';
 import { createPlannerResultApplier } from './chatOrchestrator/plannerResultApplier.js';
 import { resolveStepRoutingChain } from './stepRoutingChains.js';
 import { executeStepRoutingChain } from './stepRoutingExecutor.js';
@@ -157,6 +158,13 @@ export const createChatOrchestrator = ({
         defaultCapabilities: defaultResponseProfile.capabilities,
         recordUsage,
         executionContractTrustGraph,
+    });
+    // Created once at orchestrator scope so the GitHub context executor keeps
+    // its bounded in-process cache across requests instead of re-warming per
+    // request. Reused by every request's step registry.
+    const githubContextStepExecutor = createGitHubContextStepExecutor({
+        ...runtimeConfig.chatWorkflow.contextIntegrations.github,
+        onWarn: (message, meta) => chatOrchestratorLogger.warn(message, meta),
     });
     const createRuntimeChatPlanner = (
         getActivePlannerProfile: () => ModelProfile,
@@ -592,6 +600,7 @@ export const createChatOrchestrator = ({
                     chatOrchestratorLogger.warn(message, meta);
                 },
             }),
+            github_context: githubContextStepExecutor,
             file_scan: fileScanningContextStepExecutor,
             reverse_image_search: createReverseImageSearchContextStepExecutor({
                 provider: reverseImageSearchProvider,

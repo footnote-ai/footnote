@@ -161,6 +161,17 @@ export type RuntimeConfig = {
                  */
                 openAiNativeSearchFromHintsEnabled: boolean;
             };
+            /** Backend-owned read-only GitHub repository context controls. */
+            github: {
+                enabled: boolean;
+                /** Read-only credential; never exposed in metadata or prompts. */
+                token: string | null;
+                timeoutMs: number;
+                maxRecordsPerSection: number;
+                privateRepositoryAllowlist: string[];
+                cacheTtlMs: number;
+                staleResultLimitMs: number;
+            };
             /**
              * Reverse-image context integration controls for chat workflow execution.
              */

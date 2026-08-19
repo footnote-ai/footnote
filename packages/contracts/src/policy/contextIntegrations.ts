@@ -13,8 +13,8 @@ export const CONTEXT_INTEGRATION_NAMES = [
     'file_scan',
     'trustgraph',
     'reverse_image_search',
+    'github_context',
 ] as const;
 
 export type ContextIntegrationName =
-    | (typeof CONTEXT_INTEGRATION_NAMES)[number]
-    | (string & {});
+    (typeof CONTEXT_INTEGRATION_NAMES)[number] | (string & {});

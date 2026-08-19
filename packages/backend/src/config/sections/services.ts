@@ -10,6 +10,7 @@ import { envDefaultValues } from '@footnote/config-spec';
 import type { WorkflowModeId } from '@footnote/contracts/policy';
 import {
     parseBooleanEnv,
+    parseCsvEnv,
     parseNonNegativeIntEnv,
     parseOptionalTrimmedString,
     parsePositiveIntEnv,
@@ -245,6 +246,51 @@ export const buildServiceSections = (
                     env.CHAT_CONTEXT_WEB_SEARCH_OPENAI_NATIVE_FROM_HINTS_ENABLED,
                     true,
                     'CHAT_CONTEXT_WEB_SEARCH_OPENAI_NATIVE_FROM_HINTS_ENABLED',
+                    warn
+                ),
+            },
+            github: {
+                enabled: parseBooleanEnv(
+                    env.CHAT_CONTEXT_GITHUB_ENABLED,
+                    false,
+                    'CHAT_CONTEXT_GITHUB_ENABLED',
+                    warn
+                ),
+                token: parseOptionalTrimmedString(
+                    env.CHAT_CONTEXT_GITHUB_TOKEN
+                ),
+                timeoutMs: Math.min(
+                    5000,
+                    parsePositiveIntEnv(
+                        env.CHAT_CONTEXT_GITHUB_TIMEOUT_MS,
+                        5000,
+                        'CHAT_CONTEXT_GITHUB_TIMEOUT_MS',
+                        warn
+                    )
+                ),
+                maxRecordsPerSection: Math.min(
+                    5,
+                    parsePositiveIntEnv(
+                        env.CHAT_CONTEXT_GITHUB_MAX_RECORDS_PER_SECTION,
+                        5,
+                        'CHAT_CONTEXT_GITHUB_MAX_RECORDS_PER_SECTION',
+                        warn
+                    )
+                ),
+                privateRepositoryAllowlist: parseCsvEnv(
+                    env.CHAT_CONTEXT_GITHUB_PRIVATE_REPOSITORY_ALLOWLIST,
+                    []
+                ).map((slug) => slug.toLowerCase()),
+                cacheTtlMs: parsePositiveIntEnv(
+                    env.CHAT_CONTEXT_GITHUB_CACHE_TTL_MS,
+                    60000,
+                    'CHAT_CONTEXT_GITHUB_CACHE_TTL_MS',
+                    warn
+                ),
+                staleResultLimitMs: parsePositiveIntEnv(
+                    env.CHAT_CONTEXT_GITHUB_STALE_RESULT_LIMIT_MS,
+                    900000,
+                    'CHAT_CONTEXT_GITHUB_STALE_RESULT_LIMIT_MS',
                     warn
                 ),
             },

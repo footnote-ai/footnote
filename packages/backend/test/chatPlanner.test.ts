@@ -345,7 +345,10 @@ test('chatPlanner switches output instructions for text JSON compatibility fallb
     assert.match(structuredSystemPrompt, /provided planner decision tool/i);
     assert.doesNotMatch(structuredSystemPrompt, /Return plain JSON/i);
     assert.match(textJsonSystemPrompt, /Return plain JSON only/i);
-    assert.match(textJsonSystemPrompt, /The JSON object must have this shape/i);
+    assert.match(
+        textJsonSystemPrompt,
+        /Required fields are action, modality, safetyTier, reasoning, and generation/i
+    );
     assert.doesNotMatch(
         textJsonSystemPrompt,
         /Submit exactly one decision through the provided planner decision tool/i
@@ -464,8 +467,7 @@ test('chatPlanner ignores out-of-contract authority fields and marks ingestion a
         const authorityFields =
             (
                 ingestionInfo?.meta as
-                    | { authorityFieldAttempts?: string[] }
-                    | undefined
+                    { authorityFieldAttempts?: string[] } | undefined
             )?.authorityFieldAttempts ?? [];
         assert.deepEqual(authorityFields.sort(), [
             'executionContract',
@@ -602,8 +604,7 @@ test('chatPlanner forwards bounded capability options context and rejects blank 
         assert.deepEqual(
             (
                 fallbackWarning?.meta as
-                    | { correctionCodes?: string[] }
-                    | undefined
+                    { correctionCodes?: string[] } | undefined
             )?.correctionCodes,
             ['requested_capability_profile_missing']
         );
@@ -656,8 +657,7 @@ test('chatPlanner marks unknown requested capability profile as invalid planner 
         assert.deepEqual(
             (
                 fallbackWarning?.meta as
-                    | { correctionCodes?: string[] }
-                    | undefined
+                    { correctionCodes?: string[] } | undefined
             )?.correctionCodes,
             ['requested_capability_profile_invalid']
         );
@@ -1606,4 +1606,52 @@ test('toolIntent with reverse_image_search survives contract sanitization', () =
     assert.equal(result.shape, 'message');
     assert.equal(result.outOfContractFields.length, 0);
     assert.equal(result.authorityFieldAttempts.length, 0);
+});
+
+test('chatPlanner accepts GitHub context only for an explicit user-provided repository slug', async () => {
+    const planner = createStructuredPlanner(
+        {
+            action: 'message',
+            modality: 'text',
+            requestedCapabilityProfile: 'balanced-general',
+            safetyTier: 'Low',
+            reasoning: 'Repository state needs current context.',
+            generation: {
+                reasoningEffort: 'low',
+                verbosity: 'low',
+                temperament: {
+                    tightness: 3,
+                    rationale: 3,
+                    attribution: 3,
+                    caution: 3,
+                    extent: 3,
+                },
+                githubContext: {
+                    repository: 'acme/repo',
+                    sections: ['issues', 'pulls'],
+                },
+            },
+        },
+        [{ id: 'balanced-general', description: 'general' }]
+    );
+    const accepted = await planFromWorkflow(
+        planner,
+        createChatRequest({
+            latestUserInput: 'Check acme/repo status',
+            conversation: [{ role: 'user', content: 'Check acme/repo status' }],
+        })
+    );
+    assert.deepEqual(accepted.plan.generation.githubContext, {
+        repository: 'acme/repo',
+        sections: ['issues', 'pulls'],
+    });
+
+    const rejected = await planFromWorkflow(
+        planner,
+        createChatRequest({
+            latestUserInput: 'Check this repository',
+            conversation: [{ role: 'user', content: 'Check this repository' }],
+        })
+    );
+    assert.equal(rejected.plan.generation.githubContext, undefined);
 });

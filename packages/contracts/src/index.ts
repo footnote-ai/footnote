@@ -64,6 +64,7 @@ export type {
     PartialResponseTemperament,
     ResponseTemperament,
     TrustGraphMetadata,
+    GitHubContextMetadata,
     ResponseMetadata,
     ResponseFootnote,
     ResponseFootnoteSection,

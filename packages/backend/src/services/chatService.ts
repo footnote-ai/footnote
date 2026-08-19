@@ -14,6 +14,7 @@ import type {
 } from '@footnote/agent-runtime';
 import type {
     Citation,
+    GitHubContextMetadata,
     ContextStepRequest,
     ContextStepResult,
     PartialResponseTemperament,
@@ -687,6 +688,21 @@ const buildTrustGraphContextStepRequest = (
  * This helper is the single cast point that projects TrustGraph payloads into
  * typed runtime metadata handling.
  */
+const pickGitHubContextMetadata = (
+    contextStepResults: ContextStepResult[] | undefined
+): GitHubContextMetadata | undefined => {
+    const result = contextStepResults?.find(
+        (step) => step.integrationContext?.kind === 'github_context'
+    );
+    const payload = result?.integrationContext?.payload;
+    if (!payload || typeof payload !== 'object' || Array.isArray(payload))
+        return undefined;
+    const metadata = (payload as { metadata?: unknown }).metadata;
+    if (!metadata || typeof metadata !== 'object' || Array.isArray(metadata))
+        return undefined;
+    return metadata as GitHubContextMetadata;
+};
+
 const pickTrustGraphResultFromContextSteps = (
     contextStepResults: ContextStepResult[] | undefined
 ): TrustGraphEvidenceIngestionResult | undefined => {
@@ -1914,6 +1930,9 @@ export const createChatService = ({
                 ? 'assess_trace_misalignment'
                 : undefined;
 
+        const githubContext = pickGitHubContextMetadata(
+            workflowContextStepResults
+        );
         const runtimeContext: ResponseMetadataRuntimeContext = {
             modelVersion: usageModel,
             conversationSnapshot: `${workflowConversationSnapshot ?? conversationSnapshot}\n\n${generationResult.text}`,
@@ -1954,6 +1973,7 @@ export const createChatService = ({
             },
             trustGraphEvidenceAvailable,
             trustGraphEvidenceUsed,
+            ...(githubContext !== undefined && { githubContext }),
         };
         const finalToolExecutionTelemetry:
             FinalToolExecutionTelemetry | undefined =
