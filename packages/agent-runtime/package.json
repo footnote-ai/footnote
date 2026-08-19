@@ -26,7 +26,7 @@
     "dependencies": {
         "@ai-sdk/openai-compatible": "2.0.59",
         "@footnote/contracts": "workspace:*",
-        "@voltagent/core": "2.8.1",
+        "@voltagent/core": "2.9.2",
         "ai": "6.0.224",
         "openai": "catalog:",
         "ws": "catalog:"
