@@ -437,7 +437,7 @@ const normalizeGitHubContext = (
     if (!isRepositorySlugInConversation(repository, conversationText))
         return undefined;
     const sections = normalizeGitHubSections(candidate.sections);
-    return { repository, ...(sections.length > 0 && { sections }) };
+    return { repository, sections };
 };
 
 const normalizeWeatherLocation = (
@@ -1281,6 +1281,7 @@ const normalizePlan = (
                     ...normalizedPlan.generation,
                     search: undefined,
                     toolIntent: undefined,
+                    githubContext: undefined,
                 },
             },
             fallbackTier:
@@ -1301,6 +1302,7 @@ const normalizePlan = (
                     ...normalizedPlan.generation,
                     search: undefined,
                     toolIntent: undefined,
+                    githubContext: undefined,
                 },
             },
             fallbackTier:
@@ -1353,6 +1355,7 @@ const normalizePlan = (
                     ...normalizedPlan.generation,
                     search: undefined,
                     toolIntent: undefined,
+                    githubContext: undefined,
                 },
             },
             fallbackTier:

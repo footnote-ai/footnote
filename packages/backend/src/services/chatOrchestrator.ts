@@ -159,6 +159,13 @@ export const createChatOrchestrator = ({
         recordUsage,
         executionContractTrustGraph,
     });
+    // Created once at orchestrator scope so the GitHub context executor keeps
+    // its bounded in-process cache across requests instead of re-warming per
+    // request. Reused by every request's step registry.
+    const githubContextStepExecutor = createGitHubContextStepExecutor({
+        ...runtimeConfig.chatWorkflow.contextIntegrations.github,
+        onWarn: (message, meta) => chatOrchestratorLogger.warn(message, meta),
+    });
     const createRuntimeChatPlanner = (
         getActivePlannerProfile: () => ModelProfile,
         safetyIdentifier: string | undefined
@@ -593,11 +600,7 @@ export const createChatOrchestrator = ({
                     chatOrchestratorLogger.warn(message, meta);
                 },
             }),
-            github_context: createGitHubContextStepExecutor({
-                ...runtimeConfig.chatWorkflow.contextIntegrations.github,
-                onWarn: (message, meta) =>
-                    chatOrchestratorLogger.warn(message, meta),
-            }),
+            github_context: githubContextStepExecutor,
             file_scan: fileScanningContextStepExecutor,
             reverse_image_search: createReverseImageSearchContextStepExecutor({
                 provider: reverseImageSearchProvider,

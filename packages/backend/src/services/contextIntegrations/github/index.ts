@@ -50,7 +50,7 @@ const MAX_RECORDS = 5;
 const MAX_TEXT_LENGTH = 1_000;
 const MAX_TITLE_LENGTH = 240;
 const slugPattern =
-    /^[A-Za-z0-9](?:[A-Za-z0-9.-]{0,98}[A-Za-z0-9])?\/[A-Za-z0-9_.-]{1,100}$/;
+    /^[A-Za-z0-9](?:[A-Za-z0-9.-]{0,98}[A-Za-z0-9])?\/(?!\.{1,2}$)[A-Za-z0-9_.-]{1,100}$/;
 const cleanText = (
     value: unknown,
     limit = MAX_TEXT_LENGTH
@@ -171,14 +171,18 @@ const sectionPath: Record<GitHubContextSection, string> = {
 };
 
 type CacheEntry = { fetchedAt: number; payload: GitHubContextPayload };
+const cacheKey = (
+    slug: string,
+    sections: readonly GitHubContextSection[]
+): string => `${slug}|${sections.join(',')}`;
 class GitHubContextCache {
     private readonly entries = new Map<string, CacheEntry>();
-    get(slug: string): CacheEntry | undefined {
-        return this.entries.get(slug);
+    get(key: string): CacheEntry | undefined {
+        return this.entries.get(key);
     }
-    set(slug: string, entry: CacheEntry): void {
-        this.entries.delete(slug);
-        this.entries.set(slug, entry);
+    set(key: string, entry: CacheEntry): void {
+        this.entries.delete(key);
+        this.entries.set(key, entry);
         if (this.entries.size > 32)
             this.entries.delete(this.entries.keys().next().value as string);
     }
@@ -199,7 +203,9 @@ export const createGitHubContextStepExecutor = (input: {
     const fetchImpl = input.fetchImpl ?? (fetch as unknown as GitHubFetch);
     const now = input.now ?? Date.now;
     const cache = new GitHubContextCache();
-    const privateAllowlist = new Set(input.privateRepositoryAllowlist);
+    const privateAllowlist = new Set(
+        input.privateRepositoryAllowlist.map((slug) => slug.toLowerCase())
+    );
     const run = async (
         slug: string,
         sections: GitHubContextSection[]
@@ -235,9 +241,19 @@ export const createGitHubContextStepExecutor = (input: {
                         { method: 'GET', headers, signal: controller.signal }
                     );
                 } catch (_error) {
-                    if (section === 'repository' && !sections.includes(section))
+                    if (
+                        section === 'repository' &&
+                        !sections.includes(section)
+                    ) {
                         failedSections.push(...sections);
-                    else failedSections.push(section);
+                        reasonCodes.push(
+                            controller.signal.aborted
+                                ? 'timeout'
+                                : 'network_error'
+                        );
+                        break;
+                    }
+                    failedSections.push(section);
                     reasonCodes.push(
                         controller.signal.aborted ? 'timeout' : 'network_error'
                     );
@@ -249,9 +265,10 @@ export const createGitHubContextStepExecutor = (input: {
                         !sections.includes(section)
                     ) {
                         failedSections.push(...sections);
-                    } else {
-                        failedSections.push(section);
+                        reasonCodes.push(toReasonCode(response.status));
+                        break;
                     }
+                    failedSections.push(section);
                     reasonCodes.push(toReasonCode(response.status));
                     continue;
                 }
@@ -283,9 +300,15 @@ export const createGitHubContextStepExecutor = (input: {
                 }
                 const normalized = normalizeSection(section, json);
                 if (!normalized) {
-                    if (section === 'repository' && !sections.includes(section))
+                    if (
+                        section === 'repository' &&
+                        !sections.includes(section)
+                    ) {
                         failedSections.push(...sections);
-                    else failedSections.push(section);
+                        reasonCodes.push('malformed_response');
+                        break;
+                    }
+                    failedSections.push(section);
                     reasonCodes.push('malformed_response');
                     continue;
                 }
@@ -322,7 +345,7 @@ export const createGitHubContextStepExecutor = (input: {
                 status,
                 fetchTimestamp: fetchedAt,
                 returnedCounts: counts,
-                failedSections,
+                failedSections: [...new Set(failedSections)].slice(0, 5),
                 reasonCodes: [...new Set(reasonCodes)].slice(0, 5),
             },
             records,
@@ -338,8 +361,10 @@ export const createGitHubContextStepExecutor = (input: {
         ): GitHubContextMetadata => ({
             repository:
                 parsed ??
-                cleanText(request.input?.repository, 102) ??
-                'invalid',
+                parseGitHubRepositorySlug(
+                    cleanText(request.input?.repository, 102)
+                ) ??
+                'unknown/unknown',
             requestedSections: sections,
             status,
             returnedCounts: {},
@@ -379,7 +404,8 @@ export const createGitHubContextStepExecutor = (input: {
                     } satisfies GitHubContextPayload,
                 },
             });
-        const cached = cache.get(parsed);
+        const cacheEntryKey = cacheKey(parsed, sections);
+        const cached = cache.get(cacheEntryKey);
         if (cached && now() - cached.fetchedAt <= input.cacheTtlMs)
             return buildExecutedContextStepResult({
                 toolName: GITHUB_CONTEXT_NAME,
@@ -431,7 +457,7 @@ export const createGitHubContextStepExecutor = (input: {
                     payload,
                 },
             });
-        cache.set(parsed, { fetchedAt: now(), payload });
+        cache.set(cacheEntryKey, { fetchedAt: now(), payload });
         return buildExecutedContextStepResult({
             toolName: GITHUB_CONTEXT_NAME,
             durationMs: now() - startedAt,
