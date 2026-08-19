@@ -303,6 +303,9 @@ importers:
       '@ai-sdk/openai-compatible':
         specifier: 2.0.59
         version: 2.0.59(zod@4.4.3)
+      '@ai-sdk/provider-utils':
+        specifier: ^4.0.38
+        version: 4.0.38(zod@4.4.3)
       '@footnote/contracts':
         specifier: workspace:*
         version: link:../contracts
@@ -318,6 +321,9 @@ importers:
       ws:
         specifier: 'catalog:'
         version: 8.21.0(bufferutil@4.1.0)
+      zod:
+        specifier: 'catalog:'
+        version: 4.4.3
     devDependencies:
       typescript:
         specifier: 'catalog:'
@@ -333,7 +339,7 @@ importers:
     dependencies:
       '@footnote/agent-runtime':
         specifier: workspace:*
-        version: file:packages/agent-runtime(@ai-sdk/provider-utils@4.0.38(zod@4.4.3))(bufferutil@4.1.0)(supports-color@10.2.2)(zod@4.4.3)
+        version: file:packages/agent-runtime(bufferutil@4.1.0)(supports-color@10.2.2)
       '@footnote/config-spec':
         specifier: workspace:*
         version: link:../config-spec
@@ -4897,17 +4903,18 @@ snapshots:
       '@eslint/core': 1.2.1
       levn: 0.4.1
 
-  '@footnote/agent-runtime@file:packages/agent-runtime(@ai-sdk/provider-utils@4.0.38(zod@4.4.3))(bufferutil@4.1.0)(supports-color@10.2.2)(zod@4.4.3)':
+  '@footnote/agent-runtime@file:packages/agent-runtime(bufferutil@4.1.0)(supports-color@10.2.2)':
     dependencies:
       '@ai-sdk/openai-compatible': 2.0.59(zod@4.4.3)
+      '@ai-sdk/provider-utils': 4.0.38(zod@4.4.3)
       '@footnote/contracts': file:packages/contracts
       '@voltagent/core': 2.9.2(@ai-sdk/provider-utils@4.0.38(zod@4.4.3))(@ai-sdk/provider@3.0.14)(@cfworker/json-schema@4.1.1)(ai@6.0.224(zod@4.4.3))(bufferutil@4.1.0)(debug@4.4.3(supports-color@10.2.2))(graphql@16.13.1)(supports-color@10.2.2)(ws@8.21.0(bufferutil@4.1.0))(zod@4.4.3)
       ai: 6.0.224(zod@4.4.3)
       openai: 6.42.0(ws@8.21.0(bufferutil@4.1.0))(zod@4.4.3)
       ws: 8.21.0(bufferutil@4.1.0)
+      zod: 4.4.3
     transitivePeerDependencies:
       - '@ai-sdk/provider'
-      - '@ai-sdk/provider-utils'
       - '@cfworker/json-schema'
       - '@voltagent/logger'
       - bufferutil
@@ -4916,7 +4923,6 @@ snapshots:
       - graphql
       - supports-color
       - utf-8-validate
-      - zod
 
   '@footnote/contracts@file:packages/contracts':
     dependencies:
