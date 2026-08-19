@@ -1817,9 +1817,15 @@ export const createChatService = ({
                 : fallbackAfterInternalNoGeneration
                   ? ({
                         status: 'executed',
-                        profileId: 'workflow_internal_fallback',
-                        effectiveProfileId: 'workflow_internal_fallback',
-                        provider: 'internal',
+                        profileId:
+                            routedGenerationSelectedProfile?.id ??
+                            'workflow_internal_fallback',
+                        effectiveProfileId:
+                            routedGenerationSelectedProfile?.id ??
+                            'workflow_internal_fallback',
+                        provider:
+                            routedGenerationSelectedProfile?.provider ??
+                            'internal',
                         model: usageModel,
                         durationMs: generationDurationMs,
                     } satisfies GenerationExecutionContext)
