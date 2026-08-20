@@ -73,6 +73,9 @@ nul
 # OpenCode settings
 opencode.json
 
+# Claude Code symlinked skills (targets live in .agents/skills)
+.claude/
+
 # Local startup snapshots
 .footnote-dev/
 
