@@ -40,6 +40,10 @@ import type {
     ChatGenerationWeatherLocation,
 } from './chatGenerationTypes.js';
 import {
+    buildFootnoteGitHubContextRouteFromPlan,
+    buildProjectContextRouteFromPlan,
+} from './chatGenerationHints.js';
+import {
     normalizeRequestedCapabilityProfile,
     type CapabilityProfileId,
 } from './modelCapabilityPolicy.js';
@@ -1051,23 +1055,41 @@ const normalizeGeneration = (
         ...normalizeTopicHints(candidate.search.topicHints),
         ...(repoHints ?? []),
     ]);
+    // Footnote-self routing: repo_explainer intent selects the canonical
+    // Footnote repository for project context without requiring the slug in
+    // user text, so questions like "what work is currently open?" work.
+    const search = {
+        query: rawQuery,
+        contextSize: normalizeSearchContextSize(
+            candidate.search.contextSize,
+            searchIntent
+        ),
+        intent: searchIntent,
+    } as const;
+    const projectContext = buildProjectContextRouteFromPlan({
+        search,
+    });
+    const footnoteGitHubContext = buildFootnoteGitHubContextRouteFromPlan({
+        search,
+    });
+
+    const normalizedGeneration = {
+        ...baseGeneration,
+        search: {
+            ...search,
+            ...(repoHints && repoHints.length > 0 ? { repoHints } : {}),
+            ...(mergedTopicHints.length > 0
+                ? { topicHints: mergedTopicHints }
+                : {}),
+        },
+        ...(footnoteGitHubContext !== undefined && {
+            githubContext: footnoteGitHubContext,
+        }),
+        ...(projectContext !== undefined && { projectContext }),
+    } satisfies ChatGenerationPlan;
 
     return {
-        generation: {
-            ...baseGeneration,
-            search: {
-                query: rawQuery,
-                contextSize: normalizeSearchContextSize(
-                    candidate.search.contextSize,
-                    searchIntent
-                ),
-                intent: searchIntent,
-                ...(repoHints && repoHints.length > 0 ? { repoHints } : {}),
-                ...(mergedTopicHints.length > 0
-                    ? { topicHints: mergedTopicHints }
-                    : {}),
-            },
-        },
+        generation: normalizedGeneration,
         correctionCodes,
         ...(reasoningSuffixes.length > 0 && {
             reasoningSuffix: reasoningSuffixes.join(' '),

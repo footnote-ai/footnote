@@ -14,6 +14,7 @@ export const CONTEXT_INTEGRATION_NAMES = [
     'trustgraph',
     'reverse_image_search',
     'github_context',
+    'project_context',
 ] as const;
 
 export type ContextIntegrationName =

@@ -12,12 +12,21 @@ import type { PromptVariables } from '@footnote/prompts';
 import { promptRegistry } from './promptRegistry.js';
 
 const surfaceSystemKeys = {
-    'discord-chat': ['conversation.shared.system', 'discord.chat.system'],
+    'discord-chat': [
+        'conversation.shared.system',
+        'conversation.shared.project_context_guidance',
+        'discord.chat.system',
+    ],
     'discord-realtime': [
         'conversation.shared.system',
+        'conversation.shared.project_context_guidance',
         'discord.realtime.system',
     ],
-    'web-chat': ['conversation.shared.system', 'chat.web.system'],
+    'web-chat': [
+        'conversation.shared.system',
+        'conversation.shared.project_context_guidance',
+        'chat.web.system',
+    ],
 } as const;
 
 const surfacePersonaKeys = {

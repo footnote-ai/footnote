@@ -753,6 +753,49 @@ test('repo_explainer search plans normalize repo hints and medium context', asyn
     ]);
 });
 
+test('Footnote current-state questions add backend-owned canonical GitHub context', async () => {
+    const planner = createStructuredPlanner(
+        {
+            action: 'message',
+            modality: 'text',
+            requestedCapabilityProfile: 'balanced-general',
+            safetyTier: 'Low',
+            reasoning: 'Current repository work needs bounded GitHub context.',
+            generation: {
+                reasoningEffort: 'low',
+                verbosity: 'low',
+                temperament: {
+                    tightness: 3,
+                    rationale: 3,
+                    attribution: 3,
+                    caution: 3,
+                    extent: 3,
+                },
+                search: {
+                    query: 'What work is currently open?',
+                    contextSize: 'medium',
+                    intent: 'repo_explainer',
+                },
+            },
+        },
+        [{ id: 'balanced-general', description: 'general' }]
+    );
+
+    const { plan } = await planFromWorkflow(
+        planner,
+        createChatRequest({ latestUserInput: 'What work is currently open?' })
+    );
+
+    assert.deepEqual(plan.generation.githubContext, {
+        repository: 'footnote-ai/footnote',
+        sections: ['issues', 'pulls', 'commits'],
+    });
+    assert.equal(
+        plan.generation.projectContext?.repository,
+        'footnote-ai/footnote'
+    );
+});
+
 test('search topicHints are bounded, deduped, and normalized fail-open', async () => {
     const planner = createPlanner(
         JSON.stringify({

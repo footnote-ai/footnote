@@ -173,6 +173,22 @@ export type RuntimeConfig = {
                 staleResultLimitMs: number;
             };
             /**
+             * Backend-owned project-document context controls.
+             *
+             * Embedding provider and model are independently configured and must
+             * not implicitly inherit the chat provider.
+             */
+            projectDocs: {
+                enabled: boolean;
+                /** Canonical repository identity used for Footnote-self routing. */
+                repository: string;
+                embeddingProvider: string;
+                embeddingModel: string;
+                maxChunkBytes: number;
+                maxChunks: number;
+                topKPerCategory: number;
+            };
+            /**
              * Reverse-image context integration controls for chat workflow execution.
              */
             reverseImageSearch: {

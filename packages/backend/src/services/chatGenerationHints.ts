@@ -8,6 +8,7 @@
 import type { GenerationSearchRequest } from '@footnote/agent-runtime';
 import { chatTopicHintQueryTerms } from '@footnote/contracts';
 import type {
+    ChatGenerationGitHubContext,
     ChatGenerationPlan,
     ChatRepoSearchHint,
 } from './chatGenerationTypes.js';
@@ -16,6 +17,68 @@ const FOOTNOTE_REPO_OWNER = 'footnote-ai';
 const FOOTNOTE_REPO_NAME = 'footnote';
 const FOOTNOTE_REPO_SLUG = `${FOOTNOTE_REPO_OWNER}/${FOOTNOTE_REPO_NAME}`;
 const DEEPWIKI_FOOTNOTE_URL = 'https://deepwiki.com/footnote-ai/footnote';
+
+/**
+ * Canonical Footnote repository used for Footnote-self project-context routing.
+ */
+export const PROJECT_CONTEXT_CANONICAL_REPOSITORY = FOOTNOTE_REPO_SLUG;
+
+export type ChatGenerationProjectContextRoute = {
+    repository: string;
+    query: string;
+};
+
+/**
+ * Explicit Footnote-self acceptance seam.
+ *
+ * `repo_explainer` planner intent is the signal that a user is asking about
+ * Footnote itself. This routes to the canonical repository without requiring
+ * the slug to appear in user text, so questions like "what work is currently
+ * open?" reach project context.
+ */
+export const buildProjectContextRouteFromPlan = (
+    generation: Pick<ChatGenerationPlan, 'search'>
+): ChatGenerationProjectContextRoute | undefined => {
+    if (generation.search?.intent !== 'repo_explainer') return undefined;
+    const query = generation.search.query.trim();
+    if (!query) return undefined;
+    return {
+        repository: FOOTNOTE_REPO_SLUG,
+        query,
+    };
+};
+
+const CURRENT_PROJECT_QUERY_PATTERN =
+    /\b(current(?:ly)?|now|open|latest|recent|activity|release|releases|issues?|pull requests?|work|status)\b/iu;
+
+/**
+ * Builds a backend-owned GitHub request for current Footnote-self questions.
+ * Generic repository requests still require an exact user-authored slug; this
+ * route is limited to the fixed Footnote repository and repo-explainer intent.
+ */
+export const buildFootnoteGitHubContextRouteFromPlan = (
+    generation: Pick<ChatGenerationPlan, 'search'>
+): ChatGenerationGitHubContext | undefined => {
+    if (generation.search?.intent !== 'repo_explainer') return undefined;
+    const query = generation.search.query.trim();
+    if (!query || !CURRENT_PROJECT_QUERY_PATTERN.test(query)) return undefined;
+
+    const sections: ChatGenerationGitHubContext['sections'] = [];
+    if (/\b(open|issues?|work)\b/iu.test(query)) {
+        sections.push('issues', 'pulls');
+    }
+    if (/\b(release|releases|latest)\b/iu.test(query)) {
+        sections.push('releases');
+    }
+    if (/\b(recent|activity|current(?:ly)?|now|status)\b/iu.test(query)) {
+        sections.push('commits');
+    }
+
+    return {
+        repository: FOOTNOTE_REPO_SLUG,
+        sections: [...new Set(sections)],
+    };
+};
 
 const REPO_HINT_QUERY_TERMS: Record<ChatRepoSearchHint, string[]> = {
     architecture: ['architecture'],

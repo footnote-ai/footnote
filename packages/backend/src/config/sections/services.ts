@@ -34,6 +34,10 @@ const WEB_SEARCH_PROVIDER_MODES: ReadonlySet<WebSearchProviderMode> = new Set([
     'brave',
     'serpapi',
 ]);
+const PROJECT_DOCS_EMBEDDING_PROVIDERS: ReadonlySet<string> = new Set([
+    'openai',
+    'openrouter',
+]);
 
 const parseWebSearchProviderPriority = (
     raw: string | undefined,
@@ -330,6 +334,47 @@ export const buildServiceSections = (
                     env.CHAT_CONTEXT_REVERSE_IMAGE_SEARCH_PROVIDER_TIMEOUT_MS,
                     12000,
                     'CHAT_CONTEXT_REVERSE_IMAGE_SEARCH_PROVIDER_TIMEOUT_MS',
+                    warn
+                ),
+            },
+            projectDocs: {
+                enabled: parseBooleanEnv(
+                    env.CHAT_CONTEXT_PROJECT_DOCS_ENABLED,
+                    false,
+                    'CHAT_CONTEXT_PROJECT_DOCS_ENABLED',
+                    warn
+                ),
+                repository:
+                    parseOptionalTrimmedString(
+                        env.CHAT_CONTEXT_PROJECT_DOCS_REPOSITORY
+                    ) ?? 'footnote-ai/footnote',
+                embeddingProvider: parseStringUnionEnv(
+                    env.CHAT_CONTEXT_PROJECT_DOCS_EMBEDDING_PROVIDER,
+                    'openai' as const,
+                    'CHAT_CONTEXT_PROJECT_DOCS_EMBEDDING_PROVIDER',
+                    PROJECT_DOCS_EMBEDDING_PROVIDERS,
+                    warn
+                ),
+                embeddingModel:
+                    parseOptionalTrimmedString(
+                        env.CHAT_CONTEXT_PROJECT_DOCS_EMBEDDING_MODEL
+                    ) ?? 'text-embedding-3-small',
+                maxChunkBytes: parsePositiveIntEnv(
+                    env.CHAT_CONTEXT_PROJECT_DOCS_MAX_CHUNK_BYTES,
+                    2000,
+                    'CHAT_CONTEXT_PROJECT_DOCS_MAX_CHUNK_BYTES',
+                    warn
+                ),
+                maxChunks: parsePositiveIntEnv(
+                    env.CHAT_CONTEXT_PROJECT_DOCS_MAX_CHUNKS,
+                    200,
+                    'CHAT_CONTEXT_PROJECT_DOCS_MAX_CHUNKS',
+                    warn
+                ),
+                topKPerCategory: parsePositiveIntEnv(
+                    env.CHAT_CONTEXT_PROJECT_DOCS_TOP_K_PER_CATEGORY,
+                    5,
+                    'CHAT_CONTEXT_PROJECT_DOCS_TOP_K_PER_CATEGORY',
                     warn
                 ),
             },

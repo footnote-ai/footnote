@@ -84,12 +84,19 @@ export type ChatGenerationGitHubContext = {
     >;
 };
 
+export type ChatGenerationProjectContext = {
+    repository: string;
+    query: string;
+};
+
 export type ChatGenerationPlan = {
     reasoningEffort: NonNullable<GenerationRequest['reasoningEffort']>;
     verbosity: NonNullable<GenerationRequest['verbosity']>;
     search?: ChatGenerationSearch;
     /** Planner suggestion only; backend validates the slug against user conversation. */
     githubContext?: ChatGenerationGitHubContext;
+    /** Backend-owned Footnote-self routing suggestion. Never requires slug-in-text. */
+    projectContext?: ChatGenerationProjectContext;
     toolIntent?: ChatGenerationToolIntent;
     responseIntentHint?: ChatGenerationResponseIntentHint;
     temperament?: ResponseTemperament;

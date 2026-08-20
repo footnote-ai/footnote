@@ -47,6 +47,10 @@ import { createReverseImageSearchContextStepExecutor } from './contextIntegratio
 import { createSerpApiReverseImageSearchProvider } from './contextIntegrations/reverseImageSearch/index.js';
 import { createWebSearchContextStepExecutor } from './contextIntegrations/webSearch/index.js';
 import { createGitHubContextStepExecutor } from './contextIntegrations/github/index.js';
+import {
+    buildProjectContextWiring,
+    createProjectContextStepExecutor,
+} from './contextIntegrations/projectContext/wiring.js';
 import { createPlannerResultApplier } from './chatOrchestrator/plannerResultApplier.js';
 import { resolveStepRoutingChain } from './stepRoutingChains.js';
 import { executeStepRoutingChain } from './stepRoutingExecutor.js';
@@ -166,6 +170,17 @@ export const createChatOrchestrator = ({
         ...runtimeConfig.chatWorkflow.contextIntegrations.github,
         onWarn: (message, meta) => chatOrchestratorLogger.warn(message, meta),
     });
+    // Project-context integration is assembled once at orchestrator scope so its
+    // embedded index and last-known-good fallback survive across requests.
+    const projectContextWiring = buildProjectContextWiring({
+        config: runtimeConfig.chatWorkflow.contextIntegrations.projectDocs,
+        projectRoot: runtimeConfig.runtime.projectRoot,
+        openaiApiKey: runtimeConfig.openai.apiKey,
+        openrouterApiKey: runtimeConfig.openrouter.apiKey,
+    });
+    const projectContextStepExecutor = projectContextWiring
+        ? createProjectContextStepExecutor(projectContextWiring)
+        : undefined;
     const createRuntimeChatPlanner = (
         getActivePlannerProfile: () => ModelProfile,
         safetyIdentifier: string | undefined
@@ -602,6 +617,9 @@ export const createChatOrchestrator = ({
             }),
             github_context: githubContextStepExecutor,
             file_scan: fileScanningContextStepExecutor,
+            ...(projectContextStepExecutor !== undefined && {
+                project_context: projectContextStepExecutor,
+            }),
             reverse_image_search: createReverseImageSearchContextStepExecutor({
                 provider: reverseImageSearchProvider,
                 logger: chatOrchestratorLogger,

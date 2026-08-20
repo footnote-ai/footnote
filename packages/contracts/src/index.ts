@@ -65,6 +65,10 @@ export type {
     ResponseTemperament,
     TrustGraphMetadata,
     GitHubContextMetadata,
+    ProjectContextCategory,
+    ProjectContextMatch,
+    ProjectContextMetadata,
+    ProjectContextReasonCode,
     ResponseMetadata,
     ResponseFootnote,
     ResponseFootnoteSection,
@@ -72,6 +76,9 @@ export type {
 export { RESPONSE_FOOTNOTE_SECTIONS } from './policy/index.js';
 export {
     formatExecutionTimelineSummary,
+    buildContextPresentationSummary,
+    formatGitHubContextSummary,
+    formatProjectContextSummary,
     deriveReviewRuntimeSummary,
     buildWorkflowRoutingChainSignals,
     buildWorkflowAssessRoutingHintSignals,

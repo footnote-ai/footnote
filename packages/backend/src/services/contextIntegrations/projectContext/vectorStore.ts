@@ -1,0 +1,96 @@
+/**
+ * @description: In-memory bounded vector store for project-context chunks.
+ * Index identity (provider, model, chunker and index version) keys stored
+ * vectors so cached embeddings never outlive their meaning.
+ * @footnote-scope: core
+ * @footnote-module: ProjectContextVectorStore
+ * @footnote-risk: medium - Stale vectors or wrong identity can ground answers on outdated evidence.
+ * @footnote-ethics: high - Retrieval facts feed provenance labels, so identity must stay honest.
+ */
+import type {
+    ProjectContextCategory,
+    ProjectContextMatch,
+} from '@footnote/contracts/policy';
+
+export type ProjectIndexIdentity = {
+    provider: string;
+    model: string;
+    chunkerVersion: number;
+    indexVersion: number;
+};
+
+export type StoredProjectChunk = {
+    id: string;
+    path: string;
+    category: ProjectContextCategory;
+    contentHash: string;
+    text: string;
+    embedding: number[];
+};
+
+export type ProjectVectorStore = {
+    identity: ProjectIndexIdentity;
+    upsert: (chunks: StoredProjectChunk[]) => void;
+    search: (
+        queryEmbedding: number[],
+        categories: ProjectContextCategory[],
+        topK: number
+    ) => ProjectContextMatch[];
+    chunkCount: () => number;
+};
+
+const cosineSimilarity = (left: number[], right: number[]): number => {
+    let dot = 0;
+    let leftNorm = 0;
+    let rightNorm = 0;
+    const length = Math.max(left.length, right.length);
+    for (let index = 0; index < length; index += 1) {
+        const leftValue = left[index] ?? 0;
+        const rightValue = right[index] ?? 0;
+        dot += leftValue * rightValue;
+        leftNorm += leftValue * leftValue;
+        rightNorm += rightValue * rightValue;
+    }
+    if (leftNorm === 0 || rightNorm === 0) return 0;
+    return dot / (Math.sqrt(leftNorm) * Math.sqrt(rightNorm));
+};
+
+export const createProjectVectorStore = (input: {
+    identity: ProjectIndexIdentity;
+}): ProjectVectorStore => {
+    const chunks = new Map<string, StoredProjectChunk>();
+
+    return {
+        identity: input.identity,
+        upsert(chunkList) {
+            for (const chunk of chunkList) {
+                chunks.set(chunk.id, chunk);
+            }
+        },
+        search(queryEmbedding, categories, topK) {
+            const categorySet = new Set<string>(categories);
+            const scored: Array<{ chunk: StoredProjectChunk; score: number }> =
+                [];
+            for (const chunk of chunks.values()) {
+                if (!categorySet.has(chunk.category)) continue;
+                scored.push({
+                    chunk,
+                    score: cosineSimilarity(queryEmbedding, chunk.embedding),
+                });
+            }
+            scored.sort((left, right) => right.score - left.score);
+            return scored
+                .slice(0, Math.max(1, topK))
+                .map(({ chunk, score }) => ({
+                    category: chunk.category,
+                    path: chunk.path,
+                    contentHash: chunk.contentHash,
+                    text: chunk.text,
+                    score,
+                }));
+        },
+        chunkCount() {
+            return chunks.size;
+        },
+    };
+};
