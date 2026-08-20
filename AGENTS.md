@@ -8,6 +8,25 @@ Keep it short, clear, and current.
 - `AGENTS.md` is the canonical ruleset.
 - Tool-specific files (for example `cursor.rules`, `.codexrules`, `.github/copilot-instructions.md`) are thin adapters.
 - Adapters should only point to this file and include tool-only details when absolutely needed.
+- Skills in `.agents/skills/` own the workflow. `AGENTS.md` facts and Non-Negotiables win on conflict.
+
+## Agent Skills
+
+The skills in `.agents/skills/` are authoritative for how agents work in this
+repo: grilling requirements, TDD, code review, triage, specs, and handoffs.
+Follow them unless they contradict a Non-Negotiable below.
+
+### Issue tracker
+
+Issues and specs live as GitHub issues in `footnote-ai/footnote`, using the `gh` CLI. See `docs/agents/issue-tracker.md`.
+
+### Triage labels
+
+Five triage state labels (`needs-triage`, `needs-info`, `ready-for-agent`, `ready-for-human`, `wontfix`) plus `area:*` and concern labels. See `docs/agents/triage-labels.md`.
+
+### Domain docs
+
+Single-context: shared glossary at `docs/ai/CONTEXT.md`, decisions in `docs/ai/adr/`. See `docs/agents/domain.md`.
 
 ## Project Stage
 
@@ -67,57 +86,52 @@ For API boundary changes, keep links in sync:
 
 ## GitHub Work Management
 
-Use each GitHub feature for one job. Do not copy the same planning detail into
-labels, issue text, project fields, and milestones.
+Use each GitHub feature for one job. The full working model lives in
+`docs/ai/github-work-management.md`. Key facts:
 
-- Assignees name the person who owns the next move. Leave backlog work
-  unassigned.
-- Use the organization issue types `Feature`, `Bug`, and `Task`. Do not recreate
-  issue types as labels.
-- Labels describe areas, Footnote concerns, contribution opportunities, and
-  automation. Do not use labels for priority, workflow status, or milestones.
-- Use organization issue fields for priority, effort, start date, and target
-  date. Set dates only when work is actually scheduled.
-- Use the organization Project for workflow status and planning views. Do not
-  add project fields that duplicate issue types, labels, milestones, or
-  organization issue fields.
-- Milestones describe finite outcomes. Keep ongoing principles and general
-  maintenance out of milestones.
-- Use sub-issues for decomposition and dependency links for hard ordering. Do
-  not duplicate them with checklist trees or `blocked` labels.
-- Link pull requests to the issue they deliver. Give a pull request its own
-  milestone only when it represents standalone work.
-
-See `docs/ai/github-work-management.md` for the full working model.
+- Use org issue types `Feature`, `Bug`, and `Task`. Do not recreate types as labels.
+- Labels describe areas, Footnote concerns, contribution, and automation. Do not
+  use labels for priority, workflow status, or milestones.
+- Priority, effort, and dates belong in org issue fields. Set dates only when
+  work is scheduled. Use the org Project for workflow status.
+- Milestones describe finite outcomes.
+- Link PRs to the issue they deliver.
 
 ## Task Completion Requirements
 
-- Keep local verification focused on the files, packages, and behavior changed.
-- Run the smallest relevant test set.
-    - Use `pnpm exec tsx --test <test-files>` for focused tests.
-    - Backend behavior changes must add or update focused tests and run them.
+Keep local verification focused on the files, packages, and behavior changed.
+Run the smallest relevant test set. The loop and review process are owned by
+the `tdd` and `code-review` skills; these commands always apply:
+
 - Run `pnpm format:write` after edits.
 - Run `pnpm review --changed-only` before final handoff.
-- Build each affected package when public types, imports, exports, or build output change: `pnpm --filter @footnote/<package> build`.
-- Do not routinely run the full `pnpm review`, workspace build, or Docker build locally. CI runs `pnpm review` and `pnpm -r build`.
-- Run these additional checks when applicable:
-    - API boundary changes: `pnpm validate-openapi-links`.
-    - Startup, provider, environment, deployment, or runtime packaging changes: `pnpm test:build`.
-    - High-risk work or an explicit user request: full `pnpm review` and workspace build.
-    - Non-trivial structural refactors: include 1-2 example evidence links using `pnpm refactor:lookup`.
-- After a user-visible web behavior change, run one integrated browser smoke test of the affected flow when the environment supports it.
-    - Verify the integrated behavior, not only a component or utility test.
-    - If browser verification is unavailable, say so clearly.
-- Reuse an existing development environment when practical. Stop servers, watchers, containers, and other long-running verification processes when finished.
+- Build each affected package when public types, imports, exports, or build
+  output change: `pnpm --filter @footnote/<package> build`.
+- Backend behavior changes must add or update focused tests and run them.
+- Do not routinely run the full `pnpm review`, workspace build, or Docker build
+  locally. CI runs `pnpm review` and `pnpm -r build`.
+- API boundary changes: `pnpm validate-openapi-links`.
+- Startup, provider, environment, deployment, or runtime packaging changes:
+  `pnpm test:build`.
+- High-risk work or an explicit user request: full `pnpm review` and workspace
+  build.
+- Non-trivial structural refactors: include 1-2 example evidence links using
+  `pnpm refactor:lookup`.
+- After a user-visible web behavior change, run one integrated browser smoke
+  test of the affected flow when the environment supports it. If browser
+  verification is unavailable, say so clearly.
+- Focused tests: `pnpm exec tsx --test <test-files>`.
 - Report the commands run. If a required check could not run, state why.
 
 ## Working Style
 
 - Prefer small, focused diffs.
-- Edit only files needed for the task.
-- If the task starts touching multiple concepts, packages, or behavior surfaces, stop, report the scope expansion, and wait for confirmation before continuing.
-- Follow the user’s requested change, but preserve existing project boundaries unless the prompt explicitly asks to change them. If the prompt appears to conflict with core Footnote semantics, stop and ask before rewriting those semantics.
-- Use repo code/docs as primary context; use MCP/external tools only to verify third-party APIs, UI behavior, secrets, or issue state.
+- If the task starts touching multiple concepts, packages, or behavior surfaces,
+  stop, report the scope expansion, and wait for confirmation.
+- Follow the user's requested change, but preserve existing project boundaries
+  unless the prompt explicitly asks to change them. If the prompt appears to
+  conflict with core Footnote semantics, stop and ask before rewriting those
+  semantics.
 - Do not invent runtime facts, command output, or test results.
 - If a check was not run, say that clearly.
 
@@ -125,8 +139,8 @@ See `docs/ai/github-work-management.md` for the full working model.
 
 Write for a junior contributor:
 
-- Plain language first.
-- Short sentences.
-- Concrete action words.
-- Add JSDoc or comments for exported boundary functions, workflow/orchestrator/provider/provenance logic, fail-open behavior, and authority decisions.
+- Plain language first, short sentences, concrete action words.
+- Add JSDoc or comments for exported boundary functions,
+  workflow/orchestrator/provider/provenance logic, fail-open behavior, and
+  authority decisions.
 - Do not add comments that only restate obvious code.
