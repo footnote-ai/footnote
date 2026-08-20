@@ -4,5 +4,8 @@ Use `AGENTS.md` as the canonical guidance file for this repo.
 
 If another instruction file conflicts with `AGENTS.md`, follow `AGENTS.md`.
 
+Skills in `.agents/skills/` own the workflow; `AGENTS.md` facts and
+Non-Negotiables win on conflict.
+
 Cursor-specific metadata belongs in `.cursor/*.json`.
 Keep this file short on purpose.

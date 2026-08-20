@@ -1,3 +1,6 @@
 # Codex Rules
 
 Use `AGENTS.md` as the canonical guidance file for this repo.
+
+Skills in `.agents/skills/` own the workflow; `AGENTS.md` facts and
+Non-Negotiables win on conflict.
