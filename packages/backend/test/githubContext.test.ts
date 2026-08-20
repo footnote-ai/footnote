@@ -102,6 +102,10 @@ test('GitHub context normalizes all fixed sections, bounds records, and labels t
         formatGitHubContext(payload)[0] ?? '',
         /UNTRUSTED GITHUB CONTEXT/
     );
+    assert.match(
+        formatGitHubContext(payload)[0] ?? '',
+        /not repository totals/
+    );
     assert.equal(
         (formatGitHubContext(payload)[0] ?? '').includes(
             String.fromCharCode(0)

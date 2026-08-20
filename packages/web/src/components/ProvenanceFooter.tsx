@@ -16,6 +16,7 @@ import type {
 import {
     formatExecutionTimelineSummary,
     buildWorkflowReceiptItems,
+    buildContextPresentationSummary,
 } from '@footnote/contracts/policy';
 
 interface ProvenanceFooterProps {
@@ -101,6 +102,10 @@ const ProvenanceFooter = ({
               : 'observe');
     const hasNonAllowSafetyDecision =
         safetyDecision !== undefined && safetyDecision.action !== 'allow';
+    const contextSummaries = buildContextPresentationSummary({
+        projectContext: metadata.projectContext,
+        githubContext: metadata.githubContext,
+    });
 
     return (
         <aside
@@ -133,6 +138,17 @@ const ProvenanceFooter = ({
             )}
 
             <div className="provenance-main">
+                {contextSummaries.length > 0 && (
+                    <div
+                        className="provenance-context-summary"
+                        role="status"
+                        aria-live="polite"
+                    >
+                        {contextSummaries.map((summary) => (
+                            <div key={summary}>{summary}</div>
+                        ))}
+                    </div>
+                )}
                 {searchUnavailableWarning && (
                     <>
                         <span

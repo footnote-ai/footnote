@@ -6,6 +6,7 @@
  * @footnote-ethics: medium - Types document data meaning but do not execute logic.
  */
 import type { ContextIntegrationName } from './contextIntegrations.js';
+import type { ProjectContextMetadata } from './projectContext.js';
 
 // This file is the single source of truth for cross-package metadata shapes.
 // It primarily defines types and narrow pure helpers for contract-safe checks.
@@ -337,6 +338,7 @@ export type ToolInvocationName =
     | 'weather_forecast'
     | 'reverse_image_search'
     | 'github_context'
+    | 'project_context'
     | (string & {});
 
 export type WeatherToolInputLocation =
@@ -1331,6 +1333,8 @@ export type GitHubContextMetadata = {
     requestedSections: Array<GitHubContextSection>;
     status: 'current' | 'partial' | 'stale' | 'unavailable';
     fetchTimestamp?: string;
+    /** Maximum records returned per requested section; counts are not totals. */
+    maxRecordsPerSection?: number;
     returnedCounts: Partial<Record<GitHubContextSection, number>>;
     failedSections: Array<GitHubContextSection>;
     reasonCodes: Array<
@@ -1384,6 +1388,7 @@ export type ResponseMetadata = {
     trace_final_reason_code?: TraceFinalizationReasonCode;
     trustGraph?: TrustGraphMetadata;
     githubContext?: GitHubContextMetadata;
+    projectContext?: ProjectContextMetadata;
     imageGeneration?: ImageGenerationMetadata;
     // Optional presentation record. It never stores both answer texts.
     presentation?: PresentationMetadata;

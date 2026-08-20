@@ -36,6 +36,11 @@
 .provenance-separator {
     color: var(--public-muted);
 }
+.provenance-context-summary {
+    flex: 1 0 100%;
+    color: var(--public-muted);
+    font-size: 0.82rem;
+}
 .provenance-citation-link,
 .provenance-link {
     color: var(--public-ink);

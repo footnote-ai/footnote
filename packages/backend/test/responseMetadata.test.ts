@@ -1097,6 +1097,42 @@ test('buildResponseMetadata does not mark revised when assess requested refineme
     });
 });
 
+test('buildResponseMetadata preserves githubContext and projectContext when present', () => {
+    const metadata = buildResponseMetadata(
+        baseGenerationMetadata(),
+        baseRuntimeContext({
+            githubContext: {
+                repository: 'footnote-ai/footnote',
+                requestedSections: ['repository'],
+                status: 'current',
+                returnedCounts: { repository: 1 },
+                failedSections: [],
+                reasonCodes: [],
+            },
+            projectContext: {
+                repository: 'footnote-ai/footnote',
+                provider: 'openai',
+                model: 'text-embedding-3-small',
+                chunkerVersion: 1,
+                indexVersion: 1,
+                requestedCategories: ['documented_intent'],
+                returnedCounts: { documented_intent: 1 },
+                maxChunks: 200,
+                topKPerCategory: 5,
+                status: 'current',
+                reasonCodes: [],
+            },
+        })
+    );
+
+    assert.equal(metadata.githubContext?.repository, 'footnote-ai/footnote');
+    assert.equal(metadata.projectContext?.provider, 'openai');
+    assert.equal(metadata.projectContext?.model, 'text-embedding-3-small');
+    assert.deepEqual(metadata.projectContext?.requestedCategories, [
+        'documented_intent',
+    ]);
+});
+
 test('buildResponseMetadata sets reviewRuntime to skipped when assess step is explicitly skipped', () => {
     const metadata = buildResponseMetadata(
         baseGenerationMetadata(),
