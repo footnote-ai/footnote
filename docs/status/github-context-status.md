@@ -12,12 +12,15 @@ metadata contract.
 
 ## Limitations
 
-Repository selection requires an explicit `owner/repo` slug in the user
-conversation. There is one backend-held read-only credential; there is no
-per-user OAuth, durable cache, webhook, write operation, or public API change.
-Private repositories additionally require an exact configured allowlist.
+Generic repository selection requires an explicit `owner/repo` slug in the user
+conversation. Footnote-self current-state questions are a narrow exception:
+the backend may select the fixed `footnote-ai/footnote` repository for
+`repo_explainer` intent. There is one backend-held read-only credential; there
+is no per-user OAuth, durable cache, webhook, or write operation. Private
+repositories additionally require an exact configured allowlist.
 
 ## Next work
 
-Web and Discord only receive metadata today. Rendering source and freshness
-status is deferred to #494.
+Web and Discord present bounded source, freshness, and coverage summaries from
+the backend-owned metadata. Counts at the configured record limit are shown as
+limited retrievals, never as repository totals.

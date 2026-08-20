@@ -35,6 +35,17 @@ web:
 # Most users can keep this empty at first.
 discord-bots: []
 
+# Backend context integrations. Project-document retrieval is fail-open and
+# remains disabled until explicitly enabled.
+chat-workflow:
+    chat-context-project-docs-enabled: false
+    chat-context-project-docs-repository: 'footnote-ai/footnote'
+    chat-context-project-docs-embedding-provider: 'openai'
+    chat-context-project-docs-embedding-model: 'text-embedding-3-small'
+    chat-context-project-docs-max-chunk-bytes: 2000
+    chat-context-project-docs-max-chunks: 200
+    chat-context-project-docs-top-k-per-category: 5
+
 # Example (uncomment and fill env key names only):
 # discord-bots:
 #   - id: "main-discord"
@@ -51,4 +62,3 @@ discord-bots: []
 #       display-name: "Footnote"
 #       overlay-path: ""
 #       mention-aliases: []
-

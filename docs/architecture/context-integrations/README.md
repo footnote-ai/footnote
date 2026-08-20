@@ -107,7 +107,7 @@ reviewed workflow modes.
 ### Workflow context-step execution
 
 `weather_forecast`, `file_scan`, `web_search`, `trustgraph`,
-`reverse_image_search`, and `github_context` use the workflow context-step execution path for
+`reverse_image_search`, `github_context`, and `project_context` use the workflow context-step execution path for
 workflow modes (`express`, `balanced`, and `grounded`) when workflow execution
 is active. In this pattern:
 
@@ -144,3 +144,4 @@ where required. Footnote orchestration remains Context Step-owned.
 - [Web Search](./web-search.md)
 - [Reverse Image Search](./reverse-image-search.md)
 - [GitHub Context](./github.md)
+- [Project Context](./project-context.md)

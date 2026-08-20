@@ -6,7 +6,9 @@
 reflect current repository state when retrieval succeeds, but may also be
 partial, stale, or unavailable. It is not web search: web search discovers
 broad public sources, while this integration reads a single user-named
-`owner/repo` through fixed GitHub REST endpoints.
+`owner/repo` through fixed GitHub REST endpoints. For Footnote-self
+current-state questions, backend-owned routing may use the fixed
+`footnote-ai/footnote` repository without requiring the slug in user text.
 
 ## Scope and access
 
@@ -23,8 +25,9 @@ prompted, cached as keys, or emitted in metadata.
 
 The integration uses only GET requests for `/repos/{owner}/{repo}`, open
 issues, open pull requests, releases, and commits. Each section returns at
-most five sanitized records. Control characters are removed and text is
-length-bounded. Repository text is injected with an explicit **untrusted
+most five sanitized records. Returned counts are bounded record counts, not
+repository totals. Control characters are removed and text is length-bounded.
+Repository text is injected with an explicit **untrusted
 context** label; it cannot select routing, policy, verification, or terminal
 state.
 
@@ -40,6 +43,7 @@ generation continues without GitHub context.
 ## Provenance
 
 Canonical GitHub object URLs become citations. Response metadata records the
-repository, requested sections, status, fetch time, returned counts, failed
-sections, and bounded reason codes. Workflow records retain the context-step
-outcome for trace review.
+repository, requested sections, status, fetch time, per-section limit, returned
+counts, failed sections, and bounded reason codes. Workflow records retain the
+context-step outcome for trace review. Web and Discord show this status without
+exposing credentials or private-scope configuration.
