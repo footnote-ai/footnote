@@ -30,20 +30,19 @@ const totalProjectMatches = (metadata: ProjectContextMetadata): number =>
         0
     );
 
-const formatTimestamp = (value: string | undefined): string =>
-    value ? ` at ${value}` : '';
+const formatTimestamp = (
+    value: string | undefined,
+    label: 'indexed at' | 'fetched at'
+): string => (value ? ` ${label} ${value}` : '');
 
 export const formatProjectContextSummary = (
     metadata: ProjectContextMetadata
 ): string => {
     const count = totalProjectMatches(metadata);
     const evidence = `${count} document excerpt${count === 1 ? '' : 's'} retrieved`;
-    const coverage = Object.values(metadata.returnedCounts).some(
-        (value) => (value ?? 0) >= metadata.topKPerCategory
-    )
-        ? ' Results may be limited; counts are bounded excerpts, not document totals.'
-        : '';
-    return `Project documents: ${STATUS_LABELS[metadata.status]}; ${evidence}${formatTimestamp(metadata.indexedAt)}.${coverage}`;
+    const coverage =
+        ' Results may be limited by topKPerCategory and maxChunks; counts are selected excerpts, not document totals.';
+    return `Project documents: ${STATUS_LABELS[metadata.status]}; ${evidence}${formatTimestamp(metadata.indexedAt, 'indexed at')}.${coverage}`;
 };
 
 export const formatGitHubContextSummary = (
@@ -66,7 +65,7 @@ export const formatGitHubContextSummary = (
             : '';
     const recordSummary =
         records.length > 0 ? records.join(', ') : 'no records';
-    return `GitHub: ${metadata.status}; ${recordSummary} retrieved${formatTimestamp(metadata.fetchTimestamp)}.${coverage}`;
+    return `GitHub: ${metadata.status}; ${recordSummary} retrieved${formatTimestamp(metadata.fetchTimestamp, 'fetched at')}.${coverage}`;
 };
 
 export const buildContextPresentationSummary = (input: {

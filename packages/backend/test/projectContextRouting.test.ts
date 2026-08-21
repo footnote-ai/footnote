@@ -9,6 +9,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 
 import {
+    buildFootnoteGitHubContextRouteFromPlan,
     buildProjectContextRouteFromPlan,
     PROJECT_CONTEXT_CANONICAL_REPOSITORY,
 } from '../src/services/chatGenerationHints.js';
@@ -56,4 +57,17 @@ test('routing never requires the repository slug to appear in user text', () => 
     // The canonical repo is the acceptance target regardless of whether the
     // user typed footnote-ai/footnote.
     assert.equal(route?.repository, PROJECT_CONTEXT_CANONICAL_REPOSITORY);
+});
+
+test('generic explanations about how Footnote works do not request live GitHub state', () => {
+    assert.equal(
+        buildFootnoteGitHubContextRouteFromPlan({
+            search: {
+                query: 'How does Footnote work?',
+                contextSize: 'medium',
+                intent: 'repo_explainer',
+            },
+        }),
+        undefined
+    );
 });

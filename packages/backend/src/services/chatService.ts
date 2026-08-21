@@ -1950,7 +1950,7 @@ export const createChatService = ({
             workflowContextStepResults
         );
         const projectContext = pickProjectContextMetadata(
-            workflowContextStepResults
+            effectiveContextStepResults
         );
         const runtimeContext: ResponseMetadataRuntimeContext = {
             modelVersion: usageModel,

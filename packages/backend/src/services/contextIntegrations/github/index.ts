@@ -291,6 +291,10 @@ export const createGitHubContextStepExecutor = (input: {
                             requestedSections: sections,
                             status: 'unavailable',
                             fetchTimestamp: new Date(now()).toISOString(),
+                            maxRecordsPerSection: Math.min(
+                                MAX_RECORDS,
+                                Math.max(1, input.maxRecordsPerSection)
+                            ),
                             returnedCounts: {},
                             failedSections: sections,
                             reasonCodes: ['private_access_denied'],

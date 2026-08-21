@@ -26,7 +26,7 @@ Document access stays backend-owned:
 
 ## Retrieval and indexing
 
-Documents are chunked on markdown headings with a byte cap. Each chunk carries
+Documents are chunked on Markdown headings with a byte cap. Each chunk carries
 a content hash and an evidence category:
 
 - `documented_intent` — what the project says it wants to be
@@ -90,6 +90,8 @@ Env controls live under `CHAT_CONTEXT_PROJECT_DOCS_*`:
 The embedding provider is OpenAI-compatible. OpenRouter uses its explicit
 OpenAI-compatible embeddings endpoint; unsupported provider configuration must
 fail closed for the context step while the chat request remains fail-open.
+The backend caps `maxChunkBytes` at 32 KiB, `maxChunks` at 5,000, and
+`topKPerCategory` at 50 even when environment values are higher.
 
 For current Footnote-self questions, backend-owned routing may also request
 bounded live GitHub context for `footnote-ai/footnote`. GitHub counts describe

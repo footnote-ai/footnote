@@ -130,10 +130,21 @@ test('GitHub context fails open for private access, HTTP failures, malformed bod
     assert.deepEqual(
         (
             privateResult.integrationContext?.payload as {
-                metadata: { reasonCodes: string[] };
+                metadata: {
+                    reasonCodes: string[];
+                    maxRecordsPerSection?: number;
+                };
             }
         ).metadata.reasonCodes,
         ['private_access_denied']
+    );
+    assert.equal(
+        (
+            privateResult.integrationContext?.payload as {
+                metadata: { maxRecordsPerSection?: number };
+            }
+        ).metadata.maxRecordsPerSection,
+        5
     );
     assert.doesNotMatch(JSON.stringify(privateResult), /secret-token/);
 

@@ -1110,6 +1110,8 @@ export type ContextStepExecutedResult = ContextStepBaseResult & {
         reasonCode?: never;
     };
     contextMessages?: string[];
+    /** Prompt channel for context messages; project documents use the lower-authority user channel. */
+    contextMessageRole?: 'system' | 'user';
     sources?: Citation[];
 };
 

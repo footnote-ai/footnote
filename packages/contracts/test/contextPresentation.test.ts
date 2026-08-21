@@ -47,7 +47,9 @@ test('context summaries show source status and bounded GitHub coverage', () => {
 
     assert.match(summaries[0] ?? '', /Project documents: current/);
     assert.match(summaries[0] ?? '', /2 document excerpts retrieved/);
+    assert.match(summaries[0] ?? '', /indexed at 2026-08-20/);
     assert.match(summaries[1] ?? '', /GitHub: partial/);
+    assert.match(summaries[1] ?? '', /fetched at 2026-08-20/);
     assert.match(
         summaries[1] ?? '',
         /Results may be limited; counts are not repository totals/

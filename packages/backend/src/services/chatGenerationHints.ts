@@ -49,7 +49,7 @@ export const buildProjectContextRouteFromPlan = (
 };
 
 const CURRENT_PROJECT_QUERY_PATTERN =
-    /\b(current(?:ly)?|now|open|latest|recent|activity|release|releases|issues?|pull requests?|work|status)\b/iu;
+    /\b(current(?:ly)?|now|open|latest|recent|activity|release|releases|issues?|pull requests?|status)\b/iu;
 
 /**
  * Builds a backend-owned GitHub request for current Footnote-self questions.
@@ -64,7 +64,7 @@ export const buildFootnoteGitHubContextRouteFromPlan = (
     if (!query || !CURRENT_PROJECT_QUERY_PATTERN.test(query)) return undefined;
 
     const sections: ChatGenerationGitHubContext['sections'] = [];
-    if (/\b(open|issues?|work)\b/iu.test(query)) {
+    if (/\b(open|issues?)\b/iu.test(query)) {
         sections.push('issues', 'pulls');
     }
     if (/\b(release|releases|latest)\b/iu.test(query)) {

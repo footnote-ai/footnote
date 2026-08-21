@@ -3407,6 +3407,9 @@ components:
         GitHubContextMetadata:
             type: object
             description: Bounded, advisory GitHub context supplied to generation.
+            x-codeRefs:
+                - packages/contracts/src/policy/types.ts#GitHubContextMetadata
+                - packages/contracts/src/web/schemas.ts#GitHubContextMetadataSchema
             properties:
                 repository:
                     type: string
@@ -3460,14 +3463,19 @@ components:
         ProjectContextMetadata:
             type: object
             description: Bounded metadata for approved Footnote project-document context.
+            x-codeRefs:
+                - packages/contracts/src/policy/projectContext.ts#ProjectContextMetadata
+                - packages/contracts/src/web/schemas.ts#ProjectContextMetadataSchema
             properties:
                 repository:
                     type: string
                     pattern: '^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$'
                 provider:
                     type: string
+                    minLength: 1
                 model:
                     type: string
+                    minLength: 1
                 chunkerVersion:
                     type: integer
                     minimum: 1
@@ -3476,6 +3484,7 @@ components:
                     minimum: 1
                 indexedCommitSha:
                     type: string
+                    minLength: 1
                 indexedAt:
                     type: string
                     format: date-time
