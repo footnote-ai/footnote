@@ -38,6 +38,22 @@ const PROJECT_DOCS_EMBEDDING_PROVIDERS: ReadonlySet<string> = new Set([
     'openai',
     'openrouter',
 ]);
+const PROJECT_DOCS_MAX_CHUNK_BYTES = 32 * 1024;
+const PROJECT_DOCS_MAX_CHUNKS = 5_000;
+const PROJECT_DOCS_MAX_TOP_K_PER_CATEGORY = 50;
+
+const parseProjectDocsLimit = (
+    raw: string | undefined,
+    fallback: number,
+    key: string,
+    maximum: number,
+    warn: WarningSink
+): number => {
+    const parsed = parsePositiveIntEnv(raw, fallback, key, warn);
+    if (parsed <= maximum) return parsed;
+    warn(`${key} exceeds the project-context safety cap; using ${maximum}.`);
+    return maximum;
+};
 
 const parseWebSearchProviderPriority = (
     raw: string | undefined,
@@ -359,22 +375,25 @@ export const buildServiceSections = (
                     parseOptionalTrimmedString(
                         env.CHAT_CONTEXT_PROJECT_DOCS_EMBEDDING_MODEL
                     ) ?? 'text-embedding-3-small',
-                maxChunkBytes: parsePositiveIntEnv(
+                maxChunkBytes: parseProjectDocsLimit(
                     env.CHAT_CONTEXT_PROJECT_DOCS_MAX_CHUNK_BYTES,
                     2000,
                     'CHAT_CONTEXT_PROJECT_DOCS_MAX_CHUNK_BYTES',
+                    PROJECT_DOCS_MAX_CHUNK_BYTES,
                     warn
                 ),
-                maxChunks: parsePositiveIntEnv(
+                maxChunks: parseProjectDocsLimit(
                     env.CHAT_CONTEXT_PROJECT_DOCS_MAX_CHUNKS,
                     200,
                     'CHAT_CONTEXT_PROJECT_DOCS_MAX_CHUNKS',
+                    PROJECT_DOCS_MAX_CHUNKS,
                     warn
                 ),
-                topKPerCategory: parsePositiveIntEnv(
+                topKPerCategory: parseProjectDocsLimit(
                     env.CHAT_CONTEXT_PROJECT_DOCS_TOP_K_PER_CATEGORY,
                     5,
                     'CHAT_CONTEXT_PROJECT_DOCS_TOP_K_PER_CATEGORY',
+                    PROJECT_DOCS_MAX_TOP_K_PER_CATEGORY,
                     warn
                 ),
             },

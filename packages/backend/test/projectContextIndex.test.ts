@@ -31,6 +31,11 @@ test('defaultCategoryForPath labels status docs as current state, not intent', (
         defaultCategoryForPath('docs/status/repository-context-status.md'),
         'current_state'
     );
+    assert.equal(
+        defaultCategoryForPath('docs/status.md.bak'),
+        'documented_intent'
+    );
+    assert.equal(defaultCategoryForPath('docs/status.md'), 'current_state');
 });
 
 test('defaultCategoryForPath labels architecture docs as documented behavior', () => {
@@ -105,7 +110,40 @@ test('chunkProjectDocument caps chunk size and produces stable ids', () => {
     );
 });
 
-test('vector store upserts chunks keyed by identity and content hash', () => {
+test('chunkProjectDocument enforces UTF-8 byte caps and preserves fenced headings', () => {
+    const chunks = chunkProjectDocument(
+        {
+            path: 'docs/architecture/workflow.md',
+            content: [
+                '# Example',
+                '```md',
+                '# not a heading',
+                '🙂🙂🙂',
+                '```',
+            ].join('\n'),
+        },
+        {
+            maxChunkBytes: 64,
+            categoryForPath: defaultCategoryForPath,
+        }
+    );
+
+    assert.equal(chunks.length, 1);
+    assert.match(chunks[0]?.text ?? '', /# not a heading/);
+    assert.ok(Buffer.byteLength(chunks[0]?.text ?? '', 'utf8') <= 64);
+    const unicodeChunks = chunkProjectDocument(
+        { path: 'docs/architecture/unicode.md', content: '🙂'.repeat(20) },
+        { maxChunkBytes: 16, categoryForPath: defaultCategoryForPath }
+    );
+    assert.ok(unicodeChunks.length > 1);
+    assert.ok(
+        unicodeChunks.every(
+            (chunk) => Buffer.byteLength(chunk.text, 'utf8') <= 16
+        )
+    );
+});
+
+test('vector store upserts chunks keyed by chunk id', () => {
     const store = createProjectVectorStore({ identity, maxChunks: 100 });
     const chunk: StoredProjectChunk = {
         id: 'docs/Philosophy.md#0',
@@ -120,6 +158,17 @@ test('vector store upserts chunks keyed by identity and content hash', () => {
     assert.equal(matches.length, 1);
     assert.equal(matches[0]?.path, 'docs/Philosophy.md');
     assert.equal(matches[0]?.text, 'Footnote is transparency-first.');
+    store.upsert([
+        {
+            ...chunk,
+            text: 'Replacement chunk.',
+            contentHash: 'sha256:replacement',
+        },
+    ]);
+    assert.equal(
+        store.search([1, 0, 0], ['documented_intent'], 5)[0]?.text,
+        'Replacement chunk.'
+    );
 });
 
 test('vector store search filters by category and returns cosine scores', () => {
@@ -214,6 +263,27 @@ test('vector store skips embeddings with mismatched dimensions', () => {
     assert.deepEqual(store.search([1, 0, 0], ['documented_intent'], 5), []);
 });
 
+test('vector store rejects queries with a different index identity', () => {
+    const store = createProjectVectorStore({ identity, maxChunks: 100 });
+    store.upsert([
+        {
+            id: 'identity#0',
+            path: 'docs/Philosophy.md',
+            category: 'documented_intent',
+            contentHash: 'sha256:identity',
+            text: 'identity',
+            embedding: [1, 0, 0],
+        },
+    ]);
+    assert.deepEqual(
+        store.search([1, 0, 0], ['documented_intent'], 5, {
+            ...identity,
+            model: 'other-model',
+        }),
+        []
+    );
+});
+
 test('vector store enforces its bounded chunk capacity deterministically', () => {
     const store = createProjectVectorStore({ identity, maxChunks: 2 });
     store.upsert([
@@ -271,6 +341,7 @@ test('vector store keeps last-known-good chunks when identity changes', () => {
         },
         maxChunks: 100,
     });
+    assert.equal(rebuilt.identity.chunkerVersion, 2);
     rebuilt.upsert([
         {
             id: 'a#0',
@@ -284,4 +355,5 @@ test('vector store keeps last-known-good chunks when identity changes', () => {
     const originalMatches = store.search([1, 0, 0], ['documented_intent'], 5);
     assert.equal(originalMatches.length, 1);
     assert.equal(originalMatches[0]?.text, 'original chunk');
+    assert.equal(store.chunkCount(), 1);
 });

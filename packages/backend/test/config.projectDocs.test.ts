@@ -68,6 +68,24 @@ test('project context config falls back on invalid integer values', () => {
     assert.equal(projectContext.topKPerCategory, 5);
 });
 
+test('project context config caps resource-intensive limits', () => {
+    const warnings: string[] = [];
+    const { chatWorkflow } = buildServiceSections(
+        {
+            CHAT_CONTEXT_PROJECT_DOCS_MAX_CHUNK_BYTES: '999999',
+            CHAT_CONTEXT_PROJECT_DOCS_MAX_CHUNKS: '999999',
+            CHAT_CONTEXT_PROJECT_DOCS_TOP_K_PER_CATEGORY: '999999',
+        },
+        (message) => warnings.push(message)
+    );
+
+    const projectContext = chatWorkflow.contextIntegrations.projectDocs;
+    assert.equal(projectContext.maxChunkBytes, 32 * 1024);
+    assert.equal(projectContext.maxChunks, 5_000);
+    assert.equal(projectContext.topKPerCategory, 50);
+    assert.equal(warnings.length, 3);
+});
+
 test('project context embedding provider rejects unknown values', () => {
     const warnings: string[] = [];
     const { chatWorkflow } = buildServiceSections(

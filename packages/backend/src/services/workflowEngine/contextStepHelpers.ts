@@ -20,28 +20,31 @@ type FollowUpSearchHint = {
     priority: 'low' | 'medium' | 'high';
 };
 
+type ContextPromptMessage =
+    string | { role: 'system' | 'user'; content: string };
+
 /**
- * Injects normalized context-step system messages into the generation prompt.
+ * Injects normalized context-step messages into the generation prompt.
  * Context is inserted before planner output markers when present, otherwise
  * appended to preserve fail-open execution ordering.
  */
 export const injectContextMessagesIntoPrompt = (
     baseMessages: RuntimeMessage[],
-    contextMessages: string[] | undefined
+    contextMessages: ContextPromptMessage[] | undefined
 ): RuntimeMessage[] => {
     if (!contextMessages || contextMessages.length === 0) {
         return baseMessages;
     }
 
     const normalizedContextMessages = contextMessages
-        .map((message) => message.trim())
-        .filter((message) => message.length > 0)
-        .map(
-            (message): RuntimeMessage => ({
-                role: 'system',
-                content: message,
-            })
-        );
+        .map((message) =>
+            typeof message === 'string'
+                ? { role: 'system' as const, content: message }
+                : { role: message.role, content: message.content }
+        )
+        .map((message) => ({ ...message, content: message.content.trim() }))
+        .filter((message) => message.content.length > 0)
+        .map((message): RuntimeMessage => message);
     if (normalizedContextMessages.length === 0) {
         return baseMessages;
     }

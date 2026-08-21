@@ -29,12 +29,14 @@ export type ProjectContextRetrieverOptions = {
     maxChunkBytes: number;
     maxChunks: number;
     topKPerCategory: number;
+    now?: () => number;
 };
 
 export type ProjectContextRetrievalOutcome =
     | {
           ok: true;
           status: 'current' | 'stale';
+          indexedAt: string;
           matches: ProjectContextMatch[];
       }
     | {
@@ -62,6 +64,7 @@ type PreparedProjectIndex = {
 
 type BuiltProjectIndex = {
     fingerprint: string;
+    indexedAt: string;
     store: ReturnType<typeof createProjectVectorStore>;
 };
 
@@ -125,24 +128,37 @@ const buildIndex = async (
     );
     return {
         fingerprint: prepared.fingerprint,
+        indexedAt: new Date((options.now ?? Date.now)()).toISOString(),
         store,
     };
 };
 
 const staleOutcome = (
     current: BuiltProjectIndex
-): { ok: true; store: BuiltProjectIndex['store']; status: 'stale' } => ({
+): {
+    ok: true;
+    store: BuiltProjectIndex['store'];
+    status: 'stale';
+    indexedAt: string;
+} => ({
     ok: true,
     store: current.store,
     status: 'stale',
+    indexedAt: current.indexedAt,
 });
 
 const currentOutcome = (
     current: BuiltProjectIndex
-): { ok: true; store: BuiltProjectIndex['store']; status: 'current' } => ({
+): {
+    ok: true;
+    store: BuiltProjectIndex['store'];
+    status: 'current';
+    indexedAt: string;
+} => ({
     ok: true,
     store: current.store,
     status: 'current',
+    indexedAt: current.indexedAt,
 });
 
 const noIndexReason = 'Project context index is empty.';
@@ -161,6 +177,7 @@ const createIndexLoader = (options: ProjectContextRetrieverOptions) => {
               ok: true;
               store: BuiltProjectIndex['store'];
               status: 'current' | 'stale';
+              indexedAt: string;
           }
         | { ok: false; reason: string }
     > => {
@@ -195,6 +212,10 @@ const createIndexLoader = (options: ProjectContextRetrieverOptions) => {
     };
 };
 
+/**
+ * Creates a fail-open project retriever. Rebuild failures reuse the last
+ * known-good index; first-use failures return `ok: false` for observability.
+ */
 export const createProjectContextRetriever = (
     options: ProjectContextRetrieverOptions
 ): ProjectContextRetriever => {
@@ -223,11 +244,13 @@ export const createProjectContextRetriever = (
             const matches = fresh.store.search(
                 queryEmbedding,
                 categories,
-                options.topKPerCategory
+                options.topKPerCategory,
+                options.identity
             );
             return {
                 ok: true,
                 status: fresh.status,
+                indexedAt: fresh.indexedAt,
                 matches,
             };
         },

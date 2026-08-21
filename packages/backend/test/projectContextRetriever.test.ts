@@ -56,6 +56,7 @@ const createRetriever = (
         maxChunkBytes: 2000,
         maxChunks: 100,
         topKPerCategory: 5,
+        now: () => 1_755_000_000_000,
         ...overrides,
     });
 
@@ -68,6 +69,7 @@ test('retriever builds an index and returns ranked facts for a query', async () 
     assert.equal(outcome.ok, true);
     if (!outcome.ok) return;
     assert.equal(outcome.status, 'current');
+    assert.equal(outcome.indexedAt, '2025-08-12T12:00:00.000Z');
     assert.ok(outcome.matches.length >= 1);
     for (const match of outcome.matches) {
         assert.equal(match.category, 'documented_intent');
@@ -136,6 +138,7 @@ test('retriever falls back to last-known-good index when rebuild fails', async (
     assert.equal(stale.ok, true);
     if (stale.ok) {
         assert.equal(stale.status, 'stale');
+        assert.equal(stale.indexedAt, '2025-08-12T12:00:00.000Z');
         assert.ok(stale.matches.length >= 1);
     }
 });

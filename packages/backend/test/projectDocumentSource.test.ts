@@ -45,11 +45,6 @@ test('createProjectDocumentSource reads allowlisted tracked file contents', asyn
     await fs.mkdir(root, { recursive: true });
     try {
         await fs.writeFile(
-            path.join(root, '.footnote'),
-            'context-files\n',
-            'utf8'
-        );
-        await fs.writeFile(
             path.join(root, 'README.md'),
             '# Footnote\nTransparency first.',
             'utf8'
@@ -76,13 +71,34 @@ test('createProjectDocumentSource reads allowlisted tracked file contents', asyn
 });
 
 test('createProjectDocumentSource excludes untracked and over-limit files', async () => {
-    const source = createProjectDocumentSource({
-        repositoryRoot: '.',
-        trackedPaths: ['README.md', 'AGENTS.md'],
-        readFile: async (_filePath) => 'x'.repeat(100),
-        allowlistContents: 'README.md\nAGENTS.md\n',
-        maxFileBytes: 50,
-    });
-    const result = await source.loadDocuments();
-    assert.deepEqual(result, []);
+    const root = path.join(
+        os.tmpdir(),
+        `footnote-project-source-limits-${randomUUID()}`
+    );
+    await fs.mkdir(root, { recursive: true });
+    try {
+        await fs.writeFile(path.join(root, 'README.md'), 'small file', 'utf8');
+        await fs.writeFile(
+            path.join(root, 'large.md'),
+            'large file content',
+            'utf8'
+        );
+        const createSource = (maxFileBytes: number) =>
+            createProjectDocumentSource({
+                repositoryRoot: root,
+                trackedPaths: ['README.md', 'large.md'],
+                readFile: (filePath) => fs.readFile(filePath, 'utf8'),
+                allowlistContents: 'README.md\nlarge.md\nuntracked.md\n',
+                maxFileBytes,
+            });
+
+        assert.deepEqual(await createSource(5).loadDocuments(), []);
+        const result = await createSource(100).loadDocuments();
+        assert.deepEqual(
+            result.map((document) => document.path),
+            ['README.md', 'large.md']
+        );
+    } finally {
+        await fs.rm(root, { recursive: true, force: true });
+    }
 });

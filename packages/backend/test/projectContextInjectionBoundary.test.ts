@@ -43,6 +43,17 @@ test('injected untrusted project context stays after user messages, never in the
     assert.equal(injected[contextIndex]?.role, 'system');
 });
 
+test('project context can use the lower-authority user channel', () => {
+    const injected = injectContextMessagesIntoPrompt(buildBaseMessages(), [
+        { role: 'user', content: PROJECT_CONTEXT_UNTRUSTED_LABEL },
+    ]);
+    const context = injected.find((message) =>
+        message.content.includes('UNTRUSTED PROJECT CONTEXT')
+    );
+    assert.ok(context);
+    assert.equal(context?.role, 'user');
+});
+
 test('injected untrusted context never displaces the trusted system prompt', () => {
     const injected = injectContextMessagesIntoPrompt(buildBaseMessages(), [
         PROJECT_CONTEXT_UNTRUSTED_LABEL,

@@ -6,6 +6,7 @@
  * @footnote-risk: medium - Chunking and category rules shape which evidence reaches the prompt.
  * @footnote-ethics: high - Categories must not claim implementation strength from static docs alone.
  */
+import { createHash } from 'node:crypto';
 import type { ProjectContextCategory } from '@footnote/contracts/policy';
 
 export type ProjectDocumentSource = {
@@ -39,7 +40,7 @@ export const defaultCategoryForPath = (
     const normalized = filePath.replaceAll('\\', '/');
     if (
         normalized.startsWith('docs/status/') ||
-        normalized.startsWith('docs/status.md')
+        normalized === 'docs/status.md'
     ) {
         return 'current_state';
     }
@@ -53,13 +54,7 @@ export const defaultCategoryForPath = (
 };
 
 export const hashText = (text: string): string => {
-    // FNV-1a is deterministic, dependency-free, and stable across platforms.
-    let hash = 0x811c9dc5;
-    for (let index = 0; index < text.length; index += 1) {
-        hash ^= text.charCodeAt(index);
-        hash = Math.imul(hash, 0x01000193);
-    }
-    return `fnv1a:${(hash >>> 0).toString(16)}`;
+    return `sha256:${createHash('sha256').update(text, 'utf8').digest('hex')}`;
 };
 
 /**
@@ -76,28 +71,54 @@ export const chunkProjectDocument = (
     const content = source.content.trim();
     const sections: string[] = [];
 
-    let sectionStart = 0;
-    for (let index = 1; index < content.length; index += 1) {
-        if (content[index] === '#' && content[index - 1] === '\n') {
-            sections.push(content.slice(sectionStart, index).trim());
-            sectionStart = index;
+    let currentSection: string[] = [];
+    let inFence = false;
+    for (const line of content.split('\n')) {
+        const trimmedLine = line.trimStart();
+        const isFence = /^(?:```|~~~)/u.test(trimmedLine);
+        const isHeading = !inFence && /^#{1,6}(?:\s|$)/u.test(trimmedLine);
+        if (isHeading && currentSection.length > 0) {
+            sections.push(currentSection.join('\n').trim());
+            currentSection = [];
         }
+        currentSection.push(line);
+        if (isFence) inFence = !inFence;
     }
-    sections.push(content.slice(sectionStart).trim());
+    sections.push(currentSection.join('\n').trim());
 
     const chunks: ProjectDocumentChunk[] = [];
     let chunkIndex = 0;
     const chunkSize = Math.max(1, Math.floor(options.maxChunkBytes));
     for (const section of sections) {
         if (section.length === 0) continue;
+        const characters = Array.from(section);
         let offset = 0;
-        while (offset < section.length) {
-            let end = Math.min(offset + chunkSize, section.length);
-            if (end < section.length) {
-                const hardBreak = section.lastIndexOf('\n', end);
-                if (hardBreak > offset) end = hardBreak;
+        while (offset < characters.length) {
+            let end = offset;
+            let bytes = 0;
+            while (end < characters.length) {
+                const characterBytes = Buffer.byteLength(
+                    characters[end] ?? '',
+                    'utf8'
+                );
+                if (end > offset && bytes + characterBytes > chunkSize) {
+                    break;
+                }
+                bytes += characterBytes;
+                end += 1;
+                if (bytes >= chunkSize) break;
             }
-            const text = section.slice(offset, end).trim();
+            if (end < characters.length) {
+                const candidate = characters.slice(offset, end).join('');
+                const hardBreak = candidate.lastIndexOf('\n');
+                if (hardBreak > 0) {
+                    end =
+                        offset +
+                        Array.from(candidate.slice(0, hardBreak)).length;
+                }
+            }
+            if (end <= offset) end = offset + 1;
+            const text = characters.slice(offset, end).join('').trim();
             if (text.length > 0) {
                 chunks.push({
                     id: `${source.path}#${chunkIndex}`,

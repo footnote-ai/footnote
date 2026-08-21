@@ -59,16 +59,23 @@ export const resolveHeadCommitSha = async (
     }
 };
 
+/** Reads a path after callers have validated it against the project allowlist. */
 export const readProjectFile = async (
     repositoryRoot: string,
     filePath: string
-): Promise<string> =>
-    fs.readFile(
+): Promise<string> => {
+    const handle = await fs.open(
         path.isAbsolute(filePath)
             ? filePath
             : path.join(repositoryRoot, filePath),
-        'utf8'
+        'r'
     );
+    try {
+        return await handle.readFile('utf8');
+    } finally {
+        await handle.close();
+    }
+};
 
 export type ProjectDocumentSourceOptions = {
     repositoryRoot: string;
@@ -124,9 +131,9 @@ export const projectGlobToRegex = (pattern: string): string => {
     return `${regex}$`;
 };
 
-const matchesPattern = (filePath: string, pattern: string): boolean => {
+const matchesPattern = (filePath: string, pattern: RegExp): boolean => {
     const normalizedPath = filePath.replaceAll('\\', '/');
-    return new RegExp(projectGlobToRegex(pattern), 'u').test(normalizedPath);
+    return pattern.test(normalizedPath);
 };
 
 const parseAllowlist = (
@@ -146,6 +153,10 @@ const parseAllowlist = (
     return { include, exclude };
 };
 
+/**
+ * Creates a bounded source loader. It reads only tracked, allowlisted files,
+ * defaults to a 1 MiB file cap, and skips invalid or unreadable entries.
+ */
 export const createProjectDocumentSource = (
     options: ProjectDocumentSourceOptions
 ): { loadDocuments: () => Promise<ProjectDocumentSource[]> } => {
@@ -161,18 +172,24 @@ export const createProjectDocumentSource = (
                     filePath.replaceAll('\\', '/')
                 )
             );
+            const includePatterns = include.map(
+                (pattern) => new RegExp(projectGlobToRegex(pattern), 'u')
+            );
+            const excludePatterns = exclude.map(
+                (pattern) => new RegExp(projectGlobToRegex(pattern), 'u')
+            );
             const documents: ProjectDocumentSource[] = [];
 
             for (const filePath of tracked) {
                 const normalized = filePath.replaceAll('\\', '/');
                 if (
-                    exclude.some((pattern) =>
+                    excludePatterns.some((pattern) =>
                         matchesPattern(normalized, pattern)
                     )
                 ) {
                     continue;
                 }
-                const selected = include.some((pattern) =>
+                const selected = includePatterns.some((pattern) =>
                     matchesPattern(normalized, pattern)
                 );
                 if (!selected) continue;
@@ -198,7 +215,11 @@ export const createProjectDocumentSource = (
                 }
                 try {
                     const stats = await fs.lstat(absolutePath);
-                    if (!stats.isFile() || stats.isSymbolicLink()) {
+                    if (
+                        !stats.isFile() ||
+                        stats.isSymbolicLink() ||
+                        stats.size > maxFileBytes
+                    ) {
                         continue;
                     }
                     const content = await options.readFile(absolutePath);
@@ -212,7 +233,7 @@ export const createProjectDocumentSource = (
             }
 
             documents.sort((left, right) =>
-                left.path.localeCompare(right.path)
+                left.path < right.path ? -1 : left.path > right.path ? 1 : 0
             );
             return documents;
         },

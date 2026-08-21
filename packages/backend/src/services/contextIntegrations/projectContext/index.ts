@@ -136,6 +136,7 @@ export const createProjectContextStepExecutor = (
         maxChunkBytes: input.maxChunkBytes,
         maxChunks: input.maxChunks,
         topKPerCategory: input.topKPerCategory,
+        now,
     });
 
     return async ({
@@ -243,7 +244,7 @@ export const createProjectContextStepExecutor = (
                     []
                 ),
                 ...(commitSha !== null && { indexedCommitSha: commitSha }),
-                indexedAt: new Date(now()).toISOString(),
+                indexedAt: outcome.indexedAt,
                 returnedCounts: buildCounts(matches),
             };
             return buildExecutedContextStepResult({
@@ -254,6 +255,7 @@ export const createProjectContextStepExecutor = (
                     matches,
                     commitSha,
                 }),
+                contextMessageRole: 'user',
                 sources: citationsFromProjectContext({
                     repository: input.repository,
                     matches,

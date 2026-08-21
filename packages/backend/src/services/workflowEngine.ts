@@ -814,8 +814,7 @@ export const runBoundedReviewWorkflow = async ({
                 const normalizedExecutionContext =
                     normalizedResult.executionContext;
                 const clarificationSignals:
-                    | WorkflowToolClarificationSignals
-                    | undefined =
+                    WorkflowToolClarificationSignals | undefined =
                     normalizedResult.outcome === 'needs_clarification'
                         ? {
                               clarificationReasonCode:
@@ -890,7 +889,14 @@ export const runBoundedReviewWorkflow = async ({
                 // Preserve deterministic context ordering by request list order.
                 executedContextStepResults.flatMap((contextStepResult) =>
                     contextStepResult.outcome === 'executed'
-                        ? (contextStepResult.contextMessages ?? [])
+                        ? (contextStepResult.contextMessages ?? []).map(
+                              (content) => ({
+                                  role:
+                                      contextStepResult.contextMessageRole ??
+                                      'system',
+                                  content,
+                              })
+                          )
                         : []
                 )
             );
@@ -901,8 +907,7 @@ export const runBoundedReviewWorkflow = async ({
             });
             try {
                 let initialRoutingChainAttempts:
-                    | RoutingChainAttemptLog[]
-                    | undefined;
+                    RoutingChainAttemptLog[] | undefined;
                 let initialRoutedProfile:
                     | {
                           profileId: string;

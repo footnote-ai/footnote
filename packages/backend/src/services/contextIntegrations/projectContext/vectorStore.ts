@@ -34,7 +34,8 @@ type ProjectVectorStore = {
     search: (
         queryEmbedding: number[],
         categories: ProjectContextCategory[],
-        topK: number
+        topK: number,
+        queryIdentity?: ProjectIndexIdentity
     ) => ProjectContextMatch[];
     chunkCount: () => number;
 };
@@ -78,7 +79,17 @@ export const createProjectVectorStore = (input: {
                 chunks.set(chunk.id, chunk);
             }
         },
-        search(queryEmbedding, categories, topK) {
+        search(queryEmbedding, categories, topK, queryIdentity) {
+            if (
+                queryIdentity !== undefined &&
+                (queryIdentity.provider !== input.identity.provider ||
+                    queryIdentity.model !== input.identity.model ||
+                    queryIdentity.chunkerVersion !==
+                        input.identity.chunkerVersion ||
+                    queryIdentity.indexVersion !== input.identity.indexVersion)
+            ) {
+                return [];
+            }
             const limit = Math.max(1, topK);
             const matches: ProjectContextMatch[] = [];
             for (const category of new Set(categories)) {
