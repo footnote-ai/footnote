@@ -199,6 +199,21 @@ test('vector store applies topK independently within each category', () => {
     );
 });
 
+test('vector store skips embeddings with mismatched dimensions', () => {
+    const store = createProjectVectorStore({ identity });
+    store.upsert([
+        {
+            id: 'mismatch#0',
+            path: 'docs/Philosophy.md',
+            category: 'documented_intent',
+            contentHash: 'sha256:mismatch',
+            text: 'mismatch',
+            embedding: [1, 0],
+        },
+    ]);
+    assert.deepEqual(store.search([1, 0, 0], ['documented_intent'], 5), []);
+});
+
 test('vector store keeps last-known-good chunks when identity changes', () => {
     const store = createProjectVectorStore({ identity });
     store.upsert([

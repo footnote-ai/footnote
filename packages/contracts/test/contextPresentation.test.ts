@@ -53,3 +53,22 @@ test('context summaries show source status and bounded GitHub coverage', () => {
         /Results may be limited; counts are not repository totals/
     );
 });
+
+test('project summaries disclose when a category reaches its retrieval limit', () => {
+    const [summary] = buildContextPresentationSummary({
+        projectContext: {
+            repository: 'footnote-ai/footnote',
+            provider: 'openai',
+            model: 'text-embedding-3-small',
+            chunkerVersion: 1,
+            indexVersion: 1,
+            requestedCategories: ['documented_behavior'],
+            returnedCounts: { documented_behavior: 2 },
+            maxChunks: 200,
+            topKPerCategory: 2,
+            status: 'current',
+            reasonCodes: [],
+        },
+    });
+    assert.match(summary ?? '', /not document totals/);
+});

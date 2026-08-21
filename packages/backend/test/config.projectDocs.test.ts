@@ -9,6 +9,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { buildServiceSections } from '../src/config/sections/services.js';
+import { buildProjectContextWiring } from '../src/services/contextIntegrations/projectContext/wiring.js';
 
 test('project context config defaults to disabled with safe bounded limits', () => {
     const warnings: string[] = [];
@@ -80,4 +81,23 @@ test('project context embedding provider rejects unknown values', () => {
         chatWorkflow.contextIntegrations.projectDocs.embeddingProvider,
         'openai'
     );
+});
+
+test('project context wiring fails open when the selected provider key is absent', async () => {
+    const { chatWorkflow } = buildServiceSections(
+        { CHAT_CONTEXT_PROJECT_DOCS_ENABLED: 'true' },
+        () => undefined
+    );
+    const wiring = buildProjectContextWiring({
+        config: chatWorkflow.contextIntegrations.projectDocs,
+        projectRoot: process.cwd(),
+        openaiApiKey: null,
+        openrouterApiKey: null,
+    });
+    assert.ok(wiring);
+    const result = await wiring.embedTexts(['Footnote']);
+    assert.equal(result.status, 'error');
+    if (result.status === 'error') {
+        assert.match(result.reason, /key is not configured/);
+    }
 });

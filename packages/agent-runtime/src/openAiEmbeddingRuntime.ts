@@ -108,6 +108,11 @@ export const createOpenAiEmbeddingRuntime = ({
                         signal: request.signal,
                     }),
                 });
+                if (response.data.length !== request.texts.length) {
+                    throw new Error(
+                        `Embedding response returned ${response.data.length} vectors for ${request.texts.length} texts.`
+                    );
+                }
                 const embeddings = response.data.map((item) => item.embedding);
 
                 logger?.warn?.('Embedding runtime request succeeded.', {

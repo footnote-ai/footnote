@@ -38,7 +38,12 @@ export const formatProjectContextSummary = (
 ): string => {
     const count = totalProjectMatches(metadata);
     const evidence = `${count} document excerpt${count === 1 ? '' : 's'} retrieved`;
-    return `Project documents: ${STATUS_LABELS[metadata.status]}; ${evidence}${formatTimestamp(metadata.indexedAt)}.`;
+    const coverage = Object.values(metadata.returnedCounts).some(
+        (value) => (value ?? 0) >= metadata.topKPerCategory
+    )
+        ? ' Results may be limited; counts are bounded excerpts, not document totals.'
+        : '';
+    return `Project documents: ${STATUS_LABELS[metadata.status]}; ${evidence}${formatTimestamp(metadata.indexedAt)}.${coverage}`;
 };
 
 export const formatGitHubContextSummary = (

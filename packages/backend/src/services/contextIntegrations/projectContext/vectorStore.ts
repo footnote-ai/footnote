@@ -39,7 +39,11 @@ export type ProjectVectorStore = {
     chunkCount: () => number;
 };
 
-const cosineSimilarity = (left: number[], right: number[]): number => {
+const cosineSimilarity = (
+    left: number[],
+    right: number[]
+): number | undefined => {
+    if (left.length !== right.length || left.length === 0) return undefined;
     let dot = 0;
     let leftNorm = 0;
     let rightNorm = 0;
@@ -77,12 +81,14 @@ export const createProjectVectorStore = (input: {
                 }> = [];
                 for (const chunk of chunks.values()) {
                     if (chunk.category !== category) continue;
+                    const score = cosineSimilarity(
+                        queryEmbedding,
+                        chunk.embedding
+                    );
+                    if (score === undefined) continue;
                     scored.push({
                         chunk,
-                        score: cosineSimilarity(
-                            queryEmbedding,
-                            chunk.embedding
-                        ),
+                        score,
                     });
                 }
                 scored.sort((left, right) => right.score - left.score);

@@ -95,6 +95,23 @@ test('runtime forwards caller cancellation to the embedding client', async () =>
     assert.equal(receivedSignal, signal);
 });
 
+test('runtime rejects an embedding response with the wrong vector count', async () => {
+    const runtime = createOpenAiEmbeddingRuntime({
+        apiKey: 'test-key',
+        client: {
+            createEmbeddings: async () => ({ data: [{ embedding: [0.1] }] }),
+        },
+    });
+
+    const result = await runtime.embed(
+        createRequest({ texts: ['one', 'two'] })
+    );
+    assert.equal(result.status, 'error');
+    if (result.status === 'error') {
+        assert.match(result.reason, /returned 1 vectors for 2 texts/);
+    }
+});
+
 test('runtime requires either apiKey or an injected client', () => {
     assert.throws(() => {
         createOpenAiEmbeddingRuntime({});

@@ -13,6 +13,7 @@ import {
     type EmbeddingRuntimeResult,
 } from '@footnote/agent-runtime';
 import type { RuntimeConfig } from '../../../config/types.js';
+import { logger } from '../../../utils/logger.js';
 import {
     createProjectDocumentSource,
     listGitTrackedPaths,
@@ -35,12 +36,22 @@ export const buildProjectContextWiring = (input: {
         input.config.embeddingProvider === 'openrouter'
             ? input.openrouterApiKey
             : input.openaiApiKey;
-    const embeddingRuntime = createOpenAiEmbeddingRuntime({
-        apiKey: apiKey ?? undefined,
-        ...(input.config.embeddingProvider === 'openrouter' && {
-            baseURL: 'https://openrouter.ai/api/v1',
-        }),
-    });
+    const embeddingRuntime = apiKey
+        ? createOpenAiEmbeddingRuntime({
+              apiKey,
+              logger: {
+                  warn: (message, data) => {
+                      logger.warn(message, data);
+                  },
+                  error: (message, data) => {
+                      logger.error(message, data);
+                  },
+              },
+              ...(input.config.embeddingProvider === 'openrouter' && {
+                  baseURL: 'https://openrouter.ai/api/v1',
+              }),
+          })
+        : undefined;
 
     const loadDocuments = async () => {
         let allowlistContents: string;
@@ -73,12 +84,21 @@ export const buildProjectContextWiring = (input: {
 
     const embedTexts = async (
         texts: string[]
-    ): Promise<EmbeddingRuntimeResult> =>
-        embeddingRuntime.embed({
+    ): Promise<EmbeddingRuntimeResult> => {
+        if (embeddingRuntime === undefined) {
+            return {
+                status: 'error',
+                reason: `Embedding provider key is not configured for ${input.config.embeddingProvider}.`,
+                model: input.config.embeddingModel,
+                provider: input.config.embeddingProvider,
+            };
+        }
+        return embeddingRuntime.embed({
             texts,
             model: input.config.embeddingModel,
             provider: input.config.embeddingProvider,
         });
+    };
 
     return {
         enabled: input.config.enabled,
