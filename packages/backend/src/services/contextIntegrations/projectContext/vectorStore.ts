@@ -28,7 +28,7 @@ export type StoredProjectChunk = {
     embedding: number[];
 };
 
-export type ProjectVectorStore = {
+type ProjectVectorStore = {
     identity: ProjectIndexIdentity;
     upsert: (chunks: StoredProjectChunk[]) => void;
     search: (
@@ -61,13 +61,20 @@ const cosineSimilarity = (
 
 export const createProjectVectorStore = (input: {
     identity: ProjectIndexIdentity;
+    maxChunks: number;
 }): ProjectVectorStore => {
     const chunks = new Map<string, StoredProjectChunk>();
+    const maxChunks = Math.max(1, Math.floor(input.maxChunks));
 
     return {
         identity: input.identity,
         upsert(chunkList) {
             for (const chunk of chunkList) {
+                if (!chunks.has(chunk.id) && chunks.size >= maxChunks) {
+                    const oldestId = chunks.keys().next().value as
+                        string | undefined;
+                    if (oldestId !== undefined) chunks.delete(oldestId);
+                }
                 chunks.set(chunk.id, chunk);
             }
         },

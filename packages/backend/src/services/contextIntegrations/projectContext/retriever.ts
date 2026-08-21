@@ -20,7 +20,6 @@ import {
 import {
     createProjectVectorStore,
     type ProjectIndexIdentity,
-    type ProjectVectorStore,
 } from './vectorStore.js';
 
 export type ProjectContextRetrieverOptions = {
@@ -63,7 +62,7 @@ type PreparedProjectIndex = {
 
 type BuiltProjectIndex = {
     fingerprint: string;
-    store: ProjectVectorStore;
+    store: ReturnType<typeof createProjectVectorStore>;
 };
 
 const prepareIndex = (
@@ -101,7 +100,10 @@ const buildIndex = async (
     options: ProjectContextRetrieverOptions,
     prepared: PreparedProjectIndex
 ): Promise<BuiltProjectIndex> => {
-    const store = createProjectVectorStore({ identity: options.identity });
+    const store = createProjectVectorStore({
+        identity: options.identity,
+        maxChunks: options.maxChunks,
+    });
     const embeddingResult = await options.embedTexts(
         prepared.chunks.map((chunk) => chunk.text)
     );
@@ -129,7 +131,7 @@ const buildIndex = async (
 
 const staleOutcome = (
     current: BuiltProjectIndex
-): { ok: true; store: ProjectVectorStore; status: 'stale' } => ({
+): { ok: true; store: BuiltProjectIndex['store']; status: 'stale' } => ({
     ok: true,
     store: current.store,
     status: 'stale',
@@ -137,7 +139,7 @@ const staleOutcome = (
 
 const currentOutcome = (
     current: BuiltProjectIndex
-): { ok: true; store: ProjectVectorStore; status: 'current' } => ({
+): { ok: true; store: BuiltProjectIndex['store']; status: 'current' } => ({
     ok: true,
     store: current.store,
     status: 'current',
@@ -155,7 +157,11 @@ const createIndexLoader = (options: ProjectContextRetrieverOptions) => {
         | undefined;
 
     return async (): Promise<
-        | { ok: true; store: ProjectVectorStore; status: 'current' | 'stale' }
+        | {
+              ok: true;
+              store: BuiltProjectIndex['store'];
+              status: 'current' | 'stale';
+          }
         | { ok: false; reason: string }
     > => {
         try {

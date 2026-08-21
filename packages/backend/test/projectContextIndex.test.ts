@@ -106,7 +106,7 @@ test('chunkProjectDocument caps chunk size and produces stable ids', () => {
 });
 
 test('vector store upserts chunks keyed by identity and content hash', () => {
-    const store = createProjectVectorStore({ identity });
+    const store = createProjectVectorStore({ identity, maxChunks: 100 });
     const chunk: StoredProjectChunk = {
         id: 'docs/Philosophy.md#0',
         path: 'docs/Philosophy.md',
@@ -123,7 +123,7 @@ test('vector store upserts chunks keyed by identity and content hash', () => {
 });
 
 test('vector store search filters by category and returns cosine scores', () => {
-    const store = createProjectVectorStore({ identity });
+    const store = createProjectVectorStore({ identity, maxChunks: 100 });
     store.upsert([
         {
             id: 'a#0',
@@ -152,7 +152,7 @@ test('vector store search filters by category and returns cosine scores', () => 
 });
 
 test('vector store applies topK independently within each category', () => {
-    const store = createProjectVectorStore({ identity });
+    const store = createProjectVectorStore({ identity, maxChunks: 100 });
     store.upsert([
         {
             id: 'intent-a#0',
@@ -200,7 +200,7 @@ test('vector store applies topK independently within each category', () => {
 });
 
 test('vector store skips embeddings with mismatched dimensions', () => {
-    const store = createProjectVectorStore({ identity });
+    const store = createProjectVectorStore({ identity, maxChunks: 100 });
     store.upsert([
         {
             id: 'mismatch#0',
@@ -214,8 +214,46 @@ test('vector store skips embeddings with mismatched dimensions', () => {
     assert.deepEqual(store.search([1, 0, 0], ['documented_intent'], 5), []);
 });
 
+test('vector store enforces its bounded chunk capacity deterministically', () => {
+    const store = createProjectVectorStore({ identity, maxChunks: 2 });
+    store.upsert([
+        {
+            id: 'first#0',
+            path: 'docs/first.md',
+            category: 'documented_intent',
+            contentHash: 'sha256:first',
+            text: 'first',
+            embedding: [1, 0, 0],
+        },
+        {
+            id: 'second#0',
+            path: 'docs/second.md',
+            category: 'documented_intent',
+            contentHash: 'sha256:second',
+            text: 'second',
+            embedding: [0.9, 0, 0],
+        },
+        {
+            id: 'third#0',
+            path: 'docs/third.md',
+            category: 'documented_intent',
+            contentHash: 'sha256:third',
+            text: 'third',
+            embedding: [0.8, 0, 0],
+        },
+    ]);
+
+    assert.equal(store.chunkCount(), 2);
+    assert.deepEqual(
+        store
+            .search([1, 0, 0], ['documented_intent'], 5)
+            .map((match) => match.path),
+        ['docs/second.md', 'docs/third.md']
+    );
+});
+
 test('vector store keeps last-known-good chunks when identity changes', () => {
-    const store = createProjectVectorStore({ identity });
+    const store = createProjectVectorStore({ identity, maxChunks: 100 });
     store.upsert([
         {
             id: 'a#0',
@@ -231,6 +269,7 @@ test('vector store keeps last-known-good chunks when identity changes', () => {
             ...identity,
             chunkerVersion: 2,
         },
+        maxChunks: 100,
     });
     rebuilt.upsert([
         {
