@@ -62,7 +62,13 @@ export const resolveHeadCommitSha = async (
 export const readProjectFile = async (
     repositoryRoot: string,
     filePath: string
-): Promise<string> => fs.readFile(path.join(repositoryRoot, filePath), 'utf8');
+): Promise<string> =>
+    fs.readFile(
+        path.isAbsolute(filePath)
+            ? filePath
+            : path.join(repositoryRoot, filePath),
+        'utf8'
+    );
 
 export type ProjectDocumentSourceOptions = {
     repositoryRoot: string;
@@ -195,7 +201,7 @@ export const createProjectDocumentSource = (
                     if (!stats.isFile() || stats.isSymbolicLink()) {
                         continue;
                     }
-                    const content = await options.readFile(filePath);
+                    const content = await options.readFile(absolutePath);
                     if (Buffer.byteLength(content, 'utf8') > maxFileBytes) {
                         continue;
                     }

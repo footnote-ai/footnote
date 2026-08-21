@@ -74,9 +74,12 @@ export const buildFootnoteGitHubContextRouteFromPlan = (
         sections.push('commits');
     }
 
+    const uniqueSections = [...new Set(sections)];
+    if (uniqueSections.length === 0) return undefined;
+
     return {
         repository: FOOTNOTE_REPO_SLUG,
-        sections: [...new Set(sections)],
+        sections: uniqueSections,
     };
 };
 

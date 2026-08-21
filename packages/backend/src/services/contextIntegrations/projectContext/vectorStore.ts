@@ -68,26 +68,35 @@ export const createProjectVectorStore = (input: {
             }
         },
         search(queryEmbedding, categories, topK) {
-            const categorySet = new Set<string>(categories);
-            const scored: Array<{ chunk: StoredProjectChunk; score: number }> =
-                [];
-            for (const chunk of chunks.values()) {
-                if (!categorySet.has(chunk.category)) continue;
-                scored.push({
-                    chunk,
-                    score: cosineSimilarity(queryEmbedding, chunk.embedding),
-                });
+            const limit = Math.max(1, topK);
+            const matches: ProjectContextMatch[] = [];
+            for (const category of new Set(categories)) {
+                const scored: Array<{
+                    chunk: StoredProjectChunk;
+                    score: number;
+                }> = [];
+                for (const chunk of chunks.values()) {
+                    if (chunk.category !== category) continue;
+                    scored.push({
+                        chunk,
+                        score: cosineSimilarity(
+                            queryEmbedding,
+                            chunk.embedding
+                        ),
+                    });
+                }
+                scored.sort((left, right) => right.score - left.score);
+                matches.push(
+                    ...scored.slice(0, limit).map(({ chunk, score }) => ({
+                        category: chunk.category,
+                        path: chunk.path,
+                        contentHash: chunk.contentHash,
+                        text: chunk.text,
+                        score,
+                    }))
+                );
             }
-            scored.sort((left, right) => right.score - left.score);
-            return scored
-                .slice(0, Math.max(1, topK))
-                .map(({ chunk, score }) => ({
-                    category: chunk.category,
-                    path: chunk.path,
-                    contentHash: chunk.contentHash,
-                    text: chunk.text,
-                    score,
-                }));
+            return matches;
         },
         chunkCount() {
             return chunks.size;

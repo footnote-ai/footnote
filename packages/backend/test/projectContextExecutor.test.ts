@@ -42,6 +42,7 @@ const createExecutorInput = (
         input: {
             repository: 'footnote-ai/footnote',
             categories: ['documented_intent'],
+            query: 'transparency',
         },
     },
     workflowId: 'wf-1',
@@ -157,4 +158,29 @@ test('executor records bounded index identity and count metadata', async () => {
     assert.equal(payload.metadata.repository, 'footnote-ai/footnote');
     assert.deepEqual(payload.metadata.reasonCodes, []);
     assert.ok(payload.metadata.indexVersion >= 1);
+});
+
+test('executor skips an empty query without invoking retrieval', async () => {
+    let retrievalAttempted = false;
+    const executor = createExecutor({
+        resolveDocuments: async () => {
+            retrievalAttempted = true;
+            return documents();
+        },
+    });
+    const result = await executor(
+        createExecutorInput({
+            request: {
+                ...createExecutorInput().request,
+                input: {
+                    repository: 'footnote-ai/footnote',
+                    categories: ['documented_intent'],
+                    query: '   ',
+                },
+            },
+        })
+    );
+    assert.equal(result.outcome, 'skipped');
+    assert.equal(retrievalAttempted, false);
+    assert.match(JSON.stringify(result.integrationContext), /invalid_query/);
 });

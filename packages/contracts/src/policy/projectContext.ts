@@ -27,6 +27,7 @@ export type ProjectContextCategory =
 export type ProjectContextReasonCode =
     | 'disabled'
     | 'tool_not_requested'
+    | 'invalid_query'
     | 'query_embedding_failed'
     | 'index_unavailable'
     | 'execution_error';

@@ -102,10 +102,11 @@ const ProvenanceFooter = ({
               : 'observe');
     const hasNonAllowSafetyDecision =
         safetyDecision !== undefined && safetyDecision.action !== 'allow';
-    const contextSummaries = buildContextPresentationSummary({
-        projectContext: metadata.projectContext,
-        githubContext: metadata.githubContext,
-    });
+    const contextSummaries: ReturnType<typeof buildContextPresentationSummary> =
+        buildContextPresentationSummary({
+            projectContext: metadata.projectContext,
+            githubContext: metadata.githubContext,
+        });
 
     return (
         <aside

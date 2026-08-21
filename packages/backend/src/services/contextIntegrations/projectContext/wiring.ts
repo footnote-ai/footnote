@@ -49,8 +49,16 @@ export const buildProjectContextWiring = (input: {
                 path.join(input.projectRoot, CONTEXT_FILES_RELATIVE_PATH),
                 'utf8'
             );
-        } catch {
-            return [];
+        } catch (error: unknown) {
+            if (
+                typeof error === 'object' &&
+                error !== null &&
+                'code' in error &&
+                error.code === 'ENOENT'
+            ) {
+                return [];
+            }
+            throw error;
         }
         const trackedPaths = await listGitTrackedPaths(input.projectRoot);
         const source = createProjectDocumentSource({

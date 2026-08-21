@@ -150,7 +150,9 @@ const asReason = (error: unknown): string =>
 
 const createIndexLoader = (options: ProjectContextRetrieverOptions) => {
     let current: BuiltProjectIndex | undefined;
-    let inFlight: Promise<BuiltProjectIndex> | undefined;
+    let inFlight:
+        | { fingerprint: string; promise: Promise<BuiltProjectIndex> }
+        | undefined;
 
     return async (): Promise<
         | { ok: true; store: ProjectVectorStore; status: 'current' | 'stale' }
@@ -166,14 +168,19 @@ const createIndexLoader = (options: ProjectContextRetrieverOptions) => {
                 return currentOutcome(current);
             }
             const buildPromise =
-                inFlight ?? (async () => buildIndex(options, prepared))();
-            inFlight = buildPromise;
+                inFlight?.fingerprint === prepared.fingerprint
+                    ? inFlight.promise
+                    : buildIndex(options, prepared);
+            inFlight = {
+                fingerprint: prepared.fingerprint,
+                promise: buildPromise,
+            };
             try {
                 const built = await buildPromise;
                 current = built;
                 return currentOutcome(built);
             } finally {
-                if (inFlight === buildPromise) inFlight = undefined;
+                if (inFlight?.promise === buildPromise) inFlight = undefined;
             }
         } catch (error) {
             if (current !== undefined) return staleOutcome(current);

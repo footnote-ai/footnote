@@ -58,9 +58,10 @@ test('embeds texts through the OpenAI-compatible client and keeps provider facts
 });
 
 test('runtime exposes upstream failure as an observable error result', async () => {
+    let loggedError = '';
     const logger: OpenAiEmbeddingRuntimeLogger = {
-        warn: (message) => {
-            assert.match(message, /Embedding request failed/);
+        error: (message) => {
+            loggedError = message;
         },
     };
     const runtime = createOpenAiEmbeddingRuntime({
@@ -74,6 +75,24 @@ test('runtime exposes upstream failure as an observable error result', async () 
     if (result.status === 'error') {
         assert.match(result.reason, /Embedding request failed/);
     }
+    assert.match(loggedError, /Embedding request failed/);
+});
+
+test('runtime forwards caller cancellation to the embedding client', async () => {
+    const signal = new AbortController().signal;
+    let receivedSignal: AbortSignal | undefined;
+    const runtime = createOpenAiEmbeddingRuntime({
+        apiKey: 'test-key',
+        client: {
+            createEmbeddings: async (request) => {
+                receivedSignal = request.signal;
+                return { data: [{ embedding: [0.1] }] };
+            },
+        },
+    });
+
+    await runtime.embed(createRequest({ signal }));
+    assert.equal(receivedSignal, signal);
 });
 
 test('runtime requires either apiKey or an injected client', () => {

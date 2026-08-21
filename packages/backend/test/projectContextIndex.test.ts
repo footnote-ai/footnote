@@ -151,6 +151,54 @@ test('vector store search filters by category and returns cosine scores', () => 
     assert.equal(typeof stateMatches[0]?.score, 'number');
 });
 
+test('vector store applies topK independently within each category', () => {
+    const store = createProjectVectorStore({ identity });
+    store.upsert([
+        {
+            id: 'intent-a#0',
+            path: 'docs/Philosophy.md',
+            category: 'documented_intent',
+            contentHash: 'sha256:intent-a',
+            text: 'intent a',
+            embedding: [1, 0, 0],
+        },
+        {
+            id: 'intent-b#0',
+            path: 'docs/Goals.md',
+            category: 'documented_intent',
+            contentHash: 'sha256:intent-b',
+            text: 'intent b',
+            embedding: [0.9, 0, 0],
+        },
+        {
+            id: 'state-a#0',
+            path: 'docs/status/plan.md',
+            category: 'current_state',
+            contentHash: 'sha256:state-a',
+            text: 'state a',
+            embedding: [0.8, 0, 0],
+        },
+        {
+            id: 'state-b#0',
+            path: 'docs/status/recent.md',
+            category: 'current_state',
+            contentHash: 'sha256:state-b',
+            text: 'state b',
+            embedding: [0.7, 0, 0],
+        },
+    ]);
+
+    const matches = store.search(
+        [1, 0, 0],
+        ['documented_intent', 'current_state'],
+        1
+    );
+    assert.deepEqual(
+        matches.map((match) => match.path),
+        ['docs/Philosophy.md', 'docs/status/plan.md']
+    );
+});
+
 test('vector store keeps last-known-good chunks when identity changes', () => {
     const store = createProjectVectorStore({ identity });
     store.upsert([

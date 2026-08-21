@@ -192,12 +192,25 @@ export const createProjectContextStepExecutor = (
             });
         }
 
-        let query = '';
-        if (
-            typeof request.input?.query === 'string' &&
-            request.input.query.trim().length > 0
-        ) {
-            query = request.input.query.trim();
+        const query =
+            typeof request.input?.query === 'string'
+                ? request.input.query.trim()
+                : '';
+        if (query.length === 0) {
+            return buildSkippedContextStepResult({
+                toolName: PROJECT_CONTEXT_NAME,
+                reasonCode: 'tool_not_requested',
+                durationMs: now() - startedAt,
+                integrationContext: {
+                    kind: PROJECT_CONTEXT_NAME,
+                    version: 'v1',
+                    payload: {
+                        metadata: metadataBase('unavailable', [
+                            'invalid_query',
+                        ]),
+                    },
+                },
+            });
         }
 
         try {

@@ -87,11 +87,12 @@ export const chunkProjectDocument = (
 
     const chunks: ProjectDocumentChunk[] = [];
     let chunkIndex = 0;
+    const chunkSize = Math.max(1, Math.floor(options.maxChunkBytes));
     for (const section of sections) {
         if (section.length === 0) continue;
         let offset = 0;
         while (offset < section.length) {
-            let end = Math.min(offset + options.maxChunkBytes, section.length);
+            let end = Math.min(offset + chunkSize, section.length);
             if (end < section.length) {
                 const hardBreak = section.lastIndexOf('\n', end);
                 if (hardBreak > offset) end = hardBreak;

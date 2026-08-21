@@ -1082,9 +1082,10 @@ const normalizeGeneration = (
                 ? { topicHints: mergedTopicHints }
                 : {}),
         },
-        ...(footnoteGitHubContext !== undefined && {
-            githubContext: footnoteGitHubContext,
-        }),
+        ...(baseGeneration.githubContext === undefined &&
+            footnoteGitHubContext !== undefined && {
+                githubContext: footnoteGitHubContext,
+            }),
         ...(projectContext !== undefined && { projectContext }),
     } satisfies ChatGenerationPlan;
 

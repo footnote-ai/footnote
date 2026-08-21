@@ -19,6 +19,7 @@ export type OpenAiEmbeddingRuntimeClient = {
     createEmbeddings: (request: {
         model: string;
         input: string[];
+        signal?: AbortSignal;
     }) => Promise<{ data: OpenAiEmbeddingResponseData }>;
 };
 
@@ -46,10 +47,17 @@ const createDefaultClient = (
     });
     return {
         createEmbeddings: async (request) =>
-            openai.embeddings.create({
-                model: request.model,
-                input: request.input,
-            }),
+            openai.embeddings.create(
+                {
+                    model: request.model,
+                    input: request.input,
+                },
+                request.signal === undefined
+                    ? undefined
+                    : {
+                          signal: request.signal,
+                      }
+            ),
     };
 };
 
@@ -96,6 +104,9 @@ export const createOpenAiEmbeddingRuntime = ({
                 const response = await embeddingClient.createEmbeddings({
                     model: request.model,
                     input: request.texts,
+                    ...(request.signal !== undefined && {
+                        signal: request.signal,
+                    }),
                 });
                 const embeddings = response.data.map((item) => item.embedding);
 

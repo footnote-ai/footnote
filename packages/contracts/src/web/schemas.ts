@@ -1342,6 +1342,7 @@ const ProjectContextCategorySchema = z.enum([
 const ProjectContextReasonCodeSchema = z.enum([
     'disabled',
     'tool_not_requested',
+    'invalid_query',
     'query_embedding_failed',
     'index_unavailable',
     'execution_error',
