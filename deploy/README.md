@@ -177,8 +177,14 @@ Single-app deploy:
 Manual deploy:
 
 ```bash
-fly deploy -c deploy/fly/server.toml
+fly deploy -c deploy/fly/server.toml \
+  --build-arg FOOTNOTE_CONTEXT_COMMIT_SHA=$(git rev-parse HEAD)
 ```
+
+The server image packages the curated project-context corpus because the
+runtime image does not contain `.git`. Always pass the source commit when
+deploying so project-context citations point at the exact bytes used for
+indexing. GitHub Actions supplies this argument from `github.sha`.
 
 For Fly, `pnpm settings` and `pnpm reset` issue links through `fly ssh console`
 against the app detected from `deployment.fly-app`, `FLY_APP_NAME`, `fly.toml`,

@@ -1,34 +1,314 @@
 /**
- * @description: Resolves approved project documents from .footnote/context-files in the backend.
- * The script-side resolver only previews allowlists; this backend module also reads contents.
+ * @description: Resolves one immutable, allowlisted project-document revision.
+ * Development reads come from `git show`; production reads come from an image-bundled corpus.
  * @footnote-scope: core
  * @footnote-module: ProjectDocumentSource
- * @footnote-risk: medium - Allowlist resolution controls which repository files may influence output.
- * @footnote-ethics: high - Only approved tracked docs should enter the prompt context.
+ * @footnote-risk: high - Revision and allowlist mistakes can create false provenance or unsafe retrieval.
+ * @footnote-ethics: high - Only explicitly approved, revision-consistent documents may influence output.
  */
 import { execFile } from 'node:child_process';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { promisify } from 'node:util';
+import type { ProjectContextCategory } from '@footnote/contracts/policy';
 import type { ProjectDocumentSource } from './documentLoader.js';
 
 const execFileAsync = promisify(execFile);
+const DEFAULT_MAX_FILE_BYTES = 1024 * 1024;
+const COMMIT_SHA_PATTERN = /^[0-9a-f]{7,64}$/iu;
+
+export type ProjectContextManifestEntry = {
+    path: string;
+    category: ProjectContextCategory;
+    priority: number;
+};
+
+export type ProjectDocumentSet = {
+    revision: string | null;
+    documents: ProjectDocumentSource[];
+    source: 'git' | 'bundle';
+};
+
+export type ProjectDocumentSourceOptions = {
+    repositoryRoot: string;
+    trackedPaths: string[];
+    readFile: (filePath: string) => Promise<string>;
+    allowlistContents: string;
+    manifestEntries?: readonly ProjectContextManifestEntry[];
+    statFile?: (filePath: string) => Promise<{
+        isFile: boolean;
+        isSymbolicLink: boolean;
+        size: number;
+    }>;
+    maxFileBytes?: number;
+};
+
+const isSafeRelativePath = (filePath: string): boolean => {
+    const normalized = filePath.replaceAll('\\', '/');
+    return (
+        normalized.length > 0 &&
+        !path.posix.isAbsolute(normalized) &&
+        !normalized.split('/').includes('..')
+    );
+};
+
+const parseAllowlist = (
+    contents: string
+): { include: string[]; exclude: string[] } => {
+    const include: string[] = [];
+    const exclude: string[] = [];
+    for (const rawLine of contents.split(/\r?\n/u)) {
+        const line = rawLine.trim();
+        if (line.length === 0 || line.startsWith('#')) continue;
+        if (line.startsWith('!')) {
+            exclude.push(line.slice(1).trim());
+        } else {
+            include.push(line);
+        }
+    }
+    return { include, exclude };
+};
+
+/** Converts the supported context-file globs to an anchored regular expression. */
+export const projectGlobToRegex = (pattern: string): string => {
+    const normalized = pattern.replaceAll('\\', '/');
+    let regex = '^';
+    let index = 0;
+    while (index < normalized.length) {
+        const char = normalized[index];
+        if (
+            char === '*' &&
+            normalized[index + 1] === '*' &&
+            normalized[index + 2] === '/'
+        ) {
+            regex += '(?:.*/)?';
+            index += 3;
+            continue;
+        }
+        if (char === '*' && normalized[index + 1] === '*') {
+            regex += '.*';
+            index += 2;
+            continue;
+        }
+        if (char === '*') {
+            regex += '[^/]*';
+            index += 1;
+            continue;
+        }
+        if (char === '?') {
+            regex += '[^\\/]';
+            index += 1;
+            continue;
+        }
+        regex += char.replace(/[/.+?^${}()|[\]\\]/gu, '\\$&');
+        index += 1;
+    }
+    return `${regex}$`;
+};
+
+const matchesPattern = (filePath: string, pattern: RegExp): boolean =>
+    pattern.test(filePath.replaceAll('\\', '/'));
+
+const relativePathFromRoot = (
+    repositoryRoot: string,
+    filePath: string
+): string => {
+    const resolvedRoot = path.resolve(repositoryRoot);
+    const absolutePath = path.resolve(filePath);
+    const relativePath = path.relative(resolvedRoot, absolutePath);
+    return relativePath.replaceAll('\\', '/');
+};
+
+const normalizeRevision = (revision: string): string | null => {
+    const normalized = revision.trim();
+    return COMMIT_SHA_PATTERN.test(normalized) ? normalized : null;
+};
+
+const parseManifest = (contents: string): ProjectContextManifestEntry[] => {
+    const parsed: unknown = JSON.parse(contents);
+    if (!Array.isArray(parsed)) return [];
+    return parsed.flatMap((entry: unknown) => {
+        if (typeof entry !== 'object' || entry === null) return [];
+        const candidate = entry as Record<string, unknown>;
+        const filePath =
+            typeof candidate.path === 'string'
+                ? candidate.path.replaceAll('\\', '/')
+                : '';
+        const category = candidate.category;
+        const priority = candidate.priority;
+        if (
+            !isSafeRelativePath(filePath) ||
+            (category !== 'documented_intent' &&
+                category !== 'documented_behavior' &&
+                category !== 'current_state') ||
+            typeof priority !== 'number' ||
+            !Number.isFinite(priority)
+        ) {
+            return [];
+        }
+        return [{ path: filePath, category, priority }];
+    });
+};
+
+export const parseProjectContextManifest = parseManifest;
 
 /**
- * Lists git-tracked repository paths with forward slashes, like the script-side
- * resolver. The backend reads tracked file contents only for allowlisted paths.
+ * Creates a bounded source loader. The caller supplies the immutable path set
+ * and reader so the same allowlist logic works for git and image bundles.
  */
+export const createProjectDocumentSource = (
+    options: ProjectDocumentSourceOptions
+): { loadDocuments: () => Promise<ProjectDocumentSource[]> } => {
+    const maxFileBytes = options.maxFileBytes ?? DEFAULT_MAX_FILE_BYTES;
+    const statFile =
+        options.statFile ??
+        (async (filePath: string) => {
+            const stats = await fs.lstat(filePath);
+            return {
+                isFile: stats.isFile(),
+                isSymbolicLink: stats.isSymbolicLink(),
+                size: stats.size,
+            };
+        });
+
+    return {
+        async loadDocuments() {
+            const { include, exclude } = parseAllowlist(
+                options.allowlistContents
+            );
+            const includePatterns = include.map(
+                (pattern) => new RegExp(projectGlobToRegex(pattern), 'u')
+            );
+            const excludePatterns = exclude.map(
+                (pattern) => new RegExp(projectGlobToRegex(pattern), 'u')
+            );
+            const manifestByPath = new Map(
+                (options.manifestEntries ?? []).map((entry) => [
+                    entry.path.replaceAll('\\', '/'),
+                    entry,
+                ])
+            );
+            const tracked = new Set(
+                options.trackedPaths.map((filePath) =>
+                    filePath.replaceAll('\\', '/')
+                )
+            );
+            const documents: ProjectDocumentSource[] = [];
+
+            for (const filePath of tracked) {
+                const normalized = filePath.replaceAll('\\', '/');
+                const manifestEntry = manifestByPath.get(normalized);
+                if (
+                    !isSafeRelativePath(normalized) ||
+                    excludePatterns.some((pattern) =>
+                        matchesPattern(normalized, pattern)
+                    ) ||
+                    !includePatterns.some((pattern) =>
+                        matchesPattern(normalized, pattern)
+                    ) ||
+                    (manifestByPath.size > 0 && manifestEntry === undefined)
+                ) {
+                    continue;
+                }
+                const absolutePath = path.resolve(
+                    options.repositoryRoot,
+                    normalized
+                );
+                const relativePath = relativePathFromRoot(
+                    options.repositoryRoot,
+                    absolutePath
+                );
+                if (!isSafeRelativePath(relativePath)) continue;
+                try {
+                    const stats = await statFile(absolutePath);
+                    if (
+                        !stats.isFile ||
+                        stats.isSymbolicLink ||
+                        stats.size > maxFileBytes
+                    ) {
+                        continue;
+                    }
+                    const content = await options.readFile(absolutePath);
+                    if (Buffer.byteLength(content, 'utf8') > maxFileBytes) {
+                        continue;
+                    }
+                    documents.push({
+                        path: normalized,
+                        content,
+                        ...(manifestEntry?.category !== undefined && {
+                            category: manifestEntry.category,
+                        }),
+                        ...(manifestEntry?.priority !== undefined && {
+                            priority: manifestEntry.priority,
+                        }),
+                    });
+                } catch {
+                    continue;
+                }
+            }
+
+            documents.sort(
+                (left, right) =>
+                    (right.priority ?? 0) - (left.priority ?? 0) ||
+                    (left.path < right.path
+                        ? -1
+                        : left.path > right.path
+                          ? 1
+                          : 0)
+            );
+            return documents;
+        },
+    };
+};
+
+const readGitRevisionFile = async (
+    repositoryRoot: string,
+    revision: string,
+    filePath: string
+): Promise<string> => {
+    if (!isSafeRelativePath(filePath)) {
+        throw new Error(`Unsafe project context path: ${filePath}`);
+    }
+    const { stdout } = await execFileAsync(
+        'git',
+        ['-C', repositoryRoot, 'show', `${revision}:${filePath}`],
+        { encoding: 'utf8', maxBuffer: 2 * 1024 * 1024 }
+    );
+    return stdout;
+};
+
+const listGitRevisionFiles = async (
+    repositoryRoot: string,
+    revision: string
+): Promise<string[]> => {
+    const { stdout } = await execFileAsync(
+        'git',
+        ['-C', repositoryRoot, 'ls-tree', '-r', '-z', revision, '--'],
+        { encoding: 'utf8', maxBuffer: 20 * 1024 * 1024 }
+    );
+    return stdout.split('\0').flatMap((record) => {
+        const [header, filePath] = record.split('\t');
+        const mode = header?.split(' ')[0];
+        return (mode === '100644' || mode === '100755') &&
+            filePath !== undefined
+            ? [filePath]
+            : [];
+    });
+};
+
+/** Lists paths from one captured commit, never from a dirty working tree. */
 export const listGitTrackedPaths = async (
-    repositoryRoot: string
+    repositoryRoot: string,
+    revision?: string
 ): Promise<string[]> => {
     try {
+        if (revision !== undefined) {
+            return await listGitRevisionFiles(repositoryRoot, revision);
+        }
         const { stdout } = await execFileAsync(
             'git',
             ['-C', repositoryRoot, 'ls-files', '-z', '--'],
-            {
-                encoding: 'utf8',
-                maxBuffer: 20 * 1024 * 1024,
-            }
+            { encoding: 'utf8', maxBuffer: 20 * 1024 * 1024 }
         );
         return stdout
             .split('\0')
@@ -39,21 +319,17 @@ export const listGitTrackedPaths = async (
     }
 };
 
-/**
- * Resolves the current HEAD commit for commit-pinned citation URLs.
- * Returns null fail-open when the repository has no resolvable head.
- */
+/** Resolves the revision used for a complete project-context read. */
 export const resolveHeadCommitSha = async (
     repositoryRoot: string
 ): Promise<string | null> => {
     try {
         const { stdout } = await execFileAsync(
             'git',
-            ['-C', repositoryRoot, 'rev-parse', 'HEAD'],
+            ['-C', repositoryRoot, 'rev-parse', '--verify', 'HEAD^{commit}'],
             { encoding: 'utf8', maxBuffer: 1024 * 1024 }
         );
-        const sha = stdout.trim();
-        return sha.length > 0 ? sha : null;
+        return normalizeRevision(stdout);
     } catch {
         return null;
     }
@@ -77,165 +353,109 @@ export const readProjectFile = async (
     }
 };
 
-export type ProjectDocumentSourceOptions = {
-    repositoryRoot: string;
-    trackedPaths: string[];
-    readFile: (filePath: string) => Promise<string>;
-    allowlistContents: string;
-    maxFileBytes?: number;
-};
+const readRootFile = async (
+    repositoryRoot: string,
+    relativePath: string
+): Promise<string> =>
+    fs.readFile(path.join(repositoryRoot, relativePath), 'utf8');
 
-const DEFAULT_MAX_FILE_BYTES = 1024 * 1024;
-
-/**
- * Converts a .footnote/context-files glob pattern to an anchored regex.
- *
- * Supports `**`, `*`, and `?` wildcards. Patterns are forward-slash
- * normalized and must stay inside the repository.
- */
-export const projectGlobToRegex = (pattern: string): string => {
-    const normalized = pattern.replaceAll('\\', '/');
-    let regex = '^';
-    let index = 0;
-    while (index < normalized.length) {
-        const char = normalized[index];
-        if (
-            char === '*' &&
-            normalized[index + 1] === '*' &&
-            normalized[index + 2] === '/'
-        ) {
-            // Match zero or more directories, like the canonical globby
-            // resolver used by the repository-context preview command.
-            regex += '(?:.*/)?';
-            index += 3;
-            continue;
-        }
-        if (char === '*' && normalized[index + 1] === '*') {
-            regex += '.*';
-            index += 2;
-            continue;
-        }
-        if (char === '*') {
-            regex += '[^/]*';
-            index += 1;
-            continue;
-        }
-        if (char === '?') {
-            regex += '[^\\/]';
-            index += 1;
-            continue;
-        }
-        regex += char.replace(/[/.+?^${}()|[\]\\]/g, '\\$&');
-        index += 1;
+/** Loads one commit-pinned document set for local/dev repositories. */
+export const loadGitProjectDocumentSet = async (
+    repositoryRoot: string
+): Promise<ProjectDocumentSet> => {
+    const revision = await resolveHeadCommitSha(repositoryRoot);
+    if (revision === null) {
+        return { revision: null, documents: [], source: 'git' };
     }
-    return `${regex}$`;
-};
-
-const matchesPattern = (filePath: string, pattern: RegExp): boolean => {
-    const normalizedPath = filePath.replaceAll('\\', '/');
-    return pattern.test(normalizedPath);
-};
-
-const parseAllowlist = (
-    contents: string
-): { include: string[]; exclude: string[] } => {
-    const include: string[] = [];
-    const exclude: string[] = [];
-    for (const rawLine of contents.split(/\r?\n/u)) {
-        const line = rawLine.trim();
-        if (line.length === 0 || line.startsWith('#')) continue;
-        if (line.startsWith('!')) {
-            exclude.push(line.slice(1).trim());
-        } else {
-            include.push(line);
-        }
-    }
-    return { include, exclude };
-};
-
-/**
- * Creates a bounded source loader. It reads only tracked, allowlisted files,
- * defaults to a 1 MiB file cap, and skips invalid or unreadable entries.
- */
-export const createProjectDocumentSource = (
-    options: ProjectDocumentSourceOptions
-): { loadDocuments: () => Promise<ProjectDocumentSource[]> } => {
-    const maxFileBytes = options.maxFileBytes ?? DEFAULT_MAX_FILE_BYTES;
-
+    const allowlistContents = await readGitRevisionFile(
+        repositoryRoot,
+        revision,
+        '.footnote/context-files'
+    );
+    const manifestEntries = parseManifest(
+        await readGitRevisionFile(
+            repositoryRoot,
+            revision,
+            '.footnote/context-manifest.json'
+        )
+    );
+    const trackedPaths = await listGitTrackedPaths(repositoryRoot, revision);
+    const source = createProjectDocumentSource({
+        repositoryRoot,
+        trackedPaths,
+        allowlistContents,
+        manifestEntries,
+        readFile: (filePath) =>
+            readGitRevisionFile(
+                repositoryRoot,
+                revision,
+                relativePathFromRoot(repositoryRoot, filePath)
+            ),
+        statFile: async () => ({
+            isFile: true,
+            isSymbolicLink: false,
+            size: 0,
+        }),
+    });
     return {
-        async loadDocuments() {
-            const { include, exclude } = parseAllowlist(
-                options.allowlistContents
-            );
-            const tracked = new Set(
-                options.trackedPaths.map((filePath) =>
-                    filePath.replaceAll('\\', '/')
-                )
-            );
-            const includePatterns = include.map(
-                (pattern) => new RegExp(projectGlobToRegex(pattern), 'u')
-            );
-            const excludePatterns = exclude.map(
-                (pattern) => new RegExp(projectGlobToRegex(pattern), 'u')
-            );
-            const documents: ProjectDocumentSource[] = [];
-
-            for (const filePath of tracked) {
-                const normalized = filePath.replaceAll('\\', '/');
-                if (
-                    excludePatterns.some((pattern) =>
-                        matchesPattern(normalized, pattern)
-                    )
-                ) {
-                    continue;
-                }
-                const selected = includePatterns.some((pattern) =>
-                    matchesPattern(normalized, pattern)
-                );
-                if (!selected) continue;
-                if (
-                    path.posix.isAbsolute(normalized) ||
-                    normalized.split('/').includes('..')
-                ) {
-                    continue;
-                }
-                const resolvedRoot = path.resolve(options.repositoryRoot);
-                const absolutePath = path.resolve(
-                    options.repositoryRoot,
-                    filePath
-                );
-                const relativePath = path.relative(resolvedRoot, absolutePath);
-                if (
-                    relativePath.length === 0 ||
-                    relativePath === '..' ||
-                    relativePath.startsWith(`..${path.sep}`) ||
-                    path.isAbsolute(relativePath)
-                ) {
-                    continue;
-                }
-                try {
-                    const stats = await fs.lstat(absolutePath);
-                    if (
-                        !stats.isFile() ||
-                        stats.isSymbolicLink() ||
-                        stats.size > maxFileBytes
-                    ) {
-                        continue;
-                    }
-                    const content = await options.readFile(absolutePath);
-                    if (Buffer.byteLength(content, 'utf8') > maxFileBytes) {
-                        continue;
-                    }
-                    documents.push({ path: normalized, content });
-                } catch {
-                    continue;
-                }
-            }
-
-            documents.sort((left, right) =>
-                left.path < right.path ? -1 : left.path > right.path ? 1 : 0
-            );
-            return documents;
-        },
+        revision,
+        documents: await source.loadDocuments(),
+        source: 'git',
     };
+};
+
+const listBundleFiles = async (bundleRoot: string): Promise<string[]> => {
+    const result: string[] = [];
+    const visit = async (directory: string, prefix: string): Promise<void> => {
+        const entries = await fs.readdir(directory, { withFileTypes: true });
+        for (const entry of entries) {
+            const relative =
+                prefix.length > 0 ? `${prefix}/${entry.name}` : entry.name;
+            const absolute = path.join(directory, entry.name);
+            if (entry.isDirectory()) {
+                await visit(absolute, relative);
+            } else if (entry.isFile()) {
+                result.push(relative.replaceAll('\\', '/'));
+            }
+        }
+    };
+    await visit(bundleRoot, '');
+    return result;
+};
+
+/** Loads the immutable document set copied into a production image. */
+export const loadPackagedProjectDocumentSet = async (
+    repositoryRoot: string
+): Promise<ProjectDocumentSet | undefined> => {
+    const bundleRoot = path.join(repositoryRoot, '.footnote', 'context-bundle');
+    try {
+        const revisionText = await readRootFile(bundleRoot, 'revision.txt');
+        const revision = normalizeRevision(revisionText);
+        if (revision === null) return undefined;
+        const allowlistContents = await readRootFile(
+            repositoryRoot,
+            '.footnote/context-files'
+        );
+        const manifestEntries = parseManifest(
+            await readRootFile(
+                repositoryRoot,
+                '.footnote/context-manifest.json'
+            )
+        );
+        const trackedPaths = await listBundleFiles(bundleRoot);
+        const source = createProjectDocumentSource({
+            repositoryRoot: bundleRoot,
+            trackedPaths,
+            allowlistContents,
+            manifestEntries,
+            readFile: (filePath) => readProjectFile(bundleRoot, filePath),
+        });
+        return {
+            revision,
+            documents: await source.loadDocuments(),
+            source: 'bundle',
+        };
+    } catch {
+        return undefined;
+    }
 };

@@ -2,6 +2,7 @@
 FROM node:22-slim AS builder
 
 WORKDIR /app
+ARG FOOTNOTE_CONTEXT_COMMIT_SHA=unknown
 ENV NODE_ENV=production
 # pnpm may refresh workspace modules before filtered scripts. Mark the
 # non-interactive builder as CI so that refresh can proceed without a TTY.
@@ -39,6 +40,14 @@ COPY packages/discord-bot/ packages/discord-bot/
 COPY packages/prompts/src/ packages/prompts/src/
 COPY packages/web/ packages/web/
 
+# The runtime image intentionally has no git checkout. Package the curated,
+# immutable project-context corpus and the revision supplied by the deployer.
+COPY .footnote/context-files /app/.footnote/context-files
+COPY .footnote/context-manifest.json /app/.footnote/context-manifest.json
+COPY README.md AGENTS.md SECURITY.md /app/.footnote/context-bundle/
+COPY docs/ /app/.footnote/context-bundle/docs/
+RUN printf '%s\n' "$FOOTNOTE_CONTEXT_COMMIT_SHA" > /app/.footnote/context-bundle/revision.txt
+
 RUN pnpm --filter @footnote/contracts run build \
   && pnpm --filter @footnote/config-spec run build \
   && pnpm --filter @footnote/prompts run build \
@@ -58,6 +67,7 @@ ENV NODE_ENV=production
 
 COPY --from=builder /app/node_modules /app/node_modules
 COPY --from=builder /app/packages /app/packages
+COPY --from=builder /app/.footnote /app/.footnote
 COPY --from=litestream /usr/local/bin/litestream /usr/local/bin/litestream
 COPY deploy/litestream.yml /etc/litestream.yml
 COPY deploy/backend-entrypoint.sh /usr/local/bin/backend-entrypoint.sh

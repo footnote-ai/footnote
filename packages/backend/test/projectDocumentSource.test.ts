@@ -11,11 +11,18 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import { randomUUID } from 'node:crypto';
 import os from 'node:os';
+import { execFile } from 'node:child_process';
+import { promisify } from 'node:util';
 
 import {
     createProjectDocumentSource,
+    loadPackagedProjectDocumentSet,
+    loadGitProjectDocumentSet,
+    parseProjectContextManifest,
     projectGlobToRegex,
 } from '../src/services/contextIntegrations/projectContext/documentSource.js';
+
+const execFileAsync = promisify(execFile);
 
 test('projectGlobToRegex converts glob patterns to anchored regexes', () => {
     assert.equal(projectGlobToRegex('README.md'), '^README\\.md$');
@@ -98,6 +105,148 @@ test('createProjectDocumentSource excludes untracked and over-limit files', asyn
             result.map((document) => document.path),
             ['README.md', 'large.md']
         );
+    } finally {
+        await fs.rm(root, { recursive: true, force: true });
+    }
+});
+
+test('packaged project context loads only manifest entries and preserves its revision', async () => {
+    const root = path.join(
+        os.tmpdir(),
+        `footnote-project-bundle-${randomUUID()}`
+    );
+    await fs.mkdir(path.join(root, '.footnote', 'context-bundle', 'docs'), {
+        recursive: true,
+    });
+    try {
+        await fs.writeFile(
+            path.join(root, '.footnote', 'context-files'),
+            'README.md\ndocs/status.md\n',
+            'utf8'
+        );
+        await fs.writeFile(
+            path.join(root, '.footnote', 'context-manifest.json'),
+            JSON.stringify([
+                {
+                    path: 'README.md',
+                    category: 'documented_behavior',
+                    priority: 2,
+                },
+                {
+                    path: 'docs/status.md',
+                    category: 'current_state',
+                    priority: 3,
+                },
+            ]),
+            'utf8'
+        );
+        await fs.writeFile(
+            path.join(root, '.footnote', 'context-bundle', 'revision.txt'),
+            '0123456789abcdef\n',
+            'utf8'
+        );
+        await fs.writeFile(
+            path.join(root, '.footnote', 'context-bundle', 'README.md'),
+            'Bundled behavior.',
+            'utf8'
+        );
+        await fs.writeFile(
+            path.join(root, '.footnote', 'context-bundle', 'docs', 'status.md'),
+            'Bundled current state.',
+            'utf8'
+        );
+        await fs.writeFile(
+            path.join(root, '.footnote', 'context-bundle', 'unlisted.md'),
+            'Must not be loaded.',
+            'utf8'
+        );
+
+        const result = await loadPackagedProjectDocumentSet(root);
+        assert.ok(result);
+        assert.equal(result?.source, 'bundle');
+        assert.equal(result?.revision, '0123456789abcdef');
+        assert.deepEqual(
+            result?.documents.map((document) => [
+                document.path,
+                document.category,
+            ]),
+            [
+                ['docs/status.md', 'current_state'],
+                ['README.md', 'documented_behavior'],
+            ]
+        );
+        assert.deepEqual(
+            parseProjectContextManifest(
+                await fs.readFile(
+                    path.join(root, '.footnote', 'context-manifest.json'),
+                    'utf8'
+                )
+            ).map((entry) => entry.path),
+            ['README.md', 'docs/status.md']
+        );
+    } finally {
+        await fs.rm(root, { recursive: true, force: true });
+    }
+});
+
+test('git-backed project context reads the captured commit, not dirty working-tree bytes', async () => {
+    const root = path.join(os.tmpdir(), `footnote-project-git-${randomUUID()}`);
+    await fs.mkdir(path.join(root, '.footnote'), { recursive: true });
+    try {
+        await execFileAsync('git', ['-C', root, 'init', '-q']);
+        await execFileAsync('git', [
+            '-C',
+            root,
+            'config',
+            'user.email',
+            'test@example.com',
+        ]);
+        await execFileAsync('git', [
+            '-C',
+            root,
+            'config',
+            'user.name',
+            'Footnote Test',
+        ]);
+        await fs.writeFile(
+            path.join(root, '.footnote', 'context-files'),
+            'README.md\n',
+            'utf8'
+        );
+        await fs.writeFile(
+            path.join(root, '.footnote', 'context-manifest.json'),
+            JSON.stringify([
+                {
+                    path: 'README.md',
+                    category: 'documented_behavior',
+                    priority: 1,
+                },
+            ]),
+            'utf8'
+        );
+        await fs.writeFile(
+            path.join(root, 'README.md'),
+            'Committed bytes.',
+            'utf8'
+        );
+        await execFileAsync('git', ['-C', root, 'add', '.']);
+        await execFileAsync('git', [
+            '-C',
+            root,
+            'commit',
+            '-qm',
+            'test context revision',
+        ]);
+        await fs.writeFile(
+            path.join(root, 'README.md'),
+            'Dirty bytes.',
+            'utf8'
+        );
+
+        const result = await loadGitProjectDocumentSet(root);
+        assert.equal(result.source, 'git');
+        assert.match(result.revision ?? '', /^[0-9a-f]{40}$/u);
+        assert.equal(result.documents[0]?.content, 'Committed bytes.');
     } finally {
         await fs.rm(root, { recursive: true, force: true });
     }

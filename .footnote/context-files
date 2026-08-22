@@ -3,9 +3,18 @@
 README.md
 AGENTS.md
 SECURITY.md
-MIT_LICENSE.md
-HIPPOCRATIC_LICENSE.md
-docs/**/*.md
+docs/Philosophy.md
+docs/README.md
+docs/ai/README.md
+docs/agents/domain.md
+docs/architecture/README.md
+docs/architecture/workflow.md
+docs/architecture/context-integrations/README.md
+docs/architecture/context-integrations/project-context.md
+docs/status/index.md
+docs/status/repository-context-status.md
+docs/status/github-context-status.md
+docs/status/web-search-grounding-recovery-status.md
 
 # Exclude files matched above by prefixing a pattern with !
 # Example: !docs/archive/**
