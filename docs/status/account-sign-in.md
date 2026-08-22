@@ -2,10 +2,10 @@
 
 **Branch:** `agent/issue-455-account-sign-in`
 
-**Status:** Implemented; automated validation is complete. The Authentik smoke
-test still needs a configured test provider.
+**Status:** Implemented; automated validation and the Authentik smoke test are
+complete.
 
-**Last updated:** 2026-07-22
+**Last updated:** 2026-08-22
 
 ## Goal
 
@@ -27,10 +27,10 @@ planned sign-in slice. Automated tests cover disabled login, provider failures,
 one-time callbacks, session expiry, CSRF-protected logout, route ownership,
 shared response validation, and the public account states.
 
-The live Authentik smoke test has not been run because this worktree does not
-have a configured Authentik provider or test administrator credentials. Record
-the Authentik version and complete the manual checklist below before closing
-the issue.
+The live smoke test completed against Authentik 2026.8.0 in an ephemeral local
+Docker Compose environment. The browser flow covered administrator sign-in,
+the Footnote account session, and Footnote-only sign-out without committing
+provider secrets or account identifiers.
 
 ## Decisions For This Branch
 
