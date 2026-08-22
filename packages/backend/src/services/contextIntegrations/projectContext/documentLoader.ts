@@ -1,10 +1,10 @@
 /**
- * @description: Loads approved project documents, chunks them, and assigns conservative evidence categories.
- * The backend reads file contents here; the script-side resolver only previews the allowlist.
+ * @description: Loads approved project documents, splits them into excerpts, and labels their content.
+ * The backend reads file contents here; the helper script only previews allowed paths.
  * @footnote-scope: core
  * @footnote-module: ProjectContextDocumentLoader
- * @footnote-risk: medium - Chunking and category rules shape which evidence reaches the prompt.
- * @footnote-ethics: high - Categories must not claim implementation strength from static docs alone.
+ * @footnote-risk: medium - Chunking and labels decide which document text reaches the prompt.
+ * @footnote-ethics: high - A document label must not claim that static text proves implementation.
  */
 import { createHash } from 'node:crypto';
 import type { ProjectContextCategory } from '@footnote/contracts/policy';
@@ -32,11 +32,11 @@ export type ChunkProjectDocumentOptions = {
 };
 
 /**
- * Conservative default category mapping.
+ * Assigns a default category when the manifest does not provide one.
  *
- * Status docs are current state. Architecture/decisions docs are documented
- * behavior. Everything else stays documented intent. These labels describe
- * what the document claims; they never prove implementation.
+ * Status documents describe current state. Architecture and decision documents
+ * describe behavior. Other documents describe intent. The labels describe the
+ * document; they do not prove implementation.
  */
 export const defaultCategoryForPath = (
     filePath: string
@@ -70,10 +70,10 @@ const utf8ByteWidth = (character: string): number => {
 };
 
 /**
- * Splits one document into stable, bounded chunks.
+ * Splits one document into stable excerpts within the configured size limit.
  *
- * Prefers markdown heading boundaries so each chunk keeps its heading context;
- * falls back to hard byte splits so no chunk can exceed the configured cap.
+ * Prefers Markdown headings so an excerpt keeps its heading. Falls back to
+ * byte splits when needed to stay within the configured limit.
  */
 export const chunkProjectDocument = (
     source: ProjectDocumentSource,

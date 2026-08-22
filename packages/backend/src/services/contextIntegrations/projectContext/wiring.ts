@@ -1,10 +1,10 @@
 /**
- * @description: Assembles the project-context executor from backend runtime config.
- * Keeps provider/api-key wiring outside the executor so the integration stays testable.
+ * @description: Creates the project-context executor from backend runtime settings.
+ * Provider and API-key setup stays outside the executor so it can be tested directly.
  * @footnote-scope: core
  * @footnote-module: ProjectContextRuntimeWiring
- * @footnote-risk: medium - Wiring mistakes can silently disable or overreach doc access.
- * @footnote-ethics: high - Independent embedding config must not implicitly inherit the chat provider.
+ * @footnote-risk: medium - Wiring mistakes can disable document access or read too much.
+ * @footnote-ethics: high - Embeddings must not silently inherit the chat provider configuration.
  */
 import {
     createOpenAiEmbeddingRuntime,

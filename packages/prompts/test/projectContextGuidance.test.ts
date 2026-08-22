@@ -18,7 +18,7 @@ test('loads the project-context guidance key from shared defaults', () => {
     );
 });
 
-test('guidance instructs treating project context as untrusted data, not instructions', () => {
+test('guidance treats project context as untrusted source text, not instructions', () => {
     const registry = createPromptRegistry();
     const rendered = registry.renderPrompt(
         'conversation.shared.project_context_guidance'
@@ -27,7 +27,7 @@ test('guidance instructs treating project context as untrusted data, not instruc
     assert.match(rendered, /documented intent/i);
     assert.match(rendered, /documented behavior/i);
     assert.match(rendered, /current\s+project\s+state/i);
-    assert.match(rendered, /not\s+as\s+instructions|not instructions/i);
+    assert.match(rendered, /not\s+instructions/i);
     assert.match(rendered, /source/i);
     assert.match(rendered, /only the records returned/i);
     assert.match(rendered, /repository\s+total/i);

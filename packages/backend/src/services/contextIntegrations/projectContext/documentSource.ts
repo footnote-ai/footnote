@@ -1,10 +1,10 @@
 /**
- * @description: Resolves one immutable, allowlisted project-document revision.
+ * @description: Loads one commit-pinned set of allowed project documents.
  * Development reads come from `git show`; production reads come from an image-bundled corpus.
  * @footnote-scope: core
  * @footnote-module: ProjectDocumentSource
- * @footnote-risk: high - Revision and allowlist mistakes can create false provenance or unsafe retrieval.
- * @footnote-ethics: high - Only explicitly approved, revision-consistent documents may influence output.
+ * @footnote-risk: high - A wrong commit or allowlist could produce false citations or unsafe retrieval.
+ * @footnote-ethics: high - Only approved documents from one source revision may affect an answer.
  */
 import { execFile } from 'node:child_process';
 import fs from 'node:fs/promises';
@@ -162,8 +162,8 @@ const parseManifest = (contents: string): ProjectContextManifestEntry[] => {
 export const parseProjectContextManifest = parseManifest;
 
 /**
- * Creates a bounded source loader. The caller supplies the immutable path set
- * and reader so the same allowlist logic works for git and image bundles.
+ * Creates a source loader with a fixed path list. Callers supply the reader so
+ * Git and image bundles use the same allowlist rules.
  */
 export const createProjectDocumentSource = (
     options: ProjectDocumentSourceOptions
@@ -324,7 +324,7 @@ const listGitRevisionFiles = async (
     });
 };
 
-/** Lists paths from one captured commit, never from a dirty working tree. */
+/** Lists paths from one captured commit, not a dirty working tree. */
 export const listGitTrackedPaths = async (
     repositoryRoot: string,
     revision?: string
@@ -347,7 +347,7 @@ export const listGitTrackedPaths = async (
     }
 };
 
-/** Resolves the revision used for a complete project-context read. */
+/** Finds the commit used for a complete project-document read. */
 export const resolveHeadCommitSha = async (
     repositoryRoot: string
 ): Promise<string | null> => {
@@ -387,7 +387,7 @@ const readRootFile = async (
 ): Promise<string> =>
     fs.readFile(path.join(repositoryRoot, relativePath), 'utf8');
 
-/** Loads one commit-pinned document set for local/dev repositories. */
+/** Loads local development documents from one commit. */
 export const loadGitProjectDocumentSet = async (
     repositoryRoot: string,
     options: ProjectDocumentSetLoadOptions = {}
@@ -456,7 +456,7 @@ const listBundleFiles = async (bundleRoot: string): Promise<string[]> => {
     return result;
 };
 
-/** Loads the immutable document set copied into a production image. */
+/** Loads the fixed document set copied into a production image. */
 export const loadPackagedProjectDocumentSet = async (
     repositoryRoot: string,
     options: ProjectDocumentSetLoadOptions = {}

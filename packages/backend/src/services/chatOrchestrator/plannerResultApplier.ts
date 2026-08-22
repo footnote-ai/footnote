@@ -263,8 +263,8 @@ export const createPlannerResultApplier = (
                       plannerInput.normalizedRequest.latestUserInput,
               })
             : undefined;
-        // GitHub scope and section selection originate in the normalized planner
-        // suggestion, but the backend creates the executable context request.
+        // The planner suggests GitHub scope and sections. The backend creates
+        // the request that can run.
         const githubContextStepRequest = generationForExecution.githubContext
             ? {
                   integrationName: GITHUB_CONTEXT_NAME,
@@ -281,10 +281,9 @@ export const createPlannerResultApplier = (
                   },
               }
             : undefined;
-        // Footnote-self routing: the planner emits the canonical repository via
-        // projectContext without requiring a slug in user text. The backend
-        // checks the route exists and the integration is enabled before
-        // creating an executable step.
+        // A Footnote project-context suggestion does not need a user-supplied
+        // slug. The backend still checks the route and setting before creating
+        // a step that can run.
         const projectDocsConfig =
             runtimeConfig.chatWorkflow.contextIntegrations.projectDocs;
         const projectContextStepRequest =

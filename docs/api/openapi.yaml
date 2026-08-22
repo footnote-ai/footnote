@@ -3406,7 +3406,7 @@ components:
 
         GitHubContextMetadata:
             type: object
-            description: Bounded, advisory GitHub context supplied to generation.
+            description: GitHub results supplied to generation. Each section has a configured record limit.
             x-codeRefs:
                 - packages/contracts/src/policy/types.ts#GitHubContextMetadata
                 - packages/contracts/src/web/schemas.ts#GitHubContextMetadataSchema
@@ -3475,7 +3475,7 @@ components:
 
         ProjectContextMetadata:
             type: object
-            description: Bounded metadata for approved Footnote project-document context.
+            description: Metadata for approved Footnote project documents used during generation.
             x-codeRefs:
                 - packages/contracts/src/policy/projectContext.ts#ProjectContextMetadata
                 - packages/contracts/src/web/schemas.ts#ProjectContextMetadataSchema

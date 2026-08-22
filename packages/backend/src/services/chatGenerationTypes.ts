@@ -95,7 +95,7 @@ export type ChatGenerationPlan = {
     search?: ChatGenerationSearch;
     /** Planner suggestion only; backend validates the slug against user conversation. */
     githubContext?: ChatGenerationGitHubContext;
-    /** Backend-owned Footnote-self routing suggestion. Never requires slug-in-text. */
+    /** Backend routing suggestion for Footnote itself; the user need not provide a slug. */
     projectContext?: ChatGenerationProjectContext;
     toolIntent?: ChatGenerationToolIntent;
     responseIntentHint?: ChatGenerationResponseIntentHint;

@@ -188,14 +188,14 @@ Local Compose source build and start:
 pnpm compose:up
 ```
 
-The wrapper prepares the immutable context bundle and passes its captured
-revision to Docker before starting Compose. Pass Compose flags after `--`, for
-example `pnpm compose:up -- -d`.
+The wrapper packages the approved project documents and gives Docker the Git
+commit they came from before starting Compose. Pass Compose flags after `--`,
+for example `pnpm compose:up -- -d`.
 
-The server image packages the curated project-context corpus because the
-runtime image does not contain `.git`. Always pass the source commit when
-deploying so project-context citations point at the exact bytes used for
-indexing. GitHub Actions supplies this argument from `github.sha`.
+The server image includes the approved project documents because it does not
+contain `.git`. Always pass the source commit when deploying. That keeps
+project-document citations tied to the exact content used to build the index.
+GitHub Actions passes the commit through `github.sha`.
 
 For Fly, `pnpm settings` and `pnpm reset` issue links through `fly ssh console`
 against the app detected from `deployment.fly-app`, `FLY_APP_NAME`, `fly.toml`,

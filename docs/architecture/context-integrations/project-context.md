@@ -1,97 +1,100 @@
 # Project Context
 
-## Purpose
+## What it does
 
-`project_context` lets Footnote answer questions about itself from approved
-project documents. It supports explanation, onboarding, contribution, and
-discovery without making unsupported marketing claims. It is not web search:
-web search discovers broad public sources, while this integration reads a
-local approved document set selected by `.footnote/context-files`.
+`project_context` helps Footnote answer questions about Footnote from approved
+project documents. It supports explanations, onboarding, contribution, and
+discovery. It does not search the web. Instead, it reads the local document
+list in `.footnote/context-files`.
 
-## Scope and access
+The feature can answer questions such as “How does Footnote work?” or “Where
+should I start contributing?” It can also pair those documents with live
+GitHub results when someone asks about Footnote's current state.
 
-The planner may suggest Footnote-self routing only for `repo_explainer`
-intent. The backend derives the canonical `footnote-ai/footnote` repository
-from that intent; the repository slug never needs to appear in user text, so
-questions like "what work is currently open?" reach project context. The
-backend checks that the integration is enabled before creating the executable
-context-step request.
+## Which documents it can read
 
-Document access stays backend-owned:
+The planner suggests this lookup only for Footnote explanation requests
+(`repo_explainer`). The backend then selects the fixed
+`footnote-ai/footnote` repository. A user does not need to write that slug.
+It creates the lookup only when project context is enabled.
 
-- The allowlist comes from `.footnote/context-files`
-- Only Git-tracked files inside the repository are read
-- Absolute paths, `..` escapes, excludes, and oversize files are skipped
-- The backend reads file contents; the script-side resolver previews only
+The backend decides which files it can read:
 
-## Retrieval and indexing
+- `.footnote/context-files` supplies the allowlist.
+- It reads only Git-tracked files inside the repository.
+- It skips absolute paths, `..` escapes, excluded files, and files that are too large.
+- The backend reads file content. The helper script only previews the selected paths.
 
-Documents are chunked on Markdown headings with a byte cap. Each chunk carries
-a content hash and an evidence category:
+## How retrieval works
 
-- `documented_intent` — what the project says it wants to be
-- `documented_behavior` — what documented behavior says the project does
-- `current_state` — where the project stands now
+Footnote splits Markdown documents at headings, keeping each excerpt under the
+configured byte limit. Every excerpt has a content hash and one of these
+labels:
 
-These categories describe what the document claims; they never prove
-implementation. The prompt guidance tells the model to separate documented
-intent, documented behavior, current project state, and inference.
+- `documented_intent`: what the project says it wants to be.
+- `documented_behavior`: what the documentation says the project does.
+- `current_state`: what the document says about the project's current state.
 
-Chunks are embedded through an independently configured embedding
-provider/model (not the chat provider) and stored in a bounded in-process
-vector store. The runtime fingerprints selected paths, content hashes,
-embedding settings, and index versions before reusing vectors, so unchanged
-documents do not trigger another full embedding build.
+These labels describe the document, not the implementation. The prompt tells
+the model to distinguish documented intent, documented behavior, current
+state, and inference.
 
-Deployments run `pnpm context:bundle`, which reads the manifest-listed bytes
-with `git show <sha>:<path>` and writes an immutable build-context bundle.
-The generated bundle remains untracked but is intentionally not Git-ignored so
-Fly's remote builder receives it in the Docker context. Docker requires the
-same commit SHA as a build argument and verifies the bundle revision before
-producing the image. Production therefore does not
-depend on `.git`, a working tree, or runtime GitHub reads. Local development
-uses `git show` at one captured `HEAD` revision so the bytes indexed and the
-citation revision cannot drift apart.
+An embedding model, configured separately from the chat model, finds relevant
+excerpts. Footnote keeps the resulting vectors in memory. It reuses them only
+when the selected files, their hashes, embedding settings, and index versions
+still match.
 
-## Authority boundary
+For deployments, `pnpm context:bundle` reads each approved file from one Git
+commit and creates the Docker build bundle. Docker checks that the same commit
+was supplied as a build argument before it creates the image. This lets the
+production image work without `.git`, a working tree, or a GitHub read at
+runtime. Local development also reads every file from one captured `HEAD`
+commit, so citations and indexed content stay aligned.
 
-Project documents are untrusted evidence, never system or policy
-instructions. The executor wraps every retrieved block in an explicit
-`UNTRUSTED PROJECT CONTEXT` label, and the shared prompt guidance instructs
-the model not to follow directives inside those blocks or change behavior or
-policy based on them.
+The generated bundle is intentionally untracked and not Git-ignored so Fly's
+remote builder receives it in the Docker build context.
 
-The injection boundary keeps untrusted context out of the leading trusted
-system-instruction run: `injectContextMessagesIntoPrompt` places context after
-user conversation and before planner output, and a test proves an
-instruction-bearing allowed document stays inside the untrusted envelope.
+## How Footnote treats document text
 
-## Freshness and failures
+Footnote treats project documents as source material. Text in those documents
+cannot change system rules or policy. Retrieved excerpts are marked
+`UNTRUSTED PROJECT CONTEXT`, and the prompt tells the model not to follow
+instructions found in them.
 
-- Query-embedding failure is observable and fails the context step open; it
-  never silently returns an empty result.
-- An index rebuild or document-read failure falls back to the last-known-good
-  index and records `stale` when matches are still served.
-- A first-build failure with no prior index records `unavailable` and
-  generation continues without project context.
-- The configured timeout is one total deadline for indexing plus query
-  embedding; sequential batches cannot extend the chat request indefinitely.
-- The integration is disabled by default.
+The prompt puts these excerpts after the user conversation and before planner
+output. They never join the leading system instructions. A test covers a
+selected document that contains instructions and confirms that it remains in
+the untrusted section.
 
-## Provenance
+## When a lookup fails or is out of date
 
-Retrieved chunks become commit-pinned citations
-(`https://github.com/{repo}/blob/{commit}/{path}`) only when the source
-revision is available. If a commit-pinned URL cannot be constructed, the
-prompt includes an explicit unresolved citation marker and response metadata
-omits that unresolved citation; it never falls back to a moving branch URL.
-Response metadata records the embedding provider/model, chunker and index
-versions, requested categories, returned counts, and status. Workflow records
-retain the context-step outcome for trace review.
+- If the query cannot be embedded, the trace records the failure. Footnote does
+  not pretend that the lookup found nothing. Chat continues without project
+  documents.
+- If rebuilding the index or reading documents fails, Footnote can use its
+  last good index. The result is marked `stale`.
+- If no earlier index exists, the result is `unavailable` and chat continues
+  without project documents.
+- The timeout covers index building and query embedding together. A sequence of
+  batches cannot keep the chat request running beyond that limit.
+- The feature is off by default.
 
-## Config
+## Citations and response details
 
-Env controls live under `CHAT_CONTEXT_PROJECT_DOCS_*`:
+Footnote cites an excerpt only when it can create a link pinned to the source
+commit:
+
+`https://github.com/{repo}/blob/{commit}/{path}`
+
+If it cannot create that link, the prompt marks the citation as unresolved and
+the response does not include it. Footnote never substitutes a moving branch
+link. Response metadata includes the embedding provider and model, index and
+chunking versions, requested categories, returned excerpt counts, and source
+status. The workflow trace keeps the lookup outcome.
+
+## Configuration
+
+The environment settings begin with `CHAT_CONTEXT_PROJECT_DOCS_`:
 
 - `CHAT_CONTEXT_PROJECT_DOCS_ENABLED`
 - `CHAT_CONTEXT_PROJECT_DOCS_EMBEDDING_PROVIDER`
@@ -103,18 +106,17 @@ Env controls live under `CHAT_CONTEXT_PROJECT_DOCS_*`:
 - `CHAT_CONTEXT_PROJECT_DOCS_MIN_SCORE`
 - `CHAT_CONTEXT_PROJECT_DOCS_TIMEOUT_MS`
 
-The embedding provider is OpenAI-compatible. OpenRouter uses its explicit
-OpenAI-compatible embeddings endpoint; unsupported provider configuration must
-fail closed for the context step while the chat request remains fail-open.
-The backend caps `maxChunkBytes` at 32 KiB, `maxChunks` at 5,000, and
-`topKPerCategory` at 50 even when environment values are higher.
+The embedding provider uses the OpenAI-compatible API. OpenRouter uses its
+embeddings endpoint. An unsupported provider makes this lookup unavailable;
+the chat request still continues. The backend caps `maxChunkBytes` at 32 KiB,
+`maxChunks` at 5,000, and `topKPerCategory` at 50, even if the environment
+requests higher values.
 
-Project context is intentionally Footnote-only in this release. The canonical
-repository is `footnote-ai/footnote`, owned by backend routing, source loading,
-metadata, and citation construction together; there is no operator repository
-override that could make those authorities disagree.
+This release supports Footnote only. The backend uses
+`footnote-ai/footnote` consistently for routing, document loading, metadata,
+and citations. Operators cannot override it.
 
-For current Footnote-self questions, backend-owned routing may also request
-bounded live GitHub context for `footnote-ai/footnote`. GitHub counts describe
-records retrieved, not repository totals, and the response details show that
-coverage limit.
+For Footnote current-state questions, the backend can also request live GitHub
+results from `footnote-ai/footnote`. Those counts show records returned, not
+the total number of issues, pull requests, releases, or commits in the
+repository.

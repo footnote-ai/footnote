@@ -2,13 +2,12 @@
 
 ## Purpose
 
-`github_context` adds bounded GitHub repository state to a response. Results
-reflect current repository state when retrieval succeeds, but may also be
-partial, stale, or unavailable. It is not web search: web search discovers
-broad public sources, while this integration reads a single user-named
-`owner/repo` through fixed GitHub REST endpoints. For Footnote-self
-current-state questions, backend-owned routing may use the fixed
-`footnote-ai/footnote` repository without requiring the slug in user text.
+`github_context` adds a limited set of GitHub results to a response. When the
+lookup succeeds, those results describe the repository at that time. They can
+also be partial, stale, or unavailable. This is not web search: it reads one
+repository through fixed GitHub REST endpoints. For questions about Footnote's
+current state, the backend can use `footnote-ai/footnote` without requiring a
+user to include the repository slug.
 
 ## Scope and access
 
@@ -25,11 +24,10 @@ prompted, cached as keys, or emitted in metadata.
 
 The integration uses only GET requests for `/repos/{owner}/{repo}`, open
 issues, open pull requests, releases, and commits. Each section returns at
-most five sanitized records. Returned counts are bounded record counts, not
-repository totals. Control characters are removed and text is length-bounded.
-Repository text is injected with an explicit **untrusted
-context** label; it cannot select routing, policy, verification, or terminal
-state.
+at most five cleaned records. A returned count is a count of records retrieved,
+not the repository total. Footnote removes control characters and limits text
+length. Repository text is marked **untrusted context**. It cannot choose
+routing, policy, verification, or when execution ends.
 
 ## Freshness and failures
 
@@ -42,8 +40,8 @@ generation continues without GitHub context.
 
 ## Provenance
 
-Canonical GitHub object URLs become citations. Response metadata records the
-repository, requested sections, status, fetch time, per-section limit, returned
-counts, failed sections, and bounded reason codes. Workflow records retain the
-context-step outcome for trace review. Web and Discord show this status without
-exposing credentials or private-scope configuration.
+GitHub object URLs become citations. Response metadata records the repository,
+requested sections, status, fetch time, per-section limit, returned counts,
+failed sections, and reason codes. The workflow trace keeps the lookup outcome.
+Web and Discord show the source status without exposing credentials or private
+access settings.

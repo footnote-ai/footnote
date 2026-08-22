@@ -1,19 +1,18 @@
 /**
- * @description: Serializable project-context contract types for approved Footnote documentation.
- * Used by the backend project-context integration to keep retrieval facts and
- * index identity serializable across packages.
+ * @description: Serializable types for approved Footnote project documents.
+ * They let the backend share retrieval details and index identity across packages.
  * @footnote-scope: interface
  * @footnote-module: ProjectContextContracts
- * @footnote-risk: low - Type drift can misalign provenance surfaces between backend and web.
- * @footnote-ethics: high - Evidence categories label whether claims are documented intent, documented behavior, or current state.
+ * @footnote-risk: low - Type drift can make backend and web provenance disagree.
+ * @footnote-ethics: high - Document labels must distinguish intent, behavior, and current state.
  */
 
 /**
- * Evidence categories for retrieved project documentation.
+ * Labels for retrieved project documents.
  *
- * `documented_intent` is what the project says it wants to be. `documented_behavior`
- * is what static docs say the project does. `current_state` is where the project
- * stands now. These label evidence; they do not by themselves prove implementation.
+ * `documented_intent` is what the project says it wants to be.
+ * `documented_behavior` is what static documents say it does. `current_state`
+ * is where the project stands now. None of these labels proves implementation.
  */
 export const PROJECT_CONTEXT_CATEGORIES = [
     'documented_intent',
@@ -21,7 +20,7 @@ export const PROJECT_CONTEXT_CATEGORIES = [
     'current_state',
 ] as const;
 
-/** Canonical repository owned by the Footnote-self project-context feature. */
+/** Fixed repository used by Footnote's project-context feature. */
 export const PROJECT_CONTEXT_CANONICAL_REPOSITORY = 'footnote-ai/footnote';
 
 export type ProjectContextCategory =
@@ -40,8 +39,8 @@ export type ProjectContextReasonCode =
 /**
  * One retrieved project-document match.
  *
- * Retrieval returns facts only. Citation and prompt projection are owned by the
- * context-step executor, not the retriever.
+ * Retrieval returns matching document data. The context-step executor creates
+ * citations and prompt messages.
  */
 export type ProjectContextMatch = {
     category: ProjectContextCategory;
@@ -58,10 +57,10 @@ export type ProjectContextMatch = {
 };
 
 /**
- * Bounded index identity for the project-context integration.
+ * Details that identify a project-context index.
  *
- * The index identity must change when content hashes, embedding provider/model,
- * or chunker/index versions change, so cached vectors never outlive their meaning.
+ * Changes to content hashes, embedding provider or model, chunker version, or
+ * index version create a different identity so cached vectors are not reused.
  */
 export type ProjectContextMetadata = {
     repository: string;

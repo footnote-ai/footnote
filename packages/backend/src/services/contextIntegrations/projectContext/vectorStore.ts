@@ -1,11 +1,11 @@
 /**
- * @description: In-memory bounded vector store for project-context chunks.
- * Index identity (provider, model, chunker and index version) keys stored
- * vectors so cached embeddings never outlive their meaning.
+ * @description: Stores a limited number of project-document vectors in memory.
+ * Provider, model, chunker, and index version identify cached vectors so they
+ * are reused only with matching settings.
  * @footnote-scope: core
  * @footnote-module: ProjectContextVectorStore
- * @footnote-risk: medium - Stale vectors or wrong identity can ground answers on outdated evidence.
- * @footnote-ethics: high - Retrieval facts feed provenance labels, so identity must stay honest.
+ * @footnote-risk: medium - Stale vectors or wrong settings can use outdated document text.
+ * @footnote-ethics: high - Provenance labels must describe the source actually used.
  */
 import type {
     ProjectContextCategory,

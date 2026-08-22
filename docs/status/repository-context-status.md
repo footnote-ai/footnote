@@ -42,12 +42,12 @@ working.
 
 ## Interim Project Context Path
 
-Issue #490 adds a direct local embedding retrieval path for Footnote-self
-explanation and discovery. It reads the `.footnote/context-files` allowlist,
-chunks approved docs, reuses a bounded content-fingerprinted index, embeds them
-through an independently configured embedding model, and serves
-`project_context` context steps without TrustGraph. Current-state questions may
-also use bounded live GitHub context. TrustGraph remains the longer-term
+Issue #490 adds a direct local document lookup for Footnote explanations and
+discovery. It reads the `.footnote/context-files` allowlist, splits approved
+documents into excerpts, reuses an index when the content still matches, and
+uses a separately configured embedding model to find relevant excerpts. It
+serves `project_context` without TrustGraph. Current-state questions can also
+use a limited set of live GitHub results. TrustGraph remains the longer-term
 external retrieval option. See
 [Project Context](../architecture/context-integrations/project-context.md).
 

@@ -35,8 +35,8 @@ web:
 # Most users can keep this empty at first.
 discord-bots: []
 
-# Backend context integrations. Project-document retrieval is fail-open and
-# remains disabled until explicitly enabled.
+# Context integrations run in the backend. Project-document lookup stays off
+# until you enable it; chat continues if the lookup fails.
 chat-workflow:
     chat-context-project-docs-enabled: false
     chat-context-project-docs-embedding-provider: 'openai'

@@ -1,10 +1,10 @@
 /**
- * @description: Builds and queries a bounded, revision-aware project-document index.
- * Embeddings are batched, cached by content identity, deadline-bounded, and fail open.
+ * @description: Builds and searches a project-document index tied to one source revision.
+ * It batches embeddings, reuses matching content, observes one deadline, and lets chat continue on failure.
  * @footnote-scope: core
  * @footnote-module: ProjectContextRetriever
- * @footnote-risk: high - Retrieval quality, timeout behavior, and index revision shape answer grounding.
- * @footnote-ethics: high - A stale or weak result must remain visibly qualified instead of becoming false certainty.
+ * @footnote-risk: high - Retrieval, timeouts, and index revision affect the sources behind an answer.
+ * @footnote-ethics: high - A stale or weak result must be shown as such, not presented as certain.
  */
 import type {
     ProjectContextCategory,
@@ -121,7 +121,7 @@ const asDocumentSet = (
         ? { revision: null, documents: value, source: 'git' }
         : value;
 
-/** Keeps every category represented before spending the global chunk budget. */
+/** Gives each category a chance to appear before using the overall excerpt limit. */
 export const selectProjectContextChunks = (
     sources: ProjectDocumentSource[],
     options: Pick<ProjectContextRetrieverOptions, 'maxChunkBytes' | 'maxChunks'>
@@ -393,7 +393,7 @@ const createIndexLoader = (options: ProjectContextRetrieverOptions) => {
     };
 };
 
-/** Creates a fail-open retriever with revision-correct stale-index behavior. */
+/** Creates a retriever that can use a stale index and lets chat continue on failure. */
 export const createProjectContextRetriever = (
     options: ProjectContextRetrieverOptions
 ): ProjectContextRetriever => {

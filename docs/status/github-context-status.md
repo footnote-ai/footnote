@@ -2,25 +2,24 @@
 
 ## Implemented
 
-Issue #491 adds a backend-owned, read-only `github_context` workflow
-integration. Supported sections are repository metadata, open issues, open
-pull requests, releases, and recent commits. Retrieval is disabled by default
-and uses bounded GET-only requests, sanitization, fail-open execution, short
-in-process caching, citations, and typed response metadata. GitHub response
-metadata is propagated into response details as part of the public response
-metadata contract.
+Issue #491 adds a read-only `github_context` workflow integration. The backend
+can retrieve repository metadata, open issues, open pull requests, releases,
+and recent commits. The feature is off by default. It uses GET requests, cleans
+returned text, keeps a short in-process cache, adds citations, and records the
+results in typed response metadata. Chat continues if the lookup fails.
 
 ## Limitations
 
-Generic repository selection requires an explicit `owner/repo` slug in the user
-conversation. Footnote-self current-state questions are a narrow exception:
-the backend may select the fixed `footnote-ai/footnote` repository for
-`repo_explainer` intent. There is one backend-held read-only credential; there
-is no per-user OAuth, durable cache, webhook, or write operation. Private
-repositories additionally require an exact configured allowlist.
+For a general repository, the user must include an `owner/repo` slug.
+Footnote-current-state questions are a narrow exception: the backend may select
+the fixed `footnote-ai/footnote` repository for `repo_explainer` requests.
+There is one read-only backend credential. There is no per-user OAuth, durable
+cache, webhook, or write operation. Private repositories also need an exact
+configured allowlist.
 
 ## Next work
 
-Web and Discord present bounded source, freshness, and coverage summaries from
-the backend-owned metadata. Counts at the configured record limit are shown as
-limited retrievals, never as repository totals.
+Web and Discord show source, freshness, and coverage summaries from backend
+metadata. When a count reaches the configured record limit, the UI says that
+the results may be incomplete. It never presents the count as a repository
+total.

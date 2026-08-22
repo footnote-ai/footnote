@@ -2345,7 +2345,7 @@ export const envEntries = [
         secret: false,
         kind: 'boolean',
         description:
-            'Enables backend-owned project-document context integration for Footnote explanation and discovery.',
+            'Lets the backend use approved Footnote documents for explanation and discovery.',
         defaultValue: literal(false),
         usedBy: ['packages/backend/src/config.ts'],
     }),
@@ -2359,7 +2359,7 @@ export const envEntries = [
         kind: 'enum',
         allowedValues: ['openai', 'openrouter'] as const,
         description:
-            'Embedding provider for project-document indexing. Independent from the chat provider.',
+            'Embedding provider for project documents. This is separate from the chat provider.',
         defaultValue: literal('openai'),
         usedBy: ['packages/backend/src/config.ts'],
     }),
@@ -2372,7 +2372,7 @@ export const envEntries = [
         secret: false,
         kind: 'string',
         description:
-            'Embedding model used for project-document indexing and query retrieval.',
+            'Embedding model used to index project documents and find matching excerpts.',
         defaultValue: literal('text-embedding-3-small'),
         usedBy: ['packages/backend/src/config.ts'],
     }),
@@ -2409,7 +2409,7 @@ export const envEntries = [
         secret: false,
         kind: 'integer',
         description:
-            'Maximum retrieval matches returned per project-document category.',
+            'Maximum matching excerpts returned for each project-document category.',
         defaultValue: literal(5),
         usedBy: ['packages/backend/src/config.ts'],
     }),
@@ -2422,7 +2422,7 @@ export const envEntries = [
         secret: false,
         kind: 'integer',
         description:
-            'Global maximum number of project-document excerpts returned per query.',
+            'Maximum number of project-document excerpts returned for one query.',
         defaultValue: literal(6),
         usedBy: ['packages/backend/src/config.ts'],
     }),
@@ -2446,7 +2446,7 @@ export const envEntries = [
         required: false,
         secret: false,
         kind: 'integer',
-        description: 'Total deadline for one project-context retrieval step.',
+        description: 'Maximum time for one project-document lookup.',
         defaultValue: literal(8000),
         usedBy: ['packages/backend/src/config.ts'],
     }),

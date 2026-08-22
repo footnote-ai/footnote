@@ -1,11 +1,11 @@
 /**
- * @description: Bounded project-document context integration for Footnote explanation and discovery.
- * Retrieves approved docs from a local index, labels them as untrusted evidence, and attaches
- * commit-pinned citations. Fail-open continuation is backend-owned, never silently empty.
+ * @description: Retrieves approved project documents for Footnote explanations and discovery.
+ * It labels document text as untrusted, adds commit-pinned citations, and lets chat continue
+ * when retrieval fails instead of silently returning an empty result.
  * @footnote-scope: core
  * @footnote-module: ProjectContextIntegration
  * @footnote-risk: medium - Local doc retrieval can affect answer grounding and provenance.
- * @footnote-ethics: high - Untrusted project documents must never gain system or policy authority.
+ * @footnote-ethics: high - Project documents must not gain the authority of system instructions or policy.
  */
 import { PROJECT_CONTEXT_CANONICAL_REPOSITORY } from '@footnote/contracts/policy';
 import type {
@@ -101,12 +101,12 @@ const projectContextGuidance = renderPromptBundle(promptRegistry, [
 ]);
 
 /**
- * @description: Formats retrieved project documents as lower-authority user data.
- * Registered project guidance is returned separately as trusted system text.
+ * @description: Formats retrieved project documents as user-level source text.
+ * Registered project guidance remains separate system text.
  * @footnote-scope: core
  * @footnote-module: ProjectContextPromptBoundary
  * @footnote-risk: high - Role mistakes can promote untrusted evidence into trusted instructions.
- * @footnote-ethics: high - Users must be able to distinguish evidence from governing policy.
+ * @footnote-ethics: high - Document text must stay separate from governing policy.
  */
 export const formatProjectContextMessages = (input: {
     repository: string;
@@ -117,11 +117,11 @@ export const formatProjectContextMessages = (input: {
 ];
 
 /**
- * @description: Converts retrieved project documents into immutable source citations when revision data exists.
+ * @description: Creates commit-pinned citations for retrieved project documents when revision data exists.
  * @footnote-scope: core
  * @footnote-module: ProjectContextCitationBoundary
  * @footnote-risk: high - Moving or unresolved links can misattribute evidence.
- * @footnote-ethics: high - Provenance must not imply a source revision that was not observed.
+ * @footnote-ethics: high - A citation must not claim a source commit that was not read.
  */
 export const citationsFromProjectContext = (input: {
     repository: string;

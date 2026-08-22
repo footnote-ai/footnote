@@ -19,7 +19,7 @@ import type {
 const DEEPWIKI_FOOTNOTE_URL = 'https://deepwiki.com/footnote-ai/footnote';
 
 /**
- * Canonical Footnote repository used for Footnote-self project-context routing.
+ * The fixed Footnote repository used for project-document lookups.
  */
 export { PROJECT_CONTEXT_CANONICAL_REPOSITORY };
 
@@ -29,12 +29,11 @@ export type ChatGenerationProjectContextRoute = {
 };
 
 /**
- * Explicit Footnote-self acceptance seam.
+ * Decides whether this is a question about Footnote itself.
  *
- * `repo_explainer` planner intent is the signal that a user is asking about
- * Footnote itself. This routes to the canonical repository without requiring
- * the slug to appear in user text, so questions like "what work is currently
- * open?" reach project context.
+ * A `repo_explainer` intent selects Footnote's fixed repository, so the user
+ * does not need to include its slug. This lets questions such as "what work is
+ * currently open?" use project context.
  */
 export const buildProjectContextRouteFromPlan = (
     generation: Pick<ChatGenerationPlan, 'search'>
@@ -53,9 +52,9 @@ const CURRENT_PROJECT_QUERY_PATTERN =
 const CURRENT_PROJECT_WORK_PATTERN = /\bworking\s+on\b/iu;
 
 /**
- * Builds a backend-owned GitHub request for current Footnote-self questions.
- * Generic repository requests still require an exact user-authored slug; this
- * route is limited to the fixed Footnote repository and repo-explainer intent.
+ * Builds the GitHub request for current Footnote questions. Other repositories
+ * still need an exact slug written by the user. This route is limited to
+ * Footnote and `repo_explainer` requests.
  */
 export const buildFootnoteGitHubContextRouteFromPlan = (
     generation: Pick<ChatGenerationPlan, 'search'>

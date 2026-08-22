@@ -1,9 +1,9 @@
 /**
- * @description: Verifies reader-facing context summaries preserve status and bounded-result semantics.
+ * @description: Verifies reader-facing context summaries show source status and result limits.
  * @footnote-scope: test
  * @footnote-module: ContextPresentationTests
  * @footnote-risk: low - Summary wording is a small presentation contract.
- * @footnote-ethics: high - Users must not mistake bounded context counts for complete totals.
+ * @footnote-ethics: high - Users must not mistake partial source counts for complete totals.
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -52,7 +52,7 @@ test('context summaries show source status and bounded GitHub coverage', () => {
     assert.match(summaries[1] ?? '', /fetched at 2026-08-20/);
     assert.match(
         summaries[1] ?? '',
-        /Results may be limited; counts are not repository totals/
+        /Some results may not be shown; these counts are not repository totals/
     );
 });
 
@@ -72,7 +72,7 @@ test('project summaries disclose when a category reaches its retrieval limit', (
             reasonCodes: [],
         },
     });
-    assert.match(summary ?? '', /not document totals/);
+    assert.match(summary ?? '', /not a count of all project documents/);
 });
 
 test('GitHub summaries use singular labels for one record in every section', () => {

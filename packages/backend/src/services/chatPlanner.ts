@@ -1055,9 +1055,8 @@ const normalizeGeneration = (
         ...normalizeTopicHints(candidate.search.topicHints),
         ...(repoHints ?? []),
     ]);
-    // Footnote-self routing: repo_explainer intent selects the canonical
-    // Footnote repository for project context without requiring the slug in
-    // user text, so questions like "what work is currently open?" work.
+    // A repo_explainer request selects Footnote's fixed repository for project
+    // context, so the user does not need to include the slug.
     const search = {
         query: rawQuery,
         contextSize: normalizeSearchContextSize(
