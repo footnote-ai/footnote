@@ -49,7 +49,8 @@ export const buildProjectContextRouteFromPlan = (
 };
 
 const CURRENT_PROJECT_QUERY_PATTERN =
-    /\b(current(?:ly)?|now|open|latest|recent|activity|release|releases|issues?|pull requests?|status|work(?:ing)?|team)\b/iu;
+    /\b(current(?:ly)?|now|open|latest|recent|activity|release|releases|issues?|pull requests?|prs?|status)\b/iu;
+const CURRENT_PROJECT_WORK_PATTERN = /\bworking\s+on\b/iu;
 
 /**
  * Builds a backend-owned GitHub request for current Footnote-self questions.
@@ -61,7 +62,13 @@ export const buildFootnoteGitHubContextRouteFromPlan = (
 ): ChatGenerationGitHubContext | undefined => {
     if (generation.search?.intent !== 'repo_explainer') return undefined;
     const query = generation.search.query.trim();
-    if (!query || !CURRENT_PROJECT_QUERY_PATTERN.test(query)) return undefined;
+    if (
+        !query ||
+        (!CURRENT_PROJECT_QUERY_PATTERN.test(query) &&
+            !CURRENT_PROJECT_WORK_PATTERN.test(query))
+    ) {
+        return undefined;
+    }
 
     const sections: ChatGenerationGitHubContext['sections'] = [];
     if (/\b(open|issues?)\b/iu.test(query)) {

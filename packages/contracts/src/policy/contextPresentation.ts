@@ -24,6 +24,14 @@ const GITHUB_SECTION_LABELS: Record<string, string> = {
     commits: 'commits',
 };
 
+const GITHUB_SECTION_SINGULAR_LABELS: Record<string, string> = {
+    repository: 'repository record',
+    issues: 'issue',
+    pulls: 'pull request',
+    releases: 'release',
+    commits: 'commit',
+};
+
 const totalProjectMatches = (metadata: ProjectContextMetadata): number =>
     Object.values(metadata.returnedCounts).reduce(
         (total, count) => total + (count ?? 0),
@@ -55,7 +63,7 @@ export const formatGitHubContextSummary = (
         return count === undefined
             ? []
             : [
-                  `${count} ${count === 1 && section === 'pulls' ? 'pull request' : (GITHUB_SECTION_LABELS[section] ?? section)}`,
+                  `${count} ${count === 1 ? (GITHUB_SECTION_SINGULAR_LABELS[section] ?? section) : (GITHUB_SECTION_LABELS[section] ?? section)}`,
               ];
     });
     const coverage =

@@ -81,11 +81,13 @@ instruction-bearing allowed document stays inside the untrusted envelope.
 ## Provenance
 
 Retrieved chunks become commit-pinned citations
-(`https://github.com/{repo}/blob/{commit}/{path}`) when the head commit is
-resolvable, falling back to a `main`-branch URL. Response metadata records
-the embedding provider/model, chunker and index versions, requested
-categories, returned counts, and status. Workflow records retain the
-context-step outcome for trace review.
+(`https://github.com/{repo}/blob/{commit}/{path}`) only when the source
+revision is available. If a commit-pinned URL cannot be constructed, the
+prompt includes an explicit unresolved citation marker and response metadata
+omits that unresolved citation; it never falls back to a moving branch URL.
+Response metadata records the embedding provider/model, chunker and index
+versions, requested categories, returned counts, and status. Workflow records
+retain the context-step outcome for trace review.
 
 ## Config
 

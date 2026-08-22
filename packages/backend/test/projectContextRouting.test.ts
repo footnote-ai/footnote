@@ -71,3 +71,16 @@ test('generic explanations about how Footnote works do not request live GitHub s
         undefined
     );
 });
+
+test('stable team explanations do not request live GitHub state', () => {
+    assert.equal(
+        buildFootnoteGitHubContextRouteFromPlan({
+            search: {
+                query: 'How does the team work?',
+                contextSize: 'medium',
+                intent: 'repo_explainer',
+            },
+        }),
+        undefined
+    );
+});

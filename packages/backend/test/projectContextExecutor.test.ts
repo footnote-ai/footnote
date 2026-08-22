@@ -8,7 +8,11 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { createProjectContextStepExecutor } from '../src/services/contextIntegrations/projectContext/index.js';
+import {
+    citationsFromProjectContext,
+    createProjectContextStepExecutor,
+    formatProjectContext,
+} from '../src/services/contextIntegrations/projectContext/index.js';
 import type { ContextStepExecutorInput } from '../src/services/workflowEngine.js';
 import type { EmbeddingRuntimeResult } from '@footnote/agent-runtime';
 import type { ProjectContextMetadata } from '@footnote/contracts/policy';
@@ -137,6 +141,30 @@ test('executor attaches commit-pinned citations with source revision hashes', as
     assert.ok(citation);
     assert.match(citation?.url ?? '', /blob\/abc123\/docs\/Philosophy\.md/);
     assert.ok(citation?.title);
+});
+
+test('project context never falls back to a moving branch citation', () => {
+    const match = {
+        path: 'docs/Philosophy.md',
+        category: 'documented_intent' as const,
+        contentHash: 'sha256:test',
+        text: 'Footnote prioritizes transparency.',
+    };
+    const formatted = formatProjectContext({
+        repository: 'footnote-ai/footnote',
+        matches: [match],
+        commitSha: null,
+    })[0];
+    assert.match(formatted ?? '', /citation unresolved/);
+    assert.doesNotMatch(formatted ?? '', /\/main\//);
+    assert.deepEqual(
+        citationsFromProjectContext({
+            repository: 'footnote-ai/footnote',
+            matches: [match],
+            commitSha: null,
+        }),
+        []
+    );
 });
 
 test('executor skips when disabled or not requested', async () => {

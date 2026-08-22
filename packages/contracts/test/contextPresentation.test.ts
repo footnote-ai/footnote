@@ -74,3 +74,31 @@ test('project summaries disclose when a category reaches its retrieval limit', (
     });
     assert.match(summary ?? '', /not document totals/);
 });
+
+test('GitHub summaries use singular labels for one record in every section', () => {
+    const summary = buildContextPresentationSummary({
+        githubContext: {
+            ...githubContext,
+            requestedSections: [
+                'repository',
+                'issues',
+                'pulls',
+                'releases',
+                'commits',
+            ],
+            returnedCounts: {
+                repository: 1,
+                issues: 1,
+                pulls: 1,
+                releases: 1,
+                commits: 1,
+            },
+        },
+    })[0];
+
+    assert.match(summary ?? '', /1 repository record/);
+    assert.match(summary ?? '', /1 issue/);
+    assert.match(summary ?? '', /1 pull request/);
+    assert.match(summary ?? '', /1 release/);
+    assert.match(summary ?? '', /1 commit/);
+});

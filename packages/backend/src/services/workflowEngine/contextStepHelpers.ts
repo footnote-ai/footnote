@@ -25,9 +25,12 @@ type ContextMessageInput =
     ContextPromptMessage | { role: 'system' | 'user'; content: string };
 
 /**
- * Injects normalized context-step messages into the generation prompt.
- * Context is inserted before planner output markers when present, otherwise
- * appended to preserve fail-open execution ordering.
+ * @description: Injects normalized context-step messages into the generation prompt.
+ * Context is inserted before planner output markers when present, otherwise appended.
+ * @footnote-scope: core
+ * @footnote-module: WorkflowContextPromptBoundary
+ * @footnote-risk: high - Role mistakes can promote untrusted context into trusted instructions.
+ * @footnote-ethics: high - Prompt authority must preserve the distinction between guidance and evidence.
  */
 export const injectContextMessagesIntoPrompt = (
     baseMessages: RuntimeMessage[],

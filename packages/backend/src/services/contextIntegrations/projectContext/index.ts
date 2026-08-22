@@ -72,9 +72,9 @@ const citationUrl = (
     repository: string,
     path: string,
     commitSha: string | null
-): string => {
-    const revision = commitSha ?? 'main';
-    return `https://github.com/${escapeSegment(repository)}/blob/${escapeSegment(revision)}/${escapeSegment(path)}`;
+): string | undefined => {
+    if (commitSha === null) return undefined;
+    return `https://github.com/${escapeSegment(repository)}/blob/${escapeSegment(commitSha)}/${escapeSegment(path)}`;
 };
 
 export const formatProjectContext = (input: {
@@ -87,7 +87,8 @@ export const formatProjectContext = (input: {
         const sourceLine = [
             match.path,
             match.revisionLabel ?? match.contentHash,
-            citationUrl(input.repository, match.path, input.commitSha),
+            citationUrl(input.repository, match.path, input.commitSha) ??
+                '[citation unresolved: source revision unavailable]',
         ].join(' | ');
         lines.push(`[${match.category}] ${sourceLine}`);
         lines.push(match.text);
@@ -100,8 +101,12 @@ const projectContextGuidance = renderPromptBundle(promptRegistry, [
 ]);
 
 /**
- * Formats retrieved project documents as lower-authority user data.
+ * @description: Formats retrieved project documents as lower-authority user data.
  * Registered project guidance is returned separately as trusted system text.
+ * @footnote-scope: core
+ * @footnote-module: ProjectContextPromptBoundary
+ * @footnote-risk: high - Role mistakes can promote untrusted evidence into trusted instructions.
+ * @footnote-ethics: high - Users must be able to distinguish evidence from governing policy.
  */
 export const formatProjectContextMessages = (input: {
     repository: string;
@@ -111,16 +116,38 @@ export const formatProjectContextMessages = (input: {
     { role: 'user', content: formatProjectContext(input)[0] ?? '' },
 ];
 
+/**
+ * @description: Converts retrieved project documents into immutable source citations when revision data exists.
+ * @footnote-scope: core
+ * @footnote-module: ProjectContextCitationBoundary
+ * @footnote-risk: high - Moving or unresolved links can misattribute evidence.
+ * @footnote-ethics: high - Provenance must not imply a source revision that was not observed.
+ */
 export const citationsFromProjectContext = (input: {
     repository: string;
     matches: ProjectContextMatch[];
     commitSha: string | null;
 }): Citation[] =>
-    input.matches.map((match) => ({
-        title: match.path,
-        url: citationUrl(input.repository, match.path, input.commitSha),
-        ...(match.text && { snippet: match.text.slice(0, 240) }),
-    }));
+    input.commitSha === null
+        ? []
+        : input.matches.flatMap((match) => {
+              const url = citationUrl(
+                  input.repository,
+                  match.path,
+                  input.commitSha
+              );
+              return url === undefined
+                  ? []
+                  : [
+                        {
+                            title: match.path,
+                            url,
+                            ...(match.text && {
+                                snippet: match.text.slice(0, 240),
+                            }),
+                        },
+                    ];
+          });
 
 const normalizeCategories = (value: unknown): ProjectContextCategory[] => {
     if (!Array.isArray(value)) {

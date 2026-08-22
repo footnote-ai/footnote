@@ -76,9 +76,7 @@ test('deterministic retrieval evaluation returns the expected source in top-K', 
     );
     const paths = manifest.map((entry) => entry.path);
     const vectorFor = (text: string): number[] => {
-        const documentIndex = paths.findIndex((filePath) =>
-            text.includes(filePath)
-        );
+        const documentIndex = paths.indexOf(text.trim());
         const queryIndex = evaluationCases.findIndex(
             (evaluationCase) => evaluationCase.question === text
         );
