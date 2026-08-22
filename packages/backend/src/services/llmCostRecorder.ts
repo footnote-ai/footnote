@@ -30,8 +30,11 @@ export type BackendLLMCostRecord = {
         | 'image_render'
         | 'image_description'
         | 'tts'
-        | 'voice_realtime';
+        | 'voice_realtime'
+        | 'chat_project_context_embedding';
     model: string;
+    provider?: string;
+    purpose?: 'index' | 'query';
     promptTokens: number;
     cachedInputTokens?: number;
     cacheWriteTokens?: number;
@@ -156,6 +159,8 @@ export const recordBackendLLMUsage = (record: BackendLLMCostRecord): void => {
             event: 'backend_llm_cost',
             feature: record.feature,
             model: record.model,
+            ...(record.provider !== undefined && { provider: record.provider }),
+            ...(record.purpose !== undefined && { purpose: record.purpose }),
             promptTokens: record.promptTokens,
             ...(record.cachedInputTokens !== undefined && {
                 cachedInputTokens: record.cachedInputTokens,

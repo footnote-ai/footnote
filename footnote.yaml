@@ -35,6 +35,19 @@ web:
 # Most users can keep this empty at first.
 discord-bots: []
 
+# Context integrations run in the backend. Project-document lookup stays off
+# until you enable it; chat continues if the lookup fails.
+chat-workflow:
+    chat-context-project-docs-enabled: false
+    chat-context-project-docs-embedding-provider: 'openai'
+    chat-context-project-docs-embedding-model: 'text-embedding-3-small'
+    chat-context-project-docs-max-chunk-bytes: 2000
+    chat-context-project-docs-max-chunks: 200
+    chat-context-project-docs-top-k-per-category: 5
+    chat-context-project-docs-max-matches: 6
+    chat-context-project-docs-min-score: 0.35
+    chat-context-project-docs-timeout-ms: 8000
+
 # Example (uncomment and fill env key names only):
 # discord-bots:
 #   - id: "main-discord"
@@ -51,4 +64,3 @@ discord-bots: []
 #       display-name: "Footnote"
 #       overlay-path: ""
 #       mention-aliases: []
-

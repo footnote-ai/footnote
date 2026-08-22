@@ -269,9 +269,32 @@ test('ResponseMetadataSchema accepts typed GitHub context metadata', () => {
             requestedSections: ['repository', 'issues'],
             status: 'partial',
             fetchTimestamp: new Date().toISOString(),
+            maxRecordsPerSection: 5,
             returnedCounts: { repository: 1 },
             failedSections: ['issues'],
             reasonCodes: ['rate_limited'],
+        },
+    });
+    assert.equal(parsed.success, true);
+});
+
+test('ResponseMetadataSchema accepts typed project context metadata', () => {
+    const parsed = ResponseMetadataSchema.safeParse({
+        ...baseMetadata,
+        projectContext: {
+            repository: 'footnote-ai/footnote',
+            provider: 'openai',
+            model: 'text-embedding-3-small',
+            chunkerVersion: 1,
+            indexVersion: 1,
+            indexedCommitSha: 'abc123',
+            indexedAt: new Date().toISOString(),
+            requestedCategories: ['documented_intent', 'current_state'],
+            returnedCounts: { documented_intent: 2, current_state: 1 },
+            maxChunks: 200,
+            topKPerCategory: 5,
+            status: 'current',
+            reasonCodes: [],
         },
     });
     assert.equal(parsed.success, true);

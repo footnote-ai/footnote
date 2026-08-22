@@ -173,6 +173,23 @@ export type RuntimeConfig = {
                 staleResultLimitMs: number;
             };
             /**
+             * Backend-owned project-document context controls.
+             *
+             * Embedding provider and model are independently configured and must
+             * not implicitly inherit the chat provider.
+             */
+            projectDocs: {
+                enabled: boolean;
+                embeddingProvider: string;
+                embeddingModel: string;
+                maxChunkBytes: number;
+                maxChunks: number;
+                topKPerCategory: number;
+                maxMatches: number;
+                minScore: number;
+                embeddingTimeoutMs: number;
+            };
+            /**
              * Reverse-image context integration controls for chat workflow execution.
              */
             reverseImageSearch: {

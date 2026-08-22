@@ -16,6 +16,13 @@ jobs:
         steps:
             - uses: actions/checkout@v7
             - uses: superfly/flyctl-actions/setup-flyctl@master
-            - run: flyctl deploy --remote-only -c deploy/fly/server.toml
+            - id: context
+              name: Prepare revision-safe project context bundle
+              shell: bash
+              run: |
+                  set -euo pipefail
+                  node scripts/prepare-project-context-bundle.mjs
+                  echo "revision=$(cat .footnote/context-bundle/revision.txt)" >> "$GITHUB_OUTPUT"
+            - run: flyctl deploy --remote-only -c deploy/fly/server.toml --build-arg FOOTNOTE_CONTEXT_COMMIT_SHA=${{ steps.context.outputs.revision }}
               env:
                   FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}

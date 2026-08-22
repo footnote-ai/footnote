@@ -3404,6 +3404,172 @@ components:
                 - label
             additionalProperties: false
 
+        GitHubContextMetadata:
+            type: object
+            description: GitHub results supplied to generation. Each section has a configured record limit.
+            x-codeRefs:
+                - packages/contracts/src/policy/types.ts#GitHubContextMetadata
+                - packages/contracts/src/web/schemas.ts#GitHubContextMetadataSchema
+            properties:
+                repository:
+                    type: string
+                    pattern: '^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$'
+                requestedSections:
+                    type: array
+                    maxItems: 5
+                    items:
+                        type: string
+                        enum: [repository, issues, pulls, releases, commits]
+                status:
+                    type: string
+                    enum: [current, partial, stale, unavailable]
+                fetchTimestamp:
+                    type: string
+                    format: date-time
+                maxRecordsPerSection:
+                    type: integer
+                    minimum: 1
+                returnedCounts:
+                    type: object
+                    additionalProperties: false
+                    properties:
+                        repository: { type: integer, minimum: 0 }
+                        issues: { type: integer, minimum: 0 }
+                        pulls: { type: integer, minimum: 0 }
+                        releases: { type: integer, minimum: 0 }
+                        commits: { type: integer, minimum: 0 }
+                failedSections:
+                    type: array
+                    maxItems: 5
+                    items:
+                        type: string
+                        enum: [repository, issues, pulls, releases, commits]
+                reasonCodes:
+                    type: array
+                    maxItems: 5
+                    items:
+                        type: string
+                        enum:
+                            [
+                                disabled,
+                                invalid_repository,
+                                not_in_conversation,
+                                private_access_denied,
+                                unauthorized,
+                                not_found,
+                                rate_limited,
+                                timeout,
+                                malformed_response,
+                                network_error,
+                            ]
+            required:
+                [
+                    repository,
+                    requestedSections,
+                    status,
+                    returnedCounts,
+                    failedSections,
+                    reasonCodes,
+                ]
+            additionalProperties: false
+
+        ProjectContextMetadata:
+            type: object
+            description: Metadata for approved Footnote project documents used during generation.
+            x-codeRefs:
+                - packages/contracts/src/policy/projectContext.ts#ProjectContextMetadata
+                - packages/contracts/src/web/schemas.ts#ProjectContextMetadataSchema
+            properties:
+                repository:
+                    type: string
+                    pattern: '^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$'
+                provider:
+                    type: string
+                    minLength: 1
+                model:
+                    type: string
+                    minLength: 1
+                chunkerVersion:
+                    type: integer
+                    minimum: 1
+                indexVersion:
+                    type: integer
+                    minimum: 1
+                indexedCommitSha:
+                    type: string
+                    minLength: 1
+                indexedAt:
+                    type: string
+                    format: date-time
+                requestedCategories:
+                    type: array
+                    maxItems: 3
+                    items:
+                        type: string
+                        enum:
+                            [
+                                documented_intent,
+                                documented_behavior,
+                                current_state,
+                            ]
+                returnedCounts:
+                    type: object
+                    additionalProperties: false
+                    properties:
+                        documented_intent: { type: integer, minimum: 0 }
+                        documented_behavior: { type: integer, minimum: 0 }
+                        current_state: { type: integer, minimum: 0 }
+                maxChunks:
+                    type: integer
+                    minimum: 1
+                topKPerCategory:
+                    type: integer
+                    minimum: 1
+                maxMatches:
+                    type: integer
+                    minimum: 1
+                minScore:
+                    type: number
+                    minimum: -1
+                    maximum: 1
+                embeddingTimeoutMs:
+                    type: integer
+                    minimum: 1
+                status:
+                    type: string
+                    enum: [current, partial, stale, unavailable]
+                reasonCodes:
+                    type: array
+                    maxItems: 5
+                    items:
+                        type: string
+                        enum:
+                            [
+                                disabled,
+                                tool_not_requested,
+                                invalid_query,
+                                query_embedding_failed,
+                                embedding_timeout,
+                                index_unavailable,
+                                no_relevant_matches,
+                                execution_error,
+                            ]
+            required:
+                [
+                    repository,
+                    provider,
+                    model,
+                    chunkerVersion,
+                    indexVersion,
+                    requestedCategories,
+                    returnedCounts,
+                    maxChunks,
+                    topKPerCategory,
+                    status,
+                    reasonCodes,
+                ]
+            additionalProperties: false
+
         ResponseMetadataBase:
             type: object
             properties:
@@ -3971,6 +4137,10 @@ components:
                         - sufficiencyView
                         - evidenceView
                     additionalProperties: false
+                githubContext:
+                    $ref: '#/components/schemas/GitHubContextMetadata'
+                projectContext:
+                    $ref: '#/components/schemas/ProjectContextMetadata'
             required:
                 - provenance
                 - safetyTier

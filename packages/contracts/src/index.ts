@@ -27,6 +27,7 @@ export type {
     ToolExecutionContext,
     ContextIntegrationName,
     ContextStepRequest,
+    ContextPromptMessage,
     ContextStepIntegrationContext,
     ContextStepExecutedResult,
     ContextStepFailedResult,
@@ -65,13 +66,21 @@ export type {
     ResponseTemperament,
     TrustGraphMetadata,
     GitHubContextMetadata,
+    ProjectContextCategory,
+    ProjectContextMatch,
+    ProjectContextMetadata,
+    ProjectContextReasonCode,
     ResponseMetadata,
     ResponseFootnote,
     ResponseFootnoteSection,
 } from './policy/index.js';
 export { RESPONSE_FOOTNOTE_SECTIONS } from './policy/index.js';
+export { PROJECT_CONTEXT_CANONICAL_REPOSITORY } from './policy/index.js';
 export {
     formatExecutionTimelineSummary,
+    buildContextPresentationSummary,
+    formatGitHubContextSummary,
+    formatProjectContextSummary,
     deriveReviewRuntimeSummary,
     buildWorkflowRoutingChainSignals,
     buildWorkflowAssessRoutingHintSignals,

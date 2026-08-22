@@ -299,7 +299,11 @@
                 "docs/status/repository-context-status.md",
                 "packages/backend/test/webSearchContextStepExecutor.test.ts",
                 "packages/backend/test/reverseImageSearchContextStepExecutor.test.ts",
-                "packages/backend/test/toolExecutionParity.test.ts"
+                "packages/backend/test/toolExecutionParity.test.ts",
+                "docs/architecture/context-integrations/github.md",
+                "docs/architecture/context-integrations/project-context.md",
+                "packages/backend/src/services/contextIntegrations/github",
+                "packages/backend/src/services/contextIntegrations/projectContext"
             ],
             "page_notes": [
                 {
@@ -872,6 +876,52 @@
                 {
                     "author": "Maintainer",
                     "content": "Include the local operator setup link, settings command, reset command, and launcher path. Explain the runtime starting and ready events, including that supervisor readiness does not mean every Discord child is ready. Launcher canaries publish from main for early verification; setup and settings stay server-owned and local-only, and Discord nodes remain supervised adapters."
+                }
+            ]
+        },
+        {
+            "title": "Project Context",
+            "purpose": "Explain how Footnote answers questions about itself from approved project documents and a limited live GitHub view, while keeping source status, citations, and failure behavior visible.",
+            "parent": "Context Integrations",
+            "entrypoints": [
+                "docs/architecture/context-integrations/project-context.md",
+                "docs/architecture/context-integrations/github.md",
+                "packages/backend/src/services/contextIntegrations/projectContext",
+                "packages/backend/src/services/contextIntegrations/github",
+                "packages/backend/src/services/chatGenerationHints.ts",
+                "packages/backend/src/services/chatOrchestrator/plannerResultApplier.ts",
+                "packages/contracts/src/policy/projectContext.ts",
+                "packages/contracts/src/policy/contextPresentation.ts",
+                "packages/prompts/src/defaults.yaml",
+                "packages/web/src/components/ProvenanceFooter.tsx",
+                "packages/config-spec/src/env-spec.ts",
+                "deploy/README.md",
+                ".footnote/context-files",
+                ".footnote/context-manifest.json",
+                "scripts/prepare-project-context-bundle.mjs",
+                "packages/backend/test/projectContextExecutor.test.ts",
+                "packages/contracts/test/contextPresentation.test.ts"
+            ],
+            "page_notes": [
+                {
+                    "content": "Start with the difference between the two sources. `project_context` reads approved local documents for Footnote explanations and discovery. `github_context` retrieves a limited live view of repository state.",
+                    "author": "Maintainer"
+                },
+                {
+                    "content": "Only files allowed by `.footnote/context-files` can be read. Footnote reads each selected document from one Git commit and cites an excerpt only with a link pinned to that commit. It never replaces a missing citation with a moving branch link.",
+                    "author": "Maintainer"
+                },
+                {
+                    "content": "Project documents and GitHub results are source material, not instructions. They cannot select policy, routing, credentials, verification, or when execution ends. Explain this in plain language before the prompt and workflow details.",
+                    "author": "Maintainer"
+                },
+                {
+                    "content": "Show failure behavior clearly: chat continues without project documents when a lookup fails, can use a last good index marked `stale`, and reports `partial` or `unavailable` source status in response metadata.",
+                    "author": "Maintainer"
+                },
+                {
+                    "content": "Include the deployment path. `pnpm context:bundle` packages approved documents from a commit for the server image; Docker receives that commit as a build argument. Project context is disabled by default, and its embedding provider is configured separately from chat.",
+                    "author": "Maintainer"
                 }
             ]
         }

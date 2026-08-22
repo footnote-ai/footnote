@@ -12,6 +12,7 @@ import {
     type ResponseMetadata,
     buildWorkflowReceiptSummary,
     summarizeGroundingEvidence,
+    buildContextPresentationSummary,
 } from '@footnote/contracts/policy';
 import { ResponseMetadataSchema } from '@footnote/contracts/web/schemas';
 import { botApi } from '../../api/botApi.js';
@@ -185,6 +186,12 @@ function formatSummarySection(
         lines.push(
             `- Workflow Receipt: \`${formatMarkdownValue(workflowReceiptSummary, 220)}\``
         );
+    }
+    for (const summary of buildContextPresentationSummary({
+        projectContext: payload.projectContext,
+        githubContext: payload.githubContext,
+    })) {
+        lines.push(`- ${summary}`);
     }
 
     return lines.join('\n');

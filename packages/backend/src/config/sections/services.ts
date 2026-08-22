@@ -34,6 +34,45 @@ const WEB_SEARCH_PROVIDER_MODES: ReadonlySet<WebSearchProviderMode> = new Set([
     'brave',
     'serpapi',
 ]);
+const PROJECT_DOCS_EMBEDDING_PROVIDERS: ReadonlySet<string> = new Set([
+    'openai',
+    'openrouter',
+]);
+const PROJECT_DOCS_MAX_CHUNK_BYTES = 32 * 1024;
+const PROJECT_DOCS_MAX_CHUNKS = 5_000;
+const PROJECT_DOCS_MAX_TOP_K_PER_CATEGORY = 50;
+const PROJECT_DOCS_MAX_MATCHES = 20;
+const PROJECT_DOCS_MAX_TIMEOUT_MS = 30_000;
+
+const parseProjectDocsLimit = (
+    raw: string | undefined,
+    fallback: number,
+    key: string,
+    maximum: number,
+    warn: WarningSink
+): number => {
+    const parsed = parsePositiveIntEnv(raw, fallback, key, warn);
+    if (parsed <= maximum) return parsed;
+    warn(`${key} exceeds the project-context safety cap; using ${maximum}.`);
+    return maximum;
+};
+
+const parseProjectDocsScore = (
+    raw: string | undefined,
+    fallback: number,
+    key: string,
+    warn: WarningSink
+): number => {
+    if (raw === undefined) return fallback;
+    const parsed = Number.parseFloat(raw);
+    if (Number.isFinite(parsed) && parsed >= -1 && parsed <= 1) {
+        return parsed;
+    }
+    warn(
+        `Ignoring invalid similarity score for ${key}: "${raw}". Using default (${fallback}).`
+    );
+    return fallback;
+};
 
 const parseWebSearchProviderPriority = (
     raw: string | undefined,
@@ -330,6 +369,66 @@ export const buildServiceSections = (
                     env.CHAT_CONTEXT_REVERSE_IMAGE_SEARCH_PROVIDER_TIMEOUT_MS,
                     12000,
                     'CHAT_CONTEXT_REVERSE_IMAGE_SEARCH_PROVIDER_TIMEOUT_MS',
+                    warn
+                ),
+            },
+            projectDocs: {
+                enabled: parseBooleanEnv(
+                    env.CHAT_CONTEXT_PROJECT_DOCS_ENABLED,
+                    false,
+                    'CHAT_CONTEXT_PROJECT_DOCS_ENABLED',
+                    warn
+                ),
+                embeddingProvider: parseStringUnionEnv(
+                    env.CHAT_CONTEXT_PROJECT_DOCS_EMBEDDING_PROVIDER,
+                    'openai' as const,
+                    'CHAT_CONTEXT_PROJECT_DOCS_EMBEDDING_PROVIDER',
+                    PROJECT_DOCS_EMBEDDING_PROVIDERS,
+                    warn
+                ),
+                embeddingModel:
+                    parseOptionalTrimmedString(
+                        env.CHAT_CONTEXT_PROJECT_DOCS_EMBEDDING_MODEL
+                    ) ?? 'text-embedding-3-small',
+                maxChunkBytes: parseProjectDocsLimit(
+                    env.CHAT_CONTEXT_PROJECT_DOCS_MAX_CHUNK_BYTES,
+                    2000,
+                    'CHAT_CONTEXT_PROJECT_DOCS_MAX_CHUNK_BYTES',
+                    PROJECT_DOCS_MAX_CHUNK_BYTES,
+                    warn
+                ),
+                maxChunks: parseProjectDocsLimit(
+                    env.CHAT_CONTEXT_PROJECT_DOCS_MAX_CHUNKS,
+                    200,
+                    'CHAT_CONTEXT_PROJECT_DOCS_MAX_CHUNKS',
+                    PROJECT_DOCS_MAX_CHUNKS,
+                    warn
+                ),
+                topKPerCategory: parseProjectDocsLimit(
+                    env.CHAT_CONTEXT_PROJECT_DOCS_TOP_K_PER_CATEGORY,
+                    5,
+                    'CHAT_CONTEXT_PROJECT_DOCS_TOP_K_PER_CATEGORY',
+                    PROJECT_DOCS_MAX_TOP_K_PER_CATEGORY,
+                    warn
+                ),
+                maxMatches: parseProjectDocsLimit(
+                    env.CHAT_CONTEXT_PROJECT_DOCS_MAX_MATCHES,
+                    6,
+                    'CHAT_CONTEXT_PROJECT_DOCS_MAX_MATCHES',
+                    PROJECT_DOCS_MAX_MATCHES,
+                    warn
+                ),
+                minScore: parseProjectDocsScore(
+                    env.CHAT_CONTEXT_PROJECT_DOCS_MIN_SCORE,
+                    0.35,
+                    'CHAT_CONTEXT_PROJECT_DOCS_MIN_SCORE',
+                    warn
+                ),
+                embeddingTimeoutMs: parseProjectDocsLimit(
+                    env.CHAT_CONTEXT_PROJECT_DOCS_TIMEOUT_MS,
+                    8000,
+                    'CHAT_CONTEXT_PROJECT_DOCS_TIMEOUT_MS',
+                    PROJECT_DOCS_MAX_TIMEOUT_MS,
                     warn
                 ),
             },

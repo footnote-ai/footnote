@@ -15,6 +15,7 @@ import type {
 import type {
     Citation,
     GitHubContextMetadata,
+    ProjectContextMetadata,
     ContextStepRequest,
     ContextStepResult,
     PartialResponseTemperament,
@@ -36,6 +37,7 @@ import type {
     PostChatResponse,
     ResponseCandidate,
 } from '@footnote/contracts/web';
+import { ProjectContextMetadataSchema } from '@footnote/contracts/web';
 import type { Result } from 'neverthrow';
 import type {
     GenerationMetadataUsage,
@@ -701,6 +703,23 @@ const pickGitHubContextMetadata = (
     if (!metadata || typeof metadata !== 'object' || Array.isArray(metadata))
         return undefined;
     return metadata as GitHubContextMetadata;
+};
+
+/** Validates one backend project-context metadata payload before response assembly. */
+export const pickProjectContextMetadata = (
+    contextStepResults: ContextStepResult[] | undefined
+): ProjectContextMetadata | undefined => {
+    const result = contextStepResults?.find(
+        (step) => step.integrationContext?.kind === 'project_context'
+    );
+    const payload = result?.integrationContext?.payload;
+    if (!payload || typeof payload !== 'object' || Array.isArray(payload))
+        return undefined;
+    const metadata = (payload as { metadata?: unknown }).metadata;
+    if (!metadata || typeof metadata !== 'object' || Array.isArray(metadata))
+        return undefined;
+    const parsed = ProjectContextMetadataSchema.safeParse(metadata);
+    return parsed.success ? parsed.data : undefined;
 };
 
 const pickTrustGraphResultFromContextSteps = (
@@ -1933,6 +1952,9 @@ export const createChatService = ({
         const githubContext = pickGitHubContextMetadata(
             workflowContextStepResults
         );
+        const projectContext = pickProjectContextMetadata(
+            effectiveContextStepResults
+        );
         const runtimeContext: ResponseMetadataRuntimeContext = {
             modelVersion: usageModel,
             conversationSnapshot: `${workflowConversationSnapshot ?? conversationSnapshot}\n\n${generationResult.text}`,
@@ -1974,6 +1996,7 @@ export const createChatService = ({
             trustGraphEvidenceAvailable,
             trustGraphEvidenceUsed,
             ...(githubContext !== undefined && { githubContext }),
+            ...(projectContext !== undefined && { projectContext }),
         };
         const finalToolExecutionTelemetry:
             FinalToolExecutionTelemetry | undefined =

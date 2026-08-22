@@ -1,0 +1,77 @@
+[
+    {
+        "path": "README.md",
+        "category": "documented_behavior",
+        "priority": 100
+    },
+    {
+        "path": "AGENTS.md",
+        "category": "documented_intent",
+        "priority": 90
+    },
+    {
+        "path": "SECURITY.md",
+        "category": "documented_behavior",
+        "priority": 90
+    },
+    {
+        "path": "docs/Philosophy.md",
+        "category": "documented_intent",
+        "priority": 80
+    },
+    {
+        "path": "docs/README.md",
+        "category": "documented_behavior",
+        "priority": 75
+    },
+    {
+        "path": "docs/ai/README.md",
+        "category": "documented_intent",
+        "priority": 70
+    },
+    {
+        "path": "docs/agents/domain.md",
+        "category": "documented_behavior",
+        "priority": 70
+    },
+    {
+        "path": "docs/architecture/README.md",
+        "category": "documented_behavior",
+        "priority": 80
+    },
+    {
+        "path": "docs/architecture/workflow.md",
+        "category": "documented_behavior",
+        "priority": 90
+    },
+    {
+        "path": "docs/architecture/context-integrations/README.md",
+        "category": "documented_behavior",
+        "priority": 85
+    },
+    {
+        "path": "docs/architecture/context-integrations/project-context.md",
+        "category": "documented_behavior",
+        "priority": 100
+    },
+    {
+        "path": "docs/status/index.md",
+        "category": "current_state",
+        "priority": 90
+    },
+    {
+        "path": "docs/status/repository-context-status.md",
+        "category": "current_state",
+        "priority": 100
+    },
+    {
+        "path": "docs/status/github-context-status.md",
+        "category": "current_state",
+        "priority": 95
+    },
+    {
+        "path": "docs/status/web-search-grounding-recovery-status.md",
+        "category": "current_state",
+        "priority": 70
+    }
+]

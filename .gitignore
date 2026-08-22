@@ -2,6 +2,10 @@
 node_modules/
 *.tsbuildinfo
 
+# Deployment wrappers generate this immutable bundle before building.
+# Docker and Fly contexts include it directly; Git should keep it out of status.
+.footnote/context-bundle/
+
 # Environment files
 .env
 .env.*

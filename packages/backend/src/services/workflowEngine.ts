@@ -814,8 +814,7 @@ export const runBoundedReviewWorkflow = async ({
                 const normalizedExecutionContext =
                     normalizedResult.executionContext;
                 const clarificationSignals:
-                    | WorkflowToolClarificationSignals
-                    | undefined =
+                    WorkflowToolClarificationSignals | undefined =
                     normalizedResult.outcome === 'needs_clarification'
                         ? {
                               clarificationReasonCode:
@@ -845,7 +844,12 @@ export const runBoundedReviewWorkflow = async ({
                     attempt: 1,
                     ...(normalizedResult.outcome === 'executed' &&
                         normalizedResult.contextMessages !== undefined && {
-                            artifacts: normalizedResult.contextMessages,
+                            artifacts: normalizedResult.contextMessages.map(
+                                (message) =>
+                                    typeof message === 'string'
+                                        ? message
+                                        : message.content
+                            ),
                         }),
                     ...(normalizedResult.outcome === 'needs_clarification' && {
                         signals: clarificationSignals,
@@ -890,7 +894,25 @@ export const runBoundedReviewWorkflow = async ({
                 // Preserve deterministic context ordering by request list order.
                 executedContextStepResults.flatMap((contextStepResult) =>
                     contextStepResult.outcome === 'executed'
-                        ? (contextStepResult.contextMessages ?? [])
+                        ? [
+                              ...(
+                                  contextStepResult.trustedSystemMessages ?? []
+                              ).map((content) => ({
+                                  role: 'system' as const,
+                                  content,
+                              })),
+                              ...(contextStepResult.contextMessages ?? []).map(
+                                  (message) => ({
+                                      role:
+                                          contextStepResult.contextMessageRole ??
+                                          'system',
+                                      content:
+                                          typeof message === 'string'
+                                              ? message
+                                              : message.content,
+                                  })
+                              ),
+                          ]
                         : []
                 )
             );
@@ -901,8 +923,7 @@ export const runBoundedReviewWorkflow = async ({
             });
             try {
                 let initialRoutingChainAttempts:
-                    | RoutingChainAttemptLog[]
-                    | undefined;
+                    RoutingChainAttemptLog[] | undefined;
                 let initialRoutedProfile:
                     | {
                           profileId: string;

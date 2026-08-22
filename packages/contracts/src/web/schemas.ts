@@ -21,6 +21,7 @@ import {
     type ExecutionEvent,
     type ImageGenerationMetadata,
     type GitHubContextMetadata,
+    type ProjectContextMetadata,
     type ProvenanceAssessment,
     type ResponseMetadata,
     type SteerabilityControls,
@@ -1318,6 +1319,7 @@ const GitHubContextMetadataSchema: z.ZodType<GitHubContextMetadata> = z
         requestedSections: z.array(GitHubContextSectionSchema).max(5),
         status: z.enum(['current', 'partial', 'stale', 'unavailable']),
         fetchTimestamp: z.string().datetime().optional(),
+        maxRecordsPerSection: z.number().int().positive().optional(),
         returnedCounts: z
             .object({
                 repository: z.number().int().nonnegative().optional(),
@@ -1329,6 +1331,48 @@ const GitHubContextMetadataSchema: z.ZodType<GitHubContextMetadata> = z
             .strict(),
         failedSections: z.array(GitHubContextSectionSchema).max(5),
         reasonCodes: z.array(GitHubContextReasonCodeSchema).max(5),
+    })
+    .strict();
+
+const ProjectContextCategorySchema = z.enum([
+    'documented_intent',
+    'documented_behavior',
+    'current_state',
+]);
+const ProjectContextReasonCodeSchema = z.enum([
+    'disabled',
+    'tool_not_requested',
+    'invalid_query',
+    'query_embedding_failed',
+    'embedding_timeout',
+    'index_unavailable',
+    'no_relevant_matches',
+    'execution_error',
+]);
+export const ProjectContextMetadataSchema: z.ZodType<ProjectContextMetadata> = z
+    .object({
+        repository: z.string().regex(/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/),
+        provider: z.string().min(1),
+        model: z.string().min(1),
+        chunkerVersion: z.number().int().positive(),
+        indexVersion: z.number().int().positive(),
+        indexedCommitSha: z.string().min(1).optional(),
+        indexedAt: z.string().datetime().optional(),
+        requestedCategories: z.array(ProjectContextCategorySchema).max(3),
+        returnedCounts: z
+            .object({
+                documented_intent: z.number().int().nonnegative().optional(),
+                documented_behavior: z.number().int().nonnegative().optional(),
+                current_state: z.number().int().nonnegative().optional(),
+            })
+            .strict(),
+        maxChunks: z.number().int().positive(),
+        topKPerCategory: z.number().int().positive(),
+        maxMatches: z.number().int().positive().optional(),
+        minScore: z.number().min(-1).max(1).optional(),
+        embeddingTimeoutMs: z.number().int().positive().optional(),
+        status: z.enum(['current', 'partial', 'stale', 'unavailable']),
+        reasonCodes: z.array(ProjectContextReasonCodeSchema).max(5),
     })
     .strict();
 
@@ -1360,6 +1404,7 @@ const responseMetadataShape = {
     trace_final_reason_code: TraceFinalizationReasonCodeSchema.optional(),
     trustGraph: TrustGraphMetadataSchema.optional(),
     githubContext: GitHubContextMetadataSchema.optional(),
+    projectContext: ProjectContextMetadataSchema.optional(),
     // TODO(auth-memory-governance): Apply user opt-in auth/memory/governance
     // policy before broad prompt-rich image metadata exposure/retention.
     imageGeneration: ImageGenerationMetadataSchema.optional(),

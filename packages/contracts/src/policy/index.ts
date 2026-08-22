@@ -36,6 +36,7 @@ export type {
     ToolInvocationRequest,
     ToolExecutionContext,
     ContextStepRequest,
+    ContextPromptMessage,
     ContextStepIntegrationContext,
     ContextStepExecutedResult,
     ContextStepFailedResult,
@@ -153,7 +154,20 @@ export {
 } from './types.js';
 export { CONTEXT_INTEGRATION_NAMES } from './contextIntegrations.js';
 export type { ContextIntegrationName } from './contextIntegrations.js';
+export {
+    PROJECT_CONTEXT_CATEGORIES,
+    PROJECT_CONTEXT_CANONICAL_REPOSITORY,
+    type ProjectContextCategory,
+    type ProjectContextMatch,
+    type ProjectContextMetadata,
+    type ProjectContextReasonCode,
+} from './projectContext.js';
 export { formatExecutionTimelineSummary } from './executionFormatting.js';
+export {
+    buildContextPresentationSummary,
+    formatGitHubContextSummary,
+    formatProjectContextSummary,
+} from './contextPresentation.js';
 export { deriveReviewRuntimeSummary } from './reviewRuntime.js';
 export {
     buildWorkflowRoutingChainSignals,

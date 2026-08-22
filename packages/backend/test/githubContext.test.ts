@@ -102,6 +102,10 @@ test('GitHub context normalizes all fixed sections, bounds records, and labels t
         formatGitHubContext(payload)[0] ?? '',
         /UNTRUSTED GITHUB CONTEXT/
     );
+    assert.match(
+        formatGitHubContext(payload)[0] ?? '',
+        /not repository totals/
+    );
     assert.equal(
         (formatGitHubContext(payload)[0] ?? '').includes(
             String.fromCharCode(0)
@@ -126,10 +130,21 @@ test('GitHub context fails open for private access, HTTP failures, malformed bod
     assert.deepEqual(
         (
             privateResult.integrationContext?.payload as {
-                metadata: { reasonCodes: string[] };
+                metadata: {
+                    reasonCodes: string[];
+                    maxRecordsPerSection?: number;
+                };
             }
         ).metadata.reasonCodes,
         ['private_access_denied']
+    );
+    assert.equal(
+        (
+            privateResult.integrationContext?.payload as {
+                metadata: { maxRecordsPerSection?: number };
+            }
+        ).metadata.maxRecordsPerSection,
+        5
     );
     assert.doesNotMatch(JSON.stringify(privateResult), /secret-token/);
 

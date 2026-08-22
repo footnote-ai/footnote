@@ -15,6 +15,7 @@ import { applySingleToolPolicy } from '../tools/toolPolicy.js';
 import { resolveToolSelection } from '../tools/toolRegistry.js';
 import type { WeatherForecastTool } from '../contextIntegrations/weather/index.js';
 import { GITHUB_CONTEXT_NAME } from '../contextIntegrations/github/index.js';
+import { PROJECT_CONTEXT_NAME } from '../contextIntegrations/projectContext/index.js';
 import { FILE_SCAN_INTEGRATION_NAME } from '../contextIntegrations/fileScanning/index.js';
 import { REVERSE_IMAGE_SEARCH_INTEGRATION_NAME } from '../contextIntegrations/reverseImageSearch/index.js';
 import { isImageAttachment } from '../attachments/attachmentContext.js';
@@ -262,8 +263,8 @@ export const createPlannerResultApplier = (
                       plannerInput.normalizedRequest.latestUserInput,
               })
             : undefined;
-        // GitHub scope and section selection originate in the normalized planner
-        // suggestion, but the backend creates the executable context request.
+        // The planner suggests GitHub scope and sections. The backend creates
+        // the request that can run.
         const githubContextStepRequest = generationForExecution.githubContext
             ? {
                   integrationName: GITHUB_CONTEXT_NAME,
@@ -280,9 +281,30 @@ export const createPlannerResultApplier = (
                   },
               }
             : undefined;
+        // A Footnote project-context suggestion does not need a user-supplied
+        // slug. The backend still checks the route and setting before creating
+        // a step that can run.
+        const projectDocsConfig =
+            runtimeConfig.chatWorkflow.contextIntegrations.projectDocs;
+        const projectContextStepRequest =
+            generationForExecution.projectContext && projectDocsConfig.enabled
+                ? {
+                      integrationName: PROJECT_CONTEXT_NAME,
+                      requested: true,
+                      eligible: true,
+                      input: {
+                          repository:
+                              generationForExecution.projectContext.repository,
+                          query: generationForExecution.projectContext.query,
+                      },
+                  }
+                : undefined;
         const contextStepRequests = [
             ...(githubContextStepRequest !== undefined
                 ? [githubContextStepRequest]
+                : []),
+            ...(projectContextStepRequest !== undefined
+                ? [projectContextStepRequest]
                 : []),
             ...(toolContextStepRequest !== undefined
                 ? [toolContextStepRequest]

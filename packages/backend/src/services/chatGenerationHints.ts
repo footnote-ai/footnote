@@ -6,16 +6,95 @@
  * @footnote-ethics: medium - Repo-aware hints affect how accurately Footnote explains itself.
  */
 import type { GenerationSearchRequest } from '@footnote/agent-runtime';
-import { chatTopicHintQueryTerms } from '@footnote/contracts';
+import {
+    chatTopicHintQueryTerms,
+    PROJECT_CONTEXT_CANONICAL_REPOSITORY,
+} from '@footnote/contracts';
 import type {
+    ChatGenerationGitHubContext,
     ChatGenerationPlan,
     ChatRepoSearchHint,
 } from './chatGenerationTypes.js';
 
-const FOOTNOTE_REPO_OWNER = 'footnote-ai';
-const FOOTNOTE_REPO_NAME = 'footnote';
-const FOOTNOTE_REPO_SLUG = `${FOOTNOTE_REPO_OWNER}/${FOOTNOTE_REPO_NAME}`;
 const DEEPWIKI_FOOTNOTE_URL = 'https://deepwiki.com/footnote-ai/footnote';
+
+/**
+ * The fixed Footnote repository used for project-document lookups.
+ */
+export { PROJECT_CONTEXT_CANONICAL_REPOSITORY };
+
+export type ChatGenerationProjectContextRoute = {
+    repository: string;
+    query: string;
+};
+
+/**
+ * Decides whether this is a question about Footnote itself.
+ *
+ * A `repo_explainer` intent selects Footnote's fixed repository, so the user
+ * does not need to include its slug. This lets questions such as "what work is
+ * currently open?" use project context.
+ */
+export const buildProjectContextRouteFromPlan = (
+    generation: Pick<ChatGenerationPlan, 'search'>
+): ChatGenerationProjectContextRoute | undefined => {
+    if (generation.search?.intent !== 'repo_explainer') return undefined;
+    const query = generation.search.query.trim();
+    if (!query) return undefined;
+    return {
+        repository: PROJECT_CONTEXT_CANONICAL_REPOSITORY,
+        query,
+    };
+};
+
+const CURRENT_PROJECT_QUERY_PATTERN =
+    /\b(current(?:ly)?|now|open|latest|recent|activity|release|releases|issues?|pull requests?|prs?|status)\b/iu;
+const CURRENT_PROJECT_WORK_PATTERN = /\bworking\s+on\b/iu;
+
+/**
+ * Builds the GitHub request for current Footnote questions. Other repositories
+ * still need an exact slug written by the user. This route is limited to
+ * Footnote and `repo_explainer` requests.
+ */
+export const buildFootnoteGitHubContextRouteFromPlan = (
+    generation: Pick<ChatGenerationPlan, 'search'>
+): ChatGenerationGitHubContext | undefined => {
+    if (generation.search?.intent !== 'repo_explainer') return undefined;
+    const query = generation.search.query.trim();
+    if (
+        !query ||
+        (!CURRENT_PROJECT_QUERY_PATTERN.test(query) &&
+            !CURRENT_PROJECT_WORK_PATTERN.test(query))
+    ) {
+        return undefined;
+    }
+
+    const sections: ChatGenerationGitHubContext['sections'] = [];
+    if (/\b(open|issues?)\b/iu.test(query)) {
+        sections.push('issues', 'pulls');
+    }
+    if (/\b(pull requests?|prs?)\b/iu.test(query)) {
+        sections.push('pulls');
+    }
+    if (/\b(release|releases|latest)\b/iu.test(query)) {
+        sections.push('releases');
+    }
+    if (
+        /\b(recent|activity|current(?:ly)?|now|status|work(?:ing)?|team)\b/iu.test(
+            query
+        )
+    ) {
+        sections.push('commits');
+    }
+
+    const uniqueSections = [...new Set(sections)];
+    if (uniqueSections.length === 0) return undefined;
+
+    return {
+        repository: PROJECT_CONTEXT_CANONICAL_REPOSITORY,
+        sections: uniqueSections,
+    };
+};
 
 const REPO_HINT_QUERY_TERMS: Record<ChatRepoSearchHint, string[]> = {
     architecture: ['architecture'],
@@ -58,9 +137,8 @@ export const buildRepoExplainerQuery = (
     search: Pick<GenerationSearchRequest, 'query' | 'repoHints' | 'topicHints'>
 ): string =>
     dedupeSearchTerms([
-        FOOTNOTE_REPO_SLUG,
-        FOOTNOTE_REPO_OWNER,
-        FOOTNOTE_REPO_NAME,
+        PROJECT_CONTEXT_CANONICAL_REPOSITORY,
+        ...PROJECT_CONTEXT_CANONICAL_REPOSITORY.split('/'),
         'DeepWiki',
         ...(search.repoHints?.flatMap((hint) =>
             isChatRepoSearchHint(hint) ? REPO_HINT_QUERY_TERMS[hint] : [hint]
@@ -88,7 +166,7 @@ export const buildWebSearchInstruction = (
 
         return [
             'The planner marked this as a Footnote repository explanation lookup.',
-            `Treat ${FOOTNOTE_REPO_SLUG} as the canonical repo identity for this search.`,
+            `Treat ${PROJECT_CONTEXT_CANONICAL_REPOSITORY} as the canonical repo identity for this search.`,
             `Prefer DeepWiki results from ${DEEPWIKI_FOOTNOTE_URL} when they are relevant.`,
             'If DeepWiki coverage is thin, use broader web context instead of getting stuck.',
             `Search query: ${repoQuery}.${hintText}${topicHintText}`.trim(),

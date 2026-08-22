@@ -13,6 +13,7 @@
 export const promptKeys = [
     'conversation.shared.system',
     'conversation.shared.persona.footnote',
+    'conversation.shared.project_context_guidance',
     'discord.chat.system',
     'discord.chat.persona.footnote',
     'discord.image.system',
@@ -56,11 +57,7 @@ export interface PromptDefinition extends PromptMetadata {
 }
 
 export type TraceTemperamentAxisKey =
-    | 'tightness'
-    | 'rationale'
-    | 'attribution'
-    | 'caution'
-    | 'extent';
+    'tightness' | 'rationale' | 'attribution' | 'caution' | 'extent';
 
 export type TraceTemperamentLevel = '1' | '2' | '3' | '4' | '5';
 

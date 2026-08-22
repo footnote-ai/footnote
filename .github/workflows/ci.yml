@@ -234,10 +234,18 @@ jobs:
         steps:
             - uses: actions/checkout@v7
             - uses: docker/setup-buildx-action@v4
+            - id: context
+              name: Prepare revision-safe project context bundle
+              shell: bash
+              run: |
+                  set -euo pipefail
+                  node scripts/prepare-project-context-bundle.mjs
+                  echo "revision=$(cat .footnote/context-bundle/revision.txt)" >> "$GITHUB_OUTPUT"
             - name: Build ${{ matrix.name }} image with cache
               run: |
                   docker buildx build \
                     --file ${{ matrix.dockerfile }} \
+                    --build-arg FOOTNOTE_CONTEXT_COMMIT_SHA=${{ steps.context.outputs.revision }} \
                     --cache-from type=gha,scope=footnote-${{ matrix.name }} \
                     --cache-to type=gha,mode=max,scope=footnote-${{ matrix.name }} \
                     .

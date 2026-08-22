@@ -753,6 +753,170 @@ test('repo_explainer search plans normalize repo hints and medium context', asyn
     ]);
 });
 
+test('Footnote current-state questions add backend-owned canonical GitHub context', async () => {
+    const planner = createStructuredPlanner(
+        {
+            action: 'message',
+            modality: 'text',
+            requestedCapabilityProfile: 'balanced-general',
+            safetyTier: 'Low',
+            reasoning: 'Current repository work needs bounded GitHub context.',
+            generation: {
+                reasoningEffort: 'low',
+                verbosity: 'low',
+                temperament: {
+                    tightness: 3,
+                    rationale: 3,
+                    attribution: 3,
+                    caution: 3,
+                    extent: 3,
+                },
+                search: {
+                    query: 'What work is currently open?',
+                    contextSize: 'medium',
+                    intent: 'repo_explainer',
+                },
+            },
+        },
+        [{ id: 'balanced-general', description: 'general' }]
+    );
+
+    const { plan } = await planFromWorkflow(
+        planner,
+        createChatRequest({ latestUserInput: 'What work is currently open?' })
+    );
+
+    assert.deepEqual(plan.generation.githubContext, {
+        repository: 'footnote-ai/footnote',
+        sections: ['issues', 'pulls', 'commits'],
+    });
+    assert.equal(
+        plan.generation.projectContext?.repository,
+        'footnote-ai/footnote'
+    );
+});
+
+test('Footnote pull-request and team-work questions select live GitHub sections', async () => {
+    const planner = createStructuredPlanner(
+        {
+            action: 'message',
+            modality: 'text',
+            requestedCapabilityProfile: 'balanced-general',
+            safetyTier: 'Low',
+            reasoning: 'Current project activity needs bounded GitHub context.',
+            generation: {
+                reasoningEffort: 'low',
+                verbosity: 'low',
+                temperament: {
+                    tightness: 3,
+                    rationale: 3,
+                    attribution: 3,
+                    caution: 3,
+                    extent: 3,
+                },
+                search: {
+                    query: 'Show pull requests',
+                    contextSize: 'low',
+                    intent: 'repo_explainer',
+                },
+            },
+        },
+        [{ id: 'balanced-general', description: 'general' }]
+    );
+    const pullPlan = await planFromWorkflow(
+        planner,
+        createChatRequest({ latestUserInput: 'Show pull requests' })
+    );
+    assert.deepEqual(pullPlan.plan.generation.githubContext, {
+        repository: 'footnote-ai/footnote',
+        sections: ['pulls'],
+    });
+
+    const teamPlanner = createStructuredPlanner(
+        {
+            action: 'message',
+            modality: 'text',
+            requestedCapabilityProfile: 'balanced-general',
+            safetyTier: 'Low',
+            reasoning: 'Current project activity needs bounded GitHub context.',
+            generation: {
+                reasoningEffort: 'low',
+                verbosity: 'low',
+                temperament: {
+                    tightness: 3,
+                    rationale: 3,
+                    attribution: 3,
+                    caution: 3,
+                    extent: 3,
+                },
+                search: {
+                    query: 'What is the team working on?',
+                    contextSize: 'low',
+                    intent: 'repo_explainer',
+                },
+            },
+        },
+        [{ id: 'balanced-general', description: 'general' }]
+    );
+    const teamPlan = await planFromWorkflow(
+        teamPlanner,
+        createChatRequest({ latestUserInput: 'What is the team working on?' })
+    );
+    assert.deepEqual(teamPlan.plan.generation.githubContext, {
+        repository: 'footnote-ai/footnote',
+        sections: ['commits'],
+    });
+});
+
+test('planner-provided GitHub context wins over derived Footnote context', async () => {
+    const planner = createStructuredPlanner(
+        {
+            action: 'message',
+            modality: 'text',
+            requestedCapabilityProfile: 'balanced-general',
+            safetyTier: 'Low',
+            reasoning: 'Use the explicitly requested repository.',
+            generation: {
+                reasoningEffort: 'low',
+                verbosity: 'low',
+                temperament: {
+                    tightness: 3,
+                    rationale: 3,
+                    attribution: 3,
+                    caution: 3,
+                    extent: 3,
+                },
+                githubContext: {
+                    repository: 'acme/repo',
+                    sections: ['pulls'],
+                },
+                search: {
+                    query: 'What is currently open?',
+                    contextSize: 'low',
+                    intent: 'repo_explainer',
+                },
+            },
+        },
+        [{ id: 'balanced-general', description: 'general' }]
+    );
+    const result = await planFromWorkflow(
+        planner,
+        createChatRequest({
+            latestUserInput: 'What is currently open in acme/repo?',
+            conversation: [
+                {
+                    role: 'user',
+                    content: 'What is currently open in acme/repo?',
+                },
+            ],
+        })
+    );
+    assert.deepEqual(result.plan.generation.githubContext, {
+        repository: 'acme/repo',
+        sections: ['pulls'],
+    });
+});
+
 test('search topicHints are bounded, deduped, and normalized fail-open', async () => {
     const planner = createPlanner(
         JSON.stringify({

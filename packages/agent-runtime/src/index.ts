@@ -557,6 +557,58 @@ export function createGenerationRuntime(
     });
 }
 
+/**
+ * Backend-to-runtime input for one embedding request.
+ *
+ * Provider and model are explicit because embedding runs are independently
+ * configured and must not implicitly inherit the chat provider.
+ */
+export interface EmbeddingRequest {
+    /** Text chunks to embed. At least one item is required. */
+    texts: string[];
+    /** Embedding model identifier. */
+    model: string;
+    /** Embedding provider identifier. */
+    provider: string;
+    /** Optional caller-provided cancellation signal. */
+    signal?: AbortSignal;
+}
+
+/**
+ * Runtime-to-backend result for one embedding request.
+ *
+ * This is deliberately an observable union, never a silent `[]`. The embedding
+ * runtime does not own fail-open behavior; the project-context integration
+ * decides continuation when an error result is observed.
+ */
+export type EmbeddingRuntimeResult =
+    | {
+          status: 'success';
+          embeddings: number[][];
+          model: string;
+          provider: string;
+          texts: string[];
+          /** Provider-reported input tokens when the embedding API returns them. */
+          promptTokens?: number;
+          /** Provider-reported total tokens when the embedding API returns them. */
+          totalTokens?: number;
+          generationTimeMs: number;
+      }
+    | {
+          status: 'error';
+          reason: string;
+          model?: string;
+          provider?: string;
+      };
+
+/**
+ * Replaceable runtime implementation for text embeddings.
+ */
+export interface EmbeddingRuntime {
+    readonly kind: string;
+    embed(request: EmbeddingRequest): Promise<EmbeddingRuntimeResult>;
+}
+
 export {
     createOpenAiImageRuntime,
     type CreateOpenAiImageRuntimeOptions,
@@ -569,6 +621,12 @@ export {
     type CreateOpenAiTtsRuntimeOptions,
     type OpenAiTtsRuntimeLogger,
 } from './openAiTtsRuntime.js';
+export {
+    createOpenAiEmbeddingRuntime,
+    type CreateOpenAiEmbeddingRuntimeOptions,
+    type OpenAiEmbeddingRuntimeClient,
+    type OpenAiEmbeddingRuntimeLogger,
+} from './openAiEmbeddingRuntime.js';
 export {
     createOpenAiRealtimeVoiceRuntime,
     type CreateOpenAiRealtimeVoiceRuntimeOptions,

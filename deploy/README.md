@@ -131,7 +131,7 @@ docker compose -f deploy/compose.yml up
 For local source builds during development:
 
 ```bash
-docker compose -f deploy/compose.yml -f deploy/compose.dev-build.yml up --build
+pnpm compose:up
 ```
 
 ## Settings vs Secrets
@@ -177,8 +177,25 @@ Single-app deploy:
 Manual deploy:
 
 ```bash
-fly deploy -c deploy/fly/server.toml
+  pnpm context:bundle
+  fly deploy -c deploy/fly/server.toml \
+  --build-arg FOOTNOTE_CONTEXT_COMMIT_SHA=$(git rev-parse HEAD)
 ```
+
+Local Compose source build and start:
+
+```bash
+pnpm compose:up
+```
+
+The wrapper packages the approved project documents and gives Docker the Git
+commit they came from before starting Compose. Pass Compose flags after `--`,
+for example `pnpm compose:up -- -d`.
+
+The server image includes the approved project documents because it does not
+contain `.git`. Always pass the source commit when deploying. That keeps
+project-document citations tied to the exact content used to build the index.
+GitHub Actions passes the commit through `github.sha`.
 
 For Fly, `pnpm settings` and `pnpm reset` issue links through `fly ssh console`
 against the app detected from `deployment.fly-app`, `FLY_APP_NAME`, `fly.toml`,

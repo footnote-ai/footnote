@@ -12,6 +12,7 @@ import type {
     ContextStepResult,
     ContextStepExecutor,
 } from '../workflowEngine.js';
+import type { ContextPromptMessage } from '@footnote/contracts/policy';
 import type { GenerationRequest } from '@footnote/agent-runtime';
 
 type FollowUpSearchHint = {
@@ -20,28 +21,35 @@ type FollowUpSearchHint = {
     priority: 'low' | 'medium' | 'high';
 };
 
+type ContextMessageInput =
+    ContextPromptMessage | { role: 'system' | 'user'; content: string };
+
 /**
- * Injects normalized context-step system messages into the generation prompt.
- * Context is inserted before planner output markers when present, otherwise
- * appended to preserve fail-open execution ordering.
+ * @description: Injects normalized context-step messages into the generation prompt.
+ * Context is inserted before planner output markers when present, otherwise appended.
+ * @footnote-scope: core
+ * @footnote-module: WorkflowContextPromptBoundary
+ * @footnote-risk: high - Role mistakes can promote untrusted context into trusted instructions.
+ * @footnote-ethics: high - Prompt authority must preserve the distinction between guidance and evidence.
  */
 export const injectContextMessagesIntoPrompt = (
     baseMessages: RuntimeMessage[],
-    contextMessages: string[] | undefined
+    contextMessages: ContextMessageInput[] | undefined,
+    contextMessageRole: 'system' | 'user' = 'system'
 ): RuntimeMessage[] => {
     if (!contextMessages || contextMessages.length === 0) {
         return baseMessages;
     }
 
     const normalizedContextMessages = contextMessages
-        .map((message) => message.trim())
-        .filter((message) => message.length > 0)
-        .map(
-            (message): RuntimeMessage => ({
-                role: 'system',
-                content: message,
-            })
-        );
+        .map((message) =>
+            typeof message === 'string'
+                ? { role: contextMessageRole, content: message }
+                : { role: message.role, content: message.content }
+        )
+        .map((message) => ({ ...message, content: message.content.trim() }))
+        .filter((message) => message.content.length > 0)
+        .map((message): RuntimeMessage => message);
     if (normalizedContextMessages.length === 0) {
         return baseMessages;
     }

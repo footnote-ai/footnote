@@ -64,7 +64,11 @@ test('web search executor returns executed with normalized citations from searxn
         assert.equal(result.executionContext.status, 'executed');
         assert.equal(result.sources?.[0]?.url, 'https://example.com/policy');
         assert.ok(
-            result.contextMessages?.some((line) => line.includes('OpenAI'))
+            result.contextMessages?.some((line) =>
+                (typeof line === 'string' ? line : line.content).includes(
+                    'OpenAI'
+                )
+            )
         );
         assert.ok(observedUrl.includes('/custom/base/search'));
     } finally {

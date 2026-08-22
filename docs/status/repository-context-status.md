@@ -3,7 +3,7 @@
 Status: repository context selection and preview are implemented; TrustGraph
 loading is not implemented yet.
 
-Last updated: 2026-07-22.
+Last updated: 2026-08-20.
 
 ## Goal
 
@@ -33,13 +33,23 @@ Repositories can now define eligible context files through
 `pnpm context:repo:list`. Repository context is not enabled or loaded by
 default. The resolver does not read file contents or contact TrustGraph.
 
-The repository-loading test is still limited. It uses a small, hand-written
-file at `docs/trustgraph/repo-snapshot.json`. It does not yet read the
-repository's real documentation or connect directly to TrustGraph's document
-API.
+The repository-loading test remains separate from the direct project-context
+path. It uses a small, hand-written file at `docs/trustgraph/repo-snapshot.json`
+and does not connect directly to TrustGraph's document API.
 
 That test file should remain only until the real repository context path is
 working.
+
+## Interim Project Context Path
+
+Issue #490 adds a direct local document lookup for Footnote explanations and
+discovery. It reads the `.footnote/context-files` allowlist, splits approved
+documents into excerpts, reuses an index when the content still matches, and
+uses a separately configured embedding model to find relevant excerpts. It
+serves `project_context` without TrustGraph. Current-state questions can also
+use a limited set of live GitHub results. TrustGraph remains the longer-term
+external retrieval option. See
+[Project Context](../architecture/context-integrations/project-context.md).
 
 ## Repository Context File
 

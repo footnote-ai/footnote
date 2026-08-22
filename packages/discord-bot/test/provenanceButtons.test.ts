@@ -75,6 +75,16 @@ test('details action renders markdown sections with execution table and trace vi
                     snippet: 'Evidence',
                 },
             ],
+            githubContext: {
+                repository: 'footnote-ai/footnote',
+                requestedSections: ['issues', 'pulls'],
+                status: 'partial',
+                fetchTimestamp: new Date().toISOString(),
+                maxRecordsPerSection: 5,
+                returnedCounts: { pulls: 1 },
+                failedSections: ['issues'],
+                reasonCodes: ['unauthorized'],
+            },
             presentation: {
                 step: 'presentation',
                 outcome: 'finalized_with_audit_unavailable',
@@ -180,6 +190,7 @@ test('details action renders markdown sections with execution table and trace vi
         );
         assert.doesNotMatch(content, /candidate_.*Final answer/u);
         assert.match(content, /Sources available/);
+        assert.match(content, /GitHub: partial; 1 pull request retrieved/);
         assert.match(content, /Target Attribution: `5`/);
         assert.match(content, /Final Attribution: `3`/);
         assert.match(content, /Final Reason: `runtime_posture_adjustment`/);
