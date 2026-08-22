@@ -7,12 +7,7 @@
  */
 
 import { Message } from 'discord.js';
-import { runtimeConfig } from '../config.js';
 import { logger } from './logger.js';
-import {
-    containsPlaintextBotAlias,
-    resolveBotMentionAliases,
-} from './mentionAliases.js';
 
 type CatchupFilterDecision = { skip: boolean; reason: string };
 
@@ -103,11 +98,6 @@ export class CatchupFilter {
     ): Promise<CatchupFilterDecision> {
         try {
             const botId = message.client.user?.id;
-            const botUsername = message.client.user?.username ?? '';
-            const botAliases = resolveBotMentionAliases(
-                runtimeConfig.profile,
-                botUsername
-            );
             const isDirectMessage = !message.guildId;
 
             const combined = [...recentMessages, message].sort(
@@ -119,8 +109,7 @@ export class CatchupFilter {
 
             // Presence of the bot in the recent history short-circuits several heuristics.
             const mentionDetected =
-                !!botId &&
-                this.containsBotMention(evaluationWindow, botId, botAliases);
+                !!botId && this.containsBotMention(evaluationWindow, botId);
 
             // In shared channels we only interject if someone has reached out recently.
             if (!isDirectMessage && botId && !mentionDetected) {
@@ -171,7 +160,7 @@ export class CatchupFilter {
 
             const relevanceScore = Math.max(
                 ...evaluationWindow.map((msg) =>
-                    this.calculateRelevanceScore(msg.content ?? '', botAliases)
+                    this.calculateRelevanceScore(msg.content ?? '')
                 ),
                 0
             );
@@ -262,13 +251,9 @@ export class CatchupFilter {
     }
 
     /**
-     * Scans the supplied messages for explicit mentions or plaintext references to the bot.
+     * Scans the supplied messages for explicit mentions or replies to the bot.
      */
-    private containsBotMention(
-        messages: Message[],
-        botId: string,
-        botAliases: readonly string[]
-    ): boolean {
+    private containsBotMention(messages: Message[], botId: string): boolean {
         const mentionRegex = new RegExp(`<@!?${botId}>`, 'i');
 
         for (const msg of messages) {
@@ -285,16 +270,7 @@ export class CatchupFilter {
                 return true;
             }
 
-            const content = msg.content ?? '';
-            if (!content) {
-                continue;
-            }
-
-            if (mentionRegex.test(content)) {
-                return true;
-            }
-
-            if (containsPlaintextBotAlias(content, botAliases)) {
+            if (mentionRegex.test(msg.content ?? '')) {
                 return true;
             }
         }
@@ -389,10 +365,7 @@ export class CatchupFilter {
     /**
      * Produces a coarse relevance score indicating whether the content likely warrants a bot reply.
      */
-    private calculateRelevanceScore(
-        content: string,
-        botAliases: readonly string[]
-    ): number {
+    private calculateRelevanceScore(content: string): number {
         if (!content) {
             return 0;
         }
@@ -417,12 +390,10 @@ export class CatchupFilter {
         }
 
         const trimmedLower = lower.trim();
-        // Treat friendly openings and explicit alias mentions as mild signals to respond.
+        // Treat friendly openings as mild signals to respond. Plaintext aliases
+        // are routing candidates, not catch-up proof of assistant invocation.
         const engagementRegex = /^(hey|hi|hello|ping|bot)\b/i;
-        if (
-            engagementRegex.test(trimmedLower) ||
-            containsPlaintextBotAlias(trimmedLower, botAliases)
-        ) {
+        if (engagementRegex.test(trimmedLower)) {
             score += 0.1;
         }
 

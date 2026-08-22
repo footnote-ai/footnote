@@ -1,5 +1,5 @@
 /**
- * @description: Verifies realtime engagement mention scoring uses shared profile alias logic.
+ * @description: Verifies realtime engagement mention scoring uses explicit Discord addressing evidence.
  * @footnote-scope: test
  * @footnote-module: RealtimeEngagementFilterTests
  * @footnote-risk: low - These tests validate deterministic scoring behavior only.
@@ -96,53 +96,11 @@ type RealtimeFilterPrivateAccess = {
     scoreBotNoise: (context: EngagementContext) => number;
 };
 
-test('scoreMention returns 0.9 for explicit vendor aliases', async () => {
-    await withProfile(
-        createProfile({
-            id: 'ari-vendor',
-            displayName: 'Ari',
-            mentionAliases: ['ari'],
-        }),
-        () => {
-            const filter =
-                createFilter() as unknown as RealtimeFilterPrivateAccess;
-            assert.equal(filter.scoreMention(createContext('hey ari')), 0.9);
-        }
-    );
-});
-
-test('scoreMention falls back to footnote display-name aliases when explicit aliases are absent', async () => {
+test('scoreMention does not treat plaintext aliases as explicit addressing', async () => {
     await withProfile(createProfile(), () => {
         const filter = createFilter() as unknown as RealtimeFilterPrivateAccess;
-        assert.equal(filter.scoreMention(createContext('hey footnote')), 0.9);
+        assert.equal(filter.scoreMention(createContext('hey footnote')), 0);
     });
-});
-
-test('scoreMention includes the live Discord username as a fallback alias', async () => {
-    await withProfile(
-        createProfile({
-            id: 'vendor-bot',
-            displayName: 'Vendor Bot',
-            mentionAliases: ['ari'],
-        }),
-        () => {
-            const filter =
-                createFilter() as unknown as RealtimeFilterPrivateAccess;
-            assert.equal(
-                filter.scoreMention(
-                    createContext('hello footnotebot', {
-                        client: {
-                            user: {
-                                id: 'bot-1',
-                                username: 'FootnoteBot',
-                            },
-                        },
-                    })
-                ),
-                0.9
-            );
-        }
-    );
 });
 
 test('scoreMention blocks substring false positives for vendor aliases', async () => {

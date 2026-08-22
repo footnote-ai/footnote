@@ -1750,10 +1750,35 @@ components:
                     properties:
                         kind:
                             type: string
-                            enum: [submit, direct, invoked, catchup]
+                            enum:
+                                [
+                                    submit,
+                                    direct,
+                                    invoked,
+                                    alias_candidate,
+                                    catchup,
+                                ]
                         messageId:
                             type: string
                             minLength: 1
+                        addressing:
+                            type: object
+                            description: Provider-neutral addressing facts used by the planner to resolve ambiguous routing evidence.
+                            properties:
+                                assistantMentioned:
+                                    type: boolean
+                                replyToAssistant:
+                                    type: boolean
+                                otherParticipantMentioned:
+                                    type: boolean
+                                replyToOtherParticipant:
+                                    type: boolean
+                            required:
+                                - assistantMentioned
+                                - replyToAssistant
+                                - otherParticipantMentioned
+                                - replyToOtherParticipant
+                            additionalProperties: false
                     required:
                         - kind
                     additionalProperties: false

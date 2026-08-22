@@ -758,8 +758,21 @@ const buildFallbackPlan = (
     request: PostChatRequest,
     reason: string
 ): ChatPlan => {
+    const addressing = request.trigger.addressing;
+    const assistantWasExplicitlyAddressed = Boolean(
+        addressing?.assistantMentioned || addressing?.replyToAssistant
+    );
+    const anotherParticipantWasExplicitlyAddressed = Boolean(
+        addressing?.otherParticipantMentioned ||
+        addressing?.replyToOtherParticipant
+    );
     const fallbackAction =
-        request.trigger.kind === 'catchup' ? 'ignore' : 'message';
+        request.trigger.kind === 'catchup' ||
+        (request.trigger.kind === 'alias_candidate' &&
+            anotherParticipantWasExplicitlyAddressed &&
+            !assistantWasExplicitlyAddressed)
+            ? 'ignore'
+            : 'message';
 
     return {
         action: fallbackAction,
@@ -783,6 +796,7 @@ const summarizeRequest = (request: PostChatRequest): string =>
     JSON.stringify({
         surface: request.surface,
         trigger: request.trigger.kind,
+        addressing: request.trigger.addressing,
         latestUserInputLength: request.latestUserInput.length,
         conversationMessages: request.conversation.length,
         attachmentKinds: request.attachments?.map(
@@ -823,6 +837,14 @@ const buildPlannerMessages = (input: {
         role: 'system',
         content: `This request was triggered because ${input.request.trigger.kind}.`,
     },
+    ...(input.request.trigger.addressing
+        ? [
+              {
+                  role: 'system' as const,
+                  content: `Addressing evidence (routing facts only): ${JSON.stringify(input.request.trigger.addressing)}`,
+              },
+          ]
+        : []),
     {
         role: 'system',
         content: `Planner context tier: ${input.contextTier}`,

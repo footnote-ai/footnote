@@ -69,8 +69,17 @@ const ChatTriggerKindSchema = z.enum([
     'submit',
     'direct',
     'invoked',
+    'alias_candidate',
     'catchup',
 ]);
+const ChatAddressingEvidenceSchema = z
+    .object({
+        assistantMentioned: z.boolean(),
+        replyToAssistant: z.boolean(),
+        otherParticipantMentioned: z.boolean(),
+        replyToOtherParticipant: z.boolean(),
+    })
+    .strict();
 const ChatPersonaIdSchema = z.string().regex(/^[a-z0-9][a-z0-9-]{0,31}$/);
 const ChatModeIdSchema = z.enum(['express', 'balanced', 'grounded']);
 const ChatConversationMessageSchema = z
@@ -1499,6 +1508,7 @@ export const PostChatRequestSchema = z
             .object({
                 kind: ChatTriggerKindSchema,
                 messageId: z.string().min(1).optional(),
+                addressing: ChatAddressingEvidenceSchema.optional(),
             })
             .strict(),
         latestUserInput: z.string().min(0).max(3072),

@@ -709,6 +709,69 @@ test('chatPlanner fails open to a valid fallback generation config when planner 
     }
 });
 
+test('chatPlanner fails closed to ignore when an alias candidate targets another participant', async () => {
+    const planner = createPlanner('not valid json');
+    const response = await planFromWorkflow(
+        planner,
+        createChatRequest({
+            trigger: {
+                kind: 'alias_candidate',
+                addressing: {
+                    assistantMentioned: false,
+                    replyToAssistant: false,
+                    otherParticipantMentioned: false,
+                    replyToOtherParticipant: true,
+                },
+            },
+        })
+    );
+
+    assert.equal(response.execution.status, 'failed');
+    assert.equal(response.plan.action, 'ignore');
+});
+
+test('chatPlanner preserves message fallback for an unaddressed alias candidate', async () => {
+    const planner = createPlanner('not valid json');
+    const response = await planFromWorkflow(
+        planner,
+        createChatRequest({
+            trigger: {
+                kind: 'alias_candidate',
+                addressing: {
+                    assistantMentioned: false,
+                    replyToAssistant: false,
+                    otherParticipantMentioned: false,
+                    replyToOtherParticipant: false,
+                },
+            },
+        })
+    );
+
+    assert.equal(response.execution.status, 'failed');
+    assert.equal(response.plan.action, 'message');
+});
+
+test('chatPlanner preserves message fallback for an explicitly addressed assistant', async () => {
+    const planner = createPlanner('not valid json');
+    const response = await planFromWorkflow(
+        planner,
+        createChatRequest({
+            trigger: {
+                kind: 'alias_candidate',
+                addressing: {
+                    assistantMentioned: true,
+                    replyToAssistant: false,
+                    otherParticipantMentioned: true,
+                    replyToOtherParticipant: false,
+                },
+            },
+        })
+    );
+
+    assert.equal(response.execution.status, 'failed');
+    assert.equal(response.plan.action, 'message');
+});
+
 test('repo_explainer search plans normalize repo hints and medium context', async () => {
     const planner = createPlanner(
         JSON.stringify({

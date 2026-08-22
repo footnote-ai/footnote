@@ -9,8 +9,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { runtimeConfig } from '../src/config.js';
-import type { BotProfileConfig } from '../src/config/profile.js';
 import { CatchupFilter } from '../src/utils/CatchupFilter.js';
 
 interface CatchupMessageLike {
@@ -18,38 +16,6 @@ interface CatchupMessageLike {
     author: { bot: boolean };
     content: string;
 }
-
-const withProfile = async (
-    profile: BotProfileConfig,
-    fn: () => Promise<void> | void
-): Promise<void> => {
-    const mutableRuntimeConfig = runtimeConfig as unknown as {
-        profile: BotProfileConfig;
-    };
-    const previousProfile = mutableRuntimeConfig.profile;
-    mutableRuntimeConfig.profile = profile;
-
-    try {
-        await fn();
-    } finally {
-        mutableRuntimeConfig.profile = previousProfile;
-    }
-};
-
-const createProfile = (
-    overrides: Partial<BotProfileConfig> = {}
-): BotProfileConfig => ({
-    id: 'footnote',
-    displayName: 'Footnote',
-    mentionAliases: [],
-    promptOverlay: {
-        source: 'none',
-        text: null,
-        path: null,
-        length: 0,
-    },
-    ...overrides,
-});
 
 function createMessage(content: string): CatchupMessageLike {
     return {
@@ -106,59 +72,44 @@ const createDiscordMessage = (
         ...overrides,
     }) as never;
 
-test('shouldSkipPlanner treats vendor aliases as valid mentions in shared channels', async () => {
-    await withProfile(
-        createProfile({
-            id: 'ari-vendor',
-            displayName: 'Ari',
-            mentionAliases: ['ari'],
-        }),
-        async () => {
-            const filter = new CatchupFilter();
-            const decision = await filter.shouldSkipPlanner(
-                createDiscordMessage('hey ari can you explain this bug?'),
-                [],
-                'guild-1:channel-1'
-            );
+test('shouldSkipPlanner does not treat plaintext aliases as explicit mentions', async () => {
+    const filter = new CatchupFilter();
+    const decision = await filter.shouldSkipPlanner(
+        createDiscordMessage('footnote can you help with this error?'),
+        [],
+        'guild-1:channel-1'
+    );
 
-            assert.equal(decision.skip, false);
-        }
+    assert.equal(decision.skip, true);
+    assert.equal(
+        decision.reason,
+        'Bot not mentioned or addressed in recent context'
     );
 });
 
-test('shouldSkipPlanner uses footnote fallback alias when no explicit aliases are configured', async () => {
-    await withProfile(createProfile(), async () => {
-        const filter = new CatchupFilter();
-        const decision = await filter.shouldSkipPlanner(
-            createDiscordMessage('footnote can you help with this error?'),
-            [],
-            'guild-1:channel-1'
-        );
+test('shouldSkipPlanner preserves explicit mention catchup behavior', async () => {
+    const filter = new CatchupFilter();
+    const decision = await filter.shouldSkipPlanner(
+        createDiscordMessage('<@bot-1> can you help with this error?'),
+        [],
+        'guild-1:channel-1'
+    );
 
-        assert.equal(decision.skip, false);
-    });
+    assert.equal(decision.skip, false);
+    assert.equal(decision.reason, 'Content appears relevant for planner');
 });
 
-test('shouldSkipPlanner blocks substring false positives for plaintext aliases', async () => {
-    await withProfile(
-        createProfile({
-            id: 'ari-vendor',
-            displayName: 'Ari',
-            mentionAliases: ['ari'],
-        }),
-        async () => {
-            const filter = new CatchupFilter();
-            const decision = await filter.shouldSkipPlanner(
-                createDiscordMessage('variable naming question'),
-                [],
-                'guild-1:channel-1'
-            );
+test('shouldSkipPlanner blocks unrelated content without explicit addressing', async () => {
+    const filter = new CatchupFilter();
+    const decision = await filter.shouldSkipPlanner(
+        createDiscordMessage('variable naming question'),
+        [],
+        'guild-1:channel-1'
+    );
 
-            assert.equal(decision.skip, true);
-            assert.equal(
-                decision.reason,
-                'Bot not mentioned or addressed in recent context'
-            );
-        }
+    assert.equal(decision.skip, true);
+    assert.equal(
+        decision.reason,
+        'Bot not mentioned or addressed in recent context'
     );
 });

@@ -37,8 +37,8 @@ const buildPlaintextAliasRegex = (alias: string): RegExp => {
 };
 
 /**
- * Resolves the set of plaintext aliases that should count as addressing the
- * current bot runtime.
+ * Resolves the plaintext aliases that can provide candidate addressing
+ * evidence for the current bot runtime.
  */
 export const resolveBotMentionAliases = (
     profile: BotProfileConfig,

@@ -378,7 +378,7 @@ export class MessageCreate extends Event {
                     return;
                 }
                 messageLogger.debug(
-                    'Responding to plaintext alias invocation.',
+                    'Routing plaintext alias candidate to the planner.',
                     {
                         channelId: channelKey,
                         messageId: message.id,
@@ -639,8 +639,8 @@ export class MessageCreate extends Event {
     }
 
     /**
-     * Returns the matched plaintext alias when the message addresses the bot by
-     * profile-scoped name rather than a Discord @mention.
+     * Returns a matched plaintext alias as routing evidence. The planner still
+     * decides whether the message actually addresses the bot.
      */
     private getMatchedPlaintextMentionAlias(message: Message): string | null {
         const content = message.content ?? '';

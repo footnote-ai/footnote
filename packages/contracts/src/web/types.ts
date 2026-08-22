@@ -261,7 +261,23 @@ export type ChatSurface = 'web' | 'discord';
  * @api.operationId: postChat
  * @api.path: POST /api/chat
  */
-export type ChatTriggerKind = 'submit' | 'direct' | 'invoked' | 'catchup';
+export type ChatTriggerKind =
+    | 'submit'
+    | 'direct'
+    | 'invoked'
+    | 'alias_candidate'
+    | 'catchup';
+
+/**
+ * Provider-neutral facts about who a message explicitly addresses.
+ * These facts are evidence for planning, not a final response decision.
+ */
+export type ChatAddressingEvidence = {
+    assistantMentioned: boolean;
+    replyToAssistant: boolean;
+    otherParticipantMentioned: boolean;
+    replyToOtherParticipant: boolean;
+};
 
 /**
  * Transport-neutral conversation entry sent to the backend chat workflow.
@@ -338,6 +354,7 @@ export type PostChatRequest = {
     trigger: {
         kind: ChatTriggerKind;
         messageId?: string;
+        addressing?: ChatAddressingEvidence;
     };
     latestUserInput: string;
     conversation: ChatConversationMessage[];

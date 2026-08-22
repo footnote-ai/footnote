@@ -16,6 +16,7 @@ import { resolveBreakerDecisionContext } from '@footnote/contracts/policy';
 import type {
     PostChatRequest,
     ChatImageRequest,
+    ChatAddressingEvidence,
     ChatTriggerKind,
 } from '@footnote/contracts/web';
 import {
@@ -603,6 +604,7 @@ export class MessageProcessor {
                 trigger: {
                     kind: this.getChatTriggerKind(message, trigger),
                     messageId: message.id,
+                    addressing: this.getAddressingEvidence(message),
                 },
                 latestUserInput: message.content.trim(),
                 conversation,
@@ -723,20 +725,58 @@ export class MessageProcessor {
         message: Message,
         trigger?: string
     ): ChatTriggerKind {
-        if (message.reference?.messageId) {
-            return 'direct';
-        }
-
-        const botUserId = message.client.user?.id;
-        if (botUserId && message.mentions.users.has(botUserId)) {
+        const addressing = this.getAddressingEvidence(message);
+        if (addressing.assistantMentioned || addressing.replyToAssistant) {
             return 'invoked';
         }
 
         if (trigger?.startsWith('Mentioned by plaintext alias:')) {
-            return 'invoked';
+            return 'alias_candidate';
+        }
+
+        if (message.reference?.messageId) {
+            return 'direct';
         }
 
         return 'catchup';
+    }
+
+    /**
+     * Converts Discord mention/reply state into provider-neutral routing
+     * evidence for the backend planner. The evidence does not decide whether
+     * the assistant should answer.
+     */
+    private getAddressingEvidence(message: Message): ChatAddressingEvidence {
+        const assistantId = message.client.user?.id;
+        const assistantMentioned = Boolean(
+            assistantId && message.mentions.users.has(assistantId)
+        );
+        const repliedUserId = message.mentions.repliedUser?.id;
+        const isSameChannelReply = Boolean(
+            message.reference?.messageId &&
+            message.reference.guildId === message.guildId &&
+            message.reference.channelId === message.channelId
+        );
+        const replyToAssistant = Boolean(
+            assistantId && isSameChannelReply && repliedUserId === assistantId
+        );
+        const mentionedUsers =
+            typeof message.mentions.users.values === 'function'
+                ? Array.from(message.mentions.users.values())
+                : [];
+        const otherParticipantMentioned = mentionedUsers.some(
+            (user) => user.id !== assistantId
+        );
+        const replyToOtherParticipant = Boolean(
+            isSameChannelReply && repliedUserId && repliedUserId !== assistantId
+        );
+
+        return {
+            assistantMentioned,
+            replyToAssistant,
+            otherParticipantMentioned,
+            replyToOtherParticipant,
+        };
     }
 
     /**
