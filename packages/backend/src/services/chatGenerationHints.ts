@@ -6,22 +6,22 @@
  * @footnote-ethics: medium - Repo-aware hints affect how accurately Footnote explains itself.
  */
 import type { GenerationSearchRequest } from '@footnote/agent-runtime';
-import { chatTopicHintQueryTerms } from '@footnote/contracts';
+import {
+    chatTopicHintQueryTerms,
+    PROJECT_CONTEXT_CANONICAL_REPOSITORY,
+} from '@footnote/contracts';
 import type {
     ChatGenerationGitHubContext,
     ChatGenerationPlan,
     ChatRepoSearchHint,
 } from './chatGenerationTypes.js';
 
-const FOOTNOTE_REPO_OWNER = 'footnote-ai';
-const FOOTNOTE_REPO_NAME = 'footnote';
-const FOOTNOTE_REPO_SLUG = `${FOOTNOTE_REPO_OWNER}/${FOOTNOTE_REPO_NAME}`;
 const DEEPWIKI_FOOTNOTE_URL = 'https://deepwiki.com/footnote-ai/footnote';
 
 /**
  * Canonical Footnote repository used for Footnote-self project-context routing.
  */
-export const PROJECT_CONTEXT_CANONICAL_REPOSITORY = FOOTNOTE_REPO_SLUG;
+export { PROJECT_CONTEXT_CANONICAL_REPOSITORY };
 
 export type ChatGenerationProjectContextRoute = {
     repository: string;
@@ -43,7 +43,7 @@ export const buildProjectContextRouteFromPlan = (
     const query = generation.search.query.trim();
     if (!query) return undefined;
     return {
-        repository: FOOTNOTE_REPO_SLUG,
+        repository: PROJECT_CONTEXT_CANONICAL_REPOSITORY,
         query,
     };
 };
@@ -78,7 +78,7 @@ export const buildFootnoteGitHubContextRouteFromPlan = (
     if (uniqueSections.length === 0) return undefined;
 
     return {
-        repository: FOOTNOTE_REPO_SLUG,
+        repository: PROJECT_CONTEXT_CANONICAL_REPOSITORY,
         sections: uniqueSections,
     };
 };
@@ -124,9 +124,8 @@ export const buildRepoExplainerQuery = (
     search: Pick<GenerationSearchRequest, 'query' | 'repoHints' | 'topicHints'>
 ): string =>
     dedupeSearchTerms([
-        FOOTNOTE_REPO_SLUG,
-        FOOTNOTE_REPO_OWNER,
-        FOOTNOTE_REPO_NAME,
+        PROJECT_CONTEXT_CANONICAL_REPOSITORY,
+        ...PROJECT_CONTEXT_CANONICAL_REPOSITORY.split('/'),
         'DeepWiki',
         ...(search.repoHints?.flatMap((hint) =>
             isChatRepoSearchHint(hint) ? REPO_HINT_QUERY_TERMS[hint] : [hint]
@@ -154,7 +153,7 @@ export const buildWebSearchInstruction = (
 
         return [
             'The planner marked this as a Footnote repository explanation lookup.',
-            `Treat ${FOOTNOTE_REPO_SLUG} as the canonical repo identity for this search.`,
+            `Treat ${PROJECT_CONTEXT_CANONICAL_REPOSITORY} as the canonical repo identity for this search.`,
             `Prefer DeepWiki results from ${DEEPWIKI_FOOTNOTE_URL} when they are relevant.`,
             'If DeepWiki coverage is thin, use broader web context instead of getting stuck.',
             `Search query: ${repoQuery}.${hintText}${topicHintText}`.trim(),

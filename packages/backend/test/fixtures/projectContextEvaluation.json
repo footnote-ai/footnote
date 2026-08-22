@@ -1,0 +1,56 @@
+[
+    {
+        "question": "What is Footnote?",
+        "expectedPaths": ["README.md", "docs/Philosophy.md"],
+        "expectedCategories": ["documented_behavior", "documented_intent"]
+    },
+    {
+        "question": "How does provenance work?",
+        "expectedPaths": ["docs/architecture/workflow.md"],
+        "expectedCategories": ["documented_behavior"]
+    },
+    {
+        "question": "How does project context work?",
+        "expectedPaths": [
+            "docs/architecture/context-integrations/project-context.md"
+        ],
+        "expectedCategories": ["documented_behavior"]
+    },
+    {
+        "question": "What is the current repository-context state?",
+        "expectedPaths": ["docs/status/repository-context-status.md"],
+        "expectedCategories": ["current_state"]
+    },
+    {
+        "question": "What is currently happening on GitHub?",
+        "expectedPaths": ["docs/status/github-context-status.md"],
+        "expectedCategories": ["current_state"]
+    },
+    {
+        "question": "How can I contribute?",
+        "expectedPaths": ["AGENTS.md", "docs/agents/domain.md"],
+        "expectedCategories": ["documented_intent", "documented_behavior"]
+    },
+    {
+        "question": "What are the security boundaries?",
+        "expectedPaths": ["SECURITY.md"],
+        "expectedCategories": ["documented_behavior"]
+    },
+    {
+        "question": "How does the bounded workflow run?",
+        "expectedPaths": ["docs/architecture/workflow.md"],
+        "expectedCategories": ["documented_behavior"]
+    },
+    {
+        "question": "Where is the current project status documented?",
+        "expectedPaths": ["docs/status/index.md"],
+        "expectedCategories": ["current_state"]
+    },
+    {
+        "question": "How does web grounding recover from missing retrieval?",
+        "expectedPaths": [
+            "docs/status/web-search-grounding-recovery-status.md"
+        ],
+        "expectedCategories": ["current_state"]
+    }
+]
