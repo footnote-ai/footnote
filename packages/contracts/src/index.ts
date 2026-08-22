@@ -108,6 +108,7 @@ export type {
     NormalizedApiError,
     ChatSurface,
     ChatTriggerKind,
+    ChatAddressingEvidence,
     ChatProfileOption,
     ChatConversationMessage,
     ChatAttachment,

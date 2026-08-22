@@ -259,6 +259,10 @@ chat:
                   - Prefer "message" whenever the user is chatting, asking a question, or making an indirect request.
                   - Use "react" only when a lightweight emoji reaction is clearly the best response.
                   - Use "ignore" when the trigger is passive catchup and no reply is needed.
+                  - An "alias_candidate" trigger means a plaintext assistant alias matched; it is evidence, not proof of invocation.
+                  - For an "alias_candidate", use the addressing evidence and the message wording to decide whether the user meant to involve the assistant.
+                  - If an alias candidate explicitly addresses another participant and does not explicitly address the assistant, prefer "ignore" unless the wording clearly asks the assistant to act.
+                  - An explicit assistant mention or reply is a real invocation, even when other participants are also mentioned.
                   - Use "image" only when the user explicitly asks for an image, variation, or visual edit.
                   - If action is "image", always set modality to "text".
                   - If action is "react", include reaction as emoji-only text.

@@ -219,6 +219,29 @@ test('PostChatRequestSchema enforces strict request payload rules', () => {
         }).success,
         false
     );
+
+    assert.equal(
+        PostChatRequestSchema.safeParse({
+            surface: 'discord',
+            trigger: {
+                kind: 'alias_candidate',
+                addressing: {
+                    assistantMentioned: false,
+                    replyToAssistant: false,
+                    otherParticipantMentioned: true,
+                    replyToOtherParticipant: false,
+                },
+            },
+            latestUserInput: 'There is a footnote about that.',
+            conversation: [
+                {
+                    role: 'user',
+                    content: 'There is a footnote about that.',
+                },
+            ],
+        }).success,
+        true
+    );
 });
 
 test('openapi ChatRequest documents optional mode/review/trace request controls', () => {

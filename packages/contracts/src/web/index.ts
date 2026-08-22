@@ -16,6 +16,7 @@ export type { ApiErrorResponse, NormalizedApiError } from './types.js';
 export type {
     ChatSurface,
     ChatTriggerKind,
+    ChatAddressingEvidence,
     ChatProfileOption,
     ChatConversationMessage,
     ChatAttachment,

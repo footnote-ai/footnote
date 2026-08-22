@@ -188,7 +188,7 @@ const createRecentHumanMessage = (content = 'please explain this bug?') =>
 const createRecentMessageMap = (...messages: Array<{ id: string }>) =>
     new Map<string, unknown>(messages.map((message) => [message.id, message]));
 
-test('execute treats vendored plaintext aliases as direct invocations', async () => {
+test('execute routes vendored plaintext aliases through the planner candidate path', async () => {
     await withProfile(
         createProfile({
             id: 'ari-vendor',

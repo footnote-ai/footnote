@@ -8,11 +8,6 @@
 
 import { Message } from 'discord.js';
 import { logger } from '../utils/logger.js';
-import { runtimeConfig } from '../config.js';
-import {
-    containsPlaintextBotAlias,
-    resolveBotMentionAliases,
-} from '../utils/mentionAliases.js';
 import type { ChannelMetrics } from '../state/ChannelContextManager.js';
 import { TECHNICAL_KEYWORDS } from '../utils/CatchupFilter.js';
 
@@ -283,22 +278,15 @@ export class RealtimeEngagementFilter {
      * How it works:
      * - If the message is a direct mention or reply to the bot, the score is 1.0.
      * - If the message is not a direct mention or reply to the bot, the score is 0.0.
-     * - If the message includes the bot's plaintext username or resolved profile aliases, the score is 0.9.
+     * - Plaintext aliases are handled as routing candidates before this filter
+     *   runs and are not treated as proof of invocation here.
      * @param {EngagementContext} context - The context for the engagement decision
      * @returns {number} The score for the mention
      */
     private scoreMention(context: EngagementContext): number {
         const { message } = context;
         const botId = message.client.user?.id;
-        const botUsername = message.client.user?.username ?? '';
-
         if (!botId) return 0;
-
-        // Log bot username for debugging
-        engagementLogger.debug('Bot username detected', {
-            botUsername,
-            channelId: context.channelKey,
-        });
 
         // Check for @mentions
         if (message.mentions?.users?.has(botId)) {
@@ -333,22 +321,6 @@ export class RealtimeEngagementFilter {
                     { channelId: context.channelKey, botId }
                 );
                 return 1.0;
-            }
-        }
-
-        const aliases = resolveBotMentionAliases(
-            runtimeConfig.profile,
-            botUsername
-        );
-        for (const alias of aliases) {
-            if (containsPlaintextBotAlias(message.content ?? '', [alias])) {
-                engagementLogger.debug('Plaintext mention alias detected', {
-                    channelId: context.channelKey,
-                    profileId: runtimeConfig.profile.id,
-                    matchedAlias: alias,
-                    aliasCount: aliases.length,
-                });
-                return 0.9;
             }
         }
 

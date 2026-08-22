@@ -119,7 +119,9 @@ const createChatBuildMessage = () =>
         mentions: {
             users: {
                 has: () => false,
+                values: () => [],
             },
+            repliedUser: null,
         },
         client: {
             user: {
@@ -1037,7 +1039,7 @@ test('buildChatRequestFromMessage sends raw conversation without bot-side identi
     }
 });
 
-test('buildChatRequestFromMessage marks plaintext alias triggers as invoked', async () => {
+test('buildChatRequestFromMessage marks plaintext alias triggers as candidates', async () => {
     const processor = createProcessor();
     const processorAccess = processor as unknown as ProcessorPrivateAccess;
     processorAccess.buildRawConversationHistory = async () => [
@@ -1053,5 +1055,145 @@ test('buildChatRequestFromMessage marks plaintext alias triggers as invoked', as
         throw new Error('Expected chat request to be built');
     }
 
+    assert.equal(built.request.trigger.kind, 'alias_candidate');
+    assert.deepEqual(built.request.trigger.addressing, {
+        assistantMentioned: false,
+        replyToAssistant: false,
+        otherParticipantMentioned: false,
+        replyToOtherParticipant: false,
+    });
+});
+
+test('buildChatRequestFromMessage preserves explicit assistant precedence over other mentions', async () => {
+    const processor = createProcessor();
+    const processorAccess = processor as unknown as ProcessorPrivateAccess;
+    processorAccess.buildRawConversationHistory = async () => [
+        { role: 'user', content: 'Please answer this.' },
+    ];
+
+    const message = createChatBuildMessage() as unknown as {
+        mentions: {
+            users: {
+                has: (id: string) => boolean;
+                values: () => Array<{ id: string }>;
+            };
+            repliedUser: null;
+        };
+    };
+    message.mentions.users.values = () => [{ id: 'human-2' }];
+    message.mentions.users.has = (id) => id === 'bot-1';
+
+    const built = await processorAccess.buildChatRequestFromMessage(
+        message,
+        'Mentioned by plaintext alias: footnote'
+    );
+
+    if (!built) {
+        throw new Error('Expected chat request to be built');
+    }
+
     assert.equal(built.request.trigger.kind, 'invoked');
+    assert.deepEqual(built.request.trigger.addressing, {
+        assistantMentioned: true,
+        replyToAssistant: false,
+        otherParticipantMentioned: true,
+        replyToOtherParticipant: false,
+    });
+});
+
+test('buildChatRequestFromMessage marks a reply to another participant as an alias candidate', async () => {
+    const processor = createProcessor();
+    const processorAccess = processor as unknown as ProcessorPrivateAccess;
+    processorAccess.buildRawConversationHistory = async () => [
+        { role: 'user', content: 'Alice said: "Please check this."' },
+    ];
+
+    const message = createChatBuildMessage() as unknown as {
+        guildId: string;
+        channelId: string;
+        reference: {
+            messageId: string;
+            guildId: string;
+            channelId: string;
+        };
+        mentions: {
+            users: {
+                has: (id: string) => boolean;
+                values: () => Array<{ id: string }>;
+            };
+            repliedUser: { id: string };
+        };
+    };
+    message.reference = {
+        messageId: 'alice-message',
+        guildId: message.guildId,
+        channelId: message.channelId,
+    };
+    message.mentions.repliedUser = { id: 'human-2' };
+
+    const built = await processorAccess.buildChatRequestFromMessage(
+        message,
+        'Mentioned by plaintext alias: footnote'
+    );
+
+    if (!built) {
+        throw new Error('Expected chat request to be built');
+    }
+
+    assert.equal(built.request.trigger.kind, 'alias_candidate');
+    assert.deepEqual(built.request.trigger.addressing, {
+        assistantMentioned: false,
+        replyToAssistant: false,
+        otherParticipantMentioned: false,
+        replyToOtherParticipant: true,
+    });
+});
+
+test('buildChatRequestFromMessage preserves an explicit assistant reply over other mentions', async () => {
+    const processor = createProcessor();
+    const processorAccess = processor as unknown as ProcessorPrivateAccess;
+    processorAccess.buildRawConversationHistory = async () => [
+        { role: 'user', content: 'Please check both of these.' },
+    ];
+
+    const message = createChatBuildMessage() as unknown as {
+        guildId: string;
+        channelId: string;
+        reference: {
+            messageId: string;
+            guildId: string;
+            channelId: string;
+        };
+        mentions: {
+            users: {
+                has: (id: string) => false;
+                values: () => Array<{ id: string }>;
+            };
+            repliedUser: { id: string };
+        };
+    };
+    message.reference = {
+        messageId: 'bot-message',
+        guildId: message.guildId,
+        channelId: message.channelId,
+    };
+    message.mentions.users.values = () => [{ id: 'human-2' }];
+    message.mentions.repliedUser = { id: 'bot-1' };
+
+    const built = await processorAccess.buildChatRequestFromMessage(
+        message,
+        'Mentioned by plaintext alias: footnote'
+    );
+
+    if (!built) {
+        throw new Error('Expected chat request to be built');
+    }
+
+    assert.equal(built.request.trigger.kind, 'invoked');
+    assert.deepEqual(built.request.trigger.addressing, {
+        assistantMentioned: false,
+        replyToAssistant: true,
+        otherParticipantMentioned: true,
+        replyToOtherParticipant: false,
+    });
 });
