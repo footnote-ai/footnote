@@ -250,7 +250,10 @@ test('real VoltAgent executor requires the configured Responses search tool', as
             assert.equal(request.url, 'https://api.openai.com/v1/responses');
             assert.equal(request.body.tool_choice, 'required');
             assert.ok(Array.isArray(request.body.tools));
-            assert.ok(request.body.tools.length > 0);
+            assert.equal(request.body.tools.length, 1);
+            const searchTool = request.body.tools[0] as Record<string, unknown>;
+            assert.equal(searchTool.type, 'web_search');
+            assert.equal(searchTool.search_context_size, 'low');
         }
     );
 });

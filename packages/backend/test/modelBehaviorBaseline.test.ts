@@ -37,6 +37,39 @@ type BaselineCase = {
     };
 };
 
+type CheckCategory = keyof BaselineCase['checks'];
+
+const allowedCheckIdentifiers: Record<CheckCategory, ReadonlySet<string>> = {
+    deterministic: new Set([
+        'text_output',
+        'planner_schema_valid',
+        'trace_complete',
+        'structured_output_valid',
+        'planner_contract_valid',
+        'review_decision_schema_valid',
+        'revision_instruction_bounded',
+        'review_fail_open_preserved',
+    ]),
+    objective: new Set([
+        'retrieval_forbidden',
+        'action_message',
+        'retrieval_not_requested',
+        'retrieval_requested',
+        'current_state_intent',
+        'modality_text',
+        'review_decision_finalize',
+        'review_decision_revise',
+    ]),
+    qualitative: new Set([
+        'clear_tradeoff_explanation',
+        'request_intent_preserved',
+        'retrieval_scope_is_bounded',
+        'decision_is_minimal',
+        'no_unnecessary_revision',
+        'revision_instruction_is_actionable',
+    ]),
+};
+
 const repoRoot = path.resolve(
     path.dirname(fileURLToPath(import.meta.url)),
     '../../..'
@@ -69,7 +102,8 @@ const readRequiredString = (
 
 const readStringArray = (
     record: Record<string, unknown>,
-    key: string
+    key: string,
+    category: CheckCategory
 ): string[] => {
     const value = record[key];
     if (!Array.isArray(value)) {
@@ -84,6 +118,10 @@ const readStringArray = (
             assert.fail(`${key} entries must be strings`);
         }
         assert.ok(entry.trim().length > 0, `${key} entries must not be empty`);
+        assert.ok(
+            allowedCheckIdentifiers[category].has(entry),
+            `${key} contains unsupported version 1 check identifier: ${entry}`
+        );
         return entry;
     });
 };
@@ -136,19 +174,23 @@ const readCase = (value: unknown): BaselineCase => {
             verbosity: readRequiredString(request, 'verbosity'),
         },
         checks: {
-            deterministic: readStringArray(checks, 'deterministic'),
-            objective: readStringArray(checks, 'objective'),
-            qualitative: readStringArray(checks, 'qualitative'),
+            deterministic: readStringArray(
+                checks,
+                'deterministic',
+                'deterministic'
+            ),
+            objective: readStringArray(checks, 'objective', 'objective'),
+            qualitative: readStringArray(checks, 'qualitative', 'qualitative'),
         },
     };
 
-    if (value.messages !== undefined) {
+    if (kind !== 'review' || value.messages !== undefined) {
         baselineCase.messages = readMessages(value.messages);
     }
-    if (value.draft !== undefined) {
+    if (kind === 'review' || value.draft !== undefined) {
         baselineCase.draft = readRequiredString(value, 'draft');
     }
-    if (value.reviewContext !== undefined) {
+    if (kind === 'review' || value.reviewContext !== undefined) {
         baselineCase.reviewContext = readRequiredString(value, 'reviewContext');
     }
 
@@ -226,4 +268,51 @@ test('model behavior baseline isolates the intended first-pass failure modes', (
     );
     assert.ok(finalizeReview?.draft);
     assert.ok(reviseReview?.draft);
+});
+
+test('model behavior baseline rejects unknown checks and incomplete case inputs', () => {
+    assert.throws(
+        () =>
+            readStringArray(
+                { objective: ['retrieval_reqeusted'] },
+                'objective',
+                'objective'
+            ),
+        /unsupported version 1 check identifier/
+    );
+
+    const request: Record<string, unknown> = {
+        maxOutputTokens: 100,
+        reasoningEffort: 'low',
+        verbosity: 'low',
+    };
+    const checks: Record<string, unknown> = {
+        deterministic: ['text_output'],
+        objective: ['action_message'],
+        qualitative: ['clear_tradeoff_explanation'],
+    };
+
+    assert.throws(
+        () =>
+            readCase({
+                id: 'missing_messages',
+                kind: 'generation',
+                description: 'Missing messages.',
+                request,
+                checks,
+            }),
+        /messages must be an array/
+    );
+    assert.throws(
+        () =>
+            readCase({
+                id: 'missing_review_context',
+                kind: 'review',
+                description: 'Missing review context.',
+                draft: 'Draft.',
+                request,
+                checks,
+            }),
+        /reviewContext must be a string/
+    );
 });
