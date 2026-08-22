@@ -894,17 +894,25 @@ export const runBoundedReviewWorkflow = async ({
                 // Preserve deterministic context ordering by request list order.
                 executedContextStepResults.flatMap((contextStepResult) =>
                     contextStepResult.outcome === 'executed'
-                        ? (contextStepResult.contextMessages ?? []).map(
-                              (message) =>
-                                  typeof message === 'string'
-                                      ? {
-                                            role:
-                                                contextStepResult.contextMessageRole ??
-                                                'system',
-                                            content: message,
-                                        }
-                                      : message
-                          )
+                        ? [
+                              ...(
+                                  contextStepResult.trustedSystemMessages ?? []
+                              ).map((content) => ({
+                                  role: 'system' as const,
+                                  content,
+                              })),
+                              ...(contextStepResult.contextMessages ?? []).map(
+                                  (message) => ({
+                                      role:
+                                          contextStepResult.contextMessageRole ??
+                                          'system',
+                                      content:
+                                          typeof message === 'string'
+                                              ? message
+                                              : message.content,
+                                  })
+                              ),
+                          ]
                         : []
                 )
             );

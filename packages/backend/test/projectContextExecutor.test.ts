@@ -92,7 +92,12 @@ test('executor retrieves project context and labels it as untrusted data', async
     assert.match(message, /UNTRUSTED PROJECT CONTEXT/i);
     assert.match(message, /documented_intent/i);
     assert.match(message, /docs\/Philosophy\.md/);
-    assert.equal(result.contextMessageRole, undefined);
+    assert.equal(result.contextMessageRole, 'user');
+    assert.ok(
+        (result.trustedSystemMessages ?? []).some((message) =>
+            message.includes('project documents')
+        )
+    );
     assert.ok((result.sources ?? []).length > 0);
 });
 

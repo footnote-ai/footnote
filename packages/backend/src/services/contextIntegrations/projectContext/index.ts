@@ -99,12 +99,15 @@ const projectContextGuidance = renderPromptBundle(promptRegistry, [
     'conversation.shared.project_context_guidance',
 ]);
 
+/**
+ * Formats retrieved project documents as lower-authority user data.
+ * Registered project guidance is returned separately as trusted system text.
+ */
 export const formatProjectContextMessages = (input: {
     repository: string;
     matches: ProjectContextMatch[];
     commitSha: string | null;
 }): ContextPromptMessage[] => [
-    { role: 'system', content: projectContextGuidance },
     { role: 'user', content: formatProjectContext(input)[0] ?? '' },
 ];
 
@@ -291,6 +294,8 @@ export const createProjectContextStepExecutor = (
                         matches,
                         commitSha,
                     }),
+                    trustedSystemMessages: [projectContextGuidance],
+                    contextMessageRole: 'user',
                     sources: citationsFromProjectContext({
                         repository: PROJECT_CONTEXT_CANONICAL_REPOSITORY,
                         matches,

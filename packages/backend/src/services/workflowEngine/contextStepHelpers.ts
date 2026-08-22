@@ -21,6 +21,9 @@ type FollowUpSearchHint = {
     priority: 'low' | 'medium' | 'high';
 };
 
+type ContextMessageInput =
+    ContextPromptMessage | { role: 'system' | 'user'; content: string };
+
 /**
  * Injects normalized context-step messages into the generation prompt.
  * Context is inserted before planner output markers when present, otherwise
@@ -28,7 +31,8 @@ type FollowUpSearchHint = {
  */
 export const injectContextMessagesIntoPrompt = (
     baseMessages: RuntimeMessage[],
-    contextMessages: ContextPromptMessage[] | undefined
+    contextMessages: ContextMessageInput[] | undefined,
+    contextMessageRole: 'system' | 'user' = 'system'
 ): RuntimeMessage[] => {
     if (!contextMessages || contextMessages.length === 0) {
         return baseMessages;
@@ -37,8 +41,8 @@ export const injectContextMessagesIntoPrompt = (
     const normalizedContextMessages = contextMessages
         .map((message) =>
             typeof message === 'string'
-                ? { role: 'system' as const, content: message }
-                : { role: message.role, content: message.content }
+                ? { role: contextMessageRole, content: message }
+                : { role: contextMessageRole, content: message.content }
         )
         .map((message) => ({ ...message, content: message.content.trim() }))
         .filter((message) => message.content.length > 0)

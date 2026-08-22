@@ -54,6 +54,7 @@ export const buildExecutedContextStepResult = (input: {
     toolName: ToolInvocationName;
     durationMs?: number;
     contextMessages?: ContextPromptMessage[];
+    trustedSystemMessages?: string[];
     contextMessageRole?: 'system' | 'user';
     sources?: Citation[];
     integrationContext?: ContextStepIntegrationContext;
@@ -67,6 +68,10 @@ export const buildExecutedContextStepResult = (input: {
     ...(input.contextMessages !== undefined &&
         input.contextMessages.length > 0 && {
             contextMessages: input.contextMessages,
+        }),
+    ...(input.trustedSystemMessages !== undefined &&
+        input.trustedSystemMessages.length > 0 && {
+            trustedSystemMessages: input.trustedSystemMessages,
         }),
     ...(input.contextMessageRole !== undefined && {
         contextMessageRole: input.contextMessageRole,

@@ -1102,8 +1102,8 @@ type ContextStepBaseResult = {
     integrationContext?: ContextStepIntegrationContext;
 };
 
-export type ContextPromptMessage =
-    string | { role: 'system' | 'user'; content: string };
+/** Retrieved context is lower-authority user data; trusted guidance is separate. */
+export type ContextPromptMessage = string | { role: 'user'; content: string };
 
 export type ContextStepExecutedResult = ContextStepBaseResult & {
     outcome: 'executed';
@@ -1113,7 +1113,9 @@ export type ContextStepExecutedResult = ContextStepBaseResult & {
         reasonCode?: never;
     };
     contextMessages?: ContextPromptMessage[];
-    /** Prompt channel for context messages; project documents use the lower-authority user channel. */
+    /** Explicit trusted system guidance, never document-derived context. */
+    trustedSystemMessages?: string[];
+    /** Prompt channel for legacy string context; object entries cannot override it. */
     contextMessageRole?: 'system' | 'user';
     sources?: Citation[];
 };
