@@ -2,6 +2,9 @@
 node_modules/
 *.tsbuildinfo
 
+# The Fly remote builder receives this generated bundle from the working tree.
+# It must stay untracked without being excluded from the Docker context.
+
 # Environment files
 .env
 .env.*
@@ -78,7 +81,6 @@ opencode.json
 
 # Local startup snapshots
 .footnote-dev/
-.footnote/context-bundle/
 
 # Playwright output checks
 /playwright-report/

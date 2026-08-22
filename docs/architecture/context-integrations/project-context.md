@@ -45,8 +45,10 @@ documents do not trigger another full embedding build.
 
 Deployments run `pnpm context:bundle`, which reads the manifest-listed bytes
 with `git show <sha>:<path>` and writes an immutable build-context bundle.
-Docker requires the same commit SHA as a build argument and verifies the
-bundle revision before producing the image. Production therefore does not
+The generated bundle remains untracked but is intentionally not Git-ignored so
+Fly's remote builder receives it in the Docker context. Docker requires the
+same commit SHA as a build argument and verifies the bundle revision before
+producing the image. Production therefore does not
 depend on `.git`, a working tree, or runtime GitHub reads. Local development
 uses `git show` at one captured `HEAD` revision so the bytes indexed and the
 citation revision cannot drift apart.
