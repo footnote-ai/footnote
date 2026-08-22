@@ -80,6 +80,16 @@ test('project context config falls back on invalid integer values', () => {
     assert.equal(projectContext.embeddingTimeoutMs, 8000);
 });
 
+test('project context config rejects out-of-range similarity scores', () => {
+    const warnings: string[] = [];
+    const { chatWorkflow } = buildServiceSections(
+        { CHAT_CONTEXT_PROJECT_DOCS_MIN_SCORE: '1.5' },
+        (message) => warnings.push(message)
+    );
+    assert.equal(chatWorkflow.contextIntegrations.projectDocs.minScore, 0.35);
+    assert.equal(warnings.length, 1);
+});
+
 test('project context config caps resource-intensive limits', () => {
     const warnings: string[] = [];
     const { chatWorkflow } = buildServiceSections(

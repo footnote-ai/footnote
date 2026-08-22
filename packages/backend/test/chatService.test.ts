@@ -21,7 +21,11 @@ import {
     type ResponseMetadataRetrievalContext,
     type ResponseMetadataRuntimeContext,
 } from '../src/services/responseMetadata.js';
-import { createChatService } from '../src/services/chatService.js';
+import {
+    createChatService,
+    pickProjectContextMetadata,
+} from '../src/services/chatService.js';
+import type { ContextStepResult } from '@footnote/contracts/policy';
 import { resolveExecutionContract } from '../src/services/executionContractResolver.js';
 import {
     createScopeOwnershipValidatorFromTenancyService,
@@ -65,6 +69,51 @@ const TEST_CONTEXT_ENVELOPE: ConversationContextEnvelope = {
         projectedSpeakerLabelCount: 0,
     },
 };
+
+const projectContextStep = (metadata: unknown): ContextStepResult => ({
+    outcome: 'executed',
+    executionContext: {
+        toolName: 'project_context',
+        status: 'executed',
+    },
+    integrationContext: {
+        kind: 'project_context',
+        version: 'v1',
+        payload: { metadata },
+    },
+});
+
+test('pickProjectContextMetadata validates valid and malformed payloads', () => {
+    const valid = {
+        repository: 'footnote-ai/footnote',
+        provider: 'openai',
+        model: 'text-embedding-3-small',
+        chunkerVersion: 1,
+        indexVersion: 1,
+        requestedCategories: ['current_state'],
+        returnedCounts: { current_state: 1 },
+        maxChunks: 200,
+        topKPerCategory: 5,
+        status: 'current',
+        reasonCodes: [],
+    };
+    assert.deepEqual(
+        pickProjectContextMetadata([projectContextStep(valid)]),
+        valid
+    );
+    assert.equal(
+        pickProjectContextMetadata([
+            projectContextStep({ ...valid, unexpected: true }),
+        ]),
+        undefined
+    );
+    assert.equal(
+        pickProjectContextMetadata([
+            projectContextStep({ ...valid, returnedCounts: 'invalid' }),
+        ]),
+        undefined
+    );
+});
 
 test('createChatService records backend token usage and estimated cost', async () => {
     const usageRecords: BackendLLMCostRecord[] = [];

@@ -26,7 +26,7 @@ const createRequest = (
 
 const createClient = (
     response: {
-        data: Array<{ embedding: number[] }>;
+        data: Array<{ embedding: number[]; index?: number }>;
         usage?: { prompt_tokens?: number; total_tokens?: number };
     },
     fail = false
@@ -80,6 +80,27 @@ test('runtime exposes upstream failure as an observable error result', async () 
         assert.match(result.reason, /Embedding request failed/);
     }
     assert.match(loggedError, /Embedding request failed/);
+});
+
+test('runtime restores out-of-order provider vectors by response index', async () => {
+    const runtime = createOpenAiEmbeddingRuntime({
+        apiKey: 'test-key',
+        client: createClient({
+            data: [
+                { index: 1, embedding: [0, 1] },
+                { index: 0, embedding: [1, 0] },
+            ],
+        }),
+    });
+    const result = await runtime.embed(
+        createRequest({ texts: ['first', 'second'] })
+    );
+    assert.equal(result.status, 'success');
+    if (result.status !== 'success') return;
+    assert.deepEqual(result.embeddings, [
+        [1, 0],
+        [0, 1],
+    ]);
 });
 
 test('runtime forwards caller cancellation to the embedding client', async () => {

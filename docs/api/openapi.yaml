@@ -3449,6 +3449,19 @@ components:
                     maxItems: 5
                     items:
                         type: string
+                        enum:
+                            [
+                                disabled,
+                                invalid_repository,
+                                not_in_conversation,
+                                private_access_denied,
+                                unauthorized,
+                                not_found,
+                                rate_limited,
+                                timeout,
+                                malformed_response,
+                                network_error,
+                            ]
             required:
                 [
                     repository,
@@ -3512,6 +3525,16 @@ components:
                 topKPerCategory:
                     type: integer
                     minimum: 1
+                maxMatches:
+                    type: integer
+                    minimum: 1
+                minScore:
+                    type: number
+                    minimum: -1
+                    maximum: 1
+                embeddingTimeoutMs:
+                    type: integer
+                    minimum: 1
                 status:
                     type: string
                     enum: [current, partial, stale, unavailable]
@@ -3526,7 +3549,9 @@ components:
                                 tool_not_requested,
                                 invalid_query,
                                 query_embedding_failed,
+                                embedding_timeout,
                                 index_unavailable,
+                                no_relevant_matches,
                                 execution_error,
                             ]
             required:

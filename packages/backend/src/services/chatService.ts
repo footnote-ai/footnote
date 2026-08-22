@@ -37,6 +37,7 @@ import type {
     PostChatResponse,
     ResponseCandidate,
 } from '@footnote/contracts/web';
+import { ProjectContextMetadataSchema } from '@footnote/contracts/web';
 import type { Result } from 'neverthrow';
 import type {
     GenerationMetadataUsage,
@@ -704,7 +705,8 @@ const pickGitHubContextMetadata = (
     return metadata as GitHubContextMetadata;
 };
 
-const pickProjectContextMetadata = (
+/** Validates one backend project-context metadata payload before response assembly. */
+export const pickProjectContextMetadata = (
     contextStepResults: ContextStepResult[] | undefined
 ): ProjectContextMetadata | undefined => {
     const result = contextStepResults?.find(
@@ -716,7 +718,8 @@ const pickProjectContextMetadata = (
     const metadata = (payload as { metadata?: unknown }).metadata;
     if (!metadata || typeof metadata !== 'object' || Array.isArray(metadata))
         return undefined;
-    return metadata as ProjectContextMetadata;
+    const parsed = ProjectContextMetadataSchema.safeParse(metadata);
+    return parsed.success ? parsed.data : undefined;
 };
 
 const pickTrustGraphResultFromContextSteps = (

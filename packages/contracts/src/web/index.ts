@@ -260,6 +260,7 @@ export {
     PostTracesRequestSchema,
     PostTracesResponseSchema,
     ResponseMetadataSchema,
+    ProjectContextMetadataSchema,
     PresentationMetadataSchema,
     GetResponseVersionsApiResponseSchema,
     createSchemaResponseValidator,

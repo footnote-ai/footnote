@@ -49,7 +49,7 @@ export const buildProjectContextRouteFromPlan = (
 };
 
 const CURRENT_PROJECT_QUERY_PATTERN =
-    /\b(current(?:ly)?|now|open|latest|recent|activity|release|releases|issues?|pull requests?|status)\b/iu;
+    /\b(current(?:ly)?|now|open|latest|recent|activity|release|releases|issues?|pull requests?|status|work(?:ing)?|team)\b/iu;
 
 /**
  * Builds a backend-owned GitHub request for current Footnote-self questions.
@@ -67,10 +67,17 @@ export const buildFootnoteGitHubContextRouteFromPlan = (
     if (/\b(open|issues?)\b/iu.test(query)) {
         sections.push('issues', 'pulls');
     }
+    if (/\b(pull requests?|prs?)\b/iu.test(query)) {
+        sections.push('pulls');
+    }
     if (/\b(release|releases|latest)\b/iu.test(query)) {
         sections.push('releases');
     }
-    if (/\b(recent|activity|current(?:ly)?|now|status)\b/iu.test(query)) {
+    if (
+        /\b(recent|activity|current(?:ly)?|now|status|work(?:ing)?|team)\b/iu.test(
+            query
+        )
+    ) {
         sections.push('commits');
     }
 

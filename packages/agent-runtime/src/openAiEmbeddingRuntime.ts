@@ -13,7 +13,10 @@ import type {
     EmbeddingRuntimeResult,
 } from './index.js';
 
-type OpenAiEmbeddingResponseData = Array<{ embedding: number[] }>;
+type OpenAiEmbeddingResponseData = Array<{
+    embedding: number[];
+    index?: number;
+}>;
 
 export type OpenAiEmbeddingRuntimeClient = {
     createEmbeddings: (request: {
@@ -119,7 +122,29 @@ export const createOpenAiEmbeddingRuntime = ({
                         `Embedding response returned ${response.data.length} vectors for ${request.texts.length} texts.`
                     );
                 }
-                const embeddings = response.data.map((item) => item.embedding);
+                const indexedEmbeddings = response.data.map(
+                    (item, position) => ({
+                        index: item.index ?? position,
+                        embedding: item.embedding,
+                    })
+                );
+                const indexes = new Set<number>();
+                for (const item of indexedEmbeddings) {
+                    if (
+                        !Number.isInteger(item.index) ||
+                        item.index < 0 ||
+                        item.index >= request.texts.length ||
+                        indexes.has(item.index)
+                    ) {
+                        throw new Error(
+                            'Embedding response contained invalid or duplicate vector indexes.'
+                        );
+                    }
+                    indexes.add(item.index);
+                }
+                const embeddings = [...indexedEmbeddings]
+                    .sort((left, right) => left.index - right.index)
+                    .map((item) => item.embedding);
 
                 logger?.warn?.('Embedding runtime request succeeded.', {
                     model: request.model,

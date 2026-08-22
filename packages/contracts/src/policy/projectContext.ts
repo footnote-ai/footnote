@@ -79,7 +79,7 @@ export type ProjectContextMetadata = {
     maxMatches?: number;
     /** Minimum cosine similarity required for an evidence excerpt. */
     minScore?: number;
-    /** Maximum time allowed for one embedding request. */
+    /** Total time allowed for one project-context retrieval step. */
     embeddingTimeoutMs?: number;
     status: 'current' | 'partial' | 'stale' | 'unavailable';
     reasonCodes: ProjectContextReasonCode[];

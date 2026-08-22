@@ -35,6 +35,7 @@ const formatTimestamp = (
     label: 'indexed at' | 'fetched at'
 ): string => (value ? ` ${label} ${value}` : '');
 
+/** Formats backend-owned project metadata for reader-facing provenance UI. */
 export const formatProjectContextSummary = (
     metadata: ProjectContextMetadata
 ): string => {
@@ -45,6 +46,7 @@ export const formatProjectContextSummary = (
     return `Project documents: ${STATUS_LABELS[metadata.status]}; ${evidence}${formatTimestamp(metadata.indexedAt, 'indexed at')}.${coverage}`;
 };
 
+/** Formats backend-owned, untrusted GitHub metadata for provenance UI. */
 export const formatGitHubContextSummary = (
     metadata: GitHubContextMetadata
 ): string => {
@@ -52,7 +54,9 @@ export const formatGitHubContextSummary = (
         const count = metadata.returnedCounts[section];
         return count === undefined
             ? []
-            : [`${count} ${GITHUB_SECTION_LABELS[section] ?? section}`];
+            : [
+                  `${count} ${count === 1 && section === 'pulls' ? 'pull request' : (GITHUB_SECTION_LABELS[section] ?? section)}`,
+              ];
     });
     const coverage =
         metadata.maxRecordsPerSection !== undefined &&
@@ -68,6 +72,7 @@ export const formatGitHubContextSummary = (
     return `GitHub: ${metadata.status}; ${recordSummary} retrieved${formatTimestamp(metadata.fetchTimestamp, 'fetched at')}.${coverage}`;
 };
 
+/** Combines independently validated project and GitHub provenance summaries. */
 export const buildContextPresentationSummary = (input: {
     projectContext?: ProjectContextMetadata;
     githubContext?: GitHubContextMetadata;

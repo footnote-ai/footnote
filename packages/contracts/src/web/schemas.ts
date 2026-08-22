@@ -1349,7 +1349,7 @@ const ProjectContextReasonCodeSchema = z.enum([
     'no_relevant_matches',
     'execution_error',
 ]);
-const ProjectContextMetadataSchema: z.ZodType<ProjectContextMetadata> = z
+export const ProjectContextMetadataSchema: z.ZodType<ProjectContextMetadata> = z
     .object({
         repository: z.string().regex(/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/),
         provider: z.string().min(1),
