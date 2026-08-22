@@ -42,7 +42,7 @@ export const injectContextMessagesIntoPrompt = (
         .map((message) =>
             typeof message === 'string'
                 ? { role: contextMessageRole, content: message }
-                : { role: contextMessageRole, content: message.content }
+                : { role: message.role, content: message.content }
         )
         .map((message) => ({ ...message, content: message.content.trim() }))
         .filter((message) => message.content.length > 0)

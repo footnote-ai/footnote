@@ -56,17 +56,21 @@ test('project context can use the lower-authority user channel', () => {
     assert.equal(context?.role, 'user');
 });
 
-test('the result-level role overrides a conflicting message-level role', () => {
+test('typed context message roles are preserved while strings use the fallback role', () => {
     const injected = injectContextMessagesIntoPrompt(
         buildBaseMessages(),
-        [{ role: 'user', content: PROJECT_CONTEXT_UNTRUSTED_LABEL }],
+        [
+            { role: 'user', content: PROJECT_CONTEXT_UNTRUSTED_LABEL },
+            PROJECT_CONTEXT_UNTRUSTED_LABEL,
+        ],
         'system'
     );
-    const context = injected.find((message) =>
+    const contexts = injected.filter((message) =>
         message.content.includes('UNTRUSTED PROJECT CONTEXT')
     );
-    assert.ok(context);
-    assert.equal(context?.role, 'system');
+    assert.equal(contexts.length, 2);
+    assert.equal(contexts[0]?.role, 'user');
+    assert.equal(contexts[1]?.role, 'system');
 });
 
 test('injected untrusted context never displaces the trusted system prompt', () => {

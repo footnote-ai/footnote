@@ -300,6 +300,94 @@ test('runBoundedReviewWorkflow executes eligible context steps in parallel and m
     assert.ok(weatherContextMessageIndex < webContextMessageIndex);
 });
 
+test('runBoundedReviewWorkflow preserves project-context authority roles', async () => {
+    const observedMessages: RuntimeMessage[][] = [];
+    const generationRuntime: GenerationRuntime = {
+        kind: 'test-runtime',
+        async generate(input) {
+            observedMessages.push(input.messages);
+            return {
+                text: 'draft',
+                model: 'gpt-5-mini',
+                usage: {
+                    promptTokens: 10,
+                    completionTokens: 5,
+                    totalTokens: 15,
+                },
+                provenance: 'Inferred',
+                citations: [],
+            };
+        },
+    };
+
+    const result = await runBoundedReviewWorkflowForTest({
+        generationRuntime,
+        generationRequest: {
+            model: 'gpt-5-mini',
+            messages: [{ role: 'user', content: 'Explain Footnote.' }],
+        },
+        messagesWithHints: [{ role: 'user', content: 'Explain Footnote.' }],
+        generationStartedAtMs: Date.now(),
+        workflowConfig: {
+            workflowName: 'message_reviewed',
+            maxIterations: 1,
+            maxDurationMs: 15000,
+        },
+        workflowPolicy: {
+            enablePlanning: false,
+            enableToolUse: true,
+            enableReplanning: false,
+            enableGeneration: true,
+            enableAssessment: true,
+            enableRevision: true,
+        },
+        contextStepRequests: [
+            {
+                integrationName: 'project_context',
+                requested: true,
+                eligible: true,
+            },
+        ],
+        contextStepExecutor: async () => ({
+            outcome: 'executed' as const,
+            executionContext: {
+                toolName: 'project_context' as const,
+                status: 'executed' as const,
+            },
+            trustedSystemMessages: ['Trusted project-context guidance.'],
+            contextMessages: [
+                {
+                    role: 'user' as const,
+                    content: 'UNTRUSTED PROJECT CONTEXT: repository evidence.',
+                },
+            ],
+            contextMessageRole: 'user' as const,
+        }),
+        captureUsage: (generationResult) => ({
+            model: generationResult.model ?? 'gpt-5-mini',
+            promptTokens: generationResult.usage?.promptTokens ?? 0,
+            completionTokens: generationResult.usage?.completionTokens ?? 0,
+            totalTokens: generationResult.usage?.totalTokens ?? 0,
+            estimatedCost: {
+                inputCostUsd: 0,
+                outputCostUsd: 0,
+                totalCostUsd: 0,
+            },
+        }),
+    });
+
+    assert.equal(result.outcome, 'generated');
+    const messages = observedMessages[0] ?? [];
+    const trusted = messages.find((message) =>
+        message.content.includes('Trusted project-context guidance')
+    );
+    const untrusted = messages.find((message) =>
+        message.content.includes('UNTRUSTED PROJECT CONTEXT')
+    );
+    assert.equal(trusted?.role, 'system');
+    assert.equal(untrusted?.role, 'user');
+});
+
 test('runBoundedReviewWorkflow records failed injected context step with reason and continues fail-open', async () => {
     const generationRuntime: GenerationRuntime = {
         kind: 'test-runtime',
