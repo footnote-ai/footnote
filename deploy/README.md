@@ -177,7 +177,8 @@ Single-app deploy:
 Manual deploy:
 
 ```bash
-fly deploy -c deploy/fly/server.toml \
+  pnpm context:bundle
+  fly deploy -c deploy/fly/server.toml \
   --build-arg FOOTNOTE_CONTEXT_COMMIT_SHA=$(git rev-parse HEAD)
 ```
 

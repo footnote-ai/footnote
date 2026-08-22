@@ -43,11 +43,13 @@ vector store. The runtime fingerprints selected paths, content hashes,
 embedding settings, and index versions before reusing vectors, so unchanged
 documents do not trigger another full embedding build.
 
-Deployments package the curated `.footnote/context-manifest.json` corpus and a
-source revision into the image. Production does not depend on `.git`, a
-working tree, or runtime GitHub reads. Local development uses `git show` at one
-captured `HEAD` revision so the bytes indexed and the citation revision cannot
-drift apart.
+Deployments run `pnpm context:bundle`, which reads the manifest-listed bytes
+with `git show <sha>:<path>` and writes an immutable build-context bundle.
+Docker requires the same commit SHA as a build argument and verifies the
+bundle revision before producing the image. Production therefore does not
+depend on `.git`, a working tree, or runtime GitHub reads. Local development
+uses `git show` at one captured `HEAD` revision so the bytes indexed and the
+citation revision cannot drift apart.
 
 ## Authority boundary
 
@@ -70,6 +72,8 @@ instruction-bearing allowed document stays inside the untrusted envelope.
   index and records `stale` when matches are still served.
 - A first-build failure with no prior index records `unavailable` and
   generation continues without project context.
+- The configured timeout is one total deadline for indexing plus query
+  embedding; sequential batches cannot extend the chat request indefinitely.
 - The integration is disabled by default.
 
 ## Provenance

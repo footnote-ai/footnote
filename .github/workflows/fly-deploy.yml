@@ -16,6 +16,7 @@ jobs:
         steps:
             - uses: actions/checkout@v7
             - uses: superfly/flyctl-actions/setup-flyctl@master
+            - run: pnpm context:bundle
             - run: flyctl deploy --remote-only -c deploy/fly/server.toml --build-arg FOOTNOTE_CONTEXT_COMMIT_SHA=${{ github.sha }}
               env:
                   FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}

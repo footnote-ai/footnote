@@ -78,6 +78,7 @@ opencode.json
 
 # Local startup snapshots
 .footnote-dev/
+.footnote/context-bundle/
 
 # Playwright output checks
 /playwright-report/

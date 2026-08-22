@@ -198,7 +198,13 @@ run_env_validation fly-server "$server_app_name"
 upload_settings_yaml "$server_app_name"
 
 echo "Deploying server..."
-fly deploy -c "$SERVER_CONFIG_PATH"
+context_commit_sha=$(git -C "$REPO_ROOT" rev-parse --verify HEAD^{commit})
+if [[ ! "$context_commit_sha" =~ ^[0-9a-f]{7,64}$ ]]; then
+  echo "Unable to resolve a valid project-context revision." >&2
+  exit 1
+fi
+node "$REPO_ROOT/scripts/prepare-project-context-bundle.mjs"
+fly deploy -c "$SERVER_CONFIG_PATH" --build-arg "FOOTNOTE_CONTEXT_COMMIT_SHA=$context_commit_sha"
 echo "Scaling server to one instance..."
 fly scale count 1 -a "$server_app_name" -y
 
