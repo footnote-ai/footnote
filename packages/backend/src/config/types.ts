@@ -180,13 +180,14 @@ export type RuntimeConfig = {
              */
             projectDocs: {
                 enabled: boolean;
-                /** Canonical repository identity used for Footnote-self routing. */
-                repository: string;
                 embeddingProvider: string;
                 embeddingModel: string;
                 maxChunkBytes: number;
                 maxChunks: number;
                 topKPerCategory: number;
+                maxMatches: number;
+                minScore: number;
+                embeddingTimeoutMs: number;
             };
             /**
              * Reverse-image context integration controls for chat workflow execution.

@@ -43,6 +43,12 @@ vector store. The runtime fingerprints selected paths, content hashes,
 embedding settings, and index versions before reusing vectors, so unchanged
 documents do not trigger another full embedding build.
 
+Deployments package the curated `.footnote/context-manifest.json` corpus and a
+source revision into the image. Production does not depend on `.git`, a
+working tree, or runtime GitHub reads. Local development uses `git show` at one
+captured `HEAD` revision so the bytes indexed and the citation revision cannot
+drift apart.
+
 ## Authority boundary
 
 Project documents are untrusted evidence, never system or policy
@@ -80,18 +86,25 @@ context-step outcome for trace review.
 Env controls live under `CHAT_CONTEXT_PROJECT_DOCS_*`:
 
 - `CHAT_CONTEXT_PROJECT_DOCS_ENABLED`
-- `CHAT_CONTEXT_PROJECT_DOCS_REPOSITORY`
 - `CHAT_CONTEXT_PROJECT_DOCS_EMBEDDING_PROVIDER`
 - `CHAT_CONTEXT_PROJECT_DOCS_EMBEDDING_MODEL`
 - `CHAT_CONTEXT_PROJECT_DOCS_MAX_CHUNK_BYTES`
 - `CHAT_CONTEXT_PROJECT_DOCS_MAX_CHUNKS`
 - `CHAT_CONTEXT_PROJECT_DOCS_TOP_K_PER_CATEGORY`
+- `CHAT_CONTEXT_PROJECT_DOCS_MAX_MATCHES`
+- `CHAT_CONTEXT_PROJECT_DOCS_MIN_SCORE`
+- `CHAT_CONTEXT_PROJECT_DOCS_TIMEOUT_MS`
 
 The embedding provider is OpenAI-compatible. OpenRouter uses its explicit
 OpenAI-compatible embeddings endpoint; unsupported provider configuration must
 fail closed for the context step while the chat request remains fail-open.
 The backend caps `maxChunkBytes` at 32 KiB, `maxChunks` at 5,000, and
 `topKPerCategory` at 50 even when environment values are higher.
+
+Project context is intentionally Footnote-only in this release. The canonical
+repository is `footnote-ai/footnote`, owned by backend routing, source loading,
+metadata, and citation construction together; there is no operator repository
+override that could make those authorities disagree.
 
 For current Footnote-self questions, backend-owned routing may also request
 bounded live GitHub context for `footnote-ai/footnote`. GitHub counts describe

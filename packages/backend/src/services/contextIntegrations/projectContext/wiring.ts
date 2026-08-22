@@ -6,23 +6,21 @@
  * @footnote-risk: medium - Wiring mistakes can silently disable or overreach doc access.
  * @footnote-ethics: high - Independent embedding config must not implicitly inherit the chat provider.
  */
-import fs from 'node:fs/promises';
-import path from 'node:path';
 import {
     createOpenAiEmbeddingRuntime,
     type EmbeddingRuntimeResult,
 } from '@footnote/agent-runtime';
 import type { RuntimeConfig } from '../../../config/types.js';
+import {
+    estimateBackendTextCost,
+    recordBackendLLMUsage,
+} from '../../llmCostRecorder.js';
 import { logger } from '../../../utils/logger.js';
 import {
-    createProjectDocumentSource,
-    listGitTrackedPaths,
-    readProjectFile,
-    resolveHeadCommitSha,
+    loadGitProjectDocumentSet,
+    loadPackagedProjectDocumentSet,
 } from './documentSource.js';
 import type { ProjectContextStepExecutorOptions } from './index.js';
-
-const CONTEXT_FILES_RELATIVE_PATH = '.footnote/context-files';
 
 export const buildProjectContextWiring = (input: {
     config: RuntimeConfig['chatWorkflow']['contextIntegrations']['projectDocs'];
@@ -53,37 +51,36 @@ export const buildProjectContextWiring = (input: {
           })
         : undefined;
 
-    const loadDocuments = async () => {
-        let allowlistContents: string;
-        try {
-            allowlistContents = await fs.readFile(
-                path.join(input.projectRoot, CONTEXT_FILES_RELATIVE_PATH),
-                'utf8'
-            );
-        } catch (error: unknown) {
-            if (
-                typeof error === 'object' &&
-                error !== null &&
-                'code' in error &&
-                error.code === 'ENOENT'
-            ) {
-                return [];
-            }
-            throw error;
-        }
-        const trackedPaths = await listGitTrackedPaths(input.projectRoot);
-        const source = createProjectDocumentSource({
-            repositoryRoot: input.projectRoot,
-            trackedPaths,
-            readFile: (filePath) =>
-                readProjectFile(input.projectRoot, filePath),
-            allowlistContents,
+    const loadDocuments = async () =>
+        (await loadPackagedProjectDocumentSet(input.projectRoot)) ??
+        loadGitProjectDocumentSet(input.projectRoot);
+
+    const recordEmbeddingUsage = (
+        result: EmbeddingRuntimeResult,
+        purpose: 'index' | 'query'
+    ): void => {
+        if (result.status !== 'success') return;
+        const promptTokens = result.promptTokens ?? 0;
+        const cost = estimateBackendTextCost(result.model, promptTokens, 0, {
+            providerUsageAvailable: result.promptTokens !== undefined,
         });
-        return source.loadDocuments();
+        recordBackendLLMUsage({
+            feature: 'chat_project_context_embedding',
+            model: result.model,
+            provider: result.provider,
+            purpose,
+            promptTokens,
+            completionTokens: 0,
+            totalTokens: result.totalTokens ?? promptTokens,
+            ...cost,
+            timestamp: Date.now(),
+        });
     };
 
     const embedTexts = async (
-        texts: string[]
+        texts: string[],
+        signal: AbortSignal,
+        purpose: 'index' | 'query'
     ): Promise<EmbeddingRuntimeResult> => {
         if (embeddingRuntime === undefined) {
             return {
@@ -93,16 +90,18 @@ export const buildProjectContextWiring = (input: {
                 provider: input.config.embeddingProvider,
             };
         }
-        return embeddingRuntime.embed({
+        const result = await embeddingRuntime.embed({
             texts,
             model: input.config.embeddingModel,
             provider: input.config.embeddingProvider,
+            signal,
         });
+        recordEmbeddingUsage(result, purpose);
+        return result;
     };
 
     return {
         enabled: input.config.enabled,
-        repository: input.config.repository,
         identity: {
             provider: input.config.embeddingProvider,
             model: input.config.embeddingModel,
@@ -112,9 +111,11 @@ export const buildProjectContextWiring = (input: {
         maxChunkBytes: input.config.maxChunkBytes,
         maxChunks: input.config.maxChunks,
         topKPerCategory: input.config.topKPerCategory,
+        maxMatches: input.config.maxMatches,
+        minScore: input.config.minScore,
+        embeddingTimeoutMs: input.config.embeddingTimeoutMs,
         resolveDocuments: loadDocuments,
         embedTexts,
-        resolveCommitSha: () => resolveHeadCommitSha(input.projectRoot),
     };
 };
 

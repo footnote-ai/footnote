@@ -20,7 +20,13 @@ export type OpenAiEmbeddingRuntimeClient = {
         model: string;
         input: string[];
         signal?: AbortSignal;
-    }) => Promise<{ data: OpenAiEmbeddingResponseData }>;
+    }) => Promise<{
+        data: OpenAiEmbeddingResponseData;
+        usage?: {
+            prompt_tokens?: number;
+            total_tokens?: number;
+        };
+    }>;
 };
 
 export interface OpenAiEmbeddingRuntimeLogger {
@@ -127,6 +133,12 @@ export const createOpenAiEmbeddingRuntime = ({
                     model: request.model,
                     provider: request.provider,
                     texts: request.texts,
+                    ...(response.usage?.prompt_tokens !== undefined && {
+                        promptTokens: response.usage.prompt_tokens,
+                    }),
+                    ...(response.usage?.total_tokens !== undefined && {
+                        totalTokens: response.usage.total_tokens,
+                    }),
                     generationTimeMs: Date.now() - startedAt,
                 };
             } catch (error) {

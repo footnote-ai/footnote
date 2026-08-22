@@ -588,6 +588,10 @@ export type EmbeddingRuntimeResult =
           model: string;
           provider: string;
           texts: string[];
+          /** Provider-reported input tokens when the embedding API returns them. */
+          promptTokens?: number;
+          /** Provider-reported total tokens when the embedding API returns them. */
+          totalTokens?: number;
           generationTimeMs: number;
       }
     | {

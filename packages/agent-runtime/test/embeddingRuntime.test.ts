@@ -27,6 +27,7 @@ const createRequest = (
 const createClient = (
     response: {
         data: Array<{ embedding: number[] }>;
+        usage?: { prompt_tokens?: number; total_tokens?: number };
     },
     fail = false
 ): OpenAiEmbeddingRuntimeClient => ({
@@ -45,6 +46,7 @@ test('embeds texts through the OpenAI-compatible client and keeps provider facts
         apiKey: 'test-key',
         client: createClient({
             data: [{ embedding: [0.1, 0.2, 0.3] }],
+            usage: { prompt_tokens: 12, total_tokens: 12 },
         }),
     });
 
@@ -55,6 +57,8 @@ test('embeds texts through the OpenAI-compatible client and keeps provider facts
     assert.equal(result.model, 'text-embedding-3-small');
     assert.equal(result.provider, 'openai');
     assert.equal(result.texts.length, 1);
+    assert.equal(result.promptTokens, 12);
+    assert.equal(result.totalTokens, 12);
 });
 
 test('runtime exposes upstream failure as an observable error result', async () => {

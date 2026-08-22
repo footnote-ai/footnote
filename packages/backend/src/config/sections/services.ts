@@ -41,6 +41,8 @@ const PROJECT_DOCS_EMBEDDING_PROVIDERS: ReadonlySet<string> = new Set([
 const PROJECT_DOCS_MAX_CHUNK_BYTES = 32 * 1024;
 const PROJECT_DOCS_MAX_CHUNKS = 5_000;
 const PROJECT_DOCS_MAX_TOP_K_PER_CATEGORY = 50;
+const PROJECT_DOCS_MAX_MATCHES = 20;
+const PROJECT_DOCS_MAX_TIMEOUT_MS = 30_000;
 
 const parseProjectDocsLimit = (
     raw: string | undefined,
@@ -53,6 +55,23 @@ const parseProjectDocsLimit = (
     if (parsed <= maximum) return parsed;
     warn(`${key} exceeds the project-context safety cap; using ${maximum}.`);
     return maximum;
+};
+
+const parseProjectDocsScore = (
+    raw: string | undefined,
+    fallback: number,
+    key: string,
+    warn: WarningSink
+): number => {
+    if (raw === undefined) return fallback;
+    const parsed = Number.parseFloat(raw);
+    if (Number.isFinite(parsed) && parsed >= -1 && parsed <= 1) {
+        return parsed;
+    }
+    warn(
+        `Ignoring invalid similarity score for ${key}: "${raw}". Using default (${fallback}).`
+    );
+    return fallback;
 };
 
 const parseWebSearchProviderPriority = (
@@ -360,10 +379,6 @@ export const buildServiceSections = (
                     'CHAT_CONTEXT_PROJECT_DOCS_ENABLED',
                     warn
                 ),
-                repository:
-                    parseOptionalTrimmedString(
-                        env.CHAT_CONTEXT_PROJECT_DOCS_REPOSITORY
-                    ) ?? 'footnote-ai/footnote',
                 embeddingProvider: parseStringUnionEnv(
                     env.CHAT_CONTEXT_PROJECT_DOCS_EMBEDDING_PROVIDER,
                     'openai' as const,
@@ -394,6 +409,26 @@ export const buildServiceSections = (
                     5,
                     'CHAT_CONTEXT_PROJECT_DOCS_TOP_K_PER_CATEGORY',
                     PROJECT_DOCS_MAX_TOP_K_PER_CATEGORY,
+                    warn
+                ),
+                maxMatches: parseProjectDocsLimit(
+                    env.CHAT_CONTEXT_PROJECT_DOCS_MAX_MATCHES,
+                    6,
+                    'CHAT_CONTEXT_PROJECT_DOCS_MAX_MATCHES',
+                    PROJECT_DOCS_MAX_MATCHES,
+                    warn
+                ),
+                minScore: parseProjectDocsScore(
+                    env.CHAT_CONTEXT_PROJECT_DOCS_MIN_SCORE,
+                    0.35,
+                    'CHAT_CONTEXT_PROJECT_DOCS_MIN_SCORE',
+                    warn
+                ),
+                embeddingTimeoutMs: parseProjectDocsLimit(
+                    env.CHAT_CONTEXT_PROJECT_DOCS_TIMEOUT_MS,
+                    8000,
+                    'CHAT_CONTEXT_PROJECT_DOCS_TIMEOUT_MS',
+                    PROJECT_DOCS_MAX_TIMEOUT_MS,
                     warn
                 ),
             },
