@@ -10,6 +10,7 @@ import { execFile } from 'node:child_process';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { promisify } from 'node:util';
+import { fileURLToPath } from 'node:url';
 
 const execFileAsync = promisify(execFile);
 const revisionPattern = /^[0-9a-f]{7,64}$/u;
@@ -18,7 +19,10 @@ const categories = new Set([
     'documented_behavior',
     'current_state',
 ]);
-const repositoryRoot = process.cwd();
+const repositoryRoot = path.resolve(
+    path.dirname(fileURLToPath(import.meta.url)),
+    '..'
+);
 const bundleRoot = path.join(repositoryRoot, '.footnote', 'context-bundle');
 
 const gitShow = async (revision, filePath) => {
@@ -39,6 +43,60 @@ const isSafeRelativePath = (filePath) => {
     );
 };
 
+const parseAllowlist = (contents) => {
+    const include = [];
+    const exclude = [];
+    for (const rawLine of contents.split(/\r?\n/u)) {
+        const line = rawLine.trim();
+        if (line.length === 0 || line.startsWith('#')) continue;
+        if (line.startsWith('!')) {
+            exclude.push(line.slice(1).trim());
+        } else {
+            include.push(line);
+        }
+    }
+    return { include, exclude };
+};
+
+const projectGlobToRegex = (pattern) => {
+    const normalized = pattern.replaceAll('\\', '/');
+    let regex = '^';
+    let index = 0;
+    while (index < normalized.length) {
+        const char = normalized[index];
+        if (
+            char === '*' &&
+            normalized[index + 1] === '*' &&
+            normalized[index + 2] === '/'
+        ) {
+            regex += '(?:.*/)?';
+            index += 3;
+            continue;
+        }
+        if (char === '*' && normalized[index + 1] === '*') {
+            regex += '.*';
+            index += 2;
+            continue;
+        }
+        if (char === '*') {
+            regex += '[^/]*';
+            index += 1;
+            continue;
+        }
+        if (char === '?') {
+            regex += '[^\\/]';
+            index += 1;
+            continue;
+        }
+        regex += char.replace(/[/.+?^${}()|[\]\\]/gu, '\\$&');
+        index += 1;
+    }
+    return `${regex}$`;
+};
+
+const matchesPattern = (filePath, pattern) =>
+    pattern.test(filePath.replaceAll('\\', '/'));
+
 const { stdout: revisionOutput } = await execFileAsync(
     'git',
     ['-C', repositoryRoot, 'rev-parse', '--verify', 'HEAD^{commit}'],
@@ -53,6 +111,13 @@ const allowlistContents = await gitShow(revision, '.footnote/context-files');
 const manifestContents = await gitShow(
     revision,
     '.footnote/context-manifest.json'
+);
+const { include, exclude } = parseAllowlist(allowlistContents);
+const includePatterns = include.map(
+    (pattern) => new RegExp(projectGlobToRegex(pattern), 'u')
+);
+const excludePatterns = exclude.map(
+    (pattern) => new RegExp(projectGlobToRegex(pattern), 'u')
 );
 const manifest = JSON.parse(manifestContents);
 if (!Array.isArray(manifest) || manifest.length === 0) {
@@ -75,6 +140,18 @@ for (const entry of manifest) {
         );
     }
     const normalizedPath = entry.path.replaceAll('\\', '/');
+    if (
+        excludePatterns.some((pattern) =>
+            matchesPattern(normalizedPath, pattern)
+        ) ||
+        !includePatterns.some((pattern) =>
+            matchesPattern(normalizedPath, pattern)
+        )
+    ) {
+        throw new Error(
+            `The project-context manifest includes a non-allowlisted path: ${normalizedPath}.`
+        );
+    }
     if (manifestPaths.has(normalizedPath)) {
         throw new Error(
             `The project-context manifest repeats ${normalizedPath}.`

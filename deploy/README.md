@@ -131,7 +131,7 @@ docker compose -f deploy/compose.yml up
 For local source builds during development:
 
 ```bash
-docker compose -f deploy/compose.yml -f deploy/compose.dev-build.yml up --build
+pnpm compose:up
 ```
 
 ## Settings vs Secrets
@@ -181,6 +181,16 @@ Manual deploy:
   fly deploy -c deploy/fly/server.toml \
   --build-arg FOOTNOTE_CONTEXT_COMMIT_SHA=$(git rev-parse HEAD)
 ```
+
+Local Compose source build and start:
+
+```bash
+pnpm compose:up
+```
+
+The wrapper prepares the immutable context bundle and passes its captured
+revision to Docker before starting Compose. Pass Compose flags after `--`, for
+example `pnpm compose:up -- -d`.
 
 The server image packages the curated project-context corpus because the
 runtime image does not contain `.git`. Always pass the source commit when

@@ -2,8 +2,9 @@
 node_modules/
 *.tsbuildinfo
 
-# The Fly remote builder receives this generated bundle from the working tree.
-# It must stay untracked without being excluded from the Docker context.
+# Deployment wrappers generate this immutable bundle before building.
+# Docker and Fly contexts include it directly; Git should keep it out of status.
+.footnote/context-bundle/
 
 # Environment files
 .env

@@ -220,7 +220,10 @@ $contextCommitSha = (& git -C $repoRoot rev-parse --verify HEAD^{commit}).Trim()
 if ($LASTEXITCODE -ne 0 -or $contextCommitSha -notmatch '^[0-9a-f]{7,64}$') {
   throw "Unable to resolve a valid project-context revision."
 }
-node (Join-Path $repoRoot 'scripts/prepare-project-context-bundle.mjs')
+pnpm context:bundle
+if ($LASTEXITCODE -ne 0) {
+  throw "Project-context bundle preparation failed with exit code $LASTEXITCODE"
+}
 fly deploy -c $serverConfigPath --build-arg "FOOTNOTE_CONTEXT_COMMIT_SHA=$contextCommitSha"
 Write-Host "Scaling server to one instance..."
 fly scale count 1 -a $serverAppName -y

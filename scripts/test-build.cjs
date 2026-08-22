@@ -7,12 +7,40 @@
  */
 const { execFileSync } = require('node:child_process');
 const path = require('node:path');
+const { runCommand } = require('./lib/run-command.cjs');
 
 const repositoryRoot = path.resolve(__dirname, '..');
-const run = (command, args) =>
-    execFileSync(command, args, { cwd: repositoryRoot, stdio: 'inherit' });
+const run = (command, args) => {
+    const result = runCommand(command, args, {
+        cwd: repositoryRoot,
+        stdio: 'inherit',
+    });
+    if (result.error) throw result.error;
+    if (result.status !== 0) {
+        throw new Error(`${command} exited with status ${result.status}.`);
+    }
+};
 
-run('node', ['scripts/prepare-project-context-bundle.mjs']);
+const runPnpm = (args) => {
+    if (process.platform !== 'win32') {
+        run('pnpm', args);
+        return;
+    }
+    const pnpmScript = path.join(
+        path.dirname(process.execPath),
+        'node_modules',
+        'corepack',
+        'dist',
+        'pnpm.js'
+    );
+    if (require('node:fs').existsSync(pnpmScript)) {
+        run(process.execPath, [pnpmScript, ...args]);
+        return;
+    }
+    run('pnpm.cmd', args);
+};
+
+runPnpm(['context:bundle']);
 const revision = execFileSync(
     'git',
     ['rev-parse', '--verify', 'HEAD^{commit}'],
@@ -29,6 +57,7 @@ run('docker', [
     `FOOTNOTE_CONTEXT_COMMIT_SHA=${revision}`,
 ]);
 
+const imageReference = process.env.FOOTNOTE_IMAGE_REF ?? 'footnote:dev-local';
 const verificationScript = `
 const fs = require('node:fs');
 const bundleRoot = '/app/.footnote/context-bundle';
@@ -47,7 +76,7 @@ run('docker', [
     '--rm',
     '--env',
     `EXPECTED_REVISION=${revision}`,
-    'footnote:dev-local',
+    imageReference,
     'node',
     '-e',
     verificationScript,
