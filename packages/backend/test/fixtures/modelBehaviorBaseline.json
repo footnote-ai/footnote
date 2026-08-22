@@ -1,0 +1,149 @@
+{
+    "version": 1,
+    "cases": [
+        {
+            "id": "direct_generation_no_retrieval",
+            "kind": "generation",
+            "description": "A stable answer that should not need external retrieval.",
+            "messages": [
+                {
+                    "role": "system",
+                    "content": "Answer clearly in two short paragraphs. Do not browse or invent current facts."
+                },
+                {
+                    "role": "user",
+                    "content": "Explain why a small focused change is easier to verify than a broad refactor."
+                }
+            ],
+            "request": {
+                "maxOutputTokens": 240,
+                "reasoningEffort": "low",
+                "verbosity": "low"
+            },
+            "checks": {
+                "deterministic": ["text_output"],
+                "objective": ["retrieval_forbidden"],
+                "qualitative": ["clear_tradeoff_explanation"]
+            }
+        },
+        {
+            "id": "planner_ordinary_message",
+            "kind": "planner",
+            "description": "A planner request that should remain an ordinary message action.",
+            "messages": [
+                {
+                    "role": "system",
+                    "content": "Choose the least powerful action that satisfies the request."
+                },
+                {
+                    "role": "user",
+                    "content": "Rewrite this sentence to be more concise: The small change is easier to review."
+                }
+            ],
+            "request": {
+                "maxOutputTokens": 160,
+                "reasoningEffort": "low",
+                "verbosity": "low"
+            },
+            "checks": {
+                "deterministic": ["planner_schema_valid", "trace_complete"],
+                "objective": ["action_message", "retrieval_not_requested"],
+                "qualitative": ["request_intent_preserved"]
+            }
+        },
+        {
+            "id": "planner_retrieval_request",
+            "kind": "planner",
+            "description": "A planner request whose answer depends on current repository state.",
+            "messages": [
+                {
+                    "role": "system",
+                    "content": "Use retrieval when the answer depends on current repository state."
+                },
+                {
+                    "role": "user",
+                    "content": "What is the current status of the Footnote repository-context work?"
+                }
+            ],
+            "request": {
+                "maxOutputTokens": 180,
+                "reasoningEffort": "low",
+                "verbosity": "low"
+            },
+            "checks": {
+                "deterministic": ["planner_schema_valid", "trace_complete"],
+                "objective": ["retrieval_requested", "current_state_intent"],
+                "qualitative": ["retrieval_scope_is_bounded"]
+            }
+        },
+        {
+            "id": "structured_planner_schema",
+            "kind": "structured_planner",
+            "description": "A planner decision that must satisfy the existing structured contract.",
+            "messages": [
+                {
+                    "role": "system",
+                    "content": "Return one planner decision using the supplied structured schema."
+                },
+                {
+                    "role": "user",
+                    "content": "Respond to the user with a normal text message."
+                }
+            ],
+            "request": {
+                "maxOutputTokens": 220,
+                "reasoningEffort": "low",
+                "verbosity": "low"
+            },
+            "checks": {
+                "deterministic": [
+                    "structured_output_valid",
+                    "planner_contract_valid"
+                ],
+                "objective": ["action_message", "modality_text"],
+                "qualitative": ["decision_is_minimal"]
+            }
+        },
+        {
+            "id": "review_finalize_good_draft",
+            "kind": "review",
+            "description": "A clearly complete draft that should not trigger another revision.",
+            "draft": "A focused change is easier to verify because its behavior, tests, and failure modes stay within a small boundary.",
+            "reviewContext": "The draft directly answers the request, makes no unsupported current-state claim, and needs no citation.",
+            "request": {
+                "maxOutputTokens": 200,
+                "reasoningEffort": "low",
+                "verbosity": "low"
+            },
+            "checks": {
+                "deterministic": [
+                    "review_decision_schema_valid",
+                    "review_fail_open_preserved"
+                ],
+                "objective": ["review_decision_finalize"],
+                "qualitative": ["no_unnecessary_revision"]
+            }
+        },
+        {
+            "id": "review_revise_defective_draft",
+            "kind": "review",
+            "description": "A draft with a concrete omission that should receive one bounded revision request.",
+            "draft": "This change is better because it is better.",
+            "reviewContext": "The draft does not explain the requested tradeoff and uses circular wording.",
+            "request": {
+                "maxOutputTokens": 200,
+                "reasoningEffort": "low",
+                "verbosity": "low"
+            },
+            "checks": {
+                "deterministic": [
+                    "review_decision_schema_valid",
+                    "revision_instruction_bounded",
+                    "review_fail_open_preserved"
+                ],
+                "objective": ["review_decision_revise"],
+                "qualitative": ["revision_instruction_is_actionable"]
+            }
+        }
+    ]
+}
