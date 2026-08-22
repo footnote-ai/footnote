@@ -24,6 +24,18 @@ import {
 
 const execFileAsync = promisify(execFile);
 
+const runGit = (repositoryRoot: string, args: string[]) =>
+    execFileAsync('git', ['-C', repositoryRoot, ...args], {
+        env: {
+            ...process.env,
+            GIT_CONFIG_NOSYSTEM: '1',
+            GIT_CONFIG_GLOBAL: path.join(
+                repositoryRoot,
+                'missing-global-config'
+            ),
+        },
+    });
+
 test('projectGlobToRegex converts glob patterns to anchored regexes', () => {
     assert.equal(projectGlobToRegex('README.md'), '^README\\.md$');
     assert.equal(
@@ -193,21 +205,9 @@ test('git-backed project context reads the captured commit, not dirty working-tr
     const root = path.join(os.tmpdir(), `footnote-project-git-${randomUUID()}`);
     await fs.mkdir(path.join(root, '.footnote'), { recursive: true });
     try {
-        await execFileAsync('git', ['-C', root, 'init', '-q']);
-        await execFileAsync('git', [
-            '-C',
-            root,
-            'config',
-            'user.email',
-            'test@example.com',
-        ]);
-        await execFileAsync('git', [
-            '-C',
-            root,
-            'config',
-            'user.name',
-            'Footnote Test',
-        ]);
+        await runGit(root, ['init', '-q']);
+        await runGit(root, ['config', 'user.email', 'test@example.com']);
+        await runGit(root, ['config', 'user.name', 'Footnote Test']);
         await fs.writeFile(
             path.join(root, '.footnote', 'context-files'),
             'README.md\n',
@@ -229,14 +229,8 @@ test('git-backed project context reads the captured commit, not dirty working-tr
             'Committed bytes.',
             'utf8'
         );
-        await execFileAsync('git', ['-C', root, 'add', '.']);
-        await execFileAsync('git', [
-            '-C',
-            root,
-            'commit',
-            '-qm',
-            'test context revision',
-        ]);
+        await runGit(root, ['add', '.']);
+        await runGit(root, ['commit', '-qm', 'test context revision']);
         await fs.writeFile(
             path.join(root, 'README.md'),
             'Dirty bytes.',

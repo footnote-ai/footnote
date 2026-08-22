@@ -52,8 +52,20 @@ export const buildProjectContextWiring = (input: {
         : undefined;
 
     const loadDocuments = async () =>
-        (await loadPackagedProjectDocumentSet(input.projectRoot)) ??
-        loadGitProjectDocumentSet(input.projectRoot);
+        (await loadPackagedProjectDocumentSet(input.projectRoot, {
+            onSkip: (filePath, reason) =>
+                logger.debug('project_context_document_skipped', {
+                    filePath,
+                    reason,
+                }),
+        })) ??
+        loadGitProjectDocumentSet(input.projectRoot, {
+            onSkip: (filePath, reason) =>
+                logger.debug('project_context_document_skipped', {
+                    filePath,
+                    reason,
+                }),
+        });
 
     const recordEmbeddingUsage = (
         result: EmbeddingRuntimeResult,

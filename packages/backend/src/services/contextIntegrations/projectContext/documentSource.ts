@@ -29,6 +29,10 @@ export type ProjectDocumentSet = {
     source: 'git' | 'bundle';
 };
 
+export type ProjectDocumentSetLoadOptions = {
+    onSkip?: (filePath: string, reason: string) => void;
+};
+
 export type ProjectDocumentSourceOptions = {
     repositoryRoot: string;
     trackedPaths: string[];
@@ -40,6 +44,7 @@ export type ProjectDocumentSourceOptions = {
         isSymbolicLink: boolean;
         size: number;
     }>;
+    onSkip?: (filePath: string, reason: string) => void;
     maxFileBytes?: number;
 };
 
@@ -150,6 +155,10 @@ const parseManifest = (contents: string): ProjectContextManifestEntry[] => {
     });
 };
 
+/**
+ * Parses a project-context manifest. Valid entries are returned; malformed
+ * entries are discarded. Syntactically invalid JSON throws to the caller.
+ */
 export const parseProjectContextManifest = parseManifest;
 
 /**
@@ -208,6 +217,7 @@ export const createProjectDocumentSource = (
                     ) ||
                     (manifestByPath.size > 0 && manifestEntry === undefined)
                 ) {
+                    options.onSkip?.(normalized, 'not_allowlisted');
                     continue;
                 }
                 const absolutePath = path.resolve(
@@ -218,7 +228,10 @@ export const createProjectDocumentSource = (
                     options.repositoryRoot,
                     absolutePath
                 );
-                if (!isSafeRelativePath(relativePath)) continue;
+                if (!isSafeRelativePath(relativePath)) {
+                    options.onSkip?.(normalized, 'unsafe_relative_path');
+                    continue;
+                }
                 try {
                     const stats = await statFile(absolutePath);
                     if (
@@ -226,10 +239,19 @@ export const createProjectDocumentSource = (
                         stats.isSymbolicLink ||
                         stats.size > maxFileBytes
                     ) {
+                        options.onSkip?.(
+                            normalized,
+                            !stats.isFile
+                                ? 'not_file'
+                                : stats.isSymbolicLink
+                                  ? 'symbolic_link'
+                                  : 'file_too_large'
+                        );
                         continue;
                     }
                     const content = await options.readFile(absolutePath);
                     if (Buffer.byteLength(content, 'utf8') > maxFileBytes) {
+                        options.onSkip?.(normalized, 'content_too_large');
                         continue;
                     }
                     documents.push({
@@ -242,7 +264,13 @@ export const createProjectDocumentSource = (
                             priority: manifestEntry.priority,
                         }),
                     });
-                } catch {
+                } catch (error) {
+                    options.onSkip?.(
+                        normalized,
+                        error instanceof Error
+                            ? 'read_failed'
+                            : 'read_failed_unknown'
+                    );
                     continue;
                 }
             }
@@ -361,7 +389,8 @@ const readRootFile = async (
 
 /** Loads one commit-pinned document set for local/dev repositories. */
 export const loadGitProjectDocumentSet = async (
-    repositoryRoot: string
+    repositoryRoot: string,
+    options: ProjectDocumentSetLoadOptions = {}
 ): Promise<ProjectDocumentSet> => {
     const revision = await resolveHeadCommitSha(repositoryRoot);
     if (revision === null) {
@@ -379,12 +408,16 @@ export const loadGitProjectDocumentSet = async (
             '.footnote/context-manifest.json'
         )
     );
+    if (manifestEntries.length === 0) {
+        throw new Error('Project context manifest contains no valid entries.');
+    }
     const trackedPaths = await listGitTrackedPaths(repositoryRoot, revision);
     const source = createProjectDocumentSource({
         repositoryRoot,
         trackedPaths,
         allowlistContents,
         manifestEntries,
+        onSkip: options.onSkip,
         readFile: (filePath) =>
             readGitRevisionFile(
                 repositoryRoot,
@@ -425,7 +458,8 @@ const listBundleFiles = async (bundleRoot: string): Promise<string[]> => {
 
 /** Loads the immutable document set copied into a production image. */
 export const loadPackagedProjectDocumentSet = async (
-    repositoryRoot: string
+    repositoryRoot: string,
+    options: ProjectDocumentSetLoadOptions = {}
 ): Promise<ProjectDocumentSet | undefined> => {
     const bundleRoot = path.join(repositoryRoot, '.footnote', 'context-bundle');
     try {
@@ -442,12 +476,16 @@ export const loadPackagedProjectDocumentSet = async (
                 '.footnote/context-manifest.json'
             )
         );
+        if (manifestEntries.length === 0) {
+            return undefined;
+        }
         const trackedPaths = await listBundleFiles(bundleRoot);
         const source = createProjectDocumentSource({
             repositoryRoot: bundleRoot,
             trackedPaths,
             allowlistContents,
             manifestEntries,
+            onSkip: options.onSkip,
             readFile: (filePath) => readProjectFile(bundleRoot, filePath),
         });
         return {

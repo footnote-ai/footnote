@@ -61,6 +61,14 @@ export const hashText = (text: string): string => {
     return `sha256:${createHash('sha256').update(text, 'utf8').digest('hex')}`;
 };
 
+const utf8ByteWidth = (character: string): number => {
+    const codePoint = character.codePointAt(0) ?? 0;
+    if (codePoint <= 0x7f) return 1;
+    if (codePoint <= 0x7ff) return 2;
+    if (codePoint <= 0xffff) return 3;
+    return 4;
+};
+
 /**
  * Splits one document into stable, bounded chunks.
  *
@@ -101,10 +109,7 @@ export const chunkProjectDocument = (
             let end = offset;
             let bytes = 0;
             while (end < characters.length) {
-                const characterBytes = Buffer.byteLength(
-                    characters[end] ?? '',
-                    'utf8'
-                );
+                const characterBytes = utf8ByteWidth(characters[end] ?? '');
                 if (end > offset && bytes + characterBytes > chunkSize) {
                     break;
                 }

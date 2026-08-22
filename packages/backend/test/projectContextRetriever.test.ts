@@ -178,9 +178,35 @@ test('retriever times out a hanging query embedding and exposes the typed failur
     assert.equal(outcome.ok, false);
     if (!outcome.ok) {
         assert.equal(outcome.code, 'embedding_timeout');
-        assert.match(outcome.detail, /timed out/iu);
+        assert.match(outcome.detail, /deadline/iu);
     }
     assert.equal(observedSignal?.aborted, true);
+});
+
+test('retriever shares one deadline across sequential index batches', async () => {
+    let embedCalls = 0;
+    let clock = 0;
+    const retriever = createRetriever({
+        maxChunkBytes: 1,
+        maxChunks: 65,
+        embeddingTimeoutMs: 10,
+        now: () => clock,
+        resolveDocuments: async () => [
+            {
+                path: 'README.md',
+                content: 'x'.repeat(200),
+            },
+        ],
+        embedTexts: async (texts) => {
+            embedCalls += 1;
+            clock = 10;
+            return embedSuccess(texts);
+        },
+    });
+    const outcome = await retriever.retrieve('anything', ['documented_intent']);
+    assert.equal(outcome.ok, false);
+    if (!outcome.ok) assert.equal(outcome.code, 'embedding_timeout');
+    assert.equal(embedCalls, 1);
 });
 
 test('retriever retains the indexed revision when serving a stale index', async () => {

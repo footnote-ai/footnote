@@ -10,7 +10,10 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { parseProjectContextManifest } from '../src/services/contextIntegrations/projectContext/documentSource.js';
+import { createProjectContextRetriever } from '../src/services/contextIntegrations/projectContext/retriever.js';
+import type { EmbeddingRuntimeResult } from '@footnote/agent-runtime';
 import type { ProjectContextCategory } from '@footnote/contracts/policy';
 
 type EvaluationCase = {
@@ -19,7 +22,10 @@ type EvaluationCase = {
     expectedCategories: ProjectContextCategory[];
 };
 
-const repoRoot = process.cwd();
+const repoRoot = path.resolve(
+    path.dirname(fileURLToPath(import.meta.url)),
+    '../../..'
+);
 const evaluationCases = JSON.parse(
     fs.readFileSync(
         path.join(
@@ -61,5 +67,78 @@ test('representative project-context questions retain curated source coverage', 
                 `${evaluationCase.question} lost category ${expectedCategory}`
             );
         }
+    }
+});
+
+test('deterministic retrieval evaluation returns the expected source in top-K', async () => {
+    const manifestByPath = new Map(
+        manifest.map((entry) => [entry.path, entry])
+    );
+    const paths = manifest.map((entry) => entry.path);
+    const vectorFor = (text: string): number[] => {
+        const documentIndex = paths.findIndex((filePath) =>
+            text.includes(filePath)
+        );
+        const queryIndex = evaluationCases.findIndex(
+            (evaluationCase) => evaluationCase.question === text
+        );
+        const selectedPath =
+            documentIndex >= 0
+                ? documentIndex
+                : queryIndex >= 0
+                  ? paths.indexOf(
+                        evaluationCases[queryIndex]?.expectedPaths[0] ?? ''
+                    )
+                  : -1;
+        return paths.map((_, index) => (index === selectedPath ? 1 : 0));
+    };
+    const embedTexts = async (
+        texts: string[]
+    ): Promise<EmbeddingRuntimeResult> => ({
+        status: 'success',
+        embeddings: texts.map(vectorFor),
+        model: 'deterministic-eval',
+        provider: 'test',
+        texts,
+        generationTimeMs: 0,
+    });
+    const retriever = createProjectContextRetriever({
+        identity: {
+            provider: 'test',
+            model: 'deterministic-eval',
+            chunkerVersion: 1,
+            indexVersion: 1,
+        },
+        resolveDocuments: async () => ({
+            revision: 'eval-sha',
+            source: 'git' as const,
+            documents: paths.map((filePath) => ({
+                path: filePath,
+                category: manifestByPath.get(filePath)?.category,
+                priority: manifestByPath.get(filePath)?.priority,
+                content: filePath,
+            })),
+        }),
+        embedTexts,
+        maxChunkBytes: 2000,
+        maxChunks: 200,
+        topKPerCategory: 2,
+        maxMatches: 1,
+        minScore: 0.99,
+        embeddingTimeoutMs: 1000,
+    });
+
+    for (const evaluationCase of evaluationCases) {
+        const outcome = await retriever.retrieve(
+            evaluationCase.question,
+            evaluationCase.expectedCategories
+        );
+        assert.equal(outcome.ok, true, evaluationCase.question);
+        if (!outcome.ok) continue;
+        assert.equal(
+            outcome.matches[0]?.path,
+            evaluationCase.expectedPaths[0],
+            evaluationCase.question
+        );
     }
 });

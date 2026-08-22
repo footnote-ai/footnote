@@ -96,6 +96,11 @@ type BoundedEmbeddingResult = {
     timedOut: boolean;
 };
 
+type EmbeddingDeadlineBudget = {
+    deadlineAt: number;
+    timeoutMs: number;
+};
+
 class ProjectContextEmbeddingError extends Error {
     public readonly code: ProjectContextRetrievalFailureCode;
 
@@ -144,6 +149,13 @@ export const selectProjectContextChunks = (
         );
         byCategory.set(category, categoryChunks);
     }
+    for (const categoryChunks of byCategory.values()) {
+        categoryChunks.sort(
+            (left, right) =>
+                (right.priority ?? 0) - (left.priority ?? 0) ||
+                (left.id < right.id ? -1 : left.id > right.id ? 1 : 0)
+        );
+    }
 
     const categories: ProjectContextCategory[] = [
         'documented_intent',
@@ -191,14 +203,24 @@ const prepareIndex = (
 
 const withDeadline = async (
     options: ProjectContextRetrieverOptions,
+    budget: EmbeddingDeadlineBudget,
     texts: string[],
     purpose: 'index' | 'query'
 ): Promise<BoundedEmbeddingResult> => {
     const controller = new AbortController();
-    const timeoutMs = Math.max(
-        1,
-        Math.floor(options.embeddingTimeoutMs ?? DEFAULT_EMBEDDING_TIMEOUT_MS)
-    );
+    const now = (options.now ?? Date.now)();
+    if (budget.deadlineAt <= now) {
+        return {
+            timedOut: true,
+            result: {
+                status: 'error',
+                reason: `Project context ${purpose} embedding exceeded its ${budget.timeoutMs}ms deadline.`,
+                model: options.identity.model,
+                provider: options.identity.provider,
+            },
+        };
+    }
+    const remainingMs = Math.max(1, Math.floor(budget.deadlineAt - now));
     let timeoutHandle: ReturnType<typeof setTimeout> | undefined;
     const timeout = new Promise<BoundedEmbeddingResult>((resolve) => {
         timeoutHandle = setTimeout(() => {
@@ -207,20 +229,27 @@ const withDeadline = async (
                 timedOut: true,
                 result: {
                     status: 'error',
-                    reason: `Embedding ${purpose} timed out after ${timeoutMs}ms.`,
+                    reason: `Project context ${purpose} embedding exceeded its ${budget.timeoutMs}ms deadline.`,
                     model: options.identity.model,
                     provider: options.identity.provider,
                 },
             });
-        }, timeoutMs);
+        }, remainingMs);
     });
+    const embeddingPromise = options
+        .embedTexts(texts, controller.signal, purpose)
+        .then((result) => ({ result, timedOut: false }))
+        .catch((error: unknown) => ({
+            timedOut: false,
+            result: {
+                status: 'error' as const,
+                reason: error instanceof Error ? error.message : String(error),
+                model: options.identity.model,
+                provider: options.identity.provider,
+            },
+        }));
     try {
-        return await Promise.race([
-            options
-                .embedTexts(texts, controller.signal, purpose)
-                .then((result) => ({ result, timedOut: false })),
-            timeout,
-        ]);
+        return await Promise.race([embeddingPromise, timeout]);
     } finally {
         if (timeoutHandle !== undefined) clearTimeout(timeoutHandle);
     }
@@ -229,7 +258,8 @@ const withDeadline = async (
 const buildIndex = async (
     options: ProjectContextRetrieverOptions,
     prepared: PreparedProjectIndex,
-    embeddingCache: Map<string, number[]>
+    embeddingCache: Map<string, number[]>,
+    budget: EmbeddingDeadlineBudget
 ): Promise<BuiltProjectIndex> => {
     const cachePrefix = `${options.identity.provider}|${options.identity.model}|`;
     const missing = prepared.chunks.filter(
@@ -243,6 +273,7 @@ const buildIndex = async (
         const batch = missing.slice(offset, offset + EMBEDDING_BATCH_SIZE);
         const embeddingResult = await withDeadline(
             options,
+            budget,
             batch.map((chunk) => chunk.text),
             'index'
         );
@@ -269,6 +300,15 @@ const buildIndex = async (
                 );
             }
         });
+    }
+
+    const retainedKeys = new Set(
+        prepared.chunks.map((chunk) => `${cachePrefix}${chunk.contentHash}`)
+    );
+    for (const key of embeddingCache.keys()) {
+        if (key.startsWith(cachePrefix) && !retainedKeys.has(key)) {
+            embeddingCache.delete(key);
+        }
     }
 
     const store = createProjectVectorStore({
@@ -301,7 +341,9 @@ const createIndexLoader = (options: ProjectContextRetrieverOptions) => {
         | undefined;
     const embeddingCache = new Map<string, number[]>();
 
-    return async (): Promise<
+    return async (
+        budget: EmbeddingDeadlineBudget
+    ): Promise<
         | { ok: true; index: BuiltProjectIndex; status: 'current' | 'stale' }
         | {
               ok: false;
@@ -321,7 +363,7 @@ const createIndexLoader = (options: ProjectContextRetrieverOptions) => {
             const buildPromise =
                 inFlight?.fingerprint === prepared.fingerprint
                     ? inFlight.promise
-                    : buildIndex(options, prepared, embeddingCache);
+                    : buildIndex(options, prepared, embeddingCache, budget);
             inFlight = {
                 fingerprint: prepared.fingerprint,
                 promise: buildPromise,
@@ -361,10 +403,21 @@ export const createProjectContextRetriever = (
 
     return {
         async retrieve(query, categories) {
-            const loaded = await loadIndex();
+            const timeoutMs = Math.max(
+                1,
+                Math.floor(
+                    options.embeddingTimeoutMs ?? DEFAULT_EMBEDDING_TIMEOUT_MS
+                )
+            );
+            const budget: EmbeddingDeadlineBudget = {
+                timeoutMs,
+                deadlineAt: (options.now ?? Date.now)() + timeoutMs,
+            };
+            const loaded = await loadIndex(budget);
             if (!loaded.ok) return loaded;
             const embeddingResult = await withDeadline(
                 options,
+                budget,
                 [query],
                 'query'
             );

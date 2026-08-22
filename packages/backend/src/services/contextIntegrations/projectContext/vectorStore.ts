@@ -135,9 +135,8 @@ export const createProjectVectorStore = (input: {
                     contentHash: chunk.contentHash,
                     text: chunk.text,
                     score,
-                    ...(input.identity.sourceRevision !== undefined && {
-                        revisionLabel:
-                            input.identity.sourceRevision ?? undefined,
+                    ...(input.identity.sourceRevision != null && {
+                        revisionLabel: input.identity.sourceRevision,
                     }),
                 });
             }

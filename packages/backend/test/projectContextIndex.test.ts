@@ -81,6 +81,30 @@ test('chunk selection rotates categories so a bounded index retains current-stat
     );
 });
 
+test('chunk selection admits higher-priority chunks before lower-priority peers', () => {
+    const chunks = selectProjectContextChunks(
+        [
+            {
+                path: 'docs/low.md',
+                category: 'documented_intent',
+                priority: 1,
+                content: '# Low\nlow priority',
+            },
+            {
+                path: 'docs/high.md',
+                category: 'documented_intent',
+                priority: 10,
+                content: '# High\nhigh priority',
+            },
+        ],
+        { maxChunkBytes: 2000, maxChunks: 1 }
+    );
+    assert.deepEqual(
+        chunks.map((chunk) => chunk.path),
+        ['docs/high.md']
+    );
+});
+
 test('chunkProjectDocument splits by markdown headings and keeps heading context', () => {
     const source: ProjectDocumentSource = {
         path: 'docs/Philosophy.md',
