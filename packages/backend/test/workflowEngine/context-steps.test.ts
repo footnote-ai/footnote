@@ -381,11 +381,19 @@ test('runBoundedReviewWorkflow preserves project-context authority roles', async
     const trusted = messages.find((message) =>
         message.content.includes('Trusted project-context guidance')
     );
-    const untrusted = messages.find((message) =>
-        message.content.includes('UNTRUSTED PROJECT CONTEXT')
+    const untrusted = messages.find(
+        (message) =>
+            message.role === 'user' &&
+            message.content.includes('UNTRUSTED PROJECT CONTEXT')
+    );
+    const untrustedSystemMessage = messages.find(
+        (message) =>
+            message.role === 'system' &&
+            message.content.includes('UNTRUSTED PROJECT CONTEXT')
     );
     assert.equal(trusted?.role, 'system');
     assert.equal(untrusted?.role, 'user');
+    assert.equal(untrustedSystemMessage, undefined);
 });
 
 test('runBoundedReviewWorkflow records failed injected context step with reason and continues fail-open', async () => {

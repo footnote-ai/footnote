@@ -84,3 +84,19 @@ test('stable team explanations do not request live GitHub state', () => {
         undefined
     );
 });
+
+test('current team work requests live commit context', () => {
+    assert.deepEqual(
+        buildFootnoteGitHubContextRouteFromPlan({
+            search: {
+                query: 'What is the team working on?',
+                contextSize: 'medium',
+                intent: 'repo_explainer',
+            },
+        }),
+        {
+            repository: PROJECT_CONTEXT_CANONICAL_REPOSITORY,
+            sections: ['commits'],
+        }
+    );
+});
