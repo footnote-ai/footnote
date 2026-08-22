@@ -1102,6 +1102,9 @@ type ContextStepBaseResult = {
     integrationContext?: ContextStepIntegrationContext;
 };
 
+export type ContextPromptMessage =
+    string | { role: 'system' | 'user'; content: string };
+
 export type ContextStepExecutedResult = ContextStepBaseResult & {
     outcome: 'executed';
     executionContext: ToolExecutionContext & {
@@ -1109,7 +1112,7 @@ export type ContextStepExecutedResult = ContextStepBaseResult & {
         clarification?: never;
         reasonCode?: never;
     };
-    contextMessages?: string[];
+    contextMessages?: ContextPromptMessage[];
     /** Prompt channel for context messages; project documents use the lower-authority user channel. */
     contextMessageRole?: 'system' | 'user';
     sources?: Citation[];

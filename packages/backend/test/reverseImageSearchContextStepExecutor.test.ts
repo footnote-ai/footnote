@@ -84,7 +84,9 @@ test('reverse image executor returns executed with provider matches', async () =
     assert.equal(result.sources?.[0]?.url, 'https://source.example/match-1');
     assert.ok(
         result.contextMessages?.some((line) =>
-            line.includes('Likely from a public event archive.')
+            (typeof line === 'string' ? line : line.content).includes(
+                'Likely from a public event archive.'
+            )
         )
     );
 });
@@ -123,7 +125,9 @@ test('reverse image executor degrades gracefully on provider failure', async () 
     assert.equal(warned, true);
     assert.ok(
         result.contextMessages?.some((line) =>
-            line.includes('reverse image search failed')
+            (typeof line === 'string' ? line : line.content).includes(
+                'reverse image search failed'
+            )
         )
     );
 });

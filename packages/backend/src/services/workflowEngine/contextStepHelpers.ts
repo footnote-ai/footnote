@@ -12,6 +12,7 @@ import type {
     ContextStepResult,
     ContextStepExecutor,
 } from '../workflowEngine.js';
+import type { ContextPromptMessage } from '@footnote/contracts/policy';
 import type { GenerationRequest } from '@footnote/agent-runtime';
 
 type FollowUpSearchHint = {
@@ -19,9 +20,6 @@ type FollowUpSearchHint = {
     intent: 'repo_explainer' | 'current_facts';
     priority: 'low' | 'medium' | 'high';
 };
-
-type ContextPromptMessage =
-    string | { role: 'system' | 'user'; content: string };
 
 /**
  * Injects normalized context-step messages into the generation prompt.

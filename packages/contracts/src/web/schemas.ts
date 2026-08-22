@@ -1344,7 +1344,9 @@ const ProjectContextReasonCodeSchema = z.enum([
     'tool_not_requested',
     'invalid_query',
     'query_embedding_failed',
+    'embedding_timeout',
     'index_unavailable',
+    'no_relevant_matches',
     'execution_error',
 ]);
 const ProjectContextMetadataSchema: z.ZodType<ProjectContextMetadata> = z
@@ -1366,6 +1368,9 @@ const ProjectContextMetadataSchema: z.ZodType<ProjectContextMetadata> = z
             .strict(),
         maxChunks: z.number().int().positive(),
         topKPerCategory: z.number().int().positive(),
+        maxMatches: z.number().int().positive().optional(),
+        minScore: z.number().min(-1).max(1).optional(),
+        embeddingTimeoutMs: z.number().int().positive().optional(),
         status: z.enum(['current', 'partial', 'stale', 'unavailable']),
         reasonCodes: z.array(ProjectContextReasonCodeSchema).max(5),
     })

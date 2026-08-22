@@ -18,6 +18,7 @@ import {
     type ProjectIndexIdentity,
     type StoredProjectChunk,
 } from '../src/services/contextIntegrations/projectContext/vectorStore.js';
+import { selectProjectContextChunks } from '../src/services/contextIntegrations/projectContext/retriever.js';
 
 const identity: ProjectIndexIdentity = {
     provider: 'openai',
@@ -51,6 +52,33 @@ test('defaultCategoryForPath labels philosophy and agent docs as documented inte
         'documented_intent'
     );
     assert.equal(defaultCategoryForPath('AGENTS.md'), 'documented_intent');
+});
+
+test('chunk selection rotates categories so a bounded index retains current-state evidence', () => {
+    const chunks = selectProjectContextChunks(
+        [
+            {
+                path: 'README.md',
+                category: 'documented_intent',
+                content: '# Intent\n'.concat('intent '.repeat(40)),
+            },
+            {
+                path: 'docs/architecture/workflow.md',
+                category: 'documented_behavior',
+                content: '# Behavior\n'.concat('behavior '.repeat(40)),
+            },
+            {
+                path: 'docs/status/repository-context-status.md',
+                category: 'current_state',
+                content: '# State\n'.concat('state '.repeat(40)),
+            },
+        ],
+        { maxChunkBytes: 40, maxChunks: 6 }
+    );
+    assert.deepEqual(
+        [...new Set(chunks.map((chunk) => chunk.category))].sort(),
+        ['current_state', 'documented_behavior', 'documented_intent']
+    );
 });
 
 test('chunkProjectDocument splits by markdown headings and keeps heading context', () => {
@@ -245,6 +273,48 @@ test('vector store applies topK independently within each category', () => {
     assert.deepEqual(
         matches.map((match) => match.path),
         ['docs/Philosophy.md', 'docs/status/plan.md']
+    );
+});
+
+test('vector store applies a global relevance budget and removes duplicate evidence', () => {
+    const store = createProjectVectorStore({ identity, maxChunks: 100 });
+    store.upsert([
+        {
+            id: 'best#0',
+            path: 'docs/status/best.md',
+            category: 'current_state',
+            contentHash: 'sha256:duplicate',
+            text: 'best evidence',
+            embedding: [1, 0, 0],
+        },
+        {
+            id: 'duplicate#0',
+            path: 'docs/status/copy.md',
+            category: 'current_state',
+            contentHash: 'sha256:duplicate',
+            text: 'same evidence',
+            embedding: [0.99, 0, 0],
+        },
+        {
+            id: 'weak#0',
+            path: 'docs/status/weak.md',
+            category: 'current_state',
+            contentHash: 'sha256:weak',
+            text: 'weak evidence',
+            embedding: [0, 1, 0],
+        },
+    ]);
+    const matches = store.search(
+        [1, 0, 0],
+        ['current_state'],
+        5,
+        identity,
+        0.5,
+        1
+    );
+    assert.deepEqual(
+        matches.map((match) => match.path),
+        ['docs/status/best.md']
     );
 });
 

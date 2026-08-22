@@ -17,6 +17,7 @@ import type {
     ToolClarification,
     ToolInvocationName,
     ToolInvocationReasonCode,
+    ContextPromptMessage,
 } from '@footnote/contracts/policy';
 
 type NonBlockingExecutionLogger = {
@@ -52,7 +53,7 @@ export const buildSkippedContextStepResult = (input: {
 export const buildExecutedContextStepResult = (input: {
     toolName: ToolInvocationName;
     durationMs?: number;
-    contextMessages?: string[];
+    contextMessages?: ContextPromptMessage[];
     contextMessageRole?: 'system' | 'user';
     sources?: Citation[];
     integrationContext?: ContextStepIntegrationContext;

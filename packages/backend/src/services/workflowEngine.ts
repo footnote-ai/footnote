@@ -844,7 +844,12 @@ export const runBoundedReviewWorkflow = async ({
                     attempt: 1,
                     ...(normalizedResult.outcome === 'executed' &&
                         normalizedResult.contextMessages !== undefined && {
-                            artifacts: normalizedResult.contextMessages,
+                            artifacts: normalizedResult.contextMessages.map(
+                                (message) =>
+                                    typeof message === 'string'
+                                        ? message
+                                        : message.content
+                            ),
                         }),
                     ...(normalizedResult.outcome === 'needs_clarification' && {
                         signals: clarificationSignals,
@@ -890,12 +895,15 @@ export const runBoundedReviewWorkflow = async ({
                 executedContextStepResults.flatMap((contextStepResult) =>
                     contextStepResult.outcome === 'executed'
                         ? (contextStepResult.contextMessages ?? []).map(
-                              (content) => ({
-                                  role:
-                                      contextStepResult.contextMessageRole ??
-                                      'system',
-                                  content,
-                              })
+                              (message) =>
+                                  typeof message === 'string'
+                                      ? {
+                                            role:
+                                                contextStepResult.contextMessageRole ??
+                                                'system',
+                                            content: message,
+                                        }
+                                      : message
                           )
                         : []
                 )

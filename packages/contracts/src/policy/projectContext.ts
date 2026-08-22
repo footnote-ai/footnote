@@ -21,6 +21,9 @@ export const PROJECT_CONTEXT_CATEGORIES = [
     'current_state',
 ] as const;
 
+/** Canonical repository owned by the Footnote-self project-context feature. */
+export const PROJECT_CONTEXT_CANONICAL_REPOSITORY = 'footnote-ai/footnote';
+
 export type ProjectContextCategory =
     (typeof PROJECT_CONTEXT_CATEGORIES)[number];
 
@@ -29,7 +32,9 @@ export type ProjectContextReasonCode =
     | 'tool_not_requested'
     | 'invalid_query'
     | 'query_embedding_failed'
+    | 'embedding_timeout'
     | 'index_unavailable'
+    | 'no_relevant_matches'
     | 'execution_error';
 
 /**
@@ -70,6 +75,12 @@ export type ProjectContextMetadata = {
     returnedCounts: Partial<Record<ProjectContextCategory, number>>;
     maxChunks: number;
     topKPerCategory: number;
+    /** Global maximum number of evidence excerpts returned for one query. */
+    maxMatches?: number;
+    /** Minimum cosine similarity required for an evidence excerpt. */
+    minScore?: number;
+    /** Maximum time allowed for one embedding request. */
+    embeddingTimeoutMs?: number;
     status: 'current' | 'partial' | 'stale' | 'unavailable';
     reasonCodes: ProjectContextReasonCode[];
 };

@@ -56,6 +56,7 @@ const createRetriever = (
         maxChunkBytes: 2000,
         maxChunks: 100,
         topKPerCategory: 5,
+        minScore: 0,
         now: () => 1_755_000_000_000,
         ...overrides,
     });
@@ -99,7 +100,7 @@ test('retriever surfaces query-embedding failure as an observable error', async 
     assert.equal(embedCalls, 2);
     assert.equal(outcome.ok, false);
     if (!outcome.ok) {
-        assert.match(outcome.reason, /query embedding/i);
+        assert.match(outcome.detail, /query embedding/i);
     }
 });
 
@@ -156,5 +157,58 @@ test('retriever returns no matches when no category intersects the index', async
     assert.equal(outcome.ok, true);
     if (outcome.ok) {
         assert.deepEqual(outcome.matches, []);
+    }
+});
+
+test('retriever times out a hanging query embedding and exposes the typed failure', async () => {
+    let embedCalls = 0;
+    let observedSignal: AbortSignal | undefined;
+    const retriever = createRetriever({
+        embeddingTimeoutMs: 5,
+        embedTexts: async (texts, signal) => {
+            embedCalls += 1;
+            if (embedCalls === 1) return embedSuccess(texts);
+            observedSignal = signal;
+            return new Promise<EmbeddingRuntimeResult>(() => undefined);
+        },
+    });
+    const outcome = await retriever.retrieve('What is Footnote?', [
+        'documented_intent',
+    ]);
+    assert.equal(outcome.ok, false);
+    if (!outcome.ok) {
+        assert.equal(outcome.code, 'embedding_timeout');
+        assert.match(outcome.detail, /timed out/iu);
+    }
+    assert.equal(observedSignal?.aborted, true);
+});
+
+test('retriever retains the indexed revision when serving a stale index', async () => {
+    let failRebuild = false;
+    const retriever = createRetriever({
+        resolveDocuments: async () => {
+            if (failRebuild) {
+                throw new Error('bundle read failed');
+            }
+            return {
+                revision: 'aaaaaaaaaaaaaaaa',
+                source: 'bundle' as const,
+                documents,
+            };
+        },
+    });
+    const first = await retriever.retrieve('Footnote transparency', [
+        'documented_intent',
+    ]);
+    assert.equal(first.ok, true);
+    failRebuild = true;
+    const stale = await retriever.retrieve('Footnote transparency', [
+        'documented_intent',
+    ]);
+    assert.equal(stale.ok, true);
+    if (stale.ok) {
+        assert.equal(stale.status, 'stale');
+        assert.equal(stale.indexedCommitSha, 'aaaaaaaaaaaaaaaa');
+        assert.equal(stale.matches[0]?.revisionLabel, 'aaaaaaaaaaaaaaaa');
     }
 });

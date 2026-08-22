@@ -12,6 +12,10 @@ import type { ProjectContextCategory } from '@footnote/contracts/policy';
 export type ProjectDocumentSource = {
     path: string;
     content: string;
+    /** Explicit manifest classification; path heuristics are only a fallback. */
+    category?: ProjectContextCategory;
+    /** Higher-priority manifest entries are admitted before lower-priority entries. */
+    priority?: number;
 };
 
 export type ProjectDocumentChunk = {
@@ -67,7 +71,7 @@ export const chunkProjectDocument = (
     source: ProjectDocumentSource,
     options: ChunkProjectDocumentOptions
 ): ProjectDocumentChunk[] => {
-    const category = options.categoryForPath(source.path);
+    const category = source.category ?? options.categoryForPath(source.path);
     const content = source.content.trim();
     const sections: string[] = [];
 

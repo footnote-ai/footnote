@@ -36,6 +36,7 @@ export type {
     ToolInvocationRequest,
     ToolExecutionContext,
     ContextStepRequest,
+    ContextPromptMessage,
     ContextStepIntegrationContext,
     ContextStepExecutedResult,
     ContextStepFailedResult,
@@ -155,6 +156,7 @@ export { CONTEXT_INTEGRATION_NAMES } from './contextIntegrations.js';
 export type { ContextIntegrationName } from './contextIntegrations.js';
 export {
     PROJECT_CONTEXT_CATEGORIES,
+    PROJECT_CONTEXT_CANONICAL_REPOSITORY,
     type ProjectContextCategory,
     type ProjectContextMatch,
     type ProjectContextMetadata,

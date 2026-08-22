@@ -1,10 +1,10 @@
 /**
- * @description: Retrieves approved project-document facts for a query using an embedded index.
- * Returns retrieval matches only; citation and prompt projection belong to the executor.
+ * @description: Builds and queries a bounded, revision-aware project-document index.
+ * Embeddings are batched, cached by content identity, deadline-bounded, and fail open.
  * @footnote-scope: core
  * @footnote-module: ProjectContextRetriever
- * @footnote-risk: medium - Retrieval quality and staleness shape answer grounding.
- * @footnote-ethics: high - Failures must stay observable so the executor can decide fail-open continuation.
+ * @footnote-risk: high - Retrieval quality, timeout behavior, and index revision shape answer grounding.
+ * @footnote-ethics: high - A stale or weak result must remain visibly qualified instead of becoming false certainty.
  */
 import type {
     ProjectContextCategory,
@@ -21,14 +21,32 @@ import {
     createProjectVectorStore,
     type ProjectIndexIdentity,
 } from './vectorStore.js';
+import type { ProjectDocumentSet } from './documentSource.js';
+
+const DEFAULT_EMBEDDING_TIMEOUT_MS = 8_000;
+const DEFAULT_MAX_MATCHES = 6;
+const DEFAULT_MIN_SCORE = 0.35;
+const EMBEDDING_BATCH_SIZE = 64;
+
+export type ProjectContextRetrievalFailureCode =
+    'index_unavailable' | 'query_embedding_failed' | 'embedding_timeout';
 
 export type ProjectContextRetrieverOptions = {
     identity: ProjectIndexIdentity;
-    resolveDocuments: () => Promise<ProjectDocumentSource[]>;
-    embedTexts: (texts: string[]) => Promise<EmbeddingRuntimeResult>;
+    resolveDocuments: () => Promise<
+        ProjectDocumentSource[] | ProjectDocumentSet
+    >;
+    embedTexts: (
+        texts: string[],
+        signal: AbortSignal,
+        purpose: 'index' | 'query'
+    ) => Promise<EmbeddingRuntimeResult>;
     maxChunkBytes: number;
     maxChunks: number;
     topKPerCategory: number;
+    maxMatches?: number;
+    minScore?: number;
+    embeddingTimeoutMs?: number;
     now?: () => number;
 };
 
@@ -37,11 +55,13 @@ export type ProjectContextRetrievalOutcome =
           ok: true;
           status: 'current' | 'stale';
           indexedAt: string;
+          indexedCommitSha?: string;
           matches: ProjectContextMatch[];
       }
     | {
           ok: false;
-          reason: string;
+          code: ProjectContextRetrievalFailureCode;
+          detail: string;
       };
 
 export type ProjectContextRetriever = {
@@ -53,147 +73,255 @@ export type ProjectContextRetriever = {
 
 type PreparedProjectIndex = {
     fingerprint: string;
+    revision: string | null;
     chunks: Array<{
         id: string;
         path: string;
         category: ProjectContextCategory;
         contentHash: string;
         text: string;
+        priority?: number;
     }>;
 };
 
 type BuiltProjectIndex = {
     fingerprint: string;
+    revision: string | null;
     indexedAt: string;
     store: ReturnType<typeof createProjectVectorStore>;
 };
 
-const prepareIndex = (
+type BoundedEmbeddingResult = {
+    result: EmbeddingRuntimeResult;
+    timedOut: boolean;
+};
+
+class ProjectContextEmbeddingError extends Error {
+    public readonly code: ProjectContextRetrievalFailureCode;
+
+    public constructor(
+        code: ProjectContextRetrievalFailureCode,
+        message: string
+    ) {
+        super(message);
+        this.name = 'ProjectContextEmbeddingError';
+        this.code = code;
+    }
+}
+
+const asDocumentSet = (
+    value: ProjectDocumentSource[] | ProjectDocumentSet
+): ProjectDocumentSet =>
+    Array.isArray(value)
+        ? { revision: null, documents: value, source: 'git' }
+        : value;
+
+/** Keeps every category represented before spending the global chunk budget. */
+export const selectProjectContextChunks = (
     sources: ProjectDocumentSource[],
-    options: ProjectContextRetrieverOptions
-): PreparedProjectIndex | undefined => {
-    const chunks: PreparedProjectIndex['chunks'] = [];
+    options: Pick<ProjectContextRetrieverOptions, 'maxChunkBytes' | 'maxChunks'>
+): PreparedProjectIndex['chunks'] => {
+    const byCategory = new Map<
+        ProjectContextCategory,
+        PreparedProjectIndex['chunks']
+    >();
     for (const source of sources) {
         const documentChunks = chunkProjectDocument(source, {
             maxChunkBytes: options.maxChunkBytes,
             categoryForPath: defaultCategoryForPath,
         });
-        const remaining = options.maxChunks - chunks.length;
-        if (remaining <= 0) break;
-        chunks.push(
-            ...documentChunks.slice(0, remaining).map((chunk) => ({
+        const category = source.category ?? defaultCategoryForPath(source.path);
+        const categoryChunks = byCategory.get(category) ?? [];
+        categoryChunks.push(
+            ...documentChunks.map((chunk) => ({
                 id: chunk.id,
                 path: chunk.path,
                 category: chunk.category,
                 contentHash: chunk.contentHash,
                 text: chunk.text,
+                priority: source.priority,
             }))
         );
+        byCategory.set(category, categoryChunks);
     }
+
+    const categories: ProjectContextCategory[] = [
+        'documented_intent',
+        'documented_behavior',
+        'current_state',
+    ];
+    const selected: PreparedProjectIndex['chunks'] = [];
+    let cursor = 0;
+    while (selected.length < options.maxChunks) {
+        let added = false;
+        for (const category of categories) {
+            const candidate = byCategory.get(category)?.[cursor];
+            if (candidate === undefined) continue;
+            selected.push(candidate);
+            added = true;
+            if (selected.length >= options.maxChunks) break;
+        }
+        if (!added) break;
+        cursor += 1;
+    }
+    return selected;
+};
+
+const prepareIndex = (
+    documentSet: ProjectDocumentSet,
+    options: ProjectContextRetrieverOptions
+): PreparedProjectIndex | undefined => {
+    const chunks = selectProjectContextChunks(documentSet.documents, options);
     if (chunks.length === 0) return undefined;
     const fingerprint = hashText(
-        chunks
-            .map((chunk) => `${chunk.path}|${chunk.id}|${chunk.contentHash}`)
-            .join('\n')
+        `${documentSet.revision ?? 'unversioned'}\n${chunks
+            .map((chunk) =>
+                [
+                    chunk.path,
+                    chunk.id,
+                    chunk.category,
+                    chunk.contentHash,
+                    chunk.priority ?? 0,
+                ].join('|')
+            )
+            .join('\n')}`
     );
-    return { fingerprint, chunks };
+    return { fingerprint, revision: documentSet.revision, chunks };
+};
+
+const withDeadline = async (
+    options: ProjectContextRetrieverOptions,
+    texts: string[],
+    purpose: 'index' | 'query'
+): Promise<BoundedEmbeddingResult> => {
+    const controller = new AbortController();
+    const timeoutMs = Math.max(
+        1,
+        Math.floor(options.embeddingTimeoutMs ?? DEFAULT_EMBEDDING_TIMEOUT_MS)
+    );
+    let timeoutHandle: ReturnType<typeof setTimeout> | undefined;
+    const timeout = new Promise<BoundedEmbeddingResult>((resolve) => {
+        timeoutHandle = setTimeout(() => {
+            controller.abort();
+            resolve({
+                timedOut: true,
+                result: {
+                    status: 'error',
+                    reason: `Embedding ${purpose} timed out after ${timeoutMs}ms.`,
+                    model: options.identity.model,
+                    provider: options.identity.provider,
+                },
+            });
+        }, timeoutMs);
+    });
+    try {
+        return await Promise.race([
+            options
+                .embedTexts(texts, controller.signal, purpose)
+                .then((result) => ({ result, timedOut: false })),
+            timeout,
+        ]);
+    } finally {
+        if (timeoutHandle !== undefined) clearTimeout(timeoutHandle);
+    }
 };
 
 const buildIndex = async (
     options: ProjectContextRetrieverOptions,
-    prepared: PreparedProjectIndex
+    prepared: PreparedProjectIndex,
+    embeddingCache: Map<string, number[]>
 ): Promise<BuiltProjectIndex> => {
+    const cachePrefix = `${options.identity.provider}|${options.identity.model}|`;
+    const missing = prepared.chunks.filter(
+        (chunk) => !embeddingCache.has(`${cachePrefix}${chunk.contentHash}`)
+    );
+    for (
+        let offset = 0;
+        offset < missing.length;
+        offset += EMBEDDING_BATCH_SIZE
+    ) {
+        const batch = missing.slice(offset, offset + EMBEDDING_BATCH_SIZE);
+        const embeddingResult = await withDeadline(
+            options,
+            batch.map((chunk) => chunk.text),
+            'index'
+        );
+        const embeddingResultValue = embeddingResult.result;
+        if (embeddingResultValue.status !== 'success') {
+            throw new ProjectContextEmbeddingError(
+                embeddingResult.timedOut
+                    ? 'embedding_timeout'
+                    : 'index_unavailable',
+                embeddingResultValue.reason
+            );
+        }
+        if (embeddingResultValue.embeddings.length !== batch.length) {
+            throw new Error(
+                `Embedding response returned ${embeddingResultValue.embeddings.length} vectors for ${batch.length} chunks.`
+            );
+        }
+        batch.forEach((chunk, index) => {
+            const embedding = embeddingResultValue.embeddings[index];
+            if (embedding !== undefined) {
+                embeddingCache.set(
+                    `${cachePrefix}${chunk.contentHash}`,
+                    embedding
+                );
+            }
+        });
+    }
+
     const store = createProjectVectorStore({
-        identity: options.identity,
+        identity: { ...options.identity, sourceRevision: prepared.revision },
         maxChunks: options.maxChunks,
     });
-    const embeddingResult = await options.embedTexts(
-        prepared.chunks.map((chunk) => chunk.text)
-    );
-    if (embeddingResult.status !== 'success') {
-        throw new Error(
-            `Project context index build failed: ${embeddingResult.reason}`
-        );
-    }
-    if (embeddingResult.embeddings.length !== prepared.chunks.length) {
-        throw new Error(
-            `Project context index build returned ${embeddingResult.embeddings.length} vectors for ${prepared.chunks.length} chunks.`
-        );
-    }
     store.upsert(
-        prepared.chunks.map((chunk, index) => ({
-            ...chunk,
-            embedding: embeddingResult.embeddings[index] ?? [],
-        }))
+        prepared.chunks.flatMap((chunk) => {
+            const embedding = embeddingCache.get(
+                `${cachePrefix}${chunk.contentHash}`
+            );
+            return embedding === undefined ? [] : [{ ...chunk, embedding }];
+        })
     );
+    if (store.chunkCount() === 0) {
+        throw new Error('Project context index contains no usable embeddings.');
+    }
     return {
         fingerprint: prepared.fingerprint,
+        revision: prepared.revision,
         indexedAt: new Date((options.now ?? Date.now)()).toISOString(),
         store,
     };
 };
-
-const staleOutcome = (
-    current: BuiltProjectIndex
-): {
-    ok: true;
-    store: BuiltProjectIndex['store'];
-    status: 'stale';
-    indexedAt: string;
-} => ({
-    ok: true,
-    store: current.store,
-    status: 'stale',
-    indexedAt: current.indexedAt,
-});
-
-const currentOutcome = (
-    current: BuiltProjectIndex
-): {
-    ok: true;
-    store: BuiltProjectIndex['store'];
-    status: 'current';
-    indexedAt: string;
-} => ({
-    ok: true,
-    store: current.store,
-    status: 'current',
-    indexedAt: current.indexedAt,
-});
-
-const noIndexReason = 'Project context index is empty.';
-
-const asReason = (error: unknown): string =>
-    error instanceof Error ? error.message : String(error);
 
 const createIndexLoader = (options: ProjectContextRetrieverOptions) => {
     let current: BuiltProjectIndex | undefined;
     let inFlight:
         | { fingerprint: string; promise: Promise<BuiltProjectIndex> }
         | undefined;
+    const embeddingCache = new Map<string, number[]>();
 
     return async (): Promise<
+        | { ok: true; index: BuiltProjectIndex; status: 'current' | 'stale' }
         | {
-              ok: true;
-              store: BuiltProjectIndex['store'];
-              status: 'current' | 'stale';
-              indexedAt: string;
+              ok: false;
+              code: ProjectContextRetrievalFailureCode;
+              detail: string;
           }
-        | { ok: false; reason: string }
     > => {
         try {
-            const sources = await options.resolveDocuments();
-            const prepared = prepareIndex(sources, options);
+            const documentSet = asDocumentSet(await options.resolveDocuments());
+            const prepared = prepareIndex(documentSet, options);
             if (prepared === undefined) {
-                throw new Error(noIndexReason);
+                throw new Error('Project context index is empty.');
             }
             if (current?.fingerprint === prepared.fingerprint) {
-                return currentOutcome(current);
+                return { ok: true, index: current, status: 'current' };
             }
             const buildPromise =
                 inFlight?.fingerprint === prepared.fingerprint
                     ? inFlight.promise
-                    : buildIndex(options, prepared);
+                    : buildIndex(options, prepared, embeddingCache);
             inFlight = {
                 fingerprint: prepared.fingerprint,
                 promise: buildPromise,
@@ -201,56 +329,77 @@ const createIndexLoader = (options: ProjectContextRetrieverOptions) => {
             try {
                 const built = await buildPromise;
                 current = built;
-                return currentOutcome(built);
+                return { ok: true, index: built, status: 'current' };
             } finally {
                 if (inFlight?.promise === buildPromise) inFlight = undefined;
             }
         } catch (error) {
-            if (current !== undefined) return staleOutcome(current);
-            return { ok: false, reason: asReason(error) };
+            const detail =
+                error instanceof Error ? error.message : String(error);
+            if (current !== undefined) {
+                return { ok: true, index: current, status: 'stale' };
+            }
+            return {
+                ok: false,
+                code:
+                    error instanceof ProjectContextEmbeddingError
+                        ? error.code
+                        : 'index_unavailable',
+                detail,
+            };
         }
     };
 };
 
-/**
- * Creates a fail-open project retriever. Rebuild failures reuse the last
- * known-good index; first-use failures return `ok: false` for observability.
- */
+/** Creates a fail-open retriever with revision-correct stale-index behavior. */
 export const createProjectContextRetriever = (
     options: ProjectContextRetrieverOptions
 ): ProjectContextRetriever => {
     const loadIndex = createIndexLoader(options);
+    const maxMatches = Math.max(1, options.maxMatches ?? DEFAULT_MAX_MATCHES);
+    const minScore = options.minScore ?? DEFAULT_MIN_SCORE;
 
     return {
         async retrieve(query, categories) {
-            const fresh = await loadIndex();
-            if (!fresh.ok) {
-                return { ok: false, reason: fresh.reason };
-            }
-            const embeddingResult = await options.embedTexts([query]);
-            if (embeddingResult.status !== 'success') {
+            const loaded = await loadIndex();
+            if (!loaded.ok) return loaded;
+            const embeddingResult = await withDeadline(
+                options,
+                [query],
+                'query'
+            );
+            if (embeddingResult.result.status !== 'success') {
                 return {
                     ok: false,
-                    reason: `Project context query embedding failed: ${embeddingResult.reason}`,
+                    code: embeddingResult.timedOut
+                        ? 'embedding_timeout'
+                        : 'query_embedding_failed',
+                    detail: `Project context query embedding failed: ${embeddingResult.result.reason}`,
                 };
             }
-            const queryEmbedding = embeddingResult.embeddings[0];
+            const queryEmbedding = embeddingResult.result.embeddings[0];
             if (queryEmbedding === undefined) {
                 return {
                     ok: false,
-                    reason: 'Project context query embedding returned no vector.',
+                    code: 'query_embedding_failed',
+                    detail: 'Project context query embedding returned no vector.',
                 };
             }
-            const matches = fresh.store.search(
+            const matches = loaded.index.store.search(
                 queryEmbedding,
                 categories,
                 options.topKPerCategory,
-                options.identity
+                options.identity,
+                minScore,
+                maxMatches
             );
             return {
                 ok: true,
-                status: fresh.status,
-                indexedAt: fresh.indexedAt,
+                status: loaded.status,
+                indexedAt: loaded.index.indexedAt,
+                ...(loaded.index.revision !== null && {
+                    indexedCommitSha: loaded.index.revision,
+                }),
                 matches,
             };
         },

@@ -65,14 +65,19 @@ const documents = (extra = '') => [
 const createExecutor = (overrides = {}) =>
     createProjectContextStepExecutor({
         enabled: true,
-        repository: 'footnote-ai/footnote',
         identity,
         maxChunkBytes: 2000,
         maxChunks: 100,
         topKPerCategory: 5,
-        resolveDocuments: async () => documents(),
+        maxMatches: 6,
+        minScore: 0,
+        embeddingTimeoutMs: 1000,
+        resolveDocuments: async () => ({
+            revision: 'abc123',
+            source: 'git' as const,
+            documents: documents(),
+        }),
         embedTexts: async (texts) => embedSuccess(texts),
-        resolveCommitSha: async () => 'abc123',
         ...overrides,
     });
 
@@ -81,11 +86,13 @@ test('executor retrieves project context and labels it as untrusted data', async
     const result = await executor(createExecutorInput());
     assert.equal(result.outcome, 'executed');
     if (result.outcome !== 'executed') return;
-    const message = result.contextMessages?.[0] ?? '';
+    const message = (result.contextMessages ?? [])
+        .map((entry) => (typeof entry === 'string' ? entry : entry.content))
+        .join('\n');
     assert.match(message, /UNTRUSTED PROJECT CONTEXT/i);
     assert.match(message, /documented_intent/i);
     assert.match(message, /docs\/Philosophy\.md/);
-    assert.equal(result.contextMessageRole, 'user');
+    assert.equal(result.contextMessageRole, undefined);
     assert.ok((result.sources ?? []).length > 0);
 });
 
@@ -105,7 +112,9 @@ test('project executor keeps instruction-bearing docs inside the untrusted envel
     const result = await executor(createExecutorInput());
     assert.equal(result.outcome, 'executed');
     if (result.outcome !== 'executed') return;
-    const message = result.contextMessages?.[0] ?? '';
+    const message = (result.contextMessages ?? [])
+        .map((entry) => (typeof entry === 'string' ? entry : entry.content))
+        .join('\n');
     assert.match(message, /UNTRUSTED PROJECT CONTEXT/i);
     assert.match(message, /ignore all previous instructions/i);
     assert.ok(

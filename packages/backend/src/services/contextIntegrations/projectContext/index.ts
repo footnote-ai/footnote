@@ -7,14 +7,17 @@
  * @footnote-risk: medium - Local doc retrieval can affect answer grounding and provenance.
  * @footnote-ethics: high - Untrusted project documents must never gain system or policy authority.
  */
+import { PROJECT_CONTEXT_CANONICAL_REPOSITORY } from '@footnote/contracts/policy';
 import type {
     Citation,
+    ContextPromptMessage,
     ProjectContextCategory,
     ProjectContextMatch,
     ProjectContextMetadata,
     ProjectContextReasonCode,
 } from '@footnote/contracts/policy';
 import type { EmbeddingRuntimeResult } from '@footnote/agent-runtime';
+import { renderPromptBundle } from '@footnote/prompts';
 import {
     buildExecutedContextStepResult,
     buildFailedContextStepResult,
@@ -26,8 +29,10 @@ import type {
     ContextStepResult,
 } from '../../workflowEngine.js';
 import type { ProjectDocumentSource } from './documentLoader.js';
+import type { ProjectDocumentSet } from './documentSource.js';
 import { createProjectContextRetriever } from './retriever.js';
 import type { ProjectIndexIdentity } from './vectorStore.js';
+import { promptRegistry } from '../../prompts/promptRegistry.js';
 
 export const PROJECT_CONTEXT_NAME = 'project_context' as const;
 
@@ -42,14 +47,21 @@ export const PROJECT_CONTEXT_UNTRUSTED_LABEL =
 
 export type ProjectContextStepExecutorOptions = {
     enabled: boolean;
-    repository: string;
     identity: ProjectIndexIdentity;
     maxChunkBytes: number;
     maxChunks: number;
     topKPerCategory: number;
-    resolveDocuments: () => Promise<ProjectDocumentSource[]>;
-    embedTexts: (texts: string[]) => Promise<EmbeddingRuntimeResult>;
-    resolveCommitSha?: () => Promise<string | null>;
+    maxMatches?: number;
+    minScore?: number;
+    embeddingTimeoutMs?: number;
+    resolveDocuments: () => Promise<
+        ProjectDocumentSource[] | ProjectDocumentSet
+    >;
+    embedTexts: (
+        texts: string[],
+        signal: AbortSignal,
+        purpose: 'index' | 'query'
+    ) => Promise<EmbeddingRuntimeResult>;
     now?: () => number;
 };
 
@@ -82,6 +94,19 @@ export const formatProjectContext = (input: {
     }
     return [lines.join('\n')];
 };
+
+const projectContextGuidance = renderPromptBundle(promptRegistry, [
+    'conversation.shared.project_context_guidance',
+]);
+
+export const formatProjectContextMessages = (input: {
+    repository: string;
+    matches: ProjectContextMatch[];
+    commitSha: string | null;
+}): ContextPromptMessage[] => [
+    { role: 'system', content: projectContextGuidance },
+    { role: 'user', content: formatProjectContext(input)[0] ?? '' },
+];
 
 export const citationsFromProjectContext = (input: {
     repository: string;
@@ -118,13 +143,6 @@ const buildCounts = (
     return counts;
 };
 
-const toReasonCode = (error: string): ProjectContextReasonCode => {
-    const lowered = error.toLowerCase();
-    if (lowered.includes('query embedding')) return 'query_embedding_failed';
-    if (lowered.includes('index')) return 'index_unavailable';
-    return 'execution_error';
-};
-
 export const createProjectContextStepExecutor = (
     input: ProjectContextStepExecutorOptions
 ): ContextStepExecutor => {
@@ -136,6 +154,9 @@ export const createProjectContextStepExecutor = (
         maxChunkBytes: input.maxChunkBytes,
         maxChunks: input.maxChunks,
         topKPerCategory: input.topKPerCategory,
+        maxMatches: input.maxMatches,
+        minScore: input.minScore,
+        embeddingTimeoutMs: input.embeddingTimeoutMs,
         now,
     });
 
@@ -149,7 +170,7 @@ export const createProjectContextStepExecutor = (
             reasonCodes: ProjectContextReasonCode[] = []
         ) =>
             ({
-                repository: input.repository,
+                repository: PROJECT_CONTEXT_CANONICAL_REPOSITORY,
                 provider: input.identity.provider,
                 model: input.identity.model,
                 chunkerVersion: input.identity.chunkerVersion,
@@ -158,6 +179,15 @@ export const createProjectContextStepExecutor = (
                 returnedCounts: {},
                 maxChunks: input.maxChunks,
                 topKPerCategory: input.topKPerCategory,
+                ...(input.maxMatches !== undefined && {
+                    maxMatches: input.maxMatches,
+                }),
+                ...(input.minScore !== undefined && {
+                    minScore: input.minScore,
+                }),
+                ...(input.embeddingTimeoutMs !== undefined && {
+                    embeddingTimeoutMs: input.embeddingTimeoutMs,
+                }),
                 status,
                 reasonCodes,
             }) satisfies ProjectContextMetadata;
@@ -226,40 +256,46 @@ export const createProjectContextStepExecutor = (
                         version: 'v1',
                         payload: {
                             metadata: metadataBase('unavailable', [
-                                toReasonCode(outcome.reason),
+                                outcome.code,
                             ]),
-                            error: outcome.reason,
-                            reasonCode: toReasonCode(outcome.reason),
+                            error: outcome.detail,
+                            reasonCode: outcome.code,
                         },
                     },
                 });
             }
-            const commitSha = input.resolveCommitSha
-                ? await input.resolveCommitSha()
-                : null;
             const matches = outcome.matches;
+            const commitSha = outcome.indexedCommitSha ?? null;
+            const hasEvidence = matches.length > 0;
             const metadata: ProjectContextMetadata = {
                 ...metadataBase(
-                    outcome.status === 'stale' ? 'stale' : 'current',
-                    []
+                    hasEvidence
+                        ? outcome.status === 'stale'
+                            ? 'stale'
+                            : 'current'
+                        : 'partial',
+                    hasEvidence ? [] : ['no_relevant_matches']
                 ),
-                ...(commitSha !== null && { indexedCommitSha: commitSha }),
+                ...(outcome.indexedCommitSha !== undefined && {
+                    indexedCommitSha: outcome.indexedCommitSha,
+                }),
                 indexedAt: outcome.indexedAt,
                 returnedCounts: buildCounts(matches),
             };
             return buildExecutedContextStepResult({
                 toolName: PROJECT_CONTEXT_NAME,
                 durationMs: now() - startedAt,
-                contextMessages: formatProjectContext({
-                    repository: input.repository,
-                    matches,
-                    commitSha,
-                }),
-                contextMessageRole: 'user',
-                sources: citationsFromProjectContext({
-                    repository: input.repository,
-                    matches,
-                    commitSha,
+                ...(hasEvidence && {
+                    contextMessages: formatProjectContextMessages({
+                        repository: PROJECT_CONTEXT_CANONICAL_REPOSITORY,
+                        matches,
+                        commitSha,
+                    }),
+                    sources: citationsFromProjectContext({
+                        repository: PROJECT_CONTEXT_CANONICAL_REPOSITORY,
+                        matches,
+                        commitSha,
+                    }),
                 }),
                 integrationContext: {
                     kind: PROJECT_CONTEXT_NAME,
@@ -279,10 +315,10 @@ export const createProjectContextStepExecutor = (
                     version: 'v1',
                     payload: {
                         metadata: metadataBase('unavailable', [
-                            toReasonCode(reason),
+                            'execution_error',
                         ]),
                         error: reason,
-                        reasonCode: toReasonCode(reason),
+                        reasonCode: 'execution_error',
                     },
                 },
             });
