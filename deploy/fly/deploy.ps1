@@ -239,7 +239,7 @@ Invoke-EnvValidation -Target 'fly-server' -AppName $serverAppName
 Upload-FootnoteSettings -AppName $serverAppName -RepoRootPath $repoRoot
 
 Write-Host "Deploying server..."
-$contextCommitSha = (& git -C $repoRoot rev-parse --verify HEAD^{commit}).Trim()
+$contextCommitSha = (& git -C $repoRoot rev-parse --verify 'HEAD^{commit}').Trim()
 if ($LASTEXITCODE -ne 0 -or $contextCommitSha -notmatch '^[0-9a-f]{7,64}$') {
   throw "Unable to resolve a valid project-context revision."
 }
