@@ -131,15 +131,43 @@ test('failed callbacks remain consumed', async () => {
     );
 });
 
-test('transaction and session stores enforce configured capacity', async () => {
+test('transaction capacity evicts the oldest login and preserves zero capacity', async () => {
     let tokenIndex = 0;
     const transactionService = createAccountAuthService({
         provider: createProvider(),
         randomToken: () => `transaction-${++tokenIndex}`,
         maxTransactions: 1,
     });
-    assert.equal((await transactionService.startLogin()).ok, true);
-    assert.deepEqual(await transactionService.startLogin(), {
+
+    const firstTransaction = await transactionService.startLogin();
+    const secondTransaction = await transactionService.startLogin();
+    assert.equal(firstTransaction.ok, true);
+    assert.equal(secondTransaction.ok, true);
+    if (!firstTransaction.ok || !secondTransaction.ok) {
+        return;
+    }
+    assert.deepEqual(
+        await transactionService.completeLogin(
+            firstTransaction.transactionId,
+            '?code=first'
+        ),
+        { ok: false, reason: 'invalid_transaction' }
+    );
+    assert.equal(
+        (
+            await transactionService.completeLogin(
+                secondTransaction.transactionId,
+                '?code=second'
+            )
+        ).ok,
+        true
+    );
+
+    const zeroCapacityService = createAccountAuthService({
+        provider: createProvider(),
+        maxTransactions: 0,
+    });
+    assert.deepEqual(await zeroCapacityService.startLogin(), {
         ok: false,
         reason: 'capacity',
     });

@@ -111,19 +111,33 @@ export const createAccountAuthService = ({
         }
     };
 
+    const makeRoomForTransaction = (): boolean => {
+        if (maxTransactions <= 0) {
+            return false;
+        }
+        while (transactions.size >= maxTransactions) {
+            const oldestTransactionId = transactions.keys().next().value;
+            if (oldestTransactionId === undefined) {
+                return false;
+            }
+            transactions.delete(oldestTransactionId);
+        }
+        return true;
+    };
+
     const startLogin = async (): Promise<StartAccountLoginResult> => {
         if (!provider) {
             return { ok: false, reason: 'disabled' };
         }
         pruneExpired();
-        if (transactions.size >= maxTransactions) {
+        if (!makeRoomForTransaction()) {
             return { ok: false, reason: 'capacity' };
         }
 
         try {
             const authorization = await provider.startAuthorization();
             pruneExpired();
-            if (transactions.size >= maxTransactions) {
+            if (!makeRoomForTransaction()) {
                 return { ok: false, reason: 'capacity' };
             }
             const transactionId = randomToken(32);
