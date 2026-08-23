@@ -1,8 +1,11 @@
 # Account Sign-In
 
 Footnote can use one OpenID Connect provider for administrator account sign-in.
-The first slice proves identity only. It does not grant access to `/admin` or
-change the existing setup/admin-settings authentication rules.
+Footnote supports the OIDC protocol, not a specific identity provider.
+Deployment tooling may support particular providers, but the runtime receives
+only the standard OIDC configuration values and does not know which provider
+was selected. The first slice proves identity only. It does not grant access
+to `/admin` or change the existing setup/admin-settings authentication rules.
 
 ## Runtime behavior
 

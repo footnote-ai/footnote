@@ -1,8 +1,8 @@
 # Account Identity and Access Status
 
-Status: basic account sign-in is planned; implementation has not started.
+Status: basic account sign-in is implemented and under human review.
 
-Last updated: 2026-07-22.
+Last updated: 2026-08-23.
 
 This tracker describes the expected order of work. It stays high-level on
 purpose. Each implementation branch gets its own status document before code
@@ -26,6 +26,11 @@ Branch: `feat/account-sign-in`
 
 Branch status: [Account Sign-In Status](./account-sign-in.md)
 
+Branch result: implemented and tested. The completed slice provides the
+provider-neutral OIDC login, callback, temporary session, identity display, and
+local sign-out flow described below. Authentik 2026.8.0 was used for the
+completed manual smoke test.
+
 Outcome:
 
 > An approved administrator can sign in, view their identity on `/account`, and
@@ -39,10 +44,11 @@ High-level scope:
 - the minimum provider configuration needed to run the flow
 - focused tests and deployment instructions
 
-The branch status names the provider used for initial testing. authentik is the
-current self-hosted candidate. The Footnote boundary stays based on standard
-OIDC behavior so a compatible cloud or self-hosted provider can be considered
-later.
+Authentik is the provider used for the initial compatibility test, not a
+Footnote runtime dependency. Footnote supports standard OIDC behavior.
+Deployment tooling may support particular providers, but the runtime receives
+only the standard OIDC configuration values and does not know which provider
+was selected.
 
 Not included:
 
@@ -52,6 +58,22 @@ Not included:
 - regular-user data
 - persistent sessions
 - a broad abstraction for providers we have not tested
+
+## Proposed Follow-Up: Deployment Authentication Setup
+
+This is a proposed deployment slice, not part of the completed account sign-in
+work. Its purpose would be to make the first-run choices clear:
+
+1. Run without account sign-in.
+2. Set up a supported self-hosted provider.
+3. Use an existing OIDC provider.
+
+The authenticated choices must both produce the same four Footnote bootstrap
+values: `OIDC_ISSUER_URL`, `OIDC_CLIENT_ID`, `OIDC_CLIENT_SECRET`, and
+`OIDC_REDIRECT_URI`. The deployment layer may eventually provide an Authelia
+profile, but that should wait until a compatibility spike and operational
+review prove it is a good fit. No provider-specific runtime contract should be
+added.
 
 ## 2. Administrator Access
 
