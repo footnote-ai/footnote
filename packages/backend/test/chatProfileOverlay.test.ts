@@ -16,6 +16,56 @@ const logger = {
     warn: () => undefined,
 };
 
+test('resolves every built-in Discord persona through the public profile seam', () => {
+    const expectedProfiles = [
+        {
+            id: 'footnote',
+            displayName: 'Footnote',
+            overlaySource: 'none',
+            overlayPath: null,
+        },
+        {
+            id: 'danny',
+            displayName: 'Danny',
+            overlaySource: 'file',
+            overlayPath: /profile-overlays[\\/]danny\.md$/,
+        },
+        {
+            id: 'myuri',
+            displayName: 'Myuri',
+            overlaySource: 'file',
+            overlayPath: /profile-overlays[\\/]myuri\.md$/,
+        },
+        {
+            id: 'winter',
+            displayName: 'Winter',
+            overlaySource: 'file',
+            overlayPath: /profile-overlays[\\/]winter\.md$/,
+        },
+    ] as const;
+
+    for (const expected of expectedProfiles) {
+        const profile = resolveChatPersonaProfile(
+            { surface: 'discord', botPersonaId: expected.id },
+            logger
+        );
+
+        assert.equal(profile.id, expected.id);
+        assert.equal(profile.displayName, expected.displayName);
+        assert.equal(profile.promptOverlay.source, expected.overlaySource);
+        if (expected.overlayPath) {
+            assert.match(
+                profile.promptOverlay.path ?? '',
+                expected.overlayPath
+            );
+            assert.ok(profile.promptOverlay.text);
+        } else {
+            assert.equal(profile.promptOverlay.path, expected.overlayPath);
+            assert.equal(profile.promptOverlay.text, null);
+        }
+    }
+});
+
 test('resolves Winter as a first-class Discord persona with its authored overlay', () => {
     const profile = resolveChatPersonaProfile(
         { surface: 'discord', botPersonaId: ' WINTER ' },
