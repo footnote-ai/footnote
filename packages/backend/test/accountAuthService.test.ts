@@ -22,13 +22,17 @@ const principal = {
 
 const createProvider = (
     options: {
-        startError?: boolean;
+        startError?: boolean | (() => boolean);
         callbackError?: boolean;
         callbackInputs?: OidcCallbackInput[];
     } = {}
 ): OidcAccountClient => ({
     startAuthorization: async () => {
-        if (options.startError) {
+        const startError =
+            typeof options.startError === 'function'
+                ? options.startError()
+                : options.startError;
+        if (startError) {
             throw new Error('provider unavailable');
         }
         return {
@@ -196,6 +200,32 @@ test('transaction capacity evicts the oldest login and preserves zero capacity',
     assert.deepEqual(
         await sessionService.completeLogin(second.transactionId, '?code=two'),
         { ok: false, reason: 'session_capacity' }
+    );
+});
+
+test('provider startup failure at capacity preserves the existing transaction', async () => {
+    let failStart = false;
+    const service = createAccountAuthService({
+        provider: createProvider({ startError: () => failStart }),
+        maxTransactions: 1,
+    });
+
+    const first = await service.startLogin();
+    assert.equal(first.ok, true);
+    if (!first.ok) {
+        return;
+    }
+
+    failStart = true;
+    assert.deepEqual(await service.startLogin(), {
+        ok: false,
+        reason: 'provider_unavailable',
+    });
+
+    failStart = false;
+    assert.equal(
+        (await service.completeLogin(first.transactionId, '?code=first')).ok,
+        true
     );
 });
 

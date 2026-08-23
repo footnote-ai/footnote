@@ -130,7 +130,7 @@ export const createAccountAuthService = ({
             return { ok: false, reason: 'disabled' };
         }
         pruneExpired();
-        if (!makeRoomForTransaction()) {
+        if (maxTransactions <= 0) {
             return { ok: false, reason: 'capacity' };
         }
 
