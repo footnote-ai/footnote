@@ -12,17 +12,46 @@ import type { ExistingState, SafeState } from './types.js';
 
 export const buildSafeState = (input: SafeState): SafeState => ({ ...input });
 
+const isNonEmptyString = (value: unknown): value is string =>
+    typeof value === 'string' && value.trim().length > 0;
+
+const isExistingState = (value: unknown): value is ExistingState => {
+    if (typeof value !== 'object' || value === null) {
+        return false;
+    }
+    const state = value as Record<string, unknown>;
+    const requiredStringFields = [
+        'providerVersion',
+        'image',
+        'authAppName',
+        'footnoteAppName',
+        'region',
+        'issuerUrl',
+        'redirectUri',
+        'username',
+        'displayName',
+        'email',
+        'passwordHash',
+        'clientSecretHash',
+        'manifestPath',
+        'configurationPath',
+        'usersPath',
+    ];
+    return (
+        state.provider === 'authelia' &&
+        state.version === 1 &&
+        requiredStringFields.every((field) => isNonEmptyString(state[field])) &&
+        Array.isArray(state.secretNames) &&
+        state.secretNames.every(isNonEmptyString)
+    );
+};
+
 export const loadState = async (statePath: string): Promise<ExistingState> => {
     const parsed: unknown = JSON.parse(await readText(statePath));
-    if (
-        typeof parsed !== 'object' ||
-        parsed === null ||
-        (parsed as { provider?: unknown }).provider !== 'authelia' ||
-        (parsed as { version?: unknown }).version !== 1
-    ) {
+    if (!isExistingState(parsed)) {
         throw new Error(`Invalid Authelia deployment state: ${statePath}`);
     }
-    return parsed as ExistingState;
+    return parsed;
 };
 
 export const hasState = (statePath: string): boolean =>

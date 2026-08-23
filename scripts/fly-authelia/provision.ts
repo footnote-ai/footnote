@@ -7,7 +7,7 @@
  */
 
 import path from 'node:path';
-import { logger } from '../../packages/discord-bot/src/utils/logger';
+import { logger } from '../../packages/discord-bot/src/utils/logger.js';
 import {
     AUTH_SECRET_NAMES,
     AUTHELIA_IMAGE,
@@ -41,7 +41,18 @@ import {
     writeText,
 } from './runtime.js';
 import { buildSafeState, hasState, loadState, saveState } from './state.js';
-import type { Fetcher, ProvisionOptions, CommandRunner } from './types.js';
+import type {
+    CommandRunner,
+    Fetcher,
+    Prompt,
+    ProvisionOptions,
+} from './types.js';
+
+type ProvisionDependencyOverrides = {
+    prompt?: Prompt;
+    runner?: CommandRunner;
+    fetcher?: Fetcher;
+};
 
 const validateAdministrator = (
     username: string,
@@ -170,11 +181,18 @@ const applyAuthSecrets = async (input: {
     authAppName: string;
     authSecrets: Record<string, string>;
 }): Promise<void> => {
+    const serializeSecret = ([key, value]: [string, string]): string => {
+        if (!value.includes('\n')) {
+            return `${key}=${value}`;
+        }
+        const normalizedValue = value.replace(/\r\n/g, '\n').replace(/\n$/, '');
+        return `${key}="""\n${normalizedValue}\n"""`;
+    };
     await commandOrThrow(input.runner, {
         command: 'fly',
         args: ['secrets', 'import', '--app', input.authAppName],
         stdin: `${Object.entries(input.authSecrets)
-            .map(([key, value]) => `${key}=${value}`)
+            .map(serializeSecret)
             .join('\n')}\n`,
     });
 };
@@ -268,8 +286,6 @@ const provisionFreshProfile = async (input: {
         configurationPath: input.configurationPath,
         usersPath: input.usersPath,
     });
-    await saveState(input.statePath, state);
-
     const cleanup = `fly apps destroy ${input.authAppName} --yes`;
     try {
         await commandOrThrow(input.runner, {
@@ -291,6 +307,7 @@ const provisionFreshProfile = async (input: {
                 '--yes',
             ],
         });
+        await saveState(input.statePath, state);
         await applyAuthSecrets({
             runner: input.runner,
             authAppName: input.authAppName,
@@ -316,17 +333,18 @@ const provisionFreshProfile = async (input: {
     }
 };
 
-export const provisionAuthelia = async (
-    options: ProvisionOptions
+const runProvisionAuthelia = async (
+    options: ProvisionOptions,
+    overrides: ProvisionDependencyOverrides = {}
 ): Promise<void> => {
     if (options.mode === 'preserve') {
         logger.info('Preserving current authentication configuration.');
         return;
     }
 
-    const runner = options.runner ?? realRunner;
-    const prompt = options.prompt ?? realPrompt;
-    const fetcher = options.fetcher ?? getFetcher();
+    const runner = overrides.runner ?? realRunner;
+    const prompt = overrides.prompt ?? realPrompt;
+    const fetcher = overrides.fetcher ?? getFetcher();
     const serverToml = await readText(options.serverConfigPath);
     if (
         OIDC_KEYS.some((key) =>
@@ -379,13 +397,23 @@ export const provisionAuthelia = async (
         );
     }
 
-    const existingFootnoteSecretNames = await getSecretNames(
+    const existingFootnoteSecretResult = await getSecretNames(
         runner,
         defaults.footnoteAppName
     );
+    if (!existingFootnoteSecretResult.ok) {
+        const details =
+            existingFootnoteSecretResult.error.stderr.trim() ||
+            existingFootnoteSecretResult.error.stdout.trim();
+        throw new Error(
+            `Fly secrets list failed for ${defaults.footnoteAppName} with exit code ${existingFootnoteSecretResult.error.code}${details ? `: ${details}` : '.'}`
+        );
+    }
     await requireReplacementConfirmation(
         prompt,
-        OIDC_KEYS.filter((key) => existingFootnoteSecretNames.includes(key))
+        OIDC_KEYS.filter((key) =>
+            existingFootnoteSecretResult.names.includes(key)
+        )
     );
 
     const username = (
@@ -420,5 +448,23 @@ export const provisionAuthelia = async (
     logger.info(`Authelia is ready at ${issuerUrl}.`);
     logger.info(`Inspect generated state at ${stateDirectory}.`);
 };
+
+/**
+ * Provisions the optional Authelia profile from data-only CLI options. Preserve
+ * mode short-circuits before any remote work. Authelia owns provider setup,
+ * while the backend remains the authority for Footnote OIDC values; provider
+ * health and discovery complete before those values are imported. Failures
+ * retain existing Footnote authentication and keep created Authelia resources
+ * available for diagnosis.
+ */
+export const provisionAuthelia = async (
+    options: ProvisionOptions
+): Promise<void> => runProvisionAuthelia(options);
+
+/** Internal dependency-injection seam used by the focused provisioning tests. */
+export const provisionAutheliaForTest = async (
+    options: ProvisionOptions,
+    overrides: ProvisionDependencyOverrides
+): Promise<void> => runProvisionAuthelia(options, overrides);
 
 export type { AuthMode, Fetcher, Prompt, ProvisionOptions } from './types.js';

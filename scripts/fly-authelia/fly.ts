@@ -8,8 +8,21 @@
 
 import { AUTH_SECRET_NAMES, OIDC_KEYS } from './constants.js';
 import { commandOrThrow } from './runtime.js';
-import { logger } from '../../packages/discord-bot/src/utils/logger';
-import type { CommandRunner, ExistingState, Fetcher, Prompt } from './types.js';
+import { logger } from '../../packages/discord-bot/src/utils/logger.js';
+import type {
+    CommandResult,
+    CommandRunner,
+    ExistingState,
+    Fetcher,
+    Prompt,
+} from './types.js';
+
+export type SecretNamesResult =
+    { ok: true; names: string[] } | { ok: false; error: CommandResult };
+
+const PROBE_ATTEMPTS = 5;
+const PROBE_TIMEOUT_MS = 3_000;
+const PROBE_BACKOFF_MS = 250;
 
 const parseSecretNames = (output: string): string[] =>
     output
@@ -20,12 +33,29 @@ const parseSecretNames = (output: string): string[] =>
 export const getSecretNames = async (
     runner: CommandRunner,
     appName: string
-): Promise<string[]> => {
+): Promise<SecretNamesResult> => {
     const result = await runner.run({
         command: 'fly',
         args: ['secrets', 'list', '--app', appName],
     });
-    return result.code === 0 ? parseSecretNames(result.stdout) : [];
+    return result.code === 0
+        ? { ok: true, names: parseSecretNames(result.stdout) }
+        : { ok: false, error: result };
+};
+
+const requireSecretNames = async (
+    runner: CommandRunner,
+    appName: string
+): Promise<string[]> => {
+    const result = await getSecretNames(runner, appName);
+    if (!result.ok) {
+        const details =
+            result.error.stderr.trim() || result.error.stdout.trim();
+        throw new Error(
+            `Fly secrets list failed for ${appName} with exit code ${result.error.code}${details ? `: ${details}` : '.'}`
+        );
+    }
+    return result.names;
 };
 
 export const flyAppExists = async (
@@ -65,20 +95,57 @@ export const probeAuthelia = async (
     fetcher: Fetcher,
     issuerUrl: string
 ): Promise<void> => {
-    const health = await fetcher(`${issuerUrl}/api/health`);
-    if (health.status < 200 || health.status >= 300) {
+    const fetchWithRetry = async (
+        url: string,
+        label: string,
+        httpFailure: (status: number) => string
+    ): Promise<{ status: number; json: () => Promise<unknown> }> => {
+        let lastError: unknown;
+        let lastStatus: number | undefined;
+        for (let attempt = 0; attempt < PROBE_ATTEMPTS; attempt += 1) {
+            const controller = new AbortController();
+            const timeout = setTimeout(
+                () => controller.abort(),
+                PROBE_TIMEOUT_MS
+            );
+            try {
+                const response = await fetcher(url, {
+                    signal: controller.signal,
+                });
+                if (response.status >= 200 && response.status < 300) {
+                    return response;
+                }
+                lastStatus = response.status;
+                lastError = new Error(`HTTP ${response.status}`);
+            } catch (error) {
+                lastError = error;
+            } finally {
+                clearTimeout(timeout);
+            }
+            if (attempt < PROBE_ATTEMPTS - 1) {
+                await new Promise((resolve) =>
+                    setTimeout(resolve, PROBE_BACKOFF_MS * (attempt + 1))
+                );
+            }
+        }
+        if (lastStatus !== undefined) {
+            throw new Error(httpFailure(lastStatus));
+        }
         throw new Error(
-            `Authelia health check failed with HTTP ${health.status}.`
+            `Authelia ${label} check failed after ${PROBE_ATTEMPTS} attempts: ${String(lastError)}`
         );
-    }
-    const discovery = await fetcher(
-        `${issuerUrl}/.well-known/openid-configuration`
+    };
+
+    await fetchWithRetry(
+        `${issuerUrl}/api/health`,
+        'health',
+        (status) => `Authelia health check failed with HTTP ${status}.`
     );
-    if (discovery.status < 200 || discovery.status >= 300) {
-        throw new Error(
-            `Authelia OIDC discovery check failed with HTTP ${discovery.status}.`
-        );
-    }
+    const discovery = await fetchWithRetry(
+        `${issuerUrl}/.well-known/openid-configuration`,
+        'OIDC discovery',
+        (status) => `Authelia OIDC discovery check failed with HTTP ${status}.`
+    );
     const metadata = await discovery.json();
     if (
         typeof metadata !== 'object' ||
@@ -104,7 +171,10 @@ export const ensureExistingProfile = async (input: {
             `Authelia app ${input.authAppName} is missing but local state exists. Recover the app or remove the state only after confirming teardown; the provisioning tool will not rotate or guess credentials.`
         );
     }
-    const authSecrets = await getSecretNames(input.runner, input.authAppName);
+    const authSecrets = await requireSecretNames(
+        input.runner,
+        input.authAppName
+    );
     const missingAuthSecrets = AUTH_SECRET_NAMES.filter(
         (name) => !authSecrets.includes(name)
     );
@@ -113,7 +183,7 @@ export const ensureExistingProfile = async (input: {
             `Authelia app ${input.authAppName} is missing managed secret keys: ${missingAuthSecrets.join(', ')}. Restore them manually; credentials are not regenerated automatically.`
         );
     }
-    const footnoteSecrets = await getSecretNames(
+    const footnoteSecrets = await requireSecretNames(
         input.runner,
         input.footnoteAppName
     );

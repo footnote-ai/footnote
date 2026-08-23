@@ -13,14 +13,34 @@ import path from 'node:path';
 import test from 'node:test';
 import {
     AUTHELIA_IMAGE,
-    provisionAuthelia,
     parseServerDefaults,
     renderConfiguration,
-    type CommandResult,
-    type CommandRunner,
-    type CommandSpec,
-    type Prompt,
 } from './fly-authelia-provision.js';
+import { provisionAutheliaForTest } from './fly-authelia/provision.js';
+import { probeAuthelia } from './fly-authelia/fly.js';
+import { loadState } from './fly-authelia/state.js';
+import type {
+    CommandResult,
+    CommandRunner,
+    CommandSpec,
+    Fetcher,
+    Prompt,
+    ProvisionOptions,
+} from './fly-authelia/types.js';
+
+type TestProvisionOptions = ProvisionOptions & {
+    prompt?: Prompt;
+    runner?: CommandRunner;
+    fetcher?: Fetcher;
+};
+
+const provisionAuthelia = async ({
+    prompt,
+    runner,
+    fetcher,
+    ...options
+}: TestProvisionOptions): Promise<void> =>
+    provisionAutheliaForTest(options, { prompt, runner, fetcher });
 
 const createTempRoot = async (): Promise<string> =>
     fs.mkdtemp(path.join(os.tmpdir(), 'footnote-authelia-test-'));
@@ -87,13 +107,49 @@ test('derives Fly defaults from server.toml and renders provider-neutral OIDC se
         configuration,
         /token_endpoint_auth_method: 'client_secret_basic'/
     );
-    assert.match(
-        configuration,
-        /scopes:\n          - 'openid'\n          - 'profile'/
-    );
+    assert.match(configuration, /scopes:\n {10}- 'openid'\n {10}- 'profile'/);
     assert.match(
         configuration,
         /AUTHELIA_IDENTITY_PROVIDERS_OIDC_ISSUER_PRIVATE_KEY/
+    );
+});
+
+test('retries Authelia probes with a bounded abort signal', async () => {
+    const signals: AbortSignal[] = [];
+    let healthAttempts = 0;
+    await probeAuthelia(async (input, init) => {
+        assert.ok(init?.signal);
+        signals.push(init.signal);
+        if (input.endsWith('/api/health')) {
+            healthAttempts += 1;
+            return {
+                status: healthAttempts === 1 ? 503 : 200,
+                json: async () => ({}),
+            };
+        }
+        return {
+            status: 200,
+            json: async () => ({ issuer: 'https://footnote-auth.fly.dev' }),
+        };
+    }, 'https://footnote-auth.fly.dev');
+    assert.equal(healthAttempts, 2);
+    assert.equal(signals.length, 3);
+    assert.equal(
+        signals.every((signal) => signal instanceof AbortSignal),
+        true
+    );
+});
+
+test('rejects incomplete Authelia state before reuse', async () => {
+    const root = await createTempRoot();
+    const statePath = path.join(root, 'state.json');
+    await fs.writeFile(
+        statePath,
+        JSON.stringify({ provider: 'authelia', version: 1, secretNames: [] })
+    );
+    await assert.rejects(
+        loadState(statePath),
+        /Invalid Authelia deployment state/
     );
 });
 
@@ -169,6 +225,70 @@ test('requires explicit replacement before touching existing Footnote OIDC setti
     );
 });
 
+test('aborts when Fly cannot list existing Footnote secrets', async () => {
+    const root = await createTempRoot();
+    const serverConfigPath = await writeServerConfig(root);
+    const runner = new FakeRunner([
+        { code: 1, stdout: '', stderr: 'app not found' },
+        { code: 1, stdout: '', stderr: 'permission denied' },
+    ]);
+    await assert.rejects(
+        provisionAuthelia({
+            mode: 'authelia',
+            repositoryRoot: root,
+            serverConfigPath,
+            prompt: promptFrom([]),
+            runner,
+        }),
+        /Fly secrets list failed.*permission denied/
+    );
+    assert.equal(
+        runner.calls.some((call) => call.command === 'docker'),
+        false
+    );
+});
+
+test('does not save existing-profile state before Fly resources exist', async () => {
+    const root = await createTempRoot();
+    const serverConfigPath = await writeServerConfig(root);
+    const runner = new FakeRunner([
+        { code: 1, stdout: '', stderr: 'app not found' },
+        { code: 0, stdout: 'NAME\n', stderr: '' },
+        { code: 0, stdout: 'Digest: $argon2id$password-hash\n', stderr: '' },
+        {
+            code: 0,
+            stdout: 'Random Password: client-secret-value\nDigest: $argon2id$client-hash\n',
+            stderr: '',
+        },
+        { code: 0, stdout: '', stderr: '' },
+        { code: 1, stdout: '', stderr: 'create failed' },
+    ]);
+    await assert.rejects(
+        provisionAuthelia({
+            mode: 'authelia',
+            repositoryRoot: root,
+            serverConfigPath,
+            prompt: promptFrom([
+                '',
+                'admin',
+                'Administrator',
+                'admin@example.com',
+            ]),
+            runner,
+        }),
+        /Command failed/
+    );
+    await assert.rejects(
+        fs.access(
+            path.join(
+                root,
+                '.footnote/deploy/auth/authelia/footnote-auth/state.json'
+            )
+        ),
+        /ENOENT/
+    );
+});
+
 test('provisions, validates, probes, and stores only sanitized state', async () => {
     const root = await createTempRoot();
     const serverConfigPath = await writeServerConfig(root);
@@ -208,7 +328,47 @@ test('provisions, validates, probes, and stores only sanitized state', async () 
     assert.match(state, /password-hash/);
     assert.match(state, /client-hash/);
     assert.doesNotMatch(state, /client-secret-value/);
-    assert.doesNotMatch(state, /AUTHELIA_SESSION_SECRET=.*\n/);
+    const authSecretImport = runner.calls.find(
+        (call) =>
+            call.command === 'fly' &&
+            call.args.includes('secrets') &&
+            call.args.includes('import') &&
+            call.args.includes('footnote-auth')
+    );
+    assert.ok(authSecretImport?.stdin);
+    const importedSecretValues: string[] = [];
+    let multilineValue: string[] | undefined;
+    for (const line of authSecretImport.stdin.split('\n')) {
+        if (multilineValue) {
+            if (line === '"""') {
+                importedSecretValues.push(multilineValue.join('\n'));
+                multilineValue = undefined;
+            } else {
+                multilineValue.push(line);
+            }
+            continue;
+        }
+        const match = line.match(/^[A-Z0-9_]+=(.*)$/);
+        if (!match) {
+            continue;
+        }
+        if (match[1] === '"""') {
+            multilineValue = [];
+        } else {
+            importedSecretValues.push(match[1]);
+        }
+    }
+    for (const value of importedSecretValues) {
+        assert.doesNotMatch(
+            state,
+            new RegExp(value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'))
+        );
+    }
+    assert.match(
+        authSecretImport.stdin,
+        /AUTHELIA_IDENTITY_PROVIDERS_OIDC_ISSUER_PRIVATE_KEY="""/
+    );
+    assert.match(authSecretImport.stdin, /-----BEGIN PRIVATE KEY-----/);
     const secretImport = runner.calls.find(
         (call) =>
             call.command === 'fly' &&
