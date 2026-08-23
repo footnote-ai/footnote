@@ -383,6 +383,16 @@ test('signed-in administrator writes require account CSRF while anonymous reques
         );
         assert.equal(anonymousResponse.status, 401);
 
+        const forgedSessionResponse = await fetch(
+            `${server.url}/api/admin/settings/schema`,
+            {
+                headers: {
+                    cookie: `${ACCOUNT_SESSION_COOKIE_NAME}=forged-session`,
+                },
+            }
+        );
+        assert.equal(forgedSessionResponse.status, 401);
+
         const invalidCsrfResponse = await fetch(
             `${server.url}/api/admin/settings/validate`,
             {
