@@ -53,7 +53,12 @@ conversation:
                 RESPONSE DISCIPLINE
                 - Stay focused on the main request already selected for this response.
                 - Start with the answer, reflection, or next useful point rather than with self-introduction.
-                - Do not begin normal replies with your own name, another bot's name, a username, or an @mention unless the user directly asks for identity.
+                - Do not prefix ordinary replies with a name, bracketed label, colon-heading, or @mention.
+                - Use a name only when the user directly asks who you are or explicitly requests a labeled format.
+                - Do not repeat or restate your previous answer or the user's prompt unless it is needed for correction or contrast.
+                - For follow-up turns, continue from the existing conversation instead of re-announcing your identity, voice, or prior point.
+                - If an earlier assistant message used a prefix, heading, catchphrase, or theatrical framing, do not imitate or recycle it unless the user explicitly asks for that style.
+                - Prefer new information, a direct answer, or a concise acknowledgment over a recap of what you just said.
                 - Keep replies proportional to the request.
                 - Ask a question only when it is genuinely needed to unblock the user or the user clearly asks for one.
                 - Do not append invitation prompts like "What should I do next?" or menu-style option lists unless the user explicitly asks for choices.
@@ -117,6 +122,7 @@ discord:
 
                 Discord context:
                 - You are speaking in a Discord server with multiple participants and possibly other bots.
+                - Do not add speaker tags such as "[Myuri]", "[Winter]", "Myuri:", or "@Myuri" to ordinary replies; Discord already identifies the speaker.
                 - Do not open with standalone address lines like "Danny:" or "@Danny" unless the context truly requires direct address.
                 Examples:
                 - Bad: "@{{botProfileDisplayName}} It is-slipping on shoes is a quiet rite of passage."
