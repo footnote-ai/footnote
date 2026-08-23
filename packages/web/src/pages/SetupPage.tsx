@@ -19,6 +19,8 @@ import { parseSetupCodeFromHash } from '../utils/setupFlow';
 import { getAuthSession } from '../utils/api';
 
 const MISSING_SETTINGS_SENTINEL = '"footnote-settings-missing"';
+const SETUP_CSRF_HEADER_NAME = 'x-setup-csrf';
+const ACCOUNT_CSRF_HEADER_NAME = 'x-auth-csrf';
 
 type ExchangeState =
     | { status: 'idle' }
@@ -316,13 +318,16 @@ const SetupPage = ({ mode = 'setup' }: SetupPageProps): JSX.Element => {
             status: { kind: 'submitting' },
         }));
         try {
+            const csrfHeaderName = isAdministratorMode
+                ? ACCOUNT_CSRF_HEADER_NAME
+                : SETUP_CSRF_HEADER_NAME;
             const validateResponse = await fetch(
                 '/api/admin/settings/validate',
                 {
                     method: 'POST',
                     headers: {
                         'content-type': 'text/yaml',
-                        'x-setup-csrf': exchangeState.csrfToken,
+                        [csrfHeaderName]: exchangeState.csrfToken,
                     },
                     body: yamlText,
                 }
@@ -357,7 +362,7 @@ const SetupPage = ({ mode = 'setup' }: SetupPageProps): JSX.Element => {
                 method: 'PUT',
                 headers: {
                     'content-type': 'text/yaml',
-                    'x-setup-csrf': exchangeState.csrfToken,
+                    [csrfHeaderName]: exchangeState.csrfToken,
                     'if-match': ifMatch,
                 },
                 body: yamlText,

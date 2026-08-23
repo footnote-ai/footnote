@@ -113,7 +113,7 @@ const buildSessionCookie = (
     buildCookie({
         name: ACCOUNT_SESSION_COOKIE_NAME,
         value: sessionId,
-        path: '/api/auth',
+        path: '/api',
         maxAgeMs,
         secure,
     });

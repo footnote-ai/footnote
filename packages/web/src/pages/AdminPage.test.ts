@@ -32,5 +32,8 @@ test('admin route lazy-loads the account-session settings page', async () => {
     assert.match(setupSource, /getAuthSession\(\)/);
     assert.match(setupSource, /Sign in to an administrator account/);
     assert.match(setupSource, /Administrator settings/);
+    assert.match(setupSource, /ACCOUNT_CSRF_HEADER_NAME = 'x-auth-csrf'/);
+    assert.match(setupSource, /SETUP_CSRF_HEADER_NAME = 'x-setup-csrf'/);
+    assert.match(setupSource, /\[csrfHeaderName\]: exchangeState\.csrfToken/);
     assert.doesNotMatch(setupSource, /localStorage|sessionStorage/);
 });
