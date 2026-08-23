@@ -21,15 +21,7 @@ import {
 } from './fly-authelia/config.js';
 import { provisionAuthelia } from './fly-authelia/provision.js';
 import { realPrompt } from './fly-authelia/runtime.js';
-import type {
-    AuthMode,
-    CommandResult,
-    CommandRunner,
-    CommandSpec,
-    Fetcher,
-    Prompt,
-    ProvisionOptions,
-} from './fly-authelia/types.js';
+import type { AuthMode, ProvisionOptions } from './fly-authelia/types.js';
 
 export {
     AUTHELIA_IMAGE,
@@ -41,15 +33,7 @@ export {
     renderConfiguration,
 };
 
-export type {
-    AuthMode,
-    CommandResult,
-    CommandRunner,
-    CommandSpec,
-    Fetcher,
-    Prompt,
-    ProvisionOptions,
-};
+export type { AuthMode, ProvisionOptions };
 
 const parseCliArgs = (): {
     mode?: AuthMode;

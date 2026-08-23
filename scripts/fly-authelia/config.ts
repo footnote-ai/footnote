@@ -12,7 +12,7 @@ import type { ServerDefaults } from './types.js';
 
 const parseTomlString = (source: string, key: string): string | null => {
     const match = source.match(
-        new RegExp(`^\\s*${key}\\s*=\\s*['\"]([^'\"]+)['\"]`, 'm')
+        new RegExp(`^\\s*${key}\\s*=\\s*['"]([^'"]+)['"]`, 'm')
     );
     return match?.[1] ?? null;
 };
