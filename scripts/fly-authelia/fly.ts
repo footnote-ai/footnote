@@ -64,7 +64,7 @@ export const flyAppExists = async (
 ): Promise<boolean> => {
     const result = await runner.run({
         command: 'fly',
-        args: ['apps', 'show', appName],
+        args: ['status', '--app', appName],
     });
     return result.code === 0;
 };

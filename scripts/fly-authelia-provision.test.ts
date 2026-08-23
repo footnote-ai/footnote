@@ -18,7 +18,7 @@ import {
 } from './fly-authelia-provision.js';
 import { renderManifest, validateHttpsUrl } from './fly-authelia/config.js';
 import { provisionAutheliaForTest } from './fly-authelia/provision.js';
-import { probeAuthelia } from './fly-authelia/fly.js';
+import { flyAppExists, probeAuthelia } from './fly-authelia/fly.js';
 import { loadState } from './fly-authelia/state.js';
 import type {
     CommandResult,
@@ -142,6 +142,16 @@ test('accepts only HTTPS origins for the Footnote public URL', () => {
             /Footnote public URL/
         );
     }
+});
+
+test('checks Fly app existence with the supported status command', async () => {
+    const runner = new FakeRunner([{ code: 0, stdout: '', stderr: '' }]);
+    assert.equal(await flyAppExists(runner, 'footnote-auth'), true);
+    assert.deepEqual(runner.calls[0]?.args, [
+        'status',
+        '--app',
+        'footnote-auth',
+    ]);
 });
 
 test('retries Authelia probes with a bounded abort signal', async () => {
