@@ -219,6 +219,36 @@ test('backend server contract baseline routes and transport behavior stay stable
     );
 
     await t.test(
+        '/api/auth stays available while account sign-in is disabled',
+        async () => {
+            const sessionResponse = await fetch(
+                `${harness.baseUrl}/api/auth/session`
+            );
+            assert.equal(sessionResponse.status, 200);
+            assert.equal(
+                sessionResponse.headers.get('cache-control'),
+                'no-store'
+            );
+            assert.deepEqual(await sessionResponse.json(), {
+                enabled: false,
+                authenticated: false,
+            });
+
+            const loginResponse = await fetch(
+                `${harness.baseUrl}/api/auth/login`,
+                {
+                    redirect: 'manual',
+                }
+            );
+            assert.equal(loginResponse.status, 503);
+            assert.equal(
+                loginResponse.headers.get('cache-control'),
+                'no-store'
+            );
+        }
+    );
+
+    await t.test(
         '/api/traces/{id} negotiates Accept and sets Vary: Accept',
         async () => {
             const traceId = 'server-contract-missing-trace-id';

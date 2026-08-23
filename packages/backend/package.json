@@ -19,6 +19,7 @@
         "js-yaml": "catalog:",
         "neverthrow": "catalog:",
         "nodemailer": "catalog:",
+        "openid-client": "catalog:",
         "winston": "catalog:",
         "winston-daily-rotate-file": "catalog:",
         "ws": "catalog:",

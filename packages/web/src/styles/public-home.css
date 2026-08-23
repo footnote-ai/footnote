@@ -78,62 +78,6 @@
     text-decoration: none;
 }
 
-.public-header__unavailable {
-    position: relative;
-    display: inline-flex;
-    align-items: center;
-    gap: 0.35rem;
-    color: var(--public-muted);
-    cursor: not-allowed;
-}
-
-.public-header__unavailable-icon {
-    display: inline-grid;
-    place-items: center;
-    width: 0;
-    overflow: hidden;
-    color: #b6604f;
-    opacity: 0;
-    transition:
-        width 160ms ease,
-        opacity 160ms ease;
-}
-
-.public-header__unavailable-tooltip {
-    position: absolute;
-    top: calc(100% + 0.6rem);
-    right: 0;
-    z-index: 1;
-    width: max-content;
-    max-width: min(16rem, calc(100vw - 2.5rem));
-    padding: 0.45rem 0.6rem;
-    border: 1px solid var(--public-rule);
-    border-radius: 0.3rem;
-    background: var(--public-paper-raised);
-    box-shadow: 0 0.25rem 0.75rem
-        color-mix(in srgb, var(--public-ink) 15%, transparent);
-    color: var(--public-ink);
-    font-size: 0.75rem;
-    opacity: 0;
-    pointer-events: none;
-    transform: translateY(-0.15rem);
-    transition:
-        opacity 160ms ease,
-        transform 160ms ease;
-}
-
-.public-header__unavailable:hover .public-header__unavailable-icon,
-.public-header__unavailable:focus-visible .public-header__unavailable-icon {
-    width: 0.9rem;
-    opacity: 1;
-}
-
-.public-header__unavailable:hover .public-header__unavailable-tooltip,
-.public-header__unavailable:focus-visible .public-header__unavailable-tooltip {
-    opacity: 1;
-    transform: translateY(0);
-}
-
 .public-header .theme-toggle {
     width: 2.35rem;
     min-height: 2.35rem;

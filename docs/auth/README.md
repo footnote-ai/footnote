@@ -1,118 +1,69 @@
-# Account Identity and Access Direction
+# Account Sign-In
 
-**Last Updated:** 2026-07-22
+Footnote can use one OpenID Connect provider for administrator account sign-in.
+Footnote supports the OIDC protocol, not a specific identity provider.
+Deployment tooling may support particular providers, but the runtime receives
+only the standard OIDC configuration values and does not know which provider
+was selected. The first slice proves identity only. It does not grant access
+to `/admin` or change the existing setup/admin-settings authentication rules.
 
-## Status
+## Runtime behavior
 
-This document records the stable direction for account identity and access. It
-does not track individual implementation branches.
+- OIDC authorization code flow uses PKCE S256, state, and nonce.
+- Footnote requests only `openid profile`.
+- Login transactions live in backend memory for 10 minutes.
+- Local account sessions live in backend memory for 8 hours.
+- Restarting the backend signs every account out.
+- Signing out ends only the Footnote session. It does not sign the account out
+  of the identity provider.
+- Provider tokens are validated during callback processing and are not retained.
+- When OIDC is disabled or unavailable, public Footnote keeps running.
 
-The first implementation is intended for Footnote administrators. The same
-identity foundation should later support regular users who choose to create an
-account.
+## Configuration
 
-See the [account identity and access status](../status/account-identity-and-access.md)
-for the active delivery sequence. The current branch has its own
-[account sign-in status](../status/account-sign-in.md).
+Set all four values in the backend process environment:
 
-## Why Footnote Needs This
+```text
+OIDC_ISSUER_URL=https://identity.example/application/o/footnote/
+OIDC_CLIENT_ID=footnote
+OIDC_CLIENT_SECRET=<secret>
+OIDC_REDIRECT_URI=https://footnote.example/api/auth/callback
+```
 
-Footnote currently supports anonymous use and temporary setup access. It does
-not have a general account login.
+`OIDC_CLIENT_SECRET` is secret. The other three values are non-secret bootstrap
+environment values and intentionally do not belong in `footnote.yaml`.
 
-A general login becomes useful when people need to:
+The issuer must use HTTPS. The redirect URI must use HTTPS except for local
+loopback development, where `http://localhost`, `http://127.0.0.1`, and
+`http://[::1]` are accepted. Its path must be exactly `/api/auth/callback`.
 
-- update their own stored information
-- save preferences or history
-- review consent choices
-- request deletion of account-linked data
+Unset all four values to disable sign-in quietly. Partial or invalid
+configuration disables sign-in and logs a warning containing key names only.
 
-Administrators also need a safer way to reach future instance-management tools.
-The current setup link and admin token are useful bootstrap tools, but they are
-not the intended long-term login experience.
+## Authentik test setup
 
-## Plain-Language Model
+Create an OAuth2/OpenID provider and application in Authentik:
 
-The identity provider answers:
+1. Use a confidential client.
+2. Enable the authorization code grant.
+3. Set client authentication to `client_secret_basic`.
+4. Add the exact `OIDC_REDIRECT_URI` as a strict redirect URI.
+5. Include `openid` and `profile` scope mappings.
+6. Require PKCE with S256.
+7. Assign the application only to the administrator allowed to test Footnote.
+8. Copy the provider issuer, client ID, and client secret into the Footnote
+   environment.
 
-> Who signed in?
+Visit `/account` and choose **Sign in**. After callback validation, the page
+shows the local identity and expiry. **Sign out** clears only the local session.
 
-Footnote answers:
+## Security boundaries
 
-> What may this person do here?
-
-Keeping those questions separate prevents an identity provider from becoming
-the owner of Footnote's settings, consent, retention, provenance, incident, or
-review rules.
-
-## Current Direction
-
-### Use a standard identity boundary
-
-Footnote should connect to identity providers through OpenID Connect (OIDC)
-where practical. This keeps the boundary familiar and replaceable.
-
-authentik remains a strong self-hosted option. A compatible cloud identity
-service may also be useful for deployments that do not want to operate their own
-identity system. The first implementation should avoid provider-specific
-behavior unless it is needed and clearly isolated.
-
-### Keep the backend in charge
-
-`packages/backend` remains the public authentication and access boundary for
-the web app and other Footnote clients.
-
-The browser should not decide that someone is an administrator. It should ask
-the backend whether the current session is signed in and whether a protected
-action is allowed.
-
-The agent runtime should not own account identity or access decisions.
-
-### Separate account pages from administrator pages
-
-The intended route meanings are:
-
-- `/account`: the signed-in person's own information and preferences
-- `/admin`: instance-wide administration
-- `/api/auth/*`: backend login, callback, session, and logout operations
-
-Account login should use `/account`, even when only administrators can sign in.
-This avoids treating every future account as an administrator account.
-
-### Separate identity from permissions
-
-The basic signed-in identity should contain only stable identity information,
-such as the provider issuer and subject identifier. Names and email addresses
-are useful display information, but they can change and should not be permanent
-identifiers.
-
-Administrator access should be a separate decision. Roles or other access rules
-should be able to change without changing the basic login identity.
-
-## Relationship To Current Setup Access
-
-The current setup session is a temporary bootstrap mechanism. It proves that a
-person has a short-lived setup code. It does not represent a general account.
-
-Account sessions should be modeled separately. Later administrator work may
-allow an account session to access settings, but it should not silently turn a
-setup session into a permanent identity.
-
-## Terminology
-
-Use **administrator** or **admin** for people who manage a Footnote instance.
-Use **user** for a person using the service, including someone with a personal
-account.
-
-Some implemented setup API names still contain `operator`. Those names describe
-the current contract and should remain accurate in current-system docs until a
-follow-up change renames the code and API together.
-
-## References
-
-- [Admin Settings Architecture](../architecture/admin-settings-architecture.md)
-- [Setup and Settings Flow](../architecture/first-setup-flow.md)
-- [Footnote Philosophy](../Philosophy.md)
-- [Footnote License Strategy](../LICENSE_STRATEGY.md)
-- [authentik OAuth2/OIDC provider documentation](https://docs.goauthentik.io/docs/add-secure-apps/providers/oauth2/)
-- [OpenID Connect](https://openid.net/developers/how-connect-works/)
+- Provider application assignment decides who may complete this first sign-in
+  flow.
+- A signed-in account is not yet authorized for `/api/admin/*`.
+- Cookies contain only opaque random identifiers.
+- Identity and provider tokens are not persisted.
+- The callback origin comes from `OIDC_REDIRECT_URI`, never the request `Host`.
+- Failed and replayed callbacks create no session and expose only a generic
+  failure message.

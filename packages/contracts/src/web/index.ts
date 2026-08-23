@@ -10,6 +10,15 @@
 export type { ApiErrorResponse, NormalizedApiError } from './types.js';
 
 /**
+ * @api.operationId: getAuthSession
+ * @api.path: GET /api/auth/session
+ */
+export type {
+    AuthenticatedPrincipal,
+    GetAuthSessionResponse,
+} from './types.js';
+
+/**
  * @api.operationId: postChat
  * @api.path: POST /api/chat
  */
@@ -216,6 +225,8 @@ export {
     PostInternalRecoverableTaskClaimResponseSchema,
     PostInternalRecoverableTaskFinishRequestSchema,
     PostInternalRecoverableTaskFinishResponseSchema,
+    AuthenticatedPrincipalSchema,
+    GetAuthSessionResponseSchema,
     PostSetupSessionRequestSchema,
     PostSetupSessionResponseSchema,
     PostSetupOperatorLinkRequestSchema,

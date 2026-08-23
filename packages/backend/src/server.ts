@@ -50,6 +50,7 @@ import { createIncidentHandlers } from './handlers/incidents.js';
 import { createRuntimeConfigHandler } from './handlers/config.js';
 import { createAdminSettingsHandlers } from './handlers/adminSettings.js';
 import { createSetupSessionHandlers } from './handlers/setupSession.js';
+import { createAccountAuthHandlers } from './handlers/accountAuth.js';
 import { createIncidentService } from './services/incidents.js';
 import { createIncidentAlertRouter } from './services/incidentAlerts.js';
 import {
@@ -71,6 +72,8 @@ import { createOpenMeteoForecastTool } from './services/contextIntegrations/weat
 import { resolveExecutionContractTrustGraphRuntimeOptions } from './services/executionContractTrustGraph/index.js';
 import { createModelProfileResolver } from './services/modelProfileResolver.js';
 import { createSetupBootstrapService } from './services/setupBootstrap.js';
+import { createAccountAuthService } from './services/accountAuth.js';
+import { createOidcAccountClient } from './services/oidcClient.js';
 import { settingsSpecEntries } from './config/settings-spec.js';
 
 /**
@@ -555,6 +558,17 @@ if (incidentStore) {
 const setupBootstrapService = createSetupBootstrapService({
     settingsPath: runtimeConfig.settings.path,
 });
+const oidcAccountClient = runtimeConfig.accountAuth.enabled
+    ? createOidcAccountClient({
+          issuerUrl: runtimeConfig.accountAuth.issuerUrl,
+          clientId: runtimeConfig.accountAuth.clientId,
+          clientSecret: runtimeConfig.accountAuth.clientSecret,
+          redirectUri: runtimeConfig.accountAuth.redirectUri,
+      })
+    : null;
+const accountAuthService = createAccountAuthService({
+    provider: oidcAccountClient,
+});
 
 const handleRuntimeConfigRequest = createRuntimeConfigHandler({
     logRequest,
@@ -586,6 +600,19 @@ const {
     setupBaseUrl: runtimeConfig.runtime.flyAppName
         ? `https://${runtimeConfig.runtime.flyAppName}.fly.dev`
         : `http://localhost:${runtimeConfig.server.port}`,
+    logger,
+    logRequest,
+});
+const {
+    handleAuthLoginRequest,
+    handleAuthCallbackRequest,
+    handleAuthSessionRequest,
+    handleAuthLogoutRequest,
+} = createAccountAuthHandlers({
+    accountAuthService,
+    secureCookies:
+        runtimeConfig.accountAuth.enabled &&
+        runtimeConfig.accountAuth.secureCookies,
     logger,
     logRequest,
 });
@@ -719,6 +746,10 @@ const app = createExpressApp({
     handleSetupSessionPostRequest,
     handleSetupSessionDeleteRequest,
     handleSetupOperatorLinkPostRequest,
+    handleAuthLoginRequest,
+    handleAuthCallbackRequest,
+    handleAuthSessionRequest,
+    handleAuthLogoutRequest,
     handleStaticTransportRequest,
     resolveAsset,
     mimeMap,

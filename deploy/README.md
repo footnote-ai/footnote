@@ -91,7 +91,8 @@ pnpm start
     - default path: `./footnote.yaml`
     - advanced override: `FOOTNOTE_SETTINGS_PATH` env var
 
-3. Set secrets only in `.env` (or platform secrets).
+3. Set secrets in `.env` (or platform secrets). Features that document
+   bootstrap environment values may also read them from the process environment.
 
 4. To open the temporary settings editor for the current deployment:
 
@@ -137,9 +138,28 @@ pnpm compose:up
 ## Settings vs Secrets
 
 - `footnote.yaml`: non-secret runtime behavior
-- `.env` / Fly secrets: secret values
+- `.env` / process environment / Fly secrets: secret and documented bootstrap values
 
 `footnote.yaml` can contain env var names for Discord bot credentials (for example `discord-token-env: DISCORD_TOKEN`) but must not contain secret values.
+
+## Optional account sign-in
+
+Account sign-in uses four backend environment values:
+
+```text
+OIDC_ISSUER_URL=https://identity.example/application/o/footnote/
+OIDC_CLIENT_ID=footnote
+OIDC_CLIENT_SECRET=<secret>
+OIDC_REDIRECT_URI=https://footnote.example/api/auth/callback
+```
+
+Keep `OIDC_CLIENT_SECRET` in `.env` or the deployment platform's secret store.
+Pass the other values as non-secret bootstrap environment variables. Compose
+loads local values from the root `.env`; Fly operators may set deployment
+environment values using their normal platform workflow.
+
+See [Account Sign-In](../docs/auth/README.md) for validation rules and the
+minimum Authentik setup.
 
 ## Discord Bots
 

@@ -31,6 +31,8 @@ import {
 import { SafetyDecisionSchema } from '../policy/schemas.js';
 import type { ApiResponseValidationResult } from './client-core.js';
 import type {
+    AuthenticatedPrincipal,
+    GetAuthSessionResponse,
     GetTraceResponse,
     GetTraceStaleResponse,
     PostChatResponse,
@@ -82,6 +84,49 @@ const ChatAddressingEvidenceSchema = z
     .strict();
 const ChatPersonaIdSchema = z.string().regex(/^[a-z0-9][a-z0-9-]{0,31}$/);
 const ChatModeIdSchema = z.enum(['express', 'balanced', 'grounded']);
+
+/**
+ * Provider-neutral public identity with no provider tokens or session ids.
+ *
+ * @api.operationId: getAuthSession
+ * @api.path: GET /api/auth/session
+ */
+export const AuthenticatedPrincipalSchema: z.ZodType<AuthenticatedPrincipal> = z
+    .object({
+        issuer: z.string().min(1),
+        subject: z.string().min(1),
+        displayName: z.string().min(1).nullable(),
+    })
+    .strict();
+
+/**
+ * @api.operationId: getAuthSession
+ * @api.path: GET /api/auth/session
+ */
+export const GetAuthSessionResponseSchema: z.ZodType<GetAuthSessionResponse> =
+    z.union([
+        z
+            .object({
+                enabled: z.literal(false),
+                authenticated: z.literal(false),
+            })
+            .strict(),
+        z
+            .object({
+                enabled: z.literal(true),
+                authenticated: z.literal(false),
+            })
+            .strict(),
+        z
+            .object({
+                enabled: z.literal(true),
+                authenticated: z.literal(true),
+                principal: AuthenticatedPrincipalSchema,
+                expiresAt: z.string().datetime(),
+                csrfToken: z.string().min(1),
+            })
+            .strict(),
+    ]);
 const ChatConversationMessageSchema = z
     .object({
         role: z.enum(['system', 'user', 'assistant']),

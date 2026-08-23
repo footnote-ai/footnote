@@ -1,10 +1,11 @@
 # Account Sign-In Status
 
-**Branch:** `feat/account-sign-in`
+**Branch:** `agent/issue-455-account-sign-in`
 
-**Status:** Planned; implementation has not started.
+**Status:** Implemented; automated validation and the Authentik smoke test are
+complete.
 
-**Last updated:** 2026-07-22
+**Last updated:** 2026-08-22
 
 ## Goal
 
@@ -18,6 +19,18 @@ Deliver one complete account login flow:
 
 This branch proves authentication only. It does not grant access to `/admin` or
 the admin settings API.
+
+## Implementation Result
+
+The backend, shared contracts, API client, and `/account` page now implement the
+planned sign-in slice. Automated tests cover disabled login, provider failures,
+one-time callbacks, session expiry, CSRF-protected logout, route ownership,
+shared response validation, and the public account states.
+
+The live smoke test completed against Authentik 2026.8.0 in an ephemeral local
+Docker Compose environment. The browser flow covered administrator sign-in,
+the Footnote account session, and Footnote-only sign-out without committing
+provider secrets or account identifiers.
 
 ## Decisions For This Branch
 

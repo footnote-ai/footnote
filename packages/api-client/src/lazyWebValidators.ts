@@ -8,6 +8,7 @@
 
 import type {
     GetChatProfilesResponse,
+    GetAuthSessionResponse,
     GetTraceResponse,
     GetTraceStaleResponse,
     GetResponseVersionsResponse,
@@ -21,6 +22,9 @@ type WebSchemasModule = typeof import('@footnote/contracts/web/schemas');
 let webSchemasModulePromise: Promise<WebSchemasModule> | null = null;
 let getChatProfilesResponseValidatorPromise: Promise<
     ApiResponseValidator<GetChatProfilesResponse>
+> | null = null;
+let getAuthSessionResponseValidatorPromise: Promise<
+    ApiResponseValidator<GetAuthSessionResponse>
 > | null = null;
 let postChatResponseValidatorPromise: Promise<
     ApiResponseValidator<PostChatResponse>
@@ -65,6 +69,27 @@ export const loadGetChatProfilesResponseValidator = async (): Promise<
     }
 
     return getChatProfilesResponseValidatorPromise;
+};
+
+export const loadGetAuthSessionResponseValidator = async (): Promise<
+    ApiResponseValidator<GetAuthSessionResponse>
+> => {
+    if (!getAuthSessionResponseValidatorPromise) {
+        getAuthSessionResponseValidatorPromise = loadWebSchemasModule()
+            .then(
+                ({
+                    GetAuthSessionResponseSchema,
+                    createSchemaResponseValidator,
+                }) =>
+                    createSchemaResponseValidator(GetAuthSessionResponseSchema)
+            )
+            .catch((error) => {
+                getAuthSessionResponseValidatorPromise = null;
+                throw error;
+            });
+    }
+
+    return getAuthSessionResponseValidatorPromise;
 };
 
 export const loadPostChatResponseValidator = async (): Promise<

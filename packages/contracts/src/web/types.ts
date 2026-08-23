@@ -27,6 +27,42 @@ export type ApiErrorResponse = {
 };
 
 /**
+ * Provider-neutral identity exposed to signed-in web surfaces.
+ *
+ * @api.operationId: getAuthSession
+ * @api.path: GET /api/auth/session
+ */
+export type AuthenticatedPrincipal = {
+    issuer: string;
+    subject: string;
+    displayName: string | null;
+};
+
+/**
+ * Public account-session state. Provider tokens and opaque session identifiers
+ * stay backend-only.
+ *
+ * @api.operationId: getAuthSession
+ * @api.path: GET /api/auth/session
+ */
+export type GetAuthSessionResponse =
+    | {
+          enabled: false;
+          authenticated: false;
+      }
+    | {
+          enabled: true;
+          authenticated: false;
+      }
+    | {
+          enabled: true;
+          authenticated: true;
+          principal: AuthenticatedPrincipal;
+          expiresAt: string;
+          csrfToken: string;
+      };
+
+/**
  * Review lifecycle used by operators while investigating one report.
  */
 export type IncidentStatus =

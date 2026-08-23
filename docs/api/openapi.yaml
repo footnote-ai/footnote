@@ -23,6 +23,10 @@ openapi: 3.1.0
 # - POST /api/setup/session: Exchange one-time setup bootstrap code for short-lived setup session
 # - DELETE /api/setup/session: Clear setup session cookie
 # - POST /api/setup/operator-link: Local-only operator setup/settings link issuance
+# - GET /api/auth/login: Start optional OIDC account sign-in
+# - GET /api/auth/callback: Validate OIDC callback and create local account session
+# - GET /api/auth/session: Read account sign-in availability and local session
+# - POST /api/auth/logout: End local Footnote account session
 # - GET /api/admin/settings/schema: Admin editable settings schema metadata (AdminSettingsToken OR valid setup session)
 # - GET /api/admin/settings/template: Canonical commented settings template YAML (AdminSettingsToken OR valid setup session)
 # - GET /api/admin/settings.yaml: Admin canonical settings YAML read (AdminSettingsToken OR valid setup session)
@@ -37,7 +41,7 @@ openapi: 3.1.0
 info:
     title: Footnote Backend API
     # Versioning: bump when request/response shapes, status codes, or auth requirements change; docs-only edits can skip.
-    version: 1.0.0
+    version: 1.1.0
     license:
         name: MIT + Hippocratic License v3 (HL3-CORE)
         url: docs/LICENSE_STRATEGY.md
@@ -76,6 +80,8 @@ tags:
       description: Trace storage and retrieval.
     - name: Admin
       description: Trusted admin settings read/validate/write endpoints.
+    - name: Accounts
+      description: Optional OpenID Connect account sign-in and local sessions.
     - name: System
       description: Runtime config and service metadata.
 
@@ -956,6 +962,123 @@ paths:
                 '503':
                     $ref: '#/components/responses/ServiceUnavailable'
 
+    /api/auth/login:
+        get:
+            operationId: getAuthLogin
+            x-codeRefs:
+                - packages/backend/src/handlers/accountAuth.ts#createAccountAuthHandlers
+            summary: Start account sign-in
+            description: |
+                Starts OIDC authorization code flow with PKCE. Sign-in may be
+                disabled or temporarily unavailable without affecting public Footnote.
+            tags:
+                - Accounts
+            responses:
+                '302':
+                    description: Redirect to the configured identity provider.
+                    headers:
+                        Location:
+                            schema:
+                                type: string
+                                format: uri
+                        Set-Cookie:
+                            description: Opaque, HttpOnly, SameSite=Lax one-time login transaction cookie.
+                            schema:
+                                type: string
+                        Cache-Control:
+                            schema:
+                                type: string
+                                const: no-store
+                '429':
+                    $ref: '#/components/responses/TooManyRequests'
+                '503':
+                    $ref: '#/components/responses/ServiceUnavailable'
+
+    /api/auth/callback:
+        get:
+            operationId: getAuthCallback
+            x-codeRefs:
+                - packages/backend/src/handlers/accountAuth.ts#createAccountAuthHandlers
+            summary: Complete account sign-in
+            description: |
+                Consumes the one-time transaction, validates state, nonce, PKCE,
+                and the ID token, then creates a short-lived local Footnote session.
+                Failures redirect with only a generic marker.
+            tags:
+                - Accounts
+            responses:
+                '302':
+                    description: Redirect to /account after success or generic failure.
+                    headers:
+                        Location:
+                            schema:
+                                type: string
+                        Set-Cookie:
+                            description: Clears the transaction cookie and sets a session cookie only after validation succeeds.
+                            schema:
+                                type: string
+                        Cache-Control:
+                            schema:
+                                type: string
+                                const: no-store
+
+    /api/auth/session:
+        get:
+            operationId: getAuthSession
+            x-codeRefs:
+                - packages/backend/src/handlers/accountAuth.ts#createAccountAuthHandlers
+                - packages/contracts/src/web/types.ts#GetAuthSessionResponse
+                - packages/contracts/src/web/schemas.ts#GetAuthSessionResponseSchema
+            summary: Read local account session
+            tags:
+                - Accounts
+            security:
+                - {}
+                - AccountSessionCookie: []
+            responses:
+                '200':
+                    description: Sign-in availability and current local session state.
+                    headers:
+                        Cache-Control:
+                            schema:
+                                type: string
+                                const: no-store
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/AuthSessionResponse'
+
+    /api/auth/logout:
+        post:
+            operationId: postAuthLogout
+            x-codeRefs:
+                - packages/backend/src/handlers/accountAuth.ts#createAccountAuthHandlers
+            summary: End local Footnote account session
+            description: |
+                Revokes only the local Footnote session. A valid session requires
+                its CSRF token. Provider-wide logout is intentionally not performed.
+            tags:
+                - Accounts
+            security:
+                - {}
+                - AccountSessionCookie: []
+            parameters:
+                - $ref: '#/components/parameters/AuthCsrfHeader'
+            responses:
+                '204':
+                    description: Local session cleared or no valid session existed.
+                    headers:
+                        Set-Cookie:
+                            description: Expires the local account-session cookie.
+                            schema:
+                                type: string
+                        Cache-Control:
+                            schema:
+                                type: string
+                                const: no-store
+                '403':
+                    $ref: '#/components/responses/Forbidden'
+
     /api/setup/session:
         post:
             operationId: postSetupSession
@@ -1263,6 +1386,11 @@ components:
             in: cookie
             name: footnote_setup_session
             description: Short-lived setup session cookie accepted while the session remains valid.
+        AccountSessionCookie:
+            type: apiKey
+            in: cookie
+            name: footnote_account_session
+            description: Opaque local account session cookie. It contains no identity claims or provider tokens.
 
     # Data models for request/response payloads.
     schemas:
@@ -4391,6 +4519,75 @@ components:
                 - setup
             additionalProperties: false
 
+        AuthenticatedPrincipal:
+            type: object
+            properties:
+                issuer:
+                    type: string
+                    minLength: 1
+                subject:
+                    type: string
+                    minLength: 1
+                displayName:
+                    type:
+                        - string
+                        - 'null'
+            required:
+                - issuer
+                - subject
+                - displayName
+            additionalProperties: false
+
+        AuthSessionResponse:
+            oneOf:
+                - type: object
+                  properties:
+                      enabled:
+                          type: boolean
+                          const: false
+                      authenticated:
+                          type: boolean
+                          const: false
+                  required:
+                      - enabled
+                      - authenticated
+                  additionalProperties: false
+                - type: object
+                  properties:
+                      enabled:
+                          type: boolean
+                          const: true
+                      authenticated:
+                          type: boolean
+                          const: false
+                  required:
+                      - enabled
+                      - authenticated
+                  additionalProperties: false
+                - type: object
+                  properties:
+                      enabled:
+                          type: boolean
+                          const: true
+                      authenticated:
+                          type: boolean
+                          const: true
+                      principal:
+                          $ref: '#/components/schemas/AuthenticatedPrincipal'
+                      expiresAt:
+                          type: string
+                          format: date-time
+                      csrfToken:
+                          type: string
+                          minLength: 1
+                  required:
+                      - enabled
+                      - authenticated
+                      - principal
+                      - expiresAt
+                      - csrfToken
+                  additionalProperties: false
+
         SetupSessionRequest:
             type: object
             properties:
@@ -4666,6 +4863,15 @@ components:
             description: Required for non-GET admin settings calls when authenticated with setup session cookie.
             schema:
                 type: string
+
+        AuthCsrfHeader:
+            name: x-auth-csrf
+            in: header
+            required: false
+            description: Required when a valid account session posts local logout.
+            schema:
+                type: string
+                minLength: 1
 
         TraceResponseId:
             name: responseId

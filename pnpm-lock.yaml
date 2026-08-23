@@ -136,6 +136,9 @@ catalogs:
     openai:
       specifier: ^6.42.0
       version: 6.42.0
+    openid-client:
+      specifier: ^6.8.4
+      version: 6.8.4
     opusscript:
       specifier: ^0.1.1
       version: 0.1.1
@@ -373,6 +376,9 @@ importers:
       nodemailer:
         specifier: 'catalog:'
         version: 9.0.1
+      openid-client:
+        specifier: 'catalog:'
+        version: 6.8.4
       winston:
         specifier: 'catalog:'
         version: 3.19.0
@@ -3526,6 +3532,12 @@ packages:
     resolution: {integrity: sha512-AqZtDUWOMKs1G/8lwylVjrdYgqA4d9nu8hc+0gzRxlDb1I10+FHBGMXs6aiQHFdCUUlqH99MUMuLfzWDNDtfxw==}
     deprecated: This package is no longer supported.
 
+  oauth-sign@0.9.0:
+    resolution: {integrity: sha512-fexhUFFPTGV8ybAtSIGbV6gOkSv8UtRbDBnAyLQw4QPKkgNlsH2ByPGtMUqdWkos6YCRmAqViwgZrJc/mRDzZQ==}
+
+  oauth4webapi@3.8.6:
+    resolution: {integrity: sha512-iwemM91xz8nryHti2yTmg5fhyEMVOkOXwHNqbvcATjyajb5oQxCQzrNOA6uElRHuMhQQTKUyFKV9y/CNyg25BQ==}
+
   object-assign@4.1.1:
     resolution: {integrity: sha512-rJgTQnkUnH1sFw8yT6VSU3zD3sWmu6sZhIseY8VX+GRu3P6F7Fu+JNDoXfklElbLJSnc3FUQHVe4cU5hj+BcUg==}
     engines: {node: '>=0.10.0'}
@@ -3567,6 +3579,9 @@ packages:
         optional: true
       zod:
         optional: true
+
+  openid-client@6.8.4:
+    resolution: {integrity: sha512-QSw0BA08piujetEwfZsHoTrDpMEha7GDZDicQqVwX4u0ChCjefvjDB++TZ8BTg76UpwhzIQgdvvfgfl3HpCSAw==}
 
   opossum@9.0.0:
     resolution: {integrity: sha512-K76U0QkxOfUZamneQuzz+AP0fyfTJcCplZ2oZL93nxeupuJbN4s6uFNbmVCt4eWqqGqRnnowdFuBicJ1fLMVxw==}
@@ -7602,6 +7617,10 @@ snapshots:
       gauge: 3.0.2
       set-blocking: 2.0.0
 
+  oauth-sign@0.9.0: {}
+
+  oauth4webapi@3.8.6: {}
+
   object-assign@4.1.1: {}
 
   object-hash@3.0.0: {}
@@ -7637,6 +7656,11 @@ snapshots:
     optionalDependencies:
       ws: 8.21.0(bufferutil@4.1.0)
       zod: 4.4.3
+
+  openid-client@6.8.4:
+    dependencies:
+      jose: 6.2.3
+      oauth4webapi: 3.8.6
 
   opossum@9.0.0: {}
 

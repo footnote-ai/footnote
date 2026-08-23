@@ -315,6 +315,7 @@ export const startBackendServerContractHarness = async ({
                 ALLOWED_ORIGINS: 'https://allowed.example',
                 FRAME_ANCESTORS: 'https://allowed-frame.example',
                 OPENAI_API_KEY: '',
+                OPENROUTER_API_KEY: '',
                 OLLAMA_BASE_URL: '',
                 ...envOverrides,
             },

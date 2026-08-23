@@ -15,6 +15,7 @@ import {
     type ApiRequester,
     type CreateApiTransportOptions,
 } from './client.js';
+import { createAccountAuthApi, type AccountAuthApi } from './accountAuth.js';
 import {
     createIncidentApi,
     type CreateIncidentApiOptions,
@@ -117,7 +118,8 @@ export type CreateWebApiClientOptions = CreateApiTransportOptions;
 export type WebApiClient = {
     requestJson: ApiRequester;
     chatQuestion: ChatApi['chatQuestion'];
-} & WebReadApi;
+} & WebReadApi &
+    AccountAuthApi;
 
 export const createWebApiClient = ({
     baseUrl,
@@ -134,16 +136,19 @@ export const createWebApiClient = ({
     });
     const chatApi = createChatApi(requestJson);
     const webReadApi = createWebReadApi(requestJson);
+    const accountAuthApi = createAccountAuthApi(requestJson);
 
     return {
         requestJson,
         chatQuestion: chatApi.chatQuestion,
         ...webReadApi,
+        ...accountAuthApi,
     };
 };
 
 export { createApiTransport, isApiClientError };
 export {
+    createAccountAuthApi,
     createChatApi,
     createIncidentApi,
     createInternalImageApi,
@@ -154,6 +159,7 @@ export {
     createWebReadApi,
 };
 export type {
+    AccountAuthApi,
     ApiClientError,
     ApiErrorResponse,
     ApiJsonResult,

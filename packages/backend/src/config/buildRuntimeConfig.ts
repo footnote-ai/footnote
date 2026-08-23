@@ -18,6 +18,7 @@ import { buildRateLimitsSection } from './sections/rateLimits.js';
 import { buildRuntimeSections } from './sections/runtime.js';
 import { buildServiceSections } from './sections/services.js';
 import { buildAlertsSection } from './sections/alerts.js';
+import { buildAccountAuthSection } from './sections/accountAuth.js';
 import { buildStorageSection } from './sections/storage.js';
 import { buildTurnstileSection } from './sections/turnstile.js';
 import { buildVoltAgentSection } from './sections/voltagent.js';
@@ -40,6 +41,7 @@ export const buildRuntimeConfig = (
     );
     const effectiveEnv = buildEffectiveConfigEnv(env, yamlEnv);
     const { runtime, server } = buildRuntimeSections(effectiveEnv, warn);
+    const accountAuth = buildAccountAuthSection(effectiveEnv, warn);
     const openai = buildOpenAISection(effectiveEnv, warn);
     const ollama = buildOllamaSection(effectiveEnv);
     const openrouter = buildOpenRouterSection(effectiveEnv);
@@ -76,6 +78,7 @@ export const buildRuntimeConfig = (
     return {
         runtime,
         server,
+        accountAuth,
         openai,
         ollama,
         openrouter,

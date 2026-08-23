@@ -16,7 +16,9 @@ import {
     ApiErrorResponseSchema,
     AdminSettingsValidationErrorSchema,
     AdminSettingsValidationFailureResponseSchema,
+    AuthenticatedPrincipalSchema,
     GetAdminSettingsSchemaResponseSchema,
+    GetAuthSessionResponseSchema,
     PostAdminSettingsValidateRequestSchema,
     PostAdminSettingsValidateResponseSchema,
     PostSetupSessionRequestSchema,
@@ -81,6 +83,114 @@ const openApiSource = fs.readFileSync(
     path.join(repoRoot, 'docs/api/openapi.yaml'),
     'utf-8'
 );
+
+test('account session schemas accept only the three public session states', () => {
+    assert.equal(
+        GetAuthSessionResponseSchema.safeParse({
+            enabled: false,
+            authenticated: false,
+        }).success,
+        true
+    );
+    assert.equal(
+        GetAuthSessionResponseSchema.safeParse({
+            enabled: true,
+            authenticated: false,
+        }).success,
+        true
+    );
+    assert.equal(
+        GetAuthSessionResponseSchema.safeParse({
+            enabled: true,
+            authenticated: true,
+            principal: {
+                issuer: 'https://identity.example/application/o/footnote/',
+                subject: 'account-123',
+                displayName: 'Example Operator',
+            },
+            expiresAt: '2026-07-23T12:00:00.000Z',
+            csrfToken: 'csrf-token',
+        }).success,
+        true
+    );
+
+    const invalidStates: unknown[] = [
+        { enabled: false, authenticated: true },
+        {
+            enabled: true,
+            authenticated: false,
+            principal: {
+                issuer: 'https://identity.example',
+                subject: 'account-123',
+                displayName: null,
+            },
+        },
+        {
+            enabled: true,
+            authenticated: true,
+            principal: {
+                issuer: 'https://identity.example',
+                subject: 'account-123',
+                displayName: null,
+            },
+            expiresAt: 'not-a-date',
+            csrfToken: 'csrf-token',
+        },
+        {
+            enabled: true,
+            authenticated: true,
+            principal: {
+                issuer: '',
+                subject: 'account-123',
+                displayName: null,
+            },
+            expiresAt: '2026-07-23T12:00:00.000Z',
+            csrfToken: 'csrf-token',
+        },
+        {
+            enabled: true,
+            authenticated: true,
+            principal: {
+                issuer: 'https://identity.example',
+                subject: 'account-123',
+                displayName: null,
+                providerToken: 'must-not-cross-the-boundary',
+            },
+            expiresAt: '2026-07-23T12:00:00.000Z',
+            csrfToken: 'csrf-token',
+        },
+    ];
+
+    for (const invalidState of invalidStates) {
+        assert.equal(
+            GetAuthSessionResponseSchema.safeParse(invalidState).success,
+            false
+        );
+    }
+});
+
+test('authenticated principal schema permits a null display name and stays strict', () => {
+    assert.deepEqual(
+        AuthenticatedPrincipalSchema.parse({
+            issuer: 'https://identity.example',
+            subject: 'account-123',
+            displayName: null,
+        }),
+        {
+            issuer: 'https://identity.example',
+            subject: 'account-123',
+            displayName: null,
+        }
+    );
+    assert.equal(
+        AuthenticatedPrincipalSchema.safeParse({
+            issuer: 'https://identity.example',
+            subject: 'account-123',
+            displayName: '',
+        }).success,
+        false
+    );
+});
 
 const baseMetadata: ResponseMetadata = {
     responseId: 'response_123',
