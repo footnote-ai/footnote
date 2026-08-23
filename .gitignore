@@ -5,6 +5,7 @@ node_modules/
 # Deployment wrappers generate this immutable bundle before building.
 # Docker and Fly contexts include it directly; Git should keep it out of status.
 .footnote/context-bundle/
+.footnote/deploy/auth/
 
 # Environment files
 .env

@@ -67,3 +67,59 @@ shows the local identity and expiry. **Sign out** clears only the local session.
 - The callback origin comes from `OIDC_REDIRECT_URI`, never the request `Host`.
 - Failed and replayed callbacks create no session and expose only a generic
   failure message.
+
+## Authelia-on-Fly profile
+
+The Fly wrappers can optionally provision a small, single-instance Authelia
+profile. The default remains the current authentication configuration:
+
+```bash
+./deploy/fly/deploy.sh
+./deploy/fly/deploy.sh --auth-mode preserve
+./deploy/fly/deploy.sh --auth-mode authelia
+```
+
+On PowerShell, use `-AuthMode preserve` or `-AuthMode authelia`. An empty
+interactive choice means `preserve`. The provider app defaults to
+`<footnote-app>-auth`, uses the server's `primary_region`, and exposes the
+issuer at `https://<footnote-app>-auth.fly.dev`. The operator confirms the
+Footnote public URL before the exact `/api/auth/callback` redirect is applied.
+
+The profile pins Authelia `4.39.20` by OCI digest and owns:
+
+- one always-running 512 MB Fly Machine;
+- one 1 GB Fly volume named `authelia_data`;
+- a static Authelia file user database at `/config/users.yml`;
+- `/data` reserved for SQLite and notification state on the persistent volume;
+- local SQLite data at `/data/authelia.sqlite3`;
+- filesystem notifications at `/data/notifications.txt`.
+
+Generated manifests, sanitized configuration, user and client-secret hashes,
+and safe deployment metadata live in
+`.footnote/deploy/auth/authelia/<app>/`, which is ignored by Git. Plaintext
+credentials are kept in memory only long enough to send them through Fly's
+secret import. They are not written to generated files or command arguments.
+
+Reruns require the matching local state and preserve the administrator
+password, signing key, HMAC secret, session secret, storage key, and client
+secret. If the provider app exists without local state, or managed secret keys
+are missing, the tool stops with recovery guidance instead of guessing. If
+remote Footnote OIDC keys already exist, only their names are shown and the
+operator must type `REPLACE` before all four are replaced together. Committed
+OIDC keys in `server.toml` are an error and must be removed manually.
+
+Provisioning and health checks complete before Footnote authentication changes.
+Failures keep existing Footnote authentication unchanged, retain created
+Authelia resources for diagnosis, and print a cleanup command. To tear down a
+profile after recording evidence, remove the Footnote OIDC secrets manually,
+then run:
+
+```bash
+fly volumes list -a <footnote-app>-auth
+fly apps destroy <footnote-app>-auth --yes
+rm -rf .footnote/deploy/auth/authelia/<footnote-app>-auth
+```
+
+This first profile is limited and password-only. Password reset and MFA
+enrollment are not supported. Do not treat the file backend, SQLite volume, or
+single Machine as production or high-availability identity storage.

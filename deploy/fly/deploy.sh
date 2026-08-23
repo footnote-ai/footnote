@@ -3,6 +3,15 @@ set -euo pipefail
 
 # Deploys the canonical server Fly app, ensuring required secrets are set.
 
+auth_mode=""
+if [[ $# -gt 0 ]]; then
+  if [[ $# -ne 2 || "$1" != "--auth-mode" || ("$2" != "preserve" && "$2" != "authelia") ]]; then
+    echo "Usage: $0 [--auth-mode preserve|authelia]" >&2
+    exit 1
+  fi
+  auth_mode="$2"
+fi
+
 if ! command -v fly >/dev/null 2>&1; then
   echo "Fly CLI is required. Install from https://fly.io/docs/flyctl/install/"
   exit 1
@@ -190,6 +199,17 @@ server_app_name=$(get_app_name "$SERVER_CONFIG_PATH")
 
 echo "Ensuring Fly app exists ($server_app_name)..."
 ensure_app "$SERVER_CONFIG_PATH"
+
+echo "Choosing authentication setup..."
+auth_provision_args=(
+  exec tsx "$REPO_ROOT/scripts/fly-authelia-provision.ts"
+  --repository-root "$REPO_ROOT"
+  --server-config "$SERVER_CONFIG_PATH"
+)
+if [[ -n "$auth_mode" ]]; then
+  auth_provision_args+=(--mode "$auth_mode")
+fi
+pnpm "${auth_provision_args[@]}"
 
 echo "Configuring server secrets..."
 ensure_secrets "$server_app_name" INCIDENT_PSEUDONYMIZATION_SECRET

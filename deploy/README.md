@@ -161,6 +161,14 @@ environment values using their normal platform workflow.
 See [Account Sign-In](../docs/auth/README.md) for validation rules and the
 minimum Authentik setup.
 
+The Fly wrappers also offer an optional Authelia profile. Run
+`./deploy/fly/deploy.sh --auth-mode authelia` (or `-AuthMode authelia` in
+PowerShell) to provision it before applying the four OIDC secrets. The default
+and `preserve` mode leave the current authentication configuration unchanged.
+See [Account Sign-In](../docs/auth/README.md#authelia-on-fly-profile)
+for ownership, reruns, recovery, and teardown. This profile is single-instance
+and non-HA; it is not a production identity-storage recommendation.
+
 ## Discord Bots
 
 A Discord bot entry tells the server to run one bot process.

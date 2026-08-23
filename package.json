@@ -46,6 +46,8 @@
         "validate-env-example-parity": "pnpm exec tsx scripts/validate-env-example-parity.ts",
         "validate-openapi-links": "pnpm exec tsx scripts/validate-openapi-links.ts",
         "test:build": "pnpm exec node scripts/test-build.cjs",
+        "test:authelia": "pnpm exec tsx scripts/test-authelia-profile.ts",
+        "test:authelia-provision": "pnpm exec tsx --test scripts/fly-authelia-provision.test.ts",
         "context:bundle": "pnpm exec node scripts/prepare-project-context-bundle.mjs",
         "compose:up": "pnpm exec node scripts/compose-up.cjs",
         "refactor:lookup": "node scripts/refactor-lookup.cjs",

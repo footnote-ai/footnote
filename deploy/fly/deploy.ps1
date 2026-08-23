@@ -1,3 +1,8 @@
+param(
+  [ValidateSet('preserve', 'authelia')]
+  [string]$AuthMode
+)
+
 $ErrorActionPreference = 'Stop'
 
 # Deploys the canonical server Fly app, ensuring required secrets are set.
@@ -207,6 +212,24 @@ $serverAppName = Get-FlyAppName -ConfigPath $serverConfigPath
 Write-Host "Ensuring Fly app exists ($serverAppName)..."
 Ensure-FlyApp -ConfigPath $serverConfigPath
 
+Write-Host "Choosing authentication setup..."
+$authProvisionArgs = @(
+  'exec',
+  'tsx',
+  'scripts/fly-authelia-provision.ts',
+  '--repository-root',
+  $repoRoot,
+  '--server-config',
+  $serverConfigPath
+)
+if ($AuthMode) {
+  $authProvisionArgs += @('--mode', $AuthMode)
+}
+& pnpm @authProvisionArgs
+if ($LASTEXITCODE -ne 0) {
+  throw "Authentication setup failed with exit code $LASTEXITCODE"
+}
+
 Write-Host "Configuring server secrets..."
 Ensure-FlySecrets -AppName $serverAppName `
   -RequiredSecrets @('INCIDENT_PSEUDONYMIZATION_SECRET') `
@@ -216,7 +239,7 @@ Invoke-EnvValidation -Target 'fly-server' -AppName $serverAppName
 Upload-FootnoteSettings -AppName $serverAppName -RepoRootPath $repoRoot
 
 Write-Host "Deploying server..."
-$contextCommitSha = (& git -C $repoRoot rev-parse --verify HEAD^{commit}).Trim()
+$contextCommitSha = (& git -C $repoRoot rev-parse --verify 'HEAD^{commit}').Trim()
 if ($LASTEXITCODE -ne 0 -or $contextCommitSha -notmatch '^[0-9a-f]{7,64}$') {
   throw "Unable to resolve a valid project-context revision."
 }
