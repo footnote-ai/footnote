@@ -1,3 +1,8 @@
+param(
+  [ValidateSet('preserve', 'authelia')]
+  [string]$AuthMode
+)
+
 $ErrorActionPreference = 'Stop'
 
 # Deploys the canonical server Fly app, ensuring required secrets are set.
@@ -206,6 +211,24 @@ $serverAppName = Get-FlyAppName -ConfigPath $serverConfigPath
 
 Write-Host "Ensuring Fly app exists ($serverAppName)..."
 Ensure-FlyApp -ConfigPath $serverConfigPath
+
+Write-Host "Choosing authentication setup..."
+$authProvisionArgs = @(
+  'exec',
+  'tsx',
+  'scripts/fly-authelia-provision.ts',
+  '--repository-root',
+  $repoRoot,
+  '--server-config',
+  $serverConfigPath
+)
+if ($AuthMode) {
+  $authProvisionArgs += @('--mode', $AuthMode)
+}
+& pnpm @authProvisionArgs
+if ($LASTEXITCODE -ne 0) {
+  throw "Authentication setup failed with exit code $LASTEXITCODE"
+}
 
 Write-Host "Configuring server secrets..."
 Ensure-FlySecrets -AppName $serverAppName `
