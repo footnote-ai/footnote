@@ -167,3 +167,28 @@ test('failed discovery is retried and missing required claims fail closed', asyn
         /required ID claims/
     );
 });
+
+test('providers without PKCE S256 support are rejected', async () => {
+    const library = {
+        ClientSecretBasic: () => ({ method: 'basic' }),
+        discovery: async () => ({
+            serverMetadata: () => ({ supportsPKCE: () => false }),
+        }),
+        randomPKCECodeVerifier: () => 'verifier',
+        calculatePKCECodeChallenge: async () => 'challenge',
+        randomState: () => 'state',
+        randomNonce: () => 'nonce',
+        buildAuthorizationUrl: () =>
+            new URL('https://identity.example/authorize'),
+        authorizationCodeGrant: async () => ({ claims: () => ({}) }),
+    } as unknown as Library;
+    const client = createOidcAccountClient({
+        issuerUrl: 'https://identity.example/',
+        clientId: 'footnote',
+        clientSecret: 'client-secret',
+        redirectUri: 'https://footnote.example/api/auth/callback',
+        library,
+    });
+
+    await assert.rejects(client.startAuthorization(), /PKCE S256/);
+});
