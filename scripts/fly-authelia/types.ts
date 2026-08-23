@@ -30,18 +30,20 @@ export type Prompt = {
     text: (message: string) => Promise<string>;
 };
 
+export type FetchInit = {
+    headers?: Record<string, string>;
+    signal?: AbortSignal;
+};
+
 export type Fetcher = (
     input: string,
-    init?: RequestInit
+    init?: FetchInit
 ) => Promise<{ status: number; json: () => Promise<unknown> }>;
 
 export type ProvisionOptions = {
     mode: AuthMode;
     repositoryRoot: string;
     serverConfigPath: string;
-    prompt?: Prompt;
-    runner?: CommandRunner;
-    fetcher?: Fetcher;
     stateRoot?: string;
 };
 

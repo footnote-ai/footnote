@@ -60,10 +60,17 @@ const runProcess = (
         child.on('close', (code) => {
             resolve({ code: code ?? 1, stdout, stderr });
         });
-        if (!interactive && spec.stdin !== undefined) {
-            child.stdin?.end(spec.stdin);
-        } else if (!interactive) {
-            child.stdin?.end();
+        if (!interactive && child.stdin) {
+            child.stdin.on('error', (error: NodeJS.ErrnoException) => {
+                if (error.code !== 'EPIPE') {
+                    reject(error);
+                }
+            });
+            if (spec.stdin !== undefined) {
+                child.stdin.end(spec.stdin);
+            } else {
+                child.stdin.end();
+            }
         }
     });
 

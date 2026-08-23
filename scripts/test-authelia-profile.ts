@@ -11,11 +11,8 @@ import fs from 'node:fs/promises';
 import net from 'node:net';
 import path from 'node:path';
 import { spawn } from 'node:child_process';
-import {
-    AUTHELIA_IMAGE,
-    type CommandResult,
-    type CommandSpec,
-} from './fly-authelia-provision.js';
+import { AUTHELIA_IMAGE } from './fly-authelia-provision.js';
+import type { CommandResult, CommandSpec } from './fly-authelia/types.js';
 
 type ProfileState = {
     provider: 'authelia';
@@ -77,14 +74,21 @@ const waitForHttp = async (
 ): Promise<Response> => {
     let lastError: unknown;
     for (let attempt = 0; attempt < 30; attempt += 1) {
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), 3_000);
         try {
-            const response = await fetch(url, { headers });
+            const response = await fetch(url, {
+                headers,
+                signal: controller.signal,
+            });
             if (response.ok) {
                 return response;
             }
             lastError = new Error(`HTTP ${response.status}`);
         } catch (error) {
             lastError = error;
+        } finally {
+            clearTimeout(timeout);
         }
         await new Promise((resolve) => setTimeout(resolve, 1000));
     }
