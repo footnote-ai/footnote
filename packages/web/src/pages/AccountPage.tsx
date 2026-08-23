@@ -9,6 +9,7 @@
 import { useEffect, useRef, useState, type ComponentRef } from 'react';
 import type { GetAuthSessionResponse } from '@footnote/contracts/web';
 import PublicPageLayout from '@components/PublicPageLayout';
+import { Link } from 'react-router-dom';
 import { getAuthSession, logoutAccount } from '../utils/api';
 
 type SessionState =
@@ -207,6 +208,12 @@ const AccountPage = (): JSX.Element => {
                     Signing out ends only this Footnote session. It does not
                     sign you out of your identity provider.
                 </p>
+                <Link
+                    className="account-card__button account-card__button--primary"
+                    to="/admin"
+                >
+                    Open administrator settings
+                </Link>
                 <button
                     className="account-card__button"
                     type="button"

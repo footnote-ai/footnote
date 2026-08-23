@@ -2,9 +2,9 @@
 
 Footnote keeps canonical runtime settings in `footnote.yaml`.
 
-This document describes the trusted admin API that manages that file for
-hosted environments, including the first-setup bootstrap flow that reuses
-these YAML endpoints.
+This document describes the backend-owned admin API and web entry point that
+manage that file for hosted environments, including the first-setup bootstrap
+flow that reuses these YAML endpoints.
 
 ## Problem
 
@@ -24,10 +24,11 @@ Current scope includes:
 - canonical YAML replace
 - setup-session bootstrap exchange for first-run setup when file is missing
 - runtime config setup-state signaling via `GET /config.json`
+- `/admin` settings editor for signed-in administrators
+- account-session authorization for selected `/api/admin/*` operations
 
 It does not add:
 
-- web admin UI
 - api-client wrappers
 - secret management abstraction
 - auto-restart
@@ -49,10 +50,17 @@ It does not add:
 - Routes live under `/api/admin/*`.
 - Admin settings auth accepts either:
     - `x-admin-token` (existing trusted token)
-    - setup session cookie (`footnote_setup_session`) only while setup is required
+    - setup session cookie (`footnote_setup_session`) for bootstrap/recovery
+    - signed-in administrator account session (`footnote_account_session`)
 - Token comes from `SETTINGS_ADMIN_TOKEN`.
-- If setup is not required and token is unset, admin settings endpoints return `503`.
-- When setup-session auth is used, all non-GET admin settings calls require `x-setup-csrf`.
+- When account sign-in is disabled and no trusted token is configured, the
+  admin settings API returns `503` rather than changing public behavior.
+- Anonymous requests are denied when account sign-in is configured.
+- Setup-session auth requires `x-setup-csrf` for non-GET calls.
+- Account-session auth requires `x-auth-csrf` for non-GET calls.
+- The temporary administrator policy is explicit and separate from the account
+  identity model: every identity admitted by the configured provider is
+  currently eligible for administrator access.
 
 This keeps backend startup fail-open while leaving the admin API disabled by
 default unless explicitly configured.
@@ -146,8 +154,9 @@ Event families:
 - `admin.settings.write.succeeded|failed`
 
 Logs are intended to carry safe metadata only (request context, file path,
-ETag hashes, validation category/pointer, restart semantics), never token
-values.
+ETag hashes, validation category/pointer, restart semantics, and when present a
+deterministic hash of `issuer + subject`), never token values, cookies, CSRF
+values, or complete identity claims.
 
 ## Code Map
 
@@ -155,6 +164,7 @@ Primary implementation:
 
 - `packages/backend/src/handlers/adminSettings.ts`
 - `packages/backend/src/http/adminRoutes.ts`
+- `packages/backend/src/services/adminAuthorization.ts`
 - `packages/backend/src/http/setupRoutes.ts`
 - `packages/backend/src/handlers/setupSession.ts`
 - `packages/backend/src/services/setupBootstrap.ts`
@@ -168,17 +178,15 @@ Contract and spec:
 - `docs/api/openapi.yaml`
 - `docs/api/operation-map.md`
 
-## Planned Direction (Non-Binding)
+## Follow-on direction (Non-Binding)
 
 Likely next steps, but not committed in this branch:
 
-1. backend-owned admin web page for raw YAML read/validate/save flow
-2. schema-driven form editing on top of existing schema endpoint
-3. authenticated administrator access built on the provider-neutral account
-   identity direction described in
-   [Account Identity and Access](../auth/README.md)
-4. persistent audit log once admin action surface grows
-5. optional restart orchestration endpoint, gated by deployment policy
+1. schema-driven form editing on top of the existing schema endpoint
+2. persistent audit log once the admin action surface grows
+3. optional restart orchestration endpoint, gated by deployment policy
+4. regular-user authorization and Footnote-owned accounts as described in
+   [Account Identity and Access](../status/account-identity-and-access.md)
 
 Pre-1.0 rule still applies: update the intended shape directly as design moves;
 avoid compatibility shims unless explicitly required.

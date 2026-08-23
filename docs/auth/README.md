@@ -1,11 +1,12 @@
 # Account Sign-In
 
-Footnote can use one OpenID Connect provider for administrator account sign-in.
+Footnote can use one OpenID Connect provider for administrator account sign-in
+and access.
 Footnote supports the OIDC protocol, not a specific identity provider.
 Deployment tooling may support particular providers, but the runtime receives
 only the standard OIDC configuration values and does not know which provider
-was selected. The first slice proves identity only. It does not grant access
-to `/admin` or change the existing setup/admin-settings authentication rules.
+was selected. OIDC proves who signed in. Footnote makes the separate
+administrator authorization decision.
 
 ## Runtime behavior
 
@@ -17,6 +18,9 @@ to `/admin` or change the existing setup/admin-settings authentication rules.
 - Signing out ends only the Footnote session. It does not sign the account out
   of the identity provider.
 - Provider tokens are validated during callback processing and are not retained.
+- During the administrator-only stage, every identity admitted by the configured
+  provider may use the selected administrator settings operations. This is a
+  temporary policy, not an administrator flag on the identity/session model.
 - When OIDC is disabled or unavailable, public Footnote keeps running.
 
 ## Configuration
@@ -57,18 +61,24 @@ Create an OAuth2/OpenID provider and application in Authentik:
 Visit `/account` and choose **Sign in**. After callback validation, the page
 shows the local identity and expiry. **Sign out** clears only the local session.
 
-## Security boundaries
+## Authorization and recovery boundaries
 
 - Provider application assignment decides who may complete this first sign-in
   flow.
-- A signed-in account is not yet authorized for `/api/admin/*`.
+- The backend, not the `/admin` page, authorizes account sessions for selected
+  `/api/admin/*` settings operations.
+- Account-session writes require `x-auth-csrf`.
+- The existing `SETTINGS_ADMIN_TOKEN` trusted-token path and short-lived
+  setup/operator sessions remain available for bootstrap and recovery. They do
+  not become permanent account access.
 - Cookies contain only opaque random identifiers.
-- Identity and provider tokens are not persisted.
+- Identity and provider tokens are not persisted. Administrator audit events
+  may contain only a deterministic hash of `issuer + subject`, not raw claims.
 - The callback origin comes from `OIDC_REDIRECT_URI`, never the request `Host`.
 - Failed and replayed callbacks create no session and expose only a generic
   failure message.
 
-## Authelia-on-Fly profile
+## Delivered Authelia-on-Fly profile
 
 The Fly wrappers can optionally provision a small, single-instance Authelia
 profile. The default remains the current authentication configuration:

@@ -583,6 +583,7 @@ const {
     handleAdminSettingsYamlPutRequest,
 } = createAdminSettingsHandlers({
     adminToken: runtimeConfig.adminSettings.token,
+    accountAuthService,
     maxBodyBytes: runtimeConfig.adminSettings.maxBodyBytes,
     settingsPath: runtimeConfig.settings.path,
     settingsSpecEntries,
