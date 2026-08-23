@@ -40,9 +40,18 @@ export const validateHttpsUrl = (value: string, label: string): string => {
     } catch {
         throw new Error(`${label} must be a valid HTTPS URL.`);
     }
-    if (parsed.protocol !== 'https:' || parsed.search || parsed.hash) {
+    if (parsed.protocol !== 'https:') {
+        throw new Error(`${label} must use HTTPS.`);
+    }
+    if (parsed.username || parsed.password) {
+        throw new Error(`${label} must not include credentials.`);
+    }
+    if (parsed.pathname !== '/') {
+        throw new Error(`${label} must be an HTTPS origin without a path.`);
+    }
+    if (parsed.search || parsed.hash) {
         throw new Error(
-            `${label} must be an HTTPS URL without query or fragment.`
+            `${label} must not include a query string or fragment.`
         );
     }
     return parsed.toString().replace(/\/$/, '');
@@ -101,7 +110,7 @@ log:
 
 authentication_backend:
   file:
-    path: '/data/users.yml'
+    path: '/config/users.yml'
 
 identity_validation:
   reset_password:
@@ -184,7 +193,7 @@ primary_region = '${input.region}'
   local_path = '${input.configurationPath.replace(/'/g, "''")}'
 
 [[files]]
-  guest_path = '/data/users.yml'
+  guest_path = '/config/users.yml'
   local_path = '${input.usersPath.replace(/'/g, "''")}'
 
 [[services]]

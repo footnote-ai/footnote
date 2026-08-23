@@ -160,7 +160,7 @@ const validateGeneratedProvider = async (input: {
             '--tmpfs',
             '/data',
             '--volume',
-            `${input.usersPath}:/data/users.yml:ro`,
+            `${input.usersPath}:/config/users.yml:ro`,
             '--volume',
             `${input.stateDirectory}:/config:ro`,
             AUTHELIA_IMAGE,
@@ -450,18 +450,31 @@ const runProvisionAuthelia = async (
 };
 
 /**
- * Provisions the optional Authelia profile from data-only CLI options. Preserve
- * mode short-circuits before any remote work. Authelia owns provider setup,
- * while the backend remains the authority for Footnote OIDC values; provider
- * health and discovery complete before those values are imported. Failures
- * retain existing Footnote authentication and keep created Authelia resources
- * available for diagnosis.
+ * @description: Provisions the optional Authelia profile from data-only options.
+ * @footnote-scope: utility
+ * @footnote-module: FlyAutheliaProvision
+ * @footnote-risk: high - creates and mutates remote authentication resources.
+ * @footnote-ethics: high - controls access to a Footnote deployment while failing open on uncertainty.
+ *
+ * Preserve mode short-circuits before any remote work. Authelia owns provider
+ * setup, while the backend remains the authority for Footnote OIDC values;
+ * provider health and discovery complete before those values are imported.
+ * Failures retain existing Footnote authentication and keep created Authelia
+ * resources available for diagnosis.
  */
 export const provisionAuthelia = async (
     options: ProvisionOptions
 ): Promise<void> => runProvisionAuthelia(options);
 
-/** Internal dependency-injection seam used by the focused provisioning tests. */
+/**
+ * @description: Provides dependency injection for focused Authelia provisioning tests.
+ * @footnote-scope: test
+ * @footnote-module: FlyAutheliaProvisionTestSeam
+ * @footnote-risk: medium - test-only seams can hide orchestration regressions if misused.
+ * @footnote-ethics: high - preserves explicit coverage for authentication setup and fail-open behavior.
+ *
+ * Internal dependency-injection seam used by the focused provisioning tests.
+ */
 export const provisionAutheliaForTest = async (
     options: ProvisionOptions,
     overrides: ProvisionDependencyOverrides

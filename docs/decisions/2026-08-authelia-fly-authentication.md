@@ -15,3 +15,6 @@ This profile does not provide production identity storage, password reset, MFA
 enrollment, SMTP notifications, LDAP, custom domains, or multi-machine
 coordination. Operators must treat the generated Authelia volume and Fly
 secrets as the owner-controlled identity system.
+
+The static user database is mounted at `/config/users.yml`. The persistent
+`/data` volume is reserved for SQLite and notification state.

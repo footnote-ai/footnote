@@ -89,7 +89,8 @@ The profile pins Authelia `4.39.20` by OCI digest and owns:
 
 - one always-running 256 MB Fly Machine;
 - one 1 GB Fly volume named `authelia_data`;
-- an Authelia file user database at `/data/users.yml`;
+- a static Authelia file user database at `/config/users.yml`;
+- `/data` reserved for SQLite and notification state on the persistent volume;
 - local SQLite data at `/data/authelia.sqlite3`;
 - filesystem notifications at `/data/notifications.txt`.
 

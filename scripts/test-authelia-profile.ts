@@ -153,7 +153,7 @@ const main = async (): Promise<void> => {
         '--tmpfs',
         '/data',
         '--volume',
-        `${usersPath}:/data/users.yml:ro`,
+        `${usersPath}:/config/users.yml:ro`,
         '--volume',
         `${configurationPath}:/config/configuration.yml:ro`,
     ];

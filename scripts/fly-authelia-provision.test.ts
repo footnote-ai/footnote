@@ -16,6 +16,7 @@ import {
     parseServerDefaults,
     renderConfiguration,
 } from './fly-authelia-provision.js';
+import { renderManifest, validateHttpsUrl } from './fly-authelia/config.js';
 import { provisionAutheliaForTest } from './fly-authelia/provision.js';
 import { probeAuthelia } from './fly-authelia/fly.js';
 import { loadState } from './fly-authelia/state.js';
@@ -112,6 +113,35 @@ test('derives Fly defaults from server.toml and renders provider-neutral OIDC se
         configuration,
         /AUTHELIA_IDENTITY_PROVIDERS_OIDC_ISSUER_PRIVATE_KEY/
     );
+    assert.match(configuration, /path: '\/config\/users\.yml'/);
+
+    const manifest = renderManifest({
+        authAppName: 'footnote-auth',
+        region: 'ord',
+        configurationPath: '/tmp/configuration.yml',
+        usersPath: '/tmp/users.yml',
+    });
+    assert.match(manifest, /guest_path = '\/config\/users\.yml'/);
+    assert.doesNotMatch(manifest, /guest_path = '\/data\/users\.yml'/);
+});
+
+test('accepts only HTTPS origins for the Footnote public URL', () => {
+    assert.equal(
+        validateHttpsUrl('https://ai.example/', 'Footnote public URL'),
+        'https://ai.example'
+    );
+
+    for (const value of [
+        'https://ai.example/path',
+        'https://user:pass@ai.example',
+        'https://ai.example/?query=1',
+        'https://ai.example/#fragment',
+    ]) {
+        assert.throws(
+            () => validateHttpsUrl(value, 'Footnote public URL'),
+            /Footnote public URL/
+        );
+    }
 });
 
 test('retries Authelia probes with a bounded abort signal', async () => {
