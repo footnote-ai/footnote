@@ -8,7 +8,7 @@ providers. The runtime does not know which provider was selected.
 The Fly deploy wrappers may optionally provision Authelia 4.39.20 and pass the
 four standard OIDC values to Footnote. Authelia is deployment tooling, not a
 backend provider adapter. The profile is intentionally single-instance and
-non-HA: it uses one 256 MB Machine, one 1 GB volume, the file user backend, and
+non-HA: it uses one 512 MB Machine, one 1 GB volume, the file user backend, and
 local SQLite storage.
 
 This profile does not provide production identity storage, password reset, MFA

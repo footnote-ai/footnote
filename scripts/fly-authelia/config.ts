@@ -226,5 +226,5 @@ primary_region = '${input.region}'
 [[vm]]
   cpu_kind = 'shared'
   cpus = 1
-  memory = '256mb'
+  memory = '512mb'
 `;

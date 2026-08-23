@@ -127,6 +127,7 @@ test('derives Fly defaults from server.toml and renders provider-neutral OIDC se
     });
     assert.match(manifest, /guest_path = '\/config\/users\.yml'/);
     assert.doesNotMatch(manifest, /guest_path = '\/data\/users\.yml'/);
+    assert.match(manifest, /memory = '512mb'/);
 });
 
 test('accepts only HTTPS origins for the Footnote public URL', () => {
