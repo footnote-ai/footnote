@@ -33,17 +33,27 @@ function logRequest(
 
     // --- URL sanitization ---
     // Avoid logging chat content or OIDC callback values from query strings.
-    let logUrl = req.url;
+    const originalUrl = (req as IncomingMessage & { originalUrl?: unknown })
+        .originalUrl;
+    const requestUrls = [
+        req.url,
+        typeof originalUrl === 'string' ? originalUrl : undefined,
+    ];
+    const requestUrl = typeof originalUrl === 'string' ? originalUrl : req.url;
+    let logUrl = requestUrl;
     if (
-        req.url &&
-        (req.url.includes('/api/chat') ||
-            req.url.includes('/api/auth/callback'))
+        requestUrl &&
+        requestUrls.some(
+            (url) =>
+                url?.includes('/api/chat') ||
+                url?.includes('/api/auth/callback')
+        )
     ) {
         try {
-            const parsedUrl = new URL(req.url, 'http://localhost');
+            const parsedUrl = new URL(requestUrl, 'http://localhost');
             logUrl = parsedUrl.pathname;
         } catch {
-            logUrl = req.url;
+            logUrl = requestUrl;
         }
     }
 
