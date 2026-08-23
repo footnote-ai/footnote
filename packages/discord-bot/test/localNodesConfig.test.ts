@@ -33,7 +33,6 @@ test('discord bot definition parse succeeds for multiple bots', () => {
         },
         {
             id: 'danny',
-            enabled: false,
             credentials: {
                 discordTokenEnv: 'DANNY_DISCORD_TOKEN',
                 discordClientIdEnv: 'DANNY_DISCORD_CLIENT_ID',
@@ -61,6 +60,21 @@ test('discord bot definition parse succeeds for multiple bots', () => {
                 displayName: 'Myuri',
             },
         },
+        {
+            id: 'winter',
+            credentials: {
+                discordTokenEnv: 'WINTER_DISCORD_TOKEN',
+                discordClientIdEnv: 'WINTER_DISCORD_CLIENT_ID',
+                discordGuildIdsEnv: 'WINTER_DISCORD_GUILD_IDS',
+                discordUserIdEnv: 'WINTER_DISCORD_USER_ID',
+                incidentSecretEnv: 'INCIDENT_PSEUDONYMIZATION_SECRET',
+            },
+            profile: {
+                id: 'winter',
+                displayName: 'Winter',
+                overlayPath: '/data/profiles/winter.md',
+            },
+        },
     ]);
 
     const result = resolveLocalNodeDefinitions(parsed, {
@@ -68,23 +82,65 @@ test('discord bot definition parse succeeds for multiple bots', () => {
         FOOTNOTE_DISCORD_CLIENT_ID: 'client-footnote',
         FOOTNOTE_DISCORD_GUILD_IDS: 'guild-a,guild-b',
         FOOTNOTE_DISCORD_USER_ID: 'user-footnote',
+        DANNY_DISCORD_TOKEN: 'token-danny',
+        DANNY_DISCORD_CLIENT_ID: 'client-danny',
+        DANNY_DISCORD_GUILD_IDS: 'guild-danny',
+        DANNY_DISCORD_USER_ID: 'user-danny',
         MYURI_DISCORD_TOKEN: 'token-myuri',
         MYURI_DISCORD_CLIENT_ID: 'client-myuri',
         MYURI_DISCORD_GUILD_IDS: 'guild-myuri-a,guild-myuri-b',
         MYURI_DISCORD_USER_ID: 'user-myuri',
+        WINTER_DISCORD_TOKEN: 'token-winter',
+        WINTER_DISCORD_CLIENT_ID: 'client-winter',
+        WINTER_DISCORD_GUILD_IDS: 'guild-winter',
+        WINTER_DISCORD_USER_ID: 'user-winter',
         INCIDENT_PSEUDONYMIZATION_SECRET: 'incident-secret',
     });
 
-    assert.equal(result.activeNodes.length, 2);
+    assert.equal(result.activeNodes.length, 4);
     assert.deepEqual(
         result.activeNodes.map((entry) => entry.id),
-        ['footnote', 'myuri']
+        ['footnote', 'danny', 'myuri', 'winter']
     );
     assert.equal(result.activeNodes[0].profile.displayName, 'Footnote');
+    assert.equal(result.activeNodes[1].profile.displayName, 'Danny');
     assert.equal(
-        result.activeNodes[1].credentials.discordGuildIds,
+        result.activeNodes[2].credentials.discordGuildIds,
         'guild-myuri-a,guild-myuri-b'
     );
+    assert.equal(result.activeNodes[3].profile.displayName, 'Winter');
+    assert.deepEqual(result.disabledNodes, []);
+});
+
+test('explicitly disabled optional persona is excluded from active nodes', () => {
+    const parsed = parseLocalNodeDefinitions([
+        {
+            id: 'danny',
+            enabled: false,
+            credentials: {
+                discordTokenEnv: 'DANNY_DISCORD_TOKEN',
+                discordClientIdEnv: 'DANNY_DISCORD_CLIENT_ID',
+                discordGuildIdsEnv: 'DANNY_DISCORD_GUILD_IDS',
+                discordUserIdEnv: 'DANNY_DISCORD_USER_ID',
+                incidentSecretEnv: 'INCIDENT_PSEUDONYMIZATION_SECRET',
+            },
+            profile: {
+                id: 'danny',
+                displayName: 'Danny',
+                overlayPath: '/data/profiles/danny.md',
+            },
+        },
+    ]);
+
+    const result = resolveLocalNodeDefinitions(parsed, {
+        DANNY_DISCORD_TOKEN: 'token-danny',
+        DANNY_DISCORD_CLIENT_ID: 'client-danny',
+        DANNY_DISCORD_GUILD_IDS: 'guild-danny',
+        DANNY_DISCORD_USER_ID: 'user-danny',
+        INCIDENT_PSEUDONYMIZATION_SECRET: 'incident-secret',
+    });
+
+    assert.deepEqual(result.activeNodes, []);
     assert.deepEqual(result.disabledNodes, [
         {
             id: 'danny',

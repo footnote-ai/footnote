@@ -65,19 +65,9 @@ jobs:
               with:
                   node-version: '22'
 
-            - name: Enable Corepack
+            - name: Setup pnpm
               if: matrix.language == 'javascript-typescript'
-              run: corepack enable
-
-            - name: Activate pnpm
-              if: matrix.language == 'javascript-typescript'
-              run: corepack prepare pnpm@11.16.0 --activate
-
-            - name: Fix corepack node-gyp python shim permissions
-              if: matrix.language == 'javascript-typescript'
-              shell: bash
-              run: |
-                  find "${HOME}/.cache/node/corepack" -type f -path "*/node-gyp/gyp/gyp_main.py" -exec chmod +x {} \; || true
+              uses: pnpm/action-setup@v6
 
             - name: Install dependencies
               if: matrix.language == 'javascript-typescript'

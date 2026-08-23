@@ -61,6 +61,24 @@ test('loads shared conversational prompts plus surface supplements', () => {
     );
 });
 
+test('shared conversational prompts prevent response echoing and self-labeling', () => {
+    const registry = createPromptRegistry();
+    const content = registry.renderPrompt('conversation.shared.system').content;
+
+    assert.match(
+        content,
+        /Do not repeat or restate your previous answer or the user's prompt unless it is needed for correction or contrast\./
+    );
+    assert.match(
+        content,
+        /Do not prefix ordinary replies with a name, bracketed label, colon-heading, or @mention\./
+    );
+    assert.match(
+        content,
+        /For follow-up turns, continue from the existing conversation instead of re-announcing your identity, voice, or prior point\./
+    );
+});
+
 test('loads all review prompt keys and each key renders non-empty content', () => {
     const registry = createPromptRegistry();
     const reviewPromptKeys = [

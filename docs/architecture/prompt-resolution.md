@@ -29,6 +29,7 @@ This is the canonical order Footnote uses to build runtime prompt text.
 - Copy/paste-ready persona overlay template paths:
     - `packages/prompts/src/profile-overlays/danny.md`
     - `packages/prompts/src/profile-overlays/myuri.md`
+    - `packages/prompts/src/profile-overlays/winter.md`
 
 ## Optional Presentation
 
@@ -50,7 +51,8 @@ full styled draft from the collected authoritative context and active persona
 guidance. The main model then finalizes that draft with the same context,
 preserving its voice by default and changing only facts, citations, uncertainty,
 scope, intent, or safety. Footnote is the default persona; Discord can select
-Danny or Myuri. Future profiles use the same presentation-guidance seam.
+Danny, Myuri, or Winter. Future profiles use the same presentation-guidance
+seam.
 
 The draft has no tools and cannot alter actions, safety/refusal decisions,
 facts, uncertainty, attribution, citations, provenance, links, tool results,
