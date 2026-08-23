@@ -56,6 +56,13 @@ const PERSONA_CATALOG: Record<string, PersonaCatalogEntry> = {
         presentationGuidance:
             'Use composed, exact, measured language with quiet warmth. Make the point clear without urgency or ceremony.',
     },
+    winter: {
+        id: 'winter',
+        displayName: 'Winter',
+        overlayRelativePath: 'packages/prompts/src/profile-overlays/winter.md',
+        presentationGuidance:
+            'Use direct, sharp, personable prose with dry wit and minimal ceremony. Avoid unsolicited moral framing, generic reassurance, and performative caution. Let disagreement or constraint show plainly when it is actually relevant.',
+    },
 };
 
 const DEFAULT_PERSONA_ID = 'footnote';

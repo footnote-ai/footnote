@@ -1,0 +1,64 @@
+/**
+ * @description: Verifies built-in persona catalog resolution and overlay loading behavior.
+ * @footnote-scope: test
+ * @footnote-module: ChatProfileOverlayTests
+ * @footnote-risk: medium - Missing coverage could route a Discord persona to the wrong overlay or fallback.
+ * @footnote-ethics: high - Persona identity and presentation guidance affect user disclosure and expectations.
+ */
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {
+    resolveChatPersonaProfile,
+    resolvePersonaPresentationGuidance,
+} from '../src/services/chatProfileOverlay.js';
+
+const logger = {
+    warn: () => undefined,
+};
+
+test('resolves Winter as a first-class Discord persona with its authored overlay', () => {
+    const profile = resolveChatPersonaProfile(
+        { surface: 'discord', botPersonaId: ' WINTER ' },
+        logger
+    );
+
+    assert.equal(profile.id, 'winter');
+    assert.equal(profile.displayName, 'Winter');
+    assert.equal(profile.promptOverlay.source, 'file');
+    assert.match(
+        profile.promptOverlay.path ?? '',
+        /profile-overlays[\\/]winter\.md$/
+    );
+    assert.match(profile.promptOverlay.text ?? '', /You are Winter: sharp/);
+    assert.match(
+        profile.promptOverlay.text ?? '',
+        /Winter is permissive, not credulous/
+    );
+    assert.equal(
+        resolvePersonaPresentationGuidance('winter'),
+        'Use direct, sharp, personable prose with dry wit and minimal ceremony. Avoid unsolicited moral framing, generic reassurance, and performative caution. Let disagreement or constraint show plainly when it is actually relevant.'
+    );
+});
+
+test('keeps existing built-in and unknown persona fallback behavior', () => {
+    for (const personaId of ['footnote', 'danny', 'myuri']) {
+        const profile = resolveChatPersonaProfile(
+            { surface: 'discord', botPersonaId: personaId },
+            logger
+        );
+        assert.equal(profile.id, personaId);
+    }
+
+    const unknownProfile = resolveChatPersonaProfile(
+        { surface: 'discord', botPersonaId: 'not-a-persona' },
+        logger
+    );
+    assert.equal(unknownProfile.id, 'footnote');
+    assert.equal(unknownProfile.promptOverlay.source, 'none');
+
+    const webProfile = resolveChatPersonaProfile(
+        { surface: 'web', botPersonaId: 'winter' },
+        logger
+    );
+    assert.equal(webProfile.id, 'footnote');
+});

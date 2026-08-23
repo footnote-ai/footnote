@@ -61,6 +61,21 @@ test('discord bot definition parse succeeds for multiple bots', () => {
                 displayName: 'Myuri',
             },
         },
+        {
+            id: 'winter',
+            credentials: {
+                discordTokenEnv: 'WINTER_DISCORD_TOKEN',
+                discordClientIdEnv: 'WINTER_DISCORD_CLIENT_ID',
+                discordGuildIdsEnv: 'WINTER_DISCORD_GUILD_IDS',
+                discordUserIdEnv: 'WINTER_DISCORD_USER_ID',
+                incidentSecretEnv: 'INCIDENT_PSEUDONYMIZATION_SECRET',
+            },
+            profile: {
+                id: 'winter',
+                displayName: 'Winter',
+                overlayPath: '/data/profiles/winter.md',
+            },
+        },
     ]);
 
     const result = resolveLocalNodeDefinitions(parsed, {
@@ -72,19 +87,24 @@ test('discord bot definition parse succeeds for multiple bots', () => {
         MYURI_DISCORD_CLIENT_ID: 'client-myuri',
         MYURI_DISCORD_GUILD_IDS: 'guild-myuri-a,guild-myuri-b',
         MYURI_DISCORD_USER_ID: 'user-myuri',
+        WINTER_DISCORD_TOKEN: 'token-winter',
+        WINTER_DISCORD_CLIENT_ID: 'client-winter',
+        WINTER_DISCORD_GUILD_IDS: 'guild-winter',
+        WINTER_DISCORD_USER_ID: 'user-winter',
         INCIDENT_PSEUDONYMIZATION_SECRET: 'incident-secret',
     });
 
-    assert.equal(result.activeNodes.length, 2);
+    assert.equal(result.activeNodes.length, 3);
     assert.deepEqual(
         result.activeNodes.map((entry) => entry.id),
-        ['footnote', 'myuri']
+        ['footnote', 'myuri', 'winter']
     );
     assert.equal(result.activeNodes[0].profile.displayName, 'Footnote');
     assert.equal(
         result.activeNodes[1].credentials.discordGuildIds,
         'guild-myuri-a,guild-myuri-b'
     );
+    assert.equal(result.activeNodes[2].profile.displayName, 'Winter');
     assert.deepEqual(result.disabledNodes, [
         {
             id: 'danny',
