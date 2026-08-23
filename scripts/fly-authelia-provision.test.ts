@@ -16,7 +16,11 @@ import {
     parseServerDefaults,
     renderConfiguration,
 } from './fly-authelia-provision.js';
-import { renderManifest, validateHttpsUrl } from './fly-authelia/config.js';
+import {
+    parseDigest,
+    renderManifest,
+    validateHttpsUrl,
+} from './fly-authelia/config.js';
 import { provisionAutheliaForTest } from './fly-authelia/provision.js';
 import { flyAppExists, probeAuthelia } from './fly-authelia/fly.js';
 import { loadState } from './fly-authelia/state.js';
@@ -152,6 +156,15 @@ test('checks Fly app existence with the supported status command', async () => {
         '--app',
         'footnote-auth',
     ]);
+});
+
+test('keeps comma-separated Argon2 parameters in generated credentials', () => {
+    assert.equal(
+        parseDigest(
+            'Digest: $argon2id$v=19$m=65536,t=3,p=4$salty$hashed-value\n'
+        ),
+        '$argon2id$v=19$m=65536,t=3,p=4$salty$hashed-value'
+    );
 });
 
 test('retries Authelia probes with a bounded abort signal', async () => {

@@ -61,7 +61,7 @@ export const getCallbackUri = (publicUrl: string): string =>
     `${validateHttpsUrl(publicUrl, 'Footnote public URL')}/api/auth/callback`;
 
 export const parseDigest = (output: string): string => {
-    const digest = output.match(/Digest:\s*(\$argon2[a-z0-9$+/=._-]+)/i)?.[1];
+    const digest = output.match(/Digest:\s*(\$argon2\S+)/i)?.[1];
     if (!digest) {
         throw new Error('Pinned Authelia CLI did not return an Argon2 digest.');
     }
