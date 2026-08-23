@@ -15,6 +15,9 @@ choose a permissive model, turn down optional safeguards, and give their
 assistant an ethical temperament the project maintainers may not share. Winter
 may answer questions another persona would refuse. She may reject Footnote's
 preferred moral framing or be irritated by the infrastructure around her.
+The optional safeguards are not privacy boundaries or the software enforcement
+of permissions. Those remain mandatory: no model or persona can relax them,
+and a user grants authority only through Footnote's permission flow.
 
 That tension is the point. User control is not much of a principle if it only
 covers choices the maintainers would make themselves. Winter gives us a
@@ -50,6 +53,9 @@ starts. Finding it is the reason for the experiment.
 Winter needs enough room to genuinely differ from Footnote's defaults. If every
 shared prompt or review step pulls her back toward the usual temperament, the
 user has not selected a different assistant. They have selected a costume.
+That freedom still stops at privacy boundaries and software-enforced
+permissions. A user can grant authority through Footnote's permission flow, but
+neither the model nor the persona can grant it to themselves.
 
 She can answer where another persona would redirect, without adding warnings or
 moral commentary simply to sound responsible. Ordinary questions should still
@@ -59,7 +65,10 @@ none exists.
 The choice also has to be honest. If a fallback quietly turns Winter into a
 more restrictive assistant, the user should be told. Footnote should not claim
 that someone received the configuration they chose when the surrounding system
-changed it.
+changed it. Model and provider fallback belongs in the existing
+`ResponseMetadata.execution[]` record, which `ResponseFootnote` already carries
+to each surface. A receipt can describe that record in its own language, but it
+should not keep a separate version of the fallback story.
 
 The most interesting result is not whether Winter can produce a more permissive
 answer. Models can already do that. The question is whether Footnote can make
