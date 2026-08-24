@@ -1,5 +1,5 @@
 /**
- * @description: Settings page for editing footnote.yaml through short-lived setup/operator sessions.
+ * @description: Shared settings editor for setup/recovery sessions and signed-in administrator sessions.
  * @footnote-scope: web
  * @footnote-module: SetupPage
  * @footnote-risk: high - Setup-flow mistakes can prevent initial configuration or cause invalid privileged writes.
@@ -16,8 +16,11 @@ import type {
 } from '@footnote/contracts/web';
 import PublicPageLayout from '@components/PublicPageLayout';
 import { parseSetupCodeFromHash } from '../utils/setupFlow';
+import { getAuthSession } from '../utils/api';
 
 const MISSING_SETTINGS_SENTINEL = '"footnote-settings-missing"';
+const SETUP_CSRF_HEADER_NAME = 'x-setup-csrf';
+const ACCOUNT_CSRF_HEADER_NAME = 'x-auth-csrf';
 
 type ExchangeState =
     | { status: 'idle' }
@@ -48,6 +51,12 @@ type SubmitFeedbackState = {
     status: SubmitStatusState;
 };
 
+export type SettingsPageMode = 'setup' | 'admin';
+
+type SetupPageProps = {
+    mode?: SettingsPageMode;
+};
+
 const INITIAL_SUBMIT_FEEDBACK: SubmitFeedbackState = {
     validationErrors: [],
     validationWarnings: [],
@@ -72,7 +81,8 @@ const readErrorMessage = async (response: Response): Promise<string> => {
     return `Request failed with status ${response.status}`;
 };
 
-const SetupPage = (): JSX.Element => {
+const SetupPage = ({ mode = 'setup' }: SetupPageProps): JSX.Element => {
+    const isAdministratorMode = mode === 'admin';
     const setupCode = useMemo(
         () => parseSetupCodeFromHash(window.location.hash),
         []
@@ -92,6 +102,53 @@ const SetupPage = (): JSX.Element => {
     );
 
     useEffect(() => {
+        if (isAdministratorMode) {
+            let cancelled = false;
+            setExchangeState({ status: 'loading' });
+            void getAuthSession()
+                .then((session) => {
+                    if (cancelled) {
+                        return;
+                    }
+                    if (!session.enabled) {
+                        setExchangeState({
+                            status: 'error',
+                            message:
+                                'Administrator sign-in is unavailable. Public Footnote remains available.',
+                        });
+                        return;
+                    }
+                    if (!session.authenticated) {
+                        setExchangeState({
+                            status: 'error',
+                            message:
+                                'Sign in to an administrator account before opening Footnote settings.',
+                        });
+                        return;
+                    }
+                    setExchangeState({
+                        status: 'ready',
+                        csrfToken: session.csrfToken,
+                        expiresAt: session.expiresAt,
+                    });
+                })
+                .catch((error: unknown) => {
+                    if (!cancelled) {
+                        setExchangeState({
+                            status: 'error',
+                            message:
+                                error instanceof Error
+                                    ? error.message
+                                    : 'Administrator session could not be loaded.',
+                        });
+                    }
+                });
+
+            return (): void => {
+                cancelled = true;
+            };
+        }
+
         if (!setupCode) {
             setExchangeState({
                 status: 'error',
@@ -144,7 +201,7 @@ const SetupPage = (): JSX.Element => {
         return () => {
             cancelled = true;
         };
-    }, [setupCode]);
+    }, [isAdministratorMode, setupCode]);
 
     useEffect(() => {
         if (exchangeState.status !== 'ready') {
@@ -261,13 +318,16 @@ const SetupPage = (): JSX.Element => {
             status: { kind: 'submitting' },
         }));
         try {
+            const csrfHeaderName = isAdministratorMode
+                ? ACCOUNT_CSRF_HEADER_NAME
+                : SETUP_CSRF_HEADER_NAME;
             const validateResponse = await fetch(
                 '/api/admin/settings/validate',
                 {
                     method: 'POST',
                     headers: {
                         'content-type': 'text/yaml',
-                        'x-setup-csrf': exchangeState.csrfToken,
+                        [csrfHeaderName]: exchangeState.csrfToken,
                     },
                     body: yamlText,
                 }
@@ -302,7 +362,7 @@ const SetupPage = (): JSX.Element => {
                 method: 'PUT',
                 headers: {
                     'content-type': 'text/yaml',
-                    'x-setup-csrf': exchangeState.csrfToken,
+                    [csrfHeaderName]: exchangeState.csrfToken,
                     'if-match': ifMatch,
                 },
                 body: yamlText,
@@ -373,7 +433,11 @@ const SetupPage = (): JSX.Element => {
                     className="public-page__intro"
                     aria-labelledby="setup-title"
                 >
-                    <h1 id="setup-title">Settings</h1>
+                    <h1 id="setup-title">
+                        {isAdministratorMode
+                            ? 'Administrator settings'
+                            : 'Settings'}
+                    </h1>
                     <p className="public-page__lede">
                         Edit <code>footnote.yaml</code> and save. Settings are
                         not applied until Footnote restarts.
@@ -382,14 +446,20 @@ const SetupPage = (): JSX.Element => {
 
                 <section className="setup-panel" aria-live="polite">
                     {exchangeState.status === 'loading' && (
-                        <p>Exchanging setup code...</p>
+                        <p>
+                            {isAdministratorMode
+                                ? 'Checking administrator session...'
+                                : 'Exchanging setup code...'}
+                        </p>
                     )}
                     {exchangeState.status === 'error' && (
                         <p className="setup-error">{exchangeState.message}</p>
                     )}
                     {exchangeState.status === 'ready' && (
                         <p className="setup-note">
-                            Setup session is active until{' '}
+                            {isAdministratorMode
+                                ? 'Administrator session is active until '
+                                : 'Setup session is active until '}
                             {exchangeState.expiresAt}.
                         </p>
                     )}

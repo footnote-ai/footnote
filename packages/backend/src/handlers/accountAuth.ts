@@ -6,15 +6,23 @@
  * @footnote-ethics: high - These handlers govern identity admission and privacy-sensitive logs.
  */
 
-import { createHash, timingSafeEqual } from 'node:crypto';
+import { timingSafeEqual } from 'node:crypto';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import type { GetAuthSessionResponse } from '@footnote/contracts/web';
 import { sendJson } from './chatResponses.js';
 import type { AccountAuthService } from '../services/accountAuth.js';
+import { hashAuthenticatedPrincipal } from '../services/adminAuthorization.js';
+import {
+    ACCOUNT_SESSION_COOKIE_NAME,
+    ACCOUNT_TRANSACTION_COOKIE_NAME,
+    AUTH_CSRF_HEADER_NAME,
+    readCookieValue,
+} from '../http/authCookies.js';
 
-export const ACCOUNT_TRANSACTION_COOKIE_NAME = 'footnote_auth_transaction';
-export const ACCOUNT_SESSION_COOKIE_NAME = 'footnote_account_session';
-const AUTH_CSRF_HEADER_NAME = 'x-auth-csrf';
+export {
+    ACCOUNT_SESSION_COOKIE_NAME,
+    ACCOUNT_TRANSACTION_COOKIE_NAME,
+} from '../http/authCookies.js';
 
 type AccountAuthLogger = {
     info: (message: string, meta?: Record<string, unknown>) => void;
@@ -53,25 +61,6 @@ const readSingleHeader = (
     const rawValue = Array.isArray(value) ? value[0] : value;
     const trimmed = rawValue.trim();
     return trimmed.length > 0 ? trimmed : null;
-};
-
-const readCookie = (
-    req: IncomingMessage,
-    cookieName: string
-): string | null => {
-    const cookieHeader = readSingleHeader(req.headers.cookie);
-    if (!cookieHeader) {
-        return null;
-    }
-    for (const segment of cookieHeader.split(';')) {
-        const [rawName, ...rawValue] = segment.split('=');
-        if (rawName?.trim() !== cookieName) {
-            continue;
-        }
-        const value = rawValue.join('=').trim();
-        return value.length > 0 ? value : null;
-    }
-    return null;
 };
 
 const buildCookie = ({
@@ -124,7 +113,7 @@ const buildSessionCookie = (
     buildCookie({
         name: ACCOUNT_SESSION_COOKIE_NAME,
         value: sessionId,
-        path: '/api/auth',
+        path: '/api',
         maxAgeMs,
         secure,
     });
@@ -157,14 +146,6 @@ const constantTimeEquals = (left: string, right: string): boolean => {
         timingSafeEqual(leftBuffer, rightBuffer)
     );
 };
-
-const hashPrincipal = (issuer: string, subject: string): string =>
-    createHash('sha256')
-        .update(issuer)
-        .update('\0')
-        .update(subject)
-        .digest('hex')
-        .slice(0, 24);
 
 /**
  * @api.operationId: getAuthLogin
@@ -217,7 +198,10 @@ export const createAccountAuthHandlers = ({
     const handleAuthCallbackRequest: RequestHandler = async (req, res) => {
         setNoStore(res);
         const requestId = readSingleHeader(req.headers['x-request-id']);
-        const transactionId = readCookie(req, ACCOUNT_TRANSACTION_COOKIE_NAME);
+        const transactionId = readCookieValue(
+            req,
+            ACCOUNT_TRANSACTION_COOKIE_NAME
+        );
         const callbackQuery = new URL(
             req.url ?? '/api/auth/callback',
             'http://localhost'
@@ -252,10 +236,7 @@ export const createAccountAuthHandlers = ({
         ]);
         logger.info('account.auth.callback.succeeded', {
             requestId,
-            actorHash: hashPrincipal(
-                result.session.principal.issuer,
-                result.session.principal.subject
-            ),
+            actorHash: hashAuthenticatedPrincipal(result.session.principal),
             expiresAt: result.session.expiresAt,
         });
         logRequest(req, res, 'account.auth.callback succeeded');
@@ -273,7 +254,7 @@ export const createAccountAuthHandlers = ({
             return;
         }
 
-        const sessionId = readCookie(req, ACCOUNT_SESSION_COOKIE_NAME);
+        const sessionId = readCookieValue(req, ACCOUNT_SESSION_COOKIE_NAME);
         const session = sessionId
             ? accountAuthService.getSession(sessionId)
             : null;
@@ -307,7 +288,7 @@ export const createAccountAuthHandlers = ({
     const handleAuthLogoutRequest: RequestHandler = async (req, res) => {
         setNoStore(res);
         const requestId = readSingleHeader(req.headers['x-request-id']);
-        const sessionId = readCookie(req, ACCOUNT_SESSION_COOKIE_NAME);
+        const sessionId = readCookieValue(req, ACCOUNT_SESSION_COOKIE_NAME);
         const session = sessionId
             ? accountAuthService.getSession(sessionId)
             : null;

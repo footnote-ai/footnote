@@ -27,10 +27,18 @@ import {
     createSetupBootstrapService,
     SETUP_MISSING_IF_MATCH_ETAG,
 } from '../src/services/setupBootstrap.js';
+import {
+    createAccountAuthService,
+    type AccountAuthService,
+} from '../src/services/accountAuth.js';
+import type { OidcAccountClient } from '../src/services/oidcClient.js';
+import { ACCOUNT_SESSION_COOKIE_NAME } from '../src/http/authCookies.js';
 
 type TestServer = {
     url: string;
     settingsPath: string;
+    accountAuthService: AccountAuthService;
+    events: Array<{ message: string; meta?: Record<string, unknown> }>;
     issueSetupCode: () => Promise<{ code: string; expiresAt: string } | null>;
     close: () => Promise<void>;
     cleanup: () => void;
@@ -48,6 +56,7 @@ const createAdminSettingsTestServer = async (options?: {
     createSettingsFile?: boolean;
     now?: () => number;
     bootstrapCodeTtlMs?: number;
+    accountAuthService?: AccountAuthService;
 }): Promise<TestServer> => {
     const tempDir = fs.mkdtempSync(
         path.join(os.tmpdir(), 'footnote-admin-settings-handler-')
@@ -71,15 +80,23 @@ const createAdminSettingsTestServer = async (options?: {
         now: options?.now,
         bootstrapCodeTtlMs: options?.bootstrapCodeTtlMs,
     });
+    const accountAuthService =
+        options?.accountAuthService ??
+        createAccountAuthService({ provider: null });
+    const events: Array<{
+        message: string;
+        meta?: Record<string, unknown>;
+    }> = [];
 
     const handlers = createAdminSettingsHandlers({
         adminToken,
+        accountAuthService,
         maxBodyBytes: options?.maxBodyBytes ?? 20_000,
         settingsPath,
         settingsSpecEntries,
         setupBootstrapService,
         logger: {
-            info: () => undefined,
+            info: (message, meta) => events.push({ message, meta }),
             warn: () => undefined,
             error: () => undefined,
         },
@@ -159,6 +176,8 @@ const createAdminSettingsTestServer = async (options?: {
     return {
         url: `http://127.0.0.1:${address.port}`,
         settingsPath,
+        accountAuthService,
+        events,
         issueSetupCode: () => setupBootstrapService.issueOrGetActiveCode(),
         close: () =>
             new Promise((resolve, reject) => {
@@ -256,6 +275,151 @@ test('admin settings endpoints require x-admin-token auth and reject invalid tok
             }
         );
         assert.equal(invalidAuth.status, 403);
+    } finally {
+        await server.close();
+        server.cleanup();
+    }
+});
+
+test('signed-in administrator sessions authorize settings reads and record a safe actor hash', async () => {
+    const provider: OidcAccountClient = {
+        startAuthorization: async () => ({
+            authorizationUrl: 'https://identity.example/authorize',
+            state: 'state',
+            nonce: 'nonce',
+            codeVerifier: 'verifier',
+        }),
+        exchangeCallback: async () => ({
+            issuer: 'https://identity.example/',
+            subject: 'administrator-subject',
+            displayName: 'Administrator Name',
+        }),
+    };
+    const accountAuthService = createAccountAuthService({
+        provider,
+        randomToken: (() => {
+            let index = 0;
+            return () => `opaque-${++index}`;
+        })(),
+    });
+    const login = await accountAuthService.startLogin();
+    assert.equal(login.ok, true);
+    if (!login.ok) {
+        return;
+    }
+    const completed = await accountAuthService.completeLogin(
+        login.transactionId,
+        '?code=code&state=state'
+    );
+    assert.equal(completed.ok, true);
+    if (!completed.ok) {
+        return;
+    }
+
+    const server = await createAdminSettingsTestServer({
+        adminToken: null,
+        accountAuthService,
+    });
+    try {
+        const response = await fetch(`${server.url}/api/admin/settings.yaml`, {
+            headers: {
+                cookie: `${ACCOUNT_SESSION_COOKIE_NAME}=${completed.session.sessionId}`,
+            },
+        });
+        assert.equal(response.status, 200);
+
+        const successEvent = server.events.find(
+            (event) => event.message === 'admin.settings.read.succeeded'
+        );
+        assert.ok(successEvent?.meta);
+        assert.match(String(successEvent.meta.actorHash), /^[a-f0-9]{24}$/);
+        assert.equal(successEvent.meta.actorSource, 'account-session');
+        assert.doesNotMatch(
+            JSON.stringify(successEvent.meta),
+            /administrator-subject|Administrator Name|identity\.example/
+        );
+    } finally {
+        await server.close();
+        server.cleanup();
+    }
+});
+
+test('signed-in administrator writes require account CSRF while anonymous requests remain denied', async () => {
+    const provider: OidcAccountClient = {
+        startAuthorization: async () => ({
+            authorizationUrl: 'https://identity.example/authorize',
+            state: 'state',
+            nonce: 'nonce',
+            codeVerifier: 'verifier',
+        }),
+        exchangeCallback: async () => ({
+            issuer: 'https://identity.example/',
+            subject: 'administrator-subject',
+            displayName: null,
+        }),
+    };
+    const accountAuthService = createAccountAuthService({ provider });
+    const login = await accountAuthService.startLogin();
+    assert.equal(login.ok, true);
+    if (!login.ok) {
+        return;
+    }
+    const completed = await accountAuthService.completeLogin(
+        login.transactionId,
+        '?code=code&state=state'
+    );
+    assert.equal(completed.ok, true);
+    if (!completed.ok) {
+        return;
+    }
+
+    const server = await createAdminSettingsTestServer({
+        adminToken: null,
+        accountAuthService,
+    });
+    try {
+        const anonymousResponse = await fetch(
+            `${server.url}/api/admin/settings/schema`
+        );
+        assert.equal(anonymousResponse.status, 401);
+
+        const forgedSessionResponse = await fetch(
+            `${server.url}/api/admin/settings/schema`,
+            {
+                headers: {
+                    cookie: `${ACCOUNT_SESSION_COOKIE_NAME}=forged-session`,
+                },
+            }
+        );
+        assert.equal(forgedSessionResponse.status, 401);
+
+        const invalidCsrfResponse = await fetch(
+            `${server.url}/api/admin/settings/validate`,
+            {
+                method: 'POST',
+                headers: {
+                    cookie: `${ACCOUNT_SESSION_COOKIE_NAME}=${completed.session.sessionId}`,
+                    'content-type': 'text/yaml',
+                    'x-auth-csrf': 'wrong-csrf',
+                },
+                body: 'version: 1\n',
+            }
+        );
+        assert.equal(invalidCsrfResponse.status, 403);
+
+        const validCsrfResponse = await fetch(
+            `${server.url}/api/admin/settings/validate`,
+            {
+                method: 'POST',
+                headers: {
+                    cookie: `${ACCOUNT_SESSION_COOKIE_NAME}=${completed.session.sessionId}`,
+                    'content-type': 'text/yaml',
+                    'x-auth-csrf': completed.session.csrfToken,
+                },
+                body: 'version: 1\n',
+            }
+        );
+        assert.equal(validCsrfResponse.status, 200);
     } finally {
         await server.close();
         server.cleanup();
@@ -603,6 +767,21 @@ test('operator setup session can read and write existing settings until expiry',
     const server = await createAdminSettingsTestServer({
         createSettingsFile: true,
         adminToken: null,
+        accountAuthService: createAccountAuthService({
+            provider: {
+                startAuthorization: async () => ({
+                    authorizationUrl: 'https://identity.example/authorize',
+                    state: 'state',
+                    nonce: 'nonce',
+                    codeVerifier: 'verifier',
+                }),
+                exchangeCallback: async () => ({
+                    issuer: 'https://identity.example/',
+                    subject: 'administrator-subject',
+                    displayName: null,
+                }),
+            },
+        }),
     });
     try {
         const operatorResponse = await fetch(

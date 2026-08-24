@@ -1,9 +1,9 @@
 # Account Sign-In Status
 
-**Branch:** `agent/issue-455-account-sign-in`
+**Branch:** `agent/issue-455-account-sign-in` (historical predecessor)
 
-**Status:** Implemented; automated validation and the Authentik smoke test are
-complete.
+**Status:** Delivered foundation; automated validation and the Authentik smoke
+test are complete. Administrator access is now delivered by #456.
 
 **Last updated:** 2026-08-22
 
@@ -17,13 +17,14 @@ Deliver one complete account login flow:
 4. `/account` shows the signed-in identity.
 5. The administrator signs out of Footnote.
 
-This branch proves authentication only. It does not grant access to `/admin` or
-the admin settings API.
+This document records the completed authentication foundation. #455 proved
+identity only; #456 adds a separate backend administrator decision and connects
+the signed-in session to `/admin` and selected settings operations.
 
 ## Implementation Result
 
-The backend, shared contracts, API client, and `/account` page now implement the
-planned sign-in slice. Automated tests cover disabled login, provider failures,
+The backend, shared contracts, API client, and `/account` page implement the
+delivered sign-in slice. Automated tests cover disabled login, provider failures,
 one-time callbacks, session expiry, CSRF-protected logout, route ownership,
 shared response validation, and the public account states.
 
@@ -86,9 +87,11 @@ type AuthenticatedPrincipal = {
 `issuer + subject` is the stable identity. `displayName` is for presentation and
 uses `name`, then `preferred_username`, then `null`. Email is not an identifier.
 
-Every account admitted during this administrator-only stage is considered an
-administrator, but this branch does not use that fact to unlock administrator
-features.
+During the current administrator-only stage, every identity admitted by the
+configured provider is explicitly treated as an administrator by a separate
+authorization seam. The account identity and session shapes do not contain an
+administrator flag, so #521 can later authorize ordinary Footnote users
+without treating authentication as permission.
 
 ### Configuration
 
@@ -429,15 +432,15 @@ environment configuration, and backend runtime wiring.
 - The backend verifies the OIDC callback before creating a Footnote session.
 - No provider token reaches browser JavaScript or persistent Footnote storage.
 - Missing or unavailable OIDC configuration does not stop public Footnote.
-- Existing setup sessions and admin settings authentication are unchanged.
+- Existing trusted-token and setup-session recovery paths remain available;
+  #456 adds account-session authorization alongside them.
 - Authentik completes the documented manual smoke test.
 - API, environment, deployment, and account documentation match the code.
 - Required validation passes, or the handoff names each blocked check and why.
 
 ## Explicitly Deferred
 
-- `/admin`
-- access to `/api/admin/*`
+- regular-user authorization and storage
 - roles and permission levels
 - regular-user stored data
 - persistent or shared session storage

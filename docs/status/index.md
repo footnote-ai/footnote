@@ -6,8 +6,9 @@ work is done.
 
 ## Active Work
 
-- [Account identity and access](./account-identity-and-access.md)
-- [Account sign-in](./account-sign-in.md)
+- [Account identity and access](./account-identity-and-access.md) — OIDC
+  sign-in and administrator access delivered; #521 is next
+- [Account sign-in](./account-sign-in.md) — completed authentication foundation
 - [GPT-5.6 default rollout](./gpt-5-6-default-rollout-status.md)
 - [Launcher canary releases](./launcher-canary-releases.md)
 - [Repository context and TrustGraph](./repository-context-status.md)

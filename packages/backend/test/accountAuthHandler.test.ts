@@ -133,7 +133,14 @@ test('login callback session and CSRF logout complete one local flow', async (t)
     assert.equal(callbackResponse.headers.get('location'), '/account');
     const callbackSetCookie = callbackResponse.headers.get('set-cookie') ?? '';
     assert.match(callbackSetCookie, /Max-Age=0/);
-    assert.match(callbackSetCookie, /Path=\/api\/auth/);
+    assert.match(
+        callbackSetCookie,
+        /footnote_account_session=[^,]+; Path=\/api;/
+    );
+    assert.doesNotMatch(
+        callbackSetCookie,
+        /footnote_account_session=[^,]+; Path=\/api\/auth/
+    );
     const sessionId = readCookieValue(
         callbackSetCookie,
         ACCOUNT_SESSION_COOKIE_NAME

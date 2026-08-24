@@ -7,7 +7,7 @@
  */
 
 import fs from 'node:fs';
-import { randomUUID, createHash } from 'node:crypto';
+import { randomUUID, createHash, timingSafeEqual } from 'node:crypto';
 import path from 'node:path';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { renderSettingsTemplateYaml } from '@footnote/config-spec';
@@ -22,6 +22,16 @@ import {
     SETUP_MISSING_IF_MATCH_ETAG,
     type SetupBootstrapService,
 } from '../services/setupBootstrap.js';
+import type { AccountAuthService } from '../services/accountAuth.js';
+import {
+    createAdminAuthorizationService,
+    type AdminAuthorizationService,
+} from '../services/adminAuthorization.js';
+import {
+    ACCOUNT_SESSION_COOKIE_NAME,
+    AUTH_CSRF_HEADER_NAME,
+    readCookieValue,
+} from '../http/authCookies.js';
 
 type LogRequest = (
     req: IncomingMessage,
@@ -43,6 +53,7 @@ type AdminSettingsValidationErrorDetail = {
 
 type CreateAdminSettingsHandlersDeps = {
     adminToken: string | null;
+    accountAuthService: AccountAuthService;
     maxBodyBytes: number;
     settingsPath: string;
     settingsSpecEntries: readonly SettingsSpecEntry[];
@@ -65,7 +76,24 @@ type AdminSettingsHandlers = {
 };
 
 type AdminAuthContext = {
-    actorSource: 'x-admin-token' | 'setup-session';
+    actorSource: 'x-admin-token' | 'setup-session' | 'account-session';
+    actorHash?: string;
+};
+
+const actorAuditFields = (
+    authContext: AdminAuthContext
+): { actorSource: AdminAuthContext['actorSource']; actorHash?: string } => ({
+    actorSource: authContext.actorSource,
+    ...(authContext.actorHash ? { actorHash: authContext.actorHash } : {}),
+});
+
+const constantTimeEquals = (left: string, right: string): boolean => {
+    const leftBuffer = Buffer.from(left);
+    const rightBuffer = Buffer.from(right);
+    return (
+        leftBuffer.length === rightBuffer.length &&
+        timingSafeEqual(leftBuffer, rightBuffer)
+    );
 };
 
 class RequestBodyTooLargeError extends Error {
@@ -228,7 +256,7 @@ const buildSchemaFields = (entries: readonly SettingsSpecEntry[]) =>
  *   configured `adminToken`.
  * - `x-admin-token` path:
  *   - `adminToken` unset + token provided => 503 (disabled).
- *   - token missing => flow can fall through to setup-session path when setup is required.
+ *   - token missing => flow can fall through to setup, then account-session auth.
  *   - token present but invalid => 403.
  * - setup-session path is permitted only when `validateSetupSession` returns a
  *   valid short-lived session. First-run sessions expire when setup is no
@@ -237,19 +265,21 @@ const buildSchemaFields = (entries: readonly SettingsSpecEntry[]) =>
  *   against the issued session CSRF token; mismatch => 403.
  * - when setup is required and neither valid token nor valid setup-session auth
  *   is present, handlers return 401.
- * - when setup is not required and no token is provided:
- *   - unset `adminToken` => 503 (disabled)
- *   - set `adminToken` => 401 (missing token)
+ * - when setup is not required and no authority is provided:
+ *   - no token and disabled account auth => 503 (disabled)
+ *   - configured account auth => 401 (missing administrator auth)
  *
  * Operational contract:
  * - `authorize` emits structured auth/disabled logs and request logging for each
  *   deny path before returning `null`.
- * - No fail-open auth path exists: both token and setup-session validation are
- *   fail-closed.
- * - Callers must provision and manage `adminToken` to enable this API surface.
+ * - No fail-open auth path exists: token, setup-session, and account-session
+ *   validation are all fail-closed.
+ * - Callers may provision `adminToken` or account OIDC configuration to enable
+ *   this API surface; setup sessions remain a bounded recovery path.
  */
 const createAdminSettingsHandlers = ({
     adminToken,
+    accountAuthService,
     maxBodyBytes,
     settingsPath,
     settingsSpecEntries,
@@ -258,6 +288,8 @@ const createAdminSettingsHandlers = ({
     logRequest,
 }: CreateAdminSettingsHandlersDeps): AdminSettingsHandlers => {
     const settingsWriteLocks = new Map<string, Promise<void>>();
+    const adminAuthorizationService: AdminAuthorizationService =
+        createAdminAuthorizationService({ accountAuthService });
 
     const withSettingsWriteLock = async <T>(
         lockKey: string,
@@ -356,6 +388,49 @@ const createAdminSettingsHandlers = ({
             }
         }
 
+        const accountSessionId = readCookieValue(
+            req,
+            ACCOUNT_SESSION_COOKIE_NAME
+        );
+        if (accountSessionId) {
+            const accountAuthorization =
+                adminAuthorizationService.authorizeAccountSession(
+                    accountSessionId
+                );
+            if (accountAuthorization) {
+                if (req.method !== 'GET') {
+                    const csrfHeader = readHeaderValue(
+                        req.headers[AUTH_CSRF_HEADER_NAME]
+                    );
+                    if (
+                        !csrfHeader ||
+                        !constantTimeEquals(
+                            csrfHeader,
+                            accountAuthorization.csrfToken
+                        )
+                    ) {
+                        sendJson(res, 403, {
+                            error: 'Missing or invalid account CSRF token',
+                        });
+                        logger.warn('admin.settings.auth.failed', {
+                            requestId,
+                            routeLabel,
+                            actorSource: 'account-session',
+                            actorHash: accountAuthorization.actorHash,
+                            result: 'csrf_invalid',
+                        });
+                        logRequest(
+                            req,
+                            res,
+                            `${routeLabel} invalid-account-csrf`
+                        );
+                        return null;
+                    }
+                }
+                return accountAuthorization;
+            }
+        }
+
         const setupRequiredNow =
             await setupBootstrapService.isSetupRequiredNow();
         if (setupRequiredNow) {
@@ -370,7 +445,7 @@ const createAdminSettingsHandlers = ({
             return null;
         }
 
-        if (!adminToken) {
+        if (!adminToken && !accountAuthService.enabled) {
             sendJson(res, 503, { error: 'Admin settings API disabled' });
             logger.warn('admin.settings.disabled', {
                 requestId,
@@ -454,7 +529,7 @@ const createAdminSettingsHandlers = ({
             res.end(yamlText);
             logger.info('admin.settings.template.succeeded', {
                 requestId,
-                actorSource: authContext.actorSource,
+                ...actorAuditFields(authContext),
                 settingsPath,
             });
             logRequest(req, res, 'admin.settings.template ok');
@@ -462,7 +537,7 @@ const createAdminSettingsHandlers = ({
             sendJson(res, 500, { error: 'Internal server error' });
             logger.error('admin.settings.template.failed', {
                 requestId,
-                actorSource: authContext.actorSource,
+                ...actorAuditFields(authContext),
                 settingsPath,
                 message:
                     error instanceof Error ? error.message : 'unknown error',
@@ -497,7 +572,7 @@ const createAdminSettingsHandlers = ({
             res.end(yamlText);
             logger.info('admin.settings.read.succeeded', {
                 requestId,
-                actorSource: authContext.actorSource,
+                ...actorAuditFields(authContext),
                 settingsPath,
                 etag,
             });
@@ -511,7 +586,7 @@ const createAdminSettingsHandlers = ({
             }
             logger.error('admin.settings.read.failed', {
                 requestId,
-                actorSource: authContext.actorSource,
+                ...actorAuditFields(authContext),
                 settingsPath,
                 code: nodeError.code ?? 'unknown',
                 message:
@@ -554,7 +629,7 @@ const createAdminSettingsHandlers = ({
                 });
                 logger.warn('admin.settings.validate.failed', {
                     requestId,
-                    actorSource: authContext.actorSource,
+                    ...actorAuditFields(authContext),
                     settingsPath,
                     category: result.detail.category,
                     pointer: result.detail.pointer,
@@ -573,7 +648,7 @@ const createAdminSettingsHandlers = ({
             });
             logger.info('admin.settings.validate.succeeded', {
                 requestId,
-                actorSource: authContext.actorSource,
+                ...actorAuditFields(authContext),
                 settingsPath,
                 restartRequired: true,
             });
@@ -583,7 +658,7 @@ const createAdminSettingsHandlers = ({
                 sendJson(res, 413, { error: 'Request payload too large' });
                 logger.warn('admin.settings.validate.failed', {
                     requestId,
-                    actorSource: authContext.actorSource,
+                    ...actorAuditFields(authContext),
                     settingsPath,
                     category: 'payload_too_large',
                 });
@@ -598,7 +673,7 @@ const createAdminSettingsHandlers = ({
             sendJson(res, 500, { error: 'Internal server error' });
             logger.error('admin.settings.validate.failed', {
                 requestId,
-                actorSource: authContext.actorSource,
+                ...actorAuditFields(authContext),
                 settingsPath,
                 category: 'internal_error',
                 message:
@@ -632,7 +707,7 @@ const createAdminSettingsHandlers = ({
             sendJson(res, 428, { error: 'Missing If-Match header' });
             logger.warn('admin.settings.write.failed', {
                 requestId,
-                actorSource: authContext.actorSource,
+                ...actorAuditFields(authContext),
                 settingsPath,
                 code: 'if_match_missing',
             });
@@ -661,7 +736,7 @@ const createAdminSettingsHandlers = ({
                         });
                         logger.warn('admin.settings.write.failed', {
                             requestId,
-                            actorSource: authContext.actorSource,
+                            ...actorAuditFields(authContext),
                             settingsPath,
                             code: 'etag_mismatch_missing_sentinel_required',
                         });
@@ -676,7 +751,7 @@ const createAdminSettingsHandlers = ({
                     sendJson(res, 500, { error: 'Internal server error' });
                     logger.error('admin.settings.write.failed', {
                         requestId,
-                        actorSource: authContext.actorSource,
+                        ...actorAuditFields(authContext),
                         settingsPath,
                         code: nodeError.code ?? 'unknown',
                     });
@@ -694,7 +769,7 @@ const createAdminSettingsHandlers = ({
                     });
                     logger.warn('admin.settings.write.failed', {
                         requestId,
-                        actorSource: authContext.actorSource,
+                        ...actorAuditFields(authContext),
                         settingsPath,
                         code: 'etag_mismatch',
                         priorEtag: null,
@@ -710,7 +785,7 @@ const createAdminSettingsHandlers = ({
                 });
                 logger.warn('admin.settings.write.failed', {
                     requestId,
-                    actorSource: authContext.actorSource,
+                    ...actorAuditFields(authContext),
                     settingsPath,
                     code: 'etag_mismatch',
                     priorEtag: currentEtag,
@@ -732,7 +807,7 @@ const createAdminSettingsHandlers = ({
                     });
                     logger.warn('admin.settings.write.failed', {
                         requestId,
-                        actorSource: authContext.actorSource,
+                        ...actorAuditFields(authContext),
                         settingsPath,
                         code: 'validation_failed',
                         category: validationResult.detail.category,
@@ -752,7 +827,7 @@ const createAdminSettingsHandlers = ({
                 });
                 logger.info('admin.settings.write.succeeded', {
                     requestId,
-                    actorSource: authContext.actorSource,
+                    ...actorAuditFields(authContext),
                     settingsPath,
                     priorEtag:
                         currentEtag === null
@@ -767,7 +842,7 @@ const createAdminSettingsHandlers = ({
                     sendJson(res, 413, { error: 'Request payload too large' });
                     logger.warn('admin.settings.write.failed', {
                         requestId,
-                        actorSource: authContext.actorSource,
+                        ...actorAuditFields(authContext),
                         settingsPath,
                         code: 'payload_too_large',
                     });
@@ -782,7 +857,7 @@ const createAdminSettingsHandlers = ({
                 sendJson(res, 500, { error: 'Internal server error' });
                 logger.error('admin.settings.write.failed', {
                     requestId,
-                    actorSource: authContext.actorSource,
+                    ...actorAuditFields(authContext),
                     settingsPath,
                     code: 'internal_error',
                     message:
