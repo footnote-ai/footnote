@@ -487,6 +487,7 @@ const GenerationExecutionEventSchema = z
 
 const CurrentPresentationReasonCodeSchema = z.enum([
     'candidate_generated',
+    'budget_skipped',
     'disabled',
     'profile_not_configured',
     'structured_output',

@@ -54,6 +54,112 @@ export const estimatePlannerTokenBudget = (input: {
 }): number => estimatePlannerInputTokens(input.request) + input.maxOutputTokens;
 
 /**
+ * Bounds authoritative output so one assessment can still be admitted. The
+ * output is counted once as generation and once as assessment input.
+ */
+export const calculateReviewedGenerationOutputBudget = (input: {
+    totalTokens: number;
+    maxTokensTotal: number;
+    requestedOutputTokens: number;
+    authoritativePromptTokens: number;
+    assessmentPromptTokensWithoutDraft: number;
+    assessmentOutputTokens: number;
+}): number | undefined => {
+    if (
+        input.maxTokensTotal >= UNBOUNDED_EXECUTION_LIMIT ||
+        !Number.isFinite(input.maxTokensTotal)
+    ) {
+        return Math.max(1, Math.floor(input.requestedOutputTokens));
+    }
+
+    const remainingTokens = Math.max(
+        0,
+        Math.floor(input.maxTokensTotal - input.totalTokens)
+    );
+    const availableOutputTokens = Math.floor(
+        (remainingTokens -
+            Math.max(0, Math.floor(input.authoritativePromptTokens)) -
+            Math.max(0, Math.floor(input.assessmentPromptTokensWithoutDraft)) -
+            Math.max(0, Math.floor(input.assessmentOutputTokens))) /
+            2
+    );
+    if (availableOutputTokens < 1) {
+        return undefined;
+    }
+
+    return Math.min(
+        Math.max(1, Math.floor(input.requestedOutputTokens)),
+        availableOutputTokens
+    );
+};
+
+export type PresentationBudgetAdmission = {
+    candidateOutputTokens: number;
+    remainingTokens: number;
+    reservedTokens: number;
+};
+
+/**
+ * Calculates an optional candidate allowance while reserving the later
+ * authoritative and assessment calls. Candidate output is counted twice:
+ * once as candidate completion and once as text inserted into authority.
+ */
+export const calculatePresentationOutputBudget = (input: {
+    totalTokens: number;
+    maxTokensTotal: number;
+    requestedCandidateOutputTokens: number;
+    candidatePromptTokens: number;
+    authoritativePromptTokens: number;
+    authoritativeOutputTokens: number;
+    assessmentPromptTokens: number;
+    assessmentOutputTokens: number;
+}): PresentationBudgetAdmission | undefined => {
+    if (
+        input.maxTokensTotal >= UNBOUNDED_EXECUTION_LIMIT ||
+        !Number.isFinite(input.maxTokensTotal)
+    ) {
+        const candidateOutputTokens = Math.max(
+            1,
+            Math.floor(input.requestedCandidateOutputTokens)
+        );
+        return {
+            candidateOutputTokens,
+            remainingTokens: UNBOUNDED_EXECUTION_LIMIT,
+            reservedTokens: 0,
+        };
+    }
+
+    const remainingTokens = Math.max(
+        0,
+        Math.floor(input.maxTokensTotal - input.totalTokens)
+    );
+    const fixedReservation = [
+        input.candidatePromptTokens,
+        input.authoritativePromptTokens,
+        input.authoritativeOutputTokens,
+        input.assessmentPromptTokens,
+        input.assessmentOutputTokens,
+    ].reduce((total, value) => total + Math.max(0, Math.floor(value)), 0);
+    const candidateOutputAllowance = Math.floor(
+        (remainingTokens - fixedReservation) / 2
+    );
+    if (candidateOutputAllowance < 1) {
+        return undefined;
+    }
+
+    const candidateOutputTokens = Math.min(
+        Math.max(1, Math.floor(input.requestedCandidateOutputTokens)),
+        candidateOutputAllowance
+    );
+
+    return {
+        candidateOutputTokens,
+        remainingTokens,
+        reservedTokens: fixedReservation + candidateOutputTokens * 2,
+    };
+};
+
+/**
  * Bounds one generation request against the remaining cumulative workflow
  * budget. The estimate is deliberately conservative and provider-neutral;
  * provider-reported usage remains the authoritative accounting value.
