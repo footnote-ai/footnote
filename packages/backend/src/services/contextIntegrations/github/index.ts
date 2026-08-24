@@ -310,9 +310,14 @@ export const isRepositorySlugInConversation = (
 };
 
 /**
- * Confirms that an exact GitHub object and its repository identity occur in
- * the same user-authored context. Planner-inferred references must not gain a
- * repository authority that the user did not provide.
+ * @description: Confirms that an exact GitHub object and its repository identity occur together in user-authored context.
+ * @footnote-scope: core
+ * @footnote-module: GitHubObjectReferenceRepositoryBinding
+ * @footnote-risk: high - Incorrect binding can fetch or cite an unrelated repository object.
+ * @footnote-ethics: high - Repository identity controls which project evidence a person is shown.
+ *
+ * Planner-inferred references must not gain repository authority that the user
+ * did not provide.
  */
 export const isGitHubObjectReferenceBoundToRepository = (
     reference: GitHubObjectReference,
@@ -335,6 +340,8 @@ export const isGitHubObjectReferenceBoundToRepository = (
                     'i'
                 )
         );
+    const githubRepositoryUrlPattern =
+        /https?:\/\/(?:www\.)?github\.com\/([^/\s?#]+)\/([^/\s?#]+)/giu;
     const repositoryMentionPattern =
         /\b[A-Za-z0-9][A-Za-z0-9_.-]{0,98}\/[A-Za-z0-9][A-Za-z0-9_.-]{0,98}\b/g;
 
@@ -342,9 +349,17 @@ export const isGitHubObjectReferenceBoundToRepository = (
         if (!isGitHubObjectReferenceInConversation(reference, [text])) {
             return false;
         }
-        const otherRepositoryMentioned = [
-            ...text.matchAll(repositoryMentionPattern),
-        ].some(([match]) => match.toLowerCase() !== normalizedRepository);
+        const githubUrlMatches = [...text.matchAll(githubRepositoryUrlPattern)];
+        const repositoryMentions = [
+            ...githubUrlMatches.map(([, owner, name]) => `${owner}/${name}`),
+            ...text
+                .replace(/https?:\/\/\S+/giu, ' ')
+                .matchAll(repositoryMentionPattern)
+                .map(([match]) => match),
+        ];
+        const otherRepositoryMentioned = repositoryMentions.some(
+            (match) => match.toLowerCase() !== normalizedRepository
+        );
         if (otherRepositoryMentioned) return false;
         return (
             repositoryPattern.test(text) ||

@@ -11,6 +11,7 @@ import {
     createGitHubContextStepExecutor,
     findGitHubObjectReferenceInConversation,
     formatGitHubContext,
+    isGitHubObjectReferenceBoundToRepository,
     isRepositorySlugInConversation,
     type GitHubContextPayload,
     parseGitHubRepositorySlug,
@@ -78,6 +79,15 @@ test('GitHub context validates exact owner/repo slugs and user conversation scop
     assert.equal(
         isRepositorySlugInConversation('acme/repo', ['Use other/repo please']),
         false
+    );
+    assert.equal(
+        isGitHubObjectReferenceBoundToRepository(
+            { kind: 'pull_request', number: 528 },
+            'footnote-ai/footnote',
+            ['https://github.com/footnote-ai/footnote/pull/528'],
+            ['Footnote']
+        ),
+        true
     );
 });
 

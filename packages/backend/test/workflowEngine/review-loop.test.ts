@@ -514,10 +514,14 @@ test('runBoundedReviewWorkflow reports a provider token overrun after admitting 
 
 test('runBoundedReviewWorkflow admits assessment with a bounded output below 200 tokens', async () => {
     let generationCalls = 0;
+    let assessmentMaxOutputTokens: number | undefined;
     const generationRuntime: GenerationRuntime = {
         kind: 'test-runtime',
-        async generate() {
+        async generate(input) {
             generationCalls += 1;
+            if (generationCalls === 2) {
+                assessmentMaxOutputTokens = input.maxOutputTokens;
+            }
             if (generationCalls === 2) {
                 return {
                     text: '{"reviewDecision":"finalize","reviewReason":"Done."}',
@@ -590,6 +594,8 @@ test('runBoundedReviewWorkflow admits assessment with a bounded output below 200
     });
 
     assert.equal(generationCalls, 2);
+    assert.ok(assessmentMaxOutputTokens !== undefined);
+    assert.ok(assessmentMaxOutputTokens < 200);
     assert.equal(result.outcome, 'generated');
     assert.deepEqual(
         result.workflowLineage.steps.map((step) => step.stepKind),
