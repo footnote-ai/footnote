@@ -1541,11 +1541,37 @@ export const createChatService = ({
                         const backendFailOpenAllowed =
                             ExecutionContract?.failOpen
                                 .allowFallbackGeneration ?? true;
+                        const tokenBudgetAlreadyExhausted =
+                            workflowResult.workflowLineage.limitStop
+                                ?.exhaustedLimitKey === 'maxTokensTotal' &&
+                            workflowResult.workflowLineage.effectiveLimits?.some(
+                                (limit) =>
+                                    limit.key === 'maxTokensTotal' &&
+                                    limit.stoppedRun === true
+                            ) === true;
+                        if (
+                            handling.runtimeAction ===
+                                'run_fallback_generation' &&
+                            tokenBudgetAlreadyExhausted
+                        ) {
+                            logger.info(
+                                'Skipping fallback generation after cumulative workflow token budget exhaustion.',
+                                {
+                                    workflowName: workflowProfile.workflowName,
+                                    terminationReason:
+                                        workflowResult.workflowLineage
+                                            .terminationReason,
+                                    reasonCode:
+                                        noGenerationResolution.reasonCode,
+                                }
+                            );
+                        }
 
                         if (
                             handling.runtimeAction ===
                                 'run_fallback_generation' &&
-                            backendFailOpenAllowed
+                            backendFailOpenAllowed &&
+                            !tokenBudgetAlreadyExhausted
                         ) {
                             try {
                                 const chainGenerationResult =
