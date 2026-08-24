@@ -28,7 +28,10 @@ import {
     type TraceAxisScore,
     type TrustGraphMetadata,
 } from '../policy/index.js';
-import { SafetyDecisionSchema } from '../policy/schemas.js';
+import {
+    PersonaExpressionStrengthSchema,
+    SafetyDecisionSchema,
+} from '../policy/schemas.js';
 import type { ApiResponseValidationResult } from './client-core.js';
 import type {
     AuthenticatedPrincipal,
@@ -424,7 +427,6 @@ const PresentationReasonCodeSchema = z.enum([
     'profile_not_configured',
     'structured_output',
     'mechanical_preservation_failed',
-    'trace_caution_high',
     'draft_timeout',
     'draft_provider_error',
     'finalizer_timeout',
@@ -498,8 +500,8 @@ export const PresentationMetadataSchema = z
                 z.literal(5),
             ])
             .optional(),
-        intensity: z.enum(['standard', 'restrained', 'skipped']),
-        traceConstrained: z.boolean(),
+        expressionStrength: PersonaExpressionStrengthSchema,
+        expressionSource: z.enum(['request', 'profile', 'persona_default']),
     })
     .strict();
 
@@ -1543,6 +1545,7 @@ export const PostChatRequestSchema = z
     .object({
         surface: ChatSurfaceSchema,
         botPersonaId: ChatPersonaIdSchema.optional(),
+        personaExpressionStrength: PersonaExpressionStrengthSchema.optional(),
         modeId: ChatModeIdSchema.optional(),
         maxReviewCycles: z.number().int().nonnegative().optional(),
         traceTarget: PartialResponseTemperamentSchema.optional(),

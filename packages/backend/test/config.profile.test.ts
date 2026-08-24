@@ -26,7 +26,27 @@ test('readBotProfileConfig applies defaults when env values are missing', () => 
     assert.equal(parsed.displayName, 'Footnote');
     assert.deepEqual(parsed.mentionAliases, []);
     assert.equal(parsed.promptOverlay.source, 'none');
+    assert.equal(parsed.personaExpressionStrength, undefined);
     assert.equal(warnings.length, 0);
+});
+
+test('readBotProfileConfig parses valid expression defaults and fails open on invalid values', () => {
+    assert.equal(
+        readBotProfileConfig({
+            env: { BOT_PROFILE_PERSONA_EXPRESSION_STRENGTH: ' STRONG ' },
+            projectRoot: process.cwd(),
+            warn: () => undefined,
+        }).personaExpressionStrength,
+        'strong'
+    );
+    assert.equal(
+        readBotProfileConfig({
+            env: { BOT_PROFILE_PERSONA_EXPRESSION_STRENGTH: 'dramatic' },
+            projectRoot: process.cwd(),
+            warn: () => undefined,
+        }).personaExpressionStrength,
+        undefined
+    );
 });
 
 test('parseBotProfileConfig prefers inline overlay over file overlay', () => {

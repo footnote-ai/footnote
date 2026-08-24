@@ -158,6 +158,8 @@ const loadCanonicalLocalNodeDefinitions = (
                         id: profile.id,
                         displayName: profile['display-name'],
                         overlayPath: profile['overlay-path'],
+                        personaExpressionStrength:
+                            profile['persona-expression-strength'],
                         mentionAliases: profile['mention-aliases'],
                     },
                 };
@@ -224,8 +226,16 @@ const buildNodeEnvironment = (
         INCIDENT_PSEUDONYMIZATION_SECRET: nodeConfig.credentials.incidentSecret,
         BOT_PROFILE_ID: nodeConfig.profile.id,
         BOT_PROFILE_DISPLAY_NAME: nodeConfig.profile.displayName,
+        ...(nodeConfig.profile.personaExpressionStrength !== undefined && {
+            BOT_PROFILE_PERSONA_EXPRESSION_STRENGTH:
+                nodeConfig.profile.personaExpressionStrength,
+        }),
         LOCAL_DISCORD_NODE_ID: nodeConfig.id,
     };
+
+    if (nodeConfig.profile.personaExpressionStrength === undefined) {
+        delete env.BOT_PROFILE_PERSONA_EXPRESSION_STRENGTH;
+    }
 
     if (nodeConfig.profile.overlayPath) {
         env.BOT_PROFILE_PROMPT_OVERLAY_PATH = nodeConfig.profile.overlayPath;

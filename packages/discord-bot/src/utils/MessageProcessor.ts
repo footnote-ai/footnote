@@ -601,6 +601,11 @@ export class MessageProcessor {
             request: {
                 surface: 'discord',
                 botPersonaId: runtimeConfig.profile.id,
+                ...(runtimeConfig.profile.personaExpressionStrength !==
+                    undefined && {
+                    personaExpressionStrength:
+                        runtimeConfig.profile.personaExpressionStrength,
+                }),
                 trigger: {
                     kind: this.getChatTriggerKind(message, trigger),
                     messageId: message.id,

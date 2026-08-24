@@ -82,6 +82,15 @@ export type ProvenanceAssessment = {
 export type TraceAxisScore = 1 | 2 | 3 | 4 | 5;
 
 /**
+ * Controls how strongly the active persona may shape user-facing prose.
+ * This is presentation guidance only; it never changes answer authority.
+ */
+export type PersonaExpressionStrength = 'subtle' | 'balanced' | 'strong';
+
+/** Records where the backend resolved persona expression strength. */
+export type PersonaExpressionSource = 'request' | 'profile' | 'persona_default';
+
+/**
  * ResponseTemperament captures TRACE (response temperament) as five normalized
  * integer axes:
  * T = tightness, R = rationale, A = attribution, C = caution, E = extent.
@@ -448,7 +457,6 @@ export type PresentationReasonCode =
     | 'profile_not_configured'
     | 'structured_output'
     | 'mechanical_preservation_failed'
-    | 'trace_caution_high'
     | 'draft_timeout'
     | 'draft_provider_error'
     | 'finalizer_timeout'
@@ -503,9 +511,10 @@ export type PresentationMetadata = {
     finalHmacId?: string;
     /** Lexical retention from styled draft to final response, not a semantic guarantee. */
     styledDraftRetentionRatio?: number;
+    /** Observed TRACE caution is retained for traceability, not expression control. */
     caution?: TraceAxisScore;
-    intensity: 'standard' | 'restrained' | 'skipped';
-    traceConstrained: boolean;
+    expressionStrength: PersonaExpressionStrength;
+    expressionSource: PersonaExpressionSource;
 };
 
 export const WORKFLOW_STEP_STATUSES = [

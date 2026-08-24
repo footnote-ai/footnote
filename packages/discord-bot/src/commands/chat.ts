@@ -300,6 +300,11 @@ const chatCommand: ChatCommandWithProfiles = {
             const response = await botApi.chatViaApi({
                 surface: 'discord',
                 botPersonaId: runtimeConfig.profile.id,
+                ...(runtimeConfig.profile.personaExpressionStrength !==
+                    undefined && {
+                    personaExpressionStrength:
+                        runtimeConfig.profile.personaExpressionStrength,
+                }),
                 ...(modeId ? { modeId } : {}),
                 ...(maxReviewCycles !== undefined && { maxReviewCycles }),
                 ...(plannerProfileId !== undefined && { plannerProfileId }),

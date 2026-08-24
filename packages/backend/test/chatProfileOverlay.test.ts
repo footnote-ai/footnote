@@ -9,6 +9,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
     resolveChatPersonaProfile,
+    resolvePersonaExpression,
     resolvePersonaPresentationGuidance,
 } from '../src/services/chatProfileOverlay.js';
 
@@ -111,4 +112,44 @@ test('keeps existing built-in and unknown persona fallback behavior', () => {
         logger
     );
     assert.equal(webProfile.id, 'footnote');
+});
+
+test('resolves persona expression by request, profile, then persona default', () => {
+    const winter = resolveChatPersonaProfile(
+        { surface: 'discord', botPersonaId: 'winter' },
+        logger
+    );
+    const requestResolution = resolvePersonaExpression(
+        { personaExpressionStrength: 'subtle' },
+        winter,
+        'strong'
+    );
+    assert.equal(requestResolution.strength, 'subtle');
+    assert.equal(requestResolution.source, 'request');
+    assert.match(
+        requestResolution.guidance,
+        /Persona expression strength: subtle/u
+    );
+    assert.equal(
+        resolvePersonaExpression({}, winter, 'balanced').source,
+        'profile'
+    );
+    assert.equal(
+        resolvePersonaExpression({}, winter, 'invalid').strength,
+        'strong'
+    );
+    assert.equal(
+        resolvePersonaExpression({}, winter, undefined).source,
+        'persona_default'
+    );
+    for (const personaId of ['footnote', 'danny', 'myuri']) {
+        const profile = resolveChatPersonaProfile(
+            { surface: 'discord', botPersonaId: personaId },
+            logger
+        );
+        assert.equal(
+            resolvePersonaExpression({}, profile, undefined).strength,
+            'balanced'
+        );
+    }
 });

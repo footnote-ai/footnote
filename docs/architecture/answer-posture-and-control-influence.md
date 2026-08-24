@@ -94,17 +94,22 @@ That means:
 - presentation changes do not become execution authority
 - optional `presentation` records remain structural execution facts, not TRACE or provenance authority
 
-### Caution and presentation flow
+### Caution and persona expression
 
-The optional backend workflow step may read only final TRACE `caution` as a
-constraint. Backend caution takes precedence over persona presentation guidance:
-`5` skips styling, `4` or unavailable caution permits restrained lexical and
-cadence edits only, and `1` to `3` permits the standard conservative budget.
-The style model cannot generate or modify TRACE. The audit may request one
-bounded finalizer repair for changes to caution, uncertainty, attribution,
-scope, or other answer posture. Mapping
-tightness, rationale, attribution, or extent to presentation is explicitly out
-of scope pending evaluation evidence.
+The optional backend workflow may observe final TRACE `caution` to protect
+answer posture, but caution is not a persona-expression control. Caution `4`,
+`5`, or unavailable caution does not skip styling or force a restrained house
+voice. The backend independently resolves persona expression as `subtle`,
+`balanced`, or `strong`: valid request override, configured bot-profile
+default, then built-in persona default. The style model and audits cannot
+generate or modify TRACE. They may request one bounded finalizer repair for
+facts, uncertainty, attribution, scope, or other answer-posture issues while
+preserving the resolved persona strength.
+
+Persona expression affects prose only. It cannot change grounded content,
+permissions, refusals, provenance, TRACE values, or safety authority. Mapping
+tightness, rationale, attribution, or extent to presentation remains out of
+scope pending evaluation evidence.
 
 When a presentation record exists, the trace view shows its outcome, model,
 audit evidence, edit estimate, and opaque HMAC identifiers. It never shows

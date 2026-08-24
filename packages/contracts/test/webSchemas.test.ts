@@ -267,6 +267,7 @@ test('PostChatRequestSchema enforces strict request payload rules', () => {
         PostChatRequestSchema.safeParse({
             surface: 'web',
             modeId: 'grounded',
+            personaExpressionStrength: 'strong',
             maxReviewCycles: 3,
             traceTarget: {
                 tightness: 4,
@@ -352,6 +353,17 @@ test('PostChatRequestSchema enforces strict request payload rules', () => {
         }).success,
         true
     );
+
+    assert.equal(
+        PostChatRequestSchema.safeParse({
+            surface: 'web',
+            personaExpressionStrength: 'dramatic',
+            trigger: { kind: 'submit' },
+            latestUserInput: 'What is Footnote?',
+            conversation: [{ role: 'user', content: 'What is Footnote?' }],
+        }).success,
+        false
+    );
 });
 
 test('openapi ChatRequest documents optional mode/review/trace request controls', () => {
@@ -362,6 +374,10 @@ test('openapi ChatRequest documents optional mode/review/trace request controls'
 
     const chatRequestSection = chatRequestSectionMatch[0];
     assert.match(chatRequestSection, /botPersonaId:\s*\n\s*type:\s*string/);
+    assert.match(
+        chatRequestSection,
+        /personaExpressionStrength:\s*\n\s*type:\s*string/
+    );
     assert.match(chatRequestSection, /modeId:\s*\n\s*type:\s*string/);
     assert.match(chatRequestSection, /maxReviewCycles:\s*\n\s*type:\s*integer/);
     assert.match(chatRequestSection, /traceTarget:\s*\n\s*type:\s*object/);
@@ -709,8 +725,8 @@ test('ResponseMetadataSchema accepts a presentation receipt separately from work
             draftAttemptCount: 1,
             finalizerAttemptCount: 2,
             auditAttemptCount: 1,
-            intensity: 'standard',
-            traceConstrained: false,
+            expressionStrength: 'balanced',
+            expressionSource: 'persona_default',
         },
     });
 

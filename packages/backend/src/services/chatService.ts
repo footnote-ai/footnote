@@ -1378,6 +1378,10 @@ export const createChatService = ({
                         persona: presentationPersona ?? {
                             id: 'footnote',
                             presentationGuidance: NEUTRAL_PRESENTATION_GUIDANCE,
+                            expressionStrength: 'balanced',
+                            expressionSource: 'persona_default',
+                            expressionGuidance:
+                                'Persona expression strength: balanced. Preserve grounded content, facts, uncertainty, attribution, scope, permissions, refusals, provenance, TRACE values, and safety decisions.',
                         },
                         caution: effectivePlannerTemperament?.caution,
                         captureUsage: (result, profile, feature) =>
@@ -1387,6 +1391,9 @@ export const createChatService = ({
                                 feature
                             ),
                     },
+                    personaExpressionGuidance:
+                        presentationPersona?.expressionGuidance ??
+                        'Persona expression strength: balanced. Preserve grounded content, facts, uncertainty, attribution, scope, permissions, refusals, provenance, TRACE values, and safety decisions.',
                 });
                 workflowPlannerStepResult = workflowResult.plannerStepResult;
                 workflowPlannerSummary =

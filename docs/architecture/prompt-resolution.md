@@ -17,12 +17,19 @@ This is the canonical order Footnote uses to build runtime prompt text.
     - If an overlay is present, it replaces that whole default persona layer rather than stacking on top of it.
     - Image paths keep their existing `surface system + exactly one active persona layer` structure.
 6. Interpolate prompt variables for selected keys.
+7. Resolve persona expression strength in the backend with this precedence:
+    - valid `personaExpressionStrength` request override;
+    - valid `BOT_PROFILE_PERSONA_EXPRESSION_STRENGTH` bot-profile default;
+    - built-in persona default (`strong` for Winter, `balanced` otherwise).
+      Invalid or absent operator values fail open to the built-in persona default.
 
 ## Operator Notes
 
 - `PROMPT_CONFIG_PATH` is shared by backend and Discord bot runtimes.
 - `PROMPT_CONFIG_PATH` applies before Discord profile overlay composition.
 - `BOT_PROFILE_*` overlay settings are Discord bot runtime specific.
+- `BOT_PROFILE_PERSONA_EXPRESSION_STRENGTH` is an optional prose-only default;
+  Discord forwards it as a request preference and the backend resolves it.
 - If both `BOT_PROFILE_PROMPT_OVERLAY` and `BOT_PROFILE_PROMPT_OVERLAY_PATH` are set, inline text wins and the file path is ignored.
 - All bot paths now run with one active persona layer, not stacked personas.
 - The shared conversational prompt core is used by Discord chat, realtime voice, and web chat.
@@ -64,8 +71,9 @@ suppressing an otherwise finalized response. Trace metadata records hashes and
 bounded edit metrics without retaining both answer texts; hashes identify text
 and do not prove equivalence.
 
-Final backend TRACE caution constrains this step before persona guidance. Caution
-`5` skips it; `4` and unavailable caution use restrained edits; `1` through `3`
-use the standard bounded mode. Restrained mode forbids wit, idioms, added
-emphasis, sentence reordering, and material expansion. No other TRACE axis maps
-to presentation in v1.
+TRACE caution remains observed presentation metadata and may protect answer
+posture during drafting, finalization, repair, and flattening audits. It never
+skips or weakens persona expression. The resolved expression strength is
+applied independently at every wording stage and controls prose only; facts,
+uncertainty, attribution, scope, permissions, refusals, provenance, TRACE
+values, and safety decisions remain authoritative.

@@ -29,7 +29,29 @@ test('readBotProfileConfig applies defaults when env values are missing', () => 
     assert.equal(parsed.displayName, 'Footnote');
     assert.deepEqual(parsed.mentionAliases, []);
     assert.equal(parsed.promptOverlay.source, 'none');
+    assert.equal(parsed.personaExpressionStrength, undefined);
     assert.equal(warnings.length, 0);
+});
+
+test('parses expression-strength defaults and fails open on malformed values', () => {
+    for (const strength of ['subtle', 'balanced', 'strong'] as const) {
+        assert.equal(
+            readBotProfileConfig({
+                env: {
+                    BOT_PROFILE_PERSONA_EXPRESSION_STRENGTH: ` ${strength} `,
+                },
+                warn: () => undefined,
+            }).personaExpressionStrength,
+            strength
+        );
+    }
+    assert.equal(
+        readBotProfileConfig({
+            env: { BOT_PROFILE_PERSONA_EXPRESSION_STRENGTH: 'dramatic' },
+            warn: () => undefined,
+        }).personaExpressionStrength,
+        undefined
+    );
 });
 
 test('parseBotProfileConfig prefers inline overlay over file overlay', () => {
@@ -75,9 +97,8 @@ test('readBotProfileConfig fails open when file overlay cannot be read', () => {
         path: path.resolve(projectRoot, './missing.txt'),
         length: 0,
     });
-    assert.equal(warnings.length, 2);
+    assert.equal(warnings.length, 1);
     assert.match(warnings[0], /Could not read BOT_PROFILE_PROMPT_OVERLAY_PATH/);
-    assert.match(warnings[1], /Ignoring BOT_PROFILE_PROMPT_OVERLAY_PATH/);
 });
 
 test('buildProfileOverlaySystemMessage includes metadata and the precedence reminder', () => {

@@ -99,12 +99,15 @@ paths:
                 - packages/contracts/src/web/types.ts#PostChatRequest
                 - packages/contracts/src/web/types.ts#PostChatResponse
                 - packages/contracts/src/web/schemas.ts#ResponseMetadataSchema
+                - packages/contracts/src/policy/types.ts#PersonaExpressionStrength
+                - packages/contracts/src/policy/schemas.ts#PersonaExpressionStrengthSchema
             summary: Generate a chat response
             description: |
                 Submit a transport-neutral chat request and receive the backend-selected action.
                 Public web callers use Turnstile when enabled; trusted internal callers may authenticate with service headers.
                 Send X-Session-Id / X-Turnstile-Token headers when needed for browser traffic.
                 Optionally provide `botPersonaId` to select the backend-owned bot persona overlay (discord).
+                Optionally provide `personaExpressionStrength` to request prose-only persona expression (`subtle`, `balanced`, or `strong`).
                 Optionally provide `maxReviewCycles` and `traceTarget` to tune workflow depth and TRACE posture for this request.
             tags:
                 - Chat
@@ -1845,6 +1848,10 @@ components:
                     type: string
                     pattern: '^[a-z0-9][a-z0-9-]{0,31}$'
                     description: Optional bot persona selector used for backend-owned persona overlays (discord).
+                personaExpressionStrength:
+                    type: string
+                    enum: [subtle, balanced, strong]
+                    description: Optional backend-resolved persona expression preference. It affects prose only; TRACE posture and safety authority remain backend-owned.
                 modeId:
                     type: string
                     enum: [express, balanced, grounded]
@@ -3907,7 +3914,6 @@ components:
                                     profile_not_configured,
                                     structured_output,
                                     mechanical_preservation_failed,
-                                    trace_caution_high,
                                     draft_timeout,
                                     draft_provider_error,
                                     finalizer_timeout,
@@ -3992,11 +3998,12 @@ components:
                         caution:
                             type: integer
                             enum: [1, 2, 3, 4, 5]
-                        intensity:
+                        expressionStrength:
                             type: string
-                            enum: [standard, restrained, skipped]
-                        traceConstrained:
-                            type: boolean
+                            enum: [subtle, balanced, strong]
+                        expressionSource:
+                            type: string
+                            enum: [request, profile, persona_default]
                     required:
                         [
                             step,
@@ -4008,8 +4015,8 @@ components:
                             draftAttemptCount,
                             finalizerAttemptCount,
                             auditAttemptCount,
-                            intensity,
-                            traceConstrained,
+                            expressionStrength,
+                            expressionSource,
                         ]
                     additionalProperties: false
                 reviewRuntime:

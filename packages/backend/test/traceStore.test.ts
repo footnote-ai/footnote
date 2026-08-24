@@ -99,8 +99,8 @@ test('TraceStore round trips a presentation receipt', async () => {
             draftAttemptCount: 1,
             finalizerAttemptCount: 1,
             auditAttemptCount: 1,
-            intensity: 'standard',
-            traceConstrained: false,
+            expressionStrength: 'balanced',
+            expressionSource: 'persona_default',
         },
     };
 

@@ -10,6 +10,12 @@ import { z } from 'zod';
 import type { SafetyReasonCode } from './types.js';
 import { SAFETY_RULE_METADATA } from './safetyRuleMetadata.js';
 
+export const PersonaExpressionStrengthSchema = z.enum([
+    'subtle',
+    'balanced',
+    'strong',
+]);
+
 const SafetyTierSchema = z.enum(['Low', 'Medium', 'High']);
 
 export const SafetyRuleIdSchema = z.custom<keyof typeof SAFETY_RULE_METADATA>(

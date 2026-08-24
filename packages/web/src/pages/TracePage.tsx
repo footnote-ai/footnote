@@ -300,12 +300,7 @@ const toSafeExternalUrl = (value: unknown): string | null => {
 };
 
 type LoadingState =
-    | 'loading'
-    | 'success'
-    | 'error'
-    | 'not-found'
-    | 'stale'
-    | 'hash-mismatch';
+    'loading' | 'success' | 'error' | 'not-found' | 'stale' | 'hash-mismatch';
 
 const renderRunOutcomeSummary = (
     runOutcomeSummary: RunOutcomeSummary | null
@@ -1108,7 +1103,8 @@ const TracePage = (): JSX.Element => {
                                     'Unspecified'}
                             </code>{' '}
                             · {presentation.personaId} persona ·{' '}
-                            {presentation.intensity} intensity
+                            {presentation.expressionStrength} expression ·{' '}
+                            {presentation.expressionSource} source
                         </p>
                         <p>
                             <strong>Audit:</strong>{' '}
@@ -1209,11 +1205,9 @@ const TracePage = (): JSX.Element => {
                                     </dd>
                                 </div>
                                 <div>
-                                    <dt>TRACE constrained</dt>
+                                    <dt>Observed TRACE caution</dt>
                                     <dd>
-                                        {presentation.traceConstrained
-                                            ? 'Yes'
-                                            : 'No'}
+                                        {presentation.caution ?? 'Unavailable'}
                                     </dd>
                                 </div>
                                 <div>

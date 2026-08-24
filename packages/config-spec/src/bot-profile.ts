@@ -8,6 +8,7 @@
 
 import fs from 'node:fs';
 import path from 'node:path';
+import type { PersonaExpressionStrength } from '@footnote/contracts/policy';
 import { envDefaultValues } from './env-spec.js';
 
 /**
@@ -33,6 +34,8 @@ export interface BotProfileConfig {
     displayName: string;
     mentionAliases: string[];
     promptOverlay: BotProfilePromptOverlay;
+    /** Optional operator default; persona catalog defaults apply when absent. */
+    personaExpressionStrength?: PersonaExpressionStrength;
 }
 
 /**
@@ -46,6 +49,7 @@ export interface ParseBotProfileConfigInput {
     overlayPath?: string | null;
     overlayFileText?: string | null;
     maxOverlayLength?: number;
+    personaExpressionStrength?: string | null;
 }
 
 /**
@@ -63,15 +67,17 @@ export interface ReadBotProfileConfigOptions {
  * Places where Footnote may inject the active profile overlay.
  */
 export type ProfilePromptOverlayUsage =
-    | 'chat'
-    | 'image.system'
-    | 'image.developer'
-    | 'realtime'
-    | 'provenance';
+    'chat' | 'image.system' | 'image.developer' | 'realtime' | 'provenance';
 
 const BOT_PROFILE_DISPLAY_NAME_MAX_LENGTH = 64;
 export const BOT_PROFILE_ID_PATTERN = /^[a-z0-9][a-z0-9-]{0,31}$/;
 export const DEFAULT_BOT_PROFILE_OVERLAY_MAX_LENGTH = 8000;
+
+export const PERSONA_EXPRESSION_STRENGTHS = [
+    'subtle',
+    'balanced',
+    'strong',
+] as const satisfies readonly PersonaExpressionStrength[];
 
 const OVERLAY_BLOCK_HEADER = '// BEGIN Bot Profile Overlay';
 const OVERLAY_BLOCK_FOOTER = '// END Bot Profile Overlay';
@@ -100,6 +106,21 @@ const normalizeOptionalString = (
 
     const normalized = value.trim();
     return normalized.length > 0 ? normalized : null;
+};
+
+/** Parses operator input without allowing malformed values to block startup. */
+export const parsePersonaExpressionStrength = (
+    value: unknown
+): PersonaExpressionStrength | undefined => {
+    if (typeof value !== 'string') {
+        return undefined;
+    }
+    const normalized = normalizeOptionalString(value)?.toLowerCase();
+    return PERSONA_EXPRESSION_STRENGTHS.includes(
+        normalized as PersonaExpressionStrength
+    )
+        ? (normalized as PersonaExpressionStrength)
+        : undefined;
 };
 
 const parseMentionAliases = (value: string | null | undefined): string[] => {
@@ -212,12 +233,18 @@ export const parseBotProfileConfig = (
                 maxOverlayLength
             )
           : emptyOverlay();
+    const personaExpressionStrength = parsePersonaExpressionStrength(
+        input.personaExpressionStrength
+    );
 
     return {
         id: parseProfileId(input.profileId),
         displayName: parseProfileDisplayName(input.profileDisplayName),
         mentionAliases: parseMentionAliases(input.mentionAliasesCsv),
         promptOverlay,
+        ...(personaExpressionStrength !== undefined && {
+            personaExpressionStrength,
+        }),
     };
 };
 
@@ -271,6 +298,7 @@ export const readBotProfileConfig = (
         inlineOverlayText,
         overlayPath: resolvedOverlayPath,
         overlayFileText,
+        personaExpressionStrength: env.BOT_PROFILE_PERSONA_EXPRESSION_STRENGTH,
         maxOverlayLength,
     });
 

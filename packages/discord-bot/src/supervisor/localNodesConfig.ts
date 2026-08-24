@@ -8,6 +8,8 @@
  */
 
 import { isRecord } from './valueGuards.js';
+import { parsePersonaExpressionStrength } from '@footnote/config-spec/bot-profile';
+import type { PersonaExpressionStrength } from '@footnote/contracts/policy';
 
 type CredentialReferenceKey =
     | 'discordTokenEnv'
@@ -34,6 +36,7 @@ type LocalNodeProfileConfig = {
     id: string;
     displayName: string;
     overlayPath?: string;
+    personaExpressionStrength?: PersonaExpressionStrength;
     mentionAliases?: string[];
 };
 
@@ -63,6 +66,7 @@ export type LocalNodeRuntimeConfig = {
         id: string;
         displayName: string;
         overlayPath?: string;
+        personaExpressionStrength?: PersonaExpressionStrength;
         mentionAliases: string[];
     };
 };
@@ -141,12 +145,18 @@ const parseProfile = (
     }
 
     const overlayPath = normalizeOptionalString(value.overlayPath);
+    const personaExpressionStrength = parsePersonaExpressionStrength(
+        typeof value.personaExpressionStrength === 'string'
+            ? value.personaExpressionStrength
+            : undefined
+    );
     const mentionAliases = parseMentionAliases(value.mentionAliases, nodeId);
 
     return {
         id: profileId,
         displayName,
         overlayPath,
+        personaExpressionStrength,
         mentionAliases,
     };
 };
@@ -420,6 +430,8 @@ const resolveRuntimeNode = (
                 id: parsedNode.profile.id,
                 displayName: parsedNode.profile.displayName,
                 overlayPath: parsedNode.profile.overlayPath,
+                personaExpressionStrength:
+                    parsedNode.profile.personaExpressionStrength,
                 mentionAliases: parsedNode.profile.mentionAliases ?? [],
             },
         },

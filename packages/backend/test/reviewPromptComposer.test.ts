@@ -50,3 +50,16 @@ test('composeRefinementPrompt applies bounded module set and includes revision i
         /Trim this answer and make phrasing natural\./
     );
 });
+
+test('composeAssessPrompt and composeRefinementPrompt preserve resolved persona strength guidance', () => {
+    const guidance =
+        'Persona expression strength: strong. Preserve facts, uncertainty, and safety decisions.';
+    assert.match(
+        composeAssessPrompt({ personaExpressionGuidance: guidance }).prompt,
+        /Persona expression strength: strong/u
+    );
+    assert.match(
+        composeRefinementPrompt({ personaExpressionGuidance: guidance }).prompt,
+        /Persona expression strength: strong/u
+    );
+});

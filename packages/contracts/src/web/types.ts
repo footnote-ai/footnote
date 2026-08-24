@@ -7,6 +7,7 @@
  */
 
 import type {
+    PersonaExpressionStrength,
     PartialResponseTemperament,
     ResponseMetadata,
     TraceAxisScore,
@@ -66,11 +67,7 @@ export type GetAuthSessionResponse =
  * Review lifecycle used by operators while investigating one report.
  */
 export type IncidentStatus =
-    | 'new'
-    | 'under_review'
-    | 'confirmed'
-    | 'dismissed'
-    | 'resolved';
+    'new' | 'under_review' | 'confirmed' | 'dismissed' | 'resolved';
 
 /**
  * Canonical audit event names recorded for incident workflows.
@@ -298,11 +295,7 @@ export type ChatSurface = 'web' | 'discord';
  * @api.path: POST /api/chat
  */
 export type ChatTriggerKind =
-    | 'submit'
-    | 'direct'
-    | 'invoked'
-    | 'alias_candidate'
-    | 'catchup';
+    'submit' | 'direct' | 'invoked' | 'alias_candidate' | 'catchup';
 
 /**
  * Provider-neutral facts about who a message explicitly addresses.
@@ -375,6 +368,7 @@ export type ChatImageRequest = {
 export type PostChatRequest = {
     surface: ChatSurface;
     botPersonaId?: string;
+    personaExpressionStrength?: PersonaExpressionStrength;
     modeId?: WorkflowModeId;
     maxReviewCycles?: number;
     traceTarget?: Partial<{
@@ -525,10 +519,7 @@ export type InternalImageQuality = 'low' | 'medium' | 'high' | 'auto';
  * @api.path: POST /api/internal/image
  */
 export type InternalImageSize =
-    | '1024x1024'
-    | '1024x1536'
-    | '1536x1024'
-    | 'auto';
+    '1024x1024' | '1024x1536' | '1536x1024' | 'auto';
 
 /**
  * Internal image background values accepted by the trusted backend image route.
@@ -872,8 +863,7 @@ export type PostInternalImageDescriptionTaskResponse = {
  * @api.path: POST /api/internal/text
  */
 export type PostInternalTextRequest =
-    | PostInternalNewsTaskRequest
-    | PostInternalImageDescriptionTaskRequest;
+    PostInternalNewsTaskRequest | PostInternalImageDescriptionTaskRequest;
 
 /**
  * Narrow trusted internal text-task response union.
@@ -882,8 +872,7 @@ export type PostInternalTextRequest =
  * @api.path: POST /api/internal/text
  */
 export type PostInternalTextResponse =
-    | PostInternalNewsTaskResponse
-    | PostInternalImageDescriptionTaskResponse;
+    PostInternalNewsTaskResponse | PostInternalImageDescriptionTaskResponse;
 
 /**
  * @api.operationId: postTraces
@@ -1150,10 +1139,7 @@ export type RecoverableTaskKind = 'image_generation';
 
 /** @api.operationId: postInternalRecoverableTask @api.path: POST /api/internal/recoverable-tasks */
 export type RecoverableTaskState =
-    | 'started'
-    | 'recovering'
-    | 'complete'
-    | 'failed';
+    'started' | 'recovering' | 'complete' | 'failed';
 
 /**
  * Minimal delivery record used to reconcile a public Discord reply after a restart.

@@ -56,6 +56,7 @@ export const composeAssessPrompt = (input: {
     moduleIds?: readonly string[];
     basePromptOverride?: string;
     registry?: PromptRegistry;
+    personaExpressionGuidance?: string;
 }): {
     prompt: string;
     appliedModuleIds: ReviewModuleId[];
@@ -70,7 +71,11 @@ export const composeAssessPrompt = (input: {
         moduleIds: appliedModuleIds,
         mode: 'assess',
     });
-    const prompt = [basePrompt, modulePrompt]
+    const prompt = [
+        basePrompt,
+        modulePrompt,
+        input.personaExpressionGuidance?.trim() ?? '',
+    ]
         .filter((part) => part.trim().length > 0)
         .join('\n\n')
         .trim();
@@ -93,6 +98,7 @@ export const composeRefinementPrompt = (input: {
     revisionInstruction?: string;
     moduleIds?: readonly string[];
     registry?: PromptRegistry;
+    personaExpressionGuidance?: string;
 }): {
     prompt: string;
     appliedModuleIds: ReviewModuleId[];
@@ -119,6 +125,7 @@ export const composeRefinementPrompt = (input: {
         boundedRevisionInstruction.length > 0
             ? `Revision instruction: ${boundedRevisionInstruction}`
             : '',
+        input.personaExpressionGuidance?.trim() ?? '',
     ]
         .filter((part) => part.trim().length > 0)
         .join('\n\n')

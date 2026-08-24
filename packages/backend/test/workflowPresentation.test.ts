@@ -153,7 +153,13 @@ test('workflow asks for a styled draft before main-model finalization and record
         captureUsage: captureGenerationUsage,
         presentation: {
             config,
-            persona: { id: 'myuri', presentationGuidance: 'Lively prose.' },
+            persona: {
+                id: 'myuri',
+                presentationGuidance: 'Lively prose.',
+                expressionStrength: 'balanced',
+                expressionSource: 'persona_default',
+                expressionGuidance: 'Persona expression strength: balanced.',
+            },
             captureUsage: capturePresentationUsage,
         },
     });
@@ -315,7 +321,13 @@ test('workflow falls back to normal generation after a structured presentation d
         captureUsage: usage,
         presentation: {
             config,
-            persona: { id: 'myuri', presentationGuidance: 'Lively prose.' },
+            persona: {
+                id: 'myuri',
+                presentationGuidance: 'Lively prose.',
+                expressionStrength: 'balanced',
+                expressionSource: 'persona_default',
+                expressionGuidance: 'Persona expression strength: balanced.',
+            },
             captureUsage: usage,
         },
     });
@@ -356,7 +368,7 @@ test('workflow falls back to normal generation after a structured presentation d
     ]);
 });
 
-test('skips presentation before drafting when resolved TRACE caution is high', async () => {
+test('does not suppress presentation when resolved TRACE caution is high', async () => {
     const calls: GenerationRequest[] = [];
     const runtime: GenerationRuntime = {
         kind: 'test',
@@ -388,7 +400,13 @@ test('skips presentation before drafting when resolved TRACE caution is high', a
         captureUsage: usage,
         presentation: {
             config,
-            persona: { id: 'myuri', presentationGuidance: 'Lively prose.' },
+            persona: {
+                id: 'myuri',
+                presentationGuidance: 'Lively prose.',
+                expressionStrength: 'balanced',
+                expressionSource: 'persona_default',
+                expressionGuidance: 'Persona expression strength: balanced.',
+            },
             caution: 5,
             captureUsage: usage,
         },
@@ -397,9 +415,9 @@ test('skips presentation before drafting when resolved TRACE caution is high', a
     assert.equal(result.outcome, 'generated');
     if (result.outcome !== 'generated')
         throw new Error('Expected generated result.');
-    assert.equal(result.presentation?.reasonCode, 'trace_caution_high');
-    assert.equal(result.presentation?.attempted, false);
-    assert.equal(calls.length, 1);
+    assert.equal(result.presentation?.expressionStrength, 'balanced');
+    assert.equal(result.presentation?.attempted, true);
+    assert.ok(calls.length > 1);
     assert.equal(
         calls.some((call) =>
             call.messages.some((message) =>
@@ -408,8 +426,8 @@ test('skips presentation before drafting when resolved TRACE caution is high', a
                 )
             )
         ),
-        false
+        true
     );
     assert.equal(result.workflowLineage.steps[0]?.stepKind, 'presentation');
-    assert.equal(result.workflowLineage.steps[0]?.outcome.status, 'skipped');
+    assert.equal(result.workflowLineage.steps[0]?.outcome.status, 'executed');
 });

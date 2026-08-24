@@ -305,6 +305,7 @@ export type RuntimeConfig = {
                 id?: string;
                 displayName?: string;
                 overlayPath?: string;
+                personaExpressionStrength?: string;
                 mentionAliases?: string[];
             };
         }> | null;

@@ -95,8 +95,8 @@ test('details action renders markdown sections with execution table and trace vi
                 draftAttemptCount: 1,
                 finalizerAttemptCount: 1,
                 auditAttemptCount: 0,
-                intensity: 'standard',
-                traceConstrained: false,
+                expressionStrength: 'balanced',
+                expressionSource: 'persona_default',
             },
             workflowMode: {
                 modeId: 'balanced',

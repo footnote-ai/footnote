@@ -9,7 +9,12 @@ import fs from 'node:fs';
 import path from 'node:path';
 import type { PostChatRequest } from '@footnote/contracts/web';
 import type { BotProfileConfig } from '../config/profile.js';
+import { parsePersonaExpressionStrength } from '../config/profile.js';
 import { buildProfileOverlaySystemMessage } from './prompts/profilePromptOverlay.js';
+import {
+    buildPersonaExpressionGuidance,
+    type PersonaExpressionResolution,
+} from './prompts/personaExpression.js';
 import { runtimeConfig } from '../config.js';
 
 type ChatProfileOverlayLogger = {
@@ -32,6 +37,7 @@ export type PersonaCatalogEntry = {
     overlayRelativePath: string | null;
     /** Presentation-only guidance for optional presentation flow; not persona authority. */
     presentationGuidance: string;
+    defaultExpressionStrength: PersonaExpressionResolution['strength'];
 };
 
 const PERSONA_CATALOG: Record<string, PersonaCatalogEntry> = {
@@ -41,6 +47,7 @@ const PERSONA_CATALOG: Record<string, PersonaCatalogEntry> = {
         overlayRelativePath: null,
         presentationGuidance:
             'Use clear, neutral, practical prose. Prefer direct sentences and calm, candid phrasing.',
+        defaultExpressionStrength: 'balanced',
     },
     myuri: {
         id: 'myuri',
@@ -48,6 +55,7 @@ const PERSONA_CATALOG: Record<string, PersonaCatalogEntry> = {
         overlayRelativePath: 'packages/prompts/src/profile-overlays/myuri.md',
         presentationGuidance:
             'Use warm, lively, perceptive prose with situational wit. Keep the strongest useful point and avoid ceremony.',
+        defaultExpressionStrength: 'balanced',
     },
     danny: {
         id: 'danny',
@@ -55,6 +63,7 @@ const PERSONA_CATALOG: Record<string, PersonaCatalogEntry> = {
         overlayRelativePath: 'packages/prompts/src/profile-overlays/danny.md',
         presentationGuidance:
             'Use composed, exact, measured language with quiet warmth. Make the point clear without urgency or ceremony.',
+        defaultExpressionStrength: 'balanced',
     },
     winter: {
         id: 'winter',
@@ -62,6 +71,7 @@ const PERSONA_CATALOG: Record<string, PersonaCatalogEntry> = {
         overlayRelativePath: 'packages/prompts/src/profile-overlays/winter.md',
         presentationGuidance:
             'Use direct, sharp, personable prose with dry wit and minimal ceremony. Avoid unsolicited moral framing, generic reassurance, and performative caution. Let disagreement or constraint show plainly when it is actually relevant.',
+        defaultExpressionStrength: 'strong',
     },
 };
 
@@ -167,6 +177,36 @@ const buildPersonaProfileConfig = (
             path: overlay.absolutePath,
             length: overlay.text?.length ?? 0,
         },
+    };
+};
+
+/** Resolves expression strength at the backend boundary with fail-open fallback. */
+export const resolvePersonaExpression = (
+    request: Pick<PostChatRequest, 'personaExpressionStrength'>,
+    persona: Pick<PersonaCatalogEntry, 'id'>,
+    configuredProfileStrength: string | undefined = runtimeConfig.profile
+        .personaExpressionStrength
+): PersonaExpressionResolution => {
+    const requestStrength = parsePersonaExpressionStrength(
+        request.personaExpressionStrength
+    );
+    const profileStrength = parsePersonaExpressionStrength(
+        configuredProfileStrength
+    );
+    const strength =
+        requestStrength ??
+        profileStrength ??
+        PERSONA_CATALOG[persona.id]?.defaultExpressionStrength ??
+        'balanced';
+    const source = requestStrength
+        ? 'request'
+        : profileStrength
+          ? 'profile'
+          : 'persona_default';
+    return {
+        strength,
+        source,
+        guidance: buildPersonaExpressionGuidance(strength),
     };
 };
 

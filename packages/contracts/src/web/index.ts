@@ -39,6 +39,7 @@ export type {
     PostChatResponse,
     GetChatProfilesResponse,
 } from './types.js';
+export type { PersonaExpressionStrength } from '../policy/index.js';
 
 /**
  * @api.operationId: postInternalTextTask
