@@ -486,7 +486,10 @@ export type PresentationMetadata = {
     /** Deployment-requested style-draft provider, distinct from upstream resolution. */
     draftRequestedProvider?: string;
     draftRequestedModel?: string;
-    draftModel?: string;
+    /** Provider observed after a style-draft GenerationResult returned. */
+    draftObservedProvider?: string;
+    /** Model observed after a style-draft GenerationResult returned. */
+    draftObservedModel?: string;
     /** Upstream-reported routing facts; Footnote does not independently verify them. */
     upstreamInferenceProvider?: string;
     upstreamResolvedModel?: string;

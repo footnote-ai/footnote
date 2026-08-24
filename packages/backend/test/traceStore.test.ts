@@ -96,6 +96,10 @@ test('TraceStore round trips a presentation receipt', async () => {
             attempted: true,
             reasonCode: 'finalized',
             personaId: 'myuri',
+            draftRequestedProvider: 'openai',
+            draftRequestedModel: 'gpt-5-mini',
+            draftObservedProvider: 'openai',
+            draftObservedModel: 'gpt-5-mini',
             auditOutcome: 'clear',
             draftAttemptCount: 1,
             finalizerAttemptCount: 1,
@@ -111,6 +115,8 @@ test('TraceStore round trips a presentation receipt', async () => {
         const retrieved = await store.retrieve(responseId);
         assert.ok(retrieved, 'presentation flow trace should be retrievable');
         assert.equal(retrieved.presentation?.outcome, 'finalized');
+        assert.equal(retrieved.presentation?.draftObservedProvider, 'openai');
+        assert.equal(retrieved.presentation?.draftObservedModel, 'gpt-5-mini');
         assert.equal(retrieved.presentation?.expressionStrength, 'balanced');
         assert.equal(
             retrieved.presentation?.expressionSource,
@@ -153,6 +159,7 @@ test('TraceStore retrieves legacy presentation receipts after compatibility repa
             auditAttemptCount: 1,
             intensity: 'restrained',
             traceConstrained: true,
+            draftModel: 'requested-but-not-observed',
         },
     };
     const legacyDatabase = new Database(dbPath);
@@ -180,6 +187,11 @@ test('TraceStore retrieves legacy presentation receipts after compatibility repa
         assert.equal(
             retrieved.presentation?.expressionSource,
             'persona_default'
+        );
+        assert.equal(
+            retrieved.presentation?.draftObservedModel,
+            undefined,
+            'legacy draftModel must not be treated as observed'
         );
     } finally {
         store.close();

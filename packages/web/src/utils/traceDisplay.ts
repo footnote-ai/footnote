@@ -52,3 +52,44 @@ export const sanitizePresentationForDisplay = (
     const parsed = PresentationMetadataSchema.safeParse(presentation);
     return parsed.success ? parsed.data : null;
 };
+
+/**
+ * Explains why the optional presentation path was or was not used without
+ * implying that a requested provider returned a draft.
+ */
+export const getPresentationTraceSummary = (
+    presentation: PresentationMetadata
+): string => {
+    switch (presentation.reasonCode) {
+        case 'draft_timeout':
+            return 'No draft was returned: the presentation draft timed out; the main answer was used.';
+        case 'draft_provider_error':
+            return 'No draft was returned: the presentation provider failed; the main answer was used.';
+        case 'finalizer_timeout':
+            return 'A draft was observed, but the finalizer timed out; the main answer was used.';
+        case 'finalizer_provider_error':
+            return 'A draft was observed, but the finalizer failed; the main answer was used.';
+        case 'mechanical_preservation_failed':
+            return 'The draft and finalizer returned, but preservation checks rejected the finalizer; the main answer was used.';
+        case 'structured_output':
+            return 'The draft returned non-prose structured output; the main answer was used.';
+        case 'evidence_repair_unavailable':
+            return 'Evidence repair was unavailable; the main answer was used.';
+        case 'presentation_repair_unavailable':
+            return 'Presentation repair was unavailable; the main answer was used.';
+        case 'disabled':
+            return 'Presentation was disabled; the main answer was used.';
+        case 'profile_not_configured':
+            return 'No presentation profile was configured; the main answer was used.';
+        case 'finalized':
+            return 'Presentation finalized successfully.';
+        case 'evidence_repaired':
+            return 'Presentation finalized after evidence repair.';
+        case 'presentation_repaired':
+            return 'Presentation finalized after presentation repair.';
+        case 'audit_unavailable':
+            return 'Presentation finalized; the advisory audit was unavailable.';
+        case 'audit_invalid':
+            return 'Presentation finalized; the advisory audit returned invalid output.';
+    }
+};

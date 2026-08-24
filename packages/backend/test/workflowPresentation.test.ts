@@ -82,6 +82,71 @@ const policy = {
     enableRevision: false,
 };
 
+const runPresentationScenario = async (
+    generate: (
+        call: number,
+        request: GenerationRequest
+    ) => Promise<GenerationResult>,
+    configOverride: Partial<PresentationConfig> = {}
+) => {
+    let calls = 0;
+    const result = await runBoundedReviewWorkflow({
+        generationRuntime: {
+            kind: 'test',
+            generate: (request) => {
+                calls += 1;
+                return generate(calls, request);
+            },
+        },
+        generationRequest: {
+            messages: [
+                {
+                    role: 'system',
+                    content:
+                        'AUTHORITATIVE CONTEXT: Ada Lovelace confirmed 12 fixes at https://example.com/release.',
+                },
+                { role: 'user', content: 'status' },
+            ],
+        },
+        messagesWithHints: [
+            {
+                role: 'system',
+                content:
+                    'AUTHORITATIVE CONTEXT: Ada Lovelace confirmed 12 fixes at https://example.com/release.',
+            },
+            { role: 'user', content: 'status' },
+        ],
+        contextEnvelope,
+        generationStartedAtMs: Date.now(),
+        workflowConfig: {
+            workflowName: 'test',
+            maxIterations: 1,
+            maxDurationMs: 1000,
+            executionLimits: {
+                maxWorkflowSteps: 3,
+                maxToolCalls: 0,
+                maxDeliberationCalls: 0,
+                maxTokensTotal: 100,
+                maxDurationMs: 1000,
+            },
+        },
+        workflowPolicy: policy,
+        captureUsage: usage,
+        presentation: {
+            config: { ...config, ...configOverride },
+            persona: {
+                id: 'myuri',
+                presentationGuidance: 'Lively prose.',
+                expressionStrength: 'balanced',
+                expressionSource: 'persona_default',
+                expressionGuidance: 'Persona expression strength: balanced.',
+            },
+            captureUsage: usage,
+        },
+    });
+    return result;
+};
+
 test('workflow asks for a styled draft before main-model finalization and records the receipt', async () => {
     const calls: GenerationRequest[] = [];
     const generationUsageTexts: string[] = [];
@@ -378,6 +443,131 @@ test('workflow falls back to normal generation after a structured presentation d
             text: 'Normal main-model response.',
         },
     ]);
+});
+
+test('workflow keeps timeout and provider-error traces free of presentation candidates', async () => {
+    const timeoutResult = await runPresentationScenario(
+        async (call) => {
+            if (call === 1) {
+                await new Promise<void>((resolve) => setTimeout(resolve, 20));
+                return generated('Late draft.');
+            }
+            return generated('Normal answer after timeout.');
+        },
+        { timeoutMs: 5 }
+    );
+    const providerErrorResult = await runPresentationScenario(async (call) => {
+        if (call === 1) {
+            throw new Error('draft provider unavailable');
+        }
+        return generated('Normal answer after provider error.');
+    });
+
+    for (const [result, reasonCode, answer] of [
+        [timeoutResult, 'draft_timeout', 'Normal answer after timeout.'],
+        [
+            providerErrorResult,
+            'draft_provider_error',
+            'Normal answer after provider error.',
+        ],
+    ] as const) {
+        assert.equal(result.outcome, 'generated');
+        if (result.outcome !== 'generated') {
+            continue;
+        }
+        assert.equal(result.presentation?.reasonCode, reasonCode);
+        assert.equal(result.generationResult.text, answer);
+        assert.deepEqual(
+            result.responseCandidates?.map((candidate) => candidate.stage),
+            ['fallback']
+        );
+    }
+});
+
+test('workflow exposes only the returned draft when the finalizer fails', async () => {
+    const result = await runPresentationScenario(async (call) => {
+        if (call === 1) {
+            return generated(
+                'A lively update: Ada Lovelace confirmed 12 fixes at https://example.com/release.'
+            );
+        }
+        if (call === 2) {
+            throw new Error('finalizer provider unavailable');
+        }
+        return generated('Normal answer after finalizer failure.');
+    });
+
+    assert.equal(result.outcome, 'generated');
+    if (result.outcome !== 'generated') {
+        return;
+    }
+    assert.equal(result.presentation?.reasonCode, 'finalizer_provider_error');
+    assert.deepEqual(
+        result.responseCandidates?.map((candidate) => candidate.stage),
+        ['presentation_draft', 'fallback']
+    );
+    assert.equal(
+        result.generationResult.text,
+        'Normal answer after finalizer failure.'
+    );
+});
+
+test('workflow keeps returned presentation candidates before a mechanical fallback', async () => {
+    const result = await runPresentationScenario(async (call) => {
+        if (call === 1) {
+            return generated(
+                'A lively update: Ada Lovelace confirmed 12 fixes at https://example.com/release.'
+            );
+        }
+        if (call === 2) {
+            return generated('A lively update: 12 fixes confirmed.');
+        }
+        return generated('Normal answer after mechanical fallback.');
+    });
+
+    assert.equal(result.outcome, 'generated');
+    if (result.outcome !== 'generated') {
+        return;
+    }
+    assert.equal(
+        result.presentation?.reasonCode,
+        'mechanical_preservation_failed'
+    );
+    assert.deepEqual(
+        result.responseCandidates?.map((candidate) => candidate.stage),
+        ['presentation_draft', 'presentation_finalization', 'fallback']
+    );
+    assert.equal(
+        result.generationResult.text,
+        'Normal answer after mechanical fallback.'
+    );
+});
+
+test('workflow selects a successful finalization and does not create a fallback candidate', async () => {
+    const result = await runPresentationScenario(async (call) => {
+        if (call === 1) {
+            return generated(
+                'A lively update: Ada Lovelace confirmed 12 fixes at https://example.com/release.'
+            );
+        }
+        if (call === 2) {
+            return generated(
+                'A bright release: Ada Lovelace confirmed 12 fixes at https://example.com/release.'
+            );
+        }
+        return generated('{"verdict":"clear","feedback":""}');
+    });
+
+    assert.equal(result.outcome, 'generated');
+    if (result.outcome !== 'generated') {
+        return;
+    }
+    assert.equal(result.presentation?.reasonCode, 'finalized');
+    assert.deepEqual(
+        result.responseCandidates?.map((candidate) => candidate.stage),
+        ['presentation_draft', 'presentation_finalization']
+    );
+    assert.equal(result.responseCandidates?.at(-1)?.state, 'selected');
 });
 
 test('does not suppress presentation when resolved TRACE caution is high', async () => {

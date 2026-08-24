@@ -100,6 +100,10 @@ test('passes the styled draft and authoritative context into evidence-aware fina
     assert.equal(presentation.metadata.outcome, 'finalized');
     assert.equal(presentation.metadata.expressionStrength, 'balanced');
     assert.equal(presentation.metadata.expressionSource, 'persona_default');
+    assert.equal(presentation.metadata.draftRequestedProvider, 'openai');
+    assert.equal(presentation.metadata.draftRequestedModel, 'gpt-5-mini');
+    assert.equal(presentation.metadata.draftObservedProvider, 'openai');
+    assert.equal(presentation.metadata.draftObservedModel, 'gpt-5-mini');
     const finalizerRequest = requests[1];
     assert.match(
         String(finalizerRequest?.messages[0]?.content),
@@ -178,6 +182,52 @@ test('keeps persona expression active for elevated or unavailable TRACE caution'
             /restrained expression|skip styling/u
         );
     }
+});
+
+test('records upstream provider and returned model separately from requested draft routing', async () => {
+    let runtimeCalls = 0;
+    const presentation = await runPresentationStep({
+        generationRuntime: runtime(async () => {
+            runtimeCalls += 1;
+            return runtimeCalls === 1
+                ? {
+                      ...result(
+                          'A lively update: 12 fixes confirmed at https://example.com/release.'
+                      ),
+                      model: 'thedrummer/cydonia-24b-v4.1',
+                      upstreamAttribution: {
+                          inferenceProvider: 'parasail',
+                          resolvedModel: 'thedrummer/cydonia-24b-v4.1',
+                      },
+                  }
+                : result('{"verdict":"clear","feedback":""}');
+        }),
+        generationRequest: request,
+        finalize: async () =>
+            result(
+                'A lively update: 12 fixes confirmed at https://example.com/release.'
+            ),
+        config: {
+            ...config,
+            profile: {
+                ...profile,
+                provider: 'openrouter',
+                providerModel: 'thedrummer/cydonia-24b-v4.1',
+            },
+        },
+        persona,
+    });
+
+    assert.equal(presentation.metadata.draftRequestedProvider, 'openrouter');
+    assert.equal(
+        presentation.metadata.draftRequestedModel,
+        'thedrummer/cydonia-24b-v4.1'
+    );
+    assert.equal(presentation.metadata.draftObservedProvider, 'parasail');
+    assert.equal(
+        presentation.metadata.draftObservedModel,
+        'thedrummer/cydonia-24b-v4.1'
+    );
 });
 
 test('keeps the styled candidate when the finalizer has no authority reason to change it', async () => {
@@ -346,13 +396,39 @@ test('records draft and finalizer timeouts as bounded presentation fallbacks', a
     assert.equal(draftTimeout.metadata.reasonCode, 'draft_timeout');
     assert.equal(finalizerTimeout.metadata.reasonCode, 'finalizer_timeout');
     assert.equal(draftTimeout.metadata.attempted, true);
+    assert.equal(draftTimeout.metadata.draftRequestedModel, 'gpt-5-mini');
+    assert.equal(draftTimeout.metadata.draftObservedProvider, undefined);
+    assert.equal(draftTimeout.metadata.draftObservedModel, undefined);
     assert.equal(draftTimeout.metadata.draftAttemptCount, 1);
     assert.equal(draftTimeout.metadata.finalizerAttemptCount, 0);
     assert.equal(draftTimeout.metadata.auditAttemptCount, 0);
     assert.equal(finalizerTimeout.metadata.draftAttemptCount, 1);
+    assert.equal(finalizerTimeout.metadata.draftObservedProvider, 'openai');
+    assert.equal(finalizerTimeout.metadata.draftObservedModel, 'gpt-5-mini');
     assert.equal(finalizerTimeout.metadata.finalizerAttemptCount, 1);
     assert.equal(finalizerTimeout.metadata.auditAttemptCount, 0);
     assert.equal(finalizerSignal?.aborted, true);
+});
+
+test('does not report an observed draft when the provider fails before returning', async () => {
+    const presentation = await runPresentationStep({
+        generationRuntime: runtime(async () => {
+            throw new Error('draft provider unavailable');
+        }),
+        generationRequest: request,
+        finalize: async () => result('Unused.'),
+        config,
+        persona,
+    });
+
+    assert.equal(presentation.outcome, 'fallback');
+    assert.equal(presentation.metadata.reasonCode, 'draft_provider_error');
+    assert.equal(presentation.metadata.draftRequestedProvider, 'openai');
+    assert.equal(presentation.metadata.draftRequestedModel, 'gpt-5-mini');
+    assert.equal(presentation.metadata.draftObservedProvider, undefined);
+    assert.equal(presentation.metadata.draftObservedModel, undefined);
+    assert.equal(presentation.draftResult, undefined);
+    assert.deepEqual(presentation.finalizerResults, []);
 });
 
 test('uses normal fallback for structured drafts and mechanical preservation failures', async () => {
@@ -388,6 +464,8 @@ test('uses normal fallback for structured drafts and mechanical preservation fai
         droppedUrl.metadata.reasonCode,
         'mechanical_preservation_failed'
     );
+    assert.equal(droppedUrl.metadata.draftObservedProvider, 'openai');
+    assert.equal(droppedUrl.metadata.draftObservedModel, 'gpt-5-mini');
 });
 
 test('suppresses an unrepairable evidence issue instead of displaying the stale finalizer text', async () => {

@@ -3934,8 +3934,12 @@ components:
                             type: string
                         draftRequestedModel:
                             type: string
-                        draftModel:
+                        draftObservedProvider:
                             type: string
+                            description: Provider observed after a style-draft generation result returned. Absent when the draft failed or timed out before returning.
+                        draftObservedModel:
+                            type: string
+                            description: Model observed after a style-draft generation result returned. Absent when the draft failed or timed out before returning.
                         auditProfileId:
                             type: string
                         auditProvider:

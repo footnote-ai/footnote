@@ -28,4 +28,8 @@ test('trace response versions load final-first with controls, warnings, and unav
     assert.match(source, /This version was superseded/);
     assert.match(source, /Response history is unavailable/);
     assert.match(source, /ariaLabel="Response versions"/);
+    assert.match(source, /Requested draft/);
+    assert.match(source, /Observed draft/);
+    assert.match(source, /getPresentationTraceSummary/);
+    assert.match(source, /Main answer after presentation fallback/);
 });
