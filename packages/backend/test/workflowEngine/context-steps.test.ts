@@ -12,6 +12,29 @@ import type {
     RuntimeMessage,
 } from '@footnote/agent-runtime';
 import { runBoundedReviewWorkflowForTest } from './helpers.js';
+import type { ConversationContextEnvelope } from '../../src/services/conversationContextService.js';
+
+const contextEnvelopeWithUserTurn: ConversationContextEnvelope = {
+    participants: [],
+    turns: [
+        {
+            turnId: 'turn-1',
+            role: 'user',
+            speakerId: 'user-1',
+            speakerLabel: 'Jordan',
+            visibility: 'model_visible',
+            authority: 'conversation',
+        },
+    ],
+    diagnostics: {
+        surface: 'web',
+        totalInputMessages: 1,
+        projectedMessageCount: 1,
+        trimmedMessageCount: 0,
+        sanitizedTimestampCount: 0,
+        projectedSpeakerLabelCount: 0,
+    },
+};
 
 test('runBoundedReviewWorkflow does not emit concrete tool steps in current engine-owned review path', async () => {
     const generationRuntime: GenerationRuntime = {
@@ -391,9 +414,120 @@ test('runBoundedReviewWorkflow preserves project-context authority roles', async
             message.role === 'system' &&
             message.content.includes('UNTRUSTED PROJECT CONTEXT')
     );
+    const manifestIndex = messages.findIndex((message) =>
+        message.content.includes('FOOTNOTE CONTEXT MANIFEST')
+    );
+    const untrustedIndex = messages.findIndex((message) =>
+        message.content.includes('UNTRUSTED PROJECT CONTEXT')
+    );
     assert.equal(trusted?.role, 'system');
     assert.equal(untrusted?.role, 'user');
     assert.equal(untrustedSystemMessage, undefined);
+    assert.ok(manifestIndex >= 0 && manifestIndex < untrustedIndex);
+});
+
+test('runBoundedReviewWorkflow exposes source state without changing conversation evidence', async () => {
+    const observedMessages: RuntimeMessage[][] = [];
+    const generationRuntime: GenerationRuntime = {
+        kind: 'test-runtime',
+        async generate(input) {
+            observedMessages.push(input.messages);
+            return {
+                text: 'draft',
+                model: 'gpt-5-mini',
+                usage: {
+                    promptTokens: 10,
+                    completionTokens: 5,
+                    totalTokens: 15,
+                },
+                provenance: 'Inferred',
+                citations: [],
+            };
+        },
+    };
+
+    const result = await runBoundedReviewWorkflowForTest({
+        generationRuntime,
+        generationRequest: {
+            model: 'gpt-5-mini',
+            messages: [
+                {
+                    role: 'user',
+                    content:
+                        'Compare Ada and Grace based on what I have told you.',
+                },
+            ],
+        },
+        messagesWithHints: [
+            {
+                role: 'user',
+                content: 'Compare Ada and Grace based on what I have told you.',
+            },
+        ],
+        contextEnvelope: contextEnvelopeWithUserTurn,
+        generationStartedAtMs: Date.now(),
+        workflowConfig: {
+            workflowName: 'message_reviewed',
+            maxIterations: 1,
+            maxDurationMs: 15000,
+        },
+        workflowPolicy: {
+            enablePlanning: false,
+            enableToolUse: true,
+            enableReplanning: false,
+            enableGeneration: true,
+            enableAssessment: true,
+            enableRevision: true,
+        },
+        contextStepRequests: [
+            {
+                integrationName: 'github_context',
+                requested: true,
+                eligible: true,
+            },
+        ],
+        contextStepExecutor: async () => ({
+            outcome: 'skipped' as const,
+            executionContext: {
+                toolName: 'github_context' as const,
+                status: 'skipped' as const,
+                reasonCode: 'tool_unavailable' as const,
+            },
+        }),
+        captureUsage: (generationResult) => ({
+            model: generationResult.model ?? 'gpt-5-mini',
+            promptTokens: generationResult.usage?.promptTokens ?? 0,
+            completionTokens: generationResult.usage?.completionTokens ?? 0,
+            totalTokens: generationResult.usage?.totalTokens ?? 0,
+            estimatedCost: {
+                inputCostUsd: 0,
+                outputCostUsd: 0,
+                totalCostUsd: 0,
+            },
+        }),
+    });
+
+    assert.equal(result.outcome, 'generated');
+    const firstMessages = observedMessages[0] ?? [];
+    const manifest = firstMessages.find((message) =>
+        message.content.includes('FOOTNOTE CONTEXT MANIFEST')
+    );
+    assert.ok(manifest);
+    assert.match(
+        manifest?.content ?? '',
+        /github_context: status=unavailable/iu
+    );
+    assert.match(
+        manifest?.content ?? '',
+        /not evidence that a name was absent/iu
+    );
+    assert.ok(
+        firstMessages.some(
+            (message) =>
+                message.role === 'user' &&
+                message.content.includes('Ada and Grace')
+        )
+    );
 });
 
 test('runBoundedReviewWorkflow records failed injected context step with reason and continues fail-open', async () => {
@@ -721,10 +855,12 @@ test('runBoundedReviewWorkflow returns terminal planner action outcome without g
 
 test('runBoundedReviewWorkflow uses web_search hints for one OpenAI native follow-up when enabled', async () => {
     let observedSearch: unknown;
+    let observedMessages: RuntimeMessage[] = [];
     const generationRuntime: GenerationRuntime = {
         kind: 'test-runtime',
         async generate(input) {
             observedSearch = input.search;
+            observedMessages = input.messages;
             return {
                 text: 'draft',
                 model: 'gpt-5-mini',
@@ -817,4 +953,10 @@ test('runBoundedReviewWorkflow uses web_search hints for one OpenAI native follo
         intent: 'current_facts',
         contextSize: 'low',
     });
+    assert.match(
+        observedMessages.find((message) =>
+            message.content.includes('FOOTNOTE CONTEXT MANIFEST')
+        )?.content ?? '',
+        /web_search: status=requested/iu
+    );
 });

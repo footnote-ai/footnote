@@ -167,6 +167,7 @@ export const buildWebSearchInstruction = (
         return [
             'The planner marked this as a Footnote repository explanation lookup.',
             `Treat ${PROJECT_CONTEXT_CANONICAL_REPOSITORY} as the canonical repo identity for this search.`,
+            'This is web search, not project-document retrieval or complete GitHub repository inspection.',
             `Prefer DeepWiki results from ${DEEPWIKI_FOOTNOTE_URL} when they are relevant.`,
             'If DeepWiki coverage is thin, use broader web context instead of getting stuck.',
             `Search query: ${repoQuery}.${hintText}${topicHintText}`.trim(),
@@ -191,7 +192,9 @@ export const buildRepoExplainerResponseHint = (
 
     return [
         'Planner note: this is a Footnote repo-explanation lookup.',
+        'Project documents, bounded GitHub records, and web search are separate sources; use only the source material actually returned.',
         'Prefer DeepWiki-backed explanation when available.',
         'Use broader web context if the wiki is thin.',
+        'Do not describe web or bounded GitHub results as source-code inspection or a complete repository search.',
     ].join(' ');
 };

@@ -183,6 +183,18 @@ test('workflow asks for a styled draft before main-model finalization and record
         String(calls[3]?.messages.at(-2)?.content),
         /Restore the attribution/u
     );
+    assert.match(
+        String(
+            calls[0]?.messages.find((message) =>
+                message.content.includes('FOOTNOTE CONTEXT MANIFEST')
+            )?.content
+        ),
+        /not evidence that a name was absent/iu
+    );
+    assert.match(
+        String(calls[1]?.messages.at(-2)?.content),
+        /Persona expression strength: balanced/u
+    );
     assert.deepEqual(
         calls.map((call) => call.providerRouting),
         [

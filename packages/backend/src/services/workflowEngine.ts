@@ -69,9 +69,14 @@ import { buildPlannerStepRecord } from './workflowEngine/plannerStepRecord.js';
 import { executeReviewLoop } from './workflowEngine/reviewLoopExecutor.js';
 import {
     injectContextMessagesIntoPrompt,
+    injectGenerationContextManifestIntoPrompt,
     selectContextStepExecutor,
     selectFollowUpSearchHint,
 } from './workflowEngine/contextStepHelpers.js';
+import {
+    buildGenerationContextManifest,
+    renderGenerationContextManifest,
+} from './workflowEngine/contextManifest.js';
 import {
     executeStepRoutingChain,
     type RoutingChainAttemptLog,
@@ -892,38 +897,57 @@ export const runBoundedReviewWorkflow = async ({
             shouldStop = true;
         } else if (!stopIfOverLimits(initialResponseStepKind).stopped) {
             const initialDraftStartedAt = generationStartedAtMs;
-            messagesWithContext = injectContextMessagesIntoPrompt(
-                effectiveMessagesWithHints,
-                // Preserve deterministic context ordering by request list order.
-                executedContextStepResults.flatMap((contextStepResult) =>
-                    contextStepResult.outcome === 'executed'
-                        ? [
-                              ...(
-                                  contextStepResult.trustedSystemMessages ?? []
-                              ).map((content) => ({
-                                  role: 'system' as const,
-                                  content,
-                              })),
-                              ...(contextStepResult.contextMessages ?? []).map(
-                                  (message) => ({
-                                      role:
-                                          contextStepResult.contextMessageRole ??
-                                          'system',
-                                      content:
-                                          typeof message === 'string'
-                                              ? message
-                                              : message.content,
-                                  })
-                              ),
-                          ]
-                        : []
-                )
-            );
             const selectedFollowUpSearchHint = selectFollowUpSearchHint({
                 results: executedContextStepResults,
                 openAiNativeSearchFromHintsEnabled,
                 effectiveGenerationRequest,
             });
+            const generationContextManifest = buildGenerationContextManifest({
+                contextEnvelope: effectiveContextEnvelope,
+                contextStepRequests: effectiveContextStepRequests ?? [],
+                contextStepResults: executedContextStepResults,
+                webSearchRequested:
+                    effectiveGenerationRequest.search !== undefined ||
+                    selectedFollowUpSearchHint !== undefined,
+                webSearchAvailable:
+                    effectiveGenerationRequest.capabilities?.canUseSearch,
+            });
+            messagesWithContext = injectGenerationContextManifestIntoPrompt(
+                effectiveMessagesWithHints,
+                renderGenerationContextManifest(generationContextManifest)
+            );
+            messagesWithContext = injectContextMessagesIntoPrompt(
+                messagesWithContext,
+                // Preserve deterministic context ordering by request list order.
+                [
+                    ...executedContextStepResults.flatMap(
+                        (contextStepResult) =>
+                            contextStepResult.outcome === 'executed'
+                                ? [
+                                      ...(
+                                          contextStepResult.trustedSystemMessages ??
+                                          []
+                                      ).map((content) => ({
+                                          role: 'system' as const,
+                                          content,
+                                      })),
+                                      ...(
+                                          contextStepResult.contextMessages ??
+                                          []
+                                      ).map((message) => ({
+                                          role:
+                                              contextStepResult.contextMessageRole ??
+                                              'system',
+                                          content:
+                                              typeof message === 'string'
+                                                  ? message
+                                                  : message.content,
+                                      })),
+                                  ]
+                                : []
+                    ),
+                ]
+            );
             try {
                 let initialRoutingChainAttempts:
                     RoutingChainAttemptLog[] | undefined;

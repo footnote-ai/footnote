@@ -91,6 +91,29 @@ test('buildConversationContext projects speaker labels only for multi-human wind
     );
 });
 
+test('Danny/Myuri/Winter regression keeps both user-mentioned names in one conversation turn', () => {
+    const result = buildConversationContext(
+        createRequest({
+            latestUserInput:
+                '@Winter compare yourself with Myuri, Danny, and generic Footnote.',
+            conversation: [
+                {
+                    role: 'user',
+                    content:
+                        '@Winter compare yourself with Myuri, Danny, and generic Footnote.',
+                },
+            ],
+        }),
+        logger
+    );
+
+    const projected = result.messages[0]?.content ?? '';
+    assert.match(projected, /Myuri/u);
+    assert.match(projected, /Danny/u);
+    assert.equal(result.contextEnvelope.turns[0]?.authority, 'conversation');
+    assert.equal(result.contextEnvelope.turns[0]?.visibility, 'model_visible');
+});
+
 test('buildConversationContext sanitizes invalid timestamps without changing role semantics', () => {
     const result = buildConversationContext(
         createRequest({

@@ -1174,6 +1174,40 @@ export type ContextStepResult =
     | ContextStepSkippedResult
     | ContextStepNeedsClarificationResult;
 
+export type GenerationContextManifestSource =
+    'conversation' | 'prompt' | ContextIntegrationName;
+
+export const GENERATION_CONTEXT_MANIFEST_STATUSES = [
+    'available',
+    'retrieved',
+    'requested',
+    'empty',
+    'partial',
+    'stale',
+    'unavailable',
+    'failed',
+    'skipped',
+    'not_requested',
+] as const;
+
+export type GenerationContextManifestStatus =
+    (typeof GENERATION_CONTEXT_MANIFEST_STATUSES)[number];
+
+/** Backend-derived source state rendered at the generation prompt seam. */
+export type GenerationContextManifestEntry = {
+    source: GenerationContextManifestSource;
+    authority: 'conversation' | 'instructional' | 'advisory' | 'evidentiary';
+    requested: boolean;
+    status: GenerationContextManifestStatus;
+    scope: string;
+    evidenceCount?: number;
+};
+
+export type GenerationContextManifest = {
+    version: 'v1';
+    entries: GenerationContextManifestEntry[];
+};
+
 /**
  * One backend-owned execution timeline entry for this response.
  *
