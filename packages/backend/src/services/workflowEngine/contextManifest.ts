@@ -18,6 +18,12 @@ import type { ConversationContextEnvelope } from '../conversationContextService.
 type IntegrationMetadataStatus =
     'current' | 'partial' | 'stale' | 'unavailable';
 
+type ContextStepManifestFailure = {
+    integrationName: string;
+    requested: boolean;
+    status: 'unavailable' | 'failed' | 'skipped';
+};
+
 const INTEGRATION_SCOPES: Record<string, string> = {
     github_context: 'bounded GitHub repository metadata',
     project_context: 'approved project documents',
@@ -95,21 +101,14 @@ const resolveStepStatus = (
     return hasEvidence(result) ? 'retrieved' : 'empty';
 };
 
-const resolveRequested = (
-    result: ContextStepResult,
-    requestsByIntegration: Map<string, ContextStepRequest>
-): boolean =>
-    requestsByIntegration.get(result.executionContext.toolName)?.requested ??
-    true;
-
 const buildIntegrationEntry = (
     result: ContextStepResult,
-    requestsByIntegration: Map<string, ContextStepRequest>,
+    requested: boolean,
     nativeWebSearchRequested: boolean
 ): GenerationContextManifestEntry => ({
     source: result.executionContext.toolName,
     authority: 'advisory',
-    requested: resolveRequested(result, requestsByIntegration),
+    requested,
     status: resolveStepStatus(result, nativeWebSearchRequested),
     scope: integrationScope(result.executionContext.toolName),
     ...(evidenceCount(result) !== undefined && {
@@ -125,14 +124,82 @@ export const buildGenerationContextManifest = (input: {
     contextEnvelope: ConversationContextEnvelope;
     contextStepRequests: ContextStepRequest[];
     contextStepResults: ContextStepResult[];
+    contextStepFailures?: ContextStepManifestFailure[];
     webSearchRequested?: boolean;
     webSearchAvailable?: boolean;
 }): GenerationContextManifest => {
-    const requestsByIntegration = new Map(
-        input.contextStepRequests.map((request) => [
-            request.integrationName,
-            request,
-        ])
+    const resultIndexes = new Set<number>();
+    const failuresByIntegration = new Map(
+        input.contextStepFailures?.map((failure) => [
+            failure.integrationName,
+            failure,
+        ]) ?? []
+    );
+    const nativeWebSearchRequested = input.webSearchRequested === true;
+
+    const buildMissingResultEntry = (
+        request: ContextStepRequest
+    ): GenerationContextManifestEntry => {
+        const failure = failuresByIntegration.get(request.integrationName);
+        const status =
+            failure?.status ??
+            (request.requested
+                ? request.eligible
+                    ? 'requested'
+                    : 'skipped'
+                : 'not_requested');
+        return {
+            source: request.integrationName,
+            authority: 'advisory',
+            requested: request.requested,
+            status,
+            scope: integrationScope(request.integrationName),
+        };
+    };
+
+    const integrationEntries = input.contextStepRequests.map((request) => {
+        const resultIndex = input.contextStepResults.findIndex(
+            (result, index) =>
+                !resultIndexes.has(index) &&
+                result.executionContext.toolName === request.integrationName
+        );
+        if (resultIndex < 0) return buildMissingResultEntry(request);
+
+        resultIndexes.add(resultIndex);
+        return buildIntegrationEntry(
+            input.contextStepResults[resultIndex]!,
+            request.requested,
+            nativeWebSearchRequested
+        );
+    });
+
+    const unmatchedResultEntries = input.contextStepResults.flatMap(
+        (result, index) =>
+            resultIndexes.has(index)
+                ? []
+                : [
+                      buildIntegrationEntry(
+                          result,
+                          true,
+                          nativeWebSearchRequested
+                      ),
+                  ]
+    );
+    const unmatchedFailureEntries = (input.contextStepFailures ?? []).flatMap(
+        (failure) =>
+            input.contextStepRequests.some(
+                (request) => request.integrationName === failure.integrationName
+            )
+                ? []
+                : [
+                      {
+                          source: failure.integrationName,
+                          authority: 'advisory' as const,
+                          requested: failure.requested,
+                          status: failure.status,
+                          scope: integrationScope(failure.integrationName),
+                      },
+                  ]
     );
     const conversationTurnCount = input.contextEnvelope.turns.filter(
         (turn) => turn.visibility === 'model_visible'
@@ -153,19 +220,15 @@ export const buildGenerationContextManifest = (input: {
             status: 'available',
             scope: 'system, profile, and persona guidance',
         },
-        ...input.contextStepResults.map((result) =>
-            buildIntegrationEntry(
-                result,
-                requestsByIntegration,
-                input.webSearchRequested === true
-            )
-        ),
+        ...integrationEntries,
+        ...unmatchedResultEntries,
+        ...unmatchedFailureEntries,
     ];
 
-    const webSearchStepPresent = input.contextStepResults.some(
-        (result) => result.executionContext.toolName === 'web_search'
+    const webSearchEntryPresent = entries.some(
+        (entry) => entry.source === 'web_search'
     );
-    if (input.webSearchRequested && !webSearchStepPresent) {
+    if (nativeWebSearchRequested && !webSearchEntryPresent) {
         entries.push({
             source: 'web_search',
             authority: 'advisory',

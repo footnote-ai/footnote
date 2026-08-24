@@ -251,6 +251,12 @@ type ContextStepExecutionOutcome = {
     finishedAtMs: number;
 };
 
+type ContextStepManifestFailure = {
+    integrationName: string;
+    requested: boolean;
+    status: 'unavailable' | 'failed' | 'skipped';
+};
+
 type LimitStopEvaluation = {
     stopped: boolean;
     shouldStop: boolean;
@@ -685,14 +691,21 @@ export const runBoundedReviewWorkflow = async ({
     const requestedContextSteps = (effectiveContextStepRequests ?? []).filter(
         (request) => request.requested === true && request.eligible
     );
-    const executableContextSteps = requestedContextSteps.filter(
-        (request) =>
-            selectContextStepExecutor(
-                request,
-                contextStepExecutor,
-                contextStepExecutorRegistry
-            ) !== undefined
-    );
+    const contextStepManifestFailures: ContextStepManifestFailure[] = [];
+    const executableContextSteps = requestedContextSteps.filter((request) => {
+        const executor = selectContextStepExecutor(
+            request,
+            contextStepExecutor,
+            contextStepExecutorRegistry
+        );
+        if (executor !== undefined) return true;
+        contextStepManifestFailures.push({
+            integrationName: request.integrationName,
+            requested: request.requested,
+            status: 'unavailable',
+        });
+        return false;
+    });
     if (!shouldStop && executableContextSteps.length > 0) {
         if (
             !isWorkflowTransitionAllowed(
@@ -776,6 +789,12 @@ export const runBoundedReviewWorkflow = async ({
                     continue;
                 }
                 if (contextStepOutcome.error !== undefined) {
+                    contextStepManifestFailures.push({
+                        integrationName:
+                            contextStepOutcome.request.integrationName,
+                        requested: contextStepOutcome.request.requested,
+                        status: 'failed',
+                    });
                     logger.error(
                         'Context step execution failed; workflow continued fail-open without context.',
                         {
@@ -906,6 +925,7 @@ export const runBoundedReviewWorkflow = async ({
                 contextEnvelope: effectiveContextEnvelope,
                 contextStepRequests: effectiveContextStepRequests ?? [],
                 contextStepResults: executedContextStepResults,
+                contextStepFailures: contextStepManifestFailures,
                 webSearchRequested:
                     effectiveGenerationRequest.search !== undefined ||
                     selectedFollowUpSearchHint !== undefined,

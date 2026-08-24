@@ -122,4 +122,8 @@ test('repo-explainer guidance keeps web, project, and bounded GitHub sources sep
         webInstruction,
         /web search, not project-document retrieval/iu
     );
+    assert.match(
+        webInstruction,
+        /do not retrieve or use repository source-code files/iu
+    );
 });

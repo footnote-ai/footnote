@@ -530,6 +530,99 @@ test('runBoundedReviewWorkflow exposes source state without changing conversatio
     );
 });
 
+test('runBoundedReviewWorkflow reports missing and throwing context executors', async () => {
+    const observedMessages: RuntimeMessage[][] = [];
+    const generationRuntime: GenerationRuntime = {
+        kind: 'test-runtime',
+        async generate(input) {
+            observedMessages.push(input.messages);
+            return {
+                text: 'draft',
+                model: 'gpt-5-mini',
+                usage: {
+                    promptTokens: 10,
+                    completionTokens: 5,
+                    totalTokens: 15,
+                },
+                provenance: 'Inferred',
+                citations: [],
+            };
+        },
+    };
+
+    const result = await runBoundedReviewWorkflowForTest({
+        generationRuntime,
+        generationRequest: {
+            model: 'gpt-5-mini',
+            messages: [{ role: 'user', content: 'Inspect the repository.' }],
+        },
+        messagesWithHints: [
+            { role: 'user', content: 'Inspect the repository.' },
+        ],
+        contextEnvelope: contextEnvelopeWithUserTurn,
+        generationStartedAtMs: Date.now(),
+        workflowConfig: {
+            workflowName: 'message_reviewed',
+            maxIterations: 1,
+            maxDurationMs: 15000,
+        },
+        workflowPolicy: {
+            enablePlanning: false,
+            enableToolUse: true,
+            enableReplanning: false,
+            enableGeneration: true,
+            enableAssessment: true,
+            enableRevision: true,
+        },
+        contextStepRequests: [
+            {
+                integrationName: 'github_context',
+                requested: true,
+                eligible: true,
+            },
+            {
+                integrationName: 'project_context',
+                requested: true,
+                eligible: true,
+            },
+        ],
+        contextStepExecutorRegistry: {
+            project_context: async () => {
+                throw new Error('project context failed');
+            },
+        },
+        captureUsage: (generationResult) => ({
+            model: generationResult.model ?? 'gpt-5-mini',
+            promptTokens: generationResult.usage?.promptTokens ?? 0,
+            completionTokens: generationResult.usage?.completionTokens ?? 0,
+            totalTokens: generationResult.usage?.totalTokens ?? 0,
+            estimatedCost: {
+                inputCostUsd: 0,
+                outputCostUsd: 0,
+                totalCostUsd: 0,
+            },
+        }),
+    });
+
+    assert.equal(result.outcome, 'generated');
+    const manifest = (observedMessages[0] ?? []).find((message) =>
+        message.content.includes('FOOTNOTE CONTEXT MANIFEST')
+    );
+    assert.match(
+        manifest?.content ?? '',
+        /github_context: status=unavailable/iu
+    );
+    assert.match(manifest?.content ?? '', /project_context: status=failed/iu);
+    assert.ok(
+        result.workflowLineage.steps.some(
+            (step) =>
+                step.stepKind === 'tool' &&
+                step.outcome.status === 'failed' &&
+                step.reasonCode === 'tool_execution_error'
+        )
+    );
+});
+
 test('runBoundedReviewWorkflow records failed injected context step with reason and continues fail-open', async () => {
     const generationRuntime: GenerationRuntime = {
         kind: 'test-runtime',

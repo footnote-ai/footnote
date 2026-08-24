@@ -13,8 +13,8 @@ Issue #533 should **not** add repository source-code retrieval. The current
 architecture has a real gap there, but adding a new code/file retrieval
 capability would turn this cleanup into a repository-indexing feature.
 
-#533 can meet its invariant with the capabilities Footnote already has if it
-does three things reliably:
+Issue `#533` can meet its invariant with the capabilities Footnote already has
+if it does three things reliably:
 
 - select an existing source when that source can answer the question;
 - report the selected source, scope, and result status from backend-owned
@@ -209,8 +209,8 @@ retrieval capability or persona-overlay allowlist change was added.
 
 Focused regressions cover arbitrary names in one conversation turn, the
 Danny/Myuri/Winter example, source-state projection, empty and failed
-retrieval, unavailable GitHub context, source-boundary guidance, and
-persona-expression preservation.
+retrieval, unavailable GitHub context, missing and throwing executors,
+source-boundary guidance, and persona-expression preservation.
 
 ## Main implementation seams
 
