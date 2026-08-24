@@ -755,6 +755,7 @@ paths:
             description: |
                 Store ResponseMetadata for a responseId.
                 TraceToken required; rate limited per client IP.
+                Legacy writers may still send presentation `intensity` and `traceConstrained` fields; the backend accepts those fields and normalizes them to `expressionStrength` and `expressionSource: persona_default` before storage.
             tags:
                 - Traces
             security:
@@ -3998,12 +3999,22 @@ components:
                         caution:
                             type: integer
                             enum: [1, 2, 3, 4, 5]
+                        intensity:
+                            type: string
+                            deprecated: true
+                            description: Legacy caution-derived presentation field accepted only for trace-upsert compatibility; restrained maps to subtle and other values map to balanced.
+                        traceConstrained:
+                            type: boolean
+                            deprecated: true
+                            description: Legacy caution-derived presentation field accepted only for trace-upsert compatibility; true maps to subtle when intensity is absent.
                         expressionStrength:
                             type: string
                             enum: [subtle, balanced, strong]
+                            description: Resolved persona expression strength. Legacy trace upserts with caution-derived presentation fields are normalized before storage.
                         expressionSource:
                             type: string
                             enum: [request, profile, persona_default]
+                            description: Resolution source. Legacy presentation receipts normalize to persona_default because old caution fields do not prove a request or profile preference.
                     required:
                         [
                             step,

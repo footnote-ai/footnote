@@ -10,6 +10,7 @@ import { strict as assert } from 'node:assert';
 import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
+import Database from 'better-sqlite3';
 
 import type { ResponseMetadata } from '@footnote/contracts/policy';
 import type { ResponseCandidate } from '@footnote/contracts/web';
@@ -110,6 +111,76 @@ test('TraceStore round trips a presentation receipt', async () => {
         const retrieved = await store.retrieve(responseId);
         assert.ok(retrieved, 'presentation flow trace should be retrievable');
         assert.equal(retrieved.presentation?.outcome, 'finalized');
+        assert.equal(retrieved.presentation?.expressionStrength, 'balanced');
+        assert.equal(
+            retrieved.presentation?.expressionSource,
+            'persona_default'
+        );
+    } finally {
+        store.close();
+        await fs.rm(tempRoot, { recursive: true, force: true });
+    }
+});
+
+test('TraceStore retrieves legacy presentation receipts after compatibility repair', async () => {
+    const tempRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'trace-store-'));
+    const dbPath = path.join(tempRoot, 'provenance.db');
+    const initializedStore = new SqliteTraceStore({ dbPath });
+    initializedStore.close();
+
+    const responseId = 'legacy_presentation_trace_123';
+    const legacyMetadata = {
+        responseId,
+        provenance: 'Inferred',
+        safetyTier: 'Low',
+        tradeoffCount: 1,
+        chainHash: 'legacy_presentation_chain_hash',
+        licenseContext: 'MIT + HL3',
+        modelVersion: 'gpt-5-mini',
+        staleAfter: new Date(Date.now() + 60000).toISOString(),
+        citations: [],
+        trace_target: {},
+        trace_final: {},
+        presentation: {
+            step: 'presentation',
+            outcome: 'finalized',
+            attempted: true,
+            reasonCode: 'finalized',
+            personaId: 'winter',
+            auditOutcome: 'clear',
+            draftAttemptCount: 1,
+            finalizerAttemptCount: 1,
+            auditAttemptCount: 1,
+            intensity: 'restrained',
+            traceConstrained: true,
+        },
+    };
+    const legacyDatabase = new Database(dbPath);
+    const now = new Date().toISOString();
+    legacyDatabase
+        .prepare(
+            `INSERT INTO provenance_traces
+                (response_id, metadata_json, stale_after, created_at, updated_at)
+             VALUES (@response_id, @metadata_json, @stale_after, @created_at, @updated_at)`
+        )
+        .run({
+            response_id: responseId,
+            metadata_json: JSON.stringify(legacyMetadata),
+            stale_after: legacyMetadata.staleAfter,
+            created_at: now,
+            updated_at: now,
+        });
+    legacyDatabase.close();
+
+    const store = new SqliteTraceStore({ dbPath });
+    try {
+        const retrieved = await store.retrieve(responseId);
+        assert.ok(retrieved, 'legacy presentation trace should be retrievable');
+        assert.equal(retrieved.presentation?.expressionStrength, 'subtle');
+        assert.equal(
+            retrieved.presentation?.expressionSource,
+            'persona_default'
+        );
     } finally {
         store.close();
         await fs.rm(tempRoot, { recursive: true, force: true });

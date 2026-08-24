@@ -87,6 +87,56 @@ const ChatAddressingEvidenceSchema = z
     .strict();
 const ChatPersonaIdSchema = z.string().regex(/^[a-z0-9][a-z0-9-]{0,31}$/);
 const ChatModeIdSchema = z.enum(['express', 'balanced', 'grounded']);
+const PersonaExpressionSourceSchema = z.enum([
+    'request',
+    'profile',
+    'persona_default',
+]);
+
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+    value !== null && typeof value === 'object' && !Array.isArray(value);
+
+/**
+ * Normalizes pre-#530 presentation receipts before strict validation. Old
+ * caution-derived fields cannot prove a request/profile preference, so their
+ * replacement is marked as the persona default.
+ */
+export const normalizePresentationMetadataForCompatibility = (
+    value: unknown
+): unknown => {
+    if (!isRecord(value)) {
+        return value;
+    }
+
+    const hasLegacyFields = 'intensity' in value || 'traceConstrained' in value;
+    if (!hasLegacyFields) {
+        return value;
+    }
+
+    const currentStrength = PersonaExpressionStrengthSchema.safeParse(
+        value.expressionStrength
+    );
+    const currentSource = PersonaExpressionSourceSchema.safeParse(
+        value.expressionSource
+    );
+    const legacyStrength =
+        value.intensity === 'restrained' ||
+        (value.intensity === undefined && value.traceConstrained === true)
+            ? 'subtle'
+            : 'balanced';
+    const normalized: Record<string, unknown> = {
+        ...value,
+        expressionStrength: currentStrength.success
+            ? currentStrength.data
+            : legacyStrength,
+        expressionSource: currentSource.success
+            ? currentSource.data
+            : 'persona_default',
+    };
+    delete normalized.intensity;
+    delete normalized.traceConstrained;
+    return normalized;
+};
 
 /**
  * Provider-neutral public identity with no provider tokens or session ids.
@@ -433,7 +483,7 @@ const PresentationReasonCodeSchema = z.enum([
     'finalizer_provider_error',
 ]);
 
-export const PresentationMetadataSchema = z
+const PresentationMetadataFieldsSchema = z
     .object({
         step: z.literal('presentation'),
         outcome: z.enum([
@@ -501,9 +551,14 @@ export const PresentationMetadataSchema = z
             ])
             .optional(),
         expressionStrength: PersonaExpressionStrengthSchema,
-        expressionSource: z.enum(['request', 'profile', 'persona_default']),
+        expressionSource: PersonaExpressionSourceSchema,
     })
     .strict();
+
+export const PresentationMetadataSchema = z.preprocess(
+    normalizePresentationMetadataForCompatibility,
+    PresentationMetadataFieldsSchema
+);
 
 const ExecutionEventSchema: z.ZodType<ExecutionEvent> = z.discriminatedUnion(
     'kind',

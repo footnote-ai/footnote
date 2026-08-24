@@ -733,6 +733,34 @@ test('ResponseMetadataSchema accepts a presentation receipt separately from work
     assert.equal(parsed.success, true);
 });
 
+test('PostTracesRequestSchema normalizes legacy presentation fields', () => {
+    const parsed = PostTracesRequestSchema.safeParse({
+        ...baseMetadata,
+        presentation: {
+            step: 'presentation',
+            outcome: 'finalized',
+            attempted: true,
+            reasonCode: 'finalized',
+            personaId: 'winter',
+            auditOutcome: 'clear',
+            draftAttemptCount: 1,
+            finalizerAttemptCount: 1,
+            auditAttemptCount: 1,
+            intensity: 'restrained',
+            traceConstrained: true,
+        },
+    });
+
+    assert.equal(parsed.success, true);
+    if (!parsed.success) {
+        return;
+    }
+    assert.equal(parsed.data.presentation?.expressionStrength, 'subtle');
+    assert.equal(parsed.data.presentation?.expressionSource, 'persona_default');
+    assert.equal('intensity' in (parsed.data.presentation ?? {}), false);
+    assert.equal('traceConstrained' in (parsed.data.presentation ?? {}), false);
+});
+
 test('ResponseMetadataSchema accepts normalized review runtime summary labels', () => {
     const parsed = ResponseMetadataSchema.safeParse({
         ...baseMetadata,

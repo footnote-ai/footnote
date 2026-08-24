@@ -150,6 +150,46 @@ test('createChatService records backend token usage and estimated cost', async (
     assert.equal(usageRecords[0].totalCostUsd, 0.00019);
 });
 
+test('runChat preserves balanced persona guidance for direct generation', async () => {
+    let capturedMessages: string[] = [];
+    const chatService = createChatService({
+        generationRuntime: {
+            kind: 'test-runtime',
+            async generate(request) {
+                capturedMessages = request.messages.map((message) =>
+                    String(message.content)
+                );
+                return {
+                    text: 'direct chat response',
+                    model: 'gpt-5-mini',
+                    provenance: 'Inferred',
+                    citations: [],
+                };
+            },
+        },
+        storeTrace: async () => undefined,
+        buildResponseMetadata: () => createMetadata(),
+        defaultModel: 'gpt-5-mini',
+        recordUsage: () => undefined,
+        chatWorkflowConfig: {
+            modeId: 'express',
+            reviewLoopEnabled: false,
+            maxIterations: 0,
+            maxDurationMs: 15000,
+        },
+    });
+
+    const response = await chatService.runChat({
+        question: 'What changed?',
+    });
+
+    assert.equal(response.action, 'message');
+    assert.match(
+        capturedMessages[1] ?? '',
+        /Persona expression strength: balanced/u
+    );
+});
+
 test('createChatService passes the effective model to response metadata building', async () => {
     let capturedRuntimeContextModelVersion: string | null = null;
 

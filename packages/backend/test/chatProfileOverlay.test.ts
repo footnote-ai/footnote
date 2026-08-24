@@ -139,7 +139,7 @@ test('resolves persona expression by request, profile, then persona default', ()
         'strong'
     );
     assert.equal(
-        resolvePersonaExpression({}, winter, undefined).source,
+        resolvePersonaExpression({}, winter, 'invalid').source,
         'persona_default'
     );
     for (const personaId of ['footnote', 'danny', 'myuri']) {
@@ -148,7 +148,7 @@ test('resolves persona expression by request, profile, then persona default', ()
             logger
         );
         assert.equal(
-            resolvePersonaExpression({}, profile, undefined).strength,
+            resolvePersonaExpression({}, profile, 'invalid').strength,
             'balanced'
         );
     }

@@ -18,6 +18,7 @@ import {
     runPresentationStep,
     type PresentationConfig,
 } from '../src/services/presentation.js';
+import { buildPersonaExpressionGuidance } from '../src/services/prompts/personaExpression.js';
 
 const profile: ModelProfile = {
     id: 'presentation',
@@ -150,16 +151,23 @@ test('keeps persona expression active for elevated or unavailable TRACE caution'
                     : result('{"verdict":"clear","feedback":""}');
             }),
             generationRequest: request,
-            finalize: async (input) =>
-                result(
-                    String(input.messages.at(-1)?.content).includes(
-                        'STYLED PRESENTATION DRAFT'
-                    )
+            finalize: async (input) => {
+                const finalizerPrompt = String(input.messages.at(-2)?.content);
+                const styledDraft = String(input.messages.at(-1)?.content);
+                return result(
+                    finalizerPrompt.includes(
+                        buildPersonaExpressionGuidance('strong')
+                    ) && styledDraft.includes('STYLED PRESENTATION DRAFT')
                         ? 'A lively update: 12 fixes confirmed at https://example.com/release.'
                         : 'Unexpected finalizer input.'
-                ),
+                );
+            },
             config,
-            persona: { ...persona, expressionStrength: 'strong' },
+            persona: {
+                ...persona,
+                expressionStrength: 'strong',
+                expressionGuidance: buildPersonaExpressionGuidance('strong'),
+            },
             caution,
         });
 
