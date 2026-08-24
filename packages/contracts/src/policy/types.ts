@@ -448,6 +448,7 @@ export type PresentationOutcome =
 
 export type PresentationReasonCode =
     | 'candidate_generated'
+    | 'budget_skipped'
     | 'disabled'
     | 'profile_not_configured'
     | 'structured_output'

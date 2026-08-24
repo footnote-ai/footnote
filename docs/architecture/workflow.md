@@ -173,6 +173,14 @@ Assess may also return TRACE alignment outputs:
 These assess outputs are used for lineage and metadata finalization. They stay
 inside workflow policy and limits.
 
+When optional presentation is enabled, the candidate is admitted only after a
+conservative reservation for its prompt and output, authoritative generation,
+and the first assessment. Candidate output is counted both as candidate usage
+and as text copied into the authoritative prompt. If that reservation cannot
+fit, the candidate is skipped fail-open with the serializable presentation
+reason `budget_skipped`; authoritative generation still owns the answer, and
+provider-reported usage remains the cumulative source of truth.
+
 Review decision parsing uses explicit expected-failure results. If assess
 output is empty, not a JSON object, invalid JSON, or schema-invalid, the engine
 records a failed `assess` step and fails open to the latest successful draft.

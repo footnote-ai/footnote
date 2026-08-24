@@ -41,8 +41,7 @@ export type ExecutionResponseMode = 'fast_direct' | 'quality_grounded';
  * toggles or implementation details.
  */
 export type ExecutionStoppingRule =
-    | 'first_sufficient_answer'
-    | 'bounded_sufficient_answer';
+    'first_sufficient_answer' | 'bounded_sufficient_answer';
 
 /**
  * Top-level response intent that explains "what kind of answer path are we aiming for".
@@ -179,10 +178,7 @@ export type ExecutionContract = {
  * uses snake_case (`fast_direct`) for execution intent vocabulary.
  */
 export type ExecutionContractPresetId =
-    | 'fast-direct'
-    | 'balanced'
-    | 'quality-grounded'
-    | (string & {});
+    'fast-direct' | 'balanced' | 'quality-grounded' | (string & {});
 
 /**
  * Shared override shape used by presets, builders, and resolver assembly glue.
@@ -366,7 +362,7 @@ export const EXECUTION_CONTRACT_PRESETS: Readonly<
                 maxWorkflowSteps: 8,
                 maxToolCalls: 3,
                 maxDeliberationCalls: 3,
-                maxTokensTotal: 14_000,
+                maxTokensTotal: 20_000,
                 maxDurationMs: 70_000,
             },
             routing: {

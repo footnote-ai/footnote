@@ -400,7 +400,7 @@ test('resolveWorkflowRuntimeConfig allows grounded contract defaults to run at l
                 maxWorkflowSteps: 8,
                 maxToolCalls: 3,
                 maxDeliberationCalls: 3,
-                maxTokensTotal: 14000,
+                maxTokensTotal: 20000,
                 maxDurationMs: 70000,
             },
         },
@@ -419,6 +419,10 @@ test('resolveWorkflowRuntimeConfig allows grounded contract defaults to run at l
     assert.equal(
         groundedWithContract.workflowExecutionLimits.maxDeliberationCalls,
         3
+    );
+    assert.equal(
+        groundedWithContract.workflowExecutionLimits.maxTokensTotal,
+        20_000
     );
 });
 

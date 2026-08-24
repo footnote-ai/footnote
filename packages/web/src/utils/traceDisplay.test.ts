@@ -143,4 +143,12 @@ test('explains candidate timeout and structured-output unavailability', () => {
         }),
         /non-prose output/u
     );
+    assert.match(
+        getPresentationTraceSummary({
+            ...base,
+            attempted: false,
+            reasonCode: 'budget_skipped',
+        }),
+        /remaining workflow budget/u
+    );
 });

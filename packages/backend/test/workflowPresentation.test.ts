@@ -234,7 +234,58 @@ test('skips presentation when only authoritative generation fits the budget', as
     assert.equal(result.outcome, 'generated');
     assert.equal(calls.length, 1);
     assert.deepEqual(presentationFeatures, []);
-    assert.equal(result.presentation, undefined);
+    assert.equal(result.presentation?.outcome, 'candidate_unavailable');
+    assert.equal(result.presentation?.reasonCode, 'budget_skipped');
+    assert.equal(result.presentation?.attempted, false);
+});
+
+test('bounds authoritative generation so assessment can follow a skipped candidate', async () => {
+    const { calls, result } = await runScenario(
+        async (_request, call) =>
+            call === 1
+                ? generated('Authoritative answer.')
+                : generated(reviewFinalize),
+        { maxTokensTotal: 3000 }
+    );
+
+    assert.equal(result.outcome, 'generated');
+    assert.equal(calls.length, 2);
+    assert.equal(result.presentation?.reasonCode, 'budget_skipped');
+    assert.deepEqual(
+        result.workflowLineage.steps.map((step) => step.stepKind),
+        ['generate', 'assess']
+    );
+});
+
+test('records a provider overrun for an admitted presentation and stops later work', async () => {
+    const overrunCandidate = {
+        ...generated('Candidate text.'),
+        usage: {
+            promptTokens: 6500,
+            completionTokens: 4500,
+            totalTokens: 11000,
+        },
+    };
+    const { calls, result } = await runScenario(
+        async (_request, call) =>
+            call === 1 ? overrunCandidate : generated('Should not run.'),
+        { maxTokensTotal: 10000 }
+    );
+
+    assert.equal(calls.length, 1);
+    assert.equal(result.outcome, 'no_generation');
+    assert.equal(result.presentation?.outcome, 'candidate_generated');
+    assert.equal(result.presentation?.reasonCode, 'candidate_generated');
+    assert.equal(result.workflowLineage.status, 'degraded');
+    assert.equal(
+        result.workflowLineage.terminationReason,
+        'budget_exhausted_tokens'
+    );
+    assert.deepEqual(
+        result.workflowLineage.steps.map((step) => step.stepKind),
+        ['presentation']
+    );
+    assert.equal(result.workflowLineage.steps[0]?.usage?.totalTokens, 11000);
 });
 
 test('runs ordinary revision without carrying the raw presentation candidate', async () => {

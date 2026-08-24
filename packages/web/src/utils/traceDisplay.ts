@@ -73,6 +73,8 @@ export const getPresentationTraceSummary = (
                 return 'The presentation candidate returned non-prose output; the normal answer path was used.';
             case 'disabled':
                 return 'Presentation was disabled; the normal answer path was used.';
+            case 'budget_skipped':
+                return 'Presentation was skipped because the remaining workflow budget was reserved for the authoritative answer and review.';
             case 'profile_not_configured':
                 return 'No presentation profile was configured; the normal answer path was used.';
         }

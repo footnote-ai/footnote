@@ -14,6 +14,8 @@ import {
 } from '../../src/services/workflowEngine.js';
 import {
     boundGenerationRequestToWorkflowBudget,
+    calculatePresentationOutputBudget,
+    calculateReviewedGenerationOutputBudget,
     estimateGenerationTokenBudget,
 } from '../../src/services/workflowEngine/tokenBudget.js';
 
@@ -201,4 +203,48 @@ test('generation admission fails closed before provider call when prompt uses th
     });
 
     assert.equal(bounded, undefined);
+});
+
+test('presentation admission reserves assessment and candidate text copied into authority', () => {
+    assert.equal(
+        calculateReviewedGenerationOutputBudget({
+            totalTokens: 100,
+            maxTokensTotal: 1000,
+            requestedOutputTokens: 500,
+            authoritativePromptTokens: 100,
+            assessmentPromptTokensWithoutDraft: 100,
+            assessmentOutputTokens: 50,
+        }),
+        325
+    );
+    assert.deepEqual(
+        calculatePresentationOutputBudget({
+            totalTokens: 100,
+            maxTokensTotal: 1000,
+            requestedCandidateOutputTokens: 500,
+            candidatePromptTokens: 100,
+            authoritativePromptTokens: 100,
+            authoritativeOutputTokens: 200,
+            assessmentPromptTokens: 100,
+            assessmentOutputTokens: 50,
+        }),
+        {
+            candidateOutputTokens: 175,
+            remainingTokens: 900,
+            reservedTokens: 900,
+        }
+    );
+    assert.equal(
+        calculatePresentationOutputBudget({
+            totalTokens: 950,
+            maxTokensTotal: 1000,
+            requestedCandidateOutputTokens: 500,
+            candidatePromptTokens: 100,
+            authoritativePromptTokens: 100,
+            authoritativeOutputTokens: 200,
+            assessmentPromptTokens: 100,
+            assessmentOutputTokens: 50,
+        }),
+        undefined
+    );
 });

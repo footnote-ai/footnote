@@ -85,6 +85,8 @@ import {
     estimatePlannerInputTokens,
     estimatePlannerTokenBudget,
     estimateRuntimeMessageTokens,
+    calculatePresentationOutputBudget,
+    calculateReviewedGenerationOutputBudget,
 } from './workflowEngine/tokenBudget.js';
 import {
     executeStepRoutingChain,
@@ -95,6 +97,7 @@ import { buildRoutingChainSignals } from './workflowEngine/routingSignals.js';
 import { toRoutingChainResult } from './routingChainResult.js';
 import {
     buildAuthoritativeGenerationRequest,
+    createPresentationFallback,
     runPresentationCandidate,
     type PresentationConfig,
     type PresentationPersona,
@@ -278,7 +281,10 @@ type LimitStopEvaluation = {
 };
 
 const DEFAULT_PLANNER_MAX_OUTPUT_TOKENS = 1200;
-const PRESENTATION_PROMPT_OVERHEAD_TOKENS = 256;
+// Keep optional presentation admission usable while provider-reported usage
+// remains the authoritative cumulative budget check.
+const PRESENTATION_PROMPT_OVERHEAD_TOKENS = 128;
+const PRESENTATION_ASSESSMENT_OUTPUT_TOKENS = 200;
 
 export { isWorkflowTransitionAllowed } from './workflowEngine/transitions.js';
 export {
@@ -1130,6 +1136,7 @@ export const runBoundedReviewWorkflow = async ({
                 let authoritativeGenerationRequest =
                     generationRequestForAttempt;
                 const activePresentation = presentation;
+                let authoritativeOutputBudget: number | undefined;
                 const presentationStartedAt = Date.now();
                 const presentationCaution =
                     planContinuation?.continuation === 'continue_message'
@@ -1153,11 +1160,6 @@ export const runBoundedReviewWorkflow = async ({
                             generationRequestForAttempt
                         );
                     }
-                    const remainingTokens = Math.max(
-                        0,
-                        executionLimits.maxTokensTotal -
-                            workflowState.totalTokens
-                    );
                     const authorityPromptTokens =
                         estimateRuntimeMessageTokens(
                             authorityAdmissionRequest.messages
@@ -1166,42 +1168,84 @@ export const runBoundedReviewWorkflow = async ({
                         estimateRuntimeMessageTokens(
                             generationRequestForAttempt.messages
                         ) + PRESENTATION_PROMPT_OVERHEAD_TOKENS;
-                    const authorityOutputTokens =
+                    const requestedAuthorityOutputTokens =
                         authorityAdmissionRequest.maxOutputTokens ??
                         DEFAULT_WORKFLOW_GENERATION_MAX_OUTPUT_TOKENS;
-                    const presentationOutputBudget = Math.floor(
-                        (remainingTokens -
-                            authorityPromptTokens -
-                            presentationPromptTokens -
-                            authorityOutputTokens) /
-                            2
-                    );
-                    if (presentationOutputBudget < 1) {
+                    const assessmentPromptTokensWithoutDraft =
+                        estimateRuntimeMessageTokens(
+                            generationRequestForAttempt.messages
+                        ) + PRESENTATION_PROMPT_OVERHEAD_TOKENS;
+                    const authorityOutputTokens =
+                        calculateReviewedGenerationOutputBudget({
+                            totalTokens: workflowState.totalTokens,
+                            maxTokensTotal: executionLimits.maxTokensTotal,
+                            requestedOutputTokens:
+                                requestedAuthorityOutputTokens,
+                            authoritativePromptTokens: authorityPromptTokens,
+                            assessmentPromptTokensWithoutDraft,
+                            assessmentOutputTokens:
+                                PRESENTATION_ASSESSMENT_OUTPUT_TOKENS,
+                        });
+                    if (authorityOutputTokens !== undefined) {
+                        authoritativeOutputBudget = authorityOutputTokens;
+                    }
+                    const effectiveAuthorityOutputTokens =
+                        authorityOutputTokens ?? requestedAuthorityOutputTokens;
+                    const assessmentPromptTokens =
+                        assessmentPromptTokensWithoutDraft +
+                        effectiveAuthorityOutputTokens;
+                    const presentationBudget =
+                        calculatePresentationOutputBudget({
+                            totalTokens: workflowState.totalTokens,
+                            maxTokensTotal: executionLimits.maxTokensTotal,
+                            requestedCandidateOutputTokens:
+                                activePresentation?.config.profile
+                                    ?.maxOutputTokens ??
+                                DEFAULT_WORKFLOW_GENERATION_MAX_OUTPUT_TOKENS,
+                            candidatePromptTokens: presentationPromptTokens,
+                            authoritativePromptTokens: authorityPromptTokens,
+                            authoritativeOutputTokens:
+                                effectiveAuthorityOutputTokens,
+                            assessmentPromptTokens,
+                            assessmentOutputTokens:
+                                PRESENTATION_ASSESSMENT_OUTPUT_TOKENS,
+                        });
+                    if (presentationBudget === undefined) {
                         return undefined;
                     }
-                    const requestedPresentationOutputTokens =
-                        activePresentation?.config.profile?.maxOutputTokens ??
-                        DEFAULT_WORKFLOW_GENERATION_MAX_OUTPUT_TOKENS;
                     return {
                         ...generationRequestForAttempt,
-                        maxOutputTokens: Math.min(
-                            requestedPresentationOutputTokens,
-                            presentationOutputBudget
-                        ),
+                        maxOutputTokens:
+                            presentationBudget.candidateOutputTokens,
                     };
                 })();
                 const presentationResult =
                     presentationEnabled && activePresentation !== undefined
-                        ? presentationGenerationRequest === undefined
-                            ? undefined
-                            : await runPresentationCandidate({
+                        ? activePresentation.config.profile === undefined ||
+                          activePresentation.config.profileId === null
+                            ? await runPresentationCandidate({
                                   generationRuntime,
                                   generationRequest:
-                                      presentationGenerationRequest,
+                                      generationRequestForAttempt,
                                   config: activePresentation.config,
                                   persona: activePresentation.persona,
                                   caution: presentationCaution,
                               })
+                            : presentationGenerationRequest === undefined
+                              ? createPresentationFallback({
+                                    config: activePresentation.config,
+                                    persona: activePresentation.persona,
+                                    reasonCode: 'budget_skipped',
+                                    caution: presentationCaution,
+                                })
+                              : await runPresentationCandidate({
+                                    generationRuntime,
+                                    generationRequest:
+                                        presentationGenerationRequest,
+                                    config: activePresentation.config,
+                                    persona: activePresentation.persona,
+                                    caution: presentationCaution,
+                                })
                         : undefined;
                 if (
                     presentationResult !== undefined &&
@@ -1287,6 +1331,12 @@ export const runBoundedReviewWorkflow = async ({
                                 presentationResult.draftResult.text,
                                 activePresentation.persona.expressionGuidance
                             );
+                    }
+                    if (authoritativeOutputBudget !== undefined) {
+                        authoritativeGenerationRequest = {
+                            ...authoritativeGenerationRequest,
+                            maxOutputTokens: authoritativeOutputBudget,
+                        };
                     }
                     if (presentationResult.outcome === 'candidate_generated') {
                         workflowState = applyStepExecutionToState(
