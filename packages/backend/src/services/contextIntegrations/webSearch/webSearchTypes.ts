@@ -15,6 +15,9 @@ export type WebSearchInput = {
     contextSize?: 'low' | 'medium' | 'high';
     repoHints?: string[];
     topicHints?: string[];
+    repositoryScope?: {
+        repository: string;
+    };
 };
 
 export type WebSearchRecord = {
@@ -42,6 +45,17 @@ export type WebSearchProviderAttempt = {
 export type WebSearchContextStepIntegrationPayload = {
     attempts: WebSearchProviderAttempt[];
     searchHints: WebSearchHint[];
+    repositoryScope?: {
+        repository: string;
+        admittedCount: number;
+        outOfScopeCount: number;
+        uncertainCount: number;
+        decisions: Array<{
+            url: string;
+            admission: 'in_scope' | 'out_of_scope' | 'uncertain';
+            reason: string;
+        }>;
+    };
 };
 
 export type WebSearchProviderResult =

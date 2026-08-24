@@ -165,7 +165,11 @@ export {
     GENERATION_CONTEXT_MANIFEST_STATUSES,
 } from './types.js';
 export { CONTEXT_INTEGRATION_NAMES } from './contextIntegrations.js';
-export type { ContextIntegrationName } from './contextIntegrations.js';
+export type {
+    ContextIntegrationName,
+    GitHubContextReference,
+    GitHubObjectReference,
+} from './contextIntegrations.js';
 export {
     PROJECT_CONTEXT_CATEGORIES,
     PROJECT_CONTEXT_CANONICAL_REPOSITORY,

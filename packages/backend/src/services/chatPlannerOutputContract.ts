@@ -57,6 +57,7 @@ const PLANNER_ALLOWED_FIELD_TREE: AllowedFieldTree = {
         githubContext: {
             repository: true,
             sections: true,
+            reference: true,
         },
         search: {
             query: true,
@@ -340,6 +341,35 @@ export const chatPlannerDecisionParametersSchema: Record<string, unknown> = {
                                     'commits',
                                 ],
                             },
+                        },
+                        reference: {
+                            type: 'object',
+                            additionalProperties: false,
+                            properties: {
+                                kind: {
+                                    type: 'string',
+                                    enum: [
+                                        'pull_request',
+                                        'issue',
+                                        'commit',
+                                        'release',
+                                    ],
+                                },
+                                number: {
+                                    type: 'integer',
+                                    minimum: 1,
+                                },
+                                sha: {
+                                    type: 'string',
+                                    pattern: '^[A-Fa-f0-9]{7,40}$',
+                                },
+                                tag: {
+                                    type: 'string',
+                                    minLength: 1,
+                                    maxLength: 100,
+                                },
+                            },
+                            required: ['kind'],
                         },
                     },
                     required: ['repository'],

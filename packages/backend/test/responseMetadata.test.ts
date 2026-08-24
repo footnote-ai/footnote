@@ -220,6 +220,40 @@ test('buildResponseMetadata can classify as retrieved from execution-derived sig
     );
 });
 
+test('buildResponseMetadata confirms context-step retrieval without provider-native search', () => {
+    const metadata = buildResponseMetadata(
+        baseGenerationMetadata({
+            provenance: 'Inferred',
+            citations: [
+                {
+                    title: 'GitHub context',
+                    url: 'https://github.com/footnote-ai/footnote/pull/528',
+                },
+            ],
+        }),
+        baseRuntimeContext({
+            retrieval: {
+                requested: true,
+                used: true,
+                contextUsed: true,
+            },
+            executionContext: {
+                tool: {
+                    toolName: 'github_context',
+                    status: 'executed',
+                },
+            },
+        })
+    );
+
+    assert.equal(metadata.provenance, 'Retrieved');
+    assert.equal(
+        metadata.provenanceAssessment?.signals.retrievalToolExecuted,
+        true
+    );
+    assert.deepEqual(metadata.provenanceAssessment?.conflicts, []);
+});
+
 test('buildResponseMetadata does not classify as retrieved when TrustGraph evidence is available but unused and uncorroborated', () => {
     const metadata = buildResponseMetadata(
         baseGenerationMetadata({

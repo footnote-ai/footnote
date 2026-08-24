@@ -19,3 +19,16 @@ export const CONTEXT_INTEGRATION_NAMES = [
 
 export type ContextIntegrationName =
     (typeof CONTEXT_INTEGRATION_NAMES)[number] | (string & {});
+
+/** Serializable GitHub object kinds accepted by bounded exact retrieval. */
+export type GitHubObjectReference =
+    | { kind: 'pull_request'; number: number }
+    | { kind: 'issue'; number: number }
+    | { kind: 'commit'; sha: string }
+    | { kind: 'release'; tag: string };
+
+/** Repository-qualified reference used across planner and context boundaries. */
+export type GitHubContextReference = {
+    repository: string;
+    reference: GitHubObjectReference;
+};

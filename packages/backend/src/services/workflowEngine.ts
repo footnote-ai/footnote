@@ -56,6 +56,7 @@ import { isWorkflowTransitionAllowed } from './workflowEngine/transitions.js';
 import {
     applyStepExecutionToState,
     createInitialWorkflowState,
+    type WorkflowState,
 } from './workflowEngine/state.js';
 import {
     resolveExecutionLimits,
@@ -267,6 +268,8 @@ type LimitStopEvaluation = {
     exhaustedLimitKey?: WorkflowLimitKey;
     stoppedBeforeStepKind?: WorkflowStepKind;
 };
+
+const DEFAULT_PLANNER_MAX_OUTPUT_TOKENS = 1200;
 
 export { isWorkflowTransitionAllowed } from './workflowEngine/transitions.js';
 export {
@@ -520,17 +523,20 @@ export const runBoundedReviewWorkflow = async ({
     };
 
     const stopIfOverLimits = (
-        nextStepKind?: WorkflowStepKind
+        nextStepKind?: WorkflowStepKind,
+        nextStepTokenBudget = 0,
+        stateForCheck: WorkflowState = workflowState
     ): LimitStopEvaluation => {
         const limitsCheck = checkExecutionLimits(
-            workflowState,
+            stateForCheck,
             executionLimits,
             Date.now(),
-            nextStepKind
+            nextStepKind,
+            nextStepTokenBudget
         );
         if (limitsCheck.withinLimits) {
             return {
-                stopped: false,
+                stopped: shouldStop,
                 shouldStop,
                 terminationReason,
                 workflowStatus,
@@ -557,6 +563,35 @@ export const runBoundedReviewWorkflow = async ({
         };
     };
 
+    const stopIfTokenBudgetExceeded = (
+        stateForCheck: WorkflowState = workflowState
+    ): LimitStopEvaluation => {
+        if (stateForCheck.totalTokens <= executionLimits.maxTokensTotal) {
+            return {
+                stopped: shouldStop,
+                shouldStop,
+                terminationReason,
+                workflowStatus,
+                exhaustedLimitKey,
+                stoppedBeforeStepKind,
+            };
+        }
+
+        exhaustedLimitKey = 'maxTokensTotal';
+        stoppedBeforeStepKind = undefined;
+        terminationReason = 'budget_exhausted_tokens';
+        workflowStatus = 'degraded';
+        shouldStop = true;
+        return {
+            stopped: true,
+            shouldStop,
+            terminationReason,
+            workflowStatus,
+            exhaustedLimitKey,
+            stoppedBeforeStepKind,
+        };
+    };
+
     if (
         plannerRootStepId === undefined &&
         plannerStepRequest !== undefined &&
@@ -571,10 +606,33 @@ export const runBoundedReviewWorkflow = async ({
         ) {
             terminationReason = 'transition_blocked_by_policy';
             shouldStop = true;
-        } else if (!stopIfOverLimits('plan').stopped) {
+        } else if (
+            !stopIfOverLimits(
+                'plan',
+                Math.min(
+                    DEFAULT_PLANNER_MAX_OUTPUT_TOKENS,
+                    Math.max(
+                        0,
+                        executionLimits.maxTokensTotal -
+                            workflowState.totalTokens
+                    )
+                )
+            ).stopped
+        ) {
             const plannerStartedAt = Date.now();
             plannerExecutionResult = await plannerStepExecutor({
                 ...plannerStepRequest,
+                invocationContext: {
+                    ...plannerStepRequest.invocationContext,
+                    maxOutputTokens: Math.min(
+                        DEFAULT_PLANNER_MAX_OUTPUT_TOKENS,
+                        Math.max(
+                            1,
+                            executionLimits.maxTokensTotal -
+                                workflowState.totalTokens
+                        )
+                    ),
+                },
                 workflowId,
                 workflowName: workflowConfig.workflowName,
                 attempt: 1,
@@ -617,10 +675,12 @@ export const runBoundedReviewWorkflow = async ({
                 0,
                 1
             );
+            stopIfTokenBudgetExceeded();
         }
     }
 
     if (
+        !shouldStop &&
         plannerExecutionResult !== undefined &&
         planContinuationBuilder !== undefined
     ) {
@@ -1010,13 +1070,19 @@ export const runBoundedReviewWorkflow = async ({
                         : activePresentation?.caution;
                 const presentationResult =
                     presentationEnabled && activePresentation !== undefined
-                        ? await runPresentationCandidate({
-                              generationRuntime,
-                              generationRequest: generationRequestForAttempt,
-                              config: activePresentation.config,
-                              persona: activePresentation.persona,
-                              caution: presentationCaution,
-                          })
+                        ? stopIfOverLimits(
+                              'presentation',
+                              generationRequestForAttempt.maxOutputTokens
+                          ).stopped
+                            ? undefined
+                            : await runPresentationCandidate({
+                                  generationRuntime,
+                                  generationRequest:
+                                      generationRequestForAttempt,
+                                  config: activePresentation.config,
+                                  persona: activePresentation.persona,
+                                  caution: presentationCaution,
+                              })
                         : undefined;
                 if (
                     presentationResult !== undefined &&
@@ -1111,6 +1177,7 @@ export const runBoundedReviewWorkflow = async ({
                             0,
                             0
                         );
+                        stopIfTokenBudgetExceeded();
                     }
                 }
                 initialDraftStartedAt = Date.now();
@@ -1126,7 +1193,10 @@ export const runBoundedReviewWorkflow = async ({
                     shouldStop = true;
                 } else if (
                     draftResult === null &&
-                    !stopIfOverLimits('generate').stopped &&
+                    !stopIfOverLimits(
+                        'generate',
+                        authoritativeGenerationRequest.maxOutputTokens
+                    ).stopped &&
                     stepRoutingChainSet?.generateCandidates &&
                     stepRoutingChainSet.generateCandidates.length > 0
                 ) {
@@ -1212,7 +1282,10 @@ export const runBoundedReviewWorkflow = async ({
                     }
                 } else if (
                     canRunNormalGeneration &&
-                    !stopIfOverLimits('generate').stopped
+                    !stopIfOverLimits(
+                        'generate',
+                        authoritativeGenerationRequest.maxOutputTokens
+                    ).stopped
                 ) {
                     draftResult = await generationRuntime.generate(
                         authoritativeGenerationRequest
@@ -1278,6 +1351,7 @@ export const runBoundedReviewWorkflow = async ({
                         0,
                         0
                     );
+                    stopIfTokenBudgetExceeded();
                 } else if (!shouldStop && draftResult === null) {
                     throw new Error(
                         'Initial generation completed without a draft result.'
@@ -1333,6 +1407,7 @@ export const runBoundedReviewWorkflow = async ({
         effectiveMaxIterations,
         workflowPolicy,
         stopIfOverLimits,
+        stopIfTokenBudgetExceeded,
         selectedReviewModuleIds,
         effectiveReviewDecisionPrompt,
         personaExpressionGuidance,

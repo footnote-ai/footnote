@@ -931,6 +931,53 @@ test('Footnote pull-request and team-work questions select live GitHub sections'
     });
 });
 
+test('Footnote repo-explainer requests derive exact GitHub references from user text', async () => {
+    const planner = createStructuredPlanner(
+        {
+            action: 'message',
+            modality: 'text',
+            requestedCapabilityProfile: 'balanced-general',
+            safetyTier: 'Low',
+            reasoning: 'Retrieve the named Footnote pull request.',
+            generation: {
+                reasoningEffort: 'low',
+                verbosity: 'low',
+                temperament: {
+                    tightness: 3,
+                    rationale: 3,
+                    attribution: 3,
+                    caution: 3,
+                    extent: 3,
+                },
+                search: {
+                    query: 'Footnote PR #528 details',
+                    contextSize: 'low',
+                    intent: 'repo_explainer',
+                },
+            },
+        },
+        [{ id: 'balanced-general', description: 'general' }]
+    );
+    const result = await planFromWorkflow(
+        planner,
+        createChatRequest({
+            latestUserInput: 'What changed in Footnote PR #528?',
+            conversation: [
+                {
+                    role: 'user',
+                    content: 'What changed in Footnote PR #528?',
+                },
+            ],
+        })
+    );
+
+    assert.deepEqual(result.plan.generation.githubContext, {
+        repository: 'footnote-ai/footnote',
+        sections: ['pulls'],
+        reference: { kind: 'pull_request', number: 528 },
+    });
+});
+
 test('planner-provided GitHub context wins over derived Footnote context', async () => {
     const planner = createStructuredPlanner(
         {
@@ -1881,4 +1928,68 @@ test('chatPlanner accepts GitHub context only for an explicit user-provided repo
         })
     );
     assert.equal(rejected.plan.generation.githubContext, undefined);
+});
+
+test('chatPlanner accepts exact GitHub references only when user-authored text names the object', async () => {
+    const planner = createStructuredPlanner(
+        {
+            action: 'message',
+            modality: 'text',
+            requestedCapabilityProfile: 'balanced-general',
+            safetyTier: 'Low',
+            reasoning: 'Retrieve the explicitly named repository object.',
+            generation: {
+                reasoningEffort: 'low',
+                verbosity: 'low',
+                temperament: {
+                    tightness: 3,
+                    rationale: 3,
+                    attribution: 3,
+                    caution: 3,
+                    extent: 3,
+                },
+                githubContext: {
+                    repository: 'acme/repo',
+                    sections: ['pulls'],
+                    reference: { kind: 'pull_request', number: 528 },
+                },
+            },
+        },
+        [{ id: 'balanced-general', description: 'general' }]
+    );
+
+    const accepted = await planFromWorkflow(
+        planner,
+        createChatRequest({
+            latestUserInput: 'What changed in PR #528 in acme/repo?',
+            conversation: [
+                {
+                    role: 'user',
+                    content: 'What changed in PR #528 in acme/repo?',
+                },
+            ],
+        })
+    );
+    assert.deepEqual(accepted.plan.generation.githubContext, {
+        repository: 'acme/repo',
+        sections: ['pulls'],
+        reference: { kind: 'pull_request', number: 528 },
+    });
+
+    const rejected = await planFromWorkflow(
+        planner,
+        createChatRequest({
+            latestUserInput: 'What is currently open in acme/repo?',
+            conversation: [
+                {
+                    role: 'user',
+                    content: 'What is currently open in acme/repo?',
+                },
+            ],
+        })
+    );
+    assert.deepEqual(rejected.plan.generation.githubContext, {
+        repository: 'acme/repo',
+        sections: ['pulls'],
+    });
 });

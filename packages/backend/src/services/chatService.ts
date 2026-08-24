@@ -1776,10 +1776,19 @@ export const createChatService = ({
             orchestrationStartedAtMs !== undefined
                 ? Math.max(0, Date.now() - orchestrationStartedAtMs)
                 : undefined;
+        const contextRetrievalRequested =
+            effectiveContextStepResults.length > 0;
+        const contextStepEvidenceUsed = effectiveContextStepResults.some(
+            (contextStepResult) =>
+                contextStepResult.outcome === 'executed' &&
+                ((contextStepResult.contextMessages?.length ?? 0) > 0 ||
+                    (contextStepResult.trustedSystemMessages?.length ?? 0) > 0)
+        );
         const retrievalUsed =
             generationResult.retrieval?.used === true ||
             generationResult.provenance === 'Retrieved' ||
-            (generationResult.citations?.length ?? 0) > 0;
+            (generationResult.citations?.length ?? 0) > 0 ||
+            contextStepEvidenceUsed;
         const trustGraphEvidenceAvailable =
             trustGraphResult?.adapterStatus === 'success' &&
             (trustGraphResult.predicateViews.P_EVID.sourceRefs.length > 0 ||
@@ -2005,8 +2014,9 @@ export const createChatService = ({
                 presentation: presentationMetadata,
             }),
             retrieval: {
-                requested: hasSearchIntent,
+                requested: hasSearchIntent || contextRetrievalRequested,
                 used: retrievalUsed,
+                ...(contextStepEvidenceUsed && { contextUsed: true }),
                 intent: effectiveNormalizedGeneration?.search?.intent,
                 contextSize: effectiveNormalizedGeneration?.search?.contextSize,
             },

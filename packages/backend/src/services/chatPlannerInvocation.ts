@@ -21,6 +21,8 @@ export type ChatPlannerInvocationContext = {
     workflowName: string;
     stepKind: 'plan';
     purpose: ChatPlannerInvocationPurpose;
+    /** Workflow-owned output reservation for this bounded planner call. */
+    maxOutputTokens?: number;
 };
 
 export const isWorkflowOwnedPlannerInvocation = (

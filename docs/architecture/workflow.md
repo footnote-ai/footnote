@@ -457,9 +457,14 @@ stops a run, the workflow record includes that stop reason.
 exhausted limit prevented. This keeps a pre-generation stop distinct from a
 run that generated an answer and then lacked budget for assessment or
 revision. Token accounting includes planner, generation, assessment, and
-revision model calls when provider usage is available. Step-level `usage` and
-backend-estimated `cost` remain the canonical trace accounting records; UIs
-must label sums as partial when any executed model step lacks cost data.
+revision model calls when provider usage is available. Before a counted model
+step, the engine reserves its configured output allowance against the remaining
+cumulative budget. Provider usage remains authoritative: if a provider reports
+more than the admitted allowance, the engine records the actual step usage,
+stops further deliberation, and reports `budget_exhausted_tokens` instead of
+claiming a clean completion. Step-level `usage` and backend-estimated `cost`
+remain the canonical trace accounting records; UIs must label sums as partial
+when any executed model step lacks cost data.
 
 Profiles may narrow budgets. Hard-limit enforcement still happens in the
 engine. Adapters may pass configured limits, but exhausted-limit reason codes

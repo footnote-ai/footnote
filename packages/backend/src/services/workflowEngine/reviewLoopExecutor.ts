@@ -59,6 +59,8 @@ import { logger } from '../../utils/logger.js';
 import { resolveProfileReasoningEffort } from '../runtimeRequestControls.js';
 import type { ResponseCandidateCollector } from '../responseCandidates.js';
 
+const DEFAULT_PLANNER_MAX_OUTPUT_TOKENS = 1200;
+
 type CaptureStep = (input: {
     stepKind: 'plan' | 'tool' | 'generate' | 'assess' | 'revise' | 'finalize';
     status: 'executed' | 'failed' | 'skipped';
@@ -101,7 +103,18 @@ export const executeReviewLoop = async (ctx: {
     workflowPolicy: WorkflowRunPolicy;
     stopIfOverLimits: (
         nextStepKind?:
-            'plan' | 'tool' | 'generate' | 'assess' | 'revise' | 'finalize'
+            | 'plan'
+            | 'tool'
+            | 'generate'
+            | 'assess'
+            | 'revise'
+            | 'presentation'
+            | 'finalize',
+        nextStepTokenBudget?: number,
+        stateForCheck?: WorkflowState
+    ) => LimitStopEvaluation;
+    stopIfTokenBudgetExceeded: (
+        stateForCheck?: WorkflowState
     ) => LimitStopEvaluation;
     selectedReviewModuleIds: string[];
     effectiveReviewDecisionPrompt?: string;
@@ -202,6 +215,13 @@ export const executeReviewLoop = async (ctx: {
         stoppedBeforeStepKind = evaluation.stoppedBeforeStepKind;
         return true;
     };
+    const checkLimits = (
+        nextStepKind?: WorkflowStepKind,
+        nextStepTokenBudget = 0
+    ): LimitStopEvaluation =>
+        ctx.stopIfOverLimits(nextStepKind, nextStepTokenBudget, workflowState);
+    const checkTokenBudget = (): LimitStopEvaluation =>
+        ctx.stopIfTokenBudgetExceeded(workflowState);
     const toLatestRoutingHintSignals = (): WorkflowAssessRoutingHintSignals =>
         buildAssessRoutingHintSignals({
             assessRoutingHintsCsv: latestAssessRoutingHintsCsv,
@@ -396,6 +416,9 @@ export const executeReviewLoop = async (ctx: {
                     }),
                 },
             });
+            if (syncLimitStop(checkTokenBudget())) {
+                return { status: 'stopped' };
+            }
             latestRevisionInstruction = decision.revisionInstruction;
             return {
                 status: 'executed',
@@ -467,13 +490,21 @@ export const executeReviewLoop = async (ctx: {
             shouldStop = true;
             return { status: 'stopped' };
         }
-        if (syncLimitStop(ctx.stopIfOverLimits('plan'))) {
+        if (
+            syncLimitStop(
+                checkLimits('plan', DEFAULT_PLANNER_MAX_OUTPUT_TOKENS)
+            )
+        ) {
             return { status: 'stopped' };
         }
         const plannerReentryStartedAt = Date.now();
         try {
             const plannerReentryResult = await ctx.plannerStepExecutor({
                 ...ctx.plannerStepRequest,
+                invocationContext: {
+                    ...ctx.plannerStepRequest.invocationContext,
+                    maxOutputTokens: DEFAULT_PLANNER_MAX_OUTPUT_TOKENS,
+                },
                 workflowId: ctx.workflowId,
                 workflowName: ctx.workflowName,
                 attempt: iteration + 1,
@@ -516,6 +547,9 @@ export const executeReviewLoop = async (ctx: {
                 0,
                 1
             );
+            if (syncLimitStop(checkTokenBudget())) {
+                return { status: 'stopped' };
+            }
             planContinuation = ctx.planContinuationBuilder({
                 plannerStepResult: plannerReentryResult,
                 workflowId: ctx.workflowId,
@@ -707,6 +741,7 @@ export const executeReviewLoop = async (ctx: {
                 0,
                 0
             );
+            syncLimitStop(checkTokenBudget());
             draftResult = revisionResult;
             draftParentStepId = revisionStepId;
             draftCandidateId = revisionCandidateId;
@@ -753,7 +788,7 @@ export const executeReviewLoop = async (ctx: {
             workflowStatus = 'degraded';
             break;
         }
-        if (syncLimitStop(ctx.stopIfOverLimits('assess'))) {
+        if (syncLimitStop(checkLimits('assess', 200))) {
             break;
         }
         const assessStepResult = await executeAssessStep(iteration);
@@ -793,7 +828,14 @@ export const executeReviewLoop = async (ctx: {
             shouldStop = true;
             break;
         }
-        if (syncLimitStop(ctx.stopIfOverLimits('generate'))) {
+        if (
+            syncLimitStop(
+                checkLimits(
+                    'generate',
+                    effectiveGenerationRequest.maxOutputTokens
+                )
+            )
+        ) {
             break;
         }
         const plannerReentryResult = await executePlannerReentryStep(
@@ -803,7 +845,14 @@ export const executeReviewLoop = async (ctx: {
         if (plannerReentryResult.status === 'stopped' || shouldStop) {
             break;
         }
-        if (syncLimitStop(ctx.stopIfOverLimits('generate'))) {
+        if (
+            syncLimitStop(
+                checkLimits(
+                    'generate',
+                    effectiveGenerationRequest.maxOutputTokens
+                )
+            )
+        ) {
             break;
         }
         await executeRevisionStep({

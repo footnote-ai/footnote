@@ -68,6 +68,8 @@ export type {
     ResponseTemperament,
     TrustGraphMetadata,
     GitHubContextMetadata,
+    GitHubContextReference,
+    GitHubObjectReference,
     ProjectContextCategory,
     ProjectContextMatch,
     ProjectContextMetadata,

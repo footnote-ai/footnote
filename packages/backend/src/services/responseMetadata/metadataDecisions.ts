@@ -153,8 +153,9 @@ export const resolveProvenanceDecision = (
     const retrieval = runtimeContext.retrieval;
     const classificationToolExecution = runtimeContext.executionContext?.tool;
     const retrievalToolExecuted =
-        classificationToolExecution?.status === 'executed' &&
-        classificationToolExecution.toolName === 'web_search';
+        retrieval?.contextUsed === true ||
+        (classificationToolExecution?.status === 'executed' &&
+            classificationToolExecution.toolName === 'web_search');
 
     return classifyProvenanceWithSignals({
         assistantProvenance: generationMetadata.provenance,

@@ -11,6 +11,7 @@ import type {
 } from '@footnote/agent-runtime';
 import type {
     ChatRepoSearchHint,
+    GitHubObjectReference,
     ResponseTemperament,
 } from '@footnote/contracts';
 import type { ExecutionResponseMode } from './executionContract.js';
@@ -82,6 +83,7 @@ export type ChatGenerationGitHubContext = {
     sections?: Array<
         'repository' | 'issues' | 'pulls' | 'releases' | 'commits'
     >;
+    reference?: GitHubObjectReference;
 };
 
 export type ChatGenerationProjectContext = {

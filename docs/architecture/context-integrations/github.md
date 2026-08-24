@@ -23,11 +23,20 @@ prompted, cached as keys, or emitted in metadata.
 ## Requests and normalization
 
 The integration uses only GET requests for `/repos/{owner}/{repo}`, open
-issues, open pull requests, releases, and commits. Each section returns at
-at most five cleaned records. A returned count is a count of records retrieved,
-not the repository total. Footnote removes control characters and limits text
-length. Repository text is marked **untrusted context**. It cannot choose
-routing, policy, verification, or when execution ends.
+issues, open pull requests, releases, and commits. A user-authored, validated
+reference can additionally select one exact read-only object endpoint for a
+pull request, issue, commit, or release. Exact retrieval runs before broad
+sections, so a merged or older object does not depend on an open/recent listing.
+Each broad section returns at most five cleaned records. A returned count is a
+count of records retrieved, not the repository total. Footnote removes control
+characters and limits text length. Repository text is marked **untrusted
+context**. It cannot choose routing, policy, verification, or when execution
+ends.
+
+Planner references are advisory. The backend only executes an exact reference
+when the identifying material is also present in user-authored conversation and
+the repository slug is validated. Invalid, ambiguous, missing, or unavailable
+objects remain explicit metadata outcomes and do not block bounded discovery.
 
 ## Freshness and failures
 
@@ -41,7 +50,7 @@ generation continues without GitHub context.
 ## Provenance
 
 GitHub object URLs become citations. Response metadata records the repository,
-requested sections, status, fetch time, per-section limit, returned counts,
-failed sections, and reason codes. The workflow trace keeps the lookup outcome.
-Web and Discord show the source status without exposing credentials or private
-access settings.
+requested sections, exact-reference status when requested, fetch time,
+per-section limit, returned counts, failed sections, and reason codes. The
+workflow trace keeps the lookup outcome. Web and Discord show the source status
+without exposing credentials or private access settings.

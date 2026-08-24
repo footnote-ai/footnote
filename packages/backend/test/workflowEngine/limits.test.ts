@@ -147,3 +147,28 @@ test('mapLimitExhaustionToTerminationReason maps to expected reasons', () => {
         'budget_exhausted_time'
     );
 });
+
+test('checkExecutionLimits reserves the requested next-step token budget', () => {
+    const limits = createLimits();
+    const state = {
+        workflowId: 'wf_1',
+        workflowName: 'workflow_test',
+        startedAtMs: 500,
+        currentStepKind: 'generate' as const,
+        stepCount: 0,
+        toolCallCount: 0,
+        planCallCount: 0,
+        reviewCallCount: 0,
+        deliberationCallCount: 0,
+        totalTokens: 90,
+    };
+
+    assert.equal(
+        checkExecutionLimits(state, limits, 1200, 'assess', 10).withinLimits,
+        true
+    );
+    assert.deepEqual(checkExecutionLimits(state, limits, 1200, 'assess', 11), {
+        withinLimits: false,
+        exhaustedBy: 'maxTokensTotal',
+    });
+});

@@ -37,8 +37,7 @@ test('single-tool policy is now a no-op with unified toolIntent', () => {
     });
 
     const toolInput = decision.generation.toolIntent?.input as
-        | { location: { type: string } }
-        | undefined;
+        { location: { type: string } } | undefined;
     assert.equal(toolInput?.location.type, 'lat_lon');
     assert.equal(
         decision.generation.search?.query,
@@ -149,6 +148,30 @@ test('web search tool intent forwards topicHints when provided', () => {
         (selection.toolIntent.input as { topicHints?: string[] }).topicHints,
         ['planner fallback', 'chat planner']
     );
+});
+
+test('repo_explainer web search uses the canonical repository query and scope', () => {
+    const selection = resolveToolSelection({
+        generation: {
+            reasoningEffort: 'low',
+            verbosity: 'low',
+            search: {
+                query: 'PR #528 details',
+                contextSize: 'low',
+                intent: 'repo_explainer',
+            },
+        },
+    });
+
+    const input = selection.toolIntent.input as {
+        query: string;
+        repositoryScope?: { repository: string };
+    };
+    assert.match(input.query, /footnote-ai\/footnote/);
+    assert.match(input.query, /DeepWiki/);
+    assert.deepEqual(input.repositoryScope, {
+        repository: 'footnote-ai/footnote',
+    });
 });
 
 test('weather adapter passes through needs_clarification result with status executed', async () => {

@@ -417,6 +417,101 @@ test('runBoundedReviewWorkflow records that assessment was skipped after generat
     );
 });
 
+test('runBoundedReviewWorkflow reports a provider token overrun after admitting the assessment', async () => {
+    let generationCalls = 0;
+    const generationRuntime: GenerationRuntime = {
+        kind: 'test-runtime',
+        async generate() {
+            generationCalls += 1;
+            if (generationCalls === 2) {
+                return {
+                    text: '{"reviewDecision":"finalize","reviewReason":"Complete."}',
+                    model: 'gpt-5-mini',
+                    usage: {
+                        promptTokens: 200,
+                        completionTokens: 50,
+                        totalTokens: 250,
+                    },
+                    provenance: 'Inferred',
+                    citations: [],
+                };
+            }
+            return {
+                text: 'generated answer',
+                model: 'gpt-5-mini',
+                usage: {
+                    promptTokens: 90,
+                    completionTokens: 10,
+                    totalTokens: 100,
+                },
+                provenance: 'Inferred',
+                citations: [],
+            };
+        },
+    };
+
+    const result = await runBoundedReviewWorkflowForTest({
+        generationRuntime,
+        generationRequest: {
+            model: 'gpt-5-mini',
+            maxOutputTokens: 200,
+            messages: [{ role: 'user', content: 'hi' }],
+        },
+        messagesWithHints: [{ role: 'user', content: 'hi' }],
+        generationStartedAtMs: Date.now(),
+        workflowConfig: {
+            workflowName: 'message_reviewed',
+            maxIterations: 1,
+            maxDurationMs: 15000,
+            executionLimits: {
+                maxWorkflowSteps: 5,
+                maxToolCalls: 0,
+                maxDeliberationCalls: 1,
+                maxReviewCycles: 1,
+                maxTokensTotal: 300,
+                maxDurationMs: 15000,
+            },
+        },
+        workflowPolicy: {
+            enablePlanning: false,
+            enableToolUse: false,
+            enableReplanning: false,
+            enableGeneration: true,
+            enableAssessment: true,
+            enableRevision: false,
+        },
+        captureUsage: (response) => ({
+            model: response.model ?? 'gpt-5-mini',
+            promptTokens: response.usage?.promptTokens ?? 0,
+            completionTokens: response.usage?.completionTokens ?? 0,
+            totalTokens: response.usage?.totalTokens ?? 0,
+            estimatedCost: {
+                inputCostUsd: 0,
+                outputCostUsd: 0,
+                totalCostUsd: 0,
+            },
+        }),
+    });
+
+    assert.equal(generationCalls, 2);
+    assert.equal(result.outcome, 'generated');
+    assert.equal(result.generationResult.text, 'generated answer');
+    assert.equal(result.workflowLineage.status, 'degraded');
+    assert.equal(
+        result.workflowLineage.terminationReason,
+        'budget_exhausted_tokens'
+    );
+    assert.deepEqual(result.workflowLineage.limitStop, {
+        stoppedByLimit: true,
+        terminationReason: 'budget_exhausted_tokens',
+        exhaustedLimitKey: 'maxTokensTotal',
+    });
+    assert.deepEqual(
+        result.workflowLineage.steps.map((step) => step.stepKind),
+        ['generate', 'assess']
+    );
+});
+
 test('runBoundedReviewWorkflow classifies initial generate runtime failure as no_generation with lineage', async () => {
     let generationCalls = 0;
     let usageCaptures = 0;

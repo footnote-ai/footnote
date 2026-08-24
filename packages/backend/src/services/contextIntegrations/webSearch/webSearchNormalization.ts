@@ -40,6 +40,12 @@ export const parseWebSearchInput = (
         topicHints: Array.isArray(input.topicHints)
             ? input.topicHints.filter((v): v is string => typeof v === 'string')
             : undefined,
+        repositoryScope:
+            isRecord(input.repositoryScope) &&
+            typeof input.repositoryScope.repository === 'string' &&
+            input.repositoryScope.repository.trim().length > 0
+                ? { repository: input.repositoryScope.repository.trim() }
+                : undefined,
     };
 };
 

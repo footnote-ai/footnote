@@ -67,7 +67,10 @@ export type {
 } from './chatPlannerInvocation.js';
 import { runtimeConfig } from '../config.js';
 import {
+    findGitHubObjectReferenceInConversation,
+    isGitHubObjectReferenceInConversation,
     isRepositorySlugInConversation,
+    normalizeGitHubObjectReference,
     normalizeGitHubSections,
     parseGitHubRepositorySlug,
 } from './contextIntegrations/github/index.js';
@@ -235,6 +238,8 @@ type ChatPlannerStructuredExecutor = (
     request: ChatPlannerExecutionRequest
 ) => Promise<ChatPlannerStructuredExecutionResult>;
 type ChatPlannerExecutionMode = 'structured' | 'text_json';
+
+export const DEFAULT_CHAT_PLANNER_MAX_OUTPUT_TOKENS = 1200;
 
 /**
  * Composes shared planner policy with the output contract for one execution
@@ -441,7 +446,19 @@ const normalizeGitHubContext = (
     if (!isRepositorySlugInConversation(repository, conversationText))
         return undefined;
     const sections = normalizeGitHubSections(candidate.sections);
-    return { repository, sections };
+    const reference = normalizeGitHubObjectReference(candidate.reference);
+    const validatedReference =
+        reference !== undefined &&
+        isGitHubObjectReferenceInConversation(reference, conversationText)
+            ? reference
+            : undefined;
+    return {
+        repository,
+        sections,
+        ...(validatedReference !== undefined && {
+            reference: validatedReference,
+        }),
+    };
 };
 
 const normalizeWeatherLocation = (
@@ -1093,6 +1110,23 @@ const normalizeGeneration = (
     const footnoteGitHubContext = buildFootnoteGitHubContextRouteFromPlan({
         search,
     });
+    const inferredFootnoteReference =
+        footnoteGitHubContext !== undefined
+            ? findGitHubObjectReferenceInConversation([
+                  request.latestUserInput,
+                  ...request.conversation
+                      .filter((message) => message.role === 'user')
+                      .map((message) => message.content),
+              ])
+            : undefined;
+    const enrichedFootnoteGitHubContext =
+        footnoteGitHubContext !== undefined &&
+        inferredFootnoteReference !== undefined
+            ? {
+                  ...footnoteGitHubContext,
+                  reference: inferredFootnoteReference,
+              }
+            : footnoteGitHubContext;
 
     const normalizedGeneration = {
         ...baseGeneration,
@@ -1104,8 +1138,8 @@ const normalizeGeneration = (
                 : {}),
         },
         ...(baseGeneration.githubContext === undefined &&
-            footnoteGitHubContext !== undefined && {
-                githubContext: footnoteGitHubContext,
+            enrichedFootnoteGitHubContext !== undefined && {
+                githubContext: enrichedFootnoteGitHubContext,
             }),
         ...(projectContext !== undefined && { projectContext }),
     } satisfies ChatGenerationPlan;
@@ -1502,6 +1536,17 @@ export const createChatPlanner = ({
         invocationContext?: ChatPlannerInvocationContext
     ): Promise<ChatPlannerResult> => {
         const plannerStartedAt = Date.now();
+        const plannerOutputTokenBudget =
+            invocationContext?.maxOutputTokens !== undefined &&
+            Number.isFinite(invocationContext.maxOutputTokens)
+                ? Math.max(
+                      1,
+                      Math.min(
+                          DEFAULT_CHAT_PLANNER_MAX_OUTPUT_TOKENS,
+                          Math.floor(invocationContext.maxOutputTokens)
+                      )
+                  )
+                : DEFAULT_CHAT_PLANNER_MAX_OUTPUT_TOKENS;
         if (!isWorkflowOwnedPlannerInvocation(invocationContext)) {
             logger.warn(
                 'chat planner invocation rejected because workflow-owned context and purpose were not provided; using safe fallback',
@@ -1549,7 +1594,7 @@ export const createChatPlanner = ({
                 contextTier,
             }),
             model: defaultModel,
-            maxOutputTokens: 1200,
+            maxOutputTokens: plannerOutputTokenBudget,
             reasoningEffort: 'low',
             ...(safetyIdentifier !== undefined && { safetyIdentifier }),
         });

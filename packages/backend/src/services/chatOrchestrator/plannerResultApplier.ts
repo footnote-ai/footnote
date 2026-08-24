@@ -278,6 +278,11 @@ export const createPlannerResultApplier = (
                           sections:
                               generationForExecution.githubContext.sections,
                       }),
+                      ...(generationForExecution.githubContext.reference !==
+                          undefined && {
+                          reference:
+                              generationForExecution.githubContext.reference,
+                      }),
                   },
               }
             : undefined;
