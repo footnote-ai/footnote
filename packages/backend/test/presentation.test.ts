@@ -18,6 +18,7 @@ import {
     runPresentationStep,
     type PresentationConfig,
 } from '../src/services/presentation.js';
+import { buildPersonaExpressionGuidance } from '../src/services/prompts/personaExpression.js';
 
 const profile: ModelProfile = {
     id: 'presentation',
@@ -62,6 +63,10 @@ const result = (text: string): GenerationResult => ({
 const persona = {
     id: 'myuri',
     presentationGuidance: 'Warm, colorful, lively prose.',
+    expressionStrength: 'balanced' as const,
+    expressionSource: 'persona_default' as const,
+    expressionGuidance:
+        'Persona expression strength: balanced. Preserve grounded content and safety decisions.',
 };
 
 const runtime = (
@@ -93,6 +98,8 @@ test('passes the styled draft and authoritative context into evidence-aware fina
 
     assert.equal(presentation.outcome, 'finalized');
     assert.equal(presentation.metadata.outcome, 'finalized');
+    assert.equal(presentation.metadata.expressionStrength, 'balanced');
+    assert.equal(presentation.metadata.expressionSource, 'persona_default');
     const finalizerRequest = requests[1];
     assert.match(
         String(finalizerRequest?.messages[0]?.content),
@@ -129,6 +136,48 @@ test('passes the styled draft and authoritative context into evidence-aware fina
             additionalProperties: false,
         },
     });
+});
+
+test('keeps persona expression active for elevated or unavailable TRACE caution', async () => {
+    for (const caution of [4, 5, undefined] as const) {
+        const draftRequests: GenerationRequest[] = [];
+        const presentation = await runPresentationStep({
+            generationRuntime: runtime(async (input) => {
+                draftRequests.push(input);
+                return draftRequests.length === 1
+                    ? result(
+                          'A lively update: 12 fixes confirmed at https://example.com/release.'
+                      )
+                    : result('{"verdict":"clear","feedback":""}');
+            }),
+            generationRequest: request,
+            finalize: async (input) => {
+                const finalizerPrompt = String(input.messages.at(-2)?.content);
+                const styledDraft = String(input.messages.at(-1)?.content);
+                return result(
+                    finalizerPrompt.includes(
+                        buildPersonaExpressionGuidance('strong')
+                    ) && styledDraft.includes('STYLED PRESENTATION DRAFT')
+                        ? 'A lively update: 12 fixes confirmed at https://example.com/release.'
+                        : 'Unexpected finalizer input.'
+                );
+            },
+            config,
+            persona: {
+                ...persona,
+                expressionStrength: 'strong',
+                expressionGuidance: buildPersonaExpressionGuidance('strong'),
+            },
+            caution,
+        });
+
+        assert.equal(presentation.outcome, 'finalized');
+        assert.equal(presentation.metadata.expressionStrength, 'strong');
+        assert.doesNotMatch(
+            String(draftRequests[0]?.messages[0]?.content),
+            /restrained expression|skip styling/u
+        );
+    }
 });
 
 test('keeps the styled candidate when the finalizer has no authority reason to change it', async () => {

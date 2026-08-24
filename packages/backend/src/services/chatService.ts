@@ -50,7 +50,7 @@ import {
     type BackendLLMCostRecord,
 } from './llmCostRecorder.js';
 import { buildRepoExplainerResponseHint } from './chatGenerationHints.js';
-import { NEUTRAL_PRESENTATION_GUIDANCE } from './chatProfileOverlay.js';
+import { resolvePersonaPresentationGuidance } from './chatProfileOverlay.js';
 import type {
     PresentationConfig,
     PresentationPersona,
@@ -58,6 +58,7 @@ import type {
 import type { ChatGenerationPlan } from './chatGenerationTypes.js';
 import type { ExecutionContract } from './executionContract.js';
 import { renderConversationPromptLayers } from './prompts/conversationPromptLayers.js';
+import { buildPersonaExpressionGuidance } from './prompts/personaExpression.js';
 import { resolveNoGenerationHandlingFromTermination } from './workflowProfileContract.js';
 import {
     resolveWorkflowRuntimeConfig,
@@ -90,6 +91,20 @@ import type {
 } from './executionContractTrustGraph/trustGraphEvidenceTypes.js';
 import type { ScopeValidationPolicy } from './executionContractTrustGraph/scopeValidator.js';
 import { logger } from '../utils/logger.js';
+
+const BALANCED_PERSONA_EXPRESSION_GUIDANCE =
+    buildPersonaExpressionGuidance('balanced');
+
+const buildBalancedPresentationPersona = (id: string): PresentationPersona => ({
+    id,
+    presentationGuidance: resolvePersonaPresentationGuidance(id),
+    expressionStrength: 'balanced',
+    expressionSource: 'persona_default',
+    expressionGuidance: BALANCED_PERSONA_EXPRESSION_GUIDANCE,
+});
+
+const DEFAULT_PRESENTATION_PERSONA =
+    buildBalancedPresentationPersona('footnote');
 import { resolveProfileReasoningEffort } from './runtimeRequestControls.js';
 import { runtimeConfig } from '../config.js';
 import { buildToolClarificationResponse } from './tools/toolClarificationResponse.js';
@@ -1375,10 +1390,8 @@ export const createChatService = ({
                     },
                     presentation: {
                         config: effectivePresentationConfig,
-                        persona: presentationPersona ?? {
-                            id: 'footnote',
-                            presentationGuidance: NEUTRAL_PRESENTATION_GUIDANCE,
-                        },
+                        persona:
+                            presentationPersona ?? DEFAULT_PRESENTATION_PERSONA,
                         caution: effectivePlannerTemperament?.caution,
                         captureUsage: (result, profile, feature) =>
                             recordUsageForStep(
@@ -1387,6 +1400,9 @@ export const createChatService = ({
                                 feature
                             ),
                     },
+                    personaExpressionGuidance:
+                        presentationPersona?.expressionGuidance ??
+                        BALANCED_PERSONA_EXPRESSION_GUIDANCE,
                 });
                 workflowPlannerStepResult = workflowResult.plannerStepResult;
                 workflowPlannerSummary =
@@ -2127,6 +2143,9 @@ export const createChatService = ({
         const promptLayers = renderConversationPromptLayers('web-chat', {
             botProfileDisplayName,
         });
+        const resolvedPresentationPersona = buildBalancedPresentationPersona(
+            runtimeConfig.profile.id
+        );
         // Keep prompt assembly here so the public web chat path stays stable.
         const messages: RuntimeMessage[] = [
             {
@@ -2135,7 +2154,7 @@ export const createChatService = ({
             },
             {
                 role: 'system',
-                content: promptLayers.personaPrompt,
+                content: `${promptLayers.personaPrompt}\n\n${resolvedPresentationPersona.expressionGuidance}`,
             },
             { role: 'user', content: question.trim() },
         ];
@@ -2154,6 +2173,7 @@ export const createChatService = ({
                     projectedSpeakerLabelCount: 0,
                 },
             },
+            presentationPersona: resolvedPresentationPersona,
         });
 
         if (response.kind !== 'message') {

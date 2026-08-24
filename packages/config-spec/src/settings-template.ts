@@ -20,9 +20,7 @@ export type ResolvedTemplateTarget = 'local' | 'fly';
 export type TemplatePrimitive = string | number | boolean;
 
 export type TemplateRenderedDefault =
-    | TemplatePrimitive
-    | readonly string[]
-    | Readonly<Record<string, number>>;
+    TemplatePrimitive | readonly string[] | Readonly<Record<string, number>>;
 
 export type TemplateField = {
     envKey: string;
@@ -485,6 +483,7 @@ const renderDiscordBotsBlock = (): string[] => [
     '#         id: main',
     '#         display-name: Footnote',
     '#         overlay-path: ""',
+    '#         persona-expression-strength: balanced',
     '#         mention-aliases: []',
 ];
 

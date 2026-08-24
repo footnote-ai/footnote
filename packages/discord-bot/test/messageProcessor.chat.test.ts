@@ -906,6 +906,7 @@ test('buildChatRequestFromMessage includes botPersonaId and leaves overlay compo
             path: null,
             length: 61,
         },
+        personaExpressionStrength: 'strong',
     };
     processorAccess.buildRawConversationHistory = async () => [
         { role: 'user', content: 'Jordan said: "What changed?"' },
@@ -922,6 +923,8 @@ test('buildChatRequestFromMessage includes botPersonaId and leaves overlay compo
         }
 
         assert.equal(built.request.botPersonaId, 'ari-vendor');
+        assert.equal(built.request.personaExpressionProfileStrength, 'strong');
+        assert.equal(built.request.personaExpressionStrength, undefined);
         assert.equal(built.request.conversation[0].role, 'user');
         assert.doesNotMatch(
             built.request.conversation[0].content,

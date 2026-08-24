@@ -12,7 +12,12 @@ import type {
     GenerationStructuredOutput,
     RuntimeMessage,
 } from '@footnote/agent-runtime';
-import type { ModelProfile, TraceAxisScore } from '@footnote/contracts';
+import type {
+    ModelProfile,
+    PersonaExpressionSource,
+    PersonaExpressionStrength,
+    TraceAxisScore,
+} from '@footnote/contracts';
 import type {
     PresentationMetadata,
     PresentationReasonCode,
@@ -34,27 +39,18 @@ export type PresentationConfig = {
 export type PresentationPersona = {
     id: string;
     presentationGuidance: string;
+    expressionStrength: PersonaExpressionStrength;
+    expressionSource: PersonaExpressionSource;
+    expressionGuidance: string;
 };
-
-export type PresentationIntensity = 'standard' | 'restrained' | 'skipped';
 
 type PresentationCaution = TraceAxisScore | undefined;
 type PresentationDraftAttemptCount = 0 | 1;
 type PresentationFinalizerAttemptCount = 0 | 1 | 2;
 type PresentationAuditAttemptCount = 0 | 1;
 
-export const resolvePresentationIntensity = (
-    caution: PresentationCaution
-): PresentationIntensity => {
-    if (caution === 5) return 'skipped';
-    if (caution === undefined || caution === 4) return 'restrained';
-    return 'standard';
-};
-
 type PresentationAuditVerdict =
-    | 'clear'
-    | 'evidence_issue'
-    | 'presentation_flattened';
+    'clear' | 'evidence_issue' | 'presentation_flattened';
 
 type PresentationAudit = {
     verdict: PresentationAuditVerdict;
@@ -281,8 +277,8 @@ const buildMetadata = (input: {
                 ),
             }),
         ...(input.caution !== undefined && { caution: input.caution }),
-        intensity: resolvePresentationIntensity(input.caution),
-        traceConstrained: input.caution === undefined || input.caution >= 4,
+        expressionStrength: input.persona.expressionStrength,
+        expressionSource: input.persona.expressionSource,
         ...(input.startedAt !== undefined && {
             durationMs: Math.max(0, Date.now() - input.startedAt),
         }),
@@ -317,21 +313,31 @@ export const createPresentationFallback = (input: {
     }),
 });
 
-const finalizerSystemPrompt = (repairFeedback?: string): string =>
-    `You are the evidence-aware final editor. The styled presentation draft is the prose authority. Preserve its voice, wording, cadence, structure, and citations by default. Make only the smallest changes needed for facts, evidence, uncertainty, attribution, user intent, scope, safety, or refusal behavior. Do not turn it into a plain generic answer. Keep literal URLs, citations, code, and structured values intact. Return only the final answer.${repairFeedback ? `\n\nAudit feedback requiring one bounded repair:\n${repairFeedback}` : ''}`;
+const finalizerSystemPrompt = (
+    expressionGuidance: string,
+    repairFeedback?: string
+): string =>
+    `You are the evidence-aware final editor. The styled presentation draft is the prose authority. Preserve its voice, wording, cadence, structure, and citations by default. Make only the smallest changes needed for facts, evidence, uncertainty, attribution, user intent, scope, safety, or refusal behavior. Do not turn it into a plain generic answer. Keep literal URLs, citations, code, and structured values intact. ${expressionGuidance} Return only the final answer.${repairFeedback ? `\n\nAudit feedback requiring one bounded repair:\n${repairFeedback}` : ''}`;
 
-const auditSystemPrompt = (intensity: PresentationIntensity): string =>
-    `Audit a finalized answer against its styled presentation draft and the authoritative context. Return exactly one JSON object with {"verdict":"clear"|"evidence_issue"|"presentation_flattened","feedback":"..."}. Use evidence_issue only for a concrete factual, citation, uncertainty, attribution, scope, user-intent, or safety problem. Use presentation_flattened only when the final answer noticeably discards the styled draft's voice, wording, cadence, or structure without a concrete authority reason. feedback must be a bounded repair instruction of 320 characters or less. Return clear when neither issue exists. Resolved presentation intensity: ${intensity}.`;
+const auditSystemPrompt = (
+    expressionGuidance: string,
+    caution: PresentationCaution
+): string =>
+    `Audit a finalized answer against its styled presentation draft and the authoritative context. Return exactly one JSON object with {"verdict":"clear"|"evidence_issue"|"presentation_flattened","feedback":"..."}. Use evidence_issue only for a concrete factual, citation, uncertainty, attribution, scope, user-intent, or safety problem. Use presentation_flattened only when the final answer noticeably discards the styled draft's voice, wording, cadence, or structure without a concrete authority reason. feedback must be a bounded repair instruction of 320 characters or less. Return clear when neither issue exists. Observed TRACE caution: ${caution === undefined ? 'unavailable' : caution}; it may protect answer posture but does not weaken persona expression. ${expressionGuidance}`;
 
 const buildFinalizerRequest = (
     request: GenerationRequest,
     styledDraft: string,
+    expressionGuidance: string,
     repairFeedback?: string
 ): GenerationRequest => ({
     ...request,
     messages: [
         ...request.messages,
-        { role: 'system', content: finalizerSystemPrompt(repairFeedback) },
+        {
+            role: 'system',
+            content: finalizerSystemPrompt(expressionGuidance, repairFeedback),
+        },
         {
             role: 'user',
             content: `STYLED PRESENTATION DRAFT:\n${styledDraft}`,
@@ -360,14 +366,6 @@ export const runPresentationStep = async (input: {
             config: input.config,
             persona: input.persona,
             reasonCode: 'disabled',
-            caution: input.caution,
-        });
-    }
-    if (resolvePresentationIntensity(input.caution) === 'skipped') {
-        return createPresentationFallback({
-            config: input.config,
-            persona: input.persona,
-            reasonCode: 'trace_caution_high',
             caution: input.caution,
         });
     }
@@ -411,7 +409,7 @@ export const runPresentationStep = async (input: {
                     messages: [
                         {
                             role: 'system',
-                            content: `Write the full presentation draft using the authoritative context already supplied. You are the prose authority: use a colorful, natural persona while keeping facts, uncertainty, attribution, citations, scope, user intent, safety boundaries, URLs, code, and structured values intact. Do not use tools. Return only the response prose. ${resolvePresentationIntensity(input.caution) === 'restrained' ? 'Use restrained expression: no added emphasis, idioms, material expansion, or sentence reordering.' : ''}\n\nPresentation guidance:\n${input.persona.presentationGuidance}`,
+                            content: `Write the full presentation draft using the authoritative context already supplied. You are the prose authority: use the active persona while keeping facts, uncertainty, attribution, citations, scope, user intent, safety boundaries, URLs, code, and structured values intact. Do not use tools. Return only the response prose. Observed TRACE caution: ${input.caution === undefined ? 'unavailable' : input.caution}; protect answer posture without weakening persona expression. ${input.persona.expressionGuidance}\n\nPresentation guidance:\n${input.persona.presentationGuidance}`,
                         },
                         ...input.generationRequest.messages,
                     ],
@@ -470,6 +468,7 @@ export const runPresentationStep = async (input: {
                     buildFinalizerRequest(
                         input.generationRequest,
                         styledDraft,
+                        input.persona.expressionGuidance,
                         repairFeedback
                     ),
                     signal
@@ -552,7 +551,8 @@ export const runPresentationStep = async (input: {
                         {
                             role: 'system',
                             content: auditSystemPrompt(
-                                resolvePresentationIntensity(input.caution)
+                                input.persona.expressionGuidance,
+                                input.caution
                             ),
                         },
                         ...input.generationRequest.messages,
@@ -760,4 +760,9 @@ export const createPresentationFinalizerMessages = (
     styledDraft: string,
     repairFeedback?: string
 ): RuntimeMessage[] =>
-    buildFinalizerRequest({ messages }, styledDraft, repairFeedback).messages;
+    buildFinalizerRequest(
+        { messages },
+        styledDraft,
+        'Persona expression strength: balanced. Preserve grounded content and safety decisions.',
+        repairFeedback
+    ).messages;

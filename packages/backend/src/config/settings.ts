@@ -48,6 +48,7 @@ type CanonicalDiscordBot = {
         id?: string;
         displayName?: string;
         overlayPath?: string;
+        personaExpressionStrength?: string;
         mentionAliases?: string[];
     };
 };
@@ -436,6 +437,7 @@ const normalizeDiscordBots = (value: unknown, settingsPath: string) => {
             'id',
             'display-name',
             'overlay-path',
+            'persona-expression-strength',
             'mention-aliases',
         ]);
         if (profileSource !== undefined) {
@@ -509,6 +511,11 @@ const normalizeDiscordBots = (value: unknown, settingsPath: string) => {
             overlayPath:
                 typeof profileRecord?.['overlay-path'] === 'string'
                     ? profileRecord['overlay-path']
+                    : undefined,
+            personaExpressionStrength:
+                typeof profileRecord?.['persona-expression-strength'] ===
+                'string'
+                    ? profileRecord['persona-expression-strength']
                     : undefined,
             mentionAliases:
                 Array.isArray(mentionAliases) && mentionAliases.length > 0

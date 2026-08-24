@@ -88,8 +88,8 @@ test('sanitizePresentationForDisplay preserves text-free rewrite provenance', ()
         finalHmacId: 'b'.repeat(64),
         styledDraftRetentionRatio: 0.12,
         caution: 2,
-        intensity: 'standard',
-        traceConstrained: false,
+        expressionStrength: 'balanced',
+        expressionSource: 'persona_default',
     };
 
     assert.deepEqual(

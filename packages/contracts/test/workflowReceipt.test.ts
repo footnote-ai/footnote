@@ -402,8 +402,8 @@ test('buildWorkflowReceiptItems carries backend presentation receipt states for 
             draftAttemptCount: 1,
             finalizerAttemptCount: 1,
             auditAttemptCount: 0,
-            intensity: 'standard',
-            traceConstrained: false,
+            expressionStrength: 'balanced',
+            expressionSource: 'persona_default',
         },
     };
     assert.deepEqual(buildWorkflowReceiptItems(metadata), [

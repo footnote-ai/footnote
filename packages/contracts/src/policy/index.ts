@@ -18,6 +18,8 @@ export type {
     Citation,
     ProvenanceAssessment,
     TraceAxisScore,
+    PersonaExpressionStrength,
+    PersonaExpressionSource,
     TraceTemperamentAxisKey,
     TraceFinalizationReasonCode,
     ResponseTemperament,
@@ -123,6 +125,7 @@ export type {
     GitHubContextSection,
     ResponseMetadata,
 } from './types.js';
+export { PersonaExpressionStrengthSchema } from './schemas.js';
 export type {
     ResponseFootnote,
     ResponseFootnoteSection,

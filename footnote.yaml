@@ -63,4 +63,5 @@ chat-workflow:
 #       id: "default"
 #       display-name: "Footnote"
 #       overlay-path: ""
+#       persona-expression-strength: "balanced"
 #       mention-aliases: []

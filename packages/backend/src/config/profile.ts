@@ -22,6 +22,8 @@ export {
     BOT_PROFILE_ID_PATTERN,
     DEFAULT_BOT_PROFILE_OVERLAY_MAX_LENGTH,
     parseBotProfileConfig,
+    parsePersonaExpressionStrength,
+    PERSONA_EXPRESSION_STRENGTHS,
 } from '@footnote/config-spec/bot-profile';
 
 /**

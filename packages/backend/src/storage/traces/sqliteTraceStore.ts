@@ -12,6 +12,7 @@ import {
 } from '@footnote/contracts/policy';
 import type { ResponseCandidate } from '@footnote/contracts/web';
 import {
+    normalizePresentationMetadataForCompatibility,
     ResponseCandidateSchema,
     ResponseMetadataSchema,
 } from '@footnote/contracts/web/schemas';
@@ -104,6 +105,11 @@ const repairTraceMetadataForCompatibility = (metadata: unknown): unknown => {
     }
 
     const root = { ...metadata };
+    if (isPlainObject(root.presentation)) {
+        root.presentation = normalizePresentationMetadataForCompatibility(
+            root.presentation
+        );
+    }
     if (!isPlainObject(root.workflow)) {
         return root;
     }
@@ -488,8 +494,7 @@ export class SqliteTraceStore {
         const row = await this.withRetry(
             () =>
                 this.retrieveStatement.get(responseId) as
-                    | { metadata_json: string }
-                    | undefined
+                    { metadata_json: string } | undefined
         );
         if (!row) {
             return null;
@@ -529,8 +534,7 @@ export class SqliteTraceStore {
         const row = await this.withRetry(
             () =>
                 this.retrieveTraceCardStatement.get(responseId) as
-                    | { trace_card_svg: string }
-                    | undefined
+                    { trace_card_svg: string } | undefined
         );
 
         return row?.trace_card_svg ?? null;

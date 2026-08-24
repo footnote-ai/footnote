@@ -747,6 +747,23 @@ export const envEntries = [
     }),
 
     defineEnv({
+        key: 'BOT_PROFILE_PERSONA_EXPRESSION_STRENGTH',
+        owner: 'shared',
+        stage: 'bootstrap',
+        section: 'prompts',
+        required: false,
+        secret: false,
+        kind: 'string',
+        description:
+            'Optional default persona expression strength: subtle, balanced, or strong. Invalid values fail open to the selected persona default.',
+        defaultValue: noDefault(),
+        usedBy: [
+            'packages/backend/src/config/profile.ts',
+            'packages/discord-bot/src/config/profile.ts',
+        ],
+    }),
+
+    defineEnv({
         key: 'BOT_PROFILE_PROMPT_OVERLAY',
         owner: 'discord-bot',
         stage: 'bootstrap',

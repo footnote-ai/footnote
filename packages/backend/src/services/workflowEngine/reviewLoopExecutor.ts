@@ -101,15 +101,11 @@ export const executeReviewLoop = async (ctx: {
     workflowPolicy: WorkflowRunPolicy;
     stopIfOverLimits: (
         nextStepKind?:
-            | 'plan'
-            | 'tool'
-            | 'generate'
-            | 'assess'
-            | 'revise'
-            | 'finalize'
+            'plan' | 'tool' | 'generate' | 'assess' | 'revise' | 'finalize'
     ) => LimitStopEvaluation;
     selectedReviewModuleIds: string[];
     effectiveReviewDecisionPrompt?: string;
+    personaExpressionGuidance?: string;
     generationRuntime: GenerationRuntime;
     messagesWithContext: RuntimeMessage[];
     draftResult: GenerationResult | null;
@@ -229,6 +225,7 @@ export const executeReviewLoop = async (ctx: {
             const assessPrompt = composeAssessPrompt({
                 moduleIds: ctx.selectedReviewModuleIds,
                 basePromptOverride: ctx.effectiveReviewDecisionPrompt,
+                personaExpressionGuidance: ctx.personaExpressionGuidance,
             });
             const assessRequest: GenerationRequest = {
                 messages: [
@@ -566,6 +563,7 @@ export const executeReviewLoop = async (ctx: {
                 revisionPromptPrefix: ctx.effectiveRevisionPromptPrefix,
                 revisionInstruction: latestRevisionInstruction,
                 moduleIds: refinementModuleIds,
+                personaExpressionGuidance: ctx.personaExpressionGuidance,
             });
             const revisionRequest: GenerationRequest = {
                 ...effectiveGenerationRequest,

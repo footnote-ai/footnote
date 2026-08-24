@@ -21,6 +21,7 @@ import {
     type ResponseMetadataRuntimeContext,
 } from '../src/services/responseMetadata.js';
 import { renderConversationPromptLayers } from '../src/services/prompts/conversationPromptLayers.js';
+import { buildPersonaExpressionGuidance } from '../src/services/prompts/personaExpression.js';
 import type { WeatherForecastTool } from '../src/services/contextIntegrations/weather/index.js';
 import { logger } from '../src/utils/logger.js';
 
@@ -66,6 +67,9 @@ const createGenerationRuntime = (
     kind: 'test-runtime',
     generate: implementation,
 });
+
+const withDefaultPersonaExpressionGuidance = (personaPrompt: string): string =>
+    `${personaPrompt}\n\n${buildPersonaExpressionGuidance('balanced')}`;
 
 test('web requests go through planner and are coerced to message when planner picks react', async () => {
     let callCount = 0;
@@ -130,7 +134,9 @@ test('web requests go through planner and are coerced to message when planner pi
     );
     assert.equal(
         finalMessages[1]?.content,
-        renderConversationPromptLayers('web-chat').personaPrompt
+        withDefaultPersonaExpressionGuidance(
+            renderConversationPromptLayers('web-chat').personaPrompt
+        )
     );
     assert.match(
         finalMessages[finalMessages.length - 1]?.content ?? '',
@@ -341,7 +347,9 @@ test('message plans pass planner generation options into chatService', async () 
     );
     assert.equal(
         finalMessages[1]?.content,
-        renderConversationPromptLayers('discord-chat').personaPrompt
+        withDefaultPersonaExpressionGuidance(
+            renderConversationPromptLayers('discord-chat').personaPrompt
+        )
     );
 });
 
@@ -524,8 +532,7 @@ test('quality profile preserves explicit planner reasoning while planner verbosi
 test('planner-selected capability profile controls response model selection', async () => {
     let observedResponseModel: string | undefined;
     let capturedExecutionContext:
-        | ResponseMetadataRuntimeContext['executionContext']
-        | undefined;
+        ResponseMetadataRuntimeContext['executionContext'] | undefined;
     const selectedProfile =
         runtimeConfig.modelProfiles.catalog.find(
             (profile) => profile.id === 'openai-text-quality' && profile.enabled
@@ -616,8 +623,7 @@ test('planner-selected capability profile controls response model selection', as
 
 test('deterministic evaluator emits non-allow breaker metadata with rule and reason context', async () => {
     let capturedExecutionContext:
-        | ResponseMetadataRuntimeContext['executionContext']
-        | undefined;
+        ResponseMetadataRuntimeContext['executionContext'] | undefined;
 
     const orchestrator = createChatOrchestrator({
         generationRuntime: createGenerationRuntime(async (request) => {
@@ -1062,8 +1068,7 @@ test('invalid planner output falls open to policy-selected default capability pr
 test('planner capability selection chooses search-capable profile without reroute', async () => {
     let observedSearch: unknown;
     let capturedExecutionContext:
-        | ResponseMetadataRuntimeContext['executionContext']
-        | undefined;
+        ResponseMetadataRuntimeContext['executionContext'] | undefined;
     const warnings: Array<{ message: string; meta?: unknown }> = [];
     const originalWarn = logger.warn;
     const originalModelProfiles = runtimeConfig.modelProfiles;
@@ -1210,8 +1215,7 @@ test('planner capability selection chooses search-capable profile without rerout
 test('planner-selected non-search profile reports no tool-capable fallback when search floor cannot be met', async () => {
     let observedSearch: unknown;
     let capturedExecutionContext:
-        | ResponseMetadataRuntimeContext['executionContext']
-        | undefined;
+        ResponseMetadataRuntimeContext['executionContext'] | undefined;
     const originalModelProfiles = runtimeConfig.modelProfiles;
     const runtimeConfigMutable = runtimeConfig as unknown as {
         modelProfiles: typeof runtimeConfig.modelProfiles;
@@ -1298,8 +1302,7 @@ test('planner-selected non-search profile reports no tool-capable fallback when 
 test('request-selected non-search profile can still reroute when planner confirms same profile', async () => {
     let observedSearch: unknown;
     let capturedExecutionContext:
-        | ResponseMetadataRuntimeContext['executionContext']
-        | undefined;
+        ResponseMetadataRuntimeContext['executionContext'] | undefined;
     const requestSelectedProfile = runtimeConfig.modelProfiles.catalog.find(
         (profile) => profile.id === 'openai-text-fast' && profile.enabled
     );
@@ -1444,8 +1447,7 @@ test('normal message flow returns summary-equivalent response metadata fields', 
 
 test('search drop path exposes reason codes in response execution metadata', async () => {
     let capturedExecutionContext:
-        | ResponseMetadataRuntimeContext['executionContext']
-        | undefined;
+        ResponseMetadataRuntimeContext['executionContext'] | undefined;
     const originalModelProfiles = runtimeConfig.modelProfiles;
     const runtimeConfigMutable = runtimeConfig as unknown as {
         modelProfiles: typeof runtimeConfig.modelProfiles;
@@ -1527,8 +1529,7 @@ test('search drop path exposes reason codes in response execution metadata', asy
 test('orchestrator injects backend weather tool context and records executed tool metadata', async () => {
     let generationMessages: Array<{ role: string; content: string }> = [];
     let capturedExecutionContext:
-        | ResponseMetadataRuntimeContext['executionContext']
-        | undefined;
+        ResponseMetadataRuntimeContext['executionContext'] | undefined;
     const weatherForecastTool: WeatherForecastTool = {
         fetchForecast: async () => ({
             toolName: 'weather_forecast',
@@ -1792,8 +1793,7 @@ test('planner mixed weather and search requests apply single-tool weather priori
 
 test('orchestrator fails open when weather tool throws and still generates a response', async () => {
     let capturedExecutionContext:
-        | ResponseMetadataRuntimeContext['executionContext']
-        | undefined;
+        ResponseMetadataRuntimeContext['executionContext'] | undefined;
     const weatherForecastTool: WeatherForecastTool = {
         fetchForecast: async () => {
             throw new Error('weather.gov unavailable');
@@ -1957,9 +1957,11 @@ test('discord requests ignore runtime profile overlay when no botPersonaId is pr
         );
         assert.equal(
             finalMessages[1]?.content ?? '',
-            renderConversationPromptLayers('discord-chat', {
-                botProfileDisplayName: 'Footnote',
-            }).personaPrompt
+            withDefaultPersonaExpressionGuidance(
+                renderConversationPromptLayers('discord-chat', {
+                    botProfileDisplayName: 'Footnote',
+                }).personaPrompt
+            )
         );
         assert.doesNotMatch(
             finalMessages[1]?.content ?? '',
@@ -2041,9 +2043,11 @@ test('discord profileId does not change backend runtime profile overlay', async 
 
         assert.equal(
             finalMessages[1]?.content ?? '',
-            renderConversationPromptLayers('discord-chat', {
-                botProfileDisplayName: 'Footnote',
-            }).personaPrompt
+            withDefaultPersonaExpressionGuidance(
+                renderConversationPromptLayers('discord-chat', {
+                    botProfileDisplayName: 'Footnote',
+                }).personaPrompt
+            )
         );
     } finally {
         runtimeConfigMutable.profile = originalProfile;
@@ -2168,8 +2172,7 @@ test('orchestrator fails loudly when conversation context assembly cannot normal
 
 test('planner runtime failures emit failed planner execution metadata and still generate a message', async () => {
     let capturedExecutionContext:
-        | ResponseMetadataRuntimeContext['executionContext']
-        | undefined;
+        ResponseMetadataRuntimeContext['executionContext'] | undefined;
 
     const orchestrator = createChatOrchestrator({
         generationRuntime: createGenerationRuntime(async (request) => {
@@ -2536,8 +2539,7 @@ test('orchestrator returns clarification when tool returns needs_clarification s
 test('orchestrator continues normal weather path when tool returns status ok', async () => {
     let generationCalled = false;
     let capturedExecutionContext:
-        | ResponseMetadataRuntimeContext['executionContext']
-        | undefined;
+        ResponseMetadataRuntimeContext['executionContext'] | undefined;
     const weatherForecastTool: WeatherForecastTool = {
         fetchForecast: async () => ({
             toolName: 'weather_forecast',

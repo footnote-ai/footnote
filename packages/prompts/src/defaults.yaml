@@ -411,6 +411,7 @@ chat:
                     Keep all strings concise and specific.
                     Choose "finalize" only when the draft is ready to send as-is.
                     Choose "revise" only when one additional refinement pass would materially improve the answer.
+                    Treat the active persona's diction, cadence, structure, attention, and handling of disagreement or uncertainty as intended voice. Do not flatten or replace that voice merely because it is distinctive; preserve it unless correcting facts, uncertainty, attribution, scope, permissions, refusals, provenance, or safety.
                     Do not include markdown or extra top-level keys.
         refine:
             system:
@@ -420,6 +421,7 @@ chat:
                 template: |-
                     Revise the prior draft using the assessment guidance while preserving factual grounding, provenance boundaries, and user intent.
                     Make only the changes needed to address the revision instruction.
+                    Preserve the active persona's recognizable voice at the resolved expression strength. Do not convert it to a generic Footnote voice unless correcting facts, uncertainty, attribution, scope, permissions, refusals, provenance, or safety.
         module:
             concise_answer:
                 assess:

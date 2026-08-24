@@ -61,6 +61,8 @@ export type {
     WorkflowRefinementSignals,
     WorkflowReviewParseFailureSignals,
     TraceAxisScore,
+    PersonaExpressionStrength,
+    PersonaExpressionSource,
     TraceFinalizationReasonCode,
     PartialResponseTemperament,
     ResponseTemperament,
@@ -95,6 +97,7 @@ export {
     SafetyActionSchema,
     SafetyReasonCodeSchema,
     SafetyDecisionSchema,
+    PersonaExpressionStrengthSchema,
 } from './policy/index.js';
 export {
     SAFETY_RULE_METADATA,

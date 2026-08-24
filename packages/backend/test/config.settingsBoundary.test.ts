@@ -167,6 +167,7 @@ test('canonical discord-bots definitions load from footnote.yaml', () => {
             '    profile:',
             '      id: main',
             '      display-name: Main',
+            '      persona-expression-strength: strong',
             '',
         ].join('\n')
     );
@@ -184,6 +185,10 @@ test('canonical discord-bots definitions load from footnote.yaml', () => {
     assert.equal(
         config.settings.discordBots?.[0]?.credentials?.discordGuildIdsEnv,
         'DISCORD_GUILD_IDS'
+    );
+    assert.equal(
+        config.settings.discordBots?.[0]?.profile?.personaExpressionStrength,
+        'strong'
     );
 });
 

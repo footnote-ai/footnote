@@ -28,7 +28,10 @@ import {
     type TraceAxisScore,
     type TrustGraphMetadata,
 } from '../policy/index.js';
-import { SafetyDecisionSchema } from '../policy/schemas.js';
+import {
+    PersonaExpressionStrengthSchema,
+    SafetyDecisionSchema,
+} from '../policy/schemas.js';
 import type { ApiResponseValidationResult } from './client-core.js';
 import type {
     AuthenticatedPrincipal,
@@ -84,6 +87,56 @@ const ChatAddressingEvidenceSchema = z
     .strict();
 const ChatPersonaIdSchema = z.string().regex(/^[a-z0-9][a-z0-9-]{0,31}$/);
 const ChatModeIdSchema = z.enum(['express', 'balanced', 'grounded']);
+const PersonaExpressionSourceSchema = z.enum([
+    'request',
+    'profile',
+    'persona_default',
+]);
+
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+    value !== null && typeof value === 'object' && !Array.isArray(value);
+
+/**
+ * Normalizes pre-#530 presentation receipts before strict validation. Old
+ * caution-derived fields cannot prove a request/profile preference, so their
+ * replacement is marked as the persona default.
+ */
+export const normalizePresentationMetadataForCompatibility = (
+    value: unknown
+): unknown => {
+    if (!isRecord(value)) {
+        return value;
+    }
+
+    const hasLegacyFields = 'intensity' in value || 'traceConstrained' in value;
+    if (!hasLegacyFields) {
+        return value;
+    }
+
+    const currentStrength = PersonaExpressionStrengthSchema.safeParse(
+        value.expressionStrength
+    );
+    const currentSource = PersonaExpressionSourceSchema.safeParse(
+        value.expressionSource
+    );
+    const legacyStrength =
+        value.intensity === 'restrained' ||
+        (value.intensity === undefined && value.traceConstrained === true)
+            ? 'subtle'
+            : 'balanced';
+    const normalized: Record<string, unknown> = {
+        ...value,
+        expressionStrength: currentStrength.success
+            ? currentStrength.data
+            : legacyStrength,
+        expressionSource: currentSource.success
+            ? currentSource.data
+            : 'persona_default',
+    };
+    delete normalized.intensity;
+    delete normalized.traceConstrained;
+    return normalized;
+};
 
 /**
  * Provider-neutral public identity with no provider tokens or session ids.
@@ -424,14 +477,13 @@ const PresentationReasonCodeSchema = z.enum([
     'profile_not_configured',
     'structured_output',
     'mechanical_preservation_failed',
-    'trace_caution_high',
     'draft_timeout',
     'draft_provider_error',
     'finalizer_timeout',
     'finalizer_provider_error',
 ]);
 
-export const PresentationMetadataSchema = z
+const PresentationMetadataFieldsSchema = z
     .object({
         step: z.literal('presentation'),
         outcome: z.enum([
@@ -498,10 +550,15 @@ export const PresentationMetadataSchema = z
                 z.literal(5),
             ])
             .optional(),
-        intensity: z.enum(['standard', 'restrained', 'skipped']),
-        traceConstrained: z.boolean(),
+        expressionStrength: PersonaExpressionStrengthSchema,
+        expressionSource: PersonaExpressionSourceSchema,
     })
     .strict();
+
+export const PresentationMetadataSchema = z.preprocess(
+    normalizePresentationMetadataForCompatibility,
+    PresentationMetadataFieldsSchema
+);
 
 const ExecutionEventSchema: z.ZodType<ExecutionEvent> = z.discriminatedUnion(
     'kind',
@@ -1543,6 +1600,9 @@ export const PostChatRequestSchema = z
     .object({
         surface: ChatSurfaceSchema,
         botPersonaId: ChatPersonaIdSchema.optional(),
+        personaExpressionProfileStrength:
+            PersonaExpressionStrengthSchema.optional(),
+        personaExpressionStrength: PersonaExpressionStrengthSchema.optional(),
         modeId: ChatModeIdSchema.optional(),
         maxReviewCycles: z.number().int().nonnegative().optional(),
         traceTarget: PartialResponseTemperamentSchema.optional(),

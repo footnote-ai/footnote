@@ -26,6 +26,7 @@ import {
     resolveActiveProfileOverlayPrompt,
     resolveBotProfileDisplayName,
     resolveChatPersonaProfile,
+    resolvePersonaExpression,
     resolvePersonaPresentationGuidance,
 } from './chatProfileOverlay.js';
 import { createModelProfileResolver } from './modelProfileResolver.js';
@@ -394,6 +395,10 @@ export const createChatOrchestrator = ({
             normalizedRequest,
             chatOrchestratorLogger
         );
+        const personaExpression = resolvePersonaExpression(
+            normalizedRequest,
+            personaProfile
+        );
         const botProfileDisplayName = resolveBotProfileDisplayName(
             normalizedRequest,
             chatOrchestratorLogger
@@ -549,8 +554,7 @@ export const createChatOrchestrator = ({
                 : null;
         // Discord can inject backend-owned runtime overlay text.
         // Web keeps default prompt persona layers.
-        const personaPrompt =
-            backendOwnedProfileOverlay ?? promptLayers.personaPrompt;
+        const personaPrompt = `${backendOwnedProfileOverlay ?? promptLayers.personaPrompt}\n\n${personaExpression.guidance}`;
         const weatherContextStepExecutor =
             createWeatherForecastContextStepExecutor({
                 weatherForecastTool,
@@ -891,6 +895,9 @@ export const createChatOrchestrator = ({
                 presentationGuidance: resolvePersonaPresentationGuidance(
                     personaProfile.id
                 ),
+                expressionStrength: personaExpression.strength,
+                expressionSource: personaExpression.source,
+                expressionGuidance: personaExpression.guidance,
             },
         });
         const plannerSummary =

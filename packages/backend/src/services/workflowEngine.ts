@@ -188,6 +188,8 @@ export type RunBoundedReviewWorkflowInput = {
             feature: 'chat_presentation_draft' | 'chat_presentation_audit'
         ) => ReviewWorkflowUsageSummary;
     };
+    /** Shared persona guidance for assess and revise prompts. */
+    personaExpressionGuidance?: string;
 };
 
 export type RunBoundedReviewWorkflowResult =
@@ -290,6 +292,7 @@ export const runBoundedReviewWorkflow = async ({
     openAiNativeSearchFromHintsEnabled = false,
     stepRoutingChainSet,
     presentation,
+    personaExpressionGuidance,
 }: RunBoundedReviewWorkflowInput): Promise<RunBoundedReviewWorkflowResult> => {
     if (!contextEnvelope) {
         throw new Error(
@@ -1440,6 +1443,7 @@ export const runBoundedReviewWorkflow = async ({
         stopIfOverLimits,
         selectedReviewModuleIds,
         effectiveReviewDecisionPrompt,
+        personaExpressionGuidance,
         generationRuntime,
         messagesWithContext,
         draftResult,

@@ -99,12 +99,16 @@ paths:
                 - packages/contracts/src/web/types.ts#PostChatRequest
                 - packages/contracts/src/web/types.ts#PostChatResponse
                 - packages/contracts/src/web/schemas.ts#ResponseMetadataSchema
+                - packages/contracts/src/policy/types.ts#PersonaExpressionStrength
+                - packages/contracts/src/policy/schemas.ts#PersonaExpressionStrengthSchema
             summary: Generate a chat response
             description: |
                 Submit a transport-neutral chat request and receive the backend-selected action.
                 Public web callers use Turnstile when enabled; trusted internal callers may authenticate with service headers.
                 Send X-Session-Id / X-Turnstile-Token headers when needed for browser traffic.
                 Optionally provide `botPersonaId` to select the backend-owned bot persona overlay (discord).
+                Optionally provide `personaExpressionStrength` to request prose-only persona expression (`subtle`, `balanced`, or `strong`).
+                Configured Discord adapters carry their operator default separately as `personaExpressionProfileStrength`; the backend records that value as profile-sourced rather than request-sourced.
                 Optionally provide `maxReviewCycles` and `traceTarget` to tune workflow depth and TRACE posture for this request.
             tags:
                 - Chat
@@ -752,6 +756,7 @@ paths:
             description: |
                 Store ResponseMetadata for a responseId.
                 TraceToken required; rate limited per client IP.
+                Legacy writers may still send presentation `intensity` and `traceConstrained` fields; the backend accepts those fields and normalizes them to `expressionStrength` and `expressionSource: persona_default` before storage.
             tags:
                 - Traces
             security:
@@ -1845,6 +1850,15 @@ components:
                     type: string
                     pattern: '^[a-z0-9][a-z0-9-]{0,31}$'
                     description: Optional bot persona selector used for backend-owned persona overlays (discord).
+                personaExpressionStrength:
+                    type: string
+                    enum: [subtle, balanced, strong]
+                    description: Optional request-local persona expression override. It affects prose only; TRACE posture and safety authority remain backend-owned.
+                personaExpressionProfileStrength:
+                    type: string
+                    enum: [subtle, balanced, strong]
+                    writeOnly: true
+                    description: Operator default carried by a configured persona adapter. The backend records this preference as profile-sourced; callers should not use it as a request override.
                 modeId:
                     type: string
                     enum: [express, balanced, grounded]
@@ -3907,7 +3921,6 @@ components:
                                     profile_not_configured,
                                     structured_output,
                                     mechanical_preservation_failed,
-                                    trace_caution_high,
                                     draft_timeout,
                                     draft_provider_error,
                                     finalizer_timeout,
@@ -3994,9 +4007,20 @@ components:
                             enum: [1, 2, 3, 4, 5]
                         intensity:
                             type: string
-                            enum: [standard, restrained, skipped]
+                            deprecated: true
+                            description: Legacy caution-derived presentation field accepted only for trace-upsert compatibility; restrained maps to subtle and other values map to balanced.
                         traceConstrained:
                             type: boolean
+                            deprecated: true
+                            description: Legacy caution-derived presentation field accepted only for trace-upsert compatibility; true maps to subtle when intensity is absent.
+                        expressionStrength:
+                            type: string
+                            enum: [subtle, balanced, strong]
+                            description: Resolved persona expression strength. Legacy trace upserts with caution-derived presentation fields are normalized before storage.
+                        expressionSource:
+                            type: string
+                            enum: [request, profile, persona_default]
+                            description: Resolution source. Legacy presentation receipts normalize to persona_default because old caution fields do not prove a request or profile preference.
                     required:
                         [
                             step,
@@ -4008,8 +4032,8 @@ components:
                             draftAttemptCount,
                             finalizerAttemptCount,
                             auditAttemptCount,
-                            intensity,
-                            traceConstrained,
+                            expressionStrength,
+                            expressionSource,
                         ]
                     additionalProperties: false
                 reviewRuntime:

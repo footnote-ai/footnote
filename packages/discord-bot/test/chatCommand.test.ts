@@ -9,9 +9,13 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 
-import type { PostChatResponse } from '@footnote/contracts/web';
+import type {
+    PostChatRequest,
+    PostChatResponse,
+} from '@footnote/contracts/web';
 import { botApi } from '../src/api/botApi.js';
 import chatCommand from '../src/commands/chat.js';
+import { runtimeConfig } from '../src/config.js';
 
 type BasicOutputFixture = {
     question: string;
@@ -213,6 +217,36 @@ test('/chat forwards prompt/workflow options and renders message action', async 
     } finally {
         botApi.chatViaApi = originalChatViaApi;
         botApi.postTraceCardFromTrace = originalPostTraceCardFromTrace;
+    }
+});
+
+test('/chat carries configured expression strength as a profile preference', async () => {
+    const originalChatViaApi = botApi.chatViaApi;
+    const originalProfile = runtimeConfig.profile;
+    const runtimeConfigMutable = runtimeConfig as unknown as {
+        profile: typeof originalProfile;
+    };
+    runtimeConfigMutable.profile = {
+        ...originalProfile,
+        personaExpressionStrength: 'strong',
+    };
+    let seenRequest: PostChatRequest | undefined;
+    botApi.chatViaApi = (async (request) => {
+        seenRequest = request;
+        return { action: 'ignore', metadata: null };
+    }) as typeof botApi.chatViaApi;
+
+    const { interaction } = createInteraction({
+        prompt: 'Use the configured persona.',
+    });
+
+    try {
+        await chatCommand.execute(interaction as never);
+        assert.equal(seenRequest?.personaExpressionProfileStrength, 'strong');
+        assert.equal(seenRequest?.personaExpressionStrength, undefined);
+    } finally {
+        botApi.chatViaApi = originalChatViaApi;
+        runtimeConfigMutable.profile = originalProfile;
     }
 });
 
