@@ -69,9 +69,14 @@ import { buildPlannerStepRecord } from './workflowEngine/plannerStepRecord.js';
 import { executeReviewLoop } from './workflowEngine/reviewLoopExecutor.js';
 import {
     injectContextMessagesIntoPrompt,
+    injectGenerationContextManifestIntoPrompt,
     selectContextStepExecutor,
     selectFollowUpSearchHint,
 } from './workflowEngine/contextStepHelpers.js';
+import {
+    buildGenerationContextManifest,
+    renderGenerationContextManifest,
+} from './workflowEngine/contextManifest.js';
 import {
     executeStepRoutingChain,
     type RoutingChainAttemptLog,
@@ -244,6 +249,12 @@ type ContextStepExecutionOutcome = {
     blockedByLimit?: boolean;
     startedAtMs: number;
     finishedAtMs: number;
+};
+
+type ContextStepManifestFailure = {
+    integrationName: string;
+    requested: boolean;
+    status: 'unavailable' | 'failed' | 'skipped';
 };
 
 type LimitStopEvaluation = {
@@ -680,14 +691,21 @@ export const runBoundedReviewWorkflow = async ({
     const requestedContextSteps = (effectiveContextStepRequests ?? []).filter(
         (request) => request.requested === true && request.eligible
     );
-    const executableContextSteps = requestedContextSteps.filter(
-        (request) =>
-            selectContextStepExecutor(
-                request,
-                contextStepExecutor,
-                contextStepExecutorRegistry
-            ) !== undefined
-    );
+    const contextStepManifestFailures: ContextStepManifestFailure[] = [];
+    const executableContextSteps = requestedContextSteps.filter((request) => {
+        const executor = selectContextStepExecutor(
+            request,
+            contextStepExecutor,
+            contextStepExecutorRegistry
+        );
+        if (executor !== undefined) return true;
+        contextStepManifestFailures.push({
+            integrationName: request.integrationName,
+            requested: request.requested,
+            status: 'unavailable',
+        });
+        return false;
+    });
     if (!shouldStop && executableContextSteps.length > 0) {
         if (
             !isWorkflowTransitionAllowed(
@@ -771,6 +789,12 @@ export const runBoundedReviewWorkflow = async ({
                     continue;
                 }
                 if (contextStepOutcome.error !== undefined) {
+                    contextStepManifestFailures.push({
+                        integrationName:
+                            contextStepOutcome.request.integrationName,
+                        requested: contextStepOutcome.request.requested,
+                        status: 'failed',
+                    });
                     logger.error(
                         'Context step execution failed; workflow continued fail-open without context.',
                         {
@@ -892,38 +916,58 @@ export const runBoundedReviewWorkflow = async ({
             shouldStop = true;
         } else if (!stopIfOverLimits(initialResponseStepKind).stopped) {
             const initialDraftStartedAt = generationStartedAtMs;
-            messagesWithContext = injectContextMessagesIntoPrompt(
-                effectiveMessagesWithHints,
-                // Preserve deterministic context ordering by request list order.
-                executedContextStepResults.flatMap((contextStepResult) =>
-                    contextStepResult.outcome === 'executed'
-                        ? [
-                              ...(
-                                  contextStepResult.trustedSystemMessages ?? []
-                              ).map((content) => ({
-                                  role: 'system' as const,
-                                  content,
-                              })),
-                              ...(contextStepResult.contextMessages ?? []).map(
-                                  (message) => ({
-                                      role:
-                                          contextStepResult.contextMessageRole ??
-                                          'system',
-                                      content:
-                                          typeof message === 'string'
-                                              ? message
-                                              : message.content,
-                                  })
-                              ),
-                          ]
-                        : []
-                )
-            );
             const selectedFollowUpSearchHint = selectFollowUpSearchHint({
                 results: executedContextStepResults,
                 openAiNativeSearchFromHintsEnabled,
                 effectiveGenerationRequest,
             });
+            const generationContextManifest = buildGenerationContextManifest({
+                contextEnvelope: effectiveContextEnvelope,
+                contextStepRequests: effectiveContextStepRequests ?? [],
+                contextStepResults: executedContextStepResults,
+                contextStepFailures: contextStepManifestFailures,
+                webSearchRequested:
+                    effectiveGenerationRequest.search !== undefined ||
+                    selectedFollowUpSearchHint !== undefined,
+                webSearchAvailable:
+                    effectiveGenerationRequest.capabilities?.canUseSearch,
+            });
+            messagesWithContext = injectGenerationContextManifestIntoPrompt(
+                effectiveMessagesWithHints,
+                renderGenerationContextManifest(generationContextManifest)
+            );
+            messagesWithContext = injectContextMessagesIntoPrompt(
+                messagesWithContext,
+                // Preserve deterministic context ordering by request list order.
+                [
+                    ...executedContextStepResults.flatMap(
+                        (contextStepResult) =>
+                            contextStepResult.outcome === 'executed'
+                                ? [
+                                      ...(
+                                          contextStepResult.trustedSystemMessages ??
+                                          []
+                                      ).map((content) => ({
+                                          role: 'system' as const,
+                                          content,
+                                      })),
+                                      ...(
+                                          contextStepResult.contextMessages ??
+                                          []
+                                      ).map((message) => ({
+                                          role:
+                                              contextStepResult.contextMessageRole ??
+                                              'system',
+                                          content:
+                                              typeof message === 'string'
+                                                  ? message
+                                                  : message.content,
+                                      })),
+                                  ]
+                                : []
+                    ),
+                ]
+            );
             try {
                 let initialRoutingChainAttempts:
                     RoutingChainAttemptLog[] | undefined;

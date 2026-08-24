@@ -71,6 +71,32 @@ export const injectContextMessagesIntoPrompt = (
 };
 
 /**
+ * Inserts backend-owned context state after the conversation and before any
+ * trailing system hints. This keeps review/presentation prompt markers in
+ * their existing position while keeping the manifest ahead of retrieved text.
+ */
+export const injectGenerationContextManifestIntoPrompt = (
+    baseMessages: RuntimeMessage[],
+    manifestContent: string
+): RuntimeMessage[] => {
+    const content = manifestContent.trim();
+    if (!content) return baseMessages;
+
+    const lastUserMessageIndex = baseMessages.findLastIndex(
+        (message) => message.role === 'user'
+    );
+    const insertionIndex =
+        lastUserMessageIndex >= 0
+            ? lastUserMessageIndex + 1
+            : baseMessages.length;
+    return [
+        ...baseMessages.slice(0, insertionIndex),
+        { role: 'system', content },
+        ...baseMessages.slice(insertionIndex),
+    ];
+};
+
+/**
  * Selects the context-step executor with explicit authority precedence.
  * Registry-owned executors take priority when the integration key is an own
  * property; otherwise the shared injected executor is used as fail-open

@@ -150,6 +150,10 @@ export const buildRepoExplainerQuery = (
         search.query.trim(),
     ]).join(' ');
 
+/**
+ * Builds a provider web-search instruction without treating web results as
+ * approved project documents, bounded GitHub metadata, or source-code access.
+ */
 export const buildWebSearchInstruction = (
     search: GenerationSearchRequest
 ): string => {
@@ -167,6 +171,8 @@ export const buildWebSearchInstruction = (
         return [
             'The planner marked this as a Footnote repository explanation lookup.',
             `Treat ${PROJECT_CONTEXT_CANONICAL_REPOSITORY} as the canonical repo identity for this search.`,
+            'This is web search, not project-document retrieval or complete GitHub repository inspection.',
+            'Do not retrieve or use repository source-code files through this search path.',
             `Prefer DeepWiki results from ${DEEPWIKI_FOOTNOTE_URL} when they are relevant.`,
             'If DeepWiki coverage is thin, use broader web context instead of getting stuck.',
             `Search query: ${repoQuery}.${hintText}${topicHintText}`.trim(),
@@ -182,6 +188,11 @@ export const buildWebSearchInstruction = (
     return `The planner instructed you to perform a web search for: ${search.query.trim()}.${topicHintText}`.trim();
 };
 
+/**
+ * Describes repo-explanation source limits at the generation boundary:
+ * project documents, bounded GitHub metadata, and web search remain distinct,
+ * and none of them implies complete repository source-code inspection.
+ */
 export const buildRepoExplainerResponseHint = (
     generation: ChatGenerationPlan
 ): string | null => {
@@ -191,7 +202,9 @@ export const buildRepoExplainerResponseHint = (
 
     return [
         'Planner note: this is a Footnote repo-explanation lookup.',
+        'Project documents, bounded GitHub records, and web search are separate sources; use only the source material actually returned.',
         'Prefer DeepWiki-backed explanation when available.',
         'Use broader web context if the wiki is thin.',
+        'Do not describe web or bounded GitHub results as source-code inspection or a complete repository search.',
     ].join(' ');
 };

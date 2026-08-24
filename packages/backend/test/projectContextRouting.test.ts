@@ -10,6 +10,8 @@ import assert from 'node:assert/strict';
 
 import {
     buildFootnoteGitHubContextRouteFromPlan,
+    buildRepoExplainerResponseHint,
+    buildWebSearchInstruction,
     buildProjectContextRouteFromPlan,
     PROJECT_CONTEXT_CANONICAL_REPOSITORY,
 } from '../src/services/chatGenerationHints.js';
@@ -98,5 +100,30 @@ test('current team work requests live commit context', () => {
             repository: PROJECT_CONTEXT_CANONICAL_REPOSITORY,
             sections: ['commits'],
         }
+    );
+});
+
+test('repo-explainer guidance keeps web, project, and bounded GitHub sources separate', () => {
+    const search = {
+        query: 'Read the repository source files for persona behavior',
+        contextSize: 'medium' as const,
+        intent: 'repo_explainer' as const,
+    };
+    const responseHint = buildRepoExplainerResponseHint({
+        reasoningEffort: 'low',
+        verbosity: 'low',
+        search,
+    });
+    const webInstruction = buildWebSearchInstruction(search);
+
+    assert.match(responseHint ?? '', /separate sources/iu);
+    assert.match(responseHint ?? '', /not.*source-code inspection/iu);
+    assert.match(
+        webInstruction,
+        /web search, not project-document retrieval/iu
+    );
+    assert.match(
+        webInstruction,
+        /do not retrieve or use repository source-code files/iu
     );
 });

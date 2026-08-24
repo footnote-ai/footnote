@@ -12,5 +12,6 @@ work is done.
 - [GPT-5.6 default rollout](./gpt-5-6-default-rollout-status.md)
 - [Launcher canary releases](./launcher-canary-releases.md)
 - [Repository context and TrustGraph](./repository-context-status.md)
+- [Context retrieval and knowledge reporting](./context-retrieval-knowledge-reporting-status.md)
 - [Web search grounding recovery](./web-search-grounding-recovery-status.md)
 - [GitHub context](./github-context-status.md)

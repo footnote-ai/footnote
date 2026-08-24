@@ -73,6 +73,10 @@ export type {
     ProjectContextMetadata,
     ProjectContextReasonCode,
     ResponseMetadata,
+    GenerationContextManifest,
+    GenerationContextManifestEntry,
+    GenerationContextManifestSource,
+    GenerationContextManifestStatus,
     ResponseFootnote,
     ResponseFootnoteSection,
 } from './policy/index.js';

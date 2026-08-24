@@ -111,6 +111,10 @@ export type {
     ProviderPreferenceOutcomeState,
     ToolAllowanceState,
     GroundingEvidenceStatus,
+    GenerationContextManifest,
+    GenerationContextManifestEntry,
+    GenerationContextManifestSource,
+    GenerationContextManifestStatus,
     EvaluatorDecisionMode,
     SafetyAction,
     SafetyReasonCode,
@@ -154,6 +158,7 @@ export {
     PROVIDER_PREFERENCE_OUTCOME_STATES,
     TOOL_ALLOWANCE_STATES,
     GROUNDING_EVIDENCE_STATUSES,
+    GENERATION_CONTEXT_MANIFEST_STATUSES,
 } from './types.js';
 export { CONTEXT_INTEGRATION_NAMES } from './contextIntegrations.js';
 export type { ContextIntegrationName } from './contextIntegrations.js';
