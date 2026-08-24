@@ -98,7 +98,11 @@ const runScenario = async (
     generate: (
         request: GenerationRequest,
         call: number
-    ) => Promise<GenerationResult>
+    ) => Promise<GenerationResult>,
+    options?: {
+        workflowPolicy?: typeof policy;
+        maxWorkflowSteps?: number;
+    }
 ) => {
     const calls: GenerationRequest[] = [];
     const presentationFeatures: string[] = [];
@@ -122,14 +126,14 @@ const runScenario = async (
             maxIterations: 1,
             maxDurationMs: 1000,
             executionLimits: {
-                maxWorkflowSteps: 8,
+                maxWorkflowSteps: options?.maxWorkflowSteps ?? 8,
                 maxToolCalls: 0,
                 maxDeliberationCalls: 4,
                 maxTokensTotal: 1000,
                 maxDurationMs: 1000,
             },
         },
-        workflowPolicy: policy,
+        workflowPolicy: options?.workflowPolicy ?? policy,
         captureUsage: usage,
         presentation: {
             config,
@@ -182,6 +186,18 @@ test('runs candidate, authoritative generation, and ordinary assessment in order
     assert.match(
         String(calls[1]?.messages.at(-1)?.content),
         /A vivid candidate/u
+    );
+    const presentationStep = result.workflowLineage.steps.find(
+        (step) => step.stepKind === 'presentation'
+    );
+    const generationStep = result.workflowLineage.steps.find(
+        (step) => step.stepKind === 'generate'
+    );
+    assert.ok(presentationStep !== undefined);
+    assert.ok(generationStep !== undefined);
+    assert.ok(
+        Date.parse(presentationStep.finishedAt) <=
+            Date.parse(generationStep.startedAt)
     );
     assert.doesNotMatch(
         calls[2]?.messages.map((message) => message.content).join('\n') ?? '',
@@ -258,4 +274,44 @@ test('falls back to ordinary generation and review without a candidate', async (
         ),
         ['initial_generation']
     );
+});
+
+test('candidate failure does not consume the only authoritative workflow step', async () => {
+    const { calls, result } = await runScenario(
+        async (_request, call) => {
+            if (call === 1) throw new Error('candidate provider unavailable');
+            return generated('Ordinary authoritative answer.');
+        },
+        { maxWorkflowSteps: 1 }
+    );
+
+    assert.equal(result.outcome, 'generated');
+    assert.equal(calls.length, 2);
+    assert.equal(result.presentation?.outcome, 'candidate_unavailable');
+});
+
+test('preserves candidate metadata when a later authoritative step is blocked', async () => {
+    const { calls, result } = await runScenario(
+        async () => generated('Candidate text.'),
+        { maxWorkflowSteps: 1 }
+    );
+
+    assert.equal(result.outcome, 'no_generation');
+    assert.equal(calls.length, 1);
+    assert.equal(result.presentation?.outcome, 'candidate_generated');
+});
+
+test('presentation does not run when authoritative generation is disabled', async () => {
+    const { calls, result } = await runScenario(
+        async () => generated('This call must not run.'),
+        {
+            workflowPolicy: {
+                ...policy,
+                enableGeneration: false,
+            },
+        }
+    );
+
+    assert.equal(result.outcome, 'no_generation');
+    assert.equal(calls.length, 0);
 });

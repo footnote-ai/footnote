@@ -222,6 +222,7 @@ export type RunBoundedReviewWorkflowResult =
     | {
           outcome: 'no_generation';
           workflowLineage: WorkflowRecord;
+          presentation?: PresentationMetadata;
           plannerStepResult?: PlannerStepResult;
           planContinuation?: PlanContinuation;
           contextStepResult?: ContextStepResult;
@@ -904,8 +905,12 @@ export const runBoundedReviewWorkflow = async ({
     let presentationStepId: string | undefined;
     let presentationCandidateId: string | undefined;
     let draftCandidateId: string | undefined;
-    const initialResponseStepKind: WorkflowStepKind =
-        presentation?.config.enabled === true ? 'presentation' : 'generate';
+    const presentationEnabled =
+        presentation?.config.enabled === true &&
+        workflowPolicy.enableGeneration !== false;
+    const initialResponseStepKind: WorkflowStepKind = presentationEnabled
+        ? 'presentation'
+        : 'generate';
     if (!shouldStop) {
         if (
             !isWorkflowTransitionAllowed(
@@ -917,7 +922,7 @@ export const runBoundedReviewWorkflow = async ({
             terminationReason = 'transition_blocked_by_policy';
             shouldStop = true;
         } else if (!stopIfOverLimits(initialResponseStepKind).stopped) {
-            const initialDraftStartedAt = generationStartedAtMs;
+            let initialDraftStartedAt = generationStartedAtMs;
             const selectedFollowUpSearchHint = selectFollowUpSearchHint({
                 results: executedContextStepResults,
                 openAiNativeSearchFromHintsEnabled,
@@ -1004,7 +1009,7 @@ export const runBoundedReviewWorkflow = async ({
                           activePresentation?.caution)
                         : activePresentation?.caution;
                 const presentationResult =
-                    activePresentation?.config.enabled === true
+                    presentationEnabled && activePresentation !== undefined
                         ? await runPresentationCandidate({
                               generationRuntime,
                               generationRequest: generationRequestForAttempt,
@@ -1039,57 +1044,53 @@ export const runBoundedReviewWorkflow = async ({
                                   text: presentationResult.draftResult.text,
                               })
                             : undefined;
-                    presentationStepId = captureStep({
-                        stepKind: 'presentation',
-                        status:
-                            presentationResult.outcome === 'candidate_generated'
-                                ? 'executed'
-                                : presentationResult.metadata.attempted
-                                  ? 'failed'
-                                  : 'skipped',
-                        summary:
-                            presentationResult.outcome === 'candidate_generated'
-                                ? 'Generated a presentation candidate for authoritative wording.'
-                                : 'Presentation candidate was unavailable; workflow used normal generation.',
-                        reasonCode:
-                            presentationResult.outcome === 'candidate_generated'
-                                ? 'presentation_candidate_generated'
-                                : 'presentation_candidate_unavailable',
-                        startedAtMs: presentationStartedAt,
-                        finishedAtMs: Date.now(),
-                        model: candidateUsage?.model,
-                        usage:
-                            candidateUsage === undefined
-                                ? undefined
-                                : {
-                                      promptTokens: candidateUsage.promptTokens,
-                                      completionTokens:
-                                          candidateUsage.completionTokens,
-                                      totalTokens: candidateUsage.totalTokens,
-                                  },
-                        estimatedCost: candidateUsage?.estimatedCost,
-                        parentStepId: plannerRootStepId,
-                        attempt: 1,
-                        ...(presentationCandidateId !== undefined && {
-                            artifacts: [presentationCandidateId],
-                        }),
-                        signals: {
-                            presentationOutcome:
-                                presentationResult.metadata.outcome,
-                            presentationReasonCode:
-                                presentationResult.metadata.reasonCode,
-                            presentationAttempted:
-                                presentationResult.metadata.attempted,
-                            draftAttemptCount:
-                                presentationResult.metadata.draftAttemptCount,
-                            draftProfileId:
-                                presentationResult.metadata.draftProfileId ??
-                                null,
-                        },
-                    });
+                    if (presentationResult.outcome === 'candidate_generated') {
+                        presentationStepId = captureStep({
+                            stepKind: 'presentation',
+                            status: 'executed',
+                            summary:
+                                'Generated a presentation candidate for authoritative wording.',
+                            reasonCode: 'presentation_candidate_generated',
+                            startedAtMs: presentationStartedAt,
+                            finishedAtMs: Date.now(),
+                            model: candidateUsage?.model,
+                            usage:
+                                candidateUsage === undefined
+                                    ? undefined
+                                    : {
+                                          promptTokens:
+                                              candidateUsage.promptTokens,
+                                          completionTokens:
+                                              candidateUsage.completionTokens,
+                                          totalTokens:
+                                              candidateUsage.totalTokens,
+                                      },
+                            estimatedCost: candidateUsage?.estimatedCost,
+                            parentStepId: plannerRootStepId,
+                            attempt: 1,
+                            ...(presentationCandidateId !== undefined && {
+                                artifacts: [presentationCandidateId],
+                            }),
+                            signals: {
+                                presentationOutcome:
+                                    presentationResult.metadata.outcome,
+                                presentationReasonCode:
+                                    presentationResult.metadata.reasonCode,
+                                presentationAttempted:
+                                    presentationResult.metadata.attempted,
+                                draftAttemptCount:
+                                    presentationResult.metadata
+                                        .draftAttemptCount,
+                                draftProfileId:
+                                    presentationResult.metadata
+                                        .draftProfileId ?? null,
+                            },
+                        });
+                    }
                     if (
                         presentationCandidateId !== undefined &&
-                        presentationResult.draftResult !== undefined
+                        presentationResult.draftResult !== undefined &&
+                        presentationStepId !== undefined
                     ) {
                         responseCandidates.linkToWorkflowStep(
                             presentationCandidateId,
@@ -1102,14 +1103,17 @@ export const runBoundedReviewWorkflow = async ({
                                 activePresentation.persona.expressionGuidance
                             );
                     }
-                    workflowState = applyStepExecutionToState(
-                        workflowState,
-                        'presentation',
-                        candidateUsage?.totalTokens ?? 0,
-                        0,
-                        0
-                    );
+                    if (presentationResult.outcome === 'candidate_generated') {
+                        workflowState = applyStepExecutionToState(
+                            workflowState,
+                            'presentation',
+                            candidateUsage?.totalTokens ?? 0,
+                            0,
+                            0
+                        );
+                    }
                 }
+                initialDraftStartedAt = Date.now();
                 const canRunNormalGeneration =
                     draftResult === null &&
                     isWorkflowTransitionAllowed(
@@ -1417,6 +1421,9 @@ export const runBoundedReviewWorkflow = async ({
         return {
             outcome: 'no_generation',
             workflowLineage,
+            ...(presentationMetadata !== undefined && {
+                presentation: presentationMetadata,
+            }),
             ...(plannerExecutionResult !== undefined && {
                 plannerStepResult: plannerExecutionResult,
             }),

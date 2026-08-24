@@ -1480,6 +1480,7 @@ export const createChatService = ({
                     }
                     case 'no_generation': {
                         workflowLineage = workflowResult.workflowLineage;
+                        presentationMetadata = workflowResult.presentation;
                         const noGenShortCircuit = buildContextStepShortCircuit({
                             workflowContextStepResult,
                             workflowContextStepResults,

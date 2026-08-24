@@ -879,8 +879,9 @@ const TracePage = (): JSX.Element => {
             >
                 <h2>Response versions</h2>
                 <p>
-                    The final answer opens first. Earlier versions are kept for
-                    inspection and do not replace it.
+                    The authoritative answer opens first. Earlier generated text
+                    is kept for inspection; presentation candidates influence
+                    expression only and never replace the answer.
                 </p>
                 {responseCandidates === null &&
                     !responseVersionsUnavailable && (

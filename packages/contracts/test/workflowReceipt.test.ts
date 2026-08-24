@@ -415,3 +415,40 @@ test('buildWorkflowReceiptItems carries backend presentation receipt states for 
         'Audit did not return a usable result; the finalized answer was kept'
     );
 });
+
+test('buildWorkflowReceiptItems explains current presentation candidate outcomes', () => {
+    const basePresentation = {
+        step: 'presentation' as const,
+        flow: 'candidate_review' as const,
+        attempted: true,
+        personaId: 'myuri',
+        draftAttemptCount: 1 as const,
+        expressionStrength: 'balanced' as const,
+        expressionSource: 'persona_default' as const,
+    };
+
+    assert.deepEqual(
+        buildWorkflowReceiptItems({
+            ...createBaseMetadata(),
+            presentation: {
+                ...basePresentation,
+                outcome: 'candidate_generated',
+                reasonCode: 'candidate_generated',
+            },
+        }),
+        [
+            'Presentation candidate influenced expression; the authoritative answer was kept',
+        ]
+    );
+    assert.deepEqual(
+        buildWorkflowReceiptItems({
+            ...createBaseMetadata(),
+            presentation: {
+                ...basePresentation,
+                outcome: 'candidate_unavailable',
+                reasonCode: 'draft_timeout',
+            },
+        }),
+        ['Presentation candidate was unavailable; the normal answer was kept']
+    );
+});

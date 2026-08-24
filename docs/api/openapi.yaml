@@ -4567,12 +4567,13 @@ components:
 
         ResponseCandidate:
             type: object
-            description: One model-produced answer candidate retained with a trace. Plans, prompts, tools, audit output, and hidden reasoning are excluded.
+            description: One model-produced response candidate retained with a trace. A presentation_draft is expression-only input to authoritative generation, not evidence, provenance authority, policy, or a deliverable answer. Plans, prompts, tools, audit output, and hidden reasoning are excluded.
             properties:
                 id:
                     type: string
                 parentCandidateId:
                     type: string
+                    description: Response-history and expression-influence ancestry only; never evidence or provenance authority.
                 workflowStepId:
                     type: string
                 sequence:
