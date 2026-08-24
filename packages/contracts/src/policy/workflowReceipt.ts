@@ -40,6 +40,10 @@ export const WORKFLOW_RECEIPT_LABELS = {
         'Audit did not return a usable result; the finalized answer was kept',
     presentationFallback:
         'Style draft was unavailable; the normal answer was kept',
+    presentationCandidateGenerated:
+        'Presentation candidate influenced expression; the authoritative answer was kept',
+    presentationCandidateUnavailable:
+        'Presentation candidate was unavailable; the normal answer was kept',
 } as const;
 
 const SEARCH_UNSUPPORTED_REASON_CODE =
@@ -191,6 +195,10 @@ export const resolvePresentationReceipt = (
     metadata: ResponseMetadata
 ): string | null => {
     switch (metadata.presentation?.outcome) {
+        case 'candidate_generated':
+            return WORKFLOW_RECEIPT_LABELS.presentationCandidateGenerated;
+        case 'candidate_unavailable':
+            return WORKFLOW_RECEIPT_LABELS.presentationCandidateUnavailable;
         case 'finalized':
             return WORKFLOW_RECEIPT_LABELS.presentationFinalized;
         case 'finalized_after_evidence_repair':

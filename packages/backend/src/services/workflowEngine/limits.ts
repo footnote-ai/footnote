@@ -74,9 +74,8 @@ export const checkExecutionLimits = (
     }
 
     // `maxDeliberationCalls` reserves capacity for semantic planning and
-    // review. Presentation flow is a separately bounded presentation epilogue:
-    // it still consumes a workflow step, tokens, duration, and recorded cost,
-    // but it must not crowd out the plan/assess/revise allowance.
+    // review. Presentation candidate usage is recorded separately and does
+    // not consume deliberation-call capacity.
     const isNextStepSemanticDeliberative =
         nextStepKind === 'plan' || nextStepKind === 'assess';
     const maxPlanCycles =

@@ -101,19 +101,22 @@ answer posture, but caution is not a persona-expression control. Caution `4`,
 `5`, or unavailable caution does not skip styling or force a restrained house
 voice. The backend independently resolves persona expression as `subtle`,
 `balanced`, or `strong`: valid request override, configured bot-profile
-default, then built-in persona default. The style model and audits cannot
-generate or modify TRACE. They may request one bounded finalizer repair for
-facts, uncertainty, attribution, scope, or other answer-posture issues while
-preserving the resolved persona strength.
+default, then built-in persona default. The presentation candidate cannot
+generate or modify TRACE. It supplies preferred expression to the
+authoritative generation step. Ordinary assess and revision then correct
+substantive answer-posture issues while preserving the resolved persona
+strength; the candidate is not reintroduced into that review.
 
 Persona expression affects prose only. It cannot change grounded content,
 permissions, refusals, provenance, TRACE values, or safety authority. Mapping
 tightness, rationale, attribution, or extent to presentation remains out of
 scope pending evaluation evidence.
 
-When a presentation record exists, the trace view shows its outcome, model,
-audit evidence, edit estimate, and opaque HMAC identifiers. It never shows
-or retains both answer versions for that display.
+When a current presentation record exists, the trace view shows whether the
+candidate was generated or unavailable, requested versus observed draft
+attribution, expression resolution, and opaque candidate identifiers. It does
+not treat the candidate as evidence or provenance authority. Historical
+finalizer/audit records remain readable as a separate legacy flow.
 
 ## Control influence records
 

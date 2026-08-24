@@ -972,6 +972,10 @@ export type ResponseCandidateStage =
 /** @api.operationId: getResponseVersions @api.path: GET /api/traces/{responseId}/response-versions */
 export type ResponseCandidate = {
     id: string;
+    /**
+     * Response-history/influence ancestry only. This is not evidence or
+     * provenance authority; authoritative context remains the source of truth.
+     */
     parentCandidateId?: string;
     workflowStepId: string;
     sequence: number;

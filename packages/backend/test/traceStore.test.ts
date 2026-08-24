@@ -92,18 +92,16 @@ test('TraceStore round trips a presentation receipt', async () => {
         trace_final: {},
         presentation: {
             step: 'presentation',
-            outcome: 'finalized',
+            flow: 'candidate_review',
+            outcome: 'candidate_generated',
             attempted: true,
-            reasonCode: 'finalized',
+            reasonCode: 'candidate_generated',
             personaId: 'myuri',
             draftRequestedProvider: 'openai',
             draftRequestedModel: 'gpt-5-mini',
             draftObservedProvider: 'openai',
             draftObservedModel: 'gpt-5-mini',
-            auditOutcome: 'clear',
             draftAttemptCount: 1,
-            finalizerAttemptCount: 1,
-            auditAttemptCount: 1,
             expressionStrength: 'balanced',
             expressionSource: 'persona_default',
         },
@@ -114,7 +112,8 @@ test('TraceStore round trips a presentation receipt', async () => {
 
         const retrieved = await store.retrieve(responseId);
         assert.ok(retrieved, 'presentation flow trace should be retrievable');
-        assert.equal(retrieved.presentation?.outcome, 'finalized');
+        assert.equal(retrieved.presentation?.flow, 'candidate_review');
+        assert.equal(retrieved.presentation?.outcome, 'candidate_generated');
         assert.equal(retrieved.presentation?.draftObservedProvider, 'openai');
         assert.equal(retrieved.presentation?.draftObservedModel, 'gpt-5-mini');
         assert.equal(retrieved.presentation?.expressionStrength, 'balanced');
@@ -183,6 +182,7 @@ test('TraceStore retrieves legacy presentation receipts after compatibility repa
     try {
         const retrieved = await store.retrieve(responseId);
         assert.ok(retrieved, 'legacy presentation trace should be retrievable');
+        assert.equal(retrieved.presentation?.flow, 'legacy_finalizer_audit');
         assert.equal(retrieved.presentation?.expressionStrength, 'subtle');
         assert.equal(
             retrieved.presentation?.expressionSource,

@@ -23,9 +23,9 @@ metadata remains unavailable rather than inferred. See OpenRouter's
 
 ## Privacy and cost provenance
 
-OpenRouter receives the presentation request and may route it to the selected
-upstream provider. OpenRouter's retention and provider data policies apply in
-addition to Footnote's own handling. Operators should review OpenRouter's
+OpenRouter receives the optional presentation-candidate request and may route
+it to the selected upstream provider. OpenRouter's retention and provider data
+policies apply in addition to Footnote's own handling. Operators should review
 [privacy policy](https://openrouter.ai/privacy) and provider data policy before
 enabling this profile. The bundled routing policy requests denied data
 collection; it is a request to OpenRouter, not a guarantee that Footnote can
@@ -42,4 +42,4 @@ example `fly secrets set OPENROUTER_API_KEY=... -a <server-app>`. Do not put it
 in browser configuration or bot-only configuration. Configure an enabled
 OpenRouter model profile and the existing presentation profile selector before
 the writer can run. If the key or profile is unavailable, the presentation
-rewrite fails open and returns the original answer.
+candidate fails open and the normal authoritative generation/review path runs.

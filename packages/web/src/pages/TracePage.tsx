@@ -141,7 +141,7 @@ const RESPONSE_CANDIDATE_STAGE_LABELS: Record<
 > = {
     initial_generation: 'Initial answer',
     revision: 'Revised answer',
-    presentation_draft: 'Style draft',
+    presentation_draft: 'Presentation candidate (expression only)',
     presentation_finalization: 'Finalized answer',
     presentation_repair: 'Repaired final answer',
     fallback: 'Main answer after presentation fallback',
@@ -879,8 +879,9 @@ const TracePage = (): JSX.Element => {
             >
                 <h2>Response versions</h2>
                 <p>
-                    The final answer opens first. Earlier versions are kept for
-                    inspection and do not replace it.
+                    The authoritative answer opens first. Earlier generated text
+                    is kept for inspection; presentation candidates influence
+                    expression only and never replace the answer.
                 </p>
                 {responseCandidates === null &&
                     !responseVersionsUnavailable && (
@@ -1118,22 +1119,34 @@ const TracePage = (): JSX.Element => {
                             {presentation.expressionStrength} expression ·{' '}
                             {presentation.expressionSource} source
                         </p>
-                        <p>
-                            <strong>Audit:</strong>{' '}
-                            {presentation.auditModel ??
-                                presentation.auditProfileId ??
-                                'Not attempted'}{' '}
-                            — {presentation.auditOutcome}
-                        </p>
-                        <p>
-                            <strong>Draft retention:</strong>{' '}
-                            {Math.round(
-                                (presentation.styledDraftRetentionRatio ?? 0) *
-                                    100
-                            )}
-                            % · TRACE caution:{' '}
-                            {presentation.caution ?? 'Unavailable'}
-                        </p>
+                        {presentation.flow === 'legacy_finalizer_audit' ? (
+                            <>
+                                <p>
+                                    <strong>Audit:</strong>{' '}
+                                    {presentation.auditModel ??
+                                        presentation.auditProfileId ??
+                                        'Not attempted'}{' '}
+                                    — {presentation.auditOutcome}
+                                </p>
+                                <p>
+                                    <strong>Draft retention:</strong>{' '}
+                                    {Math.round(
+                                        (presentation.styledDraftRetentionRatio ??
+                                            0) * 100
+                                    )}
+                                    % · TRACE caution:{' '}
+                                    {presentation.caution ?? 'Unavailable'}
+                                </p>
+                            </>
+                        ) : (
+                            <p>
+                                <strong>Expression:</strong> The presentation
+                                candidate influenced expression only;
+                                authoritative context and review own the answer.
+                                {' · '}TRACE caution:{' '}
+                                {presentation.caution ?? 'Unavailable'}
+                            </p>
+                        )}
                         <details className="trace-details">
                             <summary>Presentation details</summary>
                             <dl className="trace-details__list">
@@ -1216,21 +1229,24 @@ const TracePage = (): JSX.Element => {
                                 <div>
                                     <dt>Attempts</dt>
                                     <dd>
-                                        Draft {presentation.draftAttemptCount} ·
-                                        Finalizer{' '}
-                                        {presentation.finalizerAttemptCount} ·
-                                        Audit {presentation.auditAttemptCount}
+                                        {presentation.flow ===
+                                        'legacy_finalizer_audit'
+                                            ? `Draft ${presentation.draftAttemptCount} · Finalizer ${presentation.finalizerAttemptCount} · Audit ${presentation.auditAttemptCount}`
+                                            : `Candidate ${presentation.draftAttemptCount}`}
                                     </dd>
                                 </div>
-                                <div>
-                                    <dt>Audit profile</dt>
-                                    <dd>
-                                        <code>
-                                            {presentation.auditProfileId ??
-                                                'Unavailable'}
-                                        </code>
-                                    </dd>
-                                </div>
+                                {presentation.flow ===
+                                    'legacy_finalizer_audit' && (
+                                    <div>
+                                        <dt>Audit profile</dt>
+                                        <dd>
+                                            <code>
+                                                {presentation.auditProfileId ??
+                                                    'Unavailable'}
+                                            </code>
+                                        </dd>
+                                    </div>
+                                )}
                                 <div>
                                     <dt>Observed TRACE caution</dt>
                                     <dd>
@@ -1246,15 +1262,18 @@ const TracePage = (): JSX.Element => {
                                         </code>
                                     </dd>
                                 </div>
-                                <div>
-                                    <dt>Final HMAC ID</dt>
-                                    <dd>
-                                        <code>
-                                            {presentation.finalHmacId ??
-                                                'Unavailable'}
-                                        </code>
-                                    </dd>
-                                </div>
+                                {presentation.flow ===
+                                    'legacy_finalizer_audit' && (
+                                    <div>
+                                        <dt>Final HMAC ID</dt>
+                                        <dd>
+                                            <code>
+                                                {presentation.finalHmacId ??
+                                                    'Unavailable'}
+                                            </code>
+                                        </dd>
+                                    </div>
+                                )}
                             </dl>
                         </details>
                     </>

@@ -99,6 +99,8 @@ paths:
                 - packages/contracts/src/web/types.ts#PostChatRequest
                 - packages/contracts/src/web/types.ts#PostChatResponse
                 - packages/contracts/src/web/schemas.ts#ResponseMetadataSchema
+                - packages/contracts/src/web/schemas.ts#PresentationMetadataSchema
+                - packages/contracts/src/policy/types.ts#PresentationMetadata
                 - packages/contracts/src/policy/types.ts#PersonaExpressionStrength
                 - packages/contracts/src/policy/schemas.ts#PersonaExpressionStrengthSchema
             summary: Generate a chat response
@@ -752,6 +754,9 @@ paths:
                 - packages/discord-bot/src/api/traces.ts#postTraces
                 - packages/contracts/src/web/types.ts#PostTracesRequest
                 - packages/contracts/src/web/types.ts#PostTracesResponse
+                - packages/contracts/src/web/schemas.ts#PostTracesRequestSchema
+                - packages/contracts/src/web/schemas.ts#PresentationMetadataSchema
+                - packages/contracts/src/policy/types.ts#PresentationMetadata
             summary: Upsert trace metadata
             description: |
                 Store ResponseMetadata for a responseId.
@@ -3357,6 +3362,8 @@ components:
                             planner_invalid_output,
                             evaluator_runtime_error,
                             generation_runtime_error,
+                            presentation_candidate_generated,
+                            presentation_candidate_unavailable,
                             presentation_finalized,
                             presentation_fallback,
                             tool_not_requested,
@@ -3888,158 +3895,254 @@ components:
                 workflow:
                     $ref: '#/components/schemas/WorkflowRecord'
                 presentation:
-                    type: object
-                    description: Optional backend-owned draft-first presentation receipt. It records bounded attempts and outcomes without retaining either full response text.
-                    properties:
-                        step:
-                            type: string
-                            enum: [presentation]
-                        outcome:
-                            type: string
-                            enum:
-                                [
-                                    finalized,
-                                    finalized_after_evidence_repair,
-                                    finalized_after_presentation_repair,
-                                    finalized_with_audit_unavailable,
-                                    fallback,
-                                ]
-                        attempted:
-                            type: boolean
-                        reasonCode:
-                            type: string
-                            enum:
-                                [
-                                    finalized,
-                                    evidence_repaired,
-                                    presentation_repaired,
-                                    audit_unavailable,
-                                    audit_invalid,
-                                    presentation_repair_unavailable,
-                                    evidence_repair_unavailable,
-                                    disabled,
-                                    profile_not_configured,
-                                    structured_output,
-                                    mechanical_preservation_failed,
-                                    draft_timeout,
-                                    draft_provider_error,
-                                    finalizer_timeout,
-                                    finalizer_provider_error,
-                                ]
-                        personaId:
-                            type: string
-                        draftProfileId:
-                            type: string
-                        draftRequestedProvider:
-                            type: string
-                        draftRequestedModel:
-                            type: string
-                        draftObservedProvider:
-                            type: string
-                            description: Provider observed after a style-draft generation result returned. Absent when the draft failed or timed out before returning.
-                        draftObservedModel:
-                            type: string
-                            description: Model observed after a style-draft generation result returned. Absent when the draft failed or timed out before returning.
-                        auditProfileId:
-                            type: string
-                        auditProvider:
-                            type: string
-                        auditModel:
-                            type: string
-                        upstreamInferenceProvider:
-                            type: string
-                            description: Upstream-reported style-draft inference provider. Footnote does not independently verify this value.
-                        upstreamResolvedModel:
-                            type: string
-                        upstreamRoutingAttempt:
-                            type: integer
-                            minimum: 1
-                        upstreamRoutingAttemptCount:
-                            type: integer
-                            minimum: 1
-                        backendEstimatedCostUsd:
-                            type: number
-                            minimum: 0
-                            description: Backend-calculated estimate for presentation draft and audit calls.
-                        upstreamReportedCostUsd:
-                            type: number
-                            minimum: 0
-                        durationMs:
-                            type: integer
-                            minimum: 0
-                        auditOutcome:
-                            type: string
-                            enum:
-                                [
-                                    not_attempted,
-                                    clear,
-                                    evidence_issue,
-                                    presentation_flattened,
-                                    invalid,
-                                ]
-                        auditFailureCategory:
-                            type: string
-                            description: Safe category only; raw audit feedback and provider errors are never stored here.
-                            enum:
-                                [
-                                    timeout,
-                                    provider_failure,
-                                    invalid_structured_output,
-                                    unavailable,
-                                ]
-                        draftAttemptCount:
-                            type: integer
-                            enum: [0, 1]
-                        finalizerAttemptCount:
-                            type: integer
-                            enum: [0, 1, 2]
-                        auditAttemptCount:
-                            type: integer
-                            enum: [0, 1]
-                        draftHmacId:
-                            type: string
-                            pattern: '^[a-f0-9]{64}$'
-                        finalHmacId:
-                            type: string
-                            pattern: '^[a-f0-9]{64}$'
-                        styledDraftRetentionRatio:
-                            type: number
-                            minimum: 0
-                            maximum: 1
-                        caution:
-                            type: integer
-                            enum: [1, 2, 3, 4, 5]
-                        intensity:
-                            type: string
-                            deprecated: true
-                            description: Legacy caution-derived presentation field accepted only for trace-upsert compatibility; restrained maps to subtle and other values map to balanced.
-                        traceConstrained:
-                            type: boolean
-                            deprecated: true
-                            description: Legacy caution-derived presentation field accepted only for trace-upsert compatibility; true maps to subtle when intensity is absent.
-                        expressionStrength:
-                            type: string
-                            enum: [subtle, balanced, strong]
-                            description: Resolved persona expression strength. Legacy trace upserts with caution-derived presentation fields are normalized before storage.
-                        expressionSource:
-                            type: string
-                            enum: [request, profile, persona_default]
-                            description: Resolution source. Legacy presentation receipts normalize to persona_default because old caution fields do not prove a request or profile preference.
-                    required:
-                        [
-                            step,
-                            outcome,
-                            attempted,
-                            reasonCode,
-                            personaId,
-                            auditOutcome,
-                            draftAttemptCount,
-                            finalizerAttemptCount,
-                            auditAttemptCount,
-                            expressionStrength,
-                            expressionSource,
-                        ]
-                    additionalProperties: false
+                    description: Optional backend-owned presentation receipt. New receipts use the candidate-review flow; historical finalizer/audit receipts remain readable through the legacy branch. Trace upserts that omit flow but contain legacy finalizer/audit or caution-derived fields are normalized to legacy_finalizer_audit before strict validation, without inventing observed model data.
+                    oneOf:
+                        - type: object
+                          description: Current full-candidate flow. The candidate influences expression, while authoritative generation and ordinary review own the answer.
+                          properties:
+                              step:
+                                  type: string
+                                  enum: [presentation]
+                              flow:
+                                  type: string
+                                  enum: [candidate_review]
+                              outcome:
+                                  type: string
+                                  enum:
+                                      [
+                                          candidate_generated,
+                                          candidate_unavailable,
+                                      ]
+                              attempted:
+                                  type: boolean
+                              reasonCode:
+                                  type: string
+                                  enum:
+                                      [
+                                          candidate_generated,
+                                          disabled,
+                                          profile_not_configured,
+                                          structured_output,
+                                          draft_timeout,
+                                          draft_provider_error,
+                                      ]
+                              personaId:
+                                  type: string
+                              draftProfileId:
+                                  type: string
+                              draftRequestedProvider:
+                                  type: string
+                              draftRequestedModel:
+                                  type: string
+                              draftObservedProvider:
+                                  type: string
+                                  description: Provider observed after a style-draft generation result returned. Absent when the draft failed or timed out before returning.
+                              draftObservedModel:
+                                  type: string
+                                  description: Model observed after a style-draft generation result returned. Absent when the draft failed or timed out before returning.
+                              upstreamInferenceProvider:
+                                  type: string
+                                  description: Upstream-reported style-draft inference provider. Footnote does not independently verify this value.
+                              upstreamResolvedModel:
+                                  type: string
+                              upstreamRoutingAttempt:
+                                  type: integer
+                                  minimum: 1
+                              upstreamRoutingAttemptCount:
+                                  type: integer
+                                  minimum: 1
+                              backendEstimatedCostUsd:
+                                  type: number
+                                  minimum: 0
+                                  description: Backend-calculated estimate for the presentation candidate only.
+                              upstreamReportedCostUsd:
+                                  type: number
+                                  minimum: 0
+                              durationMs:
+                                  type: integer
+                                  minimum: 0
+                              draftAttemptCount:
+                                  type: integer
+                                  enum: [0, 1]
+                              draftHmacId:
+                                  type: string
+                                  pattern: '^[a-f0-9]{64}$'
+                              caution:
+                                  type: integer
+                                  enum: [1, 2, 3, 4, 5]
+                              expressionStrength:
+                                  type: string
+                                  enum: [subtle, balanced, strong]
+                                  description: Resolved persona expression strength.
+                              expressionSource:
+                                  type: string
+                                  enum: [request, profile, persona_default]
+                                  description: Resolution source for the expression preference.
+                          required:
+                              [
+                                  step,
+                                  flow,
+                                  outcome,
+                                  attempted,
+                                  reasonCode,
+                                  personaId,
+                                  draftAttemptCount,
+                                  expressionStrength,
+                                  expressionSource,
+                              ]
+                          additionalProperties: false
+                        - type: object
+                          description: Read-compatible receipt from the pre-#540 finalizer/audit architecture. It is not emitted by the current runtime.
+                          properties:
+                              step:
+                                  type: string
+                                  enum: [presentation]
+                              flow:
+                                  type: string
+                                  enum: [legacy_finalizer_audit]
+                              outcome:
+                                  type: string
+                                  enum:
+                                      [
+                                          finalized,
+                                          finalized_after_evidence_repair,
+                                          finalized_after_presentation_repair,
+                                          finalized_with_audit_unavailable,
+                                          fallback,
+                                      ]
+                              attempted:
+                                  type: boolean
+                              reasonCode:
+                                  type: string
+                                  enum:
+                                      [
+                                          finalized,
+                                          evidence_repaired,
+                                          presentation_repaired,
+                                          audit_unavailable,
+                                          audit_invalid,
+                                          presentation_repair_unavailable,
+                                          evidence_repair_unavailable,
+                                          disabled,
+                                          profile_not_configured,
+                                          structured_output,
+                                          mechanical_preservation_failed,
+                                          draft_timeout,
+                                          draft_provider_error,
+                                          finalizer_timeout,
+                                          finalizer_provider_error,
+                                      ]
+                              personaId:
+                                  type: string
+                              draftProfileId:
+                                  type: string
+                              draftRequestedProvider:
+                                  type: string
+                              draftRequestedModel:
+                                  type: string
+                              draftObservedProvider:
+                                  type: string
+                              draftObservedModel:
+                                  type: string
+                              auditProfileId:
+                                  type: string
+                              auditProvider:
+                                  type: string
+                              auditModel:
+                                  type: string
+                              upstreamInferenceProvider:
+                                  type: string
+                              upstreamResolvedModel:
+                                  type: string
+                              upstreamRoutingAttempt:
+                                  type: integer
+                                  minimum: 1
+                              upstreamRoutingAttemptCount:
+                                  type: integer
+                                  minimum: 1
+                              backendEstimatedCostUsd:
+                                  type: number
+                                  minimum: 0
+                              upstreamReportedCostUsd:
+                                  type: number
+                                  minimum: 0
+                              durationMs:
+                                  type: integer
+                                  minimum: 0
+                              auditOutcome:
+                                  type: string
+                                  enum:
+                                      [
+                                          not_attempted,
+                                          clear,
+                                          evidence_issue,
+                                          presentation_flattened,
+                                          invalid,
+                                      ]
+                              auditFailureCategory:
+                                  type: string
+                                  description: Safe category only; raw audit feedback and provider errors are never stored here.
+                                  enum:
+                                      [
+                                          timeout,
+                                          provider_failure,
+                                          invalid_structured_output,
+                                          unavailable,
+                                      ]
+                              draftAttemptCount:
+                                  type: integer
+                                  enum: [0, 1]
+                              finalizerAttemptCount:
+                                  type: integer
+                                  enum: [0, 1, 2]
+                              auditAttemptCount:
+                                  type: integer
+                                  enum: [0, 1]
+                              draftHmacId:
+                                  type: string
+                                  pattern: '^[a-f0-9]{64}$'
+                              finalHmacId:
+                                  type: string
+                                  pattern: '^[a-f0-9]{64}$'
+                              styledDraftRetentionRatio:
+                                  type: number
+                                  minimum: 0
+                                  maximum: 1
+                              caution:
+                                  type: integer
+                                  enum: [1, 2, 3, 4, 5]
+                              intensity:
+                                  type: string
+                                  deprecated: true
+                                  description: Legacy caution-derived field accepted only while normalizing historical trace upserts; it is not accepted on current candidate-flow writes.
+                              traceConstrained:
+                                  type: boolean
+                                  deprecated: true
+                                  description: Legacy caution-derived field accepted only while normalizing historical trace upserts; it is not accepted on current candidate-flow writes.
+                              expressionStrength:
+                                  type: string
+                                  enum: [subtle, balanced, strong]
+                                  description: Normalized legacy expression strength; old caution fields do not prove a request or profile preference.
+                              expressionSource:
+                                  type: string
+                                  enum: [request, profile, persona_default]
+                                  description: Normalized legacy source. Old caution fields default this to persona_default when no current source is present.
+                          required:
+                              [
+                                  step,
+                                  flow,
+                                  outcome,
+                                  attempted,
+                                  reasonCode,
+                                  personaId,
+                                  auditOutcome,
+                                  draftAttemptCount,
+                                  finalizerAttemptCount,
+                                  auditAttemptCount,
+                                  expressionStrength,
+                                  expressionSource,
+                              ]
+                          additionalProperties: false
                 reviewRuntime:
                     $ref: '#/components/schemas/ReviewRuntimeSummary'
                 imageDescriptions:
@@ -4464,12 +4567,13 @@ components:
 
         ResponseCandidate:
             type: object
-            description: One model-produced answer candidate retained with a trace. Plans, prompts, tools, audit output, and hidden reasoning are excluded.
+            description: One model-produced response candidate retained with a trace. A presentation_draft is expression-only input to authoritative generation, not evidence, provenance authority, policy, or a deliverable answer. Plans, prompts, tools, audit output, and hidden reasoning are excluded.
             properties:
                 id:
                     type: string
                 parentCandidateId:
                     type: string
+                    description: Response-history and expression-influence ancestry only; never evidence or provenance authority.
                 workflowStepId:
                     type: string
                 sequence:
