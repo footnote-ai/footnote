@@ -323,6 +323,118 @@ test('runBoundedReviewWorkflow executes eligible context steps in parallel and m
     assert.ok(weatherContextMessageIndex < webContextMessageIndex);
 });
 
+test('runBoundedReviewWorkflow prioritizes exact GitHub context before broad and web discovery', async () => {
+    const executionOrder: string[] = [];
+    const generationRuntime: GenerationRuntime = {
+        kind: 'test-runtime',
+        async generate() {
+            return {
+                text: 'draft',
+                model: 'gpt-5-mini',
+                usage: {
+                    promptTokens: 10,
+                    completionTokens: 5,
+                    totalTokens: 15,
+                },
+                provenance: 'Inferred',
+                citations: [],
+            };
+        },
+    };
+    const contextResult = (name: string) => ({
+        outcome: 'executed' as const,
+        executionContext: {
+            toolName: name,
+            status: 'executed' as const,
+            durationMs: 1,
+        },
+        contextMessages: [`${name}: context`],
+    });
+    const result = await runBoundedReviewWorkflowForTest({
+        generationRuntime,
+        generationRequest: {
+            model: 'gpt-5-mini',
+            messages: [{ role: 'user', content: 'Inspect PR #528.' }],
+        },
+        messagesWithHints: [{ role: 'user', content: 'Inspect PR #528.' }],
+        generationStartedAtMs: Date.now(),
+        workflowConfig: {
+            workflowName: 'message_with_context',
+            maxIterations: 0,
+            maxDurationMs: 15000,
+            executionLimits: {
+                maxWorkflowSteps: 5,
+                maxToolCalls: 3,
+                maxDeliberationCalls: 0,
+                maxTokensTotal: 1000,
+                maxDurationMs: 15000,
+            },
+        },
+        workflowPolicy: {
+            enablePlanning: false,
+            enableToolUse: true,
+            enableReplanning: false,
+            enableGeneration: true,
+            enableAssessment: false,
+            enableRevision: false,
+        },
+        contextStepRequests: [
+            {
+                integrationName: 'web_search',
+                requested: true,
+                eligible: true,
+                input: { intent: 'repo_explainer' },
+            },
+            {
+                integrationName: 'project_context',
+                requested: true,
+                eligible: true,
+            },
+            {
+                integrationName: 'github_context',
+                requested: true,
+                eligible: true,
+                input: {
+                    repository: 'footnote-ai/footnote',
+                    reference: { kind: 'pull_request', number: 528 },
+                },
+            },
+        ],
+        contextStepExecutorRegistry: {
+            github_context: async () => {
+                executionOrder.push('github_exact');
+                return contextResult('github_exact');
+            },
+            project_context: async () => {
+                executionOrder.push('project_context');
+                return contextResult('project_context');
+            },
+            web_search: async () => {
+                executionOrder.push('web_search');
+                return contextResult('web_search');
+            },
+        },
+        captureUsage: (generationResult) => ({
+            model: generationResult.model ?? 'gpt-5-mini',
+            promptTokens: generationResult.usage?.promptTokens ?? 0,
+            completionTokens: generationResult.usage?.completionTokens ?? 0,
+            totalTokens: generationResult.usage?.totalTokens ?? 0,
+            estimatedCost: {
+                inputCostUsd: 0,
+                outputCostUsd: 0,
+                totalCostUsd: 0,
+            },
+        }),
+    });
+
+    assert.equal(result.outcome, 'generated');
+    assert.deepEqual(executionOrder, [
+        'github_exact',
+        'project_context',
+        'web_search',
+    ]);
+});
+
 test('runBoundedReviewWorkflow preserves project-context authority roles', async () => {
     const observedMessages: RuntimeMessage[][] = [];
     const generationRuntime: GenerationRuntime = {

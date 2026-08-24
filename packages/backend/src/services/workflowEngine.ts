@@ -79,6 +79,10 @@ import {
     renderGenerationContextManifest,
 } from './workflowEngine/contextManifest.js';
 import {
+    boundGenerationRequestToWorkflowBudget,
+    estimateGenerationTokenBudget,
+} from './workflowEngine/tokenBudget.js';
+import {
     executeStepRoutingChain,
     type RoutingChainAttemptLog,
 } from './stepRoutingExecutor.js';
@@ -418,6 +422,15 @@ export const runBoundedReviewWorkflow = async ({
             normalizedMaxDurationMs
         ),
     };
+    const boundGenerationRequest = (
+        request: GenerationRequest,
+        state: WorkflowState = workflowState
+    ): GenerationRequest | undefined =>
+        boundGenerationRequestToWorkflowBudget({
+            request,
+            totalTokens: state.totalTokens,
+            maxTokensTotal: executionLimits.maxTokensTotal,
+        });
     const hasExplicitMaxDeliberationCalls =
         workflowConfig.executionLimits?.maxDeliberationCalls !== undefined;
     if (!hasExplicitMaxDeliberationCalls) {
@@ -779,8 +792,10 @@ export const runBoundedReviewWorkflow = async ({
             terminationReason = 'transition_blocked_by_policy';
             shouldStop = true;
         } else if (!stopIfOverLimits('tool').stopped) {
-            // Parallel execution keeps integration latency bounded while each
-            // outcome remains independently fail-open and lineage-recorded.
+            // Independent context integrations remain parallel by default. An
+            // explicit GitHub object creates a narrow dependency chain so exact
+            // repository retrieval completes before broad context and web
+            // discovery can be admitted.
             const remainingToolCalls =
                 executionLimits.maxToolCalls === UNBOUNDED_EXECUTION_LIMIT
                     ? Number.POSITIVE_INFINITY
@@ -790,56 +805,94 @@ export const runBoundedReviewWorkflow = async ({
                               workflowState.toolCallCount
                       );
             let reservedToolCallCount = 0;
-            const contextStepOutcomes = await Promise.all(
-                executableContextSteps.map(
-                    async (request): Promise<ContextStepExecutionOutcome> => {
-                        if (reservedToolCallCount >= remainingToolCalls) {
-                            const blockedAtMs = Date.now();
-                            return {
+            const runContextStepBatch = async (
+                requests: ContextStepRequest[]
+            ): Promise<ContextStepExecutionOutcome[]> =>
+                Promise.all(
+                    requests.map(
+                        async (
+                            request
+                        ): Promise<ContextStepExecutionOutcome> => {
+                            if (reservedToolCallCount >= remainingToolCalls) {
+                                const blockedAtMs = Date.now();
+                                return {
+                                    request,
+                                    blockedByLimit: true,
+                                    startedAtMs: blockedAtMs,
+                                    finishedAtMs: blockedAtMs,
+                                };
+                            }
+                            reservedToolCallCount += 1;
+                            const executor = selectContextStepExecutor(
                                 request,
-                                blockedByLimit: true,
-                                startedAtMs: blockedAtMs,
-                                finishedAtMs: blockedAtMs,
-                            };
+                                contextStepExecutor,
+                                contextStepExecutorRegistry
+                            );
+                            if (executor === undefined) {
+                                return {
+                                    request,
+                                    startedAtMs: Date.now(),
+                                    finishedAtMs: Date.now(),
+                                };
+                            }
+                            const startedAtMs = Date.now();
+                            try {
+                                const result = await executor({
+                                    request,
+                                    workflowId,
+                                    workflowName: workflowConfig.workflowName,
+                                    attempt: 1,
+                                });
+                                return {
+                                    request,
+                                    result,
+                                    startedAtMs,
+                                    finishedAtMs: Date.now(),
+                                };
+                            } catch (error) {
+                                return {
+                                    request,
+                                    error,
+                                    startedAtMs,
+                                    finishedAtMs: Date.now(),
+                                };
+                            }
                         }
-                        reservedToolCallCount += 1;
-                        const executor = selectContextStepExecutor(
-                            request,
-                            contextStepExecutor,
-                            contextStepExecutorRegistry
-                        );
-                        if (executor === undefined) {
-                            return {
-                                request,
-                                startedAtMs: Date.now(),
-                                finishedAtMs: Date.now(),
-                            };
-                        }
-                        const startedAtMs = Date.now();
-                        try {
-                            const result = await executor({
-                                request,
-                                workflowId,
-                                workflowName: workflowConfig.workflowName,
-                                attempt: 1,
-                            });
-                            return {
-                                request,
-                                result,
-                                startedAtMs,
-                                finishedAtMs: Date.now(),
-                            };
-                        } catch (error) {
-                            return {
-                                request,
-                                error,
-                                startedAtMs,
-                                finishedAtMs: Date.now(),
-                            };
-                        }
-                    }
-                )
+                    )
+                );
+            const hasExplicitGitHubObject = executableContextSteps.some(
+                (request) =>
+                    request.integrationName === 'github_context' &&
+                    request.input?.reference !== undefined
             );
+            const contextStepBatches = hasExplicitGitHubObject
+                ? [
+                      executableContextSteps.filter(
+                          (request) =>
+                              request.integrationName === 'github_context' &&
+                              request.input?.reference !== undefined
+                      ),
+                      executableContextSteps.filter(
+                          (request) =>
+                              !(
+                                  request.integrationName ===
+                                      'github_context' &&
+                                  request.input?.reference !== undefined
+                              ) && request.integrationName !== 'web_search'
+                      ),
+                      executableContextSteps.filter(
+                          (request) => request.integrationName === 'web_search'
+                      ),
+                  ]
+                : [executableContextSteps];
+            const contextStepOutcomes: ContextStepExecutionOutcome[] = [];
+            for (const batch of contextStepBatches) {
+                if (batch.length > 0) {
+                    contextStepOutcomes.push(
+                        ...(await runContextStepBatch(batch))
+                    );
+                }
+            }
             for (const contextStepOutcome of contextStepOutcomes) {
                 if (contextStepOutcome.blockedByLimit === true) {
                     exhaustedLimitKey = 'maxToolCalls';
@@ -1068,17 +1121,23 @@ export const runBoundedReviewWorkflow = async ({
                               .generation.temperament?.caution ??
                           activePresentation?.caution)
                         : activePresentation?.caution;
+                const presentationGenerationRequest = boundGenerationRequest(
+                    generationRequestForAttempt
+                );
                 const presentationResult =
                     presentationEnabled && activePresentation !== undefined
-                        ? stopIfOverLimits(
+                        ? presentationGenerationRequest === undefined ||
+                          stopIfOverLimits(
                               'presentation',
-                              generationRequestForAttempt.maxOutputTokens
+                              estimateGenerationTokenBudget(
+                                  presentationGenerationRequest
+                              )
                           ).stopped
                             ? undefined
                             : await runPresentationCandidate({
                                   generationRuntime,
                                   generationRequest:
-                                      generationRequestForAttempt,
+                                      presentationGenerationRequest,
                                   config: activePresentation.config,
                                   persona: activePresentation.persona,
                                   caution: presentationCaution,
@@ -1180,6 +1239,22 @@ export const runBoundedReviewWorkflow = async ({
                         stopIfTokenBudgetExceeded();
                     }
                 }
+                const boundedGenerationRequest = boundGenerationRequest(
+                    authoritativeGenerationRequest
+                );
+                if (boundedGenerationRequest === undefined) {
+                    stopIfOverLimits(
+                        'generate',
+                        Math.max(
+                            1,
+                            executionLimits.maxTokensTotal -
+                                workflowState.totalTokens +
+                                1
+                        )
+                    );
+                } else {
+                    authoritativeGenerationRequest = boundedGenerationRequest;
+                }
                 initialDraftStartedAt = Date.now();
                 const canRunNormalGeneration =
                     draftResult === null &&
@@ -1195,7 +1270,9 @@ export const runBoundedReviewWorkflow = async ({
                     draftResult === null &&
                     !stopIfOverLimits(
                         'generate',
-                        authoritativeGenerationRequest.maxOutputTokens
+                        estimateGenerationTokenBudget(
+                            authoritativeGenerationRequest
+                        )
                     ).stopped &&
                     stepRoutingChainSet?.generateCandidates &&
                     stepRoutingChainSet.generateCandidates.length > 0
@@ -1284,7 +1361,9 @@ export const runBoundedReviewWorkflow = async ({
                     canRunNormalGeneration &&
                     !stopIfOverLimits(
                         'generate',
-                        authoritativeGenerationRequest.maxOutputTokens
+                        estimateGenerationTokenBudget(
+                            authoritativeGenerationRequest
+                        )
                     ).stopped
                 ) {
                     draftResult = await generationRuntime.generate(
@@ -1408,6 +1487,7 @@ export const runBoundedReviewWorkflow = async ({
         workflowPolicy,
         stopIfOverLimits,
         stopIfTokenBudgetExceeded,
+        maxTokensTotal: executionLimits.maxTokensTotal,
         selectedReviewModuleIds,
         effectiveReviewDecisionPrompt,
         personaExpressionGuidance,

@@ -12,6 +12,10 @@ import {
     mapLimitExhaustionToTerminationReason,
     type ExecutionLimits,
 } from '../../src/services/workflowEngine.js';
+import {
+    boundGenerationRequestToWorkflowBudget,
+    estimateGenerationTokenBudget,
+} from '../../src/services/workflowEngine/tokenBudget.js';
 
 const createLimits = (): ExecutionLimits => ({
     maxWorkflowSteps: 5,
@@ -171,4 +175,30 @@ test('checkExecutionLimits reserves the requested next-step token budget', () =>
         withinLimits: false,
         exhaustedBy: 'maxTokensTotal',
     });
+});
+
+test('generation admission counts prompt estimate and clamps provider output', () => {
+    const bounded = boundGenerationRequestToWorkflowBudget({
+        request: {
+            messages: [{ role: 'user', content: 'x'.repeat(40) }],
+        },
+        totalTokens: 20,
+        maxTokensTotal: 100,
+    });
+
+    assert.ok(bounded);
+    assert.equal(bounded.maxOutputTokens, 68);
+    assert.ok(estimateGenerationTokenBudget(bounded) <= 100 - 20);
+});
+
+test('generation admission fails closed before provider call when prompt uses the remainder', () => {
+    const bounded = boundGenerationRequestToWorkflowBudget({
+        request: {
+            messages: [{ role: 'user', content: 'x'.repeat(400) }],
+        },
+        totalTokens: 0,
+        maxTokensTotal: 100,
+    });
+
+    assert.equal(bounded, undefined);
 });
