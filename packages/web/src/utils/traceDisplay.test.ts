@@ -13,6 +13,7 @@ import type {
     WorkflowRecord,
 } from '@footnote/contracts/policy';
 import {
+    getPresentationTraceSummary,
     sanitizePresentationForDisplay,
     sanitizeWorkflowForDisplay,
 } from './traceDisplay.js';
@@ -69,7 +70,8 @@ test('sanitizePresentationForDisplay preserves text-free rewrite provenance', ()
         draftProfileId: 'ollama-cloud-style',
         draftRequestedProvider: 'openrouter',
         draftRequestedModel: 'thedrummer/cydonia-24b-v4.1',
-        draftModel: 'style-model',
+        draftObservedProvider: 'parasail',
+        draftObservedModel: 'style-model',
         auditProfileId: 'ollama-cloud-validator',
         auditProvider: 'ollama',
         auditModel: 'validator-model',
@@ -103,5 +105,31 @@ test('sanitizePresentationForDisplay preserves text-free rewrite provenance', ()
             outcome: 42,
         }),
         null
+    );
+});
+
+test('getPresentationTraceSummary explains missing drafts and mechanical fallback', () => {
+    const base: PresentationMetadata = {
+        step: 'presentation',
+        outcome: 'fallback',
+        attempted: true,
+        reasonCode: 'draft_timeout',
+        personaId: 'winter',
+        auditOutcome: 'not_attempted',
+        draftAttemptCount: 1,
+        finalizerAttemptCount: 0,
+        auditAttemptCount: 0,
+        expressionStrength: 'strong',
+        expressionSource: 'persona_default',
+    };
+
+    assert.match(getPresentationTraceSummary(base), /No draft was returned/u);
+    assert.match(
+        getPresentationTraceSummary({
+            ...base,
+            reasonCode: 'mechanical_preservation_failed',
+            draftObservedModel: 'style-model',
+        }),
+        /preservation checks rejected/u
     );
 });

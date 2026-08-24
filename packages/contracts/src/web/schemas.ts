@@ -97,9 +97,13 @@ const isRecord = (value: unknown): value is Record<string, unknown> =>
     value !== null && typeof value === 'object' && !Array.isArray(value);
 
 /**
- * Normalizes pre-#530 presentation receipts before strict validation. Old
+ * Normalizes older presentation receipts before strict validation. Old
  * caution-derived fields cannot prove a request/profile preference, so their
- * replacement is marked as the persona default.
+ * replacement is marked as the persona default. The old `draftModel` field
+ * mixed requested and observed values; it is discarded rather than promoted
+ * to observed metadata. If no requested model was stored, its value is kept
+ * only as the requested model because the old writer populated it from the
+ * configured profile when a draft was missing.
  */
 export const normalizePresentationMetadataForCompatibility = (
     value: unknown
@@ -108,7 +112,10 @@ export const normalizePresentationMetadataForCompatibility = (
         return value;
     }
 
-    const hasLegacyFields = 'intensity' in value || 'traceConstrained' in value;
+    const hasLegacyFields =
+        'intensity' in value ||
+        'traceConstrained' in value ||
+        'draftModel' in value;
     if (!hasLegacyFields) {
         return value;
     }
@@ -133,8 +140,15 @@ export const normalizePresentationMetadataForCompatibility = (
             ? currentSource.data
             : 'persona_default',
     };
+    if (
+        normalized.draftRequestedModel === undefined &&
+        typeof value.draftModel === 'string'
+    ) {
+        normalized.draftRequestedModel = value.draftModel;
+    }
     delete normalized.intensity;
     delete normalized.traceConstrained;
+    delete normalized.draftModel;
     return normalized;
 };
 
@@ -499,7 +513,8 @@ const PresentationMetadataFieldsSchema = z
         draftProfileId: z.string().min(1).optional(),
         draftRequestedProvider: z.string().min(1).optional(),
         draftRequestedModel: z.string().min(1).optional(),
-        draftModel: z.string().min(1).optional(),
+        draftObservedProvider: z.string().min(1).optional(),
+        draftObservedModel: z.string().min(1).optional(),
         auditProfileId: z.string().min(1).optional(),
         auditProvider: z.string().min(1).optional(),
         auditModel: z.string().min(1).optional(),

@@ -766,6 +766,39 @@ test('PostTracesRequestSchema normalizes legacy presentation fields', () => {
     assert.equal('traceConstrained' in (parsed.data.presentation ?? {}), false);
 });
 
+test('PostTracesRequestSchema drops ambiguous legacy observed draft models', () => {
+    const parsed = PostTracesRequestSchema.safeParse({
+        ...baseMetadata,
+        presentation: {
+            step: 'presentation',
+            outcome: 'fallback',
+            attempted: true,
+            reasonCode: 'draft_timeout',
+            personaId: 'winter',
+            draftRequestedProvider: 'openrouter',
+            draftRequestedModel: 'thedrummer/cydonia-24b-v4.1',
+            draftModel: 'thedrummer/cydonia-24b-v4.1',
+            auditOutcome: 'not_attempted',
+            draftAttemptCount: 1,
+            finalizerAttemptCount: 0,
+            auditAttemptCount: 0,
+            expressionStrength: 'strong',
+            expressionSource: 'persona_default',
+        },
+    });
+
+    assert.equal(parsed.success, true);
+    if (!parsed.success) {
+        return;
+    }
+    assert.equal(
+        parsed.data.presentation?.draftRequestedModel,
+        'thedrummer/cydonia-24b-v4.1'
+    );
+    assert.equal(parsed.data.presentation?.draftObservedModel, undefined);
+    assert.equal('draftModel' in (parsed.data.presentation ?? {}), false);
+});
+
 test('ResponseMetadataSchema accepts normalized review runtime summary labels', () => {
     const parsed = ResponseMetadataSchema.safeParse({
         ...baseMetadata,

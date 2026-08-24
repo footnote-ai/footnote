@@ -37,6 +37,7 @@ import {
 } from '../utils/traceOutcome';
 import { summarizeTraceAccounting } from '../utils/traceAccounting';
 import {
+    getPresentationTraceSummary,
     sanitizePresentationForDisplay,
     sanitizeWorkflowForDisplay,
 } from '../utils/traceDisplay';
@@ -143,7 +144,7 @@ const RESPONSE_CANDIDATE_STAGE_LABELS: Record<
     presentation_draft: 'Style draft',
     presentation_finalization: 'Finalized answer',
     presentation_repair: 'Repaired final answer',
-    fallback: 'Fallback answer',
+    fallback: 'Main answer after presentation fallback',
 };
 
 const getResponseCandidateStageLabel = (candidate: ResponseCandidate): string =>
@@ -1093,14 +1094,25 @@ const TracePage = (): JSX.Element => {
                     <>
                         <p>
                             <strong>Presentation:</strong>{' '}
-                            {presentation.outcome.charAt(0).toUpperCase() +
-                                presentation.outcome.slice(1)}
+                            {getPresentationTraceSummary(presentation)}
                         </p>
                         <p>
+                            <strong>Requested draft:</strong>{' '}
                             <code>
-                                {presentation.draftModel ??
-                                    presentation.draftProfileId ??
-                                    'Unspecified'}
+                                {presentation.draftRequestedProvider ??
+                                    'Unavailable'}
+                                {' / '}
+                                {presentation.draftRequestedModel ??
+                                    'Unavailable'}
+                            </code>
+                            {' · '}
+                            <strong>Observed draft:</strong>{' '}
+                            <code>
+                                {presentation.draftObservedProvider ??
+                                    'Not observed'}
+                                {' / '}
+                                {presentation.draftObservedModel ??
+                                    'Not observed'}
                             </code>{' '}
                             · {presentation.personaId} persona ·{' '}
                             {presentation.expressionStrength} expression ·{' '}
@@ -1152,8 +1164,23 @@ const TracePage = (): JSX.Element => {
                                     <dd>
                                         <code>
                                             {presentation.draftRequestedModel ??
-                                                presentation.draftModel ??
                                                 'Unavailable'}
+                                        </code>
+                                    </dd>
+                                </div>
+                                <div>
+                                    <dt>Observed draft provider</dt>
+                                    <dd>
+                                        {presentation.draftObservedProvider ??
+                                            'Not observed'}
+                                    </dd>
+                                </div>
+                                <div>
+                                    <dt>Observed draft model</dt>
+                                    <dd>
+                                        <code>
+                                            {presentation.draftObservedModel ??
+                                                'Not observed'}
                                         </code>
                                     </dd>
                                 </div>

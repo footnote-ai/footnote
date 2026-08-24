@@ -229,7 +229,14 @@ const buildMetadata = (input: {
         draftProfileId: input.config.profile?.id,
         draftRequestedProvider: input.config.profile?.provider,
         draftRequestedModel: input.config.profile?.providerModel,
-        draftModel: input.draft?.model ?? input.config.profile?.providerModel,
+        ...(input.draft !== undefined && {
+            draftObservedProvider:
+                input.draft.upstreamAttribution?.inferenceProvider ??
+                input.config.profile?.provider,
+            ...(input.draft.model !== undefined && {
+                draftObservedModel: input.draft.model,
+            }),
+        }),
         auditProfileId: input.config.validatorProfile?.id,
         auditProvider: input.config.validatorProfile?.provider,
         auditModel:
