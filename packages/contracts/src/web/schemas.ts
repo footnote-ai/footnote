@@ -97,13 +97,9 @@ const isRecord = (value: unknown): value is Record<string, unknown> =>
     value !== null && typeof value === 'object' && !Array.isArray(value);
 
 /**
- * Normalizes older presentation receipts before strict validation. Old
- * caution-derived fields cannot prove a request/profile preference, so their
- * replacement is marked as the persona default. The old `draftModel` field
- * mixed requested and observed values; it is discarded rather than promoted
- * to observed metadata. If no requested model was stored, its value is kept
- * only as the requested model because the old writer populated it from the
- * configured profile when a draft was missing.
+ * Normalizes historical presentation receipts before strict validation.
+ * Current candidate-flow receipts are never repaired into the legacy shape:
+ * obsolete finalizer/audit fields remain invalid on new writes.
  */
 export const normalizePresentationMetadataForCompatibility = (
     value: unknown
@@ -112,7 +108,14 @@ export const normalizePresentationMetadataForCompatibility = (
         return value;
     }
 
+    if (value.flow === 'candidate_review') {
+        return value;
+    }
+
     const hasLegacyFields =
+        'finalizerAttemptCount' in value ||
+        'auditAttemptCount' in value ||
+        'auditOutcome' in value ||
         'intensity' in value ||
         'traceConstrained' in value ||
         'draftModel' in value;
@@ -133,6 +136,7 @@ export const normalizePresentationMetadataForCompatibility = (
             : 'balanced';
     const normalized: Record<string, unknown> = {
         ...value,
+        flow: 'legacy_finalizer_audit',
         expressionStrength: currentStrength.success
             ? currentStrength.data
             : legacyStrength,
@@ -297,6 +301,8 @@ const ExecutionReasonCodeSchema = z.enum([
     'generation_runtime_error',
     'presentation_finalized',
     'presentation_fallback',
+    'presentation_candidate_generated',
+    'presentation_candidate_unavailable',
     'tool_not_requested',
     'tool_not_used',
     'search_rerouted_to_fallback_profile',
@@ -479,7 +485,16 @@ const GenerationExecutionEventSchema = z
     .superRefine(requireReasonCodeWhenNotExecuted)
     .strict();
 
-const PresentationReasonCodeSchema = z.enum([
+const CurrentPresentationReasonCodeSchema = z.enum([
+    'candidate_generated',
+    'disabled',
+    'profile_not_configured',
+    'structured_output',
+    'draft_timeout',
+    'draft_provider_error',
+]);
+
+const LegacyPresentationReasonCodeSchema = z.enum([
     'finalized',
     'evidence_repaired',
     'presentation_repaired',
@@ -500,6 +515,46 @@ const PresentationReasonCodeSchema = z.enum([
 const PresentationMetadataFieldsSchema = z
     .object({
         step: z.literal('presentation'),
+        flow: z.literal('candidate_review'),
+        outcome: z.enum(['candidate_generated', 'candidate_unavailable']),
+        attempted: z.boolean(),
+        reasonCode: CurrentPresentationReasonCodeSchema,
+        personaId: z.string().min(1),
+        draftProfileId: z.string().min(1).optional(),
+        draftRequestedProvider: z.string().min(1).optional(),
+        draftRequestedModel: z.string().min(1).optional(),
+        draftObservedProvider: z.string().min(1).optional(),
+        draftObservedModel: z.string().min(1).optional(),
+        upstreamInferenceProvider: z.string().min(1).optional(),
+        upstreamResolvedModel: z.string().min(1).optional(),
+        upstreamRoutingAttempt: z.number().int().positive().optional(),
+        upstreamRoutingAttemptCount: z.number().int().positive().optional(),
+        backendEstimatedCostUsd: z.number().nonnegative().optional(),
+        upstreamReportedCostUsd: z.number().nonnegative().optional(),
+        durationMs: z.number().int().nonnegative().optional(),
+        draftAttemptCount: z.union([z.literal(0), z.literal(1)]),
+        draftHmacId: z
+            .string()
+            .regex(/^[a-f0-9]{64}$/u)
+            .optional(),
+        caution: z
+            .union([
+                z.literal(1),
+                z.literal(2),
+                z.literal(3),
+                z.literal(4),
+                z.literal(5),
+            ])
+            .optional(),
+        expressionStrength: PersonaExpressionStrengthSchema,
+        expressionSource: PersonaExpressionSourceSchema,
+    })
+    .strict();
+
+const LegacyPresentationMetadataFieldsSchema = z
+    .object({
+        step: z.literal('presentation'),
+        flow: z.literal('legacy_finalizer_audit'),
         outcome: z.enum([
             'finalized',
             'finalized_after_evidence_repair',
@@ -508,7 +563,7 @@ const PresentationMetadataFieldsSchema = z
             'fallback',
         ]),
         attempted: z.boolean(),
-        reasonCode: PresentationReasonCodeSchema,
+        reasonCode: LegacyPresentationReasonCodeSchema,
         personaId: z.string().min(1),
         draftProfileId: z.string().min(1).optional(),
         draftRequestedProvider: z.string().min(1).optional(),
@@ -572,7 +627,10 @@ const PresentationMetadataFieldsSchema = z
 
 export const PresentationMetadataSchema = z.preprocess(
     normalizePresentationMetadataForCompatibility,
-    PresentationMetadataFieldsSchema
+    z.union([
+        PresentationMetadataFieldsSchema,
+        LegacyPresentationMetadataFieldsSchema,
+    ])
 );
 
 const ExecutionEventSchema: z.ZodType<ExecutionEvent> = z.discriminatedUnion(

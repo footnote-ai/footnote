@@ -23,7 +23,6 @@ export type BackendLLMCostRecord = {
         | 'chat'
         | 'chat_planner'
         | 'chat_presentation_draft'
-        | 'chat_presentation_audit'
         | 'news'
         | 'image'
         | 'image_prompt'

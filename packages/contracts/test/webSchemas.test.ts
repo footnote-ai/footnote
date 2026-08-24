@@ -722,20 +722,40 @@ test('ResponseMetadataSchema accepts a presentation receipt separately from work
         ...baseMetadata,
         presentation: {
             step: 'presentation',
-            outcome: 'finalized_after_evidence_repair',
+            flow: 'candidate_review',
+            outcome: 'candidate_generated',
             attempted: true,
-            reasonCode: 'evidence_repaired',
+            reasonCode: 'candidate_generated',
             personaId: 'myuri',
-            auditOutcome: 'evidence_issue',
             draftAttemptCount: 1,
-            finalizerAttemptCount: 2,
-            auditAttemptCount: 1,
             expressionStrength: 'balanced',
             expressionSource: 'persona_default',
         },
     });
 
     assert.equal(parsed.success, true);
+});
+
+test('current candidate-flow metadata rejects legacy finalizer and audit fields', () => {
+    const parsed = ResponseMetadataSchema.safeParse({
+        ...baseMetadata,
+        presentation: {
+            step: 'presentation',
+            flow: 'candidate_review',
+            outcome: 'candidate_generated',
+            attempted: true,
+            reasonCode: 'candidate_generated',
+            personaId: 'myuri',
+            draftAttemptCount: 1,
+            finalizerAttemptCount: 1,
+            auditAttemptCount: 1,
+            auditOutcome: 'clear',
+            expressionStrength: 'balanced',
+            expressionSource: 'persona_default',
+        },
+    });
+
+    assert.equal(parsed.success, false);
 });
 
 test('PostTracesRequestSchema normalizes legacy presentation fields', () => {
@@ -762,6 +782,7 @@ test('PostTracesRequestSchema normalizes legacy presentation fields', () => {
     }
     assert.equal(parsed.data.presentation?.expressionStrength, 'subtle');
     assert.equal(parsed.data.presentation?.expressionSource, 'persona_default');
+    assert.equal(parsed.data.presentation?.flow, 'legacy_finalizer_audit');
     assert.equal('intensity' in (parsed.data.presentation ?? {}), false);
     assert.equal('traceConstrained' in (parsed.data.presentation ?? {}), false);
 });
@@ -795,6 +816,7 @@ test('PostTracesRequestSchema drops ambiguous legacy observed draft models', () 
         parsed.data.presentation?.draftRequestedModel,
         'thedrummer/cydonia-24b-v4.1'
     );
+    assert.equal(parsed.data.presentation?.flow, 'legacy_finalizer_audit');
     assert.equal(parsed.data.presentation?.draftObservedModel, undefined);
     assert.equal('draftModel' in (parsed.data.presentation ?? {}), false);
 });

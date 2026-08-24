@@ -1,14 +1,15 @@
 /**
- * @description: Verifies framework-independent trace display redaction behavior.
+ * @description: Verifies framework-independent trace display redaction and presentation-flow wording.
  * @footnote-scope: test
  * @footnote-module: TraceDisplayTests
- * @footnote-risk: low - Tests cover a read-only trace transformation.
- * @footnote-ethics: medium - Redaction tests prevent artifact disclosure while preserving outcome context.
+ * @footnote-risk: low - Tests cover read-only trace transformations and compatibility rendering.
+ * @footnote-ethics: medium - Display tests prevent authority and provenance claims from drifting.
  */
 
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import type {
+    LegacyPresentationMetadata,
     PresentationMetadata,
     WorkflowRecord,
 } from '@footnote/contracts/policy';
@@ -38,9 +39,7 @@ test('sanitizeWorkflowForDisplay redacts artifacts and preserves outcome fields'
                 outcome: {
                     status: 'executed',
                     summary: 'Generated response before assessment.',
-                    signals: {
-                        assessmentSkipped: true,
-                    },
+                    signals: { assessmentSkipped: true },
                     artifacts: ['private draft', 'x'],
                 },
             },
@@ -52,29 +51,25 @@ test('sanitizeWorkflowForDisplay redacts artifacts and preserves outcome fields'
     assert.deepEqual(sanitized?.steps[0]?.outcome, {
         status: 'executed',
         summary: 'Generated response before assessment.',
-        signals: {
-            assessmentSkipped: true,
-        },
+        signals: { assessmentSkipped: true },
         artifacts: ['[redacted:13 chars]', '[redacted:1 chars]'],
     });
     assert.equal(sanitized?.terminationReason, 'budget_exhausted_tokens');
 });
 
-test('sanitizePresentationForDisplay preserves text-free rewrite provenance', () => {
+test('sanitizes current candidate-flow presentation metadata', () => {
     const presentation: PresentationMetadata = {
         step: 'presentation',
-        outcome: 'finalized',
+        flow: 'candidate_review',
+        outcome: 'candidate_generated',
         attempted: true,
-        reasonCode: 'finalized',
+        reasonCode: 'candidate_generated',
         personaId: 'myuri',
         draftProfileId: 'ollama-cloud-style',
         draftRequestedProvider: 'openrouter',
         draftRequestedModel: 'thedrummer/cydonia-24b-v4.1',
         draftObservedProvider: 'parasail',
         draftObservedModel: 'style-model',
-        auditProfileId: 'ollama-cloud-validator',
-        auditProvider: 'ollama',
-        auditModel: 'validator-model',
         upstreamInferenceProvider: 'parasail',
         upstreamResolvedModel: 'thedrummer/cydonia-24b-v4.1',
         upstreamRoutingAttempt: 1,
@@ -82,13 +77,8 @@ test('sanitizePresentationForDisplay preserves text-free rewrite provenance', ()
         backendEstimatedCostUsd: 0.001,
         upstreamReportedCostUsd: 0.002,
         durationMs: 12,
-        auditOutcome: 'clear',
         draftAttemptCount: 1,
-        finalizerAttemptCount: 1,
-        auditAttemptCount: 1,
         draftHmacId: 'a'.repeat(64),
-        finalHmacId: 'b'.repeat(64),
-        styledDraftRetentionRatio: 0.12,
         caution: 2,
         expressionStrength: 'balanced',
         expressionSource: 'persona_default',
@@ -100,36 +90,57 @@ test('sanitizePresentationForDisplay preserves text-free rewrite provenance', ()
     );
     assert.equal(sanitizePresentationForDisplay(undefined), null);
     assert.equal(
-        sanitizePresentationForDisplay({
-            ...presentation,
-            outcome: 42,
-        }),
+        sanitizePresentationForDisplay({ ...presentation, outcome: 42 }),
         null
+    );
+    assert.match(
+        getPresentationTraceSummary(presentation),
+        /authoritative generation and review selected the answer/u
     );
 });
 
-test('getPresentationTraceSummary explains missing drafts and mechanical fallback', () => {
+test('renders historical finalizer/audit receipts without relabeling them as candidate flow', () => {
+    const legacy: LegacyPresentationMetadata = {
+        step: 'presentation',
+        flow: 'legacy_finalizer_audit',
+        outcome: 'finalized',
+        attempted: true,
+        reasonCode: 'finalized',
+        personaId: 'myuri',
+        auditOutcome: 'clear',
+        draftAttemptCount: 1,
+        finalizerAttemptCount: 1,
+        auditAttemptCount: 1,
+        expressionStrength: 'balanced',
+        expressionSource: 'persona_default',
+    };
+
+    assert.deepEqual(sanitizePresentationForDisplay(legacy), legacy);
+    assert.match(
+        getPresentationTraceSummary(legacy),
+        /Presentation finalized successfully/u
+    );
+});
+
+test('explains candidate timeout and structured-output unavailability', () => {
     const base: PresentationMetadata = {
         step: 'presentation',
-        outcome: 'fallback',
+        flow: 'candidate_review',
+        outcome: 'candidate_unavailable',
         attempted: true,
         reasonCode: 'draft_timeout',
         personaId: 'winter',
-        auditOutcome: 'not_attempted',
         draftAttemptCount: 1,
-        finalizerAttemptCount: 0,
-        auditAttemptCount: 0,
         expressionStrength: 'strong',
         expressionSource: 'persona_default',
     };
 
-    assert.match(getPresentationTraceSummary(base), /No draft was returned/u);
+    assert.match(getPresentationTraceSummary(base), /candidate timed out/u);
     assert.match(
         getPresentationTraceSummary({
             ...base,
-            reasonCode: 'mechanical_preservation_failed',
-            draftObservedModel: 'style-model',
+            reasonCode: 'structured_output',
         }),
-        /preservation checks rejected/u
+        /non-prose output/u
     );
 });

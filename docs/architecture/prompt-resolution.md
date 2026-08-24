@@ -43,7 +43,7 @@ This is the canonical order Footnote uses to build runtime prompt text.
 
 ## Optional Presentation
 
-`presentation` is a backend-owned final-wording flow after normal planning,
+`presentation` is a backend-owned optional candidate step after planning,
 retrieval, tool, citation, and safety context collection. It is disabled by
 default:
 
@@ -51,32 +51,32 @@ default:
 CHAT_PRESENTATION_ENABLED=false
 CHAT_PRESENTATION_PROFILE_ID=
 CHAT_PRESENTATION_TIMEOUT_MS=2000
+# Retained for reading older deployments; #540 does not run a presentation audit.
 CHAT_PRESENTATION_VALIDATOR_PROFILE_ID=
 CHAT_PRESENTATION_VALIDATOR_TIMEOUT_MS=1500
 ```
 
-When enabled, both model profile settings select enabled backend profiles. They
-are deployment policy, not persona identity. The presentation profile writes a
-full styled draft from the collected authoritative context and active persona
-guidance. The main model then finalizes that draft with the same context,
-preserving its voice by default and changing only facts, citations, uncertainty,
-scope, intent, or safety. Footnote is the default persona; Discord can select
-Danny, Myuri, or Winter. Future profiles use the same presentation-guidance
-seam.
+The presentation profile selects an enabled backend profile. It is deployment
+policy, not persona identity. It writes one full-prose candidate using the
+collected context and active persona guidance. The candidate has no tools or
+search. The normal main generation then reconciles that candidate with the
+authoritative context, and the ordinary persona-aware assess/revision loop
+reviews the resulting answer. The candidate is preferred expression, not
+evidence or policy: authoritative context owns facts, uncertainty,
+attribution, scope, permissions, refusals, provenance, TRACE, and safety.
 
-The draft has no tools and cannot alter actions, safety/refusal decisions,
-facts, uncertainty, attribution, citations, provenance, links, tool results,
-code, or structured output. Invalid drafts, finalizer failures, and mechanical
-preservation failures use the normal main-model generation path. The audit is a
-bounded repair signal, not a veto: one evidence or presentation repair may run;
-unavailable or malformed audit output remains visible in the receipt without
-suppressing an otherwise finalized response. Trace metadata records hashes and
-bounded edit metrics without retaining both answer texts; hashes identify text
-and do not prove equivalence.
+If the candidate is disabled, malformed, times out, or fails at its provider,
+the workflow simply runs normal generation and review without candidate text.
+The candidate is never passed into ordinary assessment or revision. New trace
+receipts record whether the candidate was generated or unavailable, its
+requested and observed draft attribution, expression resolution, and an
+opaque candidate identifier. Historical finalizer/audit receipts remain
+readable through an explicit legacy flow, but new runs do not create those
+fields.
 
 TRACE caution remains observed presentation metadata and may protect answer
-posture during drafting, finalization, repair, and flattening audits. It never
-skips or weakens persona expression. The resolved expression strength is
-applied independently at every wording stage and controls prose only; facts,
+posture while the candidate is written. It never skips or weakens persona
+expression. The resolved expression strength controls prose only; facts,
 uncertainty, attribution, scope, permissions, refusals, provenance, TRACE
-values, and safety decisions remain authoritative.
+values, and safety decisions remain authoritative. Footnote is the default
+persona; Discord can select Danny, Myuri, or Winter.

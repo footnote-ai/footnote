@@ -7,6 +7,7 @@
  */
 
 import type {
+    LegacyPresentationMetadata,
     PresentationMetadata,
     WorkflowRecord,
 } from '@footnote/contracts/policy';
@@ -48,7 +49,7 @@ export const sanitizeWorkflowForDisplay = (
  */
 export const sanitizePresentationForDisplay = (
     presentation: unknown
-): PresentationMetadata | null => {
+): (PresentationMetadata | LegacyPresentationMetadata) | null => {
     const parsed = PresentationMetadataSchema.safeParse(presentation);
     return parsed.success ? parsed.data : null;
 };
@@ -58,8 +59,25 @@ export const sanitizePresentationForDisplay = (
  * implying that a requested provider returned a draft.
  */
 export const getPresentationTraceSummary = (
-    presentation: PresentationMetadata
+    presentation: PresentationMetadata | LegacyPresentationMetadata
 ): string => {
+    if (presentation.flow === 'candidate_review') {
+        switch (presentation.reasonCode) {
+            case 'candidate_generated':
+                return 'A presentation candidate influenced expression; the authoritative generation and review selected the answer.';
+            case 'draft_timeout':
+                return 'No presentation candidate was returned because the candidate timed out; the normal answer path was used.';
+            case 'draft_provider_error':
+                return 'No presentation candidate was returned because the candidate provider failed; the normal answer path was used.';
+            case 'structured_output':
+                return 'The presentation candidate returned non-prose output; the normal answer path was used.';
+            case 'disabled':
+                return 'Presentation was disabled; the normal answer path was used.';
+            case 'profile_not_configured':
+                return 'No presentation profile was configured; the normal answer path was used.';
+        }
+    }
+
     switch (presentation.reasonCode) {
         case 'draft_timeout':
             return 'No draft was returned: the presentation draft timed out; the main answer was used.';

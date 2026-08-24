@@ -197,6 +197,8 @@ export type ExecutionReasonCode =
     | 'generation_runtime_error'
     | 'presentation_finalized'
     | 'presentation_fallback'
+    | 'presentation_candidate_generated'
+    | 'presentation_candidate_unavailable'
     | 'tool_not_requested'
     | 'tool_not_used'
     | 'search_rerouted_to_fallback_profile'
@@ -434,18 +436,31 @@ export type GenerationExecutionEvent = ProfileExecutionEvent & {
     reasonCode?: GenerationExecutionReasonCode;
 };
 
-/**
- * Backend-owned receipt for the optional draft-first presentation flow. It
- * records only bounded operational facts, never either full response text.
- */
+/** Backend-owned receipt flow discriminator for presentation metadata. */
+export type PresentationFlow = 'candidate_review' | 'legacy_finalizer_audit';
+
+/** Outcome of the current candidate-to-reviewed-generation flow. */
 export type PresentationOutcome =
+    'candidate_generated' | 'candidate_unavailable';
+
+export type PresentationReasonCode =
+    | 'candidate_generated'
+    | 'disabled'
+    | 'profile_not_configured'
+    | 'structured_output'
+    | 'draft_timeout'
+    | 'draft_provider_error';
+
+/** Historical outcomes retained only for stored finalizer/audit receipts. */
+export type LegacyPresentationOutcome =
     | 'finalized'
     | 'finalized_after_evidence_repair'
     | 'finalized_after_presentation_repair'
     | 'finalized_with_audit_unavailable'
     | 'fallback';
 
-export type PresentationReasonCode =
+/** Historical reasons retained only for stored finalizer/audit receipts. */
+export type LegacyPresentationReasonCode =
     | 'finalized'
     | 'evidence_repaired'
     | 'presentation_repaired'
@@ -462,22 +477,23 @@ export type PresentationReasonCode =
     | 'finalizer_timeout'
     | 'finalizer_provider_error';
 
-export type PresentationAuditOutcome =
+export type LegacyPresentationAuditOutcome =
     | 'not_attempted'
     | 'clear'
     | 'evidence_issue'
     | 'presentation_flattened'
     | 'invalid';
 
-/** Safe operational category for an audit result that could not guide finalization. */
-export type PresentationAuditFailureCategory =
+export type LegacyPresentationAuditFailureCategory =
     | 'timeout'
     | 'provider_failure'
     | 'invalid_structured_output'
     | 'unavailable';
 
+/** Current receipt for the optional full-candidate presentation flow. */
 export type PresentationMetadata = {
     step: 'presentation';
+    flow: 'candidate_review';
     outcome: PresentationOutcome;
     attempted: boolean;
     reasonCode: PresentationReasonCode;
@@ -486,7 +502,7 @@ export type PresentationMetadata = {
     /** Deployment-requested style-draft provider, distinct from upstream resolution. */
     draftRequestedProvider?: string;
     draftRequestedModel?: string;
-    /** Provider observed after a style-draft GenerationResult returned. */
+    /** Upstream provider observed after a style-draft GenerationResult returned. */
     draftObservedProvider?: string;
     /** Model observed after a style-draft GenerationResult returned. */
     draftObservedModel?: string;
@@ -495,26 +511,50 @@ export type PresentationMetadata = {
     upstreamResolvedModel?: string;
     upstreamRoutingAttempt?: number;
     upstreamRoutingAttemptCount?: number;
-    /** Backend-estimated total for all bounded presentation calls. */
+    /** Backend-estimated cost for the presentation candidate only. */
+    backendEstimatedCostUsd?: number;
+    upstreamReportedCostUsd?: number;
+    durationMs?: number;
+    draftAttemptCount: 0 | 1;
+    /** Opaque backend-keyed HMAC identifiers. They do not prove semantic equivalence. */
+    draftHmacId?: string;
+    /** Observed TRACE caution is retained for traceability, not expression control. */
+    caution?: TraceAxisScore;
+    expressionStrength: PersonaExpressionStrength;
+    expressionSource: PersonaExpressionSource;
+};
+
+/** Read-compatible receipt for the pre-#540 finalizer/audit architecture. */
+export type LegacyPresentationMetadata = {
+    step: 'presentation';
+    flow: 'legacy_finalizer_audit';
+    outcome: LegacyPresentationOutcome;
+    attempted: boolean;
+    reasonCode: LegacyPresentationReasonCode;
+    personaId: string;
+    draftProfileId?: string;
+    draftRequestedProvider?: string;
+    draftRequestedModel?: string;
+    draftObservedProvider?: string;
+    draftObservedModel?: string;
+    upstreamInferenceProvider?: string;
+    upstreamResolvedModel?: string;
+    upstreamRoutingAttempt?: number;
+    upstreamRoutingAttemptCount?: number;
     backendEstimatedCostUsd?: number;
     upstreamReportedCostUsd?: number;
     auditProfileId?: string;
     auditProvider?: string;
     auditModel?: string;
     durationMs?: number;
-    /** Audit is a bounded repair signal, not a display veto. */
-    auditOutcome: PresentationAuditOutcome;
-    /** Never contains audit feedback or provider error text. */
-    auditFailureCategory?: PresentationAuditFailureCategory;
+    auditOutcome: LegacyPresentationAuditOutcome;
+    auditFailureCategory?: LegacyPresentationAuditFailureCategory;
     draftAttemptCount: 0 | 1;
     finalizerAttemptCount: 0 | 1 | 2;
     auditAttemptCount: 0 | 1;
-    /** Opaque backend-keyed HMAC identifiers. They do not prove semantic equivalence. */
     draftHmacId?: string;
     finalHmacId?: string;
-    /** Lexical retention from styled draft to final response, not a semantic guarantee. */
     styledDraftRetentionRatio?: number;
-    /** Observed TRACE caution is retained for traceability, not expression control. */
     caution?: TraceAxisScore;
     expressionStrength: PersonaExpressionStrength;
     expressionSource: PersonaExpressionSource;
@@ -1443,6 +1483,6 @@ export type ResponseMetadata = {
     githubContext?: GitHubContextMetadata;
     projectContext?: ProjectContextMetadata;
     imageGeneration?: ImageGenerationMetadata;
-    // Optional presentation record. It never stores both answer texts.
-    presentation?: PresentationMetadata;
+    // Optional presentation record. It never stores either answer text.
+    presentation?: PresentationMetadata | LegacyPresentationMetadata;
 };

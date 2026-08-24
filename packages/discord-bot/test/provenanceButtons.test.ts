@@ -87,6 +87,7 @@ test('details action renders markdown sections with execution table and trace vi
             },
             presentation: {
                 step: 'presentation',
+                flow: 'legacy_finalizer_audit',
                 outcome: 'finalized_with_audit_unavailable',
                 attempted: true,
                 reasonCode: 'audit_unavailable',

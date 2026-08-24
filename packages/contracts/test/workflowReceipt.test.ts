@@ -394,6 +394,7 @@ test('buildWorkflowReceiptItems carries backend presentation receipt states for 
         ...createBaseMetadata(),
         presentation: {
             step: 'presentation',
+            flow: 'legacy_finalizer_audit',
             outcome: 'finalized_with_audit_unavailable',
             attempted: true,
             reasonCode: 'audit_unavailable',
