@@ -80,12 +80,3 @@ expression. The resolved expression strength controls prose only; facts,
 uncertainty, attribution, scope, permissions, refusals, provenance, TRACE
 values, and safety decisions remain authoritative. Footnote is the default
 persona; Discord can select Danny, Myuri, or Winter.
-
-#### Separate follow-up: workflow token sizing
-
-Trace `furjkYEW` shows a separate workflow-budget issue: planner usage was
-3,003 tokens, the presentation candidate used 7,000, and authoritative
-generation used 6,715, for 16,718 against a 14,000-token workflow limit.
-Assessment therefore did not run. Candidate usage remains recorded as
-presentation usage; sizing the workflow budget is follow-up work and is not
-resolved by hiding or dropping that accounting here.
