@@ -9,7 +9,9 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import {
     createGitHubContextStepExecutor,
+    findGitHubObjectReferenceInConversation,
     formatGitHubContext,
+    isGitHubObjectReferenceBoundToRepository,
     isRepositorySlugInConversation,
     type GitHubContextPayload,
     parseGitHubRepositorySlug,
@@ -78,6 +80,40 @@ test('GitHub context validates exact owner/repo slugs and user conversation scop
         isRepositorySlugInConversation('acme/repo', ['Use other/repo please']),
         false
     );
+    assert.equal(
+        isGitHubObjectReferenceBoundToRepository(
+            { kind: 'pull_request', number: 528 },
+            'footnote-ai/footnote',
+            ['https://github.com/footnote-ai/footnote/pull/528'],
+            ['Footnote']
+        ),
+        true
+    );
+});
+
+test('GitHub release inference requires an explicit or tag-shaped release reference', () => {
+    assert.equal(
+        findGitHubObjectReferenceInConversation([
+            'Summarize the release notes',
+        ]),
+        undefined
+    );
+    assert.equal(
+        findGitHubObjectReferenceInConversation([
+            'Review the release candidate',
+        ]),
+        undefined
+    );
+    assert.deepEqual(
+        findGitHubObjectReferenceInConversation([
+            'What changed in release v1.2.3?',
+        ]),
+        { kind: 'release', tag: 'v1.2.3' }
+    );
+    assert.deepEqual(
+        findGitHubObjectReferenceInConversation(['Use release tag candidate']),
+        { kind: 'release', tag: 'candidate' }
+    );
 });
 
 test('GitHub context normalizes all fixed sections, bounds records, and labels text untrusted', async () => {
@@ -112,6 +148,188 @@ test('GitHub context normalizes all fixed sections, bounds records, and labels t
         ),
         false
     );
+});
+
+test('GitHub context retrieves an explicit merged pull request before open-PR discovery', async () => {
+    const urls: string[] = [];
+    const executor = createGitHubContextStepExecutor({
+        enabled: true,
+        token: null,
+        timeoutMs: 5000,
+        maxRecordsPerSection: 5,
+        privateRepositoryAllowlist: [],
+        cacheTtlMs: 0,
+        staleResultLimitMs: 0,
+        fetchImpl: async (url) => {
+            urls.push(url);
+            if (url.endsWith('/acme/repo')) return response(200, repository);
+            if (url.endsWith('/pulls/528')) {
+                return response(200, {
+                    title: 'Merged pull request',
+                    html_url: 'https://github.com/acme/repo/pull/528',
+                    body: 'The exact record.',
+                });
+            }
+            if (url.includes('/pulls?')) {
+                const openPulls = list('open pulls');
+                openPulls[0] = {
+                    ...openPulls[0],
+                    html_url: 'https://github.com/acme/repo/pull/528',
+                };
+                return response(200, openPulls);
+            }
+            throw new Error(`unexpected URL: ${url}`);
+        },
+    });
+
+    const result = await executor({
+        ...request(['pulls']),
+        request: {
+            ...request(['pulls']).request,
+            input: {
+                repository: 'acme/repo',
+                sections: ['pulls'],
+                reference: { kind: 'pull_request', number: 528 },
+            },
+        },
+    });
+
+    assert.equal(result.outcome, 'executed');
+    assert.deepEqual(urls, [
+        'https://api.github.com/repos/acme/repo',
+        'https://api.github.com/repos/acme/repo/pulls/528',
+        'https://api.github.com/repos/acme/repo/pulls?state=open&per_page=5',
+    ]);
+    assert.equal(
+        result.sources?.[0]?.url,
+        'https://github.com/acme/repo/pull/528'
+    );
+    const payload = result.integrationContext?.payload as GitHubContextPayload;
+    assert.equal(payload.metadata.exactReferenceStatus, 'executed');
+    assert.equal(payload.records.pulls?.[0]?.title, 'Merged pull request');
+    assert.equal(
+        payload.records.pulls?.filter(
+            (record) => record.url === 'https://github.com/acme/repo/pull/528'
+        ).length,
+        1
+    );
+});
+
+test('GitHub context supports exact issue, commit, and release references with bounded fallback', async () => {
+    const cases = [
+        {
+            reference: { kind: 'issue', number: 533 } as const,
+            section: 'issues' as const,
+            exactPath: '/issues/533',
+            exactBody: {
+                title: 'Context issue',
+                html_url: 'https://github.com/acme/repo/issues/533',
+            },
+        },
+        {
+            reference: {
+                kind: 'commit',
+                sha: 'abcdef1234567',
+            } as const,
+            section: 'commits' as const,
+            exactPath: '/commits/abcdef1234567',
+            exactBody: {
+                html_url: 'https://github.com/acme/repo/commit/abcdef1234567',
+                commit: { message: 'Exact commit' },
+            },
+        },
+        {
+            reference: { kind: 'release', tag: 'v1.2.3' } as const,
+            section: 'releases' as const,
+            exactPath: '/releases/tags/v1.2.3',
+            exactBody: {
+                tag_name: 'v1.2.3',
+                html_url: 'https://github.com/acme/repo/releases/tag/v1.2.3',
+            },
+        },
+    ];
+
+    for (const testCase of cases) {
+        const urls: string[] = [];
+        const executor = createGitHubContextStepExecutor({
+            enabled: true,
+            token: null,
+            timeoutMs: 5000,
+            maxRecordsPerSection: 5,
+            privateRepositoryAllowlist: [],
+            cacheTtlMs: 0,
+            staleResultLimitMs: 0,
+            fetchImpl: async (url) => {
+                urls.push(url);
+                if (url.endsWith('/acme/repo'))
+                    return response(200, repository);
+                if (url.endsWith(testCase.exactPath)) {
+                    return response(200, testCase.exactBody);
+                }
+                if (url.includes(`/${testCase.section}?`)) {
+                    return response(200, list(testCase.section));
+                }
+                throw new Error(`unexpected URL: ${url}`);
+            },
+        });
+        const result = await executor({
+            ...request([testCase.section]),
+            request: {
+                ...request([testCase.section]).request,
+                input: {
+                    repository: 'acme/repo',
+                    sections: [testCase.section],
+                    reference: testCase.reference,
+                },
+            },
+        });
+        assert.equal(result.outcome, 'executed');
+        assert.equal(
+            urls[1],
+            `https://api.github.com/repos/acme/repo${testCase.exactPath}`
+        );
+        assert.equal(result.integrationContext?.payload !== undefined, true);
+        const payload = result.integrationContext
+            ?.payload as GitHubContextPayload;
+        assert.equal(payload.metadata.exactReferenceStatus, 'executed');
+        assert.equal(
+            payload.records[testCase.section]?.[0]?.url,
+            testCase.exactBody.html_url
+        );
+    }
+
+    const fallbackExecutor = createGitHubContextStepExecutor({
+        enabled: true,
+        token: null,
+        timeoutMs: 5000,
+        maxRecordsPerSection: 5,
+        privateRepositoryAllowlist: [],
+        cacheTtlMs: 0,
+        staleResultLimitMs: 0,
+        fetchImpl: async (url) => {
+            if (url.endsWith('/acme/repo')) return response(200, repository);
+            if (url.endsWith('/pulls/528')) return response(404, {});
+            if (url.includes('/pulls?'))
+                return response(200, list('open pulls'));
+            throw new Error(`unexpected URL: ${url}`);
+        },
+    });
+    const fallback = await fallbackExecutor({
+        ...request(['pulls']),
+        request: {
+            ...request(['pulls']).request,
+            input: {
+                repository: 'acme/repo',
+                sections: ['pulls'],
+                reference: { kind: 'pull_request', number: 528 },
+            },
+        },
+    });
+    assert.equal(fallback.outcome, 'executed');
+    const fallbackPayload = fallback.integrationContext
+        ?.payload as GitHubContextPayload;
+    assert.equal(fallbackPayload.metadata.exactReferenceStatus, 'not_found');
+    assert.equal(fallbackPayload.records.pulls?.[0]?.title, 'open pulls 0');
 });
 
 test('GitHub context fails open for private access, HTTP failures, malformed bodies, and network errors without serializing token', async () => {

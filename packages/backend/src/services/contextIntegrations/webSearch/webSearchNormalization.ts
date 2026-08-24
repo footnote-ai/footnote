@@ -11,6 +11,7 @@ import type { WebSearchInput, WebSearchRecord } from './webSearchTypes.js';
 const isRecord = (value: unknown): value is Record<string, unknown> =>
     typeof value === 'object' && value !== null && !Array.isArray(value);
 
+/** Parses untrusted planner/tool input without treating it as admitted evidence. */
 export const parseWebSearchInput = (
     input: unknown
 ): WebSearchInput | undefined => {
@@ -40,6 +41,12 @@ export const parseWebSearchInput = (
         topicHints: Array.isArray(input.topicHints)
             ? input.topicHints.filter((v): v is string => typeof v === 'string')
             : undefined,
+        repositoryScope:
+            isRecord(input.repositoryScope) &&
+            typeof input.repositoryScope.repository === 'string' &&
+            input.repositoryScope.repository.trim().length > 0
+                ? { repository: input.repositoryScope.repository.trim() }
+                : undefined,
     };
 };
 

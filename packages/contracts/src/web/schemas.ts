@@ -1487,6 +1487,7 @@ const GitHubContextSectionSchema = z.enum([
 const GitHubContextReasonCodeSchema = z.enum([
     'disabled',
     'invalid_repository',
+    'invalid_reference',
     'not_in_conversation',
     'private_access_denied',
     'unauthorized',
@@ -1496,12 +1497,38 @@ const GitHubContextReasonCodeSchema = z.enum([
     'malformed_response',
     'network_error',
 ]);
+const GitHubObjectReferenceSchema = z.discriminatedUnion('kind', [
+    z.object({
+        kind: z.literal('pull_request'),
+        number: z.number().int().positive(),
+    }),
+    z.object({
+        kind: z.literal('issue'),
+        number: z.number().int().positive(),
+    }),
+    z.object({
+        kind: z.literal('commit'),
+        sha: z.string().regex(/^[A-Fa-f0-9]{7,40}$/),
+    }),
+    z.object({
+        kind: z.literal('release'),
+        tag: z.string().min(1).max(100),
+    }),
+]);
+const GitHubContextReferenceSchema = z.object({
+    repository: z.string().regex(/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/),
+    reference: GitHubObjectReferenceSchema,
+});
 
 const GitHubContextMetadataSchema: z.ZodType<GitHubContextMetadata> = z
     .object({
         repository: z.string().regex(/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/),
         requestedSections: z.array(GitHubContextSectionSchema).max(5),
         status: z.enum(['current', 'partial', 'stale', 'unavailable']),
+        exactReference: GitHubContextReferenceSchema.optional(),
+        exactReferenceStatus: z
+            .enum(['executed', 'not_found', 'failed'])
+            .optional(),
         fetchTimestamp: z.string().datetime().optional(),
         maxRecordsPerSection: z.number().int().positive().optional(),
         returnedCounts: z

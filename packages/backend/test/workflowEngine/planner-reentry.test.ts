@@ -208,8 +208,7 @@ test('runBoundedReviewWorkflow returns latest safe draft when planner re-entry f
 test('runBoundedReviewWorkflow attaches planner plan step to lineage and links initial generate step to planner root', async () => {
     let generationCalls = 0;
     let generatedMessages:
-        | Parameters<GenerationRuntime['generate']>[0]['messages']
-        | undefined;
+        Parameters<GenerationRuntime['generate']>[0]['messages'] | undefined;
     const generationRuntime: GenerationRuntime = {
         kind: 'test-runtime',
         async generate(input) {
@@ -406,7 +405,7 @@ test('runBoundedReviewWorkflow attaches planner plan step to lineage and links i
     );
 });
 
-test('runBoundedReviewWorkflow counts planner tokens before deciding whether generation can start', async () => {
+test('runBoundedReviewWorkflow admits planner input before generation', async () => {
     let generationCalls = 0;
     const generationRuntime: GenerationRuntime = {
         kind: 'test-runtime',
@@ -531,9 +530,9 @@ test('runBoundedReviewWorkflow counts planner tokens before deciding whether gen
         stoppedByLimit: true,
         terminationReason: 'budget_exhausted_tokens',
         exhaustedLimitKey: 'maxTokensTotal',
-        stoppedBeforeStepKind: 'generate',
+        stoppedBeforeStepKind: 'plan',
     });
-    assert.equal(result.workflowLineage.steps[0]?.usage?.totalTokens, 50);
+    assert.equal(result.workflowLineage.steps.length, 0);
 });
 
 test('runBoundedReviewWorkflow preserves failed planner fallback status on injected plan step', async () => {

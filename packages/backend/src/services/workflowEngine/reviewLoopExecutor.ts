@@ -58,6 +58,14 @@ import {
 import { logger } from '../../utils/logger.js';
 import { resolveProfileReasoningEffort } from '../runtimeRequestControls.js';
 import type { ResponseCandidateCollector } from '../responseCandidates.js';
+import {
+    boundGenerationRequestToWorkflowBudget,
+    estimateGenerationTokenBudget,
+    estimatePlannerInputTokens,
+    estimatePlannerTokenBudget,
+} from './tokenBudget.js';
+
+const DEFAULT_PLANNER_MAX_OUTPUT_TOKENS = 1200;
 
 type CaptureStep = (input: {
     stepKind: 'plan' | 'tool' | 'generate' | 'assess' | 'revise' | 'finalize';
@@ -101,8 +109,20 @@ export const executeReviewLoop = async (ctx: {
     workflowPolicy: WorkflowRunPolicy;
     stopIfOverLimits: (
         nextStepKind?:
-            'plan' | 'tool' | 'generate' | 'assess' | 'revise' | 'finalize'
+            | 'plan'
+            | 'tool'
+            | 'generate'
+            | 'assess'
+            | 'revise'
+            | 'presentation'
+            | 'finalize',
+        nextStepTokenBudget?: number,
+        stateForCheck?: WorkflowState
     ) => LimitStopEvaluation;
+    stopIfTokenBudgetExceeded: (
+        stateForCheck?: WorkflowState
+    ) => LimitStopEvaluation;
+    maxTokensTotal: number;
     selectedReviewModuleIds: string[];
     effectiveReviewDecisionPrompt?: string;
     personaExpressionGuidance?: string;
@@ -202,6 +222,51 @@ export const executeReviewLoop = async (ctx: {
         stoppedBeforeStepKind = evaluation.stoppedBeforeStepKind;
         return true;
     };
+    const checkLimits = (
+        nextStepKind?: WorkflowStepKind,
+        nextStepTokenBudget = 0
+    ): LimitStopEvaluation =>
+        ctx.stopIfOverLimits(nextStepKind, nextStepTokenBudget, workflowState);
+    const checkTokenBudget = (): LimitStopEvaluation =>
+        ctx.stopIfTokenBudgetExceeded(workflowState);
+    const boundGenerationRequest = (
+        request: GenerationRequest
+    ): GenerationRequest | undefined =>
+        boundGenerationRequestToWorkflowBudget({
+            request,
+            totalTokens: workflowState.totalTokens,
+            maxTokensTotal: ctx.maxTokensTotal,
+        });
+    const stopForUnfitGenerationRequest = (
+        stepKind: 'assess' | 'generate'
+    ): boolean => {
+        const remainingTokens =
+            ctx.maxTokensTotal >= Number.MAX_SAFE_INTEGER
+                ? 0
+                : Math.max(0, ctx.maxTokensTotal - workflowState.totalTokens);
+        return syncLimitStop(
+            checkLimits(
+                stepKind,
+                ctx.maxTokensTotal >= Number.MAX_SAFE_INTEGER
+                    ? 0
+                    : remainingTokens + 1
+            )
+        );
+    };
+    const stopForUnfitPlannerRequest = (): boolean => {
+        const remainingTokens =
+            ctx.maxTokensTotal >= Number.MAX_SAFE_INTEGER
+                ? 0
+                : Math.max(0, ctx.maxTokensTotal - workflowState.totalTokens);
+        return syncLimitStop(
+            checkLimits(
+                'plan',
+                ctx.maxTokensTotal >= Number.MAX_SAFE_INTEGER
+                    ? 0
+                    : remainingTokens + 1
+            )
+        );
+    };
     const toLatestRoutingHintSignals = (): WorkflowAssessRoutingHintSignals =>
         buildAssessRoutingHintSignals({
             assessRoutingHintsCsv: latestAssessRoutingHintsCsv,
@@ -249,6 +314,21 @@ export const executeReviewLoop = async (ctx: {
                 reasoningEffort: 'low',
                 verbosity: 'low',
             };
+            const boundedAssessRequest = boundGenerationRequest(assessRequest);
+            if (boundedAssessRequest === undefined) {
+                stopForUnfitGenerationRequest('assess');
+                return { status: 'stopped' };
+            }
+            if (
+                syncLimitStop(
+                    checkLimits(
+                        'assess',
+                        estimateGenerationTokenBudget(boundedAssessRequest)
+                    )
+                )
+            ) {
+                return { status: 'stopped' };
+            }
             const assessChainResult =
                 ctx.stepRoutingChainSet?.assessCandidates &&
                 ctx.stepRoutingChainSet.assessCandidates.length > 0
@@ -260,7 +340,7 @@ export const executeReviewLoop = async (ctx: {
                           requiresSearch: false,
                           runWithProfile: async (profile) =>
                               ctx.generationRuntime.generate({
-                                  ...assessRequest,
+                                  ...boundedAssessRequest,
                                   model: profile.providerModel,
                                   provider: profile.provider,
                                   capabilities: profile.capabilities,
@@ -313,7 +393,7 @@ export const executeReviewLoop = async (ctx: {
             }
             const reviewResult = assessRoutingResult?.isOk()
                 ? assessRoutingResult.value.value
-                : await ctx.generationRuntime.generate(assessRequest);
+                : await ctx.generationRuntime.generate(boundedAssessRequest);
             const assessUsageModel = assessRoutingResult?.isOk()
                 ? assessRoutingResult.value.selected.profile.providerModel
                 : effectiveGenerationRequest.model;
@@ -396,6 +476,9 @@ export const executeReviewLoop = async (ctx: {
                     }),
                 },
             });
+            if (syncLimitStop(checkTokenBudget())) {
+                return { status: 'stopped' };
+            }
             latestRevisionInstruction = decision.revisionInstruction;
             return {
                 status: 'executed',
@@ -467,13 +550,42 @@ export const executeReviewLoop = async (ctx: {
             shouldStop = true;
             return { status: 'stopped' };
         }
-        if (syncLimitStop(ctx.stopIfOverLimits('plan'))) {
+        const plannerInputTokens = estimatePlannerInputTokens(
+            ctx.plannerStepRequest.request
+        );
+        const remainingTokens =
+            ctx.maxTokensTotal >= Number.MAX_SAFE_INTEGER
+                ? Number.MAX_SAFE_INTEGER
+                : Math.max(0, ctx.maxTokensTotal - workflowState.totalTokens);
+        const plannerOutputBudget = Math.min(
+            DEFAULT_PLANNER_MAX_OUTPUT_TOKENS,
+            Math.max(0, remainingTokens - plannerInputTokens)
+        );
+        if (plannerOutputBudget < 1) {
+            stopForUnfitPlannerRequest();
+            return { status: 'stopped' };
+        }
+        if (
+            syncLimitStop(
+                checkLimits(
+                    'plan',
+                    estimatePlannerTokenBudget({
+                        request: ctx.plannerStepRequest.request,
+                        maxOutputTokens: plannerOutputBudget,
+                    })
+                )
+            )
+        ) {
             return { status: 'stopped' };
         }
         const plannerReentryStartedAt = Date.now();
         try {
             const plannerReentryResult = await ctx.plannerStepExecutor({
                 ...ctx.plannerStepRequest,
+                invocationContext: {
+                    ...ctx.plannerStepRequest.invocationContext,
+                    maxOutputTokens: plannerOutputBudget,
+                },
                 workflowId: ctx.workflowId,
                 workflowName: ctx.workflowName,
                 attempt: iteration + 1,
@@ -516,6 +628,9 @@ export const executeReviewLoop = async (ctx: {
                 0,
                 1
             );
+            if (syncLimitStop(checkTokenBudget())) {
+                return { status: 'stopped' };
+            }
             planContinuation = ctx.planContinuationBuilder({
                 plannerStepResult: plannerReentryResult,
                 workflowId: ctx.workflowId,
@@ -573,6 +688,22 @@ export const executeReviewLoop = async (ctx: {
                     { role: 'system', content: refinementPrompt.prompt },
                 ],
             };
+            const boundedRevisionRequest =
+                boundGenerationRequest(revisionRequest);
+            if (boundedRevisionRequest === undefined) {
+                stopForUnfitGenerationRequest('generate');
+                return;
+            }
+            if (
+                syncLimitStop(
+                    checkLimits(
+                        'generate',
+                        estimateGenerationTokenBudget(boundedRevisionRequest)
+                    )
+                )
+            ) {
+                return;
+            }
             const revisionChainResult =
                 ctx.stepRoutingChainSet?.generateCandidates &&
                 ctx.stepRoutingChainSet.generateCandidates.length > 0
@@ -587,10 +718,11 @@ export const executeReviewLoop = async (ctx: {
                           }),
                           enabledProfilesById:
                               ctx.stepRoutingChainSet.enabledProfilesById,
-                          requiresSearch: revisionRequest.search !== undefined,
+                          requiresSearch:
+                              boundedRevisionRequest.search !== undefined,
                           runWithProfile: async (profile) =>
                               ctx.generationRuntime.generate({
-                                  ...revisionRequest,
+                                  ...boundedRevisionRequest,
                                   model: profile.providerModel,
                                   provider: profile.provider,
                                   capabilities: profile.capabilities,
@@ -643,7 +775,7 @@ export const executeReviewLoop = async (ctx: {
             }
             const revisionResult = revisionRoutingResult?.isOk()
                 ? revisionRoutingResult.value.value
-                : await ctx.generationRuntime.generate(revisionRequest);
+                : await ctx.generationRuntime.generate(boundedRevisionRequest);
             const revisionUsageModel = revisionRoutingResult?.isOk()
                 ? revisionRoutingResult.value.selected.profile.providerModel
                 : effectiveGenerationRequest.model;
@@ -707,6 +839,7 @@ export const executeReviewLoop = async (ctx: {
                 0,
                 0
             );
+            syncLimitStop(checkTokenBudget());
             draftResult = revisionResult;
             draftParentStepId = revisionStepId;
             draftCandidateId = revisionCandidateId;
@@ -753,9 +886,6 @@ export const executeReviewLoop = async (ctx: {
             workflowStatus = 'degraded';
             break;
         }
-        if (syncLimitStop(ctx.stopIfOverLimits('assess'))) {
-            break;
-        }
         const assessStepResult = await executeAssessStep(iteration);
         if (assessStepResult.status === 'stopped' || shouldStop) {
             break;
@@ -793,7 +923,7 @@ export const executeReviewLoop = async (ctx: {
             shouldStop = true;
             break;
         }
-        if (syncLimitStop(ctx.stopIfOverLimits('generate'))) {
+        if (syncLimitStop(checkLimits('generate', 1))) {
             break;
         }
         const plannerReentryResult = await executePlannerReentryStep(
@@ -803,7 +933,7 @@ export const executeReviewLoop = async (ctx: {
         if (plannerReentryResult.status === 'stopped' || shouldStop) {
             break;
         }
-        if (syncLimitStop(ctx.stopIfOverLimits('generate'))) {
+        if (syncLimitStop(checkLimits('generate', 1))) {
             break;
         }
         await executeRevisionStep({

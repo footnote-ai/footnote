@@ -5,7 +5,10 @@
  * @footnote-risk: low - Incorrect shapes can break UI assumptions or validation.
  * @footnote-ethics: medium - Types document data meaning but do not execute logic.
  */
-import type { ContextIntegrationName } from './contextIntegrations.js';
+import type {
+    ContextIntegrationName,
+    GitHubContextReference,
+} from './contextIntegrations.js';
 import type { ProjectContextMetadata } from './projectContext.js';
 
 // This file is the single source of truth for cross-package metadata shapes.
@@ -1425,6 +1428,8 @@ export type GitHubContextMetadata = {
     repository: string;
     requestedSections: Array<GitHubContextSection>;
     status: 'current' | 'partial' | 'stale' | 'unavailable';
+    exactReference?: GitHubContextReference;
+    exactReferenceStatus?: 'executed' | 'not_found' | 'failed';
     fetchTimestamp?: string;
     /** Maximum records returned per requested section; counts are not totals. */
     maxRecordsPerSection?: number;
@@ -1433,6 +1438,7 @@ export type GitHubContextMetadata = {
     reasonCodes: Array<
         | 'disabled'
         | 'invalid_repository'
+        | 'invalid_reference'
         | 'not_in_conversation'
         | 'private_access_denied'
         | 'unauthorized'

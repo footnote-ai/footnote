@@ -56,6 +56,7 @@ import { isWorkflowTransitionAllowed } from './workflowEngine/transitions.js';
 import {
     applyStepExecutionToState,
     createInitialWorkflowState,
+    type WorkflowState,
 } from './workflowEngine/state.js';
 import {
     resolveExecutionLimits,
@@ -77,6 +78,14 @@ import {
     buildGenerationContextManifest,
     renderGenerationContextManifest,
 } from './workflowEngine/contextManifest.js';
+import {
+    boundGenerationRequestToWorkflowBudget,
+    DEFAULT_WORKFLOW_GENERATION_MAX_OUTPUT_TOKENS,
+    estimateGenerationTokenBudget,
+    estimatePlannerInputTokens,
+    estimatePlannerTokenBudget,
+    estimateRuntimeMessageTokens,
+} from './workflowEngine/tokenBudget.js';
 import {
     executeStepRoutingChain,
     type RoutingChainAttemptLog,
@@ -268,6 +277,9 @@ type LimitStopEvaluation = {
     stoppedBeforeStepKind?: WorkflowStepKind;
 };
 
+const DEFAULT_PLANNER_MAX_OUTPUT_TOKENS = 1200;
+const PRESENTATION_PROMPT_OVERHEAD_TOKENS = 256;
+
 export { isWorkflowTransitionAllowed } from './workflowEngine/transitions.js';
 export {
     applyStepExecutionToState,
@@ -415,6 +427,15 @@ export const runBoundedReviewWorkflow = async ({
             normalizedMaxDurationMs
         ),
     };
+    const boundGenerationRequest = (
+        request: GenerationRequest,
+        state: WorkflowState = workflowState
+    ): GenerationRequest | undefined =>
+        boundGenerationRequestToWorkflowBudget({
+            request,
+            totalTokens: state.totalTokens,
+            maxTokensTotal: executionLimits.maxTokensTotal,
+        });
     const hasExplicitMaxDeliberationCalls =
         workflowConfig.executionLimits?.maxDeliberationCalls !== undefined;
     if (!hasExplicitMaxDeliberationCalls) {
@@ -520,17 +541,20 @@ export const runBoundedReviewWorkflow = async ({
     };
 
     const stopIfOverLimits = (
-        nextStepKind?: WorkflowStepKind
+        nextStepKind?: WorkflowStepKind,
+        nextStepTokenBudget = 0,
+        stateForCheck: WorkflowState = workflowState
     ): LimitStopEvaluation => {
         const limitsCheck = checkExecutionLimits(
-            workflowState,
+            stateForCheck,
             executionLimits,
             Date.now(),
-            nextStepKind
+            nextStepKind,
+            nextStepTokenBudget
         );
         if (limitsCheck.withinLimits) {
             return {
-                stopped: false,
+                stopped: shouldStop,
                 shouldStop,
                 terminationReason,
                 workflowStatus,
@@ -557,6 +581,35 @@ export const runBoundedReviewWorkflow = async ({
         };
     };
 
+    const stopIfTokenBudgetExceeded = (
+        stateForCheck: WorkflowState = workflowState
+    ): LimitStopEvaluation => {
+        if (stateForCheck.totalTokens <= executionLimits.maxTokensTotal) {
+            return {
+                stopped: shouldStop,
+                shouldStop,
+                terminationReason,
+                workflowStatus,
+                exhaustedLimitKey,
+                stoppedBeforeStepKind,
+            };
+        }
+
+        exhaustedLimitKey = 'maxTokensTotal';
+        stoppedBeforeStepKind = undefined;
+        terminationReason = 'budget_exhausted_tokens';
+        workflowStatus = 'degraded';
+        shouldStop = true;
+        return {
+            stopped: true,
+            shouldStop,
+            terminationReason,
+            workflowStatus,
+            exhaustedLimitKey,
+            stoppedBeforeStepKind,
+        };
+    };
+
     if (
         plannerRootStepId === undefined &&
         plannerStepRequest !== undefined &&
@@ -571,56 +624,93 @@ export const runBoundedReviewWorkflow = async ({
         ) {
             terminationReason = 'transition_blocked_by_policy';
             shouldStop = true;
-        } else if (!stopIfOverLimits('plan').stopped) {
-            const plannerStartedAt = Date.now();
-            plannerExecutionResult = await plannerStepExecutor({
-                ...plannerStepRequest,
-                workflowId,
-                workflowName: workflowConfig.workflowName,
-                attempt: 1,
-            });
-            const plannerFinishedAt = Date.now();
-            const plannerStep = buildPlannerStepRecord({
-                stepId: 'step_1',
-                attempt: 1,
-                startedAtMs: plannerStartedAt,
-                finishedAtMs: plannerFinishedAt,
-                summary: {
-                    status: plannerExecutionResult.execution.status,
-                    ...(plannerExecutionResult.execution.reasonCode !==
-                        undefined && {
-                        reasonCode: plannerExecutionResult.execution.reasonCode,
-                    }),
-                    purpose: plannerExecutionResult.execution.purpose,
-                    contractType: plannerExecutionResult.execution.contractType,
-                    applyOutcome:
-                        plannerExecutionResult.execution.status === 'executed'
-                            ? 'applied'
-                            : 'not_applied',
-                    durationMs: plannerExecutionResult.execution.durationMs,
-                    action: plannerExecutionResult.plan.action,
-                    modality: plannerExecutionResult.plan.modality,
-                    requestedCapabilityProfile:
-                        plannerExecutionResult.plan.requestedCapabilityProfile,
-                    ...buildPlannerExecutionSummaryExtras(
-                        plannerExecutionResult.execution
-                    ),
-                },
-            });
-            workflowSteps.push(plannerStep);
-            workflowStepCounter.value = 1;
-            plannerRootStepId = plannerStep.stepId;
-            workflowState = applyStepExecutionToState(
-                workflowState,
-                'plan',
-                plannerExecutionResult.execution.usage?.totalTokens ?? 0,
-                0,
-                1
+        } else {
+            const plannerInputTokens = estimatePlannerInputTokens(
+                plannerStepRequest.request
             );
+            const remainingTokens =
+                executionLimits.maxTokensTotal >= UNBOUNDED_EXECUTION_LIMIT
+                    ? Number.MAX_SAFE_INTEGER
+                    : Math.max(
+                          0,
+                          executionLimits.maxTokensTotal -
+                              workflowState.totalTokens
+                      );
+            const plannerOutputBudget = Math.min(
+                DEFAULT_PLANNER_MAX_OUTPUT_TOKENS,
+                Math.max(0, remainingTokens - plannerInputTokens)
+            );
+            if (plannerOutputBudget < 1) {
+                stopIfOverLimits('plan', remainingTokens + 1);
+            } else if (
+                !stopIfOverLimits(
+                    'plan',
+                    estimatePlannerTokenBudget({
+                        request: plannerStepRequest.request,
+                        maxOutputTokens: plannerOutputBudget,
+                    })
+                ).stopped
+            ) {
+                const plannerStartedAt = Date.now();
+                plannerExecutionResult = await plannerStepExecutor({
+                    ...plannerStepRequest,
+                    invocationContext: {
+                        ...plannerStepRequest.invocationContext,
+                        maxOutputTokens: plannerOutputBudget,
+                    },
+                    workflowId,
+                    workflowName: workflowConfig.workflowName,
+                    attempt: 1,
+                });
+                const plannerFinishedAt = Date.now();
+                const plannerStep = buildPlannerStepRecord({
+                    stepId: 'step_1',
+                    attempt: 1,
+                    startedAtMs: plannerStartedAt,
+                    finishedAtMs: plannerFinishedAt,
+                    summary: {
+                        status: plannerExecutionResult.execution.status,
+                        ...(plannerExecutionResult.execution.reasonCode !==
+                            undefined && {
+                            reasonCode:
+                                plannerExecutionResult.execution.reasonCode,
+                        }),
+                        purpose: plannerExecutionResult.execution.purpose,
+                        contractType:
+                            plannerExecutionResult.execution.contractType,
+                        applyOutcome:
+                            plannerExecutionResult.execution.status ===
+                            'executed'
+                                ? 'applied'
+                                : 'not_applied',
+                        durationMs: plannerExecutionResult.execution.durationMs,
+                        action: plannerExecutionResult.plan.action,
+                        modality: plannerExecutionResult.plan.modality,
+                        requestedCapabilityProfile:
+                            plannerExecutionResult.plan
+                                .requestedCapabilityProfile,
+                        ...buildPlannerExecutionSummaryExtras(
+                            plannerExecutionResult.execution
+                        ),
+                    },
+                });
+                workflowSteps.push(plannerStep);
+                workflowStepCounter.value = 1;
+                plannerRootStepId = plannerStep.stepId;
+                workflowState = applyStepExecutionToState(
+                    workflowState,
+                    'plan',
+                    plannerExecutionResult.execution.usage?.totalTokens ?? 0,
+                    0,
+                    1
+                );
+                stopIfTokenBudgetExceeded();
+            }
         }
     }
 
     if (
+        !shouldStop &&
         plannerExecutionResult !== undefined &&
         planContinuationBuilder !== undefined
     ) {
@@ -719,8 +809,10 @@ export const runBoundedReviewWorkflow = async ({
             terminationReason = 'transition_blocked_by_policy';
             shouldStop = true;
         } else if (!stopIfOverLimits('tool').stopped) {
-            // Parallel execution keeps integration latency bounded while each
-            // outcome remains independently fail-open and lineage-recorded.
+            // Independent context integrations remain parallel by default. An
+            // explicit GitHub object creates a narrow dependency chain so exact
+            // repository retrieval completes before broad context and web
+            // discovery can be admitted.
             const remainingToolCalls =
                 executionLimits.maxToolCalls === UNBOUNDED_EXECUTION_LIMIT
                     ? Number.POSITIVE_INFINITY
@@ -730,56 +822,94 @@ export const runBoundedReviewWorkflow = async ({
                               workflowState.toolCallCount
                       );
             let reservedToolCallCount = 0;
-            const contextStepOutcomes = await Promise.all(
-                executableContextSteps.map(
-                    async (request): Promise<ContextStepExecutionOutcome> => {
-                        if (reservedToolCallCount >= remainingToolCalls) {
-                            const blockedAtMs = Date.now();
-                            return {
+            const runContextStepBatch = async (
+                requests: ContextStepRequest[]
+            ): Promise<ContextStepExecutionOutcome[]> =>
+                Promise.all(
+                    requests.map(
+                        async (
+                            request
+                        ): Promise<ContextStepExecutionOutcome> => {
+                            if (reservedToolCallCount >= remainingToolCalls) {
+                                const blockedAtMs = Date.now();
+                                return {
+                                    request,
+                                    blockedByLimit: true,
+                                    startedAtMs: blockedAtMs,
+                                    finishedAtMs: blockedAtMs,
+                                };
+                            }
+                            reservedToolCallCount += 1;
+                            const executor = selectContextStepExecutor(
                                 request,
-                                blockedByLimit: true,
-                                startedAtMs: blockedAtMs,
-                                finishedAtMs: blockedAtMs,
-                            };
+                                contextStepExecutor,
+                                contextStepExecutorRegistry
+                            );
+                            if (executor === undefined) {
+                                return {
+                                    request,
+                                    startedAtMs: Date.now(),
+                                    finishedAtMs: Date.now(),
+                                };
+                            }
+                            const startedAtMs = Date.now();
+                            try {
+                                const result = await executor({
+                                    request,
+                                    workflowId,
+                                    workflowName: workflowConfig.workflowName,
+                                    attempt: 1,
+                                });
+                                return {
+                                    request,
+                                    result,
+                                    startedAtMs,
+                                    finishedAtMs: Date.now(),
+                                };
+                            } catch (error) {
+                                return {
+                                    request,
+                                    error,
+                                    startedAtMs,
+                                    finishedAtMs: Date.now(),
+                                };
+                            }
                         }
-                        reservedToolCallCount += 1;
-                        const executor = selectContextStepExecutor(
-                            request,
-                            contextStepExecutor,
-                            contextStepExecutorRegistry
-                        );
-                        if (executor === undefined) {
-                            return {
-                                request,
-                                startedAtMs: Date.now(),
-                                finishedAtMs: Date.now(),
-                            };
-                        }
-                        const startedAtMs = Date.now();
-                        try {
-                            const result = await executor({
-                                request,
-                                workflowId,
-                                workflowName: workflowConfig.workflowName,
-                                attempt: 1,
-                            });
-                            return {
-                                request,
-                                result,
-                                startedAtMs,
-                                finishedAtMs: Date.now(),
-                            };
-                        } catch (error) {
-                            return {
-                                request,
-                                error,
-                                startedAtMs,
-                                finishedAtMs: Date.now(),
-                            };
-                        }
-                    }
-                )
+                    )
+                );
+            const hasExplicitGitHubObject = executableContextSteps.some(
+                (request) =>
+                    request.integrationName === 'github_context' &&
+                    request.input?.reference !== undefined
             );
+            const contextStepBatches = hasExplicitGitHubObject
+                ? [
+                      executableContextSteps.filter(
+                          (request) =>
+                              request.integrationName === 'github_context' &&
+                              request.input?.reference !== undefined
+                      ),
+                      executableContextSteps.filter(
+                          (request) =>
+                              !(
+                                  request.integrationName ===
+                                      'github_context' &&
+                                  request.input?.reference !== undefined
+                              ) && request.integrationName !== 'web_search'
+                      ),
+                      executableContextSteps.filter(
+                          (request) => request.integrationName === 'web_search'
+                      ),
+                  ]
+                : [executableContextSteps];
+            const contextStepOutcomes: ContextStepExecutionOutcome[] = [];
+            for (const batch of contextStepBatches) {
+                if (batch.length > 0) {
+                    contextStepOutcomes.push(
+                        ...(await runContextStepBatch(batch))
+                    );
+                }
+            }
             for (const contextStepOutcome of contextStepOutcomes) {
                 if (contextStepOutcome.blockedByLimit === true) {
                     exhaustedLimitKey = 'maxToolCalls';
@@ -1008,15 +1138,70 @@ export const runBoundedReviewWorkflow = async ({
                               .generation.temperament?.caution ??
                           activePresentation?.caution)
                         : activePresentation?.caution;
+                const presentationGenerationRequest = (() => {
+                    const authorityAdmissionRequest = boundGenerationRequest(
+                        authoritativeGenerationRequest
+                    );
+                    if (authorityAdmissionRequest === undefined) {
+                        return undefined;
+                    }
+                    if (
+                        executionLimits.maxTokensTotal >=
+                        UNBOUNDED_EXECUTION_LIMIT
+                    ) {
+                        return boundGenerationRequest(
+                            generationRequestForAttempt
+                        );
+                    }
+                    const remainingTokens = Math.max(
+                        0,
+                        executionLimits.maxTokensTotal -
+                            workflowState.totalTokens
+                    );
+                    const authorityPromptTokens =
+                        estimateRuntimeMessageTokens(
+                            authorityAdmissionRequest.messages
+                        ) + PRESENTATION_PROMPT_OVERHEAD_TOKENS;
+                    const presentationPromptTokens =
+                        estimateRuntimeMessageTokens(
+                            generationRequestForAttempt.messages
+                        ) + PRESENTATION_PROMPT_OVERHEAD_TOKENS;
+                    const authorityOutputTokens =
+                        authorityAdmissionRequest.maxOutputTokens ??
+                        DEFAULT_WORKFLOW_GENERATION_MAX_OUTPUT_TOKENS;
+                    const presentationOutputBudget = Math.floor(
+                        (remainingTokens -
+                            authorityPromptTokens -
+                            presentationPromptTokens -
+                            authorityOutputTokens) /
+                            2
+                    );
+                    if (presentationOutputBudget < 1) {
+                        return undefined;
+                    }
+                    const requestedPresentationOutputTokens =
+                        activePresentation?.config.profile?.maxOutputTokens ??
+                        DEFAULT_WORKFLOW_GENERATION_MAX_OUTPUT_TOKENS;
+                    return {
+                        ...generationRequestForAttempt,
+                        maxOutputTokens: Math.min(
+                            requestedPresentationOutputTokens,
+                            presentationOutputBudget
+                        ),
+                    };
+                })();
                 const presentationResult =
                     presentationEnabled && activePresentation !== undefined
-                        ? await runPresentationCandidate({
-                              generationRuntime,
-                              generationRequest: generationRequestForAttempt,
-                              config: activePresentation.config,
-                              persona: activePresentation.persona,
-                              caution: presentationCaution,
-                          })
+                        ? presentationGenerationRequest === undefined
+                            ? undefined
+                            : await runPresentationCandidate({
+                                  generationRuntime,
+                                  generationRequest:
+                                      presentationGenerationRequest,
+                                  config: activePresentation.config,
+                                  persona: activePresentation.persona,
+                                  caution: presentationCaution,
+                              })
                         : undefined;
                 if (
                     presentationResult !== undefined &&
@@ -1111,7 +1296,24 @@ export const runBoundedReviewWorkflow = async ({
                             0,
                             0
                         );
+                        stopIfTokenBudgetExceeded();
                     }
+                }
+                const boundedGenerationRequest = boundGenerationRequest(
+                    authoritativeGenerationRequest
+                );
+                if (boundedGenerationRequest === undefined) {
+                    stopIfOverLimits(
+                        'generate',
+                        Math.max(
+                            1,
+                            executionLimits.maxTokensTotal -
+                                workflowState.totalTokens +
+                                1
+                        )
+                    );
+                } else {
+                    authoritativeGenerationRequest = boundedGenerationRequest;
                 }
                 initialDraftStartedAt = Date.now();
                 const canRunNormalGeneration =
@@ -1126,7 +1328,12 @@ export const runBoundedReviewWorkflow = async ({
                     shouldStop = true;
                 } else if (
                     draftResult === null &&
-                    !stopIfOverLimits('generate').stopped &&
+                    !stopIfOverLimits(
+                        'generate',
+                        estimateGenerationTokenBudget(
+                            authoritativeGenerationRequest
+                        )
+                    ).stopped &&
                     stepRoutingChainSet?.generateCandidates &&
                     stepRoutingChainSet.generateCandidates.length > 0
                 ) {
@@ -1212,7 +1419,12 @@ export const runBoundedReviewWorkflow = async ({
                     }
                 } else if (
                     canRunNormalGeneration &&
-                    !stopIfOverLimits('generate').stopped
+                    !stopIfOverLimits(
+                        'generate',
+                        estimateGenerationTokenBudget(
+                            authoritativeGenerationRequest
+                        )
+                    ).stopped
                 ) {
                     draftResult = await generationRuntime.generate(
                         authoritativeGenerationRequest
@@ -1278,6 +1490,7 @@ export const runBoundedReviewWorkflow = async ({
                         0,
                         0
                     );
+                    stopIfTokenBudgetExceeded();
                 } else if (!shouldStop && draftResult === null) {
                     throw new Error(
                         'Initial generation completed without a draft result.'
@@ -1333,6 +1546,8 @@ export const runBoundedReviewWorkflow = async ({
         effectiveMaxIterations,
         workflowPolicy,
         stopIfOverLimits,
+        stopIfTokenBudgetExceeded,
+        maxTokensTotal: executionLimits.maxTokensTotal,
         selectedReviewModuleIds,
         effectiveReviewDecisionPrompt,
         personaExpressionGuidance,

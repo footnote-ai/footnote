@@ -916,6 +916,80 @@ test('runChatMessages passes structured retrieval facts into response metadata r
     });
 });
 
+test('runChatMessages reports context-step evidence as retrieval used', async () => {
+    let capturedRetrieval: ResponseMetadataRetrievalContext | undefined;
+    const chatService = createChatService({
+        generationRuntime: createRuntime({
+            provenance: 'Inferred',
+            citations: [],
+        }),
+        storeTrace: async () => undefined,
+        buildResponseMetadata: (_generationMetadata, runtimeContext) => {
+            capturedRetrieval = runtimeContext.retrieval;
+            return createMetadata();
+        },
+        defaultModel: 'gpt-5-mini',
+        recordUsage: () => undefined,
+        chatWorkflowConfig: {
+            modeId: 'grounded',
+            reviewLoopEnabled: true,
+            maxIterations: 2,
+            maxDurationMs: 15000,
+        },
+        runReviewWorkflow: async () =>
+            ({
+                outcome: 'generated',
+                generationResult: {
+                    text: 'context-backed response',
+                    model: 'gpt-5-mini',
+                    provenance: 'Inferred',
+                    citations: [],
+                },
+                workflowLineage: {
+                    workflowId: 'wf_context_retrieval',
+                    workflowName: 'message_reviewed',
+                    status: 'completed',
+                    terminationReason: 'goal_satisfied',
+                    stepCount: 2,
+                    maxSteps: 8,
+                    maxDurationMs: 15000,
+                    steps: [],
+                },
+                contextStepResults: [
+                    {
+                        outcome: 'executed',
+                        executionContext: {
+                            toolName: 'github_context',
+                            status: 'executed',
+                        },
+                        contextMessages: [
+                            'UNTRUSTED GITHUB CONTEXT: merged pull request',
+                        ],
+                        sources: [
+                            {
+                                title: 'Pull request',
+                                url: 'https://github.com/footnote-ai/footnote/pull/528',
+                            },
+                        ],
+                    },
+                ],
+            }) satisfies RunBoundedReviewWorkflowResult,
+    });
+
+    await chatService.runChatMessages({
+        messages: [{ role: 'user', content: 'What changed in PR #528?' }],
+        conversationSnapshot: 'What changed in PR #528?',
+    });
+
+    assert.deepEqual(capturedRetrieval, {
+        requested: true,
+        used: true,
+        contextUsed: true,
+        intent: undefined,
+        contextSize: undefined,
+    });
+});
+
 test('runChatMessages passes non-retrieval facts for plain VoltAgent-backed runs', async () => {
     let capturedRetrieval: ResponseMetadataRetrievalContext | undefined;
 
@@ -2403,6 +2477,21 @@ test('runChatMessages handles internal no-generation reasons with fallback gener
                         maxSteps: 3,
                         maxDurationMs: 15000,
                         steps: [],
+                        ...(terminationReason === 'budget_exhausted_tokens' && {
+                            effectiveLimits: [
+                                {
+                                    key: 'maxTokensTotal' as const,
+                                    state: 'enforced' as const,
+                                    value: 100,
+                                    stoppedRun: true,
+                                },
+                            ],
+                            limitStop: {
+                                stoppedByLimit: true,
+                                terminationReason,
+                                exhaustedLimitKey: 'maxTokensTotal' as const,
+                            },
+                        }),
                     },
                 }) satisfies RunBoundedReviewWorkflowResult,
         });
@@ -2412,9 +2501,16 @@ test('runChatMessages handles internal no-generation reasons with fallback gener
             conversationSnapshot: 'Summarize this.',
         });
 
-        assert.equal(generationCalls, 1);
-        assert.equal(usageRecords.length, 1);
-        assert.equal(response.message, 'fallback single-pass response');
+        const tokenBudgetExhausted =
+            terminationReason === 'budget_exhausted_tokens';
+        assert.equal(generationCalls, tokenBudgetExhausted ? 0 : 1);
+        assert.equal(usageRecords.length, tokenBudgetExhausted ? 0 : 1);
+        assert.equal(
+            response.message,
+            tokenBudgetExhausted
+                ? 'I could not generate a response for this request.'
+                : 'fallback single-pass response'
+        );
         assert.equal(
             response.metadata.workflow?.terminationReason,
             terminationReason
@@ -2426,20 +2522,25 @@ test('runChatMessages handles internal no-generation reasons with fallback gener
         const fallbackExecution = response.metadata.execution?.find(
             (event) => event.kind === 'generation'
         );
-        assert.ok(fallbackExecution);
-        assert.ok(capturedGenerationExecution);
-        assert.notEqual(
-            fallbackExecution.profileId,
-            'workflow_internal_fallback'
-        );
-        assert.equal(
-            fallbackExecution.profileId,
-            capturedGenerationExecution.profileId
-        );
-        assert.equal(
-            fallbackExecution.provider,
-            capturedGenerationExecution.provider
-        );
+        if (tokenBudgetExhausted) {
+            assert.equal(fallbackExecution, undefined);
+            assert.equal(capturedGenerationExecution, undefined);
+        } else {
+            assert.ok(fallbackExecution);
+            assert.ok(capturedGenerationExecution);
+            assert.notEqual(
+                fallbackExecution.profileId,
+                'workflow_internal_fallback'
+            );
+            assert.equal(
+                fallbackExecution.profileId,
+                capturedGenerationExecution.profileId
+            );
+            assert.equal(
+                fallbackExecution.provider,
+                capturedGenerationExecution.provider
+            );
+        }
     }
 });
 

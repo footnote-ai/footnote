@@ -179,6 +179,45 @@ test('PlannerResultApplier enforces single-tool policy and derives weather conte
     });
 });
 
+test('PlannerResultApplier carries a validated GitHub object reference into context execution', () => {
+    const applier = createApplier();
+    const output = applier({
+        normalizedRequest: createChatRequest({
+            latestUserInput: 'What changed in PR #528 in acme/repo?',
+            conversation: [
+                {
+                    role: 'user',
+                    content: 'What changed in PR #528 in acme/repo?',
+                },
+            ],
+        }),
+        plannerStepResult: createPlannerStepResult({
+            plan: {
+                ...createPlannerStepResult().plan,
+                generation: {
+                    reasoningEffort: 'low',
+                    verbosity: 'low',
+                    githubContext: {
+                        repository: 'acme/repo',
+                        sections: ['pulls'],
+                        reference: { kind: 'pull_request', number: 528 },
+                    },
+                },
+            },
+        }),
+        clarificationContinuation: { kind: 'none' },
+        resolvedExecutionPolicy: resolveExecutionContract({
+            presetId: 'quality-grounded',
+        }).policyContract,
+    });
+
+    assert.deepEqual(output.contextStepRequests?.[0]?.input, {
+        repository: 'acme/repo',
+        sections: ['pulls'],
+        reference: { kind: 'pull_request', number: 528 },
+    });
+});
+
 test('PlannerResultApplier resolves profile and keeps planner suggestions non-authoritative', () => {
     const applier = createApplier();
     const output = applier({

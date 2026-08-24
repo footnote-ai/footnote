@@ -53,7 +53,8 @@ export const checkExecutionLimits = (
     state: WorkflowState,
     limits: ExecutionLimits,
     nowMs: number,
-    nextStepKind?: WorkflowStepKind
+    nextStepKind?: WorkflowStepKind,
+    nextStepTokenBudget = 0
 ): {
     withinLimits: boolean;
     exhaustedBy?: ExhaustedExecutionLimit;
@@ -106,6 +107,19 @@ export const checkExecutionLimits = (
     }
 
     if (state.totalTokens >= limits.maxTokensTotal) {
+        return {
+            withinLimits: false,
+            exhaustedBy: 'maxTokensTotal',
+        };
+    }
+
+    const sanitizedNextStepTokenBudget = Number.isFinite(nextStepTokenBudget)
+        ? Math.max(0, Math.floor(nextStepTokenBudget))
+        : 0;
+    if (
+        sanitizedNextStepTokenBudget > 0 &&
+        state.totalTokens + sanitizedNextStepTokenBudget > limits.maxTokensTotal
+    ) {
         return {
             withinLimits: false,
             exhaustedBy: 'maxTokensTotal',

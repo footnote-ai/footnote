@@ -23,6 +23,7 @@ import {
     formatContextMessages,
     buildSearchHints,
 } from './webSearchPromptFormatting.js';
+import { classifyWebSearchRecordScope } from './webSearchScope.js';
 import { buildWebSearchProviderRegistry } from './webSearchProviders.js';
 import type {
     WebSearchContextStepIntegrationPayload,
@@ -153,7 +154,11 @@ export const createWebSearchContextStepExecutor = ({
         const attempts: WebSearchProviderAttempt[] = [];
         const attemptRecorder = createAttemptRecorder(attempts);
         const startedAt = Date.now();
-        let discovered: WebSearchRecord[] = [];
+        const scopeRequired = input.intent === 'repo_explainer';
+        // Providers may be tried in order, but repo-scoped records are not
+        // evidence until the backend classifies and audits their scope below.
+        let providerRecords: WebSearchRecord[] = [];
+        const providerCandidateRecords: WebSearchRecord[] = [];
         for (const provider of providerPriority) {
             const providerStartedAt = Date.now();
             const registryEntry = providerRegistry[provider];
@@ -183,17 +188,72 @@ export const createWebSearchContextStepExecutor = ({
             }
             attemptRecorder.completed(provider, result.records, durationMs);
             if (result.records.length > 0) {
-                discovered = result.records;
-                break;
+                providerCandidateRecords.push(...result.records);
+                if (providerRecords.length === 0) {
+                    providerRecords = result.records;
+                }
+                const hasAdmittedRecord =
+                    !scopeRequired ||
+                    (input.repositoryScope !== undefined &&
+                        result.records.some(
+                            (record) =>
+                                classifyWebSearchRecordScope(
+                                    record,
+                                    input.repositoryScope?.repository ?? ''
+                                ).admission === 'in_scope'
+                        ));
+                if (hasAdmittedRecord) {
+                    providerRecords = result.records;
+                    break;
+                }
             }
         }
 
         const durationMs = Math.max(0, Date.now() - startedAt);
         const searchHints: WebSearchHint[] = buildSearchHints(input);
+        const scopeDecisions = scopeRequired
+            ? providerCandidateRecords.map((record) =>
+                  input.repositoryScope === undefined
+                      ? {
+                            url: record.url,
+                            admission: 'uncertain' as const,
+                            reason: 'no_repository_scope_signal',
+                        }
+                      : classifyWebSearchRecordScope(
+                            record,
+                            input.repositoryScope.repository
+                        )
+              )
+            : [];
+        const discovered = scopeRequired
+            ? providerRecords.filter((record) =>
+                  scopeDecisions.some(
+                      (decision) =>
+                          decision.url === record.url &&
+                          decision.admission === 'in_scope'
+                  )
+              )
+            : providerRecords;
+        const repositoryScopeAudit = scopeRequired
+            ? {
+                  repository: input.repositoryScope?.repository ?? 'unresolved',
+                  admittedCount: discovered.length,
+                  outOfScopeCount: scopeDecisions.filter(
+                      (decision) => decision.admission === 'out_of_scope'
+                  ).length,
+                  uncertainCount: scopeDecisions.filter(
+                      (decision) => decision.admission === 'uncertain'
+                  ).length,
+                  decisions: scopeDecisions,
+              }
+            : undefined;
         if (discovered.length === 0) {
             warn('web_search context integration completed without results', {
                 attempts,
                 query: input.query,
+                ...(repositoryScopeAudit !== undefined && {
+                    repositoryScopeAudit,
+                }),
             });
             if (attempts.every((attempt) => attempt.status === 'skipped')) {
                 return buildSkippedContextStepResult({
@@ -206,6 +266,9 @@ export const createWebSearchContextStepExecutor = ({
                         payload: {
                             attempts,
                             searchHints,
+                            ...(repositoryScopeAudit !== undefined && {
+                                repositoryScope: repositoryScopeAudit,
+                            }),
                         } satisfies WebSearchContextStepIntegrationPayload,
                     },
                 });
@@ -221,6 +284,9 @@ export const createWebSearchContextStepExecutor = ({
                         payload: {
                             attempts,
                             searchHints,
+                            ...(repositoryScopeAudit !== undefined && {
+                                repositoryScope: repositoryScopeAudit,
+                            }),
                         } satisfies WebSearchContextStepIntegrationPayload,
                     },
                 });
@@ -235,6 +301,9 @@ export const createWebSearchContextStepExecutor = ({
                     payload: {
                         attempts,
                         searchHints,
+                        ...(repositoryScopeAudit !== undefined && {
+                            repositoryScope: repositoryScopeAudit,
+                        }),
                     } satisfies WebSearchContextStepIntegrationPayload,
                 },
             });
@@ -251,6 +320,9 @@ export const createWebSearchContextStepExecutor = ({
                 payload: {
                     attempts,
                     searchHints,
+                    ...(repositoryScopeAudit !== undefined && {
+                        repositoryScope: repositoryScopeAudit,
+                    }),
                 } satisfies WebSearchContextStepIntegrationPayload,
             },
         });

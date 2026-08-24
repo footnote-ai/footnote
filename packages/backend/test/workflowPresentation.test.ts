@@ -102,6 +102,7 @@ const runScenario = async (
     options?: {
         workflowPolicy?: typeof policy;
         maxWorkflowSteps?: number;
+        maxTokensTotal?: number;
     }
 ) => {
     const calls: GenerationRequest[] = [];
@@ -129,7 +130,7 @@ const runScenario = async (
                 maxWorkflowSteps: options?.maxWorkflowSteps ?? 8,
                 maxToolCalls: 0,
                 maxDeliberationCalls: 4,
-                maxTokensTotal: 1000,
+                maxTokensTotal: options?.maxTokensTotal ?? 5000,
                 maxDurationMs: 1000,
             },
         },
@@ -222,6 +223,18 @@ test('runs candidate, authoritative generation, and ordinary assessment in order
             },
         ]
     );
+});
+
+test('skips presentation when only authoritative generation fits the budget', async () => {
+    const { calls, result, presentationFeatures } = await runScenario(
+        async () => generated('Authoritative answer.'),
+        { maxTokensTotal: 300 }
+    );
+
+    assert.equal(result.outcome, 'generated');
+    assert.equal(calls.length, 1);
+    assert.deepEqual(presentationFeatures, []);
+    assert.equal(result.presentation, undefined);
 });
 
 test('runs ordinary revision without carrying the raw presentation candidate', async () => {

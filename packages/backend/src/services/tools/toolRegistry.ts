@@ -12,10 +12,17 @@ import type {
     ToolInvocationRequest,
 } from '@footnote/contracts/policy';
 import type { ChatGenerationPlan } from '../chatGenerationTypes.js';
+import { buildRepoExplainerQuery } from '../chatGenerationHints.js';
+import { PROJECT_CONTEXT_CANONICAL_REPOSITORY } from '@footnote/contracts';
 import type { WeatherForecastTool } from '../contextIntegrations/weather/index.js';
 import { executeWeatherForecastTool } from './weatherForecastToolAdapter.js';
 import type { BackendToolSelection } from './toolTypes.js';
 
+/**
+ * Builds the serializable web-search request. Repository-aware query and
+ * scope policy applies only to repo_explainer; provider execution still owns
+ * result admission and audit decisions.
+ */
 const buildWebSearchToolIntent = (
     generation: ChatGenerationPlan
 ): ToolInvocationIntent =>
@@ -24,9 +31,17 @@ const buildWebSearchToolIntent = (
               toolName: 'web_search',
               requested: true,
               input: {
-                  query: generation.search.query,
+                  query:
+                      generation.search.intent === 'repo_explainer'
+                          ? buildRepoExplainerQuery(generation.search)
+                          : generation.search.query,
                   intent: generation.search.intent,
                   contextSize: generation.search.contextSize,
+                  ...(generation.search.intent === 'repo_explainer' && {
+                      repositoryScope: {
+                          repository: PROJECT_CONTEXT_CANONICAL_REPOSITORY,
+                      },
+                  }),
                   ...(generation.search.repoHints &&
                       generation.search.repoHints.length > 0 && {
                           repoHints: generation.search.repoHints,
