@@ -182,7 +182,10 @@ const buildPersonaProfileConfig = (
 
 /** Resolves expression strength at the backend boundary with fail-open fallback. */
 export const resolvePersonaExpression = (
-    request: Pick<PostChatRequest, 'personaExpressionStrength'>,
+    request: Pick<
+        PostChatRequest,
+        'personaExpressionProfileStrength' | 'personaExpressionStrength'
+    >,
     persona: Pick<PersonaCatalogEntry, 'id'>,
     configuredProfileStrength: string | undefined = runtimeConfig.profile
         .personaExpressionStrength
@@ -190,9 +193,9 @@ export const resolvePersonaExpression = (
     const requestStrength = parsePersonaExpressionStrength(
         request.personaExpressionStrength
     );
-    const profileStrength = parsePersonaExpressionStrength(
-        configuredProfileStrength
-    );
+    const profilePreference =
+        request.personaExpressionProfileStrength ?? configuredProfileStrength;
+    const profileStrength = parsePersonaExpressionStrength(profilePreference);
     const strength =
         requestStrength ??
         profileStrength ??

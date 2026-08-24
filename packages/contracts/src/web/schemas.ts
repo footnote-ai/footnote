@@ -1600,6 +1600,8 @@ export const PostChatRequestSchema = z
     .object({
         surface: ChatSurfaceSchema,
         botPersonaId: ChatPersonaIdSchema.optional(),
+        personaExpressionProfileStrength:
+            PersonaExpressionStrengthSchema.optional(),
         personaExpressionStrength: PersonaExpressionStrengthSchema.optional(),
         modeId: ChatModeIdSchema.optional(),
         maxReviewCycles: z.number().int().nonnegative().optional(),

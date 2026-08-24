@@ -119,8 +119,18 @@ test('resolves persona expression by request, profile, then persona default', ()
         { surface: 'discord', botPersonaId: 'winter' },
         logger
     );
+    const profileResolution = resolvePersonaExpression(
+        { personaExpressionProfileStrength: 'strong' },
+        winter,
+        'balanced'
+    );
+    assert.equal(profileResolution.strength, 'strong');
+    assert.equal(profileResolution.source, 'profile');
     const requestResolution = resolvePersonaExpression(
-        { personaExpressionStrength: 'subtle' },
+        {
+            personaExpressionProfileStrength: 'strong',
+            personaExpressionStrength: 'subtle',
+        },
         winter,
         'strong'
     );

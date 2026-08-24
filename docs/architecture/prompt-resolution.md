@@ -19,6 +19,8 @@ This is the canonical order Footnote uses to build runtime prompt text.
 6. Interpolate prompt variables for selected keys.
 7. Resolve persona expression strength in the backend with this precedence:
     - valid `personaExpressionStrength` request override;
+    - valid `personaExpressionProfileStrength` value carried by a configured
+      persona adapter;
     - valid `BOT_PROFILE_PERSONA_EXPRESSION_STRENGTH` bot-profile default;
     - built-in persona default (`strong` for Winter, `balanced` otherwise).
       Invalid or absent operator values fail open to the built-in persona default.
@@ -29,7 +31,8 @@ This is the canonical order Footnote uses to build runtime prompt text.
 - `PROMPT_CONFIG_PATH` applies before Discord profile overlay composition.
 - `BOT_PROFILE_*` overlay settings are Discord bot runtime specific.
 - `BOT_PROFILE_PERSONA_EXPRESSION_STRENGTH` is an optional prose-only default;
-  Discord forwards it as a request preference and the backend resolves it.
+  Discord carries it through the profile-specific request field and the backend
+  records its source as `profile`.
 - If both `BOT_PROFILE_PROMPT_OVERLAY` and `BOT_PROFILE_PROMPT_OVERLAY_PATH` are set, inline text wins and the file path is ignored.
 - All bot paths now run with one active persona layer, not stacked personas.
 - The shared conversational prompt core is used by Discord chat, realtime voice, and web chat.

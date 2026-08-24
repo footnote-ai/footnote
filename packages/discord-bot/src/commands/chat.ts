@@ -302,7 +302,7 @@ const chatCommand: ChatCommandWithProfiles = {
                 botPersonaId: runtimeConfig.profile.id,
                 ...(runtimeConfig.profile.personaExpressionStrength !==
                     undefined && {
-                    personaExpressionStrength:
+                    personaExpressionProfileStrength:
                         runtimeConfig.profile.personaExpressionStrength,
                 }),
                 ...(modeId ? { modeId } : {}),

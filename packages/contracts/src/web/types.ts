@@ -368,6 +368,8 @@ export type ChatImageRequest = {
 export type PostChatRequest = {
     surface: ChatSurface;
     botPersonaId?: string;
+    /** Operator default carried by a configured persona adapter, not a request override. */
+    personaExpressionProfileStrength?: PersonaExpressionStrength;
     personaExpressionStrength?: PersonaExpressionStrength;
     modeId?: WorkflowModeId;
     maxReviewCycles?: number;

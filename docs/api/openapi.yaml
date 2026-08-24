@@ -108,6 +108,7 @@ paths:
                 Send X-Session-Id / X-Turnstile-Token headers when needed for browser traffic.
                 Optionally provide `botPersonaId` to select the backend-owned bot persona overlay (discord).
                 Optionally provide `personaExpressionStrength` to request prose-only persona expression (`subtle`, `balanced`, or `strong`).
+                Configured Discord adapters carry their operator default separately as `personaExpressionProfileStrength`; the backend records that value as profile-sourced rather than request-sourced.
                 Optionally provide `maxReviewCycles` and `traceTarget` to tune workflow depth and TRACE posture for this request.
             tags:
                 - Chat
@@ -1852,7 +1853,12 @@ components:
                 personaExpressionStrength:
                     type: string
                     enum: [subtle, balanced, strong]
-                    description: Optional backend-resolved persona expression preference. It affects prose only; TRACE posture and safety authority remain backend-owned.
+                    description: Optional request-local persona expression override. It affects prose only; TRACE posture and safety authority remain backend-owned.
+                personaExpressionProfileStrength:
+                    type: string
+                    enum: [subtle, balanced, strong]
+                    writeOnly: true
+                    description: Operator default carried by a configured persona adapter. The backend records this preference as profile-sourced; callers should not use it as a request override.
                 modeId:
                     type: string
                     enum: [express, balanced, grounded]

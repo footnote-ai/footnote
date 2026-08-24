@@ -603,7 +603,7 @@ export class MessageProcessor {
                 botPersonaId: runtimeConfig.profile.id,
                 ...(runtimeConfig.profile.personaExpressionStrength !==
                     undefined && {
-                    personaExpressionStrength:
+                    personaExpressionProfileStrength:
                         runtimeConfig.profile.personaExpressionStrength,
                 }),
                 trigger: {

@@ -267,6 +267,7 @@ test('PostChatRequestSchema enforces strict request payload rules', () => {
         PostChatRequestSchema.safeParse({
             surface: 'web',
             modeId: 'grounded',
+            personaExpressionProfileStrength: 'balanced',
             personaExpressionStrength: 'strong',
             maxReviewCycles: 3,
             traceTarget: {
@@ -377,6 +378,10 @@ test('openapi ChatRequest documents optional mode/review/trace request controls'
     assert.match(
         chatRequestSection,
         /personaExpressionStrength:\s*\n\s*type:\s*string/
+    );
+    assert.match(
+        chatRequestSection,
+        /personaExpressionProfileStrength:\s*\n\s*type:\s*string/
     );
     assert.match(chatRequestSection, /modeId:\s*\n\s*type:\s*string/);
     assert.match(chatRequestSection, /maxReviewCycles:\s*\n\s*type:\s*integer/);
