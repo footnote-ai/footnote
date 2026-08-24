@@ -80,7 +80,11 @@ import {
 } from './workflowEngine/contextManifest.js';
 import {
     boundGenerationRequestToWorkflowBudget,
+    DEFAULT_WORKFLOW_GENERATION_MAX_OUTPUT_TOKENS,
     estimateGenerationTokenBudget,
+    estimatePlannerInputTokens,
+    estimatePlannerTokenBudget,
+    estimateRuntimeMessageTokens,
 } from './workflowEngine/tokenBudget.js';
 import {
     executeStepRoutingChain,
@@ -274,6 +278,7 @@ type LimitStopEvaluation = {
 };
 
 const DEFAULT_PLANNER_MAX_OUTPUT_TOKENS = 1200;
+const PRESENTATION_PROMPT_OVERHEAD_TOKENS = 256;
 
 export { isWorkflowTransitionAllowed } from './workflowEngine/transitions.js';
 export {
@@ -619,76 +624,88 @@ export const runBoundedReviewWorkflow = async ({
         ) {
             terminationReason = 'transition_blocked_by_policy';
             shouldStop = true;
-        } else if (
-            !stopIfOverLimits(
-                'plan',
-                Math.min(
-                    DEFAULT_PLANNER_MAX_OUTPUT_TOKENS,
-                    Math.max(
-                        0,
-                        executionLimits.maxTokensTotal -
-                            workflowState.totalTokens
-                    )
-                )
-            ).stopped
-        ) {
-            const plannerStartedAt = Date.now();
-            plannerExecutionResult = await plannerStepExecutor({
-                ...plannerStepRequest,
-                invocationContext: {
-                    ...plannerStepRequest.invocationContext,
-                    maxOutputTokens: Math.min(
-                        DEFAULT_PLANNER_MAX_OUTPUT_TOKENS,
-                        Math.max(
-                            1,
-                            executionLimits.maxTokensTotal -
-                                workflowState.totalTokens
-                        )
-                    ),
-                },
-                workflowId,
-                workflowName: workflowConfig.workflowName,
-                attempt: 1,
-            });
-            const plannerFinishedAt = Date.now();
-            const plannerStep = buildPlannerStepRecord({
-                stepId: 'step_1',
-                attempt: 1,
-                startedAtMs: plannerStartedAt,
-                finishedAtMs: plannerFinishedAt,
-                summary: {
-                    status: plannerExecutionResult.execution.status,
-                    ...(plannerExecutionResult.execution.reasonCode !==
-                        undefined && {
-                        reasonCode: plannerExecutionResult.execution.reasonCode,
-                    }),
-                    purpose: plannerExecutionResult.execution.purpose,
-                    contractType: plannerExecutionResult.execution.contractType,
-                    applyOutcome:
-                        plannerExecutionResult.execution.status === 'executed'
-                            ? 'applied'
-                            : 'not_applied',
-                    durationMs: plannerExecutionResult.execution.durationMs,
-                    action: plannerExecutionResult.plan.action,
-                    modality: plannerExecutionResult.plan.modality,
-                    requestedCapabilityProfile:
-                        plannerExecutionResult.plan.requestedCapabilityProfile,
-                    ...buildPlannerExecutionSummaryExtras(
-                        plannerExecutionResult.execution
-                    ),
-                },
-            });
-            workflowSteps.push(plannerStep);
-            workflowStepCounter.value = 1;
-            plannerRootStepId = plannerStep.stepId;
-            workflowState = applyStepExecutionToState(
-                workflowState,
-                'plan',
-                plannerExecutionResult.execution.usage?.totalTokens ?? 0,
-                0,
-                1
+        } else {
+            const plannerInputTokens = estimatePlannerInputTokens(
+                plannerStepRequest.request
             );
-            stopIfTokenBudgetExceeded();
+            const remainingTokens =
+                executionLimits.maxTokensTotal >= UNBOUNDED_EXECUTION_LIMIT
+                    ? Number.MAX_SAFE_INTEGER
+                    : Math.max(
+                          0,
+                          executionLimits.maxTokensTotal -
+                              workflowState.totalTokens
+                      );
+            const plannerOutputBudget = Math.min(
+                DEFAULT_PLANNER_MAX_OUTPUT_TOKENS,
+                Math.max(0, remainingTokens - plannerInputTokens)
+            );
+            if (plannerOutputBudget < 1) {
+                stopIfOverLimits('plan', remainingTokens + 1);
+            } else if (
+                !stopIfOverLimits(
+                    'plan',
+                    estimatePlannerTokenBudget({
+                        request: plannerStepRequest.request,
+                        maxOutputTokens: plannerOutputBudget,
+                    })
+                ).stopped
+            ) {
+                const plannerStartedAt = Date.now();
+                plannerExecutionResult = await plannerStepExecutor({
+                    ...plannerStepRequest,
+                    invocationContext: {
+                        ...plannerStepRequest.invocationContext,
+                        maxOutputTokens: plannerOutputBudget,
+                    },
+                    workflowId,
+                    workflowName: workflowConfig.workflowName,
+                    attempt: 1,
+                });
+                const plannerFinishedAt = Date.now();
+                const plannerStep = buildPlannerStepRecord({
+                    stepId: 'step_1',
+                    attempt: 1,
+                    startedAtMs: plannerStartedAt,
+                    finishedAtMs: plannerFinishedAt,
+                    summary: {
+                        status: plannerExecutionResult.execution.status,
+                        ...(plannerExecutionResult.execution.reasonCode !==
+                            undefined && {
+                            reasonCode:
+                                plannerExecutionResult.execution.reasonCode,
+                        }),
+                        purpose: plannerExecutionResult.execution.purpose,
+                        contractType:
+                            plannerExecutionResult.execution.contractType,
+                        applyOutcome:
+                            plannerExecutionResult.execution.status ===
+                            'executed'
+                                ? 'applied'
+                                : 'not_applied',
+                        durationMs: plannerExecutionResult.execution.durationMs,
+                        action: plannerExecutionResult.plan.action,
+                        modality: plannerExecutionResult.plan.modality,
+                        requestedCapabilityProfile:
+                            plannerExecutionResult.plan
+                                .requestedCapabilityProfile,
+                        ...buildPlannerExecutionSummaryExtras(
+                            plannerExecutionResult.execution
+                        ),
+                    },
+                });
+                workflowSteps.push(plannerStep);
+                workflowStepCounter.value = 1;
+                plannerRootStepId = plannerStep.stepId;
+                workflowState = applyStepExecutionToState(
+                    workflowState,
+                    'plan',
+                    plannerExecutionResult.execution.usage?.totalTokens ?? 0,
+                    0,
+                    1
+                );
+                stopIfTokenBudgetExceeded();
+            }
         }
     }
 
@@ -1121,18 +1138,61 @@ export const runBoundedReviewWorkflow = async ({
                               .generation.temperament?.caution ??
                           activePresentation?.caution)
                         : activePresentation?.caution;
-                const presentationGenerationRequest = boundGenerationRequest(
-                    generationRequestForAttempt
-                );
+                const presentationGenerationRequest = (() => {
+                    const authorityAdmissionRequest = boundGenerationRequest(
+                        authoritativeGenerationRequest
+                    );
+                    if (authorityAdmissionRequest === undefined) {
+                        return undefined;
+                    }
+                    if (
+                        executionLimits.maxTokensTotal >=
+                        UNBOUNDED_EXECUTION_LIMIT
+                    ) {
+                        return boundGenerationRequest(
+                            generationRequestForAttempt
+                        );
+                    }
+                    const remainingTokens = Math.max(
+                        0,
+                        executionLimits.maxTokensTotal -
+                            workflowState.totalTokens
+                    );
+                    const authorityPromptTokens =
+                        estimateRuntimeMessageTokens(
+                            authorityAdmissionRequest.messages
+                        ) + PRESENTATION_PROMPT_OVERHEAD_TOKENS;
+                    const presentationPromptTokens =
+                        estimateRuntimeMessageTokens(
+                            generationRequestForAttempt.messages
+                        ) + PRESENTATION_PROMPT_OVERHEAD_TOKENS;
+                    const authorityOutputTokens =
+                        authorityAdmissionRequest.maxOutputTokens ??
+                        DEFAULT_WORKFLOW_GENERATION_MAX_OUTPUT_TOKENS;
+                    const presentationOutputBudget = Math.floor(
+                        (remainingTokens -
+                            authorityPromptTokens -
+                            presentationPromptTokens -
+                            authorityOutputTokens) /
+                            2
+                    );
+                    if (presentationOutputBudget < 1) {
+                        return undefined;
+                    }
+                    const requestedPresentationOutputTokens =
+                        activePresentation?.config.profile?.maxOutputTokens ??
+                        DEFAULT_WORKFLOW_GENERATION_MAX_OUTPUT_TOKENS;
+                    return {
+                        ...generationRequestForAttempt,
+                        maxOutputTokens: Math.min(
+                            requestedPresentationOutputTokens,
+                            presentationOutputBudget
+                        ),
+                    };
+                })();
                 const presentationResult =
                     presentationEnabled && activePresentation !== undefined
-                        ? presentationGenerationRequest === undefined ||
-                          stopIfOverLimits(
-                              'presentation',
-                              estimateGenerationTokenBudget(
-                                  presentationGenerationRequest
-                              )
-                          ).stopped
+                        ? presentationGenerationRequest === undefined
                             ? undefined
                             : await runPresentationCandidate({
                                   generationRuntime,

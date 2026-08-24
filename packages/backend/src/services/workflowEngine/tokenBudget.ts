@@ -10,11 +10,13 @@ import type {
     GenerationRequest,
     RuntimeMessage,
 } from '@footnote/agent-runtime';
+import type { PostChatRequest } from '@footnote/contracts/web';
 import { UNBOUNDED_EXECUTION_LIMIT } from './limits.js';
 
 export const DEFAULT_WORKFLOW_GENERATION_MAX_OUTPUT_TOKENS = 1200;
 
 const ESTIMATED_CHARS_PER_TOKEN = 4;
+const PLANNER_PROMPT_OVERHEAD_TOKENS = 1_200;
 
 const estimateTextTokens = (value: string): number =>
     Math.max(1, Math.ceil(value.length / ESTIMATED_CHARS_PER_TOKEN));
@@ -33,6 +35,23 @@ export const estimateGenerationTokenBudget = (
 ): number =>
     estimateRuntimeMessageTokens(request.messages) +
     (request.maxOutputTokens ?? DEFAULT_WORKFLOW_GENERATION_MAX_OUTPUT_TOKENS);
+
+/** Estimates planner input from the bounded conversation window plus fixed planner scaffolding. */
+export const estimatePlannerInputTokens = (request: PostChatRequest): number =>
+    estimateTextTokens(
+        JSON.stringify({
+            surface: request.surface,
+            trigger: request.trigger,
+            latestUserInput: request.latestUserInput,
+            conversation: request.conversation.slice(-12),
+            capabilities: request.capabilities,
+        })
+    ) + PLANNER_PROMPT_OVERHEAD_TOKENS;
+
+export const estimatePlannerTokenBudget = (input: {
+    request: PostChatRequest;
+    maxOutputTokens: number;
+}): number => estimatePlannerInputTokens(input.request) + input.maxOutputTokens;
 
 /**
  * Bounds one generation request against the remaining cumulative workflow

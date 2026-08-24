@@ -1541,6 +1541,10 @@ export const createChatService = ({
                         const backendFailOpenAllowed =
                             ExecutionContract?.failOpen
                                 .allowFallbackGeneration ?? true;
+                        // Once the workflow has consumed its cumulative token
+                        // budget, a fallback would bypass the same accounting
+                        // boundary. Preserve the admitted draft/lineage even
+                        // though provider-reported usage may have overrun it.
                         const tokenBudgetAlreadyExhausted =
                             workflowResult.workflowLineage.limitStop
                                 ?.exhaustedLimitKey === 'maxTokensTotal' &&

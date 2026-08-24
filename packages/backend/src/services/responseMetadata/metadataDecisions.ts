@@ -152,6 +152,9 @@ export const resolveProvenanceDecision = (
 ): ProvenanceDecision => {
     const retrieval = runtimeContext.retrieval;
     const classificationToolExecution = runtimeContext.executionContext?.tool;
+    // A context integration can supply evidence without a provider-native
+    // web-search tool call. Keep provenance authority tied to backend evidence
+    // delivery, while preserving the legacy execution signal as a fallback.
     const retrievalToolExecuted =
         retrieval?.contextUsed === true ||
         (classificationToolExecution?.status === 'executed' &&

@@ -155,6 +155,8 @@ export const createWebSearchContextStepExecutor = ({
         const attemptRecorder = createAttemptRecorder(attempts);
         const startedAt = Date.now();
         const scopeRequired = input.intent === 'repo_explainer';
+        // Providers may be tried in order, but repo-scoped records are not
+        // evidence until the backend classifies and audits their scope below.
         let providerRecords: WebSearchRecord[] = [];
         const providerCandidateRecords: WebSearchRecord[] = [];
         for (const provider of providerPriority) {

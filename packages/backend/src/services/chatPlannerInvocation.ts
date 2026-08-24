@@ -38,7 +38,10 @@ export const isWorkflowOwnedPlannerInvocation = (
         candidate.stepKind === 'plan' &&
         candidate.purpose === 'chat_orchestrator_action_selection' &&
         typeof candidate.workflowName === 'string' &&
-        candidate.workflowName.trim().length > 0
+        candidate.workflowName.trim().length > 0 &&
+        (candidate.maxOutputTokens === undefined ||
+            (typeof candidate.maxOutputTokens === 'number' &&
+                Number.isFinite(candidate.maxOutputTokens)))
     );
 };
 

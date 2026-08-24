@@ -57,7 +57,10 @@ export type ResponseMetadataGenerationInput = {
 export type ResponseMetadataRetrievalContext = {
     requested: boolean;
     used: boolean;
-    /** Backend-confirmed evidence reached the generation prompt. */
+    /**
+     * Backend-confirmed evidence reached the generation prompt. This is
+     * retrieval authority, not a provider-native tool-call claim.
+     */
     contextUsed?: boolean;
     intent?: GenerationSearchIntent;
     contextSize?: GenerationSearchContextSize;

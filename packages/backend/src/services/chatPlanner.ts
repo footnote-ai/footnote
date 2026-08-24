@@ -42,6 +42,7 @@ import type {
 import {
     buildFootnoteGitHubContextRouteFromPlan,
     buildProjectContextRouteFromPlan,
+    PROJECT_CONTEXT_CANONICAL_REPOSITORY,
 } from './chatGenerationHints.js';
 import {
     normalizeRequestedCapabilityProfile,
@@ -68,6 +69,7 @@ export type {
 import { runtimeConfig } from '../config.js';
 import {
     findGitHubObjectReferenceInConversation,
+    isGitHubObjectReferenceBoundToRepository,
     isGitHubObjectReferenceInConversation,
     isRepositorySlugInConversation,
     normalizeGitHubObjectReference,
@@ -1110,14 +1112,25 @@ const normalizeGeneration = (
     const footnoteGitHubContext = buildFootnoteGitHubContextRouteFromPlan({
         search,
     });
-    const inferredFootnoteReference =
+    const userAuthoredConversation = [
+        request.latestUserInput,
+        ...request.conversation
+            .filter((message) => message.role === 'user')
+            .map((message) => message.content),
+    ];
+    const inferredReferenceCandidate =
         footnoteGitHubContext !== undefined
-            ? findGitHubObjectReferenceInConversation([
-                  request.latestUserInput,
-                  ...request.conversation
-                      .filter((message) => message.role === 'user')
-                      .map((message) => message.content),
-              ])
+            ? findGitHubObjectReferenceInConversation(userAuthoredConversation)
+            : undefined;
+    const inferredFootnoteReference =
+        inferredReferenceCandidate !== undefined &&
+        isGitHubObjectReferenceBoundToRepository(
+            inferredReferenceCandidate,
+            PROJECT_CONTEXT_CANONICAL_REPOSITORY,
+            userAuthoredConversation,
+            ['Footnote']
+        )
+            ? inferredReferenceCandidate
             : undefined;
     const enrichedFootnoteGitHubContext =
         footnoteGitHubContext !== undefined &&

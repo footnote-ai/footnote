@@ -11,6 +11,7 @@ import type { WebSearchInput, WebSearchRecord } from './webSearchTypes.js';
 const isRecord = (value: unknown): value is Record<string, unknown> =>
     typeof value === 'object' && value !== null && !Array.isArray(value);
 
+/** Parses untrusted planner/tool input without treating it as admitted evidence. */
 export const parseWebSearchInput = (
     input: unknown
 ): WebSearchInput | undefined => {

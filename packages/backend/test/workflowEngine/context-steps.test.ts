@@ -325,6 +325,10 @@ test('runBoundedReviewWorkflow executes eligible context steps in parallel and m
 
 test('runBoundedReviewWorkflow prioritizes exact GitHub context before broad and web discovery', async () => {
     const executionOrder: string[] = [];
+    let resolveExactGitHub: (() => void) | undefined;
+    const exactGitHubReady = new Promise<void>((resolve) => {
+        resolveExactGitHub = resolve;
+    });
     const generationRuntime: GenerationRuntime = {
         kind: 'test-runtime',
         async generate() {
@@ -350,7 +354,7 @@ test('runBoundedReviewWorkflow prioritizes exact GitHub context before broad and
         },
         contextMessages: [`${name}: context`],
     });
-    const result = await runBoundedReviewWorkflowForTest({
+    const resultPromise = runBoundedReviewWorkflowForTest({
         generationRuntime,
         generationRequest: {
             model: 'gpt-5-mini',
@@ -403,6 +407,7 @@ test('runBoundedReviewWorkflow prioritizes exact GitHub context before broad and
         contextStepExecutorRegistry: {
             github_context: async () => {
                 executionOrder.push('github_exact');
+                await exactGitHubReady;
                 return contextResult('github_exact');
             },
             project_context: async () => {
@@ -427,6 +432,10 @@ test('runBoundedReviewWorkflow prioritizes exact GitHub context before broad and
         }),
     });
 
+    await Promise.resolve();
+    assert.deepEqual(executionOrder, ['github_exact']);
+    resolveExactGitHub?.();
+    const result = await resultPromise;
     assert.equal(result.outcome, 'generated');
     assert.deepEqual(executionOrder, [
         'github_exact',

@@ -15,6 +15,7 @@ import {
     type ChatPlannerInvocationContext,
 } from '../src/services/chatPlanner.js';
 import { assessPlannerOutputContract } from '../src/services/chatPlannerOutputContract.js';
+import { isWorkflowOwnedPlannerInvocation } from '../src/services/chatPlannerInvocation.js';
 import { logger } from '../src/utils/logger.js';
 
 const createChatRequest = (
@@ -38,6 +39,33 @@ const WORKFLOW_PLANNER_INVOCATION: ChatPlannerInvocationContext = {
     stepKind: 'plan',
     purpose: 'chat_orchestrator_action_selection',
 };
+
+test('workflow planner invocation validates optional output budget values', () => {
+    assert.equal(
+        isWorkflowOwnedPlannerInvocation(WORKFLOW_PLANNER_INVOCATION),
+        true
+    );
+    assert.equal(
+        isWorkflowOwnedPlannerInvocation({
+            ...WORKFLOW_PLANNER_INVOCATION,
+            maxOutputTokens: 400,
+        }),
+        true
+    );
+    for (const maxOutputTokens of [
+        '400',
+        Number.NaN,
+        Number.POSITIVE_INFINITY,
+    ]) {
+        assert.equal(
+            isWorkflowOwnedPlannerInvocation({
+                ...WORKFLOW_PLANNER_INVOCATION,
+                maxOutputTokens,
+            }),
+            false
+        );
+    }
+});
 
 const planFromWorkflow = (
     planner: ReturnType<typeof createChatPlanner>,
@@ -975,6 +1003,53 @@ test('Footnote repo-explainer requests derive exact GitHub references from user 
         repository: 'footnote-ai/footnote',
         sections: ['pulls'],
         reference: { kind: 'pull_request', number: 528 },
+    });
+});
+
+test('repo-explainer inference does not bind an exact reference from another repository', async () => {
+    const planner = createStructuredPlanner(
+        {
+            action: 'message',
+            modality: 'text',
+            requestedCapabilityProfile: 'balanced-general',
+            safetyTier: 'Low',
+            reasoning: 'Use repository-scoped context.',
+            generation: {
+                reasoningEffort: 'low',
+                verbosity: 'low',
+                temperament: {
+                    tightness: 3,
+                    rationale: 3,
+                    attribution: 3,
+                    caution: 3,
+                    extent: 3,
+                },
+                search: {
+                    query: 'acme/repo PR #528 current status',
+                    contextSize: 'low',
+                    intent: 'repo_explainer',
+                },
+            },
+        },
+        [{ id: 'balanced-general', description: 'general' }]
+    );
+
+    const result = await planFromWorkflow(
+        planner,
+        createChatRequest({
+            latestUserInput: 'What changed in acme/repo PR #528?',
+            conversation: [
+                {
+                    role: 'user',
+                    content: 'What changed in acme/repo PR #528?',
+                },
+            ],
+        })
+    );
+
+    assert.deepEqual(result.plan.generation.githubContext, {
+        repository: 'footnote-ai/footnote',
+        sections: ['pulls', 'commits'],
     });
 });
 

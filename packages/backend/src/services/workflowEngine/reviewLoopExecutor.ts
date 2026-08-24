@@ -61,6 +61,8 @@ import type { ResponseCandidateCollector } from '../responseCandidates.js';
 import {
     boundGenerationRequestToWorkflowBudget,
     estimateGenerationTokenBudget,
+    estimatePlannerInputTokens,
+    estimatePlannerTokenBudget,
 } from './tokenBudget.js';
 
 const DEFAULT_PLANNER_MAX_OUTPUT_TOKENS = 1200;
@@ -245,6 +247,20 @@ export const executeReviewLoop = async (ctx: {
         return syncLimitStop(
             checkLimits(
                 stepKind,
+                ctx.maxTokensTotal >= Number.MAX_SAFE_INTEGER
+                    ? 0
+                    : remainingTokens + 1
+            )
+        );
+    };
+    const stopForUnfitPlannerRequest = (): boolean => {
+        const remainingTokens =
+            ctx.maxTokensTotal >= Number.MAX_SAFE_INTEGER
+                ? 0
+                : Math.max(0, ctx.maxTokensTotal - workflowState.totalTokens);
+        return syncLimitStop(
+            checkLimits(
+                'plan',
                 ctx.maxTokensTotal >= Number.MAX_SAFE_INTEGER
                     ? 0
                     : remainingTokens + 1
@@ -534,19 +550,31 @@ export const executeReviewLoop = async (ctx: {
             shouldStop = true;
             return { status: 'stopped' };
         }
-        const plannerOutputBudget =
+        const plannerInputTokens = estimatePlannerInputTokens(
+            ctx.plannerStepRequest.request
+        );
+        const remainingTokens =
             ctx.maxTokensTotal >= Number.MAX_SAFE_INTEGER
-                ? DEFAULT_PLANNER_MAX_OUTPUT_TOKENS
-                : Math.min(
-                      DEFAULT_PLANNER_MAX_OUTPUT_TOKENS,
-                      Math.max(
-                          0,
-                          ctx.maxTokensTotal - workflowState.totalTokens
-                      )
-                  );
+                ? Number.MAX_SAFE_INTEGER
+                : Math.max(0, ctx.maxTokensTotal - workflowState.totalTokens);
+        const plannerOutputBudget = Math.min(
+            DEFAULT_PLANNER_MAX_OUTPUT_TOKENS,
+            Math.max(0, remainingTokens - plannerInputTokens)
+        );
+        if (plannerOutputBudget < 1) {
+            stopForUnfitPlannerRequest();
+            return { status: 'stopped' };
+        }
         if (
-            plannerOutputBudget < 1 ||
-            syncLimitStop(checkLimits('plan', plannerOutputBudget))
+            syncLimitStop(
+                checkLimits(
+                    'plan',
+                    estimatePlannerTokenBudget({
+                        request: ctx.plannerStepRequest.request,
+                        maxOutputTokens: plannerOutputBudget,
+                    })
+                )
+            )
         ) {
             return { status: 'stopped' };
         }
@@ -856,9 +884,6 @@ export const executeReviewLoop = async (ctx: {
         ) {
             terminationReason = 'transition_blocked_by_policy';
             workflowStatus = 'degraded';
-            break;
-        }
-        if (syncLimitStop(checkLimits('assess', 200))) {
             break;
         }
         const assessStepResult = await executeAssessStep(iteration);

@@ -18,6 +18,11 @@ import type { WeatherForecastTool } from '../contextIntegrations/weather/index.j
 import { executeWeatherForecastTool } from './weatherForecastToolAdapter.js';
 import type { BackendToolSelection } from './toolTypes.js';
 
+/**
+ * Builds the serializable web-search request. Repository-aware query and
+ * scope policy applies only to repo_explainer; provider execution still owns
+ * result admission and audit decisions.
+ */
 const buildWebSearchToolIntent = (
     generation: ChatGenerationPlan
 ): ToolInvocationIntent =>

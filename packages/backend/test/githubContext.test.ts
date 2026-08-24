@@ -9,6 +9,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import {
     createGitHubContextStepExecutor,
+    findGitHubObjectReferenceInConversation,
     formatGitHubContext,
     isRepositorySlugInConversation,
     type GitHubContextPayload,
@@ -80,6 +81,31 @@ test('GitHub context validates exact owner/repo slugs and user conversation scop
     );
 });
 
+test('GitHub release inference requires an explicit or tag-shaped release reference', () => {
+    assert.equal(
+        findGitHubObjectReferenceInConversation([
+            'Summarize the release notes',
+        ]),
+        undefined
+    );
+    assert.equal(
+        findGitHubObjectReferenceInConversation([
+            'Review the release candidate',
+        ]),
+        undefined
+    );
+    assert.deepEqual(
+        findGitHubObjectReferenceInConversation([
+            'What changed in release v1.2.3?',
+        ]),
+        { kind: 'release', tag: 'v1.2.3' }
+    );
+    assert.deepEqual(
+        findGitHubObjectReferenceInConversation(['Use release tag candidate']),
+        { kind: 'release', tag: 'candidate' }
+    );
+});
+
 test('GitHub context normalizes all fixed sections, bounds records, and labels text untrusted', async () => {
     const executor = createGitHubContextStepExecutor({
         enabled: true,
@@ -135,7 +161,12 @@ test('GitHub context retrieves an explicit merged pull request before open-PR di
                 });
             }
             if (url.includes('/pulls?')) {
-                return response(200, list('open pulls'));
+                const openPulls = list('open pulls');
+                openPulls[0] = {
+                    ...openPulls[0],
+                    html_url: 'https://github.com/acme/repo/pull/528',
+                };
+                return response(200, openPulls);
             }
             throw new Error(`unexpected URL: ${url}`);
         },
@@ -166,6 +197,12 @@ test('GitHub context retrieves an explicit merged pull request before open-PR di
     const payload = result.integrationContext?.payload as GitHubContextPayload;
     assert.equal(payload.metadata.exactReferenceStatus, 'executed');
     assert.equal(payload.records.pulls?.[0]?.title, 'Merged pull request');
+    assert.equal(
+        payload.records.pulls?.filter(
+            (record) => record.url === 'https://github.com/acme/repo/pull/528'
+        ).length,
+        1
+    );
 });
 
 test('GitHub context supports exact issue, commit, and release references with bounded fallback', async () => {
@@ -196,7 +233,7 @@ test('GitHub context supports exact issue, commit, and release references with b
             section: 'releases' as const,
             exactPath: '/releases/tags/v1.2.3',
             exactBody: {
-                name: 'Release v1.2.3',
+                tag_name: 'v1.2.3',
                 html_url: 'https://github.com/acme/repo/releases/tag/v1.2.3',
             },
         },

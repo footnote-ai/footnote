@@ -163,6 +163,9 @@ export const normalizeGitHubObjectReference = (
 const escapeRegExp = (value: string): string =>
     value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
+const isTagShapedReleaseIdentifier = (value: string): boolean =>
+    /^[A-Za-z0-9][A-Za-z0-9._-]{0,99}$/.test(value) && /[0-9._-]/u.test(value);
+
 /** Returns true only when the exact object identity appears in user-authored text. */
 export const isGitHubObjectReferenceInConversation = (
     reference: GitHubObjectReference,
@@ -200,13 +203,21 @@ export const isGitHubObjectReferenceInConversation = (
                   ]
                 : [
                       new RegExp(
-                          `\\brelease(?:\\s+tag)?\\s+${escapedIdentifier}\\b`,
+                          `\\brelease\\s+tag\\s+${escapedIdentifier}\\b`,
                           'i'
                       ),
                       new RegExp(
                           `/releases/tag/${escapedIdentifier}(?:\\b|$)`,
                           'i'
                       ),
+                      ...(isTagShapedReleaseIdentifier(reference.tag)
+                          ? [
+                                new RegExp(
+                                    `\\brelease\\s+${escapedIdentifier}\\b`,
+                                    'i'
+                                ),
+                            ]
+                          : []),
                   ];
     return texts.some((text) => patterns.some((pattern) => pattern.test(text)));
 };
@@ -260,15 +271,20 @@ export const findGitHubObjectReferenceInConversation = (
         }
 
         const release =
-            text.match(/\brelease(?:\s+tag)?\s+([^\s,.;!?]+)/i) ??
-            text.match(/\/releases\/tag\/([^\s/?#]+)/i);
+            text.match(/\brelease\s+tag\s+([^\s,;!?]+)/i) ??
+            text.match(/\/releases\/tag\/([^\s/?#]+)/i) ??
+            text.match(/\brelease\s+([^\s,;!?]+)/i);
         if (release !== null) {
+            const releaseToken = release[1];
             const reference = normalizeGitHubObjectReference({
                 kind: 'release',
-                tag: release[1],
+                tag: releaseToken,
             });
             if (
                 reference !== undefined &&
+                (release[0].includes('/releases/tag/') ||
+                    release[0].toLowerCase().includes('release tag') ||
+                    isTagShapedReleaseIdentifier(releaseToken)) &&
                 isGitHubObjectReferenceInConversation(reference, [text])
             ) {
                 return reference;
@@ -291,6 +307,50 @@ export const isRepositorySlugInConversation = (
         'i'
     );
     return texts.some((text) => matcher.test(text));
+};
+
+/**
+ * Confirms that an exact GitHub object and its repository identity occur in
+ * the same user-authored context. Planner-inferred references must not gain a
+ * repository authority that the user did not provide.
+ */
+export const isGitHubObjectReferenceBoundToRepository = (
+    reference: GitHubObjectReference,
+    repository: string,
+    texts: readonly string[],
+    repositoryAliases: readonly string[] = []
+): boolean => {
+    const normalizedRepository = repository.trim().toLowerCase();
+    const repositoryPattern = new RegExp(
+        `(?:^|[^A-Za-z0-9_.-])${escapeRegExp(normalizedRepository)}(?:$|[^A-Za-z0-9_.-])`,
+        'i'
+    );
+    const aliasPatterns = repositoryAliases
+        .map((alias) => alias.trim())
+        .filter((alias) => alias.length > 0)
+        .map(
+            (alias) =>
+                new RegExp(
+                    `(?:^|[^A-Za-z0-9_.-])${escapeRegExp(alias)}(?:$|[^A-Za-z0-9_.-])`,
+                    'i'
+                )
+        );
+    const repositoryMentionPattern =
+        /\b[A-Za-z0-9][A-Za-z0-9_.-]{0,98}\/[A-Za-z0-9][A-Za-z0-9_.-]{0,98}\b/g;
+
+    return texts.some((text) => {
+        if (!isGitHubObjectReferenceInConversation(reference, [text])) {
+            return false;
+        }
+        const otherRepositoryMentioned = [
+            ...text.matchAll(repositoryMentionPattern),
+        ].some(([match]) => match.toLowerCase() !== normalizedRepository);
+        if (otherRepositoryMentioned) return false;
+        return (
+            repositoryPattern.test(text) ||
+            aliasPatterns.some((pattern) => pattern.test(text))
+        );
+    });
 };
 
 const toReasonCode = (status: number): GitHubReasonCode =>
