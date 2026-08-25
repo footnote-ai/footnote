@@ -2820,9 +2820,9 @@ export const envEntries = [
         required: false,
         secret: false,
         kind: 'enum',
-        allowedValues: ['none', 'http'] as const,
+        allowedValues: ['none', 'http', 'deployment'] as const,
         description:
-            'Ownership binding mode used by TrustGraph tenancy checks (`none` or `http`).',
+            'Ownership binding mode used by TrustGraph checks: `deployment` fixes access to the configured collection, while `http` delegates tenancy checks to an external backend service.',
         defaultValue: literal('none'),
         usedBy: ['packages/backend/src/config.ts'],
     }),

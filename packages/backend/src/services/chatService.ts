@@ -336,6 +336,8 @@ const buildContextStepShortCircuit = ({
 
 type ExecutionContractTrustGraphRuntimeOptions = {
     adapter?: TrustGraphEvidenceAdapter;
+    /** Backend-owned fixed collection used by deployment-scoped wiring. */
+    deploymentCollectionId?: string;
     budget: {
         timeoutMs: number;
         maxCalls: number;

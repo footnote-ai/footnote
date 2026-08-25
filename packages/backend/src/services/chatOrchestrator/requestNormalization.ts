@@ -60,11 +60,22 @@ export const buildCorrelationIds = (
 });
 
 export const buildExecutionContractScopeTuple = (
-    request: PostChatRequest
+    request: PostChatRequest,
+    defaults: {
+        collectionId?: string;
+    } = {}
 ): ScopeTuple | undefined => {
     const userId = normalizeScopeValue(request.surfaceContext?.userId);
     if (userId === undefined) {
         return undefined;
+    }
+
+    const deploymentCollectionId = normalizeScopeValue(defaults.collectionId);
+    if (deploymentCollectionId !== undefined) {
+        return {
+            userId,
+            collectionId: deploymentCollectionId,
+        };
     }
 
     const channelProjectId = normalizeScopeValue(

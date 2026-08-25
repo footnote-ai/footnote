@@ -1302,6 +1302,57 @@ test('Execution Contract TrustGraph runtime wiring threads ownership validation 
     );
 });
 
+test('Execution Contract TrustGraph runtime wiring binds deployment scope to adapter collection', async () => {
+    const config = createExecutionContractTrustGraphRuntimeConfig({
+        enabled: true,
+        adapter: {
+            mode: 'stub',
+            baseUrl: null,
+            flow: null,
+            collection: 'footnote-repository-context',
+            apiToken: null,
+            workspaceRef: 'footnote',
+            graphRagLimits: {
+                maxQueryChars: 8000,
+                entityLimit: 50,
+                tripleLimit: 30,
+                maxSubgraphSize: 1000,
+                maxPathLength: 2,
+                maxResponseChars: 12000,
+                maxSources: 20,
+                maxSourceUriChars: 2048,
+                maxSourceTitleChars: 512,
+            },
+            stubMode: 'success',
+        },
+        ownership: {
+            bindingMode: 'deployment',
+            validatorId: 'backend_deployment_scope_v1',
+            endpointUrl: null,
+            apiToken: null,
+        },
+    });
+
+    const resolved = resolveExecutionContractTrustGraphRuntimeOptions(config);
+    assert.ok(resolved?.scopeOwnershipValidator);
+    assert.equal(
+        resolved?.deploymentCollectionId,
+        'footnote-repository-context'
+    );
+
+    const allowed = await resolved.scopeOwnershipValidator.validateOwnership({
+        userId: 'user_1',
+        collectionId: 'footnote-repository-context',
+    });
+    const denied = await resolved.scopeOwnershipValidator.validateOwnership({
+        userId: 'user_1',
+        collectionId: 'other-context',
+    });
+
+    assert.equal(allowed.decision, 'allow');
+    assert.equal(denied.decision, 'deny');
+});
+
 test('Execution Contract TrustGraph runtime wiring fails fast when http adapter base URL is missing', () => {
     const config = createExecutionContractTrustGraphRuntimeConfig({
         enabled: true,
