@@ -93,7 +93,7 @@ Start a local TrustGraph instance, choose an existing processing flow, then
 preview and load the repository selection:
 
 ```powershell
-$env:TRUSTGRAPH_URL = "http://localhost:8088"
+$env:TRUSTGRAPH_URL = "http://localhost:8888"
 $env:TRUSTGRAPH_WORKSPACE = "default"
 $env:TRUSTGRAPH_FLOW_ID = "<local-flow-id>"
 $env:TRUSTGRAPH_COLLECTION = "footnote-repository-context"
@@ -109,7 +109,7 @@ command-line options.
 
 The loader sends one `add-document` request per selected file. The existing
 1 MiB per-file limit keeps each file below TrustGraph's chunking threshold.
-Every request includes the chosen workspace. Processing uses TrustGraph 2.7's
+Every request includes the chosen workspace. Processing uses the Librarian API's
 `add-processing` and `remove-processing` operations.
 
 Document and processing IDs are stable for a repository ID and relative path.
