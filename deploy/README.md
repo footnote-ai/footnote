@@ -226,8 +226,8 @@ project-document citations tied to the exact content used to build the index.
 GitHub Actions passes the commit through `github.sha`.
 
 For Fly, `pnpm settings` and `pnpm reset` issue links through `fly ssh console`
-against the app detected from `deployment.fly-app`, `FLY_APP_NAME`, `fly.toml`,
-or `deploy/fly/server.toml`. The backend operator-link endpoint only accepts
+against the app detected from `deployment.fly-app`, `FLY_APP_NAME`, or
+`deploy/fly/server.toml`. The backend operator-link endpoint only accepts
 loopback requests, so public web traffic cannot mint settings links.
 
 ### Memory verification for multi-bot Machines
