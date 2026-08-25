@@ -121,13 +121,24 @@ Code references:
 ## Repository context
 
 A repository may define the files Footnote can load into TrustGraph as project
-context. The planned repo-owned file is `.footnote/context-files`.
+context. The repo-owned file is `.footnote/context-files`.
 
-The selection must be easy to review before anything is sent outside the
-repository. The first version will use Git-tracked files, familiar include and
-exclude patterns, stable paths, and clear size limits. Loading and refreshing
-this context happens during setup or through an operator command, not while a
-chat request is running.
+The selection is reviewable before anything is sent outside the repository.
+It uses Git-tracked regular files, familiar include and exclude patterns,
+stable paths, and clear size limits. `pnpm context:repo:list` previews metadata
+only. `pnpm context:repo:load` reads the selected UTF-8 text and reconciles it
+through TrustGraph's Librarian API.
+
+The loader stores a stable repository-and-path identity plus a SHA-256 content
+hash with each document. Repeat loads leave matching documents alone, repair
+missing processing submissions, and replace documents whose content changed.
+Each Librarian request names its TrustGraph workspace explicitly. Loading and
+refreshing happen through this operator command, not while a chat request is
+running.
+
+This setup utility is separate from the backend runtime adapter. It does not
+change chat routing, ownership checks, or response authority. A per-file
+failure is reported while the rest of the setup batch continues.
 
 TrustGraph can supply extra context, but Footnote still decides how to handle
 the request. If TrustGraph is unavailable, the local chat path continues

@@ -1,7 +1,7 @@
 # Repository Context and TrustGraph Status
 
-Status: repository context selection and preview are implemented; TrustGraph
-loading is not implemented yet.
+Status: repository context selection, preview, and manual TrustGraph loading are
+implemented. Chat retrieval and guided setup are separate follow-up work.
 
 Last updated: 2026-08-20.
 
@@ -28,17 +28,16 @@ Footnote already has a guarded TrustGraph lookup path. It can call an outside
 service for extra context, record what happened, and continue without that
 context if the service is unavailable.
 
-Repositories can now define eligible context files through
-`.footnote/context-files` and preview the safe, tracked selection with
-`pnpm context:repo:list`. Repository context is not enabled or loaded by
-default. The resolver does not read file contents or contact TrustGraph.
+Repositories define eligible context files through `.footnote/context-files`
+and preview the safe, tracked selection with `pnpm context:repo:list`.
+Repository context is not loaded by default. The preview resolver does not read
+file contents or contact TrustGraph.
 
-The repository-loading test remains separate from the direct project-context
-path. It uses a small, hand-written file at `docs/trustgraph/repo-snapshot.json`
-and does not connect directly to TrustGraph's document API.
-
-That test file should remain only until the real repository context path is
-working.
+An operator can now load the selected text files with
+`pnpm context:repo:load`. The command uses TrustGraph's Librarian API directly,
+keeps the repository-relative path and SHA-256 content hash with every
+document, and reports added, changed, unchanged, skipped, and failed files.
+The earlier hand-written snapshot and seed loader have been removed.
 
 ## Interim Project Context Path
 
@@ -88,6 +87,44 @@ The first version now does the following:
 This file becomes the repo-owned source for previews, loading, refreshes, and
 source links.
 
+## Load into TrustGraph
+
+Start a local TrustGraph instance, choose an existing processing flow, then
+preview and load the repository selection:
+
+```powershell
+$env:TRUSTGRAPH_URL = "http://localhost:8888"
+$env:TRUSTGRAPH_WORKSPACE = "default"
+$env:TRUSTGRAPH_FLOW_ID = "<local-flow-id>"
+$env:TRUSTGRAPH_COLLECTION = "footnote-repository-context"
+
+pnpm context:repo:list
+pnpm context:repo:load
+```
+
+Set `TRUSTGRAPH_TOKEN` when the local Librarian endpoint requires bearer
+authentication. The token is read only from the environment and is not included
+in logs or results. Run `pnpm context:repo:load -- --help` for equivalent
+command-line options.
+
+The loader sends one `add-document` request per selected file. The existing
+1 MiB per-file limit keeps each file below TrustGraph's chunking threshold.
+Every request includes the chosen workspace. Processing uses the Librarian API's
+`add-processing` and `remove-processing` operations.
+
+Document and processing IDs are stable for a repository ID and relative path.
+On a repeat load:
+
+- the same content hash and existing processing submission are unchanged
+- a missing processing submission is repaired
+- changed content replaces the old document and processing submission
+- a failure for one file is reported while the loader continues with other
+  files
+- remote documents that are no longer selected are reported and left unchanged
+
+An `added` or `changed` result means the document was stored and processing was
+submitted. TrustGraph may still be processing it asynchronously.
+
 ## Planned Branches
 
 ### 1. Choose repository context files
@@ -100,11 +137,9 @@ Done when a contributor can review one stable list of repository context files.
 
 ### 2. Load repository context into TrustGraph
 
-Use the selected files with TrustGraph's document or text API. Record the
-repository-relative path and a content hash for each file. Repeated loads should
-report which files were added, changed, unchanged, skipped, or failed.
-
-Once this works, remove the hand-written snapshot and its manual loader.
+Implemented by the setup-time Librarian loader and
+`pnpm context:repo:load`. It records the repository-relative path and content
+hash and supports repeatable reconciliation without adding runtime authority.
 
 Done when the selected Footnote docs can be loaded into a local TrustGraph
 instance and inspected there.
