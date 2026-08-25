@@ -271,6 +271,32 @@ type ContextStepManifestFailure = {
     status: 'unavailable' | 'failed' | 'skipped';
 };
 
+/**
+ * Preserves already-admitted context requests when planner continuation adds
+ * more requests. Backend-injected requests, such as TrustGraph, must not be
+ * dropped when the planner returns its own context-step list.
+ */
+const mergeContextStepRequests = (
+    existingRequests: ContextStepRequest[] | undefined,
+    continuationRequests: ContextStepRequest[] | undefined
+): ContextStepRequest[] => {
+    const mergedRequests = [...(existingRequests ?? [])];
+    const seenIntegrations = new Set(
+        mergedRequests.map((request) => request.integrationName)
+    );
+
+    for (const request of continuationRequests ?? []) {
+        if (seenIntegrations.has(request.integrationName)) {
+            continue;
+        }
+
+        seenIntegrations.add(request.integrationName);
+        mergedRequests.push(request);
+    }
+
+    return mergedRequests;
+};
+
 type LimitStopEvaluation = {
     stopped: boolean;
     shouldStop: boolean;
@@ -735,9 +761,10 @@ export const runBoundedReviewWorkflow = async ({
             } else {
                 effectiveGenerationRequest = planContinuation.generationRequest;
                 effectiveMessagesWithHints = planContinuation.messagesWithHints;
-                effectiveContextStepRequests =
-                    planContinuation.contextStepRequests ??
-                    effectiveContextStepRequests;
+                effectiveContextStepRequests = mergeContextStepRequests(
+                    effectiveContextStepRequests,
+                    planContinuation.contextStepRequests
+                );
             }
         } catch (error) {
             logger.warn(
