@@ -501,6 +501,9 @@ test('loader leaves a managed remote document when it is no longer selected', as
     });
     const input = makeLoadInput(repositoryRoot, librarian.baseUrl);
     await loadRepositoryContext(input);
+    const retainedDocument = librarian.documents[0];
+    assert.ok(retainedDocument !== undefined);
+    const retainedSnapshot = structuredClone(retainedDocument);
     await fs.writeFile(
         path.join(repositoryRoot, '.footnote', 'context-files'),
         'other.md\n',
@@ -520,6 +523,12 @@ test('loader leaves a managed remote document when it is no longer selected', as
         result.items.find((item) => item.path === 'README.md')?.reason,
         'not selected locally; remote document left unchanged'
     );
+    assert.deepEqual(
+        librarian.documents.find(
+            (document) => document.id === retainedSnapshot.id
+        ),
+        retainedSnapshot
+    );
     assert.equal(librarian.documents.length, 2);
 });
 
@@ -537,6 +546,7 @@ test('loader reports duplicate managed remote paths without changing them', asyn
     await loadRepositoryContext(input);
     const existingDocument = librarian.documents[0];
     assert.ok(existingDocument !== undefined);
+    const originalDocument = structuredClone(existingDocument);
     librarian.documents.push(structuredClone(existingDocument));
 
     const result = await loadRepositoryContext(input);
@@ -552,6 +562,7 @@ test('loader reports duplicate managed remote paths without changing them', asyn
         result.items[0]?.reason,
         'multiple managed remote documents share this path'
     );
+    assert.deepEqual(librarian.documents[0], originalDocument);
     assert.equal(librarian.documents.length, 2);
 });
 
