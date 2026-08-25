@@ -140,6 +140,19 @@ This setup utility is separate from the backend runtime adapter. It does not
 change chat routing, ownership checks, or response authority. A per-file
 failure is reported while the rest of the setup batch continues.
 
+The runtime adapter uses TrustGraph 2.8 Graph RAG through
+`POST /api/v1/flow/{flow}/service/graph-rag` with `streaming: false`. Runtime
+configuration supplies the base URL, flow, collection, bearer token, and
+bounded Graph RAG limits. TrustGraph resolves workspace access from the token;
+the optional workspace reference is diagnostic only and is never sent as
+authorization context.
+
+Graph RAG responses are consumed only when they contain a non-empty generated
+response and validated source URIs. Footnote maps the generated text to one
+aggregate advisory evidence item. It does not duplicate that text per source,
+and it does not treat TrustGraph ranking or confidence as backend policy. The
+returned source URIs and titles remain in the item's provenance path.
+
 TrustGraph can supply extra context, but Footnote still decides how to handle
 the request. If TrustGraph is unavailable, the local chat path continues
 without it.
@@ -192,6 +205,7 @@ Useful test entrypoints include:
 - [chatService.test.ts](../../../packages/backend/test/chatService.test.ts)
 - [chatOrchestratorExecutionContractTrustGraph.test.ts](../../../packages/backend/test/chatOrchestratorExecutionContractTrustGraph.test.ts)
 - [chatHandler.test.ts](../../../packages/backend/test/chatHandler.test.ts)
+- [trustGraphHttpAdapter.test.ts](../../../packages/backend/test/trustGraphHttpAdapter.test.ts)
 
 The current tests do not prove:
 

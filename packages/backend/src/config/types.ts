@@ -231,9 +231,22 @@ export type RuntimeConfig = {
         maxCalls: number;
         adapter: {
             mode: 'none' | 'stub' | 'http';
-            endpointUrl: string | null;
+            baseUrl: string | null;
+            flow: string | null;
+            collection: string | null;
             apiToken: string | null;
-            configRef: string | null;
+            workspaceRef: string | null;
+            graphRagLimits: {
+                maxQueryChars: number;
+                entityLimit: number;
+                tripleLimit: number;
+                maxSubgraphSize: number;
+                maxPathLength: number;
+                maxResponseChars: number;
+                maxSources: number;
+                maxSourceUriChars: number;
+                maxSourceTitleChars: number;
+            };
             stubMode: 'success' | 'failure' | 'timeout' | 'poisoned';
         };
         ownership: {
