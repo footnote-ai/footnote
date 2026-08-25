@@ -33,7 +33,7 @@ export type HttpTrustGraphAdapterConfig = {
     flow: string;
     collection: string;
     apiToken: string;
-    /** Diagnostic only. TrustGraph derives workspace access from the token. */
+    /** Workspace used by TrustGraph to route the request to its flow. */
     workspaceRef?: string | null;
     limits: TrustGraphGraphRagLimits;
 };
@@ -258,6 +258,7 @@ const toEvidenceBundle = (input: {
 export class HttpTrustGraphEvidenceAdapter implements TrustGraphEvidenceAdapter {
     private readonly endpointUrl: string;
     private readonly apiToken: string;
+    private readonly workspaceRef: string | undefined;
     private readonly collection: string;
     private readonly flow: string;
     private readonly limits: TrustGraphGraphRagLimits;
@@ -278,6 +279,9 @@ export class HttpTrustGraphEvidenceAdapter implements TrustGraphEvidenceAdapter 
 
         this.endpointUrl = buildEndpointUrl(config);
         this.apiToken = config.apiToken.trim();
+        this.workspaceRef = isNonEmptyString(config.workspaceRef)
+            ? config.workspaceRef.trim()
+            : undefined;
         this.collection = config.collection.trim();
         this.flow = config.flow.trim();
         this.limits = validateLimits(config.limits);
@@ -304,6 +308,9 @@ export class HttpTrustGraphEvidenceAdapter implements TrustGraphEvidenceAdapter 
                 Authorization: `Bearer ${this.apiToken}`,
             },
             body: JSON.stringify({
+                ...(this.workspaceRef !== undefined && {
+                    workspace: this.workspaceRef,
+                }),
                 query,
                 collection: this.collection,
                 'entity-limit': this.limits.entityLimit,

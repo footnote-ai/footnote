@@ -112,6 +112,7 @@ test('Graph RAG adapter sends the native request and maps one aggregate item', a
         assert.equal(authorization, 'Bearer secret-token-for-test');
         assert.deepEqual(requestBody, {
             query: 'How does context loading work?',
+            workspace: 'default',
             collection: 'footnote-repository-context',
             'entity-limit': 12,
             'triple-limit': 8,

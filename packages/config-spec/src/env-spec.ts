@@ -2687,7 +2687,7 @@ export const envEntries = [
         secret: false,
         kind: 'string',
         description:
-            'Optional diagnostic TrustGraph workspace reference. Workspace authorization comes from the API token and this value is never sent to TrustGraph.',
+            'Optional TrustGraph workspace used to route HTTP Graph RAG requests to the configured flow.',
         defaultValue: noDefault(),
         usedBy: ['packages/backend/src/config.ts'],
     }),
