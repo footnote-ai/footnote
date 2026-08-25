@@ -67,6 +67,17 @@ FROM node:22-slim
 WORKDIR /app
 ENV NODE_ENV=production
 
+# Tailscale is optional at runtime. The server entrypoint starts it only when
+# TAILSCALE_AUTHKEY is present, so local and non-TrustGraph deployments keep
+# the existing startup path.
+RUN apt-get update \
+  && apt-get install -y --no-install-recommends ca-certificates iptables \
+  && rm -rf /var/lib/apt/lists/*
+
+COPY --from=docker.io/tailscale/tailscale:stable /usr/local/bin/tailscaled /usr/local/bin/tailscaled
+COPY --from=docker.io/tailscale/tailscale:stable /usr/local/bin/tailscale /usr/local/bin/tailscale
+RUN mkdir -p /var/run/tailscale /var/cache/tailscale /var/lib/tailscale
+
 COPY --from=builder /app/node_modules /app/node_modules
 COPY --from=builder /app/packages /app/packages
 COPY --from=builder /app/.footnote /app/.footnote

@@ -230,6 +230,80 @@ against the app detected from `deployment.fly-app`, `FLY_APP_NAME`, or
 `deploy/fly/server.toml`. The backend operator-link endpoint only accepts
 loopback requests, so public web traffic cannot mint settings links.
 
+### PC-hosted TrustGraph over Tailscale
+
+The canonical Fly server can optionally join the same Tailscale network as a
+PC-hosted TrustGraph 2.8 deployment. This uses the existing Footnote Fly
+Machine; it does not create a second Fly Machine or expose TrustGraph publicly.
+The image includes `tailscale` and `tailscaled`, while
+`deploy/server-entrypoint.sh` starts them only when `TAILSCALE_AUTHKEY` is
+present. If Tailscale is unavailable, Footnote starts normally and the
+TrustGraph adapter remains fail-open.
+
+#### One-time TrustGraph setup
+
+Use the TrustGraph GUI to create a workspace named `footnote` and a
+workspace-scoped API key. Do not use the bootstrap/admin token for Fly. Load
+the reviewed context into that workspace from the Footnote checkout:
+
+```powershell
+$env:TRUSTGRAPH_URL = 'http://localhost:8888'
+$env:TRUSTGRAPH_WORKSPACE = 'footnote'
+$env:TRUSTGRAPH_FLOW_ID = 'default'
+$env:TRUSTGRAPH_COLLECTION = 'footnote-repository-context'
+$env:TRUSTGRAPH_TOKEN = '<workspace-scoped-key>'
+pnpm context:repo:load
+```
+
+Keep TrustGraph reachable on the PC at port `8888`. In Windows Firewall,
+allow TCP `8888` from the Tailscale range (`100.64.0.0/10`) and remove or
+restrict any broader inbound rule for that port. In Tailscale access policy,
+grant the Fly node tag (for example, `tag:footnote-fly`) access only to the PC
+TrustGraph node and port `8888`.
+
+#### Fly deployment values
+
+The deploy wrappers require these values only when TrustGraph mode is enabled.
+They read them from the untracked root `.env` when present or prompt without
+echoing required values:
+
+```text
+TAILSCALE_AUTHKEY=<reusable, pre-authorized ephemeral auth key>
+EXECUTION_CONTRACT_TRUSTGRAPH_ADAPTER_API_TOKEN=<workspace-scoped-key>
+EXECUTION_CONTRACT_TRUSTGRAPH_BASE_URL=http://<pc-magicdns-hostname>:8888
+EXECUTION_CONTRACT_TRUSTGRAPH_FLOW=default
+EXECUTION_CONTRACT_TRUSTGRAPH_COLLECTION=footnote-repository-context
+EXECUTION_CONTRACT_TRUSTGRAPH_WORKSPACE_REF=footnote
+```
+
+The normal Fly deploy leaves TrustGraph disabled and does not require these
+additional values. To opt in, pass the explicit TrustGraph mode flag:
+
+```powershell
+./deploy/fly/deploy.ps1 -EnableTrustGraph
+```
+
+```bash
+./deploy/fly/deploy.sh --enable-trustgraph
+```
+
+TrustGraph mode enables the HTTP adapter during deployment. The adapter token
+is sent only as a bearer token to TrustGraph. The workspace reference is
+diagnostic; TrustGraph authorization comes from the token.
+
+Deploy normally without TrustGraph:
+
+```powershell
+./deploy/fly/deploy.ps1
+```
+
+After deployment, verify `TAILSCALE_STATUS=ready` in the Fly logs and run one
+chat request using the loaded repository context. Confirm the response trace
+contains bounded TrustGraph metadata and source provenance. To disable remote
+retrieval without changing the image, set
+`EXECUTION_CONTRACT_TRUSTGRAPH_KILL_SWITCH=true` as a Fly environment value and
+restart the Machine.
+
 ### Memory verification for multi-bot Machines
 
 Capture a same-configuration baseline before deployment. After deployment, wait
