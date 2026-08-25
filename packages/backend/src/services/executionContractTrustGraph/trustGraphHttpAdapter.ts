@@ -45,6 +45,12 @@ type GraphRagSource = {
 
 const GRAPH_RAG_ADAPTER_VERSION = 'trustgraph-graph-rag-v1';
 const GRAPH_RAG_SOURCE_REF_PREFIX = 'trustgraph://graph-rag/collection/';
+// TrustGraph 2.8's native client sends these bounded reranking controls. Keep
+// them explicit so the HTTP adapter uses the same retrieval path across 2.8
+// deployments instead of relying on server-side defaults.
+const GRAPH_RAG_EDGE_SCORE_LIMIT = 30;
+const GRAPH_RAG_EDGE_LIMIT = 25;
+const GRAPH_RAG_MAX_RERANKER_INPUT = 350;
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
     typeof value === 'object' && value !== null;
@@ -304,6 +310,9 @@ export class HttpTrustGraphEvidenceAdapter implements TrustGraphEvidenceAdapter 
                 'triple-limit': this.limits.tripleLimit,
                 'max-subgraph-size': this.limits.maxSubgraphSize,
                 'max-path-length': this.limits.maxPathLength,
+                'edge-score-limit': GRAPH_RAG_EDGE_SCORE_LIMIT,
+                'edge-limit': GRAPH_RAG_EDGE_LIMIT,
+                'max-reranker-input': GRAPH_RAG_MAX_RERANKER_INPUT,
                 streaming: false,
             }),
             signal: input.abortSignal,

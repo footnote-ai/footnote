@@ -117,6 +117,9 @@ test('Graph RAG adapter sends the native request and maps one aggregate item', a
             'triple-limit': 8,
             'max-subgraph-size': 100,
             'max-path-length': 2,
+            'edge-score-limit': 30,
+            'edge-limit': 25,
+            'max-reranker-input': 350,
             streaming: false,
         });
         assert.equal(bundle.items.length, 1);
