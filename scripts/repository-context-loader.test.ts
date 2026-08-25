@@ -1,5 +1,5 @@
 /**
- * @description: Verifies TrustGraph 2.7 Librarian requests and repeatable repository-context loading.
+ * @description: Verifies TrustGraph Librarian requests and repeatable repository-context loading.
  * It covers exact wire operations, stable reconciliation, safe text handling, and fail-open batches.
  * @footnote-scope: test
  * @footnote-module: RepositoryContextLoaderTest
@@ -165,9 +165,9 @@ const createTestLibrarian = async (options?: {
                         error: `unexpected operation ${String(body.operation)}`,
                     });
             }
-        } catch (error) {
+        } catch {
             sendJson(response, 500, {
-                error: error instanceof Error ? error.message : String(error),
+                error: 'test Librarian server request failed',
             });
         }
     });
@@ -241,7 +241,7 @@ const getMetadataValue = (
     return undefined;
 };
 
-test('TrustGraph client sends explicit 2.7 workspace and processing operations', async () => {
+test('TrustGraph client sends explicit workspace and processing operations', async () => {
     const librarian = await createTestLibrarian();
     try {
         const client = new TrustGraphLibrarianClient({
@@ -256,7 +256,17 @@ test('TrustGraph client sends explicit 2.7 workspace and processing operations',
             kind: 'text/plain',
             title: 'README.md',
             comments: '',
-            metadata: [],
+            metadata: [
+                {
+                    s: { t: 'i', i: 'urn:test:document' },
+                    p: { t: 'i', i: 'urn:test:predicate' },
+                    o: {
+                        t: 'l',
+                        v: 'literal value',
+                        d: 'http://www.w3.org/2001/XMLSchema#string',
+                    },
+                },
+            ],
             tags: ['test'],
         };
         const processing: TrustGraphProcessingMetadata = {
@@ -274,6 +284,12 @@ test('TrustGraph client sends explicit 2.7 workspace and processing operations',
             documentMetadata: document,
             contentBase64: Buffer.from('hello', 'utf8').toString('base64'),
         });
+        const listedDocuments = await client.listDocuments();
+        assert.deepEqual(listedDocuments[0]?.metadata[0]?.o, {
+            t: 'l',
+            v: 'literal value',
+            d: 'http://www.w3.org/2001/XMLSchema#string',
+        });
         await client.removeDocument(document.id);
         await client.startProcessing(processing);
         await client.stopProcessing(processing.id);
@@ -284,6 +300,7 @@ test('TrustGraph client sends explicit 2.7 workspace and processing operations',
                 'list-documents',
                 'list-processing',
                 'add-document',
+                'list-documents',
                 'remove-document',
                 'add-processing',
                 'remove-processing',
@@ -296,7 +313,7 @@ test('TrustGraph client sends explicit 2.7 workspace and processing operations',
         );
         const addDocument = librarian.requests[2];
         assert.equal(addDocument.content, 'aGVsbG8=');
-        const startProcessing = librarian.requests[4]['processing-metadata'];
+        const startProcessing = librarian.requests[5]['processing-metadata'];
         assert.ok(isRecord(startProcessing));
         assert.equal(startProcessing['document-id'], document.id);
     } finally {
@@ -320,6 +337,28 @@ test('TrustGraph client timeout covers response body reads', async (context) => 
     await assert.rejects(
         client.listDocuments(),
         /TrustGraph Librarian request timed out after 25ms/u
+    );
+});
+
+test('TrustGraph client rejects declared oversized responses before reading them', async (context) => {
+    const server = http.createServer((_request, response) => {
+        response.writeHead(200, {
+            'content-type': 'application/json',
+            'content-length': String(5 * 1024 * 1024 + 1),
+        });
+        response.end('{}');
+    });
+    const port = await listen(server);
+    context.after(() => closeServer(server));
+    const client = new TrustGraphLibrarianClient({
+        baseUrl: `http://127.0.0.1:${port}`,
+        workspace: 'oversized-response-test',
+        requestTimeoutMs: 2_000,
+    });
+
+    await assert.rejects(
+        client.listDocuments(),
+        /TrustGraph Librarian response exceeded the 5 MiB safety limit\./u
     );
 });
 
@@ -445,6 +484,75 @@ test('loader adds, leaves alone, repairs, then replaces a changed document', asy
             'add-processing',
         ]
     );
+});
+
+test('loader leaves a managed remote document when it is no longer selected', async (context) => {
+    const repositoryRoot = await createTrackedRepository(
+        {
+            'README.md': 'retained context\n',
+            'other.md': 'newly selected context\n',
+        },
+        'README.md\n'
+    );
+    const librarian = await createTestLibrarian();
+    context.after(async () => {
+        await librarian.close();
+        await fs.rm(repositoryRoot, { recursive: true, force: true });
+    });
+    const input = makeLoadInput(repositoryRoot, librarian.baseUrl);
+    await loadRepositoryContext(input);
+    await fs.writeFile(
+        path.join(repositoryRoot, '.footnote', 'context-files'),
+        'other.md\n',
+        'utf8'
+    );
+
+    const result = await loadRepositoryContext(input);
+
+    assert.deepEqual(result.counts, {
+        added: 1,
+        changed: 0,
+        unchanged: 0,
+        skipped: 1,
+        failed: 0,
+    });
+    assert.equal(
+        result.items.find((item) => item.path === 'README.md')?.reason,
+        'not selected locally; remote document left unchanged'
+    );
+    assert.equal(librarian.documents.length, 2);
+});
+
+test('loader reports duplicate managed remote paths without changing them', async (context) => {
+    const repositoryRoot = await createTrackedRepository(
+        { 'README.md': 'duplicate path context\n' },
+        'README.md\n'
+    );
+    const librarian = await createTestLibrarian();
+    context.after(async () => {
+        await librarian.close();
+        await fs.rm(repositoryRoot, { recursive: true, force: true });
+    });
+    const input = makeLoadInput(repositoryRoot, librarian.baseUrl);
+    await loadRepositoryContext(input);
+    const existingDocument = librarian.documents[0];
+    assert.ok(existingDocument !== undefined);
+    librarian.documents.push(structuredClone(existingDocument));
+
+    const result = await loadRepositoryContext(input);
+
+    assert.deepEqual(result.counts, {
+        added: 0,
+        changed: 0,
+        unchanged: 0,
+        skipped: 0,
+        failed: 1,
+    });
+    assert.equal(
+        result.items[0]?.reason,
+        'multiple managed remote documents share this path'
+    );
+    assert.equal(librarian.documents.length, 2);
 });
 
 test('loader does not replace malformed managed metadata', async (context) => {

@@ -1,11 +1,13 @@
 /**
- * @description: Provides a small typed HTTP client for the TrustGraph 2.7 Librarian API.
+ * @description: Provides a small typed HTTP client for the TrustGraph Librarian API.
  * It keeps repository-context ingestion separate from Footnote runtime and chat authority.
  * @footnote-scope: utility
  * @footnote-module: TrustGraphLibrarianClient
  * @footnote-risk: medium - Incorrect request shapes can leave external repository context incomplete or stale.
  * @footnote-ethics: high - Stored context and provenance metadata influence what outside evidence reviewers may inspect.
  */
+
+import { TextDecoder } from 'node:util';
 
 export type TrustGraphIriTerm = {
     t: 'i';
@@ -15,8 +17,8 @@ export type TrustGraphIriTerm = {
 export type TrustGraphLiteralTerm = {
     t: 'l';
     v: string;
-    dt?: string;
-    ln?: string;
+    d?: string;
+    l?: string;
 };
 
 export type TrustGraphTerm = TrustGraphIriTerm | TrustGraphLiteralTerm;
@@ -101,13 +103,13 @@ const parseTerm = (value: unknown): TrustGraphTerm => {
         return {
             t: 'l',
             v: value.v,
-            ...(typeof value.dt === 'string' && { dt: value.dt }),
-            ...(typeof value.ln === 'string' && { ln: value.ln }),
+            ...(typeof value.d === 'string' && { d: value.d }),
+            ...(typeof value.l === 'string' && { l: value.l }),
         };
     }
 
     throw new Error(
-        'TrustGraph metadata term must use the 2.7 IRI or literal wire format.'
+        'TrustGraph metadata term must use the supported IRI or literal wire format.'
     );
 };
 
@@ -192,6 +194,53 @@ const truncateErrorText = (value: string): string =>
         ? value
         : `${value.slice(0, MAX_ERROR_TEXT_LENGTH)}…`;
 
+const makeOversizedResponseError = (): Error =>
+    new Error('TrustGraph Librarian response exceeded the 5 MiB safety limit.');
+
+const readResponseText = async (response: Response): Promise<string> => {
+    const declaredLength = Number(
+        response.headers.get('content-length') ?? Number.NaN
+    );
+    if (
+        Number.isFinite(declaredLength) &&
+        declaredLength > MAX_RESPONSE_TEXT_LENGTH
+    ) {
+        throw makeOversizedResponseError();
+    }
+
+    if (response.body === null) {
+        return '';
+    }
+
+    const reader = response.body.getReader();
+    const chunks: Uint8Array[] = [];
+    let totalBytes = 0;
+    try {
+        while (true) {
+            const { done, value } = await reader.read();
+            if (done) {
+                break;
+            }
+            totalBytes += value.byteLength;
+            if (totalBytes > MAX_RESPONSE_TEXT_LENGTH) {
+                await reader.cancel().catch(() => undefined);
+                throw makeOversizedResponseError();
+            }
+            chunks.push(value);
+        }
+    } finally {
+        reader.releaseLock();
+    }
+
+    const body = new Uint8Array(totalBytes);
+    let offset = 0;
+    for (const chunk of chunks) {
+        body.set(chunk, offset);
+        offset += chunk.byteLength;
+    }
+    return new TextDecoder().decode(body);
+};
+
 const toLibrarianUrl = (baseUrl: string): URL => {
     const parsed = new URL(baseUrl);
     return new URL('/api/v1/librarian', parsed);
@@ -200,9 +249,9 @@ const toLibrarianUrl = (baseUrl: string): URL => {
 /**
  * Sends repository documents through TrustGraph's setup-time Librarian boundary.
  *
- * The public method names mirror the TrustGraph Python API. In TrustGraph 2.7,
- * startProcessing and stopProcessing intentionally send the service operations
- * `add-processing` and `remove-processing`.
+ * The public method names mirror the TrustGraph Python API. The processing
+ * methods intentionally send the service operations `add-processing` and
+ * `remove-processing`.
  */
 export class TrustGraphLibrarianClient {
     private readonly endpointUrl: URL;
@@ -335,12 +384,7 @@ export class TrustGraphLibrarianClient {
                 signal: controller.signal,
             });
 
-            const responseText = await response.text();
-            if (responseText.length > MAX_RESPONSE_TEXT_LENGTH) {
-                throw new Error(
-                    'TrustGraph Librarian response exceeded the 5 MiB safety limit.'
-                );
-            }
+            const responseText = await readResponseText(response);
 
             let responseBody: unknown = {};
             if (responseText.trim().length > 0) {
