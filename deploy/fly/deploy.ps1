@@ -194,12 +194,12 @@ function Ensure-FlySecrets {
 function Enable-FlyTrustGraphRuntime {
   param([string]$AppName)
 
-  Write-Host "Enabling TrustGraph HTTP retrieval with required ownership validation for $AppName..."
+  Write-Host "Enabling TrustGraph HTTP retrieval with deployment-scoped ownership validation for $AppName..."
   & fly secrets set `
     'EXECUTION_CONTRACT_TRUSTGRAPH_ENABLED=true' `
     'EXECUTION_CONTRACT_TRUSTGRAPH_KILL_SWITCH=false' `
     'EXECUTION_CONTRACT_TRUSTGRAPH_ADAPTER_MODE=http' `
-    'EXECUTION_CONTRACT_TRUSTGRAPH_OWNERSHIP_BINDING_MODE=http' `
+    'EXECUTION_CONTRACT_TRUSTGRAPH_OWNERSHIP_BINDING_MODE=deployment' `
     -a $AppName | Out-Null
   if ($LASTEXITCODE -ne 0) {
     throw "Failed to enable TrustGraph runtime for $AppName"
@@ -270,9 +270,7 @@ if ($EnableTrustGraph) {
     'EXECUTION_CONTRACT_TRUSTGRAPH_BASE_URL',
     'EXECUTION_CONTRACT_TRUSTGRAPH_FLOW',
     'EXECUTION_CONTRACT_TRUSTGRAPH_COLLECTION',
-    'EXECUTION_CONTRACT_TRUSTGRAPH_WORKSPACE_REF',
-    'EXECUTION_CONTRACT_TRUSTGRAPH_OWNERSHIP_ENDPOINT_URL',
-    'EXECUTION_CONTRACT_TRUSTGRAPH_OWNERSHIP_API_TOKEN'
+    'EXECUTION_CONTRACT_TRUSTGRAPH_WORKSPACE_REF'
   )
 }
 Ensure-FlySecrets -AppName $serverAppName `

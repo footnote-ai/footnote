@@ -274,8 +274,6 @@ EXECUTION_CONTRACT_TRUSTGRAPH_BASE_URL=http://<pc-magicdns-hostname>:8888
 EXECUTION_CONTRACT_TRUSTGRAPH_FLOW=default
 EXECUTION_CONTRACT_TRUSTGRAPH_COLLECTION=footnote-repository-context
 EXECUTION_CONTRACT_TRUSTGRAPH_WORKSPACE_REF=footnote
-EXECUTION_CONTRACT_TRUSTGRAPH_OWNERSHIP_ENDPOINT_URL=http://<tenancy-host-over-tailscale>:<port>/ownership
-EXECUTION_CONTRACT_TRUSTGRAPH_OWNERSHIP_API_TOKEN=<tenancy-validator-token>
 ```
 
 The normal Fly deploy leaves TrustGraph disabled and does not require these
@@ -289,43 +287,20 @@ additional values. To opt in, pass the explicit TrustGraph mode flag:
 ./deploy/fly/deploy.sh --enable-trustgraph
 ```
 
-TrustGraph mode enables the HTTP adapter and required HTTP ownership validation
-during deployment. The adapter token is sent only as a bearer token to
-TrustGraph. The ownership token is sent only to the separately configured
-tenancy endpoint. The workspace reference is diagnostic; TrustGraph
-authorization comes from the adapter token.
+TrustGraph mode enables the HTTP adapter and an explicit deployment-scoped
+ownership check during deployment. Every chat-authorized user may query the
+single configured collection. The backend ignores caller-selected channel,
+guild, project, and collection values for this mode, so this is intentionally
+single-tenant and is not a multi-tenant authorization model. The adapter token
+is sent only as a bearer token to TrustGraph. The workspace reference is
+diagnostic; TrustGraph authorization comes from the adapter token.
 
-The ownership endpoint is not TrustGraph. It is an authenticated Footnote
-tenancy service that decides whether the request's exact user/project or
-user/collection tuple is owned. It accepts `POST` requests shaped like:
-
-```json
-{
-    "scopeTuple": {
-        "userId": "...",
-        "projectId": "..."
-    }
-}
-```
-
-An allow response is shaped like:
-
-```json
-{
-    "owned": true,
-    "checkedAt": "2026-08-25T21:00:00Z",
-    "evidence": ["account/project membership"]
-}
-```
-
-The service must validate a real relationship represented by the tuple. For
-Discord requests, the current project and collection values come from the
-channel and guild, so the validator must use trusted Discord membership/access
-data rather than accepting those request values as proof. Do not point this
-setting at TrustGraph, reuse the TrustGraph workspace token, or deploy an
-allow-all response. The deploy command now requires both ownership values
-before it enables retrieval. A missing or failed ownership check still fails
-closed for external retrieval while the local answer path continues.
+Do not point the adapter at an untrusted TrustGraph workspace, reuse unrelated
+credentials, or replace the backend deployment-scope check with an allow-all
+validator. A missing or failed scope check still fails closed for external
+retrieval while the local answer path continues. A future multi-tenant setup
+can switch to `http` ownership binding when an authoritative Footnote tenancy
+service exists.
 
 Deploy normally without TrustGraph:
 
@@ -333,8 +308,9 @@ Deploy normally without TrustGraph:
 ./deploy/fly/deploy.ps1
 ```
 
-After deployment, verify `TAILSCALE_STATUS=ready` and
-`ownershipBindingMode=http` in the Fly logs. Before treating retrieval as
+After deployment, verify `TAILSCALE_STATUS=ready`,
+`ownershipBindingMode=deployment`, and `ownershipValidatorConfigured=true` in
+the Fly logs. Before treating retrieval as
 ready, call Graph RAG directly and confirm its response contains non-empty
 `sources`; generated text without source references is rejected by Footnote.
 Then run one chat request using the loaded repository context and confirm the
