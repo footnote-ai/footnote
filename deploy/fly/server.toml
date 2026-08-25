@@ -11,6 +11,8 @@ primary_region = 'ord'
   FRAME_ANCESTORS = 'https://ai.jordanmakes.dev'
   TURNSTILE_ALLOWED_HOSTNAMES = 'ai.jordanmakes.dev'
   OLLAMA_BASE_URL = 'https://ollama.com'
+  TAILSCALE_HOSTNAME = 'footnote-fly'
+  TAILSCALE_TAGS = 'tag:footnote-fly'
 
 [[services]]
   internal_port = 3000

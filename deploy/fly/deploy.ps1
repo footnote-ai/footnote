@@ -126,6 +126,21 @@ function Get-OrCreate-TraceToken {
   return $token
 }
 
+function Read-RequiredSecretValue {
+  param(
+    [string]$Secret,
+    [string]$AppName
+  )
+
+  $secureValue = Read-Host "Enter value for $Secret (required for $AppName)" -AsSecureString
+  $pointer = [Runtime.InteropServices.Marshal]::SecureStringToBSTR($secureValue)
+  try {
+    return [Runtime.InteropServices.Marshal]::PtrToStringBSTR($pointer)
+  } finally {
+    [Runtime.InteropServices.Marshal]::ZeroFreeBSTR($pointer)
+  }
+}
+
 function Ensure-FlySecrets {
   param(
     [string]$AppName,
@@ -145,7 +160,7 @@ function Ensure-FlySecrets {
       } elseif ($secret -eq 'TRACE_API_TOKEN') {
         $value = Get-OrCreate-TraceToken -EnvPath $EnvPath
       } else {
-        $value = Read-Host "Enter value for $secret (required for $AppName)"
+        $value = Read-RequiredSecretValue -Secret $secret -AppName $AppName
       }
       if ($value -and $value.Trim().Length -gt 0) {
         & fly secrets set "$secret=$value" -a $AppName | Out-Null
@@ -172,6 +187,20 @@ function Ensure-FlySecrets {
         Write-Host "Skipped $secret for $AppName."
       }
     }
+  }
+}
+
+function Enable-FlyTrustGraphRuntime {
+  param([string]$AppName)
+
+  Write-Host "Enabling TrustGraph HTTP retrieval for $AppName..."
+  & fly secrets set `
+    'EXECUTION_CONTRACT_TRUSTGRAPH_ENABLED=true' `
+    'EXECUTION_CONTRACT_TRUSTGRAPH_KILL_SWITCH=false' `
+    'EXECUTION_CONTRACT_TRUSTGRAPH_ADAPTER_MODE=http' `
+    -a $AppName | Out-Null
+  if ($LASTEXITCODE -ne 0) {
+    throw "Failed to enable TrustGraph runtime for $AppName"
   }
 }
 
@@ -232,9 +261,10 @@ if ($LASTEXITCODE -ne 0) {
 
 Write-Host "Configuring server secrets..."
 Ensure-FlySecrets -AppName $serverAppName `
-  -RequiredSecrets @('INCIDENT_PSEUDONYMIZATION_SECRET') `
+  -RequiredSecrets @('INCIDENT_PSEUDONYMIZATION_SECRET', 'TAILSCALE_AUTHKEY', 'EXECUTION_CONTRACT_TRUSTGRAPH_ADAPTER_API_TOKEN', 'EXECUTION_CONTRACT_TRUSTGRAPH_BASE_URL', 'EXECUTION_CONTRACT_TRUSTGRAPH_FLOW', 'EXECUTION_CONTRACT_TRUSTGRAPH_COLLECTION', 'EXECUTION_CONTRACT_TRUSTGRAPH_WORKSPACE_REF') `
   -OptionalSecrets @('OPENAI_API_KEY', 'OLLAMA_API_KEY', 'TRACE_API_TOKEN', 'REFLECT_SERVICE_TOKEN', 'TURNSTILE_SECRET_KEY', 'DISCORD_TOKEN', 'CLOUDINARY_API_KEY', 'CLOUDINARY_API_SECRET', 'GITHUB_WEBHOOK_SECRET') `
   -EnvPath $envPath
+Enable-FlyTrustGraphRuntime -AppName $serverAppName
 Invoke-EnvValidation -Target 'fly-server' -AppName $serverAppName
 Upload-FootnoteSettings -AppName $serverAppName -RepoRootPath $repoRoot
 
