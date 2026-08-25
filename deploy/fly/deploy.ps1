@@ -1,6 +1,7 @@
 param(
   [ValidateSet('preserve', 'authelia')]
-  [string]$AuthMode
+  [string]$AuthMode,
+  [switch]$EnableTrustGraph
 )
 
 $ErrorActionPreference = 'Stop'
@@ -260,11 +261,24 @@ if ($LASTEXITCODE -ne 0) {
 }
 
 Write-Host "Configuring server secrets..."
+$requiredSecrets = @('INCIDENT_PSEUDONYMIZATION_SECRET')
+if ($EnableTrustGraph) {
+  $requiredSecrets += @(
+    'TAILSCALE_AUTHKEY',
+    'EXECUTION_CONTRACT_TRUSTGRAPH_ADAPTER_API_TOKEN',
+    'EXECUTION_CONTRACT_TRUSTGRAPH_BASE_URL',
+    'EXECUTION_CONTRACT_TRUSTGRAPH_FLOW',
+    'EXECUTION_CONTRACT_TRUSTGRAPH_COLLECTION',
+    'EXECUTION_CONTRACT_TRUSTGRAPH_WORKSPACE_REF'
+  )
+}
 Ensure-FlySecrets -AppName $serverAppName `
-  -RequiredSecrets @('INCIDENT_PSEUDONYMIZATION_SECRET', 'TAILSCALE_AUTHKEY', 'EXECUTION_CONTRACT_TRUSTGRAPH_ADAPTER_API_TOKEN', 'EXECUTION_CONTRACT_TRUSTGRAPH_BASE_URL', 'EXECUTION_CONTRACT_TRUSTGRAPH_FLOW', 'EXECUTION_CONTRACT_TRUSTGRAPH_COLLECTION', 'EXECUTION_CONTRACT_TRUSTGRAPH_WORKSPACE_REF') `
+  -RequiredSecrets $requiredSecrets `
   -OptionalSecrets @('OPENAI_API_KEY', 'OLLAMA_API_KEY', 'TRACE_API_TOKEN', 'REFLECT_SERVICE_TOKEN', 'TURNSTILE_SECRET_KEY', 'DISCORD_TOKEN', 'CLOUDINARY_API_KEY', 'CLOUDINARY_API_SECRET', 'GITHUB_WEBHOOK_SECRET') `
   -EnvPath $envPath
-Enable-FlyTrustGraphRuntime -AppName $serverAppName
+if ($EnableTrustGraph) {
+  Enable-FlyTrustGraphRuntime -AppName $serverAppName
+}
 Invoke-EnvValidation -Target 'fly-server' -AppName $serverAppName
 Upload-FootnoteSettings -AppName $serverAppName -RepoRootPath $repoRoot
 

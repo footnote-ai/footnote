@@ -4,13 +4,27 @@ set -euo pipefail
 # Deploys the canonical server Fly app, ensuring required secrets are set.
 
 auth_mode=""
-if [[ $# -gt 0 ]]; then
-  if [[ $# -ne 2 || "$1" != "--auth-mode" || ("$2" != "preserve" && "$2" != "authelia") ]]; then
-    echo "Usage: $0 [--auth-mode preserve|authelia]" >&2
-    exit 1
-  fi
-  auth_mode="$2"
-fi
+enable_trustgraph=false
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --auth-mode)
+      if [[ $# -lt 2 || ("$2" != "preserve" && "$2" != "authelia") ]]; then
+        echo "Usage: $0 [--auth-mode preserve|authelia] [--enable-trustgraph]" >&2
+        exit 1
+      fi
+      auth_mode="$2"
+      shift 2
+      ;;
+    --enable-trustgraph)
+      enable_trustgraph=true
+      shift
+      ;;
+    *)
+      echo "Usage: $0 [--auth-mode preserve|authelia] [--enable-trustgraph]" >&2
+      exit 1
+      ;;
+  esac
+done
 
 if ! command -v fly >/dev/null 2>&1; then
   echo "Fly CLI is required. Install from https://fly.io/docs/flyctl/install/"
@@ -231,9 +245,15 @@ fi
 pnpm "${auth_provision_args[@]}"
 
 echo "Configuring server secrets..."
-ensure_secrets "$server_app_name" INCIDENT_PSEUDONYMIZATION_SECRET TAILSCALE_AUTHKEY EXECUTION_CONTRACT_TRUSTGRAPH_ADAPTER_API_TOKEN EXECUTION_CONTRACT_TRUSTGRAPH_BASE_URL EXECUTION_CONTRACT_TRUSTGRAPH_FLOW EXECUTION_CONTRACT_TRUSTGRAPH_COLLECTION EXECUTION_CONTRACT_TRUSTGRAPH_WORKSPACE_REF
+required_secrets=(INCIDENT_PSEUDONYMIZATION_SECRET)
+if [[ "$enable_trustgraph" == true ]]; then
+  required_secrets+=(TAILSCALE_AUTHKEY EXECUTION_CONTRACT_TRUSTGRAPH_ADAPTER_API_TOKEN EXECUTION_CONTRACT_TRUSTGRAPH_BASE_URL EXECUTION_CONTRACT_TRUSTGRAPH_FLOW EXECUTION_CONTRACT_TRUSTGRAPH_COLLECTION EXECUTION_CONTRACT_TRUSTGRAPH_WORKSPACE_REF)
+fi
+ensure_secrets "$server_app_name" "${required_secrets[@]}"
 ensure_optional_secrets "$server_app_name" OPENAI_API_KEY OLLAMA_API_KEY TRACE_API_TOKEN REFLECT_SERVICE_TOKEN TURNSTILE_SECRET_KEY DISCORD_TOKEN CLOUDINARY_API_KEY CLOUDINARY_API_SECRET GITHUB_WEBHOOK_SECRET
-enable_trustgraph_runtime "$server_app_name"
+if [[ "$enable_trustgraph" == true ]]; then
+  enable_trustgraph_runtime "$server_app_name"
+fi
 run_env_validation fly-server "$server_app_name"
 upload_settings_yaml "$server_app_name"
 
@@ -252,4 +272,3 @@ if [[ -f "$SCRIPT_DIR/start.sh" ]]; then
   echo "Starting server app..."
   bash "$SCRIPT_DIR/start.sh"
 fi
-

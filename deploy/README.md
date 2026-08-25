@@ -263,9 +263,9 @@ TrustGraph node and port `8888`.
 
 #### Fly deployment values
 
-The deploy wrappers require these values before deploying the TrustGraph-
-enabled server. They read them from the untracked root `.env` when present or
-prompt without echoing required values:
+The deploy wrappers require these values only when TrustGraph mode is enabled.
+They read them from the untracked root `.env` when present or prompt without
+echoing required values:
 
 ```text
 TAILSCALE_AUTHKEY=<reusable, pre-authorized ephemeral auth key>
@@ -276,11 +276,22 @@ EXECUTION_CONTRACT_TRUSTGRAPH_COLLECTION=footnote-repository-context
 EXECUTION_CONTRACT_TRUSTGRAPH_WORKSPACE_REF=footnote
 ```
 
-The Fly deploy wrappers enable the HTTP adapter during deployment. The
-adapter token is sent only as a bearer token to TrustGraph. The workspace
-reference is diagnostic; TrustGraph authorization comes from the token.
+The normal Fly deploy leaves TrustGraph disabled and does not require these
+additional values. To opt in, pass the explicit TrustGraph mode flag:
 
-Deploy with the normal wrapper:
+```powershell
+./deploy/fly/deploy.ps1 -EnableTrustGraph
+```
+
+```bash
+./deploy/fly/deploy.sh --enable-trustgraph
+```
+
+TrustGraph mode enables the HTTP adapter during deployment. The adapter token
+is sent only as a bearer token to TrustGraph. The workspace reference is
+diagnostic; TrustGraph authorization comes from the token.
+
+Deploy normally without TrustGraph:
 
 ```powershell
 ./deploy/fly/deploy.ps1
