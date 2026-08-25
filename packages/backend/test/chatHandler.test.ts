@@ -75,9 +75,22 @@ const createExecutionContractTrustGraphRuntimeConfig = (
         maxCalls: 1,
         adapter: {
             mode: 'none',
-            endpointUrl: null,
+            baseUrl: null,
+            flow: null,
+            collection: null,
             apiToken: null,
-            configRef: null,
+            workspaceRef: null,
+            graphRagLimits: {
+                maxQueryChars: 8000,
+                entityLimit: 50,
+                tripleLimit: 30,
+                maxSubgraphSize: 1000,
+                maxPathLength: 2,
+                maxResponseChars: 12000,
+                maxSources: 20,
+                maxSourceUriChars: 2048,
+                maxSourceTitleChars: 512,
+            },
             stubMode: 'success',
             ...(adapter ?? {}),
         },
@@ -1194,9 +1207,22 @@ test('Execution Contract TrustGraph config disabled and kill switch both remove 
                 enabled: false,
                 adapter: {
                     mode: 'stub',
-                    endpointUrl: null,
+                    baseUrl: null,
+                    flow: null,
+                    collection: null,
                     apiToken: null,
-                    configRef: null,
+                    workspaceRef: null,
+                    graphRagLimits: {
+                        maxQueryChars: 8000,
+                        entityLimit: 50,
+                        tripleLimit: 30,
+                        maxSubgraphSize: 1000,
+                        maxPathLength: 2,
+                        maxResponseChars: 12000,
+                        maxSources: 20,
+                        maxSourceUriChars: 2048,
+                        maxSourceTitleChars: 512,
+                    },
                     stubMode: 'success',
                 },
             })
@@ -1209,9 +1235,22 @@ test('Execution Contract TrustGraph config disabled and kill switch both remove 
                 killSwitchExternalRetrieval: true,
                 adapter: {
                     mode: 'stub',
-                    endpointUrl: null,
+                    baseUrl: null,
+                    flow: null,
+                    collection: null,
                     apiToken: null,
-                    configRef: null,
+                    workspaceRef: null,
+                    graphRagLimits: {
+                        maxQueryChars: 8000,
+                        entityLimit: 50,
+                        tripleLimit: 30,
+                        maxSubgraphSize: 1000,
+                        maxPathLength: 2,
+                        maxResponseChars: 12000,
+                        maxSources: 20,
+                        maxSourceUriChars: 2048,
+                        maxSourceTitleChars: 512,
+                    },
                     stubMode: 'success',
                 },
             })
@@ -1230,9 +1269,22 @@ test('Execution Contract TrustGraph runtime wiring threads ownership validation 
         timeoutMs: 321,
         adapter: {
             mode: 'none',
-            endpointUrl: null,
+            baseUrl: null,
+            flow: null,
+            collection: null,
             apiToken: null,
-            configRef: null,
+            workspaceRef: null,
+            graphRagLimits: {
+                maxQueryChars: 8000,
+                entityLimit: 50,
+                tripleLimit: 30,
+                maxSubgraphSize: 1000,
+                maxPathLength: 2,
+                maxResponseChars: 12000,
+                maxSources: 20,
+                maxSourceUriChars: 2048,
+                maxSourceTitleChars: 512,
+            },
             stubMode: 'success',
         },
         ownership: {
@@ -1250,21 +1302,34 @@ test('Execution Contract TrustGraph runtime wiring threads ownership validation 
     );
 });
 
-test('Execution Contract TrustGraph runtime wiring fails fast when http adapter endpoint is missing', () => {
+test('Execution Contract TrustGraph runtime wiring fails fast when http adapter base URL is missing', () => {
     const config = createExecutionContractTrustGraphRuntimeConfig({
         enabled: true,
         adapter: {
             mode: 'http',
-            endpointUrl: null,
+            baseUrl: null,
+            flow: null,
+            collection: null,
             apiToken: 'adapter-secret',
-            configRef: null,
+            workspaceRef: null,
+            graphRagLimits: {
+                maxQueryChars: 8000,
+                entityLimit: 50,
+                tripleLimit: 30,
+                maxSubgraphSize: 1000,
+                maxPathLength: 2,
+                maxResponseChars: 12000,
+                maxSources: 20,
+                maxSourceUriChars: 2048,
+                maxSourceTitleChars: 512,
+            },
             stubMode: 'success',
         },
     });
 
     assert.throws(
         () => resolveExecutionContractTrustGraphRuntimeOptions(config),
-        /execution_contract_trustgraph_http_adapter_missing_endpoint/
+        /execution_contract_trustgraph_http_adapter_missing_base_url/
     );
 });
 
@@ -1273,9 +1338,22 @@ test('Execution Contract TrustGraph runtime wiring fails fast when http adapter 
         enabled: true,
         adapter: {
             mode: 'http',
-            endpointUrl: 'http://trustgraph.internal/evidence',
+            baseUrl: 'http://trustgraph.internal',
+            flow: 'default',
+            collection: 'footnote-repository-context',
             apiToken: null,
-            configRef: null,
+            workspaceRef: null,
+            graphRagLimits: {
+                maxQueryChars: 8000,
+                entityLimit: 50,
+                tripleLimit: 30,
+                maxSubgraphSize: 1000,
+                maxPathLength: 2,
+                maxResponseChars: 12000,
+                maxSources: 20,
+                maxSourceUriChars: 2048,
+                maxSourceTitleChars: 512,
+            },
             stubMode: 'success',
         },
     });
@@ -1291,9 +1369,22 @@ test('Execution Contract TrustGraph runtime wiring does not fail startup when fe
         enabled: false,
         adapter: {
             mode: 'http',
-            endpointUrl: null,
+            baseUrl: null,
+            flow: null,
+            collection: null,
             apiToken: null,
-            configRef: null,
+            workspaceRef: null,
+            graphRagLimits: {
+                maxQueryChars: 8000,
+                entityLimit: 50,
+                tripleLimit: 30,
+                maxSubgraphSize: 1000,
+                maxPathLength: 2,
+                maxResponseChars: 12000,
+                maxSources: 20,
+                maxSourceUriChars: 2048,
+                maxSourceTitleChars: 512,
+            },
             stubMode: 'success',
         },
     });

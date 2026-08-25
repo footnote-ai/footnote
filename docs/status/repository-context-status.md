@@ -1,9 +1,10 @@
 # Repository Context and TrustGraph Status
 
-Status: repository context selection, preview, and manual TrustGraph loading are
-implemented. Chat retrieval and guided setup are separate follow-up work.
+Status: repository context selection, preview, manual TrustGraph loading, and
+the native Graph RAG adapter are implemented. Live activation and guided setup
+remain separate follow-up work.
 
-Last updated: 2026-08-20.
+Last updated: 2026-08-24.
 
 ## Goal
 
@@ -38,6 +39,13 @@ An operator can now load the selected text files with
 keeps the repository-relative path and SHA-256 content hash with every
 document, and reports added, changed, unchanged, skipped, and failed files.
 The earlier hand-written snapshot and seed loader have been removed.
+
+The backend Graph RAG adapter calls TrustGraph 2.8's flow-scoped endpoint with
+bounded retrieval limits and requires returned source URIs before consuming a
+generated response. It maps one response to one aggregate advisory evidence
+item, retains returned source URIs and titles in provenance, and fails open to
+local chat on transport, timeout, or payload errors. The adapter does not send
+workspace identity; TrustGraph derives workspace access from the bearer token.
 
 ## Interim Project Context Path
 

@@ -23,12 +23,24 @@ const isNonEmptyString = (value: string | null): value is string =>
     typeof value === 'string' && value.trim().length > 0;
 
 const requireHttpAdapterConfig = (input: {
-    endpointUrl: string | null;
+    baseUrl: string | null;
+    flow: string | null;
+    collection: string | null;
     apiToken: string | null;
-}): { endpointUrl: string; apiToken: string } => {
-    if (!isNonEmptyString(input.endpointUrl)) {
+}): { baseUrl: string; flow: string; collection: string; apiToken: string } => {
+    if (!isNonEmptyString(input.baseUrl)) {
         throw new Error(
-            'execution_contract_trustgraph_http_adapter_missing_endpoint'
+            'execution_contract_trustgraph_http_adapter_missing_base_url'
+        );
+    }
+    if (!isNonEmptyString(input.flow)) {
+        throw new Error(
+            'execution_contract_trustgraph_http_adapter_missing_flow'
+        );
+    }
+    if (!isNonEmptyString(input.collection)) {
+        throw new Error(
+            'execution_contract_trustgraph_http_adapter_missing_collection'
         );
     }
     if (!isNonEmptyString(input.apiToken)) {
@@ -38,7 +50,9 @@ const requireHttpAdapterConfig = (input: {
     }
 
     return {
-        endpointUrl: input.endpointUrl,
+        baseUrl: input.baseUrl,
+        flow: input.flow,
+        collection: input.collection,
         apiToken: input.apiToken,
     };
 };
@@ -77,13 +91,18 @@ export const resolveExecutionContractTrustGraphRuntimeOptions = (
     >['adapter'];
     if (config.adapter.mode === 'http') {
         const adapterConfig = requireHttpAdapterConfig({
-            endpointUrl: config.adapter.endpointUrl,
+            baseUrl: config.adapter.baseUrl,
+            flow: config.adapter.flow,
+            collection: config.adapter.collection,
             apiToken: config.adapter.apiToken,
         });
         adapter = createHttpTrustGraphEvidenceAdapter({
-            endpointUrl: adapterConfig.endpointUrl,
+            baseUrl: adapterConfig.baseUrl,
+            flow: adapterConfig.flow,
+            collection: adapterConfig.collection,
             apiToken: adapterConfig.apiToken,
-            configRef: config.adapter.configRef,
+            workspaceRef: config.adapter.workspaceRef,
+            limits: config.adapter.graphRagLimits,
         });
     } else if (config.adapter.mode === 'stub') {
         adapter = new StubTrustGraphEvidenceAdapter(config.adapter.stubMode);
@@ -123,7 +142,7 @@ export const resolveExecutionContractTrustGraphRuntimeOptions = (
     logger.info(
         `chat.execution_contract_trustgraph.runtime_wiring (enabled=true, adapterMode=${config.adapter.mode}, adapterConfigured=${String(
             adapter !== undefined
-        )}, adapterConfigRef=${config.adapter.configRef}, ownershipBindingMode=${config.ownership.bindingMode}, ownershipValidatorConfigured=${String(
+        )}, workspaceRefConfigured=${String(isNonEmptyString(config.adapter.workspaceRef))}, ownershipBindingMode=${config.ownership.bindingMode}, ownershipValidatorConfigured=${String(
             scopeOwnershipValidator !== undefined
         )}, policyId=${config.policyId})`
     );

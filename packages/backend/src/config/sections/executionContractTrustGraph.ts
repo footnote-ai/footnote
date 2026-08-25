@@ -82,15 +82,77 @@ export const buildExecutionContractTrustGraphSection = (
             ADAPTER_MODES,
             warn
         ),
-        endpointUrl: parseOptionalTrimmedString(
-            env.EXECUTION_CONTRACT_TRUSTGRAPH_ADAPTER_ENDPOINT_URL
+        baseUrl: parseOptionalTrimmedString(
+            env.EXECUTION_CONTRACT_TRUSTGRAPH_BASE_URL
+        ),
+        flow: parseOptionalTrimmedString(
+            env.EXECUTION_CONTRACT_TRUSTGRAPH_FLOW
+        ),
+        collection: parseOptionalTrimmedString(
+            env.EXECUTION_CONTRACT_TRUSTGRAPH_COLLECTION
         ),
         apiToken: parseOptionalTrimmedString(
             env.EXECUTION_CONTRACT_TRUSTGRAPH_ADAPTER_API_TOKEN
         ),
-        configRef: parseOptionalTrimmedString(
-            env.EXECUTION_CONTRACT_TRUSTGRAPH_ADAPTER_CONFIG_REF
+        workspaceRef: parseOptionalTrimmedString(
+            env.EXECUTION_CONTRACT_TRUSTGRAPH_WORKSPACE_REF
         ),
+        graphRagLimits: {
+            maxQueryChars: parsePositiveIntEnv(
+                env.EXECUTION_CONTRACT_TRUSTGRAPH_MAX_QUERY_CHARS,
+                8000,
+                'EXECUTION_CONTRACT_TRUSTGRAPH_MAX_QUERY_CHARS',
+                warn
+            ),
+            entityLimit: parsePositiveIntEnv(
+                env.EXECUTION_CONTRACT_TRUSTGRAPH_ENTITY_LIMIT,
+                50,
+                'EXECUTION_CONTRACT_TRUSTGRAPH_ENTITY_LIMIT',
+                warn
+            ),
+            tripleLimit: parsePositiveIntEnv(
+                env.EXECUTION_CONTRACT_TRUSTGRAPH_TRIPLE_LIMIT,
+                30,
+                'EXECUTION_CONTRACT_TRUSTGRAPH_TRIPLE_LIMIT',
+                warn
+            ),
+            maxSubgraphSize: parsePositiveIntEnv(
+                env.EXECUTION_CONTRACT_TRUSTGRAPH_MAX_SUBGRAPH_SIZE,
+                1000,
+                'EXECUTION_CONTRACT_TRUSTGRAPH_MAX_SUBGRAPH_SIZE',
+                warn
+            ),
+            maxPathLength: parsePositiveIntEnv(
+                env.EXECUTION_CONTRACT_TRUSTGRAPH_MAX_PATH_LENGTH,
+                2,
+                'EXECUTION_CONTRACT_TRUSTGRAPH_MAX_PATH_LENGTH',
+                warn
+            ),
+            maxResponseChars: parsePositiveIntEnv(
+                env.EXECUTION_CONTRACT_TRUSTGRAPH_MAX_RESPONSE_CHARS,
+                12000,
+                'EXECUTION_CONTRACT_TRUSTGRAPH_MAX_RESPONSE_CHARS',
+                warn
+            ),
+            maxSources: parsePositiveIntEnv(
+                env.EXECUTION_CONTRACT_TRUSTGRAPH_MAX_SOURCES,
+                20,
+                'EXECUTION_CONTRACT_TRUSTGRAPH_MAX_SOURCES',
+                warn
+            ),
+            maxSourceUriChars: parsePositiveIntEnv(
+                env.EXECUTION_CONTRACT_TRUSTGRAPH_MAX_SOURCE_URI_CHARS,
+                2048,
+                'EXECUTION_CONTRACT_TRUSTGRAPH_MAX_SOURCE_URI_CHARS',
+                warn
+            ),
+            maxSourceTitleChars: parsePositiveIntEnv(
+                env.EXECUTION_CONTRACT_TRUSTGRAPH_MAX_SOURCE_TITLE_CHARS,
+                512,
+                'EXECUTION_CONTRACT_TRUSTGRAPH_MAX_SOURCE_TITLE_CHARS',
+                warn
+            ),
+        },
         stubMode: parseStringUnionEnv<StubAdapterMode>(
             env.EXECUTION_CONTRACT_TRUSTGRAPH_STUB_ADAPTER_MODE,
             'success',

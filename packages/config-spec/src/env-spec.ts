@@ -2625,7 +2625,7 @@ export const envEntries = [
     }),
 
     defineEnv({
-        key: 'EXECUTION_CONTRACT_TRUSTGRAPH_ADAPTER_ENDPOINT_URL',
+        key: 'EXECUTION_CONTRACT_TRUSTGRAPH_BASE_URL',
         owner: 'backend',
         stage: 'runtime',
         section: 'chat-workflow',
@@ -2633,7 +2633,33 @@ export const envEntries = [
         secret: false,
         kind: 'string',
         description:
-            'HTTP endpoint URL for TrustGraph adapter mode when adapter mode is `http`.',
+            'Base URL for the TrustGraph HTTP API when Graph RAG adapter mode is `http`.',
+        defaultValue: noDefault(),
+        usedBy: ['packages/backend/src/config.ts'],
+    }),
+
+    defineEnv({
+        key: 'EXECUTION_CONTRACT_TRUSTGRAPH_FLOW',
+        owner: 'backend',
+        stage: 'runtime',
+        section: 'chat-workflow',
+        required: false,
+        secret: false,
+        kind: 'string',
+        description: 'TrustGraph flow instance used for Graph RAG queries.',
+        defaultValue: noDefault(),
+        usedBy: ['packages/backend/src/config.ts'],
+    }),
+
+    defineEnv({
+        key: 'EXECUTION_CONTRACT_TRUSTGRAPH_COLLECTION',
+        owner: 'backend',
+        stage: 'runtime',
+        section: 'chat-workflow',
+        required: false,
+        secret: false,
+        kind: 'string',
+        description: 'TrustGraph collection searched by Graph RAG queries.',
         defaultValue: noDefault(),
         usedBy: ['packages/backend/src/config.ts'],
     }),
@@ -2653,7 +2679,7 @@ export const envEntries = [
     }),
 
     defineEnv({
-        key: 'EXECUTION_CONTRACT_TRUSTGRAPH_ADAPTER_CONFIG_REF',
+        key: 'EXECUTION_CONTRACT_TRUSTGRAPH_WORKSPACE_REF',
         owner: 'backend',
         stage: 'runtime',
         section: 'chat-workflow',
@@ -2661,8 +2687,128 @@ export const envEntries = [
         secret: false,
         kind: 'string',
         description:
-            'Optional adapter configuration reference passed with TrustGraph HTTP calls.',
+            'Optional diagnostic TrustGraph workspace reference. Workspace authorization comes from the API token and this value is never sent to TrustGraph.',
         defaultValue: noDefault(),
+        usedBy: ['packages/backend/src/config.ts'],
+    }),
+
+    defineEnv({
+        key: 'EXECUTION_CONTRACT_TRUSTGRAPH_MAX_QUERY_CHARS',
+        owner: 'backend',
+        stage: 'runtime',
+        section: 'chat-workflow',
+        required: false,
+        secret: false,
+        kind: 'integer',
+        description: 'Maximum query characters sent to TrustGraph Graph RAG.',
+        defaultValue: literal(8000),
+        usedBy: ['packages/backend/src/config.ts'],
+    }),
+
+    defineEnv({
+        key: 'EXECUTION_CONTRACT_TRUSTGRAPH_ENTITY_LIMIT',
+        owner: 'backend',
+        stage: 'runtime',
+        section: 'chat-workflow',
+        required: false,
+        secret: false,
+        kind: 'integer',
+        description: 'Maximum TrustGraph Graph RAG entities to retrieve.',
+        defaultValue: literal(50),
+        usedBy: ['packages/backend/src/config.ts'],
+    }),
+
+    defineEnv({
+        key: 'EXECUTION_CONTRACT_TRUSTGRAPH_TRIPLE_LIMIT',
+        owner: 'backend',
+        stage: 'runtime',
+        section: 'chat-workflow',
+        required: false,
+        secret: false,
+        kind: 'integer',
+        description: 'Maximum TrustGraph triples per Graph RAG entity.',
+        defaultValue: literal(30),
+        usedBy: ['packages/backend/src/config.ts'],
+    }),
+
+    defineEnv({
+        key: 'EXECUTION_CONTRACT_TRUSTGRAPH_MAX_SUBGRAPH_SIZE',
+        owner: 'backend',
+        stage: 'runtime',
+        section: 'chat-workflow',
+        required: false,
+        secret: false,
+        kind: 'integer',
+        description: 'Maximum TrustGraph Graph RAG subgraph size.',
+        defaultValue: literal(1000),
+        usedBy: ['packages/backend/src/config.ts'],
+    }),
+
+    defineEnv({
+        key: 'EXECUTION_CONTRACT_TRUSTGRAPH_MAX_PATH_LENGTH',
+        owner: 'backend',
+        stage: 'runtime',
+        section: 'chat-workflow',
+        required: false,
+        secret: false,
+        kind: 'integer',
+        description: 'Maximum TrustGraph Graph RAG traversal path length.',
+        defaultValue: literal(2),
+        usedBy: ['packages/backend/src/config.ts'],
+    }),
+
+    defineEnv({
+        key: 'EXECUTION_CONTRACT_TRUSTGRAPH_MAX_RESPONSE_CHARS',
+        owner: 'backend',
+        stage: 'runtime',
+        section: 'chat-workflow',
+        required: false,
+        secret: false,
+        kind: 'integer',
+        description:
+            'Maximum generated Graph RAG response characters consumed as evidence.',
+        defaultValue: literal(12000),
+        usedBy: ['packages/backend/src/config.ts'],
+    }),
+
+    defineEnv({
+        key: 'EXECUTION_CONTRACT_TRUSTGRAPH_MAX_SOURCES',
+        owner: 'backend',
+        stage: 'runtime',
+        section: 'chat-workflow',
+        required: false,
+        secret: false,
+        kind: 'integer',
+        description: 'Maximum Graph RAG source records consumed per response.',
+        defaultValue: literal(20),
+        usedBy: ['packages/backend/src/config.ts'],
+    }),
+
+    defineEnv({
+        key: 'EXECUTION_CONTRACT_TRUSTGRAPH_MAX_SOURCE_URI_CHARS',
+        owner: 'backend',
+        stage: 'runtime',
+        section: 'chat-workflow',
+        required: false,
+        secret: false,
+        kind: 'integer',
+        description:
+            'Maximum characters allowed in a returned Graph RAG source URI.',
+        defaultValue: literal(2048),
+        usedBy: ['packages/backend/src/config.ts'],
+    }),
+
+    defineEnv({
+        key: 'EXECUTION_CONTRACT_TRUSTGRAPH_MAX_SOURCE_TITLE_CHARS',
+        owner: 'backend',
+        stage: 'runtime',
+        section: 'chat-workflow',
+        required: false,
+        secret: false,
+        kind: 'integer',
+        description:
+            'Maximum characters allowed in a returned Graph RAG source title.',
+        defaultValue: literal(512),
         usedBy: ['packages/backend/src/config.ts'],
     }),
 
