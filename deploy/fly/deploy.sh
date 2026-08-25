@@ -19,7 +19,7 @@ fi
 
 get_app_name() {
   local config_path="$1"
-  # Extract app name from fly.toml to keep scripts DRY.
+  # Extract app name from server.toml to keep scripts DRY.
   local line
   line=$(grep -E "^app\\s*=" "$config_path" | head -n 1 || true)
   if [[ -z "$line" ]]; then

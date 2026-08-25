@@ -77,7 +77,7 @@ const requestLocalOperatorLink = ({ port, action }) =>
 const requestFlyOperatorLink = ({ flyApp, action }) => {
     const body = JSON.stringify({ action }).replace(/'/g, "'\\''");
     const remoteCommand = [
-        // Port 3000 matches internal_port in fly.toml and deploy/fly/server.toml.
+        // Port 3000 matches internal_port in deploy/fly/server.toml.
         'curl -fsS -X POST http://127.0.0.1:3000/api/setup/operator-link',
         "-H 'content-type: application/json'",
         `-H '${OPERATOR_REQUEST_HEADER}: ${OPERATOR_REQUEST_HEADER_VALUE}'`,

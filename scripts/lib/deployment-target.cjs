@@ -95,7 +95,6 @@ const readDeploymentMetadata = (repoRoot) => {
 const resolveDeploymentTarget = ({ argv, repoRoot }) => {
     const parsedArgs = parseTargetArgs(argv);
     const metadata = readDeploymentMetadata(repoRoot);
-    const rootFlyApp = readFlyAppFromToml(path.join(repoRoot, 'fly.toml'));
     const deployFlyApp = readFlyAppFromToml(
         path.join(repoRoot, 'deploy', 'fly', 'server.toml')
     );
@@ -105,11 +104,10 @@ const resolveDeploymentTarget = ({ argv, repoRoot }) => {
         parsedArgs.target ??
         metadata.target ??
         (envFlyApp ? 'fly' : undefined) ??
-        (rootFlyApp || deployFlyApp ? 'fly' : undefined) ??
+        (deployFlyApp ? 'fly' : undefined) ??
         'local';
 
-    const flyApp =
-        metadata.flyApp ?? envFlyApp ?? rootFlyApp ?? deployFlyApp ?? undefined;
+    const flyApp = metadata.flyApp ?? envFlyApp ?? deployFlyApp ?? undefined;
 
     if (target === 'fly' && !flyApp) {
         throw new Error(
