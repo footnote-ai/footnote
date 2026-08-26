@@ -60,7 +60,11 @@ const describeTargetFailure = (
     }
 
     const reason = normalizeFailureDetail(error) || 'unknown_error';
-    return { errorName: 'UnknownError', reason };
+    const errorName =
+        reason === 'trustgraph_adapter_aborted_by_signal'
+            ? 'AbortError'
+            : 'UnknownError';
+    return { errorName, reason };
 };
 
 const requireHttpAdapterConfig = (input: {

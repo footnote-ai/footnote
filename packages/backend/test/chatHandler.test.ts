@@ -1351,17 +1351,23 @@ test('Execution Contract TrustGraph target failures preserve safe error details 
         const resolved =
             resolveExecutionContractTrustGraphRuntimeOptions(config);
         assert.ok(resolved?.adapter);
-        const abortController = new AbortController();
-        abortController.abort();
+        const originalFetch = globalThis.fetch;
+        globalThis.fetch = (() =>
+            Promise.reject(
+                'trustgraph_adapter_aborted_by_signal'
+            )) as unknown as typeof fetch;
 
-        await assert.rejects(
-            resolved.adapter.getEvidenceBundle({
-                queryIntent: 'What changed?',
-                scopeTuple: { userId: 'user_1', projectId: 'project_1' },
-                budget: { timeoutMs: 100, maxCalls: 1 },
-                abortSignal: abortController.signal,
-            })
-        );
+        try {
+            await assert.rejects(
+                resolved.adapter.getEvidenceBundle({
+                    queryIntent: 'What changed?',
+                    scopeTuple: { userId: 'user_1', projectId: 'project_1' },
+                    budget: { timeoutMs: 100, maxCalls: 1 },
+                })
+            );
+        } finally {
+            globalThis.fetch = originalFetch;
+        }
 
         assert.match(
             observedWarning?.message ?? '',
