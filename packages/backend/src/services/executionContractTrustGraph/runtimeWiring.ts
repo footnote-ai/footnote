@@ -176,6 +176,21 @@ export const resolveExecutionContractTrustGraphRuntimeOptions = (
                     }
                 );
             },
+            onTargetResponseTruncated: (target, details) => {
+                const event =
+                    'chat.execution_contract_trustgraph.target_response_truncated';
+                logger.warn(
+                    `${event} (targetId=${target.id}, flow=${target.flow}, collection=${target.collection}, originalResponseChars=${details.originalResponseChars}, retainedResponseChars=${details.retainedResponseChars})`,
+                    {
+                        event,
+                        targetId: target.id,
+                        flow: target.flow,
+                        collection: target.collection,
+                        originalResponseChars: details.originalResponseChars,
+                        retainedResponseChars: details.retainedResponseChars,
+                    }
+                );
+            },
         });
     } else if (config.adapter.mode === 'stub') {
         adapter = new StubTrustGraphEvidenceAdapter(config.adapter.stubMode);

@@ -165,11 +165,16 @@ the optional workspace reference is diagnostic only and is never sent as
 authorization context.
 
 Graph RAG responses are consumed only when they contain a non-empty generated
-response and validated source URIs. Footnote maps each successful configured
-target to one aggregate advisory evidence item. The target identity is retained
-in the evidence item and provenance path; source URIs and titles remain in that
-path. Footnote does not treat TrustGraph ranking or confidence as backend
-policy.
+response and validated source URIs. A generated response that exceeds the
+per-target character bound is retained as an explicitly marked, sentence-aware
+bounded excerpt instead of discarding that target. Footnote also applies a
+shared aggregate response bound across configured targets, so adding targets
+does not silently multiply prompt context. Transport bodies that exceed the
+hard HTTP body bound still fail open. Footnote maps each successful configured
+target to one aggregate advisory evidence item. The target identity is
+retained in the evidence item and provenance path; source URIs and titles
+remain in that path. Footnote does not treat TrustGraph ranking or confidence
+as backend policy.
 
 TrustGraph can supply extra context, but Footnote still decides how to handle
 the request. If TrustGraph is unavailable, the local chat path continues

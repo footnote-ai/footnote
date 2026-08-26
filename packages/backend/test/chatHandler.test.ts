@@ -1391,6 +1391,102 @@ test('Execution Contract TrustGraph target failures preserve safe error details 
     }
 });
 
+test('Execution Contract TrustGraph response truncation preserves safe size details in logs', async () => {
+    const config = createExecutionContractTrustGraphRuntimeConfig({
+        adapter: {
+            mode: 'http',
+            baseUrl: 'http://trustgraph.test',
+            apiToken: 'adapter-secret',
+            workspaceRef: 'footnote',
+            targets: [
+                {
+                    id: 'history',
+                    flow: 'history-flow',
+                    collection: 'history-collection',
+                },
+            ],
+            graphRagLimits: {
+                maxQueryChars: 8000,
+                entityLimit: 50,
+                tripleLimit: 30,
+                maxSubgraphSize: 1000,
+                maxPathLength: 2,
+                maxResponseChars: 12000,
+                maxSources: 20,
+                maxSourceUriChars: 2048,
+                maxSourceTitleChars: 512,
+            },
+            stubMode: 'success',
+        },
+    });
+    const originalWarn = logger.warn;
+    let observedWarning:
+        { message: string; metadata: Record<string, unknown> } | undefined;
+
+    logger.warn = ((message: string, metadata?: unknown) => {
+        if (
+            message.startsWith(
+                'chat.execution_contract_trustgraph.target_response_truncated '
+            )
+        ) {
+            observedWarning = {
+                message,
+                metadata:
+                    metadata !== null && typeof metadata === 'object'
+                        ? (metadata as Record<string, unknown>)
+                        : {},
+            };
+        }
+        return undefined;
+    }) as unknown as typeof logger.warn;
+
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = (() =>
+        Promise.resolve(
+            new Response(
+                JSON.stringify({
+                    response: 'x'.repeat(12001),
+                    sources: [{ uri: 'urn:history' }],
+                }),
+                { headers: { 'content-type': 'application/json' } }
+            )
+        )) as unknown as typeof fetch;
+
+    try {
+        const resolved =
+            resolveExecutionContractTrustGraphRuntimeOptions(config);
+        assert.ok(resolved?.adapter);
+        const bundle = await resolved.adapter.getEvidenceBundle({
+            queryIntent: 'What changed?',
+            scopeTuple: { userId: 'user_1', projectId: 'project_1' },
+            budget: { timeoutMs: 100, maxCalls: 1 },
+        });
+
+        assert.equal(bundle.items.length, 1);
+        assert.equal(
+            bundle.items[0]?.retrievalReason,
+            'trustgraph_graph_rag_source_backed_response_truncated'
+        );
+        assert.match(
+            observedWarning?.message ?? '',
+            /^chat\.execution_contract_trustgraph\.target_response_truncated /u
+        );
+        assert.equal(observedWarning?.metadata.targetId, 'history');
+        assert.equal(observedWarning?.metadata.originalResponseChars, 12001);
+        assert.equal(
+            observedWarning?.metadata.retainedResponseChars,
+            bundle.items[0]?.claimText.length
+        );
+        assert.equal(
+            JSON.stringify(observedWarning).includes('adapter-secret'),
+            false
+        );
+    } finally {
+        globalThis.fetch = originalFetch;
+        logger.warn = originalWarn;
+    }
+});
+
 test('Execution Contract TrustGraph runtime wiring binds deployment scope to configured collections', async () => {
     const config = createExecutionContractTrustGraphRuntimeConfig({
         enabled: true,

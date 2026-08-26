@@ -42,11 +42,14 @@ The earlier hand-written snapshot and seed loader have been removed.
 
 The backend Graph RAG adapter calls TrustGraph 2.8's flow-scoped endpoint with
 bounded retrieval limits and requires returned source URIs before consuming a
-generated response. It maps each successful explicitly configured target to
-one aggregate advisory evidence item, retains target identity plus returned
-source URIs and titles in provenance, and fails open to local chat on transport,
-timeout, or payload errors. TrustGraph derives authorization from the bearer
-token; an optional workspace reference only routes the request.
+generated response. Responses are bounded per target and across the configured
+set: oversized generated responses are retained as explicitly marked excerpts,
+while oversized HTTP bodies still fail open. It maps each successful explicitly
+configured target to one aggregate advisory evidence item, retains target
+identity plus returned source URIs and titles in provenance, and fails open to
+local chat on transport, timeout, or unrecoverable payload errors. TrustGraph
+derives authorization from the bearer token; an optional workspace reference
+only routes the request.
 
 ## Interim Project Context Path
 
