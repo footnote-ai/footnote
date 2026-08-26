@@ -25,10 +25,10 @@
     },
     "dependencies": {
         "@ai-sdk/provider-utils": "catalog:",
-        "@ai-sdk/openai-compatible": "2.0.59",
+        "@ai-sdk/openai-compatible": "3.0.35",
         "@footnote/contracts": "workspace:*",
         "@voltagent/core": "2.9.2",
-        "ai": "6.0.224",
+        "ai": "7.0.77",
         "openai": "catalog:",
         "ws": "catalog:",
         "zod": "catalog:"
