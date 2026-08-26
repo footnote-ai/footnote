@@ -87,6 +87,21 @@ export const resolveExecutionContractTrustGraphRuntimeOptions = (
             policyId: config.policyId,
         });
 
+    const deploymentCollectionId =
+        config.ownership.bindingMode === 'deployment' &&
+        isNonEmptyString(config.adapter.collection)
+            ? config.adapter.collection.trim()
+            : undefined;
+    if (
+        config.ownership.bindingMode === 'deployment' &&
+        deploymentCollectionId === undefined
+    ) {
+        logger.warn(
+            `chat.execution_contract_trustgraph.runtime_disabled (reason=deployment_scope_missing_collection, bindingMode=${config.ownership.bindingMode})`
+        );
+        return undefined;
+    }
+
     let adapter: NonNullable<
         CreateChatServiceOptions['executionContractTrustGraph']
     >['adapter'];
@@ -117,18 +132,16 @@ export const resolveExecutionContractTrustGraphRuntimeOptions = (
           >['scopeOwnershipValidator']
         | undefined;
     if (config.ownership.bindingMode === 'deployment') {
-        if (!isNonEmptyString(config.adapter.collection)) {
-            logger.warn(
-                `chat.execution_contract_trustgraph.ownership_wiring (reason=deployment_scope_missing_collection, bindingMode=${config.ownership.bindingMode})`
-            );
-        } else {
-            // Deployment mode deliberately ignores caller-selected project and
-            // collection IDs. The adapter collection is the backend authority.
-            scopeOwnershipValidator = createDeploymentScopedOwnershipValidator({
-                validatorId: config.ownership.validatorId,
-                collectionId: config.adapter.collection,
-            });
+        if (deploymentCollectionId === undefined) {
+            return undefined;
         }
+
+        // Deployment mode deliberately ignores caller-selected project and
+        // collection IDs. The adapter collection is the backend authority.
+        scopeOwnershipValidator = createDeploymentScopedOwnershipValidator({
+            validatorId: config.ownership.validatorId,
+            collectionId: deploymentCollectionId,
+        });
     } else if (config.ownership.bindingMode === 'http') {
         // Missing ownership wiring fails open at the adapter seam. Retrieval may
         // still be disabled later by downstream validation or caller policy.
@@ -163,10 +176,9 @@ export const resolveExecutionContractTrustGraphRuntimeOptions = (
 
     return {
         adapter,
-        ...(config.ownership.bindingMode === 'deployment' &&
-            isNonEmptyString(config.adapter.collection) && {
-                deploymentCollectionId: config.adapter.collection,
-            }),
+        ...(deploymentCollectionId !== undefined && {
+            deploymentCollectionId,
+        }),
         budget: {
             timeoutMs: config.timeoutMs,
             maxCalls: config.maxCalls,

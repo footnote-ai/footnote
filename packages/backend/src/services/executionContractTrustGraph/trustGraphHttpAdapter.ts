@@ -33,7 +33,13 @@ export type HttpTrustGraphAdapterConfig = {
     flow: string;
     collection: string;
     apiToken: string;
-    /** Workspace used by TrustGraph to route the request to its flow. */
+    /**
+     * @description: Workspace used by TrustGraph to route the request to its flow.
+     * @footnote-scope: interface
+     * @footnote-module: HttpTrustGraphEvidenceAdapter
+     * @footnote-risk: medium - Incorrect workspace routing changes retrieval scope.
+     * @footnote-ethics: medium - Incorrect workspace routing can affect tenant isolation.
+     */
     workspaceRef?: string | null;
     limits: TrustGraphGraphRagLimits;
 };

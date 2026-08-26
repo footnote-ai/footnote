@@ -272,9 +272,11 @@ type ContextStepManifestFailure = {
 };
 
 /**
- * Preserves already-admitted context requests when planner continuation adds
- * more requests. Backend-injected requests, such as TrustGraph, must not be
- * dropped when the planner returns its own context-step list.
+ * @description: Preserves admitted context requests when planner continuation adds requests. It prevents injected TrustGraph context from being dropped.
+ * @footnote-scope: core
+ * @footnote-module: WorkflowEngine
+ * @footnote-risk: medium - A merge defect can remove context from generation.
+ * @footnote-ethics: medium - Context provenance can affect governance evidence.
  */
 const mergeContextStepRequests = (
     existingRequests: ContextStepRequest[] | undefined,

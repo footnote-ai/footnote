@@ -291,9 +291,9 @@ TrustGraph mode enables the HTTP adapter and an explicit deployment-scoped
 ownership check during deployment. Every chat-authorized user may query the
 single configured collection. The backend ignores caller-selected channel,
 guild, project, and collection values for this mode, so this is intentionally
-single-tenant and is not a multi-tenant authorization model. The adapter token
-is sent only as a bearer token to TrustGraph. The workspace reference is
-diagnostic; TrustGraph authorization comes from the adapter token.
+single-tenant and is not a multi-tenant authorization model. `workspaceRef`
+selects the TrustGraph workspace route for the configured flow. Separately, the
+adapter token is sent only as a bearer token to authorize the TrustGraph request.
 
 Do not point the adapter at an untrusted TrustGraph workspace, reuse unrelated
 credentials, or replace the backend deployment-scope check with an allow-all
