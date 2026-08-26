@@ -249,8 +249,8 @@ the reviewed context into that workspace from the Footnote checkout:
 ```powershell
 $env:TRUSTGRAPH_URL = 'http://localhost:8888'
 $env:TRUSTGRAPH_WORKSPACE = 'footnote'
-$env:TRUSTGRAPH_FLOW_ID = 'default'
-$env:TRUSTGRAPH_COLLECTION = 'footnote-repository-context'
+$env:TRUSTGRAPH_FLOW_ID = '<flow-id>'
+$env:TRUSTGRAPH_COLLECTION = '<collection-id>'
 $env:TRUSTGRAPH_TOKEN = '<workspace-scoped-key>'
 pnpm context:repo:load
 ```
@@ -271,9 +271,8 @@ echoing required values:
 TAILSCALE_AUTHKEY=<reusable, pre-authorized ephemeral auth key>
 EXECUTION_CONTRACT_TRUSTGRAPH_ADAPTER_API_TOKEN=<workspace-scoped-key>
 EXECUTION_CONTRACT_TRUSTGRAPH_BASE_URL=http://<pc-magicdns-hostname>:8888
-EXECUTION_CONTRACT_TRUSTGRAPH_FLOW=default
-EXECUTION_CONTRACT_TRUSTGRAPH_COLLECTION=footnote-repository-context
 EXECUTION_CONTRACT_TRUSTGRAPH_WORKSPACE_REF=footnote
+EXECUTION_CONTRACT_TRUSTGRAPH_TARGETS=[{"id":"history","flow":"<flow-id>","collection":"<collection-id>","workspaceRef":"footnote"}]
 ```
 
 The normal Fly deploy leaves TrustGraph disabled and does not require these
@@ -289,11 +288,19 @@ additional values. To opt in, pass the explicit TrustGraph mode flag:
 
 TrustGraph mode enables the HTTP adapter and an explicit deployment-scoped
 ownership check during deployment. Every chat-authorized user may query the
-single configured collection. The backend ignores caller-selected channel,
-guild, project, and collection values for this mode, so this is intentionally
-single-tenant and is not a multi-tenant authorization model. `workspaceRef`
-selects the TrustGraph workspace route for the configured flow. Separately, the
-adapter token is sent only as a bearer token to authorize the TrustGraph request.
+small set of explicitly configured targets. The backend ignores caller-selected
+channel, guild, project, and collection values for this mode, so this is
+intentionally deployment-scoped and is not a generalized multi-tenant
+authorization model. `workspaceRef` selects the TrustGraph workspace route for
+that target. Separately, the adapter token is sent only as a bearer token to
+authorize the TrustGraph request.
+
+The target value is a JSON array. Only the listed flows and collections are
+queried; Footnote does not discover or enumerate other workspace data. Give
+each target a stable operator-chosen `id` so its evidence remains identifiable
+in provenance. The adapter queries configured targets within the shared timeout
+and aggregate source budget, and a failed target does not discard successful
+results from another target.
 
 Do not point the adapter at an untrusted TrustGraph workspace, reuse unrelated
 credentials, or replace the backend deployment-scope check with an allow-all

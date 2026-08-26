@@ -42,10 +42,11 @@ The earlier hand-written snapshot and seed loader have been removed.
 
 The backend Graph RAG adapter calls TrustGraph 2.8's flow-scoped endpoint with
 bounded retrieval limits and requires returned source URIs before consuming a
-generated response. It maps one response to one aggregate advisory evidence
-item, retains returned source URIs and titles in provenance, and fails open to
-local chat on transport, timeout, or payload errors. The adapter does not send
-workspace identity; TrustGraph derives workspace access from the bearer token.
+generated response. It maps each successful explicitly configured target to
+one aggregate advisory evidence item, retains target identity plus returned
+source URIs and titles in provenance, and fails open to local chat on transport,
+timeout, or payload errors. TrustGraph derives authorization from the bearer
+token; an optional workspace reference only routes the request.
 
 ## Interim Project Context Path
 
@@ -150,13 +151,14 @@ Implemented by the setup-time Librarian loader and
 hash and supports repeatable reconciliation without adding runtime authority.
 
 Done when the selected Footnote docs can be loaded into a local TrustGraph
-instance and inspected there.
+instance and inspected there. Multiple explicitly configured collections may
+be used by the runtime; unconfigured collections are not discovered.
 
 ### 3. Use TrustGraph context in chat
 
-Connect the existing backend lookup path to TrustGraph's normal query API. Keep
-access checks, timeouts, source records, and the rule that Footnote continues
-without TrustGraph when a lookup fails.
+The existing backend lookup path uses TrustGraph's normal query API. Keep access
+checks, shared timeouts, bounded aggregate source records, and the rule that
+Footnote continues without TrustGraph when a lookup fails.
 
 This branch also needs one clear local-development access-check path. The docs
 must not describe that check as optional when the backend requires it.

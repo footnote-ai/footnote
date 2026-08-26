@@ -13,11 +13,11 @@ parent [README](./README.md).
 
 ## Request path
 
-| Case             | What happens                                                                                                                                                                                                        | What Footnote still decides                                                              |
-| ---------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------- |
-| Normal retrieval | The orchestrator builds a TrustGraph scope tuple from explicit request inputs. Scope and ownership pass. The adapter makes one bounded call. Returned evidence is sanitized and mapped into governed backend views. | The normal backend path still decides the final response.                                |
-| Scope denied     | Scope is missing, malformed, ambiguous, conflicting, or fails ownership validation. External retrieval does not run.                                                                                                | The backend still completes the local chat request and records why retrieval was denied. |
-| Timeout or error | Scope passes, but the adapter times out or fails. External evidence is dropped.                                                                                                                                     | The backend still produces the local response and records what failed.                   |
+| Case             | What happens                                                                                                                                                                                                                                                                                           | What Footnote still decides                                                              |
+| ---------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------- |
+| Normal retrieval | The orchestrator builds a TrustGraph scope tuple from explicit request inputs. Scope and ownership pass. The adapter queries the small explicitly configured target set in parallel under one timeout and shared source budget. Returned evidence is sanitized and mapped into governed backend views. | The normal backend path still decides the final response.                                |
+| Scope denied     | Scope is missing, malformed, ambiguous, conflicting, or fails ownership validation. External retrieval does not run.                                                                                                                                                                                   | The backend still completes the local chat request and records why retrieval was denied. |
+| Timeout or error | Scope passes, but the adapter times out or fails. External evidence is dropped.                                                                                                                                                                                                                        | The backend still produces the local response and records what failed.                   |
 
 ## Scope and ownership
 
@@ -99,6 +99,23 @@ In the current implementation:
 The kill switch lives at the runtime wiring boundary. If it is on, no external
 retrieval is attempted and local behavior continues normally.
 
+### Configured target set
+
+The HTTP adapter accepts one or more deployment-configured targets. Each target
+has a stable operator-chosen `id`, a TrustGraph `flow`, a `collection`, and an
+optional per-target `workspaceRef`. The deployment's bearer token and base URL
+remain shared connection settings. The runtime never enumerates a workspace or
+queries a collection that is not present in this list. A legacy single
+`FLOW`/`COLLECTION` configuration is normalized to one target for a small,
+backward-compatible migration path.
+
+Target requests share the existing request timeout and the adapter's aggregate
+source budget. A target failure is recorded and does not discard successful
+results from other configured targets; if every target fails, the existing
+fail-open adapter error path is used. Deployment ownership validation accepts
+only the configured collection set and continues to reject caller-selected
+projects or collections.
+
 `chatOrchestrator` is still the authority for action selection. It may:
 
 - decide whether retrieval is attempted
@@ -142,16 +159,17 @@ failure is reported while the rest of the setup batch continues.
 
 The runtime adapter uses TrustGraph 2.8 Graph RAG through
 `POST /api/v1/flow/{flow}/service/graph-rag` with `streaming: false`. Runtime
-configuration supplies the base URL, flow, collection, bearer token, and
+configuration supplies the base URL, configured target array, bearer token, and
 bounded Graph RAG limits. TrustGraph resolves workspace access from the token;
 the optional workspace reference is diagnostic only and is never sent as
 authorization context.
 
 Graph RAG responses are consumed only when they contain a non-empty generated
-response and validated source URIs. Footnote maps the generated text to one
-aggregate advisory evidence item. It does not duplicate that text per source,
-and it does not treat TrustGraph ranking or confidence as backend policy. The
-returned source URIs and titles remain in the item's provenance path.
+response and validated source URIs. Footnote maps each successful configured
+target to one aggregate advisory evidence item. The target identity is retained
+in the evidence item and provenance path; source URIs and titles remain in that
+path. Footnote does not treat TrustGraph ranking or confidence as backend
+policy.
 
 TrustGraph can supply extra context, but Footnote still decides how to handle
 the request. If TrustGraph is unavailable, the local chat path continues
