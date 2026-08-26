@@ -26,6 +26,43 @@ type ExecutionContractTrustGraphRuntimeConfig =
 const isNonEmptyString = (value: string | null): value is string =>
     typeof value === 'string' && value.trim().length > 0;
 
+const MAX_LOGGED_FAILURE_DETAIL_LENGTH = 256;
+
+const normalizeFailureDetail = (value: unknown): string => {
+    if (typeof value !== 'string') {
+        return '';
+    }
+
+    let normalized = '';
+    for (const character of value) {
+        const codePoint = character.codePointAt(0) ?? 0;
+        normalized += codePoint <= 0x1f || codePoint === 0x7f ? ' ' : character;
+    }
+
+    return normalized.trim().slice(0, MAX_LOGGED_FAILURE_DETAIL_LENGTH);
+};
+
+const describeTargetFailure = (
+    error: unknown
+): { errorName: string; reason: string } => {
+    if (error instanceof Error) {
+        const errorName = normalizeFailureDetail(error.name) || 'Error';
+        const reason = normalizeFailureDetail(error.message) || errorName;
+        return { errorName, reason };
+    }
+
+    if (typeof error === 'object' && error !== null) {
+        const errorRecord = error as Record<string, unknown>;
+        const errorName =
+            normalizeFailureDetail(errorRecord.name) || 'UnknownError';
+        const reason = normalizeFailureDetail(errorRecord.message) || errorName;
+        return { errorName, reason };
+    }
+
+    const reason = normalizeFailureDetail(error) || 'unknown_error';
+    return { errorName: 'UnknownError', reason };
+};
+
 const requireHttpAdapterConfig = (input: {
     baseUrl: string | null;
     targets: readonly TrustGraphTargetConfig[];
@@ -120,10 +157,19 @@ export const resolveExecutionContractTrustGraphRuntimeOptions = (
             workspaceRef: config.adapter.workspaceRef,
             limits: config.adapter.graphRagLimits,
             onTargetFailure: (target, error) => {
-                const reason =
-                    error instanceof Error ? error.message : 'unknown_error';
+                const failure = describeTargetFailure(error);
+                const event =
+                    'chat.execution_contract_trustgraph.target_failed';
                 logger.warn(
-                    `chat.execution_contract_trustgraph.target_failed (targetId=${target.id}, flow=${target.flow}, collection=${target.collection}, reason=${reason})`
+                    `${event} (targetId=${target.id}, flow=${target.flow}, collection=${target.collection}, errorName=${failure.errorName}, reason=${failure.reason})`,
+                    {
+                        event,
+                        targetId: target.id,
+                        flow: target.flow,
+                        collection: target.collection,
+                        errorName: failure.errorName,
+                        reason: failure.reason,
+                    }
                 );
             },
         });

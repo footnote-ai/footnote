@@ -1298,6 +1298,93 @@ test('Execution Contract TrustGraph runtime wiring threads ownership validation 
     );
 });
 
+test('Execution Contract TrustGraph target failures preserve safe error details in logs', async () => {
+    const config = createExecutionContractTrustGraphRuntimeConfig({
+        adapter: {
+            mode: 'http',
+            baseUrl: 'http://127.0.0.1:1',
+            apiToken: 'adapter-secret',
+            workspaceRef: 'footnote',
+            targets: [
+                {
+                    id: 'history',
+                    flow: 'history-flow',
+                    collection: 'history-collection',
+                },
+            ],
+            graphRagLimits: {
+                maxQueryChars: 8000,
+                entityLimit: 50,
+                tripleLimit: 30,
+                maxSubgraphSize: 1000,
+                maxPathLength: 2,
+                maxResponseChars: 12000,
+                maxSources: 20,
+                maxSourceUriChars: 2048,
+                maxSourceTitleChars: 512,
+            },
+            stubMode: 'success',
+        },
+    });
+    const originalWarn = logger.warn;
+    let observedWarning:
+        { message: string; metadata: Record<string, unknown> } | undefined;
+
+    logger.warn = ((message: string, metadata?: unknown) => {
+        if (
+            message.startsWith(
+                'chat.execution_contract_trustgraph.target_failed '
+            )
+        ) {
+            observedWarning = {
+                message,
+                metadata:
+                    metadata !== null && typeof metadata === 'object'
+                        ? (metadata as Record<string, unknown>)
+                        : {},
+            };
+        }
+        return undefined;
+    }) as unknown as typeof logger.warn;
+
+    try {
+        const resolved =
+            resolveExecutionContractTrustGraphRuntimeOptions(config);
+        assert.ok(resolved?.adapter);
+        const abortController = new AbortController();
+        abortController.abort();
+
+        await assert.rejects(
+            resolved.adapter.getEvidenceBundle({
+                queryIntent: 'What changed?',
+                scopeTuple: { userId: 'user_1', projectId: 'project_1' },
+                budget: { timeoutMs: 100, maxCalls: 1 },
+                abortSignal: abortController.signal,
+            })
+        );
+
+        assert.match(
+            observedWarning?.message ?? '',
+            /^chat\.execution_contract_trustgraph\.target_failed /u
+        );
+        assert.equal(observedWarning?.metadata.targetId, 'history');
+        assert.equal(observedWarning?.metadata.flow, 'history-flow');
+        assert.equal(
+            observedWarning?.metadata.collection,
+            'history-collection'
+        );
+        assert.equal(observedWarning?.metadata.errorName, 'AbortError');
+        assert.match(String(observedWarning?.metadata.reason), /aborted/i);
+        assert.notEqual(observedWarning?.metadata.reason, 'unknown_error');
+        assert.equal(
+            JSON.stringify(observedWarning).includes('adapter-secret'),
+            false
+        );
+    } finally {
+        logger.warn = originalWarn;
+    }
+});
+
 test('Execution Contract TrustGraph runtime wiring binds deployment scope to configured collections', async () => {
     const config = createExecutionContractTrustGraphRuntimeConfig({
         enabled: true,
