@@ -125,6 +125,10 @@ const sanitizeEvidenceItem = (
         return { valid: false };
     }
 
+    if (item.targetId !== undefined && !isNonEmptyString(item.targetId)) {
+        return { valid: false };
+    }
+
     return {
         valid: true,
         item: {
@@ -138,6 +142,9 @@ const sanitizeEvidenceItem = (
             retrievedAt: item.retrievedAt.trim(),
             collectionScope: item.collectionScope.trim(),
             adapterVersion: item.adapterVersion.trim(),
+            ...(item.targetId !== undefined && {
+                targetId: item.targetId.trim(),
+            }),
         },
     };
 };
@@ -481,13 +488,10 @@ export const runEvidenceIngestion = async (
                 predicateViews: createEmptyConsumerViews(),
             };
         }
-        if (
-            !(
-                typeof ownershipValidationPolicy.justificationCode ===
-                    'string' &&
-                ownershipValidationPolicy.justificationCode.trim().length > 0
-            )
-        ) {
+        if (!(
+            typeof ownershipValidationPolicy.justificationCode === 'string' &&
+            ownershipValidationPolicy.justificationCode.trim().length > 0
+        )) {
             provenanceReasonCodes.push('external_scope_validation_failed');
             return {
                 evidenceMode: 'advisory',

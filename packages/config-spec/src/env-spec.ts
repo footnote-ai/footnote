@@ -2639,6 +2639,20 @@ export const envEntries = [
     }),
 
     defineEnv({
+        key: 'EXECUTION_CONTRACT_TRUSTGRAPH_TARGETS',
+        owner: 'backend',
+        stage: 'runtime',
+        section: 'chat-workflow',
+        required: false,
+        secret: false,
+        kind: 'string',
+        description:
+            'JSON array of explicitly configured TrustGraph retrieval targets. Each target supplies an id, flow, collection, and optional workspaceRef; arbitrary workspace collections are never discovered.',
+        defaultValue: noDefault(),
+        usedBy: ['packages/backend/src/config.ts'],
+    }),
+
+    defineEnv({
         key: 'EXECUTION_CONTRACT_TRUSTGRAPH_FLOW',
         owner: 'backend',
         stage: 'runtime',

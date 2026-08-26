@@ -76,10 +76,9 @@ const createExecutionContractTrustGraphRuntimeConfig = (
         adapter: {
             mode: 'none',
             baseUrl: null,
-            flow: null,
-            collection: null,
             apiToken: null,
             workspaceRef: null,
+            targets: [],
             graphRagLimits: {
                 maxQueryChars: 8000,
                 entityLimit: 50,
@@ -1208,10 +1207,9 @@ test('Execution Contract TrustGraph config disabled and kill switch both remove 
                 adapter: {
                     mode: 'stub',
                     baseUrl: null,
-                    flow: null,
-                    collection: null,
                     apiToken: null,
                     workspaceRef: null,
+                    targets: [],
                     graphRagLimits: {
                         maxQueryChars: 8000,
                         entityLimit: 50,
@@ -1236,10 +1234,9 @@ test('Execution Contract TrustGraph config disabled and kill switch both remove 
                 adapter: {
                     mode: 'stub',
                     baseUrl: null,
-                    flow: null,
-                    collection: null,
                     apiToken: null,
                     workspaceRef: null,
+                    targets: [],
                     graphRagLimits: {
                         maxQueryChars: 8000,
                         entityLimit: 50,
@@ -1270,10 +1267,9 @@ test('Execution Contract TrustGraph runtime wiring threads ownership validation 
         adapter: {
             mode: 'none',
             baseUrl: null,
-            flow: null,
-            collection: null,
             apiToken: null,
             workspaceRef: null,
+            targets: [],
             graphRagLimits: {
                 maxQueryChars: 8000,
                 entityLimit: 50,
@@ -1302,16 +1298,26 @@ test('Execution Contract TrustGraph runtime wiring threads ownership validation 
     );
 });
 
-test('Execution Contract TrustGraph runtime wiring binds deployment scope to adapter collection', async () => {
+test('Execution Contract TrustGraph runtime wiring binds deployment scope to configured collections', async () => {
     const config = createExecutionContractTrustGraphRuntimeConfig({
         enabled: true,
         adapter: {
             mode: 'stub',
             baseUrl: null,
-            flow: null,
-            collection: 'footnote-repository-context',
             apiToken: null,
             workspaceRef: 'footnote',
+            targets: [
+                {
+                    id: 'history',
+                    flow: 'history-flow',
+                    collection: 'history-collection',
+                },
+                {
+                    id: 'operator',
+                    flow: 'operator-flow',
+                    collection: 'operator-collection',
+                },
+            ],
             graphRagLimits: {
                 maxQueryChars: 8000,
                 entityLimit: 50,
@@ -1335,21 +1341,23 @@ test('Execution Contract TrustGraph runtime wiring binds deployment scope to ada
 
     const resolved = resolveExecutionContractTrustGraphRuntimeOptions(config);
     assert.ok(resolved?.scopeOwnershipValidator);
-    assert.equal(
-        resolved?.deploymentCollectionId,
-        'footnote-repository-context'
-    );
+    assert.equal(resolved?.deploymentCollectionId, 'history-collection');
 
     const allowed = await resolved.scopeOwnershipValidator.validateOwnership({
         userId: 'user_1',
-        collectionId: 'footnote-repository-context',
+        collectionId: 'history-collection',
     });
     const denied = await resolved.scopeOwnershipValidator.validateOwnership({
         userId: 'user_1',
         collectionId: 'other-context',
     });
+    const operator = await resolved.scopeOwnershipValidator.validateOwnership({
+        userId: 'user_1',
+        collectionId: 'operator-collection',
+    });
 
     assert.equal(allowed.decision, 'allow');
+    assert.equal(operator.decision, 'allow');
     assert.equal(denied.decision, 'deny');
 });
 
@@ -1359,10 +1367,9 @@ test('incomplete deployment TrustGraph wiring skips caller-scoped retrieval', as
         adapter: {
             mode: 'stub',
             baseUrl: null,
-            flow: null,
-            collection: '   ',
             apiToken: null,
             workspaceRef: 'footnote',
+            targets: [],
             graphRagLimits: {
                 maxQueryChars: 8000,
                 entityLimit: 50,
@@ -1437,10 +1444,15 @@ test('Execution Contract TrustGraph runtime wiring fails fast when http adapter 
         adapter: {
             mode: 'http',
             baseUrl: null,
-            flow: null,
-            collection: null,
             apiToken: 'adapter-secret',
             workspaceRef: null,
+            targets: [
+                {
+                    id: 'default',
+                    flow: 'default',
+                    collection: 'footnote-repository-context',
+                },
+            ],
             graphRagLimits: {
                 maxQueryChars: 8000,
                 entityLimit: 50,
@@ -1468,10 +1480,15 @@ test('Execution Contract TrustGraph runtime wiring fails fast when http adapter 
         adapter: {
             mode: 'http',
             baseUrl: 'http://trustgraph.internal',
-            flow: 'default',
-            collection: 'footnote-repository-context',
             apiToken: null,
             workspaceRef: null,
+            targets: [
+                {
+                    id: 'default',
+                    flow: 'default',
+                    collection: 'footnote-repository-context',
+                },
+            ],
             graphRagLimits: {
                 maxQueryChars: 8000,
                 entityLimit: 50,
@@ -1499,10 +1516,9 @@ test('Execution Contract TrustGraph runtime wiring does not fail startup when fe
         adapter: {
             mode: 'http',
             baseUrl: null,
-            flow: null,
-            collection: null,
             apiToken: null,
             workspaceRef: null,
+            targets: [],
             graphRagLimits: {
                 maxQueryChars: 8000,
                 entityLimit: 50,

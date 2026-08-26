@@ -8,12 +8,14 @@
  */
 
 import { randomUUID } from 'node:crypto';
+import { TextDecoder } from 'node:util';
 
 import type {
     Budget,
     EvidenceBundle,
     ScopeTuple,
     TrustGraphEvidenceAdapter,
+    TrustGraphTargetConfig,
 } from './trustGraphEvidenceTypes.js';
 
 export type TrustGraphGraphRagLimits = {
@@ -30,8 +32,7 @@ export type TrustGraphGraphRagLimits = {
 
 export type HttpTrustGraphAdapterConfig = {
     baseUrl: string;
-    flow: string;
-    collection: string;
+    targets: readonly TrustGraphTargetConfig[];
     apiToken: string;
     /**
      * @description: Workspace used by TrustGraph to route the request to its flow.
@@ -42,6 +43,7 @@ export type HttpTrustGraphAdapterConfig = {
      */
     workspaceRef?: string | null;
     limits: TrustGraphGraphRagLimits;
+    onTargetFailure?: (target: TrustGraphTargetConfig, error: unknown) => void;
 };
 
 type GraphRagSource = {
@@ -57,6 +59,7 @@ const GRAPH_RAG_SOURCE_REF_PREFIX = 'trustgraph://graph-rag/collection/';
 const GRAPH_RAG_EDGE_SCORE_LIMIT = 30;
 const GRAPH_RAG_EDGE_LIMIT = 25;
 const GRAPH_RAG_MAX_RERANKER_INPUT = 350;
+const MAX_RESPONSE_TEXT_LENGTH = 1_048_576;
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
     typeof value === 'object' && value !== null;
@@ -202,15 +205,62 @@ const parseGraphRagPayload = (
     return { response, sources: parseSources(payload.sources, limits) };
 };
 
-const buildEndpointUrl = (config: HttpTrustGraphAdapterConfig): string => {
-    const baseUrl = config.baseUrl.trim().replace(/\/+$/u, '');
-    const flow = encodeURIComponent(config.flow.trim());
+const readResponseTextBounded = async (response: Response): Promise<string> => {
+    const declaredLength = response.headers.get('content-length');
+    const parsedLength = declaredLength === null ? NaN : Number(declaredLength);
+    if (
+        Number.isSafeInteger(parsedLength) &&
+        parsedLength > MAX_RESPONSE_TEXT_LENGTH
+    ) {
+        throw new Error('trustgraph_graph_rag_response_too_large');
+    }
+
+    if (response.body === null) {
+        throw new Error('trustgraph_graph_rag_missing_response_body');
+    }
+
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+    const chunks: string[] = [];
+    let totalBytes = 0;
+    try {
+        while (true) {
+            const chunk = await reader.read();
+            if (chunk.done) {
+                break;
+            }
+
+            totalBytes += chunk.value.byteLength;
+            if (totalBytes > MAX_RESPONSE_TEXT_LENGTH) {
+                try {
+                    await reader.cancel();
+                } catch {
+                    // Preserve the bounded-response error even if the peer
+                    // closes the stream before cancellation completes.
+                }
+                throw new Error('trustgraph_graph_rag_response_too_large');
+            }
+            chunks.push(decoder.decode(chunk.value, { stream: true }));
+        }
+        chunks.push(decoder.decode());
+        return chunks.join('');
+    } finally {
+        reader.releaseLock();
+    }
+};
+
+const buildEndpointUrl = (baseUrlInput: string, flowInput: string): string => {
+    const baseUrl = baseUrlInput.trim().replace(/\/+$/u, '');
+    const flow = encodeURIComponent(flowInput.trim());
     return `${baseUrl}/api/v1/flow/${flow}/service/graph-rag`;
 };
 
-const buildProvenancePathRefs = (sources: GraphRagSource[]): string[] => {
-    const refs: string[] = [];
-    for (const source of sources) {
+const buildProvenancePathRefs = (input: {
+    target: TrustGraphTargetConfig;
+    sources: GraphRagSource[];
+}): string[] => {
+    const refs: string[] = [`target:${input.target.id}`];
+    for (const source of input.sources) {
         refs.push(source.uri);
         if (source.title !== undefined && source.title.length > 0) {
             refs.push(`title:${source.title}`);
@@ -222,75 +272,159 @@ const buildProvenancePathRefs = (sources: GraphRagSource[]): string[] => {
 const toEvidenceBundle = (input: {
     queryIntent: string;
     scopeTuple: ScopeTuple;
-    collection: string;
-    flow: string;
-    response: string;
-    sources: GraphRagSource[];
-}): EvidenceBundle => ({
-    bundleId: `trustgraph_graph_rag_${randomUUID()}`,
-    queryIntent: input.queryIntent,
-    items: [
-        {
-            evidenceId: `trustgraph_graph_rag_evidence_${randomUUID()}`,
-            claimText: input.response,
-            sourceRef: `${GRAPH_RAG_SOURCE_REF_PREFIX}${encodeURIComponent(input.collection)}`,
-            provenancePathRef: buildProvenancePathRefs(input.sources),
-            retrievalReason: 'trustgraph_graph_rag_source_backed_response',
-            // Graph RAG does not expose a Footnote confidence score. Keep this
-            // neutral and outside backend policy rather than treating ranking as confidence.
-            confidenceScore: 0,
-            confidenceMethodId: 'trustgraph_graph_rag_confidence_not_provided',
-            retrievedAt: new Date().toISOString(),
-            collectionScope: input.collection,
+    results: Array<{
+        target: TrustGraphTargetConfig;
+        response: string;
+        sources: GraphRagSource[];
+    }>;
+}): EvidenceBundle => {
+    const items = input.results.map((result) => ({
+        evidenceId: `trustgraph_graph_rag_evidence_${randomUUID()}`,
+        claimText: result.response,
+        sourceRef: `${GRAPH_RAG_SOURCE_REF_PREFIX}${encodeURIComponent(result.target.collection)}`,
+        provenancePathRef: buildProvenancePathRefs(result),
+        retrievalReason: 'trustgraph_graph_rag_source_backed_response',
+        // Graph RAG does not expose a Footnote confidence score. Keep this
+        // neutral and outside backend policy rather than treating ranking as confidence.
+        confidenceScore: 0,
+        confidenceMethodId: 'trustgraph_graph_rag_confidence_not_provided',
+        retrievedAt: new Date().toISOString(),
+        collectionScope: result.target.collection,
+        adapterVersion: GRAPH_RAG_ADAPTER_VERSION,
+        targetId: result.target.id,
+    }));
+
+    return {
+        bundleId: `trustgraph_graph_rag_${randomUUID()}`,
+        queryIntent: input.queryIntent,
+        items,
+        coverageEstimate: {
+            evaluationUnit: 'source',
+            scoreRange: '0..1',
+            value: 0,
+            computationBasis: ['trustgraph_graph_rag_source_count_only'],
+            comparableAcrossVersions: false,
             adapterVersion: GRAPH_RAG_ADAPTER_VERSION,
         },
-    ],
-    coverageEstimate: {
-        evaluationUnit: 'source',
-        scoreRange: '0..1',
-        value: 0,
-        computationBasis: ['trustgraph_graph_rag_source_count_only'],
-        comparableAcrossVersions: false,
+        conflictSignals: [],
+        traceRefs: [
+            ...input.results.map(
+                (result) =>
+                    `${GRAPH_RAG_SOURCE_REF_PREFIX}${encodeURIComponent(result.target.collection)}/target/${encodeURIComponent(result.target.id)}/flow/${encodeURIComponent(result.target.flow)}`
+            ),
+        ],
+        scopeTuple: input.scopeTuple,
         adapterVersion: GRAPH_RAG_ADAPTER_VERSION,
-    },
-    conflictSignals: [],
-    traceRefs: [
-        `${GRAPH_RAG_SOURCE_REF_PREFIX}${encodeURIComponent(input.collection)}/flow/${encodeURIComponent(input.flow)}`,
-    ],
-    scopeTuple: input.scopeTuple,
-    adapterVersion: GRAPH_RAG_ADAPTER_VERSION,
-});
+    };
+};
+
+type GraphRagTargetResult = {
+    target: TrustGraphTargetConfig;
+    response: string;
+    sources: GraphRagSource[];
+};
 
 export class HttpTrustGraphEvidenceAdapter implements TrustGraphEvidenceAdapter {
-    private readonly endpointUrl: string;
+    private readonly baseUrl: string;
     private readonly apiToken: string;
     private readonly workspaceRef: string | undefined;
-    private readonly collection: string;
-    private readonly flow: string;
+    private readonly targets: readonly TrustGraphTargetConfig[];
     private readonly limits: TrustGraphGraphRagLimits;
+    private readonly onTargetFailure:
+        HttpTrustGraphAdapterConfig['onTargetFailure'] | undefined;
 
     public constructor(config: HttpTrustGraphAdapterConfig) {
-        if (
-            !isNonEmptyString(config.baseUrl) ||
-            !isNonEmptyString(config.flow)
-        ) {
+        if (!isNonEmptyString(config.baseUrl)) {
             throw new Error('trustgraph_graph_rag_missing_endpoint_config');
         }
-        if (!isNonEmptyString(config.collection)) {
-            throw new Error('trustgraph_graph_rag_missing_collection');
+        if (config.targets.length === 0) {
+            throw new Error('trustgraph_graph_rag_missing_targets');
         }
         if (!isNonEmptyString(config.apiToken)) {
             throw new Error('trustgraph_graph_rag_missing_api_token');
         }
 
-        this.endpointUrl = buildEndpointUrl(config);
+        this.baseUrl = config.baseUrl.trim();
         this.apiToken = config.apiToken.trim();
         this.workspaceRef = isNonEmptyString(config.workspaceRef)
             ? config.workspaceRef.trim()
             : undefined;
-        this.collection = config.collection.trim();
-        this.flow = config.flow.trim();
+        this.targets = config.targets.map((target) => {
+            if (
+                !isNonEmptyString(target.id) ||
+                !isNonEmptyString(target.flow) ||
+                !isNonEmptyString(target.collection)
+            ) {
+                throw new Error('trustgraph_graph_rag_invalid_target');
+            }
+            return {
+                id: target.id.trim(),
+                flow: target.flow.trim(),
+                collection: target.collection.trim(),
+                ...(target.workspaceRef === null
+                    ? { workspaceRef: null }
+                    : isNonEmptyString(target.workspaceRef)
+                      ? { workspaceRef: target.workspaceRef.trim() }
+                      : {}),
+            };
+        });
         this.limits = validateLimits(config.limits);
+        this.onTargetFailure = config.onTargetFailure;
+    }
+
+    private async fetchTarget(input: {
+        target: TrustGraphTargetConfig;
+        query: string;
+        abortSignal?: AbortSignal;
+    }): Promise<GraphRagTargetResult> {
+        const workspaceRef =
+            input.target.workspaceRef !== undefined
+                ? isNonEmptyString(input.target.workspaceRef)
+                    ? input.target.workspaceRef.trim()
+                    : undefined
+                : this.workspaceRef;
+        const response = await fetch(
+            buildEndpointUrl(this.baseUrl, input.target.flow),
+            {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    Authorization: `Bearer ${this.apiToken}`,
+                },
+                body: JSON.stringify({
+                    ...(workspaceRef !== undefined && {
+                        workspace: workspaceRef,
+                    }),
+                    query: input.query,
+                    collection: input.target.collection,
+                    'entity-limit': this.limits.entityLimit,
+                    'triple-limit': this.limits.tripleLimit,
+                    'max-subgraph-size': this.limits.maxSubgraphSize,
+                    'max-path-length': this.limits.maxPathLength,
+                    'edge-score-limit': GRAPH_RAG_EDGE_SCORE_LIMIT,
+                    'edge-limit': GRAPH_RAG_EDGE_LIMIT,
+                    'max-reranker-input': GRAPH_RAG_MAX_RERANKER_INPUT,
+                    streaming: false,
+                }),
+                signal: input.abortSignal,
+            }
+        );
+
+        if (!response.ok) {
+            throw new Error(
+                `trustgraph_graph_rag_http_status_${response.status}`
+            );
+        }
+
+        const responseText = await readResponseTextBounded(response);
+        let payload: unknown;
+        try {
+            payload = JSON.parse(responseText) as unknown;
+        } catch {
+            throw new Error('trustgraph_graph_rag_invalid_json');
+        }
+        const parsed = parseGraphRagPayload(payload, this.limits);
+        return { target: input.target, ...parsed };
     }
 
     public async getEvidenceBundle(input: {
@@ -307,45 +441,57 @@ export class HttpTrustGraphEvidenceAdapter implements TrustGraphEvidenceAdapter 
             throw new Error('trustgraph_graph_rag_query_too_large');
         }
 
-        const response = await fetch(this.endpointUrl, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                Authorization: `Bearer ${this.apiToken}`,
-            },
-            body: JSON.stringify({
-                ...(this.workspaceRef !== undefined && {
-                    workspace: this.workspaceRef,
-                }),
-                query,
-                collection: this.collection,
-                'entity-limit': this.limits.entityLimit,
-                'triple-limit': this.limits.tripleLimit,
-                'max-subgraph-size': this.limits.maxSubgraphSize,
-                'max-path-length': this.limits.maxPathLength,
-                'edge-score-limit': GRAPH_RAG_EDGE_SCORE_LIMIT,
-                'edge-limit': GRAPH_RAG_EDGE_LIMIT,
-                'max-reranker-input': GRAPH_RAG_MAX_RERANKER_INPUT,
-                streaming: false,
-            }),
-            signal: input.abortSignal,
-        });
-
-        if (!response.ok) {
-            throw new Error(
-                `trustgraph_graph_rag_http_status_${response.status}`
-            );
+        const settled = await Promise.allSettled(
+            this.targets.map((target) =>
+                this.fetchTarget({
+                    target,
+                    query,
+                    abortSignal: input.abortSignal,
+                })
+            )
+        );
+        const successful: GraphRagTargetResult[] = [];
+        const failures: Array<{
+            target: TrustGraphTargetConfig;
+            error: unknown;
+        }> = [];
+        for (const [index, result] of settled.entries()) {
+            const target = this.targets[index];
+            if (result.status === 'fulfilled') {
+                successful.push(result.value);
+            } else if (target !== undefined) {
+                failures.push({ target, error: result.reason });
+                this.onTargetFailure?.(target, result.reason);
+            }
         }
 
-        const payload: unknown = await response.json();
-        const parsed = parseGraphRagPayload(payload, this.limits);
+        if (successful.length === 0) {
+            if (failures.length === 1) {
+                throw failures[0].error;
+            }
+            throw new Error('trustgraph_graph_rag_all_targets_failed');
+        }
+
+        let remainingSources = this.limits.maxSources;
+        const results: GraphRagTargetResult[] = [];
+        for (const [index, result] of successful.entries()) {
+            if (remainingSources === 0) {
+                break;
+            }
+            const remainingTargets = successful.length - index;
+            const sourceCount = Math.max(
+                1,
+                Math.floor(remainingSources / remainingTargets)
+            );
+            const sources = result.sources.slice(0, sourceCount);
+            results.push({ ...result, sources });
+            remainingSources -= sources.length;
+        }
+
         return toEvidenceBundle({
             queryIntent: query,
             scopeTuple: input.scopeTuple,
-            collection: this.collection,
-            flow: this.flow,
-            response: parsed.response,
-            sources: parsed.sources,
+            results,
         });
     }
 }

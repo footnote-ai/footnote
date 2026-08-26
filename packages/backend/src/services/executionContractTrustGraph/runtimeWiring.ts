@@ -15,7 +15,10 @@ import { createScopeOwnershipValidatorFromTenancyService } from './tenancyOwners
 import { createBackendTenancyOwnershipHttpService } from './tenancyOwnershipHttpService.js';
 import { createHttpTrustGraphEvidenceAdapter } from './trustGraphHttpAdapter.js';
 import { StubTrustGraphEvidenceAdapter } from './trustGraphEvidenceAdapter.js';
-import { TrustGraphOwnershipValidationPolicy } from './trustGraphEvidenceTypes.js';
+import {
+    TrustGraphOwnershipValidationPolicy,
+    type TrustGraphTargetConfig,
+} from './trustGraphEvidenceTypes.js';
 
 type ExecutionContractTrustGraphRuntimeConfig =
     RuntimeConfig['executionContractTrustGraph'];
@@ -25,23 +28,21 @@ const isNonEmptyString = (value: string | null): value is string =>
 
 const requireHttpAdapterConfig = (input: {
     baseUrl: string | null;
-    flow: string | null;
-    collection: string | null;
+    targets: readonly TrustGraphTargetConfig[];
     apiToken: string | null;
-}): { baseUrl: string; flow: string; collection: string; apiToken: string } => {
+}): {
+    baseUrl: string;
+    targets: readonly TrustGraphTargetConfig[];
+    apiToken: string;
+} => {
     if (!isNonEmptyString(input.baseUrl)) {
         throw new Error(
             'execution_contract_trustgraph_http_adapter_missing_base_url'
         );
     }
-    if (!isNonEmptyString(input.flow)) {
+    if (input.targets.length === 0) {
         throw new Error(
-            'execution_contract_trustgraph_http_adapter_missing_flow'
-        );
-    }
-    if (!isNonEmptyString(input.collection)) {
-        throw new Error(
-            'execution_contract_trustgraph_http_adapter_missing_collection'
+            'execution_contract_trustgraph_http_adapter_missing_targets'
         );
     }
     if (!isNonEmptyString(input.apiToken)) {
@@ -52,8 +53,7 @@ const requireHttpAdapterConfig = (input: {
 
     return {
         baseUrl: input.baseUrl,
-        flow: input.flow,
-        collection: input.collection,
+        targets: input.targets,
         apiToken: input.apiToken,
     };
 };
@@ -87,17 +87,19 @@ export const resolveExecutionContractTrustGraphRuntimeOptions = (
             policyId: config.policyId,
         });
 
+    const deploymentCollectionIds = config.adapter.targets.map(
+        (target) => target.collection
+    );
     const deploymentCollectionId =
-        config.ownership.bindingMode === 'deployment' &&
-        isNonEmptyString(config.adapter.collection)
-            ? config.adapter.collection.trim()
+        config.ownership.bindingMode === 'deployment'
+            ? deploymentCollectionIds[0]
             : undefined;
     if (
         config.ownership.bindingMode === 'deployment' &&
-        deploymentCollectionId === undefined
+        deploymentCollectionIds.length === 0
     ) {
         logger.warn(
-            `chat.execution_contract_trustgraph.runtime_disabled (reason=deployment_scope_missing_collection, bindingMode=${config.ownership.bindingMode})`
+            `chat.execution_contract_trustgraph.runtime_disabled (reason=deployment_scope_missing_targets, bindingMode=${config.ownership.bindingMode})`
         );
         return undefined;
     }
@@ -108,17 +110,22 @@ export const resolveExecutionContractTrustGraphRuntimeOptions = (
     if (config.adapter.mode === 'http') {
         const adapterConfig = requireHttpAdapterConfig({
             baseUrl: config.adapter.baseUrl,
-            flow: config.adapter.flow,
-            collection: config.adapter.collection,
+            targets: config.adapter.targets,
             apiToken: config.adapter.apiToken,
         });
         adapter = createHttpTrustGraphEvidenceAdapter({
             baseUrl: adapterConfig.baseUrl,
-            flow: adapterConfig.flow,
-            collection: adapterConfig.collection,
+            targets: adapterConfig.targets,
             apiToken: adapterConfig.apiToken,
             workspaceRef: config.adapter.workspaceRef,
             limits: config.adapter.graphRagLimits,
+            onTargetFailure: (target, error) => {
+                const reason =
+                    error instanceof Error ? error.message : 'unknown_error';
+                logger.warn(
+                    `chat.execution_contract_trustgraph.target_failed (targetId=${target.id}, flow=${target.flow}, collection=${target.collection}, reason=${reason})`
+                );
+            },
         });
     } else if (config.adapter.mode === 'stub') {
         adapter = new StubTrustGraphEvidenceAdapter(config.adapter.stubMode);
@@ -132,15 +139,15 @@ export const resolveExecutionContractTrustGraphRuntimeOptions = (
           >['scopeOwnershipValidator']
         | undefined;
     if (config.ownership.bindingMode === 'deployment') {
-        if (deploymentCollectionId === undefined) {
+        if (deploymentCollectionIds.length === 0) {
             return undefined;
         }
 
         // Deployment mode deliberately ignores caller-selected project and
-        // collection IDs. The adapter collection is the backend authority.
+        // collection IDs. The configured target set is the backend authority.
         scopeOwnershipValidator = createDeploymentScopedOwnershipValidator({
             validatorId: config.ownership.validatorId,
-            collectionId: deploymentCollectionId,
+            collectionIds: deploymentCollectionIds,
         });
     } else if (config.ownership.bindingMode === 'http') {
         // Missing ownership wiring fails open at the adapter seam. Retrieval may
@@ -167,7 +174,7 @@ export const resolveExecutionContractTrustGraphRuntimeOptions = (
     }
 
     logger.info(
-        `chat.execution_contract_trustgraph.runtime_wiring (enabled=true, adapterMode=${config.adapter.mode}, adapterConfigured=${String(
+        `chat.execution_contract_trustgraph.runtime_wiring (enabled=true, adapterMode=${config.adapter.mode}, targetCount=${config.adapter.targets.length}, adapterConfigured=${String(
             adapter !== undefined
         )}, workspaceRefConfigured=${String(isNonEmptyString(config.adapter.workspaceRef))}, ownershipBindingMode=${config.ownership.bindingMode}, ownershipValidatorConfigured=${String(
             scopeOwnershipValidator !== undefined

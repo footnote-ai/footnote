@@ -18,6 +18,14 @@ export type Budget = {
     maxCalls: number;
 };
 
+/** One explicitly configured TrustGraph retrieval target. */
+export type TrustGraphTargetConfig = {
+    id: string;
+    flow: string;
+    collection: string;
+    workspaceRef?: string | null;
+};
+
 export type CoverageEstimate = {
     evaluationUnit: 'claim' | 'subquestion' | 'source';
     scoreRange: '0..1' | '0..100';
@@ -38,6 +46,8 @@ export type EvidenceItem = {
     retrievedAt: string;
     collectionScope: string;
     adapterVersion: string;
+    /** Stable deployment-configured target identity, when supplied. */
+    targetId?: string;
 };
 
 export type EvidenceBundle = {
@@ -75,9 +85,7 @@ export interface ScopeValidator {
 export type TrustGraphOwnershipValidationMode = 'required' | 'explicitly_none';
 
 export type OwnershipBypassJustificationCode =
-    | 'benchmark_harness'
-    | 'unit_test'
-    | 'local_dev_manual';
+    'benchmark_harness' | 'unit_test' | 'local_dev_manual';
 
 export class TrustGraphOwnershipBypassCapability {
     public readonly capabilitySource: 'benchmark_harness' | 'integration_test';
@@ -102,8 +110,7 @@ export class TrustGraphOwnershipValidationPolicy {
     public readonly mode: TrustGraphOwnershipValidationMode;
     public readonly justificationCode?: OwnershipBypassJustificationCode;
     public readonly policySource:
-        | 'trusted_backend_policy'
-        | 'untrusted_callsite';
+        'trusted_backend_policy' | 'untrusted_callsite';
     public readonly policyId: string;
     public readonly bypassCapability?: TrustGraphOwnershipBypassCapability;
 
@@ -161,19 +168,12 @@ export type ExternalArtifactJoin = {
 export type MappingRegistryConsumer = 'P_SUFF' | 'P_EVID';
 
 export type TrustGraphPredicateConsumer =
-    | MappingRegistryConsumer
-    | 'P_VER'
-    | 'P_POLICY'
-    | 'P_BUDGET';
+    MappingRegistryConsumer | 'P_VER' | 'P_POLICY' | 'P_BUDGET';
 
 export type LocalTerminalOutcome = 'complete' | 'degraded' | 'stopped';
 
 export type TrustGraphAdapterStatus =
-    | 'off'
-    | 'scope_denied'
-    | 'success'
-    | 'timeout'
-    | 'error';
+    'off' | 'scope_denied' | 'success' | 'timeout' | 'error';
 
 export type TrustGraphProvenanceReasonCode =
     | 'external_scope_validation_failed'
@@ -248,8 +248,7 @@ export type TrustGraphScopeOwnershipValidationResult =
 
 export interface ScopeOwnershipValidator {
     readonly validatorSource:
-        | 'backend_tenancy_service'
-        | 'custom_untrusted_validator';
+        'backend_tenancy_service' | 'custom_untrusted_validator';
     readonly validatorId: string;
     validateOwnership(
         input: ScopeTuple,
