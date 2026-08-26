@@ -404,7 +404,7 @@ test('Graph RAG adapter rejects malformed JSON and non-success responses without
     }
 });
 
-test('Graph RAG adapter enforces response/source bounds and honors cancellation', async () => {
+test('Graph RAG adapter enforces transport bounds and honors cancellation', async () => {
     const declaredOversized = await startServer((_request, response) => {
         response.setHeader('content-length', '1048577');
         response.end('declared oversized');
@@ -416,7 +416,7 @@ test('Graph RAG adapter enforces response/source bounds and honors cancellation'
                 scopeTuple: { userId: 'user-1', projectId: 'project-1' },
                 budget: { timeoutMs: 100, maxCalls: 1 },
             }),
-            /trustgraph_graph_rag_response_too_large/
+            /trustgraph_graph_rag_response_body_too_large/
         );
     } finally {
         await closeServer(declaredOversized.server);
@@ -433,12 +433,17 @@ test('Graph RAG adapter enforces response/source bounds and honors cancellation'
                 scopeTuple: { userId: 'user-1', projectId: 'project-1' },
                 budget: { timeoutMs: 100, maxCalls: 1 },
             }),
-            /trustgraph_graph_rag_response_too_large/
+            /trustgraph_graph_rag_response_body_too_large/
         );
     } finally {
         await closeServer(streamedOversized.server);
     }
 
+    const truncations: Array<{
+        targetId: string;
+        originalResponseChars: number;
+        retainedResponseChars: number;
+    }> = [];
     const oversized = await startServer((_request, response) => {
         response.setHeader('content-type', 'application/json');
         response.end(
@@ -449,16 +454,96 @@ test('Graph RAG adapter enforces response/source bounds and honors cancellation'
         );
     });
     try {
-        await assert.rejects(
-            createAdapter(oversized.baseUrl).getEvidenceBundle({
-                queryIntent: 'query',
-                scopeTuple: { userId: 'user-1', projectId: 'project-1' },
-                budget: { timeoutMs: 100, maxCalls: 1 },
-            }),
-            /trustgraph_graph_rag_response_too_large/
+        const adapter = new HttpTrustGraphEvidenceAdapter({
+            baseUrl: oversized.baseUrl,
+            targets: [
+                {
+                    id: 'oversized',
+                    flow: 'oversized-flow',
+                    collection: 'oversized-collection',
+                },
+            ],
+            apiToken: 'secret-token-for-test',
+            workspaceRef: 'default',
+            limits: TEST_LIMITS,
+            onTargetResponseTruncated: (target, details) =>
+                truncations.push({ targetId: target.id, ...details }),
+        });
+        const bundle = await adapter.getEvidenceBundle({
+            queryIntent: 'query',
+            scopeTuple: { userId: 'user-1', projectId: 'project-1' },
+            budget: { timeoutMs: 100, maxCalls: 1 },
+        });
+        const item = bundle.items[0];
+        assert.ok(item);
+        assert.equal(
+            item.claimText.length <= TEST_LIMITS.maxResponseChars,
+            true
         );
+        assert.match(
+            item.claimText,
+            /\[TrustGraph response truncated by Footnote bounds\.\]$/u
+        );
+        assert.equal(
+            item.retrievalReason,
+            'trustgraph_graph_rag_source_backed_response_truncated'
+        );
+        assert.deepEqual(truncations, [
+            {
+                targetId: 'oversized',
+                originalResponseChars: TEST_LIMITS.maxResponseChars + 1,
+                retainedResponseChars: item.claimText.length,
+            },
+        ]);
     } finally {
         await closeServer(oversized.server);
+    }
+
+    const aggregate = await startServer((_request, response) => {
+        response.setHeader('content-type', 'application/json');
+        response.end(
+            JSON.stringify({
+                response: 'y'.repeat(TEST_LIMITS.maxResponseChars),
+                sources: [{ uri: 'urn:aggregate' }],
+            })
+        );
+    });
+    try {
+        const aggregateLimits: TrustGraphGraphRagLimits = {
+            ...TEST_LIMITS,
+            maxSources: 3,
+        };
+        const adapter = new HttpTrustGraphEvidenceAdapter({
+            baseUrl: aggregate.baseUrl,
+            targets: [
+                { id: 'one', flow: 'one-flow', collection: 'one' },
+                { id: 'two', flow: 'two-flow', collection: 'two' },
+                { id: 'three', flow: 'three-flow', collection: 'three' },
+            ],
+            apiToken: 'secret-token-for-test',
+            limits: aggregateLimits,
+        });
+        const bundle = await adapter.getEvidenceBundle({
+            queryIntent: 'query',
+            scopeTuple: { userId: 'user-1', projectId: 'project-1' },
+            budget: { timeoutMs: 100, maxCalls: 1 },
+        });
+        assert.equal(bundle.items.length, 3);
+        assert.equal(
+            bundle.items.reduce(
+                (total, item) => total + item.claimText.length,
+                0
+            ) <=
+                TEST_LIMITS.maxResponseChars * 2,
+            true
+        );
+        assert.ok(
+            bundle.items.some((item) =>
+                item.retrievalReason.endsWith('_truncated')
+            )
+        );
+    } finally {
+        await closeServer(aggregate.server);
     }
 
     const slow = await startServer((_request, response) => {

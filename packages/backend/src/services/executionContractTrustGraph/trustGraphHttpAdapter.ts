@@ -44,6 +44,13 @@ export type HttpTrustGraphAdapterConfig = {
     workspaceRef?: string | null;
     limits: TrustGraphGraphRagLimits;
     onTargetFailure?: (target: TrustGraphTargetConfig, error: unknown) => void;
+    onTargetResponseTruncated?: (
+        target: TrustGraphTargetConfig,
+        details: {
+            originalResponseChars: number;
+            retainedResponseChars: number;
+        }
+    ) => void;
 };
 
 type GraphRagSource = {
@@ -60,6 +67,9 @@ const GRAPH_RAG_EDGE_SCORE_LIMIT = 30;
 const GRAPH_RAG_EDGE_LIMIT = 25;
 const GRAPH_RAG_MAX_RERANKER_INPUT = 350;
 const MAX_RESPONSE_TEXT_LENGTH = 1_048_576;
+const AGGREGATE_RESPONSE_LIMIT_MULTIPLIER = 2;
+const RESPONSE_TRUNCATION_SUFFIX =
+    '\n\n[TrustGraph response truncated by Footnote bounds.]';
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
     typeof value === 'object' && value !== null;
@@ -186,23 +196,67 @@ const parseSources = (
     });
 };
 
+const truncateResponse = (
+    response: string,
+    maxChars: number
+): { response: string; truncated: boolean } => {
+    if (response.length <= maxChars) {
+        return { response, truncated: false };
+    }
+
+    if (maxChars <= RESPONSE_TRUNCATION_SUFFIX.length) {
+        return {
+            response: RESPONSE_TRUNCATION_SUFFIX.slice(0, maxChars),
+            truncated: true,
+        };
+    }
+
+    const contentLimit = maxChars - RESPONSE_TRUNCATION_SUFFIX.length;
+    const candidate = response.slice(0, contentLimit);
+    const boundary = Math.max(
+        candidate.lastIndexOf('\n'),
+        candidate.lastIndexOf('. '),
+        candidate.lastIndexOf('! '),
+        candidate.lastIndexOf('? ')
+    );
+    const content =
+        boundary >= Math.floor(contentLimit / 2)
+            ? candidate.slice(0, boundary + 1)
+            : candidate;
+
+    return {
+        response: `${content.trimEnd()}${RESPONSE_TRUNCATION_SUFFIX}`,
+        truncated: true,
+    };
+};
+
 const parseGraphRagPayload = (
     payload: unknown,
     limits: TrustGraphGraphRagLimits
-): { response: string; sources: GraphRagSource[] } => {
+): {
+    response: string;
+    sources: GraphRagSource[];
+    originalResponseChars: number;
+    responseTruncated: boolean;
+} => {
     if (!isRecord(payload) || !isNonEmptyString(payload.response)) {
         throw new Error('trustgraph_graph_rag_invalid_response_payload');
     }
 
     const response = payload.response.trim();
-    if (
-        response.length > limits.maxResponseChars ||
-        hasControlCharacters(response)
-    ) {
-        throw new Error('trustgraph_graph_rag_response_too_large');
+    if (hasControlCharacters(response)) {
+        throw new Error(
+            'trustgraph_graph_rag_invalid_response_control_characters'
+        );
     }
 
-    return { response, sources: parseSources(payload.sources, limits) };
+    const bounded = truncateResponse(response, limits.maxResponseChars);
+    return {
+        response: bounded.response,
+        sources: parseSources(payload.sources, limits),
+        originalResponseChars: response.length,
+        responseTruncated: bounded.truncated,
+    };
 };
 
 const readResponseTextBounded = async (response: Response): Promise<string> => {
@@ -212,7 +266,7 @@ const readResponseTextBounded = async (response: Response): Promise<string> => {
         Number.isSafeInteger(parsedLength) &&
         parsedLength > MAX_RESPONSE_TEXT_LENGTH
     ) {
-        throw new Error('trustgraph_graph_rag_response_too_large');
+        throw new Error('trustgraph_graph_rag_response_body_too_large');
     }
 
     if (response.body === null) {
@@ -238,7 +292,7 @@ const readResponseTextBounded = async (response: Response): Promise<string> => {
                     // Preserve the bounded-response error even if the peer
                     // closes the stream before cancellation completes.
                 }
-                throw new Error('trustgraph_graph_rag_response_too_large');
+                throw new Error('trustgraph_graph_rag_response_body_too_large');
             }
             chunks.push(decoder.decode(chunk.value, { stream: true }));
         }
@@ -276,6 +330,7 @@ const toEvidenceBundle = (input: {
         target: TrustGraphTargetConfig;
         response: string;
         sources: GraphRagSource[];
+        responseTruncated: boolean;
     }>;
 }): EvidenceBundle => {
     const items = input.results.map((result) => ({
@@ -283,7 +338,9 @@ const toEvidenceBundle = (input: {
         claimText: result.response,
         sourceRef: `${GRAPH_RAG_SOURCE_REF_PREFIX}${encodeURIComponent(result.target.collection)}`,
         provenancePathRef: buildProvenancePathRefs(result),
-        retrievalReason: 'trustgraph_graph_rag_source_backed_response',
+        retrievalReason: result.responseTruncated
+            ? 'trustgraph_graph_rag_source_backed_response_truncated'
+            : 'trustgraph_graph_rag_source_backed_response',
         // Graph RAG does not expose a Footnote confidence score. Keep this
         // neutral and outside backend policy rather than treating ranking as confidence.
         confidenceScore: 0,
@@ -322,6 +379,39 @@ type GraphRagTargetResult = {
     target: TrustGraphTargetConfig;
     response: string;
     sources: GraphRagSource[];
+    originalResponseChars: number;
+    responseTruncated: boolean;
+};
+
+const applyAggregateResponseLimit = (
+    results: readonly GraphRagTargetResult[],
+    maxResponseChars: number
+): GraphRagTargetResult[] => {
+    const aggregateLimit =
+        maxResponseChars * AGGREGATE_RESPONSE_LIMIT_MULTIPLIER;
+    const totalResponseChars = results.reduce(
+        (total, result) => total + result.response.length,
+        0
+    );
+    if (totalResponseChars <= aggregateLimit) {
+        return [...results];
+    }
+
+    let remainingChars = aggregateLimit;
+    return results.map((result, index) => {
+        const remainingResults = results.length - index;
+        const allocation = Math.max(
+            1,
+            Math.floor(remainingChars / remainingResults)
+        );
+        const bounded = truncateResponse(result.response, allocation);
+        remainingChars = Math.max(0, remainingChars - bounded.response.length);
+        return {
+            ...result,
+            response: bounded.response,
+            responseTruncated: result.responseTruncated || bounded.truncated,
+        };
+    });
 };
 
 export class HttpTrustGraphEvidenceAdapter implements TrustGraphEvidenceAdapter {
@@ -332,6 +422,8 @@ export class HttpTrustGraphEvidenceAdapter implements TrustGraphEvidenceAdapter 
     private readonly limits: TrustGraphGraphRagLimits;
     private readonly onTargetFailure:
         HttpTrustGraphAdapterConfig['onTargetFailure'] | undefined;
+    private readonly onTargetResponseTruncated:
+        HttpTrustGraphAdapterConfig['onTargetResponseTruncated'] | undefined;
 
     public constructor(config: HttpTrustGraphAdapterConfig) {
         if (!isNonEmptyString(config.baseUrl)) {
@@ -370,6 +462,7 @@ export class HttpTrustGraphEvidenceAdapter implements TrustGraphEvidenceAdapter 
         });
         this.limits = validateLimits(config.limits);
         this.onTargetFailure = config.onTargetFailure;
+        this.onTargetResponseTruncated = config.onTargetResponseTruncated;
     }
 
     private async fetchTarget(input: {
@@ -488,10 +581,23 @@ export class HttpTrustGraphEvidenceAdapter implements TrustGraphEvidenceAdapter 
             remainingSources -= sources.length;
         }
 
+        const boundedResults = applyAggregateResponseLimit(
+            results,
+            this.limits.maxResponseChars
+        );
+        for (const result of boundedResults) {
+            if (result.responseTruncated) {
+                this.onTargetResponseTruncated?.(result.target, {
+                    originalResponseChars: result.originalResponseChars,
+                    retainedResponseChars: result.response.length,
+                });
+            }
+        }
+
         return toEvidenceBundle({
             queryIntent: query,
             scopeTuple: input.scopeTuple,
-            results,
+            results: boundedResults,
         });
     }
 }
