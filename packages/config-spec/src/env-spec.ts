@@ -2576,7 +2576,7 @@ export const envEntries = [
         kind: 'integer',
         description:
             'Timeout budget in milliseconds for TrustGraph advisory retrieval calls.',
-        defaultValue: literal(800),
+        defaultValue: literal(20_000),
         usedBy: ['packages/backend/src/config.ts'],
     }),
 
@@ -2687,7 +2687,7 @@ export const envEntries = [
         secret: false,
         kind: 'string',
         description:
-            'Optional diagnostic TrustGraph workspace reference. Workspace authorization comes from the API token and this value is never sent to TrustGraph.',
+            'Optional TrustGraph workspace used to route HTTP Graph RAG requests to the configured flow.',
         defaultValue: noDefault(),
         usedBy: ['packages/backend/src/config.ts'],
     }),
@@ -2820,9 +2820,9 @@ export const envEntries = [
         required: false,
         secret: false,
         kind: 'enum',
-        allowedValues: ['none', 'http'] as const,
+        allowedValues: ['none', 'http', 'deployment'] as const,
         description:
-            'Ownership binding mode used by TrustGraph tenancy checks (`none` or `http`).',
+            'Ownership binding mode used by TrustGraph checks: `deployment` fixes access to the configured collection, while `http` delegates tenancy checks to an external backend service.',
         defaultValue: literal('none'),
         usedBy: ['packages/backend/src/config.ts'],
     }),

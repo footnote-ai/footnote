@@ -59,12 +59,29 @@ export const buildCorrelationIds = (
     responseId,
 });
 
+/**
+ * Builds the execution-contract scope tuple for a normalized chat request.
+ * `defaults.collectionId` is deployment-owned and takes precedence over
+ * caller-provided channelId and guildId; it must not be treated as a
+ * user-controlled selector.
+ */
 export const buildExecutionContractScopeTuple = (
-    request: PostChatRequest
+    request: PostChatRequest,
+    defaults: {
+        collectionId?: string;
+    } = {}
 ): ScopeTuple | undefined => {
     const userId = normalizeScopeValue(request.surfaceContext?.userId);
     if (userId === undefined) {
         return undefined;
+    }
+
+    const deploymentCollectionId = normalizeScopeValue(defaults.collectionId);
+    if (deploymentCollectionId !== undefined) {
+        return {
+            userId,
+            collectionId: deploymentCollectionId,
+        };
     }
 
     const channelProjectId = normalizeScopeValue(

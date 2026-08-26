@@ -854,7 +854,12 @@ export const createChatOrchestrator = ({
             contextEnvelope: toSnapshotContextEnvelope(contextEnvelope),
         });
         const executionContractScopeTuple =
-            buildExecutionContractScopeTuple(normalizedRequest);
+            executionContractTrustGraph === undefined
+                ? undefined
+                : buildExecutionContractScopeTuple(normalizedRequest, {
+                      collectionId:
+                          executionContractTrustGraph.deploymentCollectionId,
+                  });
         const response = await chatService.runChatMessagesWithOutcome({
             messages: baseConversationMessages,
             conversationSnapshot: baseConversationSnapshot,

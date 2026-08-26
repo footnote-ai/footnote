@@ -192,11 +192,12 @@ ensure_optional_secrets() {
 
 enable_trustgraph_runtime() {
   local app_name="$1"
-  echo "Enabling TrustGraph HTTP retrieval for $app_name..."
+  echo "Enabling TrustGraph HTTP retrieval with deployment-scoped ownership validation for $app_name..."
   fly secrets set \
     EXECUTION_CONTRACT_TRUSTGRAPH_ENABLED=true \
     EXECUTION_CONTRACT_TRUSTGRAPH_KILL_SWITCH=false \
     EXECUTION_CONTRACT_TRUSTGRAPH_ADAPTER_MODE=http \
+    EXECUTION_CONTRACT_TRUSTGRAPH_OWNERSHIP_BINDING_MODE=deployment \
     -a "$app_name" >/dev/null
 }
 

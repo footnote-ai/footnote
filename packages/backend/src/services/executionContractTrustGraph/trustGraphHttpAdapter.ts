@@ -33,7 +33,13 @@ export type HttpTrustGraphAdapterConfig = {
     flow: string;
     collection: string;
     apiToken: string;
-    /** Diagnostic only. TrustGraph derives workspace access from the token. */
+    /**
+     * @description: Workspace used by TrustGraph to route the request to its flow.
+     * @footnote-scope: interface
+     * @footnote-module: HttpTrustGraphEvidenceAdapter
+     * @footnote-risk: medium - Incorrect workspace routing changes retrieval scope.
+     * @footnote-ethics: medium - Incorrect workspace routing can affect tenant isolation.
+     */
     workspaceRef?: string | null;
     limits: TrustGraphGraphRagLimits;
 };
@@ -45,6 +51,12 @@ type GraphRagSource = {
 
 const GRAPH_RAG_ADAPTER_VERSION = 'trustgraph-graph-rag-v1';
 const GRAPH_RAG_SOURCE_REF_PREFIX = 'trustgraph://graph-rag/collection/';
+// TrustGraph 2.8's native client sends these bounded reranking controls. Keep
+// them explicit so the HTTP adapter uses the same retrieval path across 2.8
+// deployments instead of relying on server-side defaults.
+const GRAPH_RAG_EDGE_SCORE_LIMIT = 30;
+const GRAPH_RAG_EDGE_LIMIT = 25;
+const GRAPH_RAG_MAX_RERANKER_INPUT = 350;
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
     typeof value === 'object' && value !== null;
@@ -252,6 +264,7 @@ const toEvidenceBundle = (input: {
 export class HttpTrustGraphEvidenceAdapter implements TrustGraphEvidenceAdapter {
     private readonly endpointUrl: string;
     private readonly apiToken: string;
+    private readonly workspaceRef: string | undefined;
     private readonly collection: string;
     private readonly flow: string;
     private readonly limits: TrustGraphGraphRagLimits;
@@ -272,6 +285,9 @@ export class HttpTrustGraphEvidenceAdapter implements TrustGraphEvidenceAdapter 
 
         this.endpointUrl = buildEndpointUrl(config);
         this.apiToken = config.apiToken.trim();
+        this.workspaceRef = isNonEmptyString(config.workspaceRef)
+            ? config.workspaceRef.trim()
+            : undefined;
         this.collection = config.collection.trim();
         this.flow = config.flow.trim();
         this.limits = validateLimits(config.limits);
@@ -298,12 +314,18 @@ export class HttpTrustGraphEvidenceAdapter implements TrustGraphEvidenceAdapter 
                 Authorization: `Bearer ${this.apiToken}`,
             },
             body: JSON.stringify({
+                ...(this.workspaceRef !== undefined && {
+                    workspace: this.workspaceRef,
+                }),
                 query,
                 collection: this.collection,
                 'entity-limit': this.limits.entityLimit,
                 'triple-limit': this.limits.tripleLimit,
                 'max-subgraph-size': this.limits.maxSubgraphSize,
                 'max-path-length': this.limits.maxPathLength,
+                'edge-score-limit': GRAPH_RAG_EDGE_SCORE_LIMIT,
+                'edge-limit': GRAPH_RAG_EDGE_LIMIT,
+                'max-reranker-input': GRAPH_RAG_MAX_RERANKER_INPUT,
                 streaming: false,
             }),
             signal: input.abortSignal,

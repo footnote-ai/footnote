@@ -287,9 +287,20 @@ additional values. To opt in, pass the explicit TrustGraph mode flag:
 ./deploy/fly/deploy.sh --enable-trustgraph
 ```
 
-TrustGraph mode enables the HTTP adapter during deployment. The adapter token
-is sent only as a bearer token to TrustGraph. The workspace reference is
-diagnostic; TrustGraph authorization comes from the token.
+TrustGraph mode enables the HTTP adapter and an explicit deployment-scoped
+ownership check during deployment. Every chat-authorized user may query the
+single configured collection. The backend ignores caller-selected channel,
+guild, project, and collection values for this mode, so this is intentionally
+single-tenant and is not a multi-tenant authorization model. `workspaceRef`
+selects the TrustGraph workspace route for the configured flow. Separately, the
+adapter token is sent only as a bearer token to authorize the TrustGraph request.
+
+Do not point the adapter at an untrusted TrustGraph workspace, reuse unrelated
+credentials, or replace the backend deployment-scope check with an allow-all
+validator. A missing or failed scope check still fails closed for external
+retrieval while the local answer path continues. A future multi-tenant setup
+can switch to `http` ownership binding when an authoritative Footnote tenancy
+service exists.
 
 Deploy normally without TrustGraph:
 
@@ -297,10 +308,14 @@ Deploy normally without TrustGraph:
 ./deploy/fly/deploy.ps1
 ```
 
-After deployment, verify `TAILSCALE_STATUS=ready` in the Fly logs and run one
-chat request using the loaded repository context. Confirm the response trace
-contains bounded TrustGraph metadata and source provenance. To disable remote
-retrieval without changing the image, set
+After deployment, verify `TAILSCALE_STATUS=ready`,
+`ownershipBindingMode=deployment`, and `ownershipValidatorConfigured=true` in
+the Fly logs. Before treating retrieval as
+ready, call Graph RAG directly and confirm its response contains non-empty
+`sources`; generated text without source references is rejected by Footnote.
+Then run one chat request using the loaded repository context and confirm the
+response trace contains bounded TrustGraph metadata and source provenance. To
+disable remote retrieval without changing the image, set
 `EXECUTION_CONTRACT_TRUSTGRAPH_KILL_SWITCH=true` as a Fly environment value and
 restart the Machine.
 

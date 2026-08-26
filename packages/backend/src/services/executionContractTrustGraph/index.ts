@@ -14,6 +14,7 @@ export * from './trustGraphEvidenceTypes.js';
 export * from './provenanceJoin.js';
 export * from './scopeValidator.js';
 export * from './tenancyOwnershipValidator.js';
+export * from './deploymentScopeOwnershipValidator.js';
 export * from './trustGraphEvidenceAdapter.js';
 export * from './trustGraphHttpAdapter.js';
 export * from './tenancyOwnershipHttpService.js';

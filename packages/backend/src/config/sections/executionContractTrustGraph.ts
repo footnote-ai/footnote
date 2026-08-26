@@ -30,6 +30,7 @@ const ADAPTER_MODES: ReadonlySet<AdapterMode> = new Set([
 const OWNERSHIP_BINDING_MODES: ReadonlySet<OwnershipBindingMode> = new Set([
     'none',
     'http',
+    'deployment',
 ]);
 const STUB_ADAPTER_MODES: ReadonlySet<StubAdapterMode> = new Set([
     'success',
@@ -64,7 +65,7 @@ export const buildExecutionContractTrustGraphSection = (
         ) ?? 'server_chat_runtime_policy',
     timeoutMs: parsePositiveIntEnv(
         env.EXECUTION_CONTRACT_TRUSTGRAPH_TIMEOUT_MS,
-        800,
+        20_000,
         'EXECUTION_CONTRACT_TRUSTGRAPH_TIMEOUT_MS',
         warn
     ),
@@ -161,23 +162,30 @@ export const buildExecutionContractTrustGraphSection = (
             warn
         ),
     },
-    ownership: {
-        bindingMode: parseStringUnionEnv<OwnershipBindingMode>(
+    ownership: (() => {
+        const bindingMode = parseStringUnionEnv<OwnershipBindingMode>(
             env.EXECUTION_CONTRACT_TRUSTGRAPH_OWNERSHIP_BINDING_MODE,
             'none',
             'EXECUTION_CONTRACT_TRUSTGRAPH_OWNERSHIP_BINDING_MODE',
             OWNERSHIP_BINDING_MODES,
             warn
-        ),
-        validatorId:
-            parseOptionalTrimmedString(
-                env.EXECUTION_CONTRACT_TRUSTGRAPH_OWNERSHIP_VALIDATOR_ID
-            ) ?? 'backend_tenancy_http_v1',
-        endpointUrl: parseOptionalTrimmedString(
-            env.EXECUTION_CONTRACT_TRUSTGRAPH_OWNERSHIP_ENDPOINT_URL
-        ),
-        apiToken: parseOptionalTrimmedString(
-            env.EXECUTION_CONTRACT_TRUSTGRAPH_OWNERSHIP_API_TOKEN
-        ),
-    },
+        );
+
+        return {
+            bindingMode,
+            validatorId:
+                parseOptionalTrimmedString(
+                    env.EXECUTION_CONTRACT_TRUSTGRAPH_OWNERSHIP_VALIDATOR_ID
+                ) ??
+                (bindingMode === 'deployment'
+                    ? 'backend_deployment_scope_v1'
+                    : 'backend_tenancy_http_v1'),
+            endpointUrl: parseOptionalTrimmedString(
+                env.EXECUTION_CONTRACT_TRUSTGRAPH_OWNERSHIP_ENDPOINT_URL
+            ),
+            apiToken: parseOptionalTrimmedString(
+                env.EXECUTION_CONTRACT_TRUSTGRAPH_OWNERSHIP_API_TOKEN
+            ),
+        };
+    })(),
 });

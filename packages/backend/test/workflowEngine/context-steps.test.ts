@@ -198,6 +198,208 @@ test('runBoundedReviewWorkflow executes injected context step and records contex
     ]);
 });
 
+test('runBoundedReviewWorkflow preserves backend-injected context steps after planner continuation', async () => {
+    const executedIntegrations: string[] = [];
+    const generationRuntime: GenerationRuntime = {
+        kind: 'test-runtime',
+        async generate() {
+            return {
+                text: 'draft',
+                model: 'gpt-5-mini',
+                usage: {
+                    promptTokens: 10,
+                    completionTokens: 5,
+                    totalTokens: 15,
+                },
+                provenance: 'Inferred',
+                citations: [],
+            };
+        },
+    };
+
+    const plannerResult = {
+        plan: {
+            action: 'message' as const,
+            modality: 'text' as const,
+            safetyTier: 'Low' as const,
+            reasoning: 'Continue message flow.',
+            generation: {
+                reasoningEffort: 'low' as const,
+                verbosity: 'low' as const,
+            },
+        },
+        execution: {
+            status: 'executed' as const,
+            purpose: 'chat_orchestrator_action_selection' as const,
+            contractType: 'structured' as const,
+            durationMs: 1,
+        },
+        ingestion: {
+            outputApplyOutcome: 'accepted' as const,
+            fallbackTier: 'none' as const,
+            correctionCodes: [],
+            outOfContractFields: [],
+            authorityFieldAttempts: [],
+        },
+        diagnostics: {
+            rawToolIntentPresent: false,
+            normalizedToolIntentPresent: false,
+            toolIntentRejected: false,
+            toolIntentRejectionReasons: [],
+        },
+    };
+
+    const result = await runBoundedReviewWorkflowForTest({
+        generationRuntime,
+        generationRequest: {
+            model: 'gpt-5-mini',
+            messages: [{ role: 'user', content: 'Need context' }],
+        },
+        messagesWithHints: [{ role: 'user', content: 'Need context' }],
+        generationStartedAtMs: Date.now(),
+        workflowConfig: {
+            workflowName: 'message_with_planner_context',
+            maxIterations: 1,
+            maxDurationMs: 15000,
+            executionLimits: {
+                maxWorkflowSteps: 4,
+                maxToolCalls: 4,
+                maxPlanCycles: 1,
+                maxDeliberationCalls: 1,
+                maxTokensTotal: Number.MAX_SAFE_INTEGER,
+                maxDurationMs: 15000,
+            },
+        },
+        workflowPolicy: {
+            enablePlanning: true,
+            enableToolUse: true,
+            enableReplanning: false,
+            enableGeneration: true,
+            enableAssessment: false,
+            enableRevision: false,
+        },
+        contextStepRequests: [
+            {
+                integrationName: 'trustgraph',
+                requested: true,
+                eligible: true,
+                input: { queryIntent: 'Need context' },
+            },
+        ],
+        contextStepExecutorRegistry: {
+            trustgraph: async ({ request }) => {
+                executedIntegrations.push(request.integrationName);
+                return {
+                    outcome: 'executed',
+                    executionContext: {
+                        toolName: request.integrationName,
+                        status: 'executed',
+                    },
+                    contextMessages: ['trustgraph_context: found'],
+                };
+            },
+            weather_forecast: async ({ request }) => {
+                executedIntegrations.push(request.integrationName);
+                return {
+                    outcome: 'executed',
+                    executionContext: {
+                        toolName: request.integrationName,
+                        status: 'executed',
+                    },
+                    contextMessages: ['weather_context: clear skies'],
+                };
+            },
+        },
+        plannerStepRequest: {
+            workflowId: 'wf_test',
+            workflowName: 'message_with_planner_context',
+            attempt: 1,
+            request: {
+                surface: 'web',
+                trigger: { kind: 'submit' },
+                latestUserInput: 'Need context',
+                conversation: [{ role: 'user', content: 'Need context' }],
+            },
+            invocationContext: {
+                owner: 'workflow',
+                workflowName: 'message_with_planner_context',
+                stepKind: 'plan',
+                purpose: 'chat_orchestrator_action_selection',
+            },
+            capabilityProfiles: [],
+        },
+        plannerStepExecutor: async () => plannerResult,
+        planContinuationBuilder: ({
+            baseGenerationRequest,
+            baseMessagesWithHints,
+            contextEnvelope,
+        }) => ({
+            continuation: 'continue_message',
+            messagesWithHints: baseMessagesWithHints,
+            generationRequest: baseGenerationRequest,
+            conversationSnapshot: 'planner continuation snapshot',
+            contextEnvelope,
+            contextStepRequests: [
+                {
+                    integrationName: 'weather_forecast',
+                    requested: true,
+                    eligible: true,
+                    input: { location: 'Indianapolis' },
+                },
+            ],
+            plannerSummary: {
+                executionPlan: plannerResult.plan,
+                generationForExecution: plannerResult.plan.generation,
+                selectedResponseProfile: {
+                    id: 'default',
+                    provider: 'openai',
+                    providerModel: 'gpt-5-mini',
+                    capabilities: {
+                        supportsReasoningEffort: true,
+                        supportsVerbosity: true,
+                        canUseSearch: false,
+                        canGenerateImage: false,
+                        canUseVision: false,
+                        canUseAudio: false,
+                        canUseStreaming: true,
+                    },
+                },
+                originalSelectedProfileId: 'default',
+                effectiveSelectedProfileId: 'default',
+                toolRequestContext: {
+                    toolName: 'web_search',
+                    requested: false,
+                    eligible: false,
+                    reasonCode: 'tool_not_requested',
+                },
+                plannerDiagnostics: plannerResult.diagnostics,
+                plannerApplyOutcome: 'applied',
+                plannerMattered: true,
+                plannerMatteredControlIds: [],
+                fallbackReasons: [],
+                fallbackRollupSelectionSource: 'default',
+                modality: plannerResult.plan.modality,
+                safetyTier: plannerResult.plan.safetyTier,
+                searchRequested: false,
+            },
+        }),
+        captureUsage: () => ({
+            model: 'gpt-5-mini',
+            promptTokens: 0,
+            completionTokens: 0,
+            totalTokens: 0,
+            estimatedCost: {
+                inputCostUsd: 0,
+                outputCostUsd: 0,
+                totalCostUsd: 0,
+            },
+        }),
+    });
+
+    assert.equal(result.outcome, 'generated');
+    assert.deepEqual(executedIntegrations, ['trustgraph', 'weather_forecast']);
+});
+
 test('runBoundedReviewWorkflow executes eligible context steps in parallel and merges emitted context messages', async () => {
     const observedMessages: RuntimeMessage[][] = [];
     const generationRuntime: GenerationRuntime = {

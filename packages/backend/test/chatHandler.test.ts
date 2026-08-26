@@ -1302,6 +1302,135 @@ test('Execution Contract TrustGraph runtime wiring threads ownership validation 
     );
 });
 
+test('Execution Contract TrustGraph runtime wiring binds deployment scope to adapter collection', async () => {
+    const config = createExecutionContractTrustGraphRuntimeConfig({
+        enabled: true,
+        adapter: {
+            mode: 'stub',
+            baseUrl: null,
+            flow: null,
+            collection: 'footnote-repository-context',
+            apiToken: null,
+            workspaceRef: 'footnote',
+            graphRagLimits: {
+                maxQueryChars: 8000,
+                entityLimit: 50,
+                tripleLimit: 30,
+                maxSubgraphSize: 1000,
+                maxPathLength: 2,
+                maxResponseChars: 12000,
+                maxSources: 20,
+                maxSourceUriChars: 2048,
+                maxSourceTitleChars: 512,
+            },
+            stubMode: 'success',
+        },
+        ownership: {
+            bindingMode: 'deployment',
+            validatorId: 'backend_deployment_scope_v1',
+            endpointUrl: null,
+            apiToken: null,
+        },
+    });
+
+    const resolved = resolveExecutionContractTrustGraphRuntimeOptions(config);
+    assert.ok(resolved?.scopeOwnershipValidator);
+    assert.equal(
+        resolved?.deploymentCollectionId,
+        'footnote-repository-context'
+    );
+
+    const allowed = await resolved.scopeOwnershipValidator.validateOwnership({
+        userId: 'user_1',
+        collectionId: 'footnote-repository-context',
+    });
+    const denied = await resolved.scopeOwnershipValidator.validateOwnership({
+        userId: 'user_1',
+        collectionId: 'other-context',
+    });
+
+    assert.equal(allowed.decision, 'allow');
+    assert.equal(denied.decision, 'deny');
+});
+
+test('incomplete deployment TrustGraph wiring skips caller-scoped retrieval', async () => {
+    const config = createExecutionContractTrustGraphRuntimeConfig({
+        enabled: true,
+        adapter: {
+            mode: 'stub',
+            baseUrl: null,
+            flow: null,
+            collection: '   ',
+            apiToken: null,
+            workspaceRef: 'footnote',
+            graphRagLimits: {
+                maxQueryChars: 8000,
+                entityLimit: 50,
+                tripleLimit: 30,
+                maxSubgraphSize: 1000,
+                maxPathLength: 2,
+                maxResponseChars: 12000,
+                maxSources: 20,
+                maxSourceUriChars: 2048,
+                maxSourceTitleChars: 512,
+            },
+            stubMode: 'success',
+        },
+        ownership: {
+            bindingMode: 'deployment',
+            validatorId: 'backend_deployment_scope_v1',
+            endpointUrl: null,
+            apiToken: null,
+        },
+    });
+
+    const resolved = resolveExecutionContractTrustGraphRuntimeOptions(config);
+    assert.equal(resolved, undefined);
+
+    const env = process.env as MutableEnv;
+    const previousTraceToken = env.TRACE_API_TOKEN;
+    const previousTurnstileSecret = env.TURNSTILE_SECRET_KEY;
+    const previousTurnstileSite = env.TURNSTILE_SITE_KEY;
+
+    env.TRACE_API_TOKEN = 'trace-secret';
+    env.TURNSTILE_SECRET_KEY = 'turnstile-secret';
+    env.TURNSTILE_SITE_KEY = 'turnstile-site';
+
+    const server = await createTestServer({
+        executionContractTrustGraph: resolved,
+    });
+
+    try {
+        const response = await fetch(`${server.url}/api/chat`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-Trace-Token': 'trace-secret',
+            },
+            body: JSON.stringify(
+                createChatRequest({
+                    surfaceContext: {
+                        userId: 'user_1',
+                        channelId: 'caller-project',
+                        guildId: 'caller-collection',
+                    },
+                })
+            ),
+        });
+
+        assert.equal(response.status, 200);
+        const payload = (await response.json()) as {
+            metadata: ResponseMetadata & { trustGraph?: unknown };
+        };
+        assert.equal(payload.metadata.trustGraph, undefined);
+    } finally {
+        await server.close();
+        env.TRACE_API_TOKEN = previousTraceToken;
+        env.TURNSTILE_SECRET_KEY = previousTurnstileSecret;
+        env.TURNSTILE_SITE_KEY = previousTurnstileSite;
+    }
+});
+
 test('Execution Contract TrustGraph runtime wiring fails fast when http adapter base URL is missing', () => {
     const config = createExecutionContractTrustGraphRuntimeConfig({
         enabled: true,

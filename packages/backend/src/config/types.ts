@@ -250,7 +250,7 @@ export type RuntimeConfig = {
             stubMode: 'success' | 'failure' | 'timeout' | 'poisoned';
         };
         ownership: {
-            bindingMode: 'none' | 'http';
+            bindingMode: 'none' | 'http' | 'deployment';
             validatorId: string;
             endpointUrl: string | null;
             apiToken: string | null;
