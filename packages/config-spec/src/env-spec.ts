@@ -2576,7 +2576,7 @@ export const envEntries = [
         kind: 'integer',
         description:
             'Timeout budget in milliseconds for TrustGraph advisory retrieval calls.',
-        defaultValue: literal(30_000),
+        defaultValue: literal(60_000),
         usedBy: ['packages/backend/src/config.ts'],
     }),
 

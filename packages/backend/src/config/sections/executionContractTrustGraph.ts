@@ -195,7 +195,7 @@ export const buildExecutionContractTrustGraphSection = (
             ) ?? 'server_chat_runtime_policy',
         timeoutMs: parsePositiveIntEnv(
             env.EXECUTION_CONTRACT_TRUSTGRAPH_TIMEOUT_MS,
-            30_000,
+            60_000,
             'EXECUTION_CONTRACT_TRUSTGRAPH_TIMEOUT_MS',
             warn
         ),

@@ -11,10 +11,10 @@ import test from 'node:test';
 
 import { buildExecutionContractTrustGraphSection } from '../src/config/sections/executionContractTrustGraph.js';
 
-test('TrustGraph retrieval defaults to a 30-second timeout for local runtimes', () => {
+test('TrustGraph retrieval defaults to a 60-second timeout for local runtimes', () => {
     const config = buildExecutionContractTrustGraphSection({}, () => undefined);
 
-    assert.equal(config.timeoutMs, 30_000);
+    assert.equal(config.timeoutMs, 60_000);
 });
 
 test('TrustGraph retrieval preserves an explicitly configured timeout', () => {
