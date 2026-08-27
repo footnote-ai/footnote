@@ -26,30 +26,10 @@ test('TrustGraph retrieval preserves an explicitly configured timeout', () => {
     assert.equal(config.timeoutMs, 4500);
 });
 
-test('TrustGraph target configuration preserves the legacy single target shape', () => {
-    const config = buildExecutionContractTrustGraphSection(
-        {
-            EXECUTION_CONTRACT_TRUSTGRAPH_FLOW: 'project-history-graphrag',
-            EXECUTION_CONTRACT_TRUSTGRAPH_COLLECTION:
-                'footnote-project-history',
-            EXECUTION_CONTRACT_TRUSTGRAPH_WORKSPACE_REF: 'footnote',
-        },
-        () => undefined
-    );
-
-    assert.deepEqual(config.adapter.targets, [
-        {
-            id: 'legacy-default',
-            flow: 'project-history-graphrag',
-            collection: 'footnote-project-history',
-            workspaceRef: 'footnote',
-        },
-    ]);
-});
-
 test('TrustGraph target configuration accepts an explicit bounded target set', () => {
     const config = buildExecutionContractTrustGraphSection(
         {
+            EXECUTION_CONTRACT_TRUSTGRAPH_ENABLED: 'true',
             EXECUTION_CONTRACT_TRUSTGRAPH_TARGETS: JSON.stringify([
                 {
                     id: 'project-history',
@@ -89,6 +69,7 @@ test('TrustGraph target configuration rejects duplicate identities', () => {
         () =>
             buildExecutionContractTrustGraphSection(
                 {
+                    EXECUTION_CONTRACT_TRUSTGRAPH_ENABLED: 'true',
                     EXECUTION_CONTRACT_TRUSTGRAPH_TARGETS: JSON.stringify([
                         {
                             id: 'duplicate',
@@ -113,6 +94,7 @@ test('TrustGraph target configuration rejects malformed target JSON', () => {
         () =>
             buildExecutionContractTrustGraphSection(
                 {
+                    EXECUTION_CONTRACT_TRUSTGRAPH_ENABLED: 'true',
                     EXECUTION_CONTRACT_TRUSTGRAPH_TARGETS: '{not-json',
                 },
                 () => undefined
@@ -121,27 +103,14 @@ test('TrustGraph target configuration rejects malformed target JSON', () => {
     );
 });
 
-test('TrustGraph target configuration gives explicit targets precedence over legacy fields', () => {
+test('Disabled TrustGraph ignores malformed target JSON so local chat stays available', () => {
     const config = buildExecutionContractTrustGraphSection(
         {
-            EXECUTION_CONTRACT_TRUSTGRAPH_TARGETS: JSON.stringify([
-                {
-                    id: 'explicit',
-                    flow: 'explicit-flow',
-                    collection: 'explicit-collection',
-                },
-            ]),
-            EXECUTION_CONTRACT_TRUSTGRAPH_FLOW: 'legacy-flow',
-            EXECUTION_CONTRACT_TRUSTGRAPH_COLLECTION: 'legacy-collection',
+            EXECUTION_CONTRACT_TRUSTGRAPH_TARGETS: '{not-json',
         },
         () => undefined
     );
 
-    assert.deepEqual(config.adapter.targets, [
-        {
-            id: 'explicit',
-            flow: 'explicit-flow',
-            collection: 'explicit-collection',
-        },
-    ]);
+    assert.equal(config.enabled, false);
+    assert.deepEqual(config.adapter.targets, []);
 });

@@ -1,10 +1,10 @@
 # Repository Context and TrustGraph Status
 
 Status: repository context selection, preview, manual TrustGraph loading, and
-the native Graph RAG adapter are implemented. Live activation and guided setup
-remain separate follow-up work.
+the guarded multi-target Graph RAG chat integration are implemented. Guided
+setup remains separate follow-up work.
 
-Last updated: 2026-08-24.
+Last updated: 2026-08-27.
 
 ## Goal
 
@@ -42,14 +42,15 @@ The earlier hand-written snapshot and seed loader have been removed.
 
 The backend Graph RAG adapter calls TrustGraph 2.8's flow-scoped endpoint with
 bounded retrieval limits and requires returned source URIs before consuming a
-generated response. Responses are bounded per target and across the configured
-set: oversized generated responses are retained as explicitly marked excerpts,
-while oversized HTTP bodies still fail open. It maps each successful explicitly
-configured target to one aggregate advisory evidence item, retains target
-identity plus returned source URIs and titles in provenance, and fails open to
-local chat on transport, timeout, or unrecoverable payload errors. TrustGraph
-derives authorization from the bearer token; an optional workspace reference
-only routes the request.
+generated response. The current deployment supplies three explicitly
+configured targets. Responses are bounded per target and across that set:
+oversized generated responses are retained as explicitly marked excerpts,
+while oversized HTTP bodies still fail open. Each successful target becomes
+one aggregate advisory evidence item with target identity, collection, source
+URIs, and titles retained in provenance. A shared 60-second default retrieval
+timeout covers the target set, and partial target failures preserve successful
+results. TrustGraph derives authorization from the bearer token; an optional
+workspace reference only routes the request.
 
 ## Interim Project Context Path
 
@@ -137,7 +138,7 @@ On a repeat load:
 An `added` or `changed` result means the document was stored and processing was
 submitted. TrustGraph may still be processing it asynchronously.
 
-## Planned Branches
+## Completed and planned work
 
 ### 1. Choose repository context files
 
@@ -159,15 +160,18 @@ be used by the runtime; unconfigured collections are not discovered.
 
 ### 3. Use TrustGraph context in chat
 
-The existing backend lookup path uses TrustGraph's normal query API. Keep access
-checks, shared timeouts, bounded aggregate source records, and the rule that
-Footnote continues without TrustGraph when a lookup fails.
-
-This branch also needs one clear local-development access-check path. The docs
-must not describe that check as optional when the backend requires it.
+Implemented in the backend workflow context-step path. A scoped request runs
+deployment ownership validation, queries the explicitly configured target set
+under one shared timeout and aggregate source/response budget, and preserves
+successful results when one target fails. Generated Graph RAG text reaches
+final generation as labeled user-level advisory context, not as a system
+instruction or source fact. Target, collection, source, and failure details
+remain visible through governed provenance and metadata, while local chat
+continues when retrieval is unavailable.
 
 Done when a scoped chat request can use repository context from TrustGraph and
-show that use in its response details.
+show that use in its response details. This is complete; the three-target live
+deployment path is validated separately from this status document.
 
 ### 4. Add guided setup
 

@@ -130,6 +130,33 @@ test('Success path returns governed predicate views and hides raw adapter payloa
     );
 });
 
+test('Partial target failure remains visible as advisory provenance metadata', async () => {
+    const adapter: TrustGraphEvidenceAdapter = {
+        async getEvidenceBundle(): Promise<EvidenceBundle> {
+            return {
+                ...buildBundle({
+                    scopeTuple: { userId: 'user_1', projectId: 'project_1' },
+                }),
+                partialTargetFailureIds: ['target-b'],
+            };
+        },
+    };
+
+    const result = await runEvidenceIngestion({
+        queryIntent: 'partial target failure',
+        scopeTuple: { userId: 'user_1', projectId: 'project_1' },
+        budget: { timeoutMs: 100, maxCalls: 1 },
+        ownershipValidationPolicy: bypassPolicy(),
+        adapter,
+    });
+
+    assert.equal(result.adapterStatus, 'success');
+    assert.equal(
+        result.provenanceReasonCodes.includes('adapter_partial_failure'),
+        true
+    );
+});
+
 test('Adapter bundle scope mismatch is denied and advisory evidence is rejected', async () => {
     const adapter: TrustGraphEvidenceAdapter = {
         async getEvidenceBundle(): Promise<EvidenceBundle> {

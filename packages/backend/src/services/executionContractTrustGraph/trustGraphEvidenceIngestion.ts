@@ -605,6 +605,12 @@ export const runEvidenceIngestion = async (
             budget: input.budget,
         });
         adapterBundle = adapterInvocation;
+        if (
+            adapterBundle.partialTargetFailureIds !== undefined &&
+            adapterBundle.partialTargetFailureIds.length > 0
+        ) {
+            provenanceReasonCodes.push('adapter_partial_failure');
+        }
     } catch (error: unknown) {
         if (error instanceof TrustGraphAdapterTimeoutError) {
             provenanceReasonCodes.push('adapter_timeout');

@@ -2653,32 +2653,6 @@ export const envEntries = [
     }),
 
     defineEnv({
-        key: 'EXECUTION_CONTRACT_TRUSTGRAPH_FLOW',
-        owner: 'backend',
-        stage: 'runtime',
-        section: 'chat-workflow',
-        required: false,
-        secret: false,
-        kind: 'string',
-        description: 'TrustGraph flow instance used for Graph RAG queries.',
-        defaultValue: noDefault(),
-        usedBy: ['packages/backend/src/config.ts'],
-    }),
-
-    defineEnv({
-        key: 'EXECUTION_CONTRACT_TRUSTGRAPH_COLLECTION',
-        owner: 'backend',
-        stage: 'runtime',
-        section: 'chat-workflow',
-        required: false,
-        secret: false,
-        kind: 'string',
-        description: 'TrustGraph collection searched by Graph RAG queries.',
-        defaultValue: noDefault(),
-        usedBy: ['packages/backend/src/config.ts'],
-    }),
-
-    defineEnv({
         key: 'EXECUTION_CONTRACT_TRUSTGRAPH_ADAPTER_API_TOKEN',
         owner: 'backend',
         stage: 'runtime',

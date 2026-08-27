@@ -236,7 +236,6 @@ test('Graph RAG adapter queries only configured targets and preserves target pro
 });
 
 test('Graph RAG adapter keeps usable evidence when one configured target fails', async () => {
-    const failures: string[] = [];
     const { server, baseUrl } = await startServer(async (request, response) => {
         const body = JSON.parse(await readRequestBody(request)) as {
             collection?: string;
@@ -272,7 +271,6 @@ test('Graph RAG adapter keeps usable evidence when one configured target fails',
             ],
             apiToken: 'secret-token-for-test',
             limits: TEST_LIMITS,
-            onTargetFailure: (target) => failures.push(target.id),
         });
 
         const bundle = await adapter.getEvidenceBundle({
@@ -284,9 +282,9 @@ test('Graph RAG adapter keeps usable evidence when one configured target fails',
             budget: { timeoutMs: 100, maxCalls: 1 },
         });
 
-        assert.deepEqual(failures, ['broken']);
         assert.equal(bundle.items.length, 1);
         assert.equal(bundle.items[0]?.targetId, 'working');
+        assert.deepEqual(bundle.partialTargetFailureIds, ['broken']);
     } finally {
         await closeServer(server);
     }
@@ -319,9 +317,30 @@ test('Graph RAG adapter enforces a shared source budget across targets', async (
             item.provenancePathRef.filter((ref) => ref.startsWith('urn:'))
         );
         assert.equal(sourceRefs.length, TEST_LIMITS.maxSources);
+        assert.ok(
+            bundle.items.some((item) =>
+                item.retrievalReason.endsWith('_sources_truncated')
+            )
+        );
     } finally {
         await closeServer(server);
     }
+});
+
+test('Graph RAG adapter rejects a target set that cannot fit the source budget', () => {
+    assert.throws(
+        () =>
+            new HttpTrustGraphEvidenceAdapter({
+                baseUrl: 'http://trustgraph.test',
+                targets: [
+                    { id: 'one', flow: 'flow-one', collection: 'one' },
+                    { id: 'two', flow: 'flow-two', collection: 'two' },
+                ],
+                apiToken: 'secret-token-for-test',
+                limits: { ...TEST_LIMITS, maxSources: 1 },
+            }),
+        /trustgraph_graph_rag_max_sources_below_target_count/
+    );
 });
 
 test('Graph RAG adapter rejects missing, empty, or malformed sources', async () => {
@@ -433,11 +452,6 @@ test('Graph RAG adapter preserves normal whitespace in generated responses', asy
 });
 
 test('Graph RAG adapter keeps bounded evidence when sources exceed the limit', async () => {
-    const truncations: Array<{
-        targetId: string;
-        originalSourceCount: number;
-        retainedSourceCount: number;
-    }> = [];
     const { server, baseUrl } = await startServer((_request, response) => {
         response.setHeader('content-type', 'application/json');
         response.end(
@@ -464,8 +478,6 @@ test('Graph RAG adapter keeps bounded evidence when sources exceed the limit', a
             ],
             apiToken: 'secret-token-for-test',
             limits: TEST_LIMITS,
-            onTargetSourcesTruncated: (target, details) =>
-                truncations.push({ targetId: target.id, ...details }),
         });
 
         const bundle = await adapter.getEvidenceBundle({
@@ -485,13 +497,6 @@ test('Graph RAG adapter keeps bounded evidence when sources exceed the limit', a
             item.retrievalReason,
             'trustgraph_graph_rag_source_backed_sources_truncated'
         );
-        assert.deepEqual(truncations, [
-            {
-                targetId: 'bounded',
-                originalSourceCount: TEST_LIMITS.maxSources + 2,
-                retainedSourceCount: TEST_LIMITS.maxSources,
-            },
-        ]);
     } finally {
         await closeServer(server);
     }
@@ -532,11 +537,6 @@ test('Graph RAG adapter enforces transport bounds and honors cancellation', asyn
         await closeServer(streamedOversized.server);
     }
 
-    const truncations: Array<{
-        targetId: string;
-        originalResponseChars: number;
-        retainedResponseChars: number;
-    }> = [];
     const oversized = await startServer((_request, response) => {
         response.setHeader('content-type', 'application/json');
         response.end(
@@ -559,8 +559,6 @@ test('Graph RAG adapter enforces transport bounds and honors cancellation', asyn
             apiToken: 'secret-token-for-test',
             workspaceRef: 'default',
             limits: TEST_LIMITS,
-            onTargetResponseTruncated: (target, details) =>
-                truncations.push({ targetId: target.id, ...details }),
         });
         const bundle = await adapter.getEvidenceBundle({
             queryIntent: 'query',
@@ -581,13 +579,6 @@ test('Graph RAG adapter enforces transport bounds and honors cancellation', asyn
             item.retrievalReason,
             'trustgraph_graph_rag_source_backed_response_truncated'
         );
-        assert.deepEqual(truncations, [
-            {
-                targetId: 'oversized',
-                originalResponseChars: TEST_LIMITS.maxResponseChars + 1,
-                retainedResponseChars: item.claimText.length,
-            },
-        ]);
     } finally {
         await closeServer(oversized.server);
     }

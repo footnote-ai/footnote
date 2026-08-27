@@ -10,6 +10,7 @@
 import { randomUUID } from 'node:crypto';
 import { TextDecoder } from 'node:util';
 
+import { logger } from '../../utils/logger.js';
 import type {
     Budget,
     EvidenceBundle,
@@ -43,21 +44,6 @@ export type HttpTrustGraphAdapterConfig = {
      */
     workspaceRef?: string | null;
     limits: TrustGraphGraphRagLimits;
-    onTargetFailure?: (target: TrustGraphTargetConfig, error: unknown) => void;
-    onTargetResponseTruncated?: (
-        target: TrustGraphTargetConfig,
-        details: {
-            originalResponseChars: number;
-            retainedResponseChars: number;
-        }
-    ) => void;
-    onTargetSourcesTruncated?: (
-        target: TrustGraphTargetConfig,
-        details: {
-            originalSourceCount: number;
-            retainedSourceCount: number;
-        }
-    ) => void;
 };
 
 type GraphRagSource = {
@@ -83,6 +69,103 @@ const isRecord = (value: unknown): value is Record<string, unknown> =>
 
 const isNonEmptyString = (value: unknown): value is string =>
     typeof value === 'string' && value.trim().length > 0;
+
+const MAX_LOGGED_FAILURE_DETAIL_LENGTH = 256;
+
+const normalizeFailureDetail = (value: unknown): string => {
+    if (typeof value !== 'string') {
+        return '';
+    }
+
+    let normalized = '';
+    for (const character of value) {
+        const codePoint = character.codePointAt(0) ?? 0;
+        normalized += codePoint <= 0x1f || codePoint === 0x7f ? ' ' : character;
+    }
+
+    return normalized.trim().slice(0, MAX_LOGGED_FAILURE_DETAIL_LENGTH);
+};
+
+const describeTargetFailure = (
+    error: unknown
+): { errorName: string; reason: string } => {
+    if (error instanceof Error) {
+        const errorName = normalizeFailureDetail(error.name) || 'Error';
+        const reason = normalizeFailureDetail(error.message) || errorName;
+        return { errorName, reason };
+    }
+
+    if (typeof error === 'object' && error !== null) {
+        const errorRecord = error as Record<string, unknown>;
+        const errorName =
+            normalizeFailureDetail(errorRecord.name) || 'UnknownError';
+        const reason = normalizeFailureDetail(errorRecord.message) || errorName;
+        return { errorName, reason };
+    }
+
+    const reason = normalizeFailureDetail(error) || 'unknown_error';
+    const errorName =
+        reason === 'trustgraph_adapter_aborted_by_signal'
+            ? 'AbortError'
+            : 'UnknownError';
+    return { errorName, reason };
+};
+
+const logTargetFailure = (
+    target: TrustGraphTargetConfig,
+    error: unknown
+): void => {
+    const failure = describeTargetFailure(error);
+    const event = 'chat.execution_contract_trustgraph.target_failed';
+    logger.warn(
+        `${event} (targetId=${target.id}, flow=${target.flow}, collection=${target.collection}, errorName=${failure.errorName}, reason=${failure.reason})`,
+        {
+            event,
+            targetId: target.id,
+            flow: target.flow,
+            collection: target.collection,
+            errorName: failure.errorName,
+            reason: failure.reason,
+        }
+    );
+};
+
+const logTargetResponseTruncated = (
+    target: TrustGraphTargetConfig,
+    details: { originalResponseChars: number; retainedResponseChars: number }
+): void => {
+    const event =
+        'chat.execution_contract_trustgraph.target_response_truncated';
+    logger.warn(
+        `${event} (targetId=${target.id}, flow=${target.flow}, collection=${target.collection}, originalResponseChars=${details.originalResponseChars}, retainedResponseChars=${details.retainedResponseChars})`,
+        {
+            event,
+            targetId: target.id,
+            flow: target.flow,
+            collection: target.collection,
+            originalResponseChars: details.originalResponseChars,
+            retainedResponseChars: details.retainedResponseChars,
+        }
+    );
+};
+
+const logTargetSourcesTruncated = (
+    target: TrustGraphTargetConfig,
+    details: { originalSourceCount: number; retainedSourceCount: number }
+): void => {
+    const event = 'chat.execution_contract_trustgraph.target_sources_truncated';
+    logger.warn(
+        `${event} (targetId=${target.id}, flow=${target.flow}, collection=${target.collection}, originalSourceCount=${details.originalSourceCount}, retainedSourceCount=${details.retainedSourceCount})`,
+        {
+            event,
+            targetId: target.id,
+            flow: target.flow,
+            collection: target.collection,
+            originalSourceCount: details.originalSourceCount,
+            retainedSourceCount: details.retainedSourceCount,
+        }
+    );
+};
 
 const hasControlCharacters = (value: string): boolean => {
     for (const character of value) {
@@ -356,6 +439,7 @@ const buildProvenancePathRefs = (input: {
 const toEvidenceBundle = (input: {
     queryIntent: string;
     scopeTuple: ScopeTuple;
+    partialTargetFailureIds?: string[];
     results: Array<{
         target: TrustGraphTargetConfig;
         response: string;
@@ -405,6 +489,10 @@ const toEvidenceBundle = (input: {
         ],
         scopeTuple: input.scopeTuple,
         adapterVersion: GRAPH_RAG_ADAPTER_VERSION,
+        ...(input.partialTargetFailureIds !== undefined &&
+            input.partialTargetFailureIds.length > 0 && {
+                partialTargetFailureIds: input.partialTargetFailureIds,
+            }),
     };
 };
 
@@ -455,12 +543,6 @@ export class HttpTrustGraphEvidenceAdapter implements TrustGraphEvidenceAdapter 
     private readonly workspaceRef: string | undefined;
     private readonly targets: readonly TrustGraphTargetConfig[];
     private readonly limits: TrustGraphGraphRagLimits;
-    private readonly onTargetFailure:
-        HttpTrustGraphAdapterConfig['onTargetFailure'] | undefined;
-    private readonly onTargetResponseTruncated:
-        HttpTrustGraphAdapterConfig['onTargetResponseTruncated'] | undefined;
-    private readonly onTargetSourcesTruncated:
-        HttpTrustGraphAdapterConfig['onTargetSourcesTruncated'] | undefined;
 
     public constructor(config: HttpTrustGraphAdapterConfig) {
         if (!isNonEmptyString(config.baseUrl)) {
@@ -498,9 +580,11 @@ export class HttpTrustGraphEvidenceAdapter implements TrustGraphEvidenceAdapter 
             };
         });
         this.limits = validateLimits(config.limits);
-        this.onTargetFailure = config.onTargetFailure;
-        this.onTargetResponseTruncated = config.onTargetResponseTruncated;
-        this.onTargetSourcesTruncated = config.onTargetSourcesTruncated;
+        if (this.targets.length > this.limits.maxSources) {
+            throw new Error(
+                'trustgraph_graph_rag_max_sources_below_target_count'
+            );
+        }
     }
 
     private async fetchTarget(input: {
@@ -592,7 +676,7 @@ export class HttpTrustGraphEvidenceAdapter implements TrustGraphEvidenceAdapter 
                 successful.push(result.value);
             } else if (target !== undefined) {
                 failures.push({ target, error: result.reason });
-                this.onTargetFailure?.(target, result.reason);
+                logTargetFailure(target, result.reason);
             }
         }
 
@@ -615,7 +699,13 @@ export class HttpTrustGraphEvidenceAdapter implements TrustGraphEvidenceAdapter 
                 Math.floor(remainingSources / remainingTargets)
             );
             const sources = result.sources.slice(0, sourceCount);
-            results.push({ ...result, sources });
+            results.push({
+                ...result,
+                sources,
+                sourceTruncated:
+                    result.sourceTruncated ||
+                    sources.length < result.sources.length,
+            });
             remainingSources -= sources.length;
         }
 
@@ -625,13 +715,13 @@ export class HttpTrustGraphEvidenceAdapter implements TrustGraphEvidenceAdapter 
         );
         for (const result of boundedResults) {
             if (result.sourceTruncated) {
-                this.onTargetSourcesTruncated?.(result.target, {
+                logTargetSourcesTruncated(result.target, {
                     originalSourceCount: result.originalSourceCount,
                     retainedSourceCount: result.sources.length,
                 });
             }
             if (result.responseTruncated) {
-                this.onTargetResponseTruncated?.(result.target, {
+                logTargetResponseTruncated(result.target, {
                     originalResponseChars: result.originalResponseChars,
                     retainedResponseChars: result.response.length,
                 });
@@ -641,6 +731,9 @@ export class HttpTrustGraphEvidenceAdapter implements TrustGraphEvidenceAdapter 
         return toEvidenceBundle({
             queryIntent: query,
             scopeTuple: input.scopeTuple,
+            partialTargetFailureIds: failures.map(
+                (failure) => failure.target.id
+            ),
             results: boundedResults,
         });
     }

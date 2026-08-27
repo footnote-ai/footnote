@@ -26,47 +26,6 @@ type ExecutionContractTrustGraphRuntimeConfig =
 const isNonEmptyString = (value: string | null): value is string =>
     typeof value === 'string' && value.trim().length > 0;
 
-const MAX_LOGGED_FAILURE_DETAIL_LENGTH = 256;
-
-const normalizeFailureDetail = (value: unknown): string => {
-    if (typeof value !== 'string') {
-        return '';
-    }
-
-    let normalized = '';
-    for (const character of value) {
-        const codePoint = character.codePointAt(0) ?? 0;
-        normalized += codePoint <= 0x1f || codePoint === 0x7f ? ' ' : character;
-    }
-
-    return normalized.trim().slice(0, MAX_LOGGED_FAILURE_DETAIL_LENGTH);
-};
-
-const describeTargetFailure = (
-    error: unknown
-): { errorName: string; reason: string } => {
-    if (error instanceof Error) {
-        const errorName = normalizeFailureDetail(error.name) || 'Error';
-        const reason = normalizeFailureDetail(error.message) || errorName;
-        return { errorName, reason };
-    }
-
-    if (typeof error === 'object' && error !== null) {
-        const errorRecord = error as Record<string, unknown>;
-        const errorName =
-            normalizeFailureDetail(errorRecord.name) || 'UnknownError';
-        const reason = normalizeFailureDetail(errorRecord.message) || errorName;
-        return { errorName, reason };
-    }
-
-    const reason = normalizeFailureDetail(error) || 'unknown_error';
-    const errorName =
-        reason === 'trustgraph_adapter_aborted_by_signal'
-            ? 'AbortError'
-            : 'UnknownError';
-    return { errorName, reason };
-};
-
 const requireHttpAdapterConfig = (input: {
     baseUrl: string | null;
     targets: readonly TrustGraphTargetConfig[];
@@ -160,52 +119,6 @@ export const resolveExecutionContractTrustGraphRuntimeOptions = (
             apiToken: adapterConfig.apiToken,
             workspaceRef: config.adapter.workspaceRef,
             limits: config.adapter.graphRagLimits,
-            onTargetFailure: (target, error) => {
-                const failure = describeTargetFailure(error);
-                const event =
-                    'chat.execution_contract_trustgraph.target_failed';
-                logger.warn(
-                    `${event} (targetId=${target.id}, flow=${target.flow}, collection=${target.collection}, errorName=${failure.errorName}, reason=${failure.reason})`,
-                    {
-                        event,
-                        targetId: target.id,
-                        flow: target.flow,
-                        collection: target.collection,
-                        errorName: failure.errorName,
-                        reason: failure.reason,
-                    }
-                );
-            },
-            onTargetResponseTruncated: (target, details) => {
-                const event =
-                    'chat.execution_contract_trustgraph.target_response_truncated';
-                logger.warn(
-                    `${event} (targetId=${target.id}, flow=${target.flow}, collection=${target.collection}, originalResponseChars=${details.originalResponseChars}, retainedResponseChars=${details.retainedResponseChars})`,
-                    {
-                        event,
-                        targetId: target.id,
-                        flow: target.flow,
-                        collection: target.collection,
-                        originalResponseChars: details.originalResponseChars,
-                        retainedResponseChars: details.retainedResponseChars,
-                    }
-                );
-            },
-            onTargetSourcesTruncated: (target, details) => {
-                const event =
-                    'chat.execution_contract_trustgraph.target_sources_truncated';
-                logger.warn(
-                    `${event} (targetId=${target.id}, flow=${target.flow}, collection=${target.collection}, originalSourceCount=${details.originalSourceCount}, retainedSourceCount=${details.retainedSourceCount})`,
-                    {
-                        event,
-                        targetId: target.id,
-                        flow: target.flow,
-                        collection: target.collection,
-                        originalSourceCount: details.originalSourceCount,
-                        retainedSourceCount: details.retainedSourceCount,
-                    }
-                );
-            },
         });
     } else if (config.adapter.mode === 'stub') {
         adapter = new StubTrustGraphEvidenceAdapter(config.adapter.stubMode);

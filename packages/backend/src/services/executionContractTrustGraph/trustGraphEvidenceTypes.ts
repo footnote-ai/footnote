@@ -73,6 +73,8 @@ export type EvidenceBundle = {
     traceRefs: string[];
     scopeTuple: ScopeTuple;
     adapterVersion: string;
+    /** Failed configured targets are observable without exposing transport details. */
+    partialTargetFailureIds?: string[];
 };
 
 export type ScopeValidationResult =
@@ -196,6 +198,7 @@ export type TrustGraphProvenanceReasonCode =
     | 'adapter_timeout'
     | 'adapter_timeout_cancellation_requested'
     | 'adapter_error'
+    | 'adapter_partial_failure'
     | 'adapter_processing_failed'
     | 'poisoned_evidence_dropped'
     | 'aggregate_signals_neutralized_after_filtering'

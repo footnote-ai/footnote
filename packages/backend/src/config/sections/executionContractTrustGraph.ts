@@ -130,31 +130,6 @@ const parseConfiguredTargets = (
     });
 };
 
-const parseLegacyTarget = (
-    flow: string | undefined,
-    collection: string | undefined,
-    workspaceRef: string | undefined
-): TrustGraphTargetConfig[] => {
-    if (flow === undefined && collection === undefined) {
-        return [];
-    }
-    if (flow === undefined || collection === undefined) {
-        return invalidTargets('legacy_target');
-    }
-
-    const requiredFlow = flow;
-    const requiredCollection = collection;
-
-    return [
-        {
-            id: 'legacy-default',
-            flow: requiredFlow,
-            collection: requiredCollection,
-            ...(workspaceRef !== undefined && { workspaceRef }),
-        },
-    ];
-};
-
 /**
  * Resolves explicit runtime policy and connection settings for advisory
  * TrustGraph integration.
@@ -163,26 +138,19 @@ export const buildExecutionContractTrustGraphSection = (
     env: NodeJS.ProcessEnv,
     warn: WarningSink
 ): RuntimeConfig['executionContractTrustGraph'] => {
-    const flow = parseOptionalTrimmedString(
-        env.EXECUTION_CONTRACT_TRUSTGRAPH_FLOW
+    const enabled = parseBooleanEnv(
+        env.EXECUTION_CONTRACT_TRUSTGRAPH_ENABLED,
+        false,
+        'EXECUTION_CONTRACT_TRUSTGRAPH_ENABLED',
+        warn
     );
-    const collection = parseOptionalTrimmedString(
-        env.EXECUTION_CONTRACT_TRUSTGRAPH_COLLECTION
-    );
-    const workspaceRef = parseOptionalTrimmedString(
-        env.EXECUTION_CONTRACT_TRUSTGRAPH_WORKSPACE_REF
-    );
-    const explicitTargets = parseConfiguredTargets(
-        env.EXECUTION_CONTRACT_TRUSTGRAPH_TARGETS
-    );
+    // Disabled local chat must not fail startup over an unused TrustGraph value.
+    const explicitTargets = enabled
+        ? parseConfiguredTargets(env.EXECUTION_CONTRACT_TRUSTGRAPH_TARGETS)
+        : undefined;
 
     return {
-        enabled: parseBooleanEnv(
-            env.EXECUTION_CONTRACT_TRUSTGRAPH_ENABLED,
-            false,
-            'EXECUTION_CONTRACT_TRUSTGRAPH_ENABLED',
-            warn
-        ),
+        enabled,
         killSwitchExternalRetrieval: parseBooleanEnv(
             env.EXECUTION_CONTRACT_TRUSTGRAPH_KILL_SWITCH,
             false,
@@ -216,13 +184,7 @@ export const buildExecutionContractTrustGraphSection = (
             baseUrl: parseOptionalTrimmedString(
                 env.EXECUTION_CONTRACT_TRUSTGRAPH_BASE_URL
             ),
-            targets:
-                explicitTargets ??
-                parseLegacyTarget(
-                    flow ?? undefined,
-                    collection ?? undefined,
-                    workspaceRef ?? undefined
-                ),
+            targets: explicitTargets ?? [],
             apiToken: parseOptionalTrimmedString(
                 env.EXECUTION_CONTRACT_TRUSTGRAPH_ADAPTER_API_TOKEN
             ),

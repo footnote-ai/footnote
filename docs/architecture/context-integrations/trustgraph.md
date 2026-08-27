@@ -7,8 +7,9 @@ request. That evidence can improve context, but it does not get to decide what
 response Footnote sends, when execution is done, or whether verification still
 applies.
 
-Today this path exists in code, but it is not yet a central or fully activated
-part of the product. The shared rules for context integrations are in the
+This path is implemented as an optional, guarded runtime integration. It is not
+a critical product dependency: local chat remains fail-open when retrieval is
+disabled or unavailable. The shared rules for context integrations are in the
 parent [README](./README.md).
 
 ## Request path
@@ -101,20 +102,24 @@ retrieval is attempted and local behavior continues normally.
 
 ### Configured target set
 
-The HTTP adapter accepts one or more deployment-configured targets. Each target
+The HTTP adapter accepts one or more deployment-configured targets. The current
+deployment supplies three targets. Each target
 has a stable operator-chosen `id`, a TrustGraph `flow`, a `collection`, and an
 optional per-target `workspaceRef`. The deployment's bearer token and base URL
 remain shared connection settings. The runtime never enumerates a workspace or
-queries a collection that is not present in this list. A legacy single
-`FLOW`/`COLLECTION` configuration is normalized to one target for a small,
-backward-compatible migration path.
+queries a collection that is not present in this list. Deployments must provide
+the explicit target array; the old single-flow/single-collection settings are
+not part of this runtime path.
 
-Target requests share the existing request timeout and the adapter's aggregate
-source budget. A target failure is recorded and does not discard successful
-results from other configured targets; if every target fails, the existing
-fail-open adapter error path is used. Deployment ownership validation accepts
-only the configured collection set and continues to reject caller-selected
-projects or collections.
+Target requests share the existing 60-second default retrieval timeout and the
+adapter's aggregate source and response budgets. A target failure is recorded
+and does not discard successful results from other configured targets; if every
+target fails, the existing fail-open adapter error path is used. Partial
+failures remain visible in target failure logs and governed provenance reason
+codes. The aggregate source bound must be at least the number of configured
+targets so each successful target can retain one source-backed item. Deployment
+ownership validation accepts only the configured collection set and continues
+to reject caller-selected projects or collections.
 
 `chatOrchestrator` is still the authority for action selection. It may:
 
@@ -174,7 +179,9 @@ hard HTTP body bound still fail open. If a target returns more source
 references than the per-target source bound, Footnote retains the first
 bounded set in TrustGraph order, marks the evidence as source-truncated, and
 logs the original and retained counts. Footnote maps each successful
-configured target to one aggregate advisory evidence item. The target identity
+configured target to one aggregate advisory evidence item. Aggregate source
+allocation also marks truncation when the shared bound trims a target's source
+set. The target identity
 is retained in the evidence item and provenance path; source URIs and titles
 remain in that path. Footnote does not treat TrustGraph ranking or confidence
 as backend policy. The generated Graph RAG response is also passed to final
@@ -245,8 +252,8 @@ The current tests do not prove:
 
 That is why the activation story should stay conservative.
 
-Today this is a real seam with guarded runtime wiring, not yet a fully
-activated product dependency.
+This is a real seam with guarded runtime wiring and an active deployment path,
+while remaining an optional, non-authoritative context dependency.
 
 What is already in good shape:
 
@@ -256,7 +263,7 @@ What is already in good shape:
 - unsafe retrieval paths fail closed
 - local chat execution keeps working when retrieval fails
 
-What still needs care before broader activation:
+What still needs care before broader operational rollout:
 
 - real TrustGraph service deployment details
 - real tenancy ownership service deployment details
