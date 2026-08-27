@@ -128,6 +128,25 @@ test('bootstrap env key in footnote.yaml fails validation', () => {
     }, /maps to bootstrap env key FLY_APP_NAME/i);
 });
 
+test('stale single-target TrustGraph settings fail with migration guidance', () => {
+    const rawYaml = [
+        'version: 1',
+        'chat-workflow:',
+        '  execution-contract-trustgraph-flow: default',
+        '  execution-contract-trustgraph-collection: footnote-context',
+        '',
+    ].join('\n');
+
+    assert.throws(
+        () =>
+            parseServerSettingsYaml({
+                rawText: rawYaml,
+                settingsPath: withSettingsFile(rawYaml),
+            }),
+        /chat-workflow\.execution-contract-trustgraph-flow is obsolete.*EXECUTION_CONTRACT_TRUSTGRAPH_TARGETS.*deployment bootstrap environment/i
+    );
+});
+
 test('rejects removed settings.localNodes.configPath shape', () => {
     const settingsPath = withSettingsFile(
         [

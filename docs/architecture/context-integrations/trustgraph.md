@@ -121,6 +121,14 @@ targets so each successful target can retain one source-backed item. Deployment
 ownership validation accepts only the configured collection set and continues
 to reject caller-selected projects or collections.
 
+The target array is deployment bootstrap configuration and is not represented
+in `footnote.yaml`. A deployment migrated from the old single-target settings
+must back up its persisted YAML and remove only
+`chat-workflow.execution-contract-trustgraph-flow` and
+`chat-workflow.execution-contract-trustgraph-collection`. The settings loader
+rejects those obsolete keys with guidance to configure
+`EXECUTION_CONTRACT_TRUSTGRAPH_TARGETS`; it does not rewrite YAML at startup.
+
 `chatOrchestrator` is still the authority for action selection. It may:
 
 - decide whether retrieval is attempted

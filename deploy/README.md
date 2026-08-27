@@ -305,6 +305,15 @@ at least one source per configured target. A failed target does not discard
 successful results from another target, and partial failures remain visible in
 provenance metadata.
 
+Target sets are deployment bootstrap configuration, not `footnote.yaml`
+settings. When upgrading a deployment that still has
+`chat-workflow.execution-contract-trustgraph-flow` or
+`chat-workflow.execution-contract-trustgraph-collection`, back up the persisted
+settings file, remove only those two obsolete keys, preserve the bot
+definitions and other settings, and restart. Do not add a `targets` block to
+YAML. The backend rejects the obsolete keys with migration guidance rather
+than rewriting settings on startup.
+
 Do not point the adapter at an untrusted TrustGraph workspace, reuse unrelated
 credentials, or replace the backend deployment-scope check with an allow-all
 validator. A missing or failed scope check still fails closed for external

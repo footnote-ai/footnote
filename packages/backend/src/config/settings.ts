@@ -244,6 +244,16 @@ const createSourceTree = (): SourceNode => {
 
 const SOURCE_TREE = createSourceTree();
 
+const LEGACY_TRUST_GRAPH_SETTINGS_PATHS = new Set([
+    'chat-workflow.execution-contract-trustgraph-flow',
+    'chat-workflow.execution-contract-trustgraph-collection',
+]);
+
+const unsupportedSettingsKeyMessage = (path: string): string =>
+    LEGACY_TRUST_GRAPH_SETTINGS_PATHS.has(path)
+        ? `Invalid server settings YAML: ${path} is obsolete. Remove it from footnote.yaml; configure EXECUTION_CONTRACT_TRUSTGRAPH_TARGETS in deployment bootstrap environment instead.`
+        : `Invalid server settings YAML: ${path} is not a supported key.`;
+
 const validateSupportedSettingsKeys = (
     root: Record<string, unknown>,
     pointer = 'root',
@@ -263,7 +273,7 @@ const validateSupportedSettingsKeys = (
         const next = node.children.get(key);
         if (!next) {
             throw new ServerSettingsValidationError({
-                message: `Invalid server settings YAML: ${path} is not a supported key.`,
+                message: unsupportedSettingsKeyMessage(path),
                 category: 'unsupported_key',
                 pointer: path,
             });
