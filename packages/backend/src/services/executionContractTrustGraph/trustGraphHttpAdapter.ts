@@ -51,6 +51,13 @@ export type HttpTrustGraphAdapterConfig = {
             retainedResponseChars: number;
         }
     ) => void;
+    onTargetSourcesTruncated?: (
+        target: TrustGraphTargetConfig,
+        details: {
+            originalSourceCount: number;
+            retainedSourceCount: number;
+        }
+    ) => void;
 };
 
 type GraphRagSource = {
@@ -168,16 +175,18 @@ const validateLimits = (
 const parseSources = (
     value: unknown,
     limits: TrustGraphGraphRagLimits
-): GraphRagSource[] => {
-    if (
-        !Array.isArray(value) ||
-        value.length === 0 ||
-        value.length > limits.maxSources
-    ) {
+): {
+    sources: GraphRagSource[];
+    originalSourceCount: number;
+    sourceTruncated: boolean;
+} => {
+    if (!Array.isArray(value) || value.length === 0) {
         throw new Error('trustgraph_graph_rag_invalid_sources');
     }
 
-    return value.map((source): GraphRagSource => {
+    const originalSourceCount = value.length;
+    const retainedSources = value.slice(0, limits.maxSources);
+    const sources = retainedSources.map((source): GraphRagSource => {
         if (!isRecord(source) || !isNonEmptyString(source.uri)) {
             throw new Error('trustgraph_graph_rag_invalid_source');
         }
@@ -206,6 +215,12 @@ const parseSources = (
 
         return { uri, ...(title !== undefined && { title }) };
     });
+
+    return {
+        sources,
+        originalSourceCount,
+        sourceTruncated: originalSourceCount > sources.length,
+    };
 };
 
 const truncateResponse = (
@@ -248,6 +263,8 @@ const parseGraphRagPayload = (
 ): {
     response: string;
     sources: GraphRagSource[];
+    originalSourceCount: number;
+    sourceTruncated: boolean;
     originalResponseChars: number;
     responseTruncated: boolean;
 } => {
@@ -263,9 +280,10 @@ const parseGraphRagPayload = (
     }
 
     const bounded = truncateResponse(response, limits.maxResponseChars);
+    const parsedSources = parseSources(payload.sources, limits);
     return {
         response: bounded.response,
-        sources: parseSources(payload.sources, limits),
+        ...parsedSources,
         originalResponseChars: response.length,
         responseTruncated: bounded.truncated,
     };
@@ -342,6 +360,7 @@ const toEvidenceBundle = (input: {
         target: TrustGraphTargetConfig;
         response: string;
         sources: GraphRagSource[];
+        sourceTruncated: boolean;
         responseTruncated: boolean;
     }>;
 }): EvidenceBundle => {
@@ -350,9 +369,11 @@ const toEvidenceBundle = (input: {
         claimText: result.response,
         sourceRef: `${GRAPH_RAG_SOURCE_REF_PREFIX}${encodeURIComponent(result.target.collection)}`,
         provenancePathRef: buildProvenancePathRefs(result),
-        retrievalReason: result.responseTruncated
-            ? 'trustgraph_graph_rag_source_backed_response_truncated'
-            : 'trustgraph_graph_rag_source_backed_response',
+        retrievalReason: result.sourceTruncated
+            ? 'trustgraph_graph_rag_source_backed_sources_truncated'
+            : result.responseTruncated
+              ? 'trustgraph_graph_rag_source_backed_response_truncated'
+              : 'trustgraph_graph_rag_source_backed_response',
         // Graph RAG does not expose a Footnote confidence score. Keep this
         // neutral and outside backend policy rather than treating ranking as confidence.
         confidenceScore: 0,
@@ -391,6 +412,8 @@ type GraphRagTargetResult = {
     target: TrustGraphTargetConfig;
     response: string;
     sources: GraphRagSource[];
+    originalSourceCount: number;
+    sourceTruncated: boolean;
     originalResponseChars: number;
     responseTruncated: boolean;
 };
@@ -436,6 +459,8 @@ export class HttpTrustGraphEvidenceAdapter implements TrustGraphEvidenceAdapter 
         HttpTrustGraphAdapterConfig['onTargetFailure'] | undefined;
     private readonly onTargetResponseTruncated:
         HttpTrustGraphAdapterConfig['onTargetResponseTruncated'] | undefined;
+    private readonly onTargetSourcesTruncated:
+        HttpTrustGraphAdapterConfig['onTargetSourcesTruncated'] | undefined;
 
     public constructor(config: HttpTrustGraphAdapterConfig) {
         if (!isNonEmptyString(config.baseUrl)) {
@@ -475,6 +500,7 @@ export class HttpTrustGraphEvidenceAdapter implements TrustGraphEvidenceAdapter 
         this.limits = validateLimits(config.limits);
         this.onTargetFailure = config.onTargetFailure;
         this.onTargetResponseTruncated = config.onTargetResponseTruncated;
+        this.onTargetSourcesTruncated = config.onTargetSourcesTruncated;
     }
 
     private async fetchTarget(input: {
@@ -598,6 +624,12 @@ export class HttpTrustGraphEvidenceAdapter implements TrustGraphEvidenceAdapter 
             this.limits.maxResponseChars
         );
         for (const result of boundedResults) {
+            if (result.sourceTruncated) {
+                this.onTargetSourcesTruncated?.(result.target, {
+                    originalSourceCount: result.originalSourceCount,
+                    retainedSourceCount: result.sources.length,
+                });
+            }
             if (result.responseTruncated) {
                 this.onTargetResponseTruncated?.(result.target, {
                     originalResponseChars: result.originalResponseChars,

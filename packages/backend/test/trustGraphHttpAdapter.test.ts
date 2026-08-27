@@ -432,6 +432,71 @@ test('Graph RAG adapter preserves normal whitespace in generated responses', asy
     }
 });
 
+test('Graph RAG adapter keeps bounded evidence when sources exceed the limit', async () => {
+    const truncations: Array<{
+        targetId: string;
+        originalSourceCount: number;
+        retainedSourceCount: number;
+    }> = [];
+    const { server, baseUrl } = await startServer((_request, response) => {
+        response.setHeader('content-type', 'application/json');
+        response.end(
+            JSON.stringify({
+                response:
+                    'Evidence with more source references than the local bound.',
+                sources: Array.from(
+                    { length: TEST_LIMITS.maxSources + 2 },
+                    (_value, index) => ({ uri: `urn:source:${index}` })
+                ),
+            })
+        );
+    });
+
+    try {
+        const adapter = new HttpTrustGraphEvidenceAdapter({
+            baseUrl,
+            targets: [
+                {
+                    id: 'bounded',
+                    flow: 'bounded-flow',
+                    collection: 'bounded-collection',
+                },
+            ],
+            apiToken: 'secret-token-for-test',
+            limits: TEST_LIMITS,
+            onTargetSourcesTruncated: (target, details) =>
+                truncations.push({ targetId: target.id, ...details }),
+        });
+
+        const bundle = await adapter.getEvidenceBundle({
+            queryIntent: 'query',
+            scopeTuple: { userId: 'user-1', projectId: 'project-1' },
+            budget: { timeoutMs: 100, maxCalls: 1 },
+        });
+
+        const item = bundle.items[0];
+        assert.ok(item);
+        assert.equal(
+            item.provenancePathRef.filter((ref) => ref.startsWith('urn:'))
+                .length,
+            TEST_LIMITS.maxSources
+        );
+        assert.equal(
+            item.retrievalReason,
+            'trustgraph_graph_rag_source_backed_sources_truncated'
+        );
+        assert.deepEqual(truncations, [
+            {
+                targetId: 'bounded',
+                originalSourceCount: TEST_LIMITS.maxSources + 2,
+                retainedSourceCount: TEST_LIMITS.maxSources,
+            },
+        ]);
+    } finally {
+        await closeServer(server);
+    }
+});
+
 test('Graph RAG adapter enforces transport bounds and honors cancellation', async () => {
     const declaredOversized = await startServer((_request, response) => {
         response.setHeader('content-length', '1048577');

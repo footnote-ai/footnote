@@ -170,9 +170,12 @@ per-target character bound is retained as an explicitly marked, sentence-aware
 bounded excerpt instead of discarding that target. Footnote also applies a
 shared aggregate response bound across configured targets, so adding targets
 does not silently multiply prompt context. Transport bodies that exceed the
-hard HTTP body bound still fail open. Footnote maps each successful configured
-target to one aggregate advisory evidence item. The target identity is
-retained in the evidence item and provenance path; source URIs and titles
+hard HTTP body bound still fail open. If a target returns more source
+references than the per-target source bound, Footnote retains the first
+bounded set in TrustGraph order, marks the evidence as source-truncated, and
+logs the original and retained counts. Footnote maps each successful
+configured target to one aggregate advisory evidence item. The target identity
+is retained in the evidence item and provenance path; source URIs and titles
 remain in that path. Footnote does not treat TrustGraph ranking or confidence
 as backend policy.
 
