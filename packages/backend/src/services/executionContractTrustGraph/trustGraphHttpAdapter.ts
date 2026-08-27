@@ -87,6 +87,18 @@ const hasControlCharacters = (value: string): boolean => {
     return false;
 };
 
+const hasUnsafeResponseControlCharacters = (value: string): boolean => {
+    for (const character of value) {
+        const codePoint = character.codePointAt(0) ?? 0;
+        const isAllowedWhitespace =
+            codePoint === 0x09 || codePoint === 0x0a || codePoint === 0x0d;
+        if ((codePoint <= 0x1f && !isAllowedWhitespace) || codePoint === 0x7f) {
+            return true;
+        }
+    }
+    return false;
+};
+
 const requirePositiveLimit = (value: number, name: string): number => {
     if (!Number.isSafeInteger(value) || value < 1) {
         throw new Error(`trustgraph_graph_rag_invalid_${name}`);
@@ -244,7 +256,7 @@ const parseGraphRagPayload = (
     }
 
     const response = payload.response.trim();
-    if (hasControlCharacters(response)) {
+    if (hasUnsafeResponseControlCharacters(response)) {
         throw new Error(
             'trustgraph_graph_rag_invalid_response_control_characters'
         );

@@ -328,6 +328,7 @@ test('Graph RAG adapter rejects missing, empty, or malformed sources', async () 
     const payloads: unknown[] = [
         { response: 'answer', sources: [] },
         { response: 'answer' },
+        { response: 'answer\u0000bad', sources: [{ uri: 'urn:one' }] },
         { response: 'answer', sources: [{ title: 'missing uri' }] },
         { response: 'answer', sources: [{ uri: 'urn:one' }, { uri: 2 }] },
     ];
@@ -401,6 +402,33 @@ test('Graph RAG adapter rejects malformed JSON and non-success responses without
         );
     } finally {
         await closeServer(failed.server);
+    }
+});
+
+test('Graph RAG adapter preserves normal whitespace in generated responses', async () => {
+    const { server, baseUrl } = await startServer((_request, response) => {
+        response.setHeader('content-type', 'application/json');
+        response.end(
+            JSON.stringify({
+                response: 'First line\nSecond line\twith detail.',
+                sources: [{ uri: 'urn:multiline' }],
+            })
+        );
+    });
+
+    try {
+        const bundle = await createAdapter(baseUrl).getEvidenceBundle({
+            queryIntent: 'query',
+            scopeTuple: { userId: 'user-1', projectId: 'project-1' },
+            budget: { timeoutMs: 100, maxCalls: 1 },
+        });
+
+        assert.equal(
+            bundle.items[0]?.claimText,
+            'First line\nSecond line\twith detail.'
+        );
+    } finally {
+        await closeServer(server);
     }
 });
 
