@@ -28,11 +28,19 @@ const TEST_LIMITS: TrustGraphGraphRagLimits = {
     maxSourceTitleChars: 40,
 };
 
-const createAdapter = (baseUrl: string): HttpTrustGraphEvidenceAdapter =>
+const createAdapter = (
+    baseUrl: string,
+    targets = [
+        {
+            id: 'default-target',
+            flow: 'default',
+            collection: 'footnote-repository-context',
+        },
+    ]
+): HttpTrustGraphEvidenceAdapter =>
     new HttpTrustGraphEvidenceAdapter({
         baseUrl,
-        flow: 'default',
-        collection: 'footnote-repository-context',
+        targets,
         apiToken: 'secret-token-for-test',
         workspaceRef: 'default',
         limits: TEST_LIMITS,
@@ -133,6 +141,7 @@ test('Graph RAG adapter sends the native request and maps one aggregate item', a
             'trustgraph://graph-rag/collection/footnote-repository-context'
         );
         assert.deepEqual(bundle.items[0]?.provenancePathRef, [
+            'target:default-target',
             'urn:document:context-status',
             'title:Repository context status',
             'https://example.test/context.md',
@@ -148,10 +157,197 @@ test('Graph RAG adapter sends the native request and maps one aggregate item', a
     }
 });
 
+test('Graph RAG adapter queries only configured targets and preserves target provenance', async () => {
+    const requests: Array<{ path: string; collection: string }> = [];
+    const { server, baseUrl } = await startServer(async (request, response) => {
+        const body = JSON.parse(await readRequestBody(request)) as {
+            collection?: string;
+        };
+        requests.push({
+            path: request.url ?? '',
+            collection: body.collection ?? '',
+        });
+        response.setHeader('content-type', 'application/json');
+        response.end(
+            JSON.stringify({
+                response: `evidence for ${body.collection}`,
+                sources: [{ uri: `urn:source:${body.collection}` }],
+            })
+        );
+    });
+
+    try {
+        const bundle = await createAdapter(baseUrl, [
+            {
+                id: 'history',
+                flow: 'history-flow',
+                collection: 'history-collection',
+            },
+            {
+                id: 'operator',
+                flow: 'operator-flow',
+                collection: 'operator-collection',
+            },
+        ]).getEvidenceBundle({
+            queryIntent: 'What changed?',
+            scopeTuple: {
+                userId: 'user-1',
+                collectionId: 'history-collection',
+            },
+            budget: { timeoutMs: 100, maxCalls: 1 },
+        });
+
+        assert.deepEqual(
+            requests.sort((left, right) =>
+                left.collection.localeCompare(right.collection)
+            ),
+            [
+                {
+                    path: '/api/v1/flow/history-flow/service/graph-rag',
+                    collection: 'history-collection',
+                },
+                {
+                    path: '/api/v1/flow/operator-flow/service/graph-rag',
+                    collection: 'operator-collection',
+                },
+            ]
+        );
+        assert.deepEqual(bundle.items.map((item) => item.targetId).sort(), [
+            'history',
+            'operator',
+        ]);
+        assert.ok(
+            bundle.items.every((item) =>
+                item.provenancePathRef.some((ref) => ref.startsWith('target:'))
+            )
+        );
+        assert.ok(
+            bundle.traceRefs.some((ref) => ref.includes('/target/history/'))
+        );
+        assert.equal(
+            bundle.items.some((item) =>
+                item.collectionScope.includes('unconfigured')
+            ),
+            false
+        );
+    } finally {
+        await closeServer(server);
+    }
+});
+
+test('Graph RAG adapter keeps usable evidence when one configured target fails', async () => {
+    const { server, baseUrl } = await startServer(async (request, response) => {
+        const body = JSON.parse(await readRequestBody(request)) as {
+            collection?: string;
+        };
+        if (body.collection === 'broken-collection') {
+            response.statusCode = 503;
+            response.end('upstream failure');
+            return;
+        }
+        response.setHeader('content-type', 'application/json');
+        response.end(
+            JSON.stringify({
+                response: 'usable evidence',
+                sources: [{ uri: 'urn:usable' }],
+            })
+        );
+    });
+
+    try {
+        const adapter = new HttpTrustGraphEvidenceAdapter({
+            baseUrl,
+            targets: [
+                {
+                    id: 'broken',
+                    flow: 'broken-flow',
+                    collection: 'broken-collection',
+                },
+                {
+                    id: 'working',
+                    flow: 'working-flow',
+                    collection: 'working-collection',
+                },
+            ],
+            apiToken: 'secret-token-for-test',
+            limits: TEST_LIMITS,
+        });
+
+        const bundle = await adapter.getEvidenceBundle({
+            queryIntent: 'query',
+            scopeTuple: {
+                userId: 'user-1',
+                collectionId: 'working-collection',
+            },
+            budget: { timeoutMs: 100, maxCalls: 1 },
+        });
+
+        assert.equal(bundle.items.length, 1);
+        assert.equal(bundle.items[0]?.targetId, 'working');
+        assert.deepEqual(bundle.partialTargetFailureIds, ['broken']);
+    } finally {
+        await closeServer(server);
+    }
+});
+
+test('Graph RAG adapter enforces a shared source budget across targets', async () => {
+    const { server, baseUrl } = await startServer(
+        async (_request, response) => {
+            response.setHeader('content-type', 'application/json');
+            response.end(
+                JSON.stringify({
+                    response: 'bounded evidence',
+                    sources: [{ uri: 'urn:one' }, { uri: 'urn:two' }],
+                })
+            );
+        }
+    );
+
+    try {
+        const bundle = await createAdapter(baseUrl, [
+            { id: 'one', flow: 'flow-one', collection: 'collection-one' },
+            { id: 'two', flow: 'flow-two', collection: 'collection-two' },
+        ]).getEvidenceBundle({
+            queryIntent: 'query',
+            scopeTuple: { userId: 'user-1', collectionId: 'collection-one' },
+            budget: { timeoutMs: 100, maxCalls: 1 },
+        });
+
+        const sourceRefs = bundle.items.flatMap((item) =>
+            item.provenancePathRef.filter((ref) => ref.startsWith('urn:'))
+        );
+        assert.equal(sourceRefs.length, TEST_LIMITS.maxSources);
+        assert.ok(
+            bundle.items.some((item) =>
+                item.retrievalReason.endsWith('_sources_truncated')
+            )
+        );
+    } finally {
+        await closeServer(server);
+    }
+});
+
+test('Graph RAG adapter rejects a target set that cannot fit the source budget', () => {
+    assert.throws(
+        () =>
+            new HttpTrustGraphEvidenceAdapter({
+                baseUrl: 'http://trustgraph.test',
+                targets: [
+                    { id: 'one', flow: 'flow-one', collection: 'one' },
+                    { id: 'two', flow: 'flow-two', collection: 'two' },
+                ],
+                apiToken: 'secret-token-for-test',
+                limits: { ...TEST_LIMITS, maxSources: 1 },
+            }),
+        /trustgraph_graph_rag_max_sources_below_target_count/
+    );
+});
+
 test('Graph RAG adapter rejects missing, empty, or malformed sources', async () => {
     const payloads: unknown[] = [
         { response: 'answer', sources: [] },
         { response: 'answer' },
+        { response: 'answer\u0000bad', sources: [{ uri: 'urn:one' }] },
         { response: 'answer', sources: [{ title: 'missing uri' }] },
         { response: 'answer', sources: [{ uri: 'urn:one' }, { uri: 2 }] },
     ];
@@ -228,7 +424,119 @@ test('Graph RAG adapter rejects malformed JSON and non-success responses without
     }
 });
 
-test('Graph RAG adapter enforces response/source bounds and honors cancellation', async () => {
+test('Graph RAG adapter preserves normal whitespace in generated responses', async () => {
+    const { server, baseUrl } = await startServer((_request, response) => {
+        response.setHeader('content-type', 'application/json');
+        response.end(
+            JSON.stringify({
+                response: 'First line\nSecond line\twith detail.',
+                sources: [{ uri: 'urn:multiline' }],
+            })
+        );
+    });
+
+    try {
+        const bundle = await createAdapter(baseUrl).getEvidenceBundle({
+            queryIntent: 'query',
+            scopeTuple: { userId: 'user-1', projectId: 'project-1' },
+            budget: { timeoutMs: 100, maxCalls: 1 },
+        });
+
+        assert.equal(
+            bundle.items[0]?.claimText,
+            'First line\nSecond line\twith detail.'
+        );
+    } finally {
+        await closeServer(server);
+    }
+});
+
+test('Graph RAG adapter keeps bounded evidence when sources exceed the limit', async () => {
+    const { server, baseUrl } = await startServer((_request, response) => {
+        response.setHeader('content-type', 'application/json');
+        response.end(
+            JSON.stringify({
+                response:
+                    'Evidence with more source references than the local bound.',
+                sources: Array.from(
+                    { length: TEST_LIMITS.maxSources + 2 },
+                    (_value, index) => ({ uri: `urn:source:${index}` })
+                ),
+            })
+        );
+    });
+
+    try {
+        const adapter = new HttpTrustGraphEvidenceAdapter({
+            baseUrl,
+            targets: [
+                {
+                    id: 'bounded',
+                    flow: 'bounded-flow',
+                    collection: 'bounded-collection',
+                },
+            ],
+            apiToken: 'secret-token-for-test',
+            limits: TEST_LIMITS,
+        });
+
+        const bundle = await adapter.getEvidenceBundle({
+            queryIntent: 'query',
+            scopeTuple: { userId: 'user-1', projectId: 'project-1' },
+            budget: { timeoutMs: 100, maxCalls: 1 },
+        });
+
+        const item = bundle.items[0];
+        assert.ok(item);
+        assert.equal(
+            item.provenancePathRef.filter((ref) => ref.startsWith('urn:'))
+                .length,
+            TEST_LIMITS.maxSources
+        );
+        assert.equal(
+            item.retrievalReason,
+            'trustgraph_graph_rag_source_backed_sources_truncated'
+        );
+    } finally {
+        await closeServer(server);
+    }
+});
+
+test('Graph RAG adapter enforces transport bounds and honors cancellation', async () => {
+    const declaredOversized = await startServer((_request, response) => {
+        response.setHeader('content-length', '1048577');
+        response.end('declared oversized');
+    });
+    try {
+        await assert.rejects(
+            createAdapter(declaredOversized.baseUrl).getEvidenceBundle({
+                queryIntent: 'query',
+                scopeTuple: { userId: 'user-1', projectId: 'project-1' },
+                budget: { timeoutMs: 100, maxCalls: 1 },
+            }),
+            /trustgraph_graph_rag_response_body_too_large/
+        );
+    } finally {
+        await closeServer(declaredOversized.server);
+    }
+
+    const streamedOversized = await startServer((_request, response) => {
+        response.write('x'.repeat(600_000));
+        response.end('x'.repeat(600_000));
+    });
+    try {
+        await assert.rejects(
+            createAdapter(streamedOversized.baseUrl).getEvidenceBundle({
+                queryIntent: 'query',
+                scopeTuple: { userId: 'user-1', projectId: 'project-1' },
+                budget: { timeoutMs: 100, maxCalls: 1 },
+            }),
+            /trustgraph_graph_rag_response_body_too_large/
+        );
+    } finally {
+        await closeServer(streamedOversized.server);
+    }
+
     const oversized = await startServer((_request, response) => {
         response.setHeader('content-type', 'application/json');
         response.end(
@@ -239,16 +547,87 @@ test('Graph RAG adapter enforces response/source bounds and honors cancellation'
         );
     });
     try {
-        await assert.rejects(
-            createAdapter(oversized.baseUrl).getEvidenceBundle({
-                queryIntent: 'query',
-                scopeTuple: { userId: 'user-1', projectId: 'project-1' },
-                budget: { timeoutMs: 100, maxCalls: 1 },
-            }),
-            /trustgraph_graph_rag_response_too_large/
+        const adapter = new HttpTrustGraphEvidenceAdapter({
+            baseUrl: oversized.baseUrl,
+            targets: [
+                {
+                    id: 'oversized',
+                    flow: 'oversized-flow',
+                    collection: 'oversized-collection',
+                },
+            ],
+            apiToken: 'secret-token-for-test',
+            workspaceRef: 'default',
+            limits: TEST_LIMITS,
+        });
+        const bundle = await adapter.getEvidenceBundle({
+            queryIntent: 'query',
+            scopeTuple: { userId: 'user-1', projectId: 'project-1' },
+            budget: { timeoutMs: 100, maxCalls: 1 },
+        });
+        const item = bundle.items[0];
+        assert.ok(item);
+        assert.equal(
+            item.claimText.length <= TEST_LIMITS.maxResponseChars,
+            true
+        );
+        assert.match(
+            item.claimText,
+            /\[TrustGraph response truncated by Footnote bounds\.\]$/u
+        );
+        assert.equal(
+            item.retrievalReason,
+            'trustgraph_graph_rag_source_backed_response_truncated'
         );
     } finally {
         await closeServer(oversized.server);
+    }
+
+    const aggregate = await startServer((_request, response) => {
+        response.setHeader('content-type', 'application/json');
+        response.end(
+            JSON.stringify({
+                response: 'y'.repeat(TEST_LIMITS.maxResponseChars),
+                sources: [{ uri: 'urn:aggregate' }],
+            })
+        );
+    });
+    try {
+        const aggregateLimits: TrustGraphGraphRagLimits = {
+            ...TEST_LIMITS,
+            maxSources: 3,
+        };
+        const adapter = new HttpTrustGraphEvidenceAdapter({
+            baseUrl: aggregate.baseUrl,
+            targets: [
+                { id: 'one', flow: 'one-flow', collection: 'one' },
+                { id: 'two', flow: 'two-flow', collection: 'two' },
+                { id: 'three', flow: 'three-flow', collection: 'three' },
+            ],
+            apiToken: 'secret-token-for-test',
+            limits: aggregateLimits,
+        });
+        const bundle = await adapter.getEvidenceBundle({
+            queryIntent: 'query',
+            scopeTuple: { userId: 'user-1', projectId: 'project-1' },
+            budget: { timeoutMs: 100, maxCalls: 1 },
+        });
+        assert.equal(bundle.items.length, 3);
+        assert.equal(
+            bundle.items.reduce(
+                (total, item) => total + item.claimText.length,
+                0
+            ) <=
+                TEST_LIMITS.maxResponseChars * 2,
+            true
+        );
+        assert.ok(
+            bundle.items.some((item) =>
+                item.retrievalReason.endsWith('_truncated')
+            )
+        );
+    } finally {
+        await closeServer(aggregate.server);
     }
 
     const slow = await startServer((_request, response) => {

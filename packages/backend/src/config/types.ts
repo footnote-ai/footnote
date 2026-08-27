@@ -19,6 +19,7 @@ import type { ModelProfile } from '@footnote/contracts';
 import type { StepRoutingChainsConfig } from '@footnote/contracts';
 import type { WorkflowModeId } from '@footnote/contracts/policy';
 import type { BotProfileConfig } from './profile.js';
+import type { TrustGraphTargetConfig } from '../services/executionContractTrustGraph/trustGraphEvidenceTypes.js';
 
 /**
  * Sink used by config builders to report ignored or risky env values without
@@ -232,8 +233,6 @@ export type RuntimeConfig = {
         adapter: {
             mode: 'none' | 'stub' | 'http';
             baseUrl: string | null;
-            flow: string | null;
-            collection: string | null;
             apiToken: string | null;
             workspaceRef: string | null;
             graphRagLimits: {
@@ -248,6 +247,7 @@ export type RuntimeConfig = {
                 maxSourceTitleChars: number;
             };
             stubMode: 'success' | 'failure' | 'timeout' | 'poisoned';
+            targets: TrustGraphTargetConfig[];
         };
         ownership: {
             bindingMode: 'none' | 'http' | 'deployment';

@@ -34,3 +34,14 @@ test('account auth keeps bootstrap values out of settings and the secret in env'
     assert.equal(envConfigSourceByKey.OIDC_CLIENT_SECRET, 'secret_env');
     assert.equal(envSpecByKey.OIDC_CLIENT_SECRET.secret, true);
 });
+
+test('TrustGraph target sets remain deployment configuration instead of settings YAML', () => {
+    assert.equal(
+        envConfigSourceByKey.EXECUTION_CONTRACT_TRUSTGRAPH_TARGETS,
+        'bootstrap_env'
+    );
+    assert.equal(
+        envSpecByKey.EXECUTION_CONTRACT_TRUSTGRAPH_TARGETS.secret,
+        false
+    );
+});

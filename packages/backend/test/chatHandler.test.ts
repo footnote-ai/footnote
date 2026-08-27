@@ -76,10 +76,9 @@ const createExecutionContractTrustGraphRuntimeConfig = (
         adapter: {
             mode: 'none',
             baseUrl: null,
-            flow: null,
-            collection: null,
             apiToken: null,
             workspaceRef: null,
+            targets: [],
             graphRagLimits: {
                 maxQueryChars: 8000,
                 entityLimit: 50,
@@ -1208,10 +1207,9 @@ test('Execution Contract TrustGraph config disabled and kill switch both remove 
                 adapter: {
                     mode: 'stub',
                     baseUrl: null,
-                    flow: null,
-                    collection: null,
                     apiToken: null,
                     workspaceRef: null,
+                    targets: [],
                     graphRagLimits: {
                         maxQueryChars: 8000,
                         entityLimit: 50,
@@ -1236,10 +1234,9 @@ test('Execution Contract TrustGraph config disabled and kill switch both remove 
                 adapter: {
                     mode: 'stub',
                     baseUrl: null,
-                    flow: null,
-                    collection: null,
                     apiToken: null,
                     workspaceRef: null,
+                    targets: [],
                     graphRagLimits: {
                         maxQueryChars: 8000,
                         entityLimit: 50,
@@ -1270,10 +1267,9 @@ test('Execution Contract TrustGraph runtime wiring threads ownership validation 
         adapter: {
             mode: 'none',
             baseUrl: null,
-            flow: null,
-            collection: null,
             apiToken: null,
             workspaceRef: null,
+            targets: [],
             graphRagLimits: {
                 maxQueryChars: 8000,
                 entityLimit: 50,
@@ -1302,16 +1298,215 @@ test('Execution Contract TrustGraph runtime wiring threads ownership validation 
     );
 });
 
-test('Execution Contract TrustGraph runtime wiring binds deployment scope to adapter collection', async () => {
+test('Execution Contract TrustGraph target failures preserve safe error details in logs', async () => {
+    const config = createExecutionContractTrustGraphRuntimeConfig({
+        adapter: {
+            mode: 'http',
+            baseUrl: 'http://127.0.0.1:1',
+            apiToken: 'adapter-secret',
+            workspaceRef: 'footnote',
+            targets: [
+                {
+                    id: 'history',
+                    flow: 'history-flow',
+                    collection: 'history-collection',
+                },
+            ],
+            graphRagLimits: {
+                maxQueryChars: 8000,
+                entityLimit: 50,
+                tripleLimit: 30,
+                maxSubgraphSize: 1000,
+                maxPathLength: 2,
+                maxResponseChars: 12000,
+                maxSources: 20,
+                maxSourceUriChars: 2048,
+                maxSourceTitleChars: 512,
+            },
+            stubMode: 'success',
+        },
+    });
+    const originalWarn = logger.warn;
+    let observedWarning:
+        { message: string; metadata: Record<string, unknown> } | undefined;
+
+    logger.warn = ((message: string, metadata?: unknown) => {
+        if (
+            message.startsWith(
+                'chat.execution_contract_trustgraph.target_failed '
+            )
+        ) {
+            observedWarning = {
+                message,
+                metadata:
+                    metadata !== null && typeof metadata === 'object'
+                        ? (metadata as Record<string, unknown>)
+                        : {},
+            };
+        }
+        return undefined;
+    }) as unknown as typeof logger.warn;
+
+    try {
+        const resolved =
+            resolveExecutionContractTrustGraphRuntimeOptions(config);
+        assert.ok(resolved?.adapter);
+        const originalFetch = globalThis.fetch;
+        globalThis.fetch = (() =>
+            Promise.reject(
+                'trustgraph_adapter_aborted_by_signal'
+            )) as unknown as typeof fetch;
+
+        try {
+            await assert.rejects(
+                resolved.adapter.getEvidenceBundle({
+                    queryIntent: 'What changed?',
+                    scopeTuple: { userId: 'user_1', projectId: 'project_1' },
+                    budget: { timeoutMs: 100, maxCalls: 1 },
+                })
+            );
+        } finally {
+            globalThis.fetch = originalFetch;
+        }
+
+        assert.match(
+            observedWarning?.message ?? '',
+            /^chat\.execution_contract_trustgraph\.target_failed /u
+        );
+        assert.equal(observedWarning?.metadata.targetId, 'history');
+        assert.equal(observedWarning?.metadata.flow, 'history-flow');
+        assert.equal(
+            observedWarning?.metadata.collection,
+            'history-collection'
+        );
+        assert.equal(observedWarning?.metadata.errorName, 'AbortError');
+        assert.match(String(observedWarning?.metadata.reason), /aborted/i);
+        assert.notEqual(observedWarning?.metadata.reason, 'unknown_error');
+        assert.equal(
+            JSON.stringify(observedWarning).includes('adapter-secret'),
+            false
+        );
+    } finally {
+        logger.warn = originalWarn;
+    }
+});
+
+test('Execution Contract TrustGraph response truncation preserves safe size details in logs', async () => {
+    const config = createExecutionContractTrustGraphRuntimeConfig({
+        adapter: {
+            mode: 'http',
+            baseUrl: 'http://trustgraph.test',
+            apiToken: 'adapter-secret',
+            workspaceRef: 'footnote',
+            targets: [
+                {
+                    id: 'history',
+                    flow: 'history-flow',
+                    collection: 'history-collection',
+                },
+            ],
+            graphRagLimits: {
+                maxQueryChars: 8000,
+                entityLimit: 50,
+                tripleLimit: 30,
+                maxSubgraphSize: 1000,
+                maxPathLength: 2,
+                maxResponseChars: 12000,
+                maxSources: 20,
+                maxSourceUriChars: 2048,
+                maxSourceTitleChars: 512,
+            },
+            stubMode: 'success',
+        },
+    });
+    const originalWarn = logger.warn;
+    let observedWarning:
+        { message: string; metadata: Record<string, unknown> } | undefined;
+
+    logger.warn = ((message: string, metadata?: unknown) => {
+        if (
+            message.startsWith(
+                'chat.execution_contract_trustgraph.target_response_truncated '
+            )
+        ) {
+            observedWarning = {
+                message,
+                metadata:
+                    metadata !== null && typeof metadata === 'object'
+                        ? (metadata as Record<string, unknown>)
+                        : {},
+            };
+        }
+        return undefined;
+    }) as unknown as typeof logger.warn;
+
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = (() =>
+        Promise.resolve(
+            new Response(
+                JSON.stringify({
+                    response: 'x'.repeat(12001),
+                    sources: [{ uri: 'urn:history' }],
+                }),
+                { headers: { 'content-type': 'application/json' } }
+            )
+        )) as unknown as typeof fetch;
+
+    try {
+        const resolved =
+            resolveExecutionContractTrustGraphRuntimeOptions(config);
+        assert.ok(resolved?.adapter);
+        const bundle = await resolved.adapter.getEvidenceBundle({
+            queryIntent: 'What changed?',
+            scopeTuple: { userId: 'user_1', projectId: 'project_1' },
+            budget: { timeoutMs: 100, maxCalls: 1 },
+        });
+
+        assert.equal(bundle.items.length, 1);
+        assert.equal(
+            bundle.items[0]?.retrievalReason,
+            'trustgraph_graph_rag_source_backed_response_truncated'
+        );
+        assert.match(
+            observedWarning?.message ?? '',
+            /^chat\.execution_contract_trustgraph\.target_response_truncated /u
+        );
+        assert.equal(observedWarning?.metadata.targetId, 'history');
+        assert.equal(observedWarning?.metadata.originalResponseChars, 12001);
+        assert.equal(
+            observedWarning?.metadata.retainedResponseChars,
+            bundle.items[0]?.claimText.length
+        );
+        assert.equal(
+            JSON.stringify(observedWarning).includes('adapter-secret'),
+            false
+        );
+    } finally {
+        globalThis.fetch = originalFetch;
+        logger.warn = originalWarn;
+    }
+});
+
+test('Execution Contract TrustGraph runtime wiring binds deployment scope to configured collections', async () => {
     const config = createExecutionContractTrustGraphRuntimeConfig({
         enabled: true,
         adapter: {
             mode: 'stub',
             baseUrl: null,
-            flow: null,
-            collection: 'footnote-repository-context',
             apiToken: null,
             workspaceRef: 'footnote',
+            targets: [
+                {
+                    id: 'history',
+                    flow: 'history-flow',
+                    collection: 'history-collection',
+                },
+                {
+                    id: 'operator',
+                    flow: 'operator-flow',
+                    collection: 'operator-collection',
+                },
+            ],
             graphRagLimits: {
                 maxQueryChars: 8000,
                 entityLimit: 50,
@@ -1335,21 +1530,23 @@ test('Execution Contract TrustGraph runtime wiring binds deployment scope to ada
 
     const resolved = resolveExecutionContractTrustGraphRuntimeOptions(config);
     assert.ok(resolved?.scopeOwnershipValidator);
-    assert.equal(
-        resolved?.deploymentCollectionId,
-        'footnote-repository-context'
-    );
+    assert.equal(resolved?.deploymentCollectionId, 'history-collection');
 
     const allowed = await resolved.scopeOwnershipValidator.validateOwnership({
         userId: 'user_1',
-        collectionId: 'footnote-repository-context',
+        collectionId: 'history-collection',
     });
     const denied = await resolved.scopeOwnershipValidator.validateOwnership({
         userId: 'user_1',
         collectionId: 'other-context',
     });
+    const operator = await resolved.scopeOwnershipValidator.validateOwnership({
+        userId: 'user_1',
+        collectionId: 'operator-collection',
+    });
 
     assert.equal(allowed.decision, 'allow');
+    assert.equal(operator.decision, 'allow');
     assert.equal(denied.decision, 'deny');
 });
 
@@ -1359,10 +1556,9 @@ test('incomplete deployment TrustGraph wiring skips caller-scoped retrieval', as
         adapter: {
             mode: 'stub',
             baseUrl: null,
-            flow: null,
-            collection: '   ',
             apiToken: null,
             workspaceRef: 'footnote',
+            targets: [],
             graphRagLimits: {
                 maxQueryChars: 8000,
                 entityLimit: 50,
@@ -1437,10 +1633,15 @@ test('Execution Contract TrustGraph runtime wiring fails fast when http adapter 
         adapter: {
             mode: 'http',
             baseUrl: null,
-            flow: null,
-            collection: null,
             apiToken: 'adapter-secret',
             workspaceRef: null,
+            targets: [
+                {
+                    id: 'default',
+                    flow: 'default',
+                    collection: 'footnote-repository-context',
+                },
+            ],
             graphRagLimits: {
                 maxQueryChars: 8000,
                 entityLimit: 50,
@@ -1468,10 +1669,15 @@ test('Execution Contract TrustGraph runtime wiring fails fast when http adapter 
         adapter: {
             mode: 'http',
             baseUrl: 'http://trustgraph.internal',
-            flow: 'default',
-            collection: 'footnote-repository-context',
             apiToken: null,
             workspaceRef: null,
+            targets: [
+                {
+                    id: 'default',
+                    flow: 'default',
+                    collection: 'footnote-repository-context',
+                },
+            ],
             graphRagLimits: {
                 maxQueryChars: 8000,
                 entityLimit: 50,
@@ -1499,10 +1705,9 @@ test('Execution Contract TrustGraph runtime wiring does not fail startup when fe
         adapter: {
             mode: 'http',
             baseUrl: null,
-            flow: null,
-            collection: null,
             apiToken: null,
             workspaceRef: null,
+            targets: [],
             graphRagLimits: {
                 maxQueryChars: 8000,
                 entityLimit: 50,

@@ -13,7 +13,7 @@ import { createDeploymentScopedOwnershipValidator } from '../src/services/execut
 test('deployment scope validator allows the configured collection without a project selector', async () => {
     const validator = createDeploymentScopedOwnershipValidator({
         validatorId: 'backend_deployment_scope_v1',
-        collectionId: 'footnote-repository-context',
+        collectionIds: ['footnote-repository-context'],
     });
 
     const result = await validator.validateOwnership({
@@ -28,7 +28,7 @@ test('deployment scope validator allows the configured collection without a proj
 test('deployment scope validator denies caller-selected collections and projects', async () => {
     const validator = createDeploymentScopedOwnershipValidator({
         validatorId: 'backend_deployment_scope_v1',
-        collectionId: 'footnote-repository-context',
+        collectionIds: ['footnote-repository-context'],
     });
 
     const wrongCollection = await validator.validateOwnership({
@@ -45,4 +45,23 @@ test('deployment scope validator denies caller-selected collections and projects
     assert.equal(wrongCollection.denialReason, 'scope_not_found');
     assert.equal(projectSelector.decision, 'deny');
     assert.equal(projectSelector.denialReason, 'scope_not_found');
+});
+
+test('deployment scope validator allows every explicitly configured collection', async () => {
+    const validator = createDeploymentScopedOwnershipValidator({
+        validatorId: 'backend_deployment_scope_v1',
+        collectionIds: ['history', 'operator'],
+    });
+
+    const history = await validator.validateOwnership({
+        userId: 'user_1',
+        collectionId: 'history',
+    });
+    const operator = await validator.validateOwnership({
+        userId: 'user_1',
+        collectionId: 'operator',
+    });
+
+    assert.equal(history.decision, 'allow');
+    assert.equal(operator.decision, 'allow');
 });

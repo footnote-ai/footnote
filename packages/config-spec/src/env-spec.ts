@@ -2576,7 +2576,7 @@ export const envEntries = [
         kind: 'integer',
         description:
             'Timeout budget in milliseconds for TrustGraph advisory retrieval calls.',
-        defaultValue: literal(20_000),
+        defaultValue: literal(60_000),
         usedBy: ['packages/backend/src/config.ts'],
     }),
 
@@ -2639,27 +2639,15 @@ export const envEntries = [
     }),
 
     defineEnv({
-        key: 'EXECUTION_CONTRACT_TRUSTGRAPH_FLOW',
+        key: 'EXECUTION_CONTRACT_TRUSTGRAPH_TARGETS',
         owner: 'backend',
         stage: 'runtime',
         section: 'chat-workflow',
         required: false,
         secret: false,
         kind: 'string',
-        description: 'TrustGraph flow instance used for Graph RAG queries.',
-        defaultValue: noDefault(),
-        usedBy: ['packages/backend/src/config.ts'],
-    }),
-
-    defineEnv({
-        key: 'EXECUTION_CONTRACT_TRUSTGRAPH_COLLECTION',
-        owner: 'backend',
-        stage: 'runtime',
-        section: 'chat-workflow',
-        required: false,
-        secret: false,
-        kind: 'string',
-        description: 'TrustGraph collection searched by Graph RAG queries.',
+        description:
+            'JSON array of explicitly configured TrustGraph retrieval targets. Each target supplies an id, flow, collection, and optional workspaceRef; arbitrary workspace collections are never discovered.',
         defaultValue: noDefault(),
         usedBy: ['packages/backend/src/config.ts'],
     }),
@@ -3142,6 +3130,7 @@ const BOOTSTRAP_ENV_ALLOWLIST = new Set<string>([
     'FOOTNOTE_SETTINGS_PATH',
     'NODE_ENV',
     'FLY_APP_NAME',
+    'EXECUTION_CONTRACT_TRUSTGRAPH_TARGETS',
     'OIDC_ISSUER_URL',
     'OIDC_CLIENT_ID',
     'OIDC_REDIRECT_URI',

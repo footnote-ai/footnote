@@ -4,6 +4,8 @@
 # - normal runtime settings live in this file
 # - secrets stay in environment variables / Fly secrets
 # - for discord-bots credentials, put env var NAMES here, never secret values
+# - TrustGraph target sets stay in deployment bootstrap environment
+#   (EXECUTION_CONTRACT_TRUSTGRAPH_TARGETS), not in this YAML file
 
 version: 1
 
