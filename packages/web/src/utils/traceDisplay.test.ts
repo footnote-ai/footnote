@@ -141,7 +141,7 @@ test('explains candidate timeout and mechanical admission unavailability', () =>
             ...base,
             reasonCode: 'candidate_not_admissible',
         }),
-        /non-prose output/u
+        /not usable as prose/u
     );
     assert.match(
         getPresentationTraceSummary({

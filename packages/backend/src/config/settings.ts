@@ -591,7 +591,7 @@ const normalizeDiscordBots = (value: unknown, settingsPath: string) => {
  * - Throws on malformed YAML, invalid root/shape, unsupported keys, forbidden secret/bootstrap keys,
  *   type mismatches, or invalid version.
  * - Secrets/bootstrap credentials in YAML are rejected by source-boundary validation, not projected.
- * - Retired presentation-validator settings are accepted only as scalar values and returned as
+ * - Retired presentation-validator settings are accepted as scalar or array values and returned as
  *   explicit deprecation warnings; they are never projected into `yamlEnv`.
  *
  * Authority and side effects:

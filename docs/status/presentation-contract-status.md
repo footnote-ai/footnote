@@ -1,21 +1,31 @@
-# Presentation Contract Status
+# Presentation Flow Status
 
-Status: current runtime uses the candidate-review flow. It does not run a
-model-backed presentation validator or audit.
+Status: the current runtime uses a simpler presentation flow. This cleanup
+matters because older documentation described presentation as a style writer
+followed by a separate validator or audit model. The workflow changed, but the
+old configuration and terminology remained. Operators and contributors could
+therefore think a review model was running when it was not.
 
-The optional presentation call proposes wording and style. Candidate admission
-only checks mechanical usability as ordinary answer prose. Authoritative
-generation owns the answer, and the ordinary assessment/revision loop owns
-semantic review, grounding, posture, and corrections.
+The current flow is:
 
-Current receipts record the candidate's requested and observed attribution,
-admission outcome, and skip or failure reason. They do not claim validator
-model execution. Historical finalizer/audit receipts remain readable through a
-separate legacy schema branch, but new runs do not emit that flow.
+1. An optional presentation model drafts wording and style.
+2. Footnote checks that the returned draft is usable prose. This small check
+   does not judge facts, grounding, safety, policy, or persona correctness.
+3. Normal answer generation may use the draft as a style suggestion while it
+   works from the authoritative context and makes the answer.
+4. The normal assessment/revision loop reviews that answer for correctness,
+   grounding, posture, TRACE, and needed corrections.
 
-The canonical settings template no longer exposes validator settings. Existing
-YAML files may still load those two retired keys with explicit deprecated and
-ignored warnings; they are not projected into runtime configuration.
+There is no separate presentation-validator model call. The second step is
+called `candidate admission` in the code and serialized contracts, but that
+name means only the prose-usability check above. The presentation draft never
+owns facts, policy, provenance, safety decisions, or the final answer.
+
+New receipts record the actual presentation attempt, model attribution, and
+skip or failure reason. Old traces remain readable, but new runs do not create
+validator or audit records. Old YAML validator settings may still be loaded
+only to produce explicit deprecated-and-ignored warnings; they do nothing and
+are not copied into runtime configuration.
 
 Related work:
 

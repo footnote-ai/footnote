@@ -70,7 +70,7 @@ export const getPresentationTraceSummary = (
             case 'draft_provider_error':
                 return 'No presentation candidate was returned because the candidate provider failed; the normal answer path was used.';
             case 'candidate_not_admissible':
-                return 'The presentation candidate returned non-prose output; the normal answer path was used.';
+                return 'The presentation candidate was not usable as prose; the normal answer path was used.';
             case 'disabled':
                 return 'Presentation was disabled; the normal answer path was used.';
             case 'budget_skipped':
