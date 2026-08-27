@@ -18,7 +18,7 @@ parent [README](./README.md).
 | ---------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------- |
 | Normal retrieval | The orchestrator builds a TrustGraph scope tuple from explicit request inputs. Scope and ownership pass. The adapter queries the small explicitly configured target set in parallel under one timeout and shared source budget. Returned evidence is sanitized and mapped into governed backend views. | The normal backend path still decides the final response.                                |
 | Scope denied     | Scope is missing, malformed, ambiguous, conflicting, or fails ownership validation. External retrieval does not run.                                                                                                                                                                                   | The backend still completes the local chat request and records why retrieval was denied. |
-| Timeout or error | Scope passes, but the adapter times out or fails. External evidence is dropped.                                                                                                                                                                                                                        | The backend still produces the local response and records what failed.                   |
+| Timeout or error | Scope passes, but one or more targets fail. Successful evidence from the other targets is preserved. External evidence is dropped only for a shared timeout or when all targets fail. Each target failure is recorded.                                                                                 | The backend still produces the local response and records what failed.                   |
 
 ## Scope and ownership
 
@@ -173,9 +173,10 @@ failure is reported while the rest of the setup batch continues.
 The runtime adapter uses TrustGraph 2.8 Graph RAG through
 `POST /api/v1/flow/{flow}/service/graph-rag` with `streaming: false`. Runtime
 configuration supplies the base URL, configured target array, bearer token, and
-bounded Graph RAG limits. TrustGraph resolves workspace access from the token;
-the optional workspace reference is diagnostic only and is never sent as
-authorization context.
+bounded Graph RAG limits. A target's optional `workspaceRef` selects the
+TrustGraph workspace route for that target. It is routing-only and is never used
+as authorization context; TrustGraph resolves workspace authorization from the
+bearer token.
 
 Graph RAG responses are consumed only when they contain a non-empty generated
 response and validated source URIs. A generated response that exceeds the
