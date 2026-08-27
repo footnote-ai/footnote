@@ -1116,7 +1116,8 @@ export const runBoundedReviewWorkflow = async ({
                 [
                     ...executedContextStepResults.flatMap(
                         (contextStepResult) =>
-                            contextStepResult.outcome === 'executed'
+                            contextStepResult.outcome === 'executed' ||
+                            contextStepResult.outcome === 'failed'
                                 ? [
                                       ...(
                                           contextStepResult.trustedSystemMessages ??
@@ -1125,18 +1126,24 @@ export const runBoundedReviewWorkflow = async ({
                                           role: 'system' as const,
                                           content,
                                       })),
-                                      ...(
-                                          contextStepResult.contextMessages ??
-                                          []
-                                      ).map((message) => ({
-                                          role:
-                                              contextStepResult.contextMessageRole ??
-                                              'system',
-                                          content:
-                                              typeof message === 'string'
-                                                  ? message
-                                                  : message.content,
-                                      })),
+                                      ...(contextStepResult.outcome ===
+                                      'executed'
+                                          ? [
+                                                ...(
+                                                    contextStepResult.contextMessages ??
+                                                    []
+                                                ).map((message) => ({
+                                                    role:
+                                                        contextStepResult.contextMessageRole ??
+                                                        'system',
+                                                    content:
+                                                        typeof message ===
+                                                        'string'
+                                                            ? message
+                                                            : message.content,
+                                                })),
+                                            ]
+                                          : []),
                                   ]
                                 : []
                     ),

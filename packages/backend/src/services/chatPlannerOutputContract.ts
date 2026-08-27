@@ -30,6 +30,7 @@ const PLANNER_ALLOWED_FIELD_TREE: AllowedFieldTree = {
     requestedCapabilityProfile: true,
     contextNeed: true,
     contextTier: true,
+    trustGraphTargetIds: true,
     reaction: true,
     imageRequest: {
         prompt: true,
@@ -234,6 +235,16 @@ export const chatPlannerDecisionParametersSchema: Record<string, unknown> = {
                 'expanded_with_summary',
             ],
         },
+        trustGraphTargetIds: {
+            type: 'array',
+            maxItems: 8,
+            uniqueItems: true,
+            items: {
+                type: 'string',
+                minLength: 1,
+                maxLength: 128,
+            },
+        },
         reaction: {
             type: 'string',
         },
@@ -427,5 +438,12 @@ export const chatPlannerDecisionParametersSchema: Record<string, unknown> = {
             required: ['reasoningEffort', 'verbosity'],
         },
     },
-    required: ['action', 'modality', 'safetyTier', 'reasoning', 'generation'],
+    required: [
+        'action',
+        'modality',
+        'safetyTier',
+        'reasoning',
+        'trustGraphTargetIds',
+        'generation',
+    ],
 };

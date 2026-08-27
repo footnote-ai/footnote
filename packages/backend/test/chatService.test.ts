@@ -3142,6 +3142,14 @@ test('runChatMessages integrates advisory TrustGraph evidence into metadata with
         defaultModel: 'gpt-5-mini',
         recordUsage: () => undefined,
         executionContractTrustGraph: {
+            targets: [
+                {
+                    id: 'product-docs',
+                    flow: 'product-flow',
+                    collection: 'product-docs',
+                    description: 'Product documentation.',
+                },
+            ],
             adapter: new StubTrustGraphEvidenceAdapter('success'),
             budget: {
                 timeoutMs: 100,
@@ -3164,6 +3172,7 @@ test('runChatMessages integrates advisory TrustGraph evidence into metadata with
                 userId: 'user_1',
                 projectId: 'project_1',
             },
+            targetIds: ['product-docs'],
         },
     });
 
@@ -3220,6 +3229,10 @@ test('runChatMessages integrates advisory TrustGraph evidence into metadata with
         )?.trustGraph !== undefined,
         true
     );
+    assert.equal(
+        ResponseMetadataSchema.safeParse(storedMetadata).success,
+        true
+    );
 });
 
 test('runChatMessages trustgraph ON/OFF does not change local execution authority surface', async () => {
@@ -3248,6 +3261,14 @@ test('runChatMessages trustgraph ON/OFF does not change local execution authorit
             recordUsage: () => undefined,
             ...(enabled && {
                 executionContractTrustGraph: {
+                    targets: [
+                        {
+                            id: 'product-docs',
+                            flow: 'product-flow',
+                            collection: 'product-docs',
+                            description: 'Product documentation.',
+                        },
+                    ],
                     adapter: new StubTrustGraphEvidenceAdapter('success'),
                     budget: {
                         timeoutMs: 100,
@@ -3272,6 +3293,7 @@ test('runChatMessages trustgraph ON/OFF does not change local execution authorit
                         userId: 'user_1',
                         projectId: 'project_1',
                     },
+                    targetIds: ['product-docs'],
                 },
             }),
         });
@@ -3330,6 +3352,14 @@ test('runChatMessages preserves local response authority when TrustGraph ownersh
         defaultModel: 'gpt-5-mini',
         recordUsage: () => undefined,
         executionContractTrustGraph: {
+            targets: [
+                {
+                    id: 'product-docs',
+                    flow: 'product-flow',
+                    collection: 'product-docs',
+                    description: 'Product documentation.',
+                },
+            ],
             adapter: new StubTrustGraphEvidenceAdapter('success'),
             budget: {
                 timeoutMs: 100,
@@ -3353,6 +3383,7 @@ test('runChatMessages preserves local response authority when TrustGraph ownersh
                 userId: 'user_1',
                 projectId: 'project_1',
             },
+            targetIds: ['product-docs'],
         },
     });
 

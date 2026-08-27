@@ -1205,6 +1205,8 @@ export type ContextStepFailedResult = ContextStepBaseResult & {
         clarification?: never;
     };
     sources?: Citation[];
+    /** Backend guidance explaining the failure without blocking generation. */
+    trustedSystemMessages?: string[];
 };
 
 export type ContextStepSkippedResult = ContextStepBaseResult & {

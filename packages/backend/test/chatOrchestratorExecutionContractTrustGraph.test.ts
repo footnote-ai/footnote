@@ -21,15 +21,27 @@ import {
 import type {
     EvidenceBundle,
     ScopeTuple,
+    TrustGraphEvidenceAdapter,
 } from '../src/services/executionContractTrustGraph/index.js';
 
 const PLANNER_TOKEN_SENTINEL = 1200;
 const TEST_TIMESTAMP = new Date('2026-04-04T00:00:00.000Z').toISOString();
+const TEST_TARGETS = [
+    {
+        id: 'product-docs',
+        flow: 'product-flow',
+        collection: 'product-docs',
+        description: 'Current product documentation and usage guidance.',
+    },
+    {
+        id: 'meeting-archive',
+        flow: 'meeting-flow',
+        collection: 'meeting-archive',
+        description: 'Historical meeting notes and decisions.',
+    },
+] as const;
 
 type TrustGraphMetadata = {
-    evidenceMode?: string;
-    canBlockExecution?: boolean;
-    verificationMode?: string;
     adapterStatus?: string;
     terminalAuthority?: string;
     failOpenBehavior?: string;
@@ -112,20 +124,38 @@ test('orchestrator runtime path integrates advisory TrustGraph metadata without 
                 }),
             },
         });
+    let selectedTargetIds: string[] | undefined;
+    const adapter: TrustGraphEvidenceAdapter = {
+        getEvidenceBundle: async (input) => {
+            selectedTargetIds = [...input.targetIds];
+            return buildEvidenceBundle(input.scopeTuple);
+        },
+    };
+    let plannerCall = true;
 
     const orchestrator = createChatOrchestrator({
         generationRuntime: createGenerationRuntime(
             async ({ maxOutputTokens }) => {
-                if (maxOutputTokens === PLANNER_TOKEN_SENTINEL) {
+                if (maxOutputTokens === PLANNER_TOKEN_SENTINEL && plannerCall) {
+                    plannerCall = false;
                     return {
                         text: JSON.stringify({
                             action: 'message',
                             modality: 'text',
+                            requestedCapabilityProfile: 'balanced-general',
                             safetyTier: 'Low',
                             reasoning: 'Standard message reply.',
+                            trustGraphTargetIds: ['product-docs'],
                             generation: {
                                 reasoningEffort: 'low',
                                 verbosity: 'low',
+                                temperament: {
+                                    tightness: 3,
+                                    rationale: 3,
+                                    attribution: 3,
+                                    caution: 3,
+                                    extent: 3,
+                                },
                             },
                         }),
                         model: 'gpt-5-mini',
@@ -145,7 +175,8 @@ test('orchestrator runtime path integrates advisory TrustGraph metadata without 
         defaultModel: 'gpt-5-mini',
         recordUsage: () => undefined,
         executionContractTrustGraph: {
-            adapter: new StubTrustGraphEvidenceAdapter('success'),
+            targets: TEST_TARGETS,
+            adapter,
             budget: {
                 timeoutMs: 100,
                 maxCalls: 1,
@@ -169,19 +200,17 @@ test('orchestrator runtime path integrates advisory TrustGraph metadata without 
 
     assert.equal(response.action, 'message');
     assert.equal(response.message, 'message with advisory evidence');
+    assert.deepEqual(selectedTargetIds, ['product-docs']);
     const trustGraph = (
         response.metadata as ResponseMetadata & {
             trustGraph?: Record<string, unknown>;
         }
     ).trustGraph as TrustGraphMetadata | undefined;
     assert.ok(trustGraph);
-    assert.equal(trustGraph?.evidenceMode, 'advisory');
-    assert.equal(trustGraph?.canBlockExecution, false);
     assert.equal(trustGraph?.adapterStatus, 'success');
     assert.equal(trustGraph?.terminalAuthority, 'backend_execution_contract');
     assert.equal(trustGraph?.failOpenBehavior, 'local_behavior');
     assert.equal(trustGraph?.verificationRequired, true);
-    assert.equal(trustGraph?.verificationMode, 'none');
     assert.deepEqual(trustGraph?.scopeValidation, {
         ok: true,
         normalizedScope: {
@@ -227,11 +256,20 @@ test('orchestrator TrustGraph ON/OFF preserves routing and terminal authority se
                             text: JSON.stringify({
                                 action: 'message',
                                 modality: 'text',
+                                requestedCapabilityProfile: 'balanced-general',
                                 safetyTier: 'Low',
                                 reasoning: 'Standard message reply.',
+                                trustGraphTargetIds: ['product-docs'],
                                 generation: {
                                     reasoningEffort: 'low',
                                     verbosity: 'low',
+                                    temperament: {
+                                        tightness: 3,
+                                        rationale: 3,
+                                        attribution: 3,
+                                        caution: 3,
+                                        extent: 3,
+                                    },
                                 },
                             }),
                             model: 'gpt-5-mini',
@@ -252,6 +290,7 @@ test('orchestrator TrustGraph ON/OFF preserves routing and terminal authority se
             recordUsage: () => undefined,
             ...(trustGraphEnabled && {
                 executionContractTrustGraph: {
+                    targets: TEST_TARGETS,
                     adapter: new StubTrustGraphEvidenceAdapter('success'),
                     budget: {
                         timeoutMs: 100,
@@ -323,11 +362,20 @@ test('orchestrator scope builder keeps sessionId correlation-only and uses expli
                         text: JSON.stringify({
                             action: 'message',
                             modality: 'text',
+                            requestedCapabilityProfile: 'balanced-general',
                             safetyTier: 'Low',
                             reasoning: 'Standard message reply.',
+                            trustGraphTargetIds: ['product-docs'],
                             generation: {
                                 reasoningEffort: 'low',
                                 verbosity: 'low',
+                                temperament: {
+                                    tightness: 3,
+                                    rationale: 3,
+                                    attribution: 3,
+                                    caution: 3,
+                                    extent: 3,
+                                },
                             },
                         }),
                         model: 'gpt-5-mini',
@@ -347,6 +395,7 @@ test('orchestrator scope builder keeps sessionId correlation-only and uses expli
         defaultModel: 'gpt-5-mini',
         recordUsage: () => undefined,
         executionContractTrustGraph: {
+            targets: TEST_TARGETS,
             adapter: {
                 async getEvidenceBundle(input) {
                     capturedScopeTuple = input.scopeTuple;
@@ -406,11 +455,20 @@ test('orchestrator does not backfill TrustGraph project scope from sessionId whe
                         text: JSON.stringify({
                             action: 'message',
                             modality: 'text',
+                            requestedCapabilityProfile: 'balanced-general',
                             safetyTier: 'Low',
                             reasoning: 'Standard message reply.',
+                            trustGraphTargetIds: ['product-docs'],
                             generation: {
                                 reasoningEffort: 'low',
                                 verbosity: 'low',
+                                temperament: {
+                                    tightness: 3,
+                                    rationale: 3,
+                                    attribution: 3,
+                                    caution: 3,
+                                    extent: 3,
+                                },
                             },
                         }),
                         model: 'gpt-5-mini',
@@ -430,6 +488,7 @@ test('orchestrator does not backfill TrustGraph project scope from sessionId whe
         defaultModel: 'gpt-5-mini',
         recordUsage: () => undefined,
         executionContractTrustGraph: {
+            targets: TEST_TARGETS,
             adapter: {
                 async getEvidenceBundle(input) {
                     adapterInvoked = true;

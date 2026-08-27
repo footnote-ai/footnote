@@ -117,6 +117,7 @@ export const buildFailedContextStepResult = (input: {
     reasonCode: ToolInvocationReasonCode;
     durationMs?: number;
     sources?: Citation[];
+    trustedSystemMessages?: string[];
     integrationContext?: ContextStepIntegrationContext;
 }): ContextStepResult => ({
     outcome: 'failed',
@@ -129,6 +130,10 @@ export const buildFailedContextStepResult = (input: {
     ...(input.sources !== undefined &&
         input.sources.length > 0 && {
             sources: input.sources,
+        }),
+    ...(input.trustedSystemMessages !== undefined &&
+        input.trustedSystemMessages.length > 0 && {
+            trustedSystemMessages: input.trustedSystemMessages,
         }),
     ...(input.integrationContext !== undefined && {
         integrationContext: input.integrationContext,

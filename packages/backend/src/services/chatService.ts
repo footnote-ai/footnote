@@ -88,6 +88,7 @@ import type {
     TrustGraphEvidenceIngestionResult,
     TrustGraphOwnershipValidationPolicy,
     ScopeOwnershipValidator,
+    TrustGraphTargetConfig,
 } from './executionContractTrustGraph/trustGraphEvidenceTypes.js';
 import type { ScopeValidationPolicy } from './executionContractTrustGraph/scopeValidator.js';
 import { logger } from '../utils/logger.js';
@@ -342,6 +343,11 @@ const buildContextStepShortCircuit = ({
 
 type ExecutionContractTrustGraphRuntimeOptions = {
     adapter?: TrustGraphEvidenceAdapter;
+    /**
+     * Backend-owned allowlist and trusted routing descriptions. Runtime wiring
+     * supplies this allowlist; test seams may omit it.
+     */
+    targets?: readonly TrustGraphTargetConfig[];
     /** Backend-owned fixed collection used by deployment-scoped wiring. */
     deploymentCollectionId?: string;
     budget: {
@@ -363,6 +369,7 @@ type ExecutionContractTrustGraphRuntimeOptions = {
 type ExecutionContractTrustGraphContext = {
     queryIntent: string;
     scopeTuple: ScopeTuple;
+    targetIds: readonly string[];
 };
 
 type TrustGraphMetadataEnvelope = {
@@ -386,9 +393,6 @@ type TrustGraphMetadataEnvelope = {
         traceRefs: string[];
     };
     provenanceJoin?: TrustGraphEvidenceIngestionResult['provenanceJoin'];
-    evidenceMode?: 'off' | TrustGraphEvidenceIngestionResult['evidenceMode'];
-    canBlockExecution?: TrustGraphEvidenceIngestionResult['canBlockExecution'];
-    verificationMode?: ExecutionContract['verification']['mode'];
 };
 
 /**
@@ -522,20 +526,13 @@ const toPublicScopeValidation = (
 };
 
 const toTrustGraphMetadataEnvelope = (
-    result: TrustGraphEvidenceIngestionResult,
-    ExecutionContract?: Pick<ExecutionContract, 'trustGraph' | 'verification'>
+    result: TrustGraphEvidenceIngestionResult
 ): TrustGraphMetadataEnvelope => ({
-    evidenceMode:
-        ExecutionContract?.trustGraph.evidenceMode ?? result.evidenceMode,
-    canBlockExecution:
-        ExecutionContract?.trustGraph.canBlockExecution ??
-        result.canBlockExecution,
     adapterStatus: result.adapterStatus,
     scopeValidation: toPublicScopeValidation(result.scopeValidation),
     terminalAuthority: result.terminalAuthority,
     failOpenBehavior: result.failOpenBehavior,
     verificationRequired: result.verificationRequired,
-    verificationMode: ExecutionContract?.verification.mode,
     advisoryEvidenceItemCount: result.advisoryEvidenceItemCount,
     droppedEvidenceCount: result.droppedEvidenceCount,
     droppedEvidenceIds: result.droppedEvidenceIds,
@@ -702,6 +699,7 @@ const buildTrustGraphContextStepRequest = (
         input: {
             queryIntent: executionContractTrustGraphContext.queryIntent,
             scopeTuple: executionContractTrustGraphContext.scopeTuple,
+            targetIds: executionContractTrustGraphContext.targetIds,
         },
     };
 };
@@ -1301,11 +1299,16 @@ export const createChatService = ({
                 const sanitizedReviewModuleIds = sanitizeReviewModuleIds(
                     workflowProfile.optionalExtensions?.reviewModuleIds
                 );
+                // The orchestrator adds the planner-selected TrustGraph
+                // request after planning. Keep this legacy direct-service
+                // request only for callers that do not run the planner.
                 const trustGraphContextStepRequest =
-                    buildTrustGraphContextStepRequest(
-                        executionContractTrustGraph,
-                        executionContractTrustGraphContext
-                    );
+                    plannerStepExecutor === undefined
+                        ? buildTrustGraphContextStepRequest(
+                              executionContractTrustGraph,
+                              executionContractTrustGraphContext
+                          )
+                        : undefined;
                 const effectiveContextStepRequests = mergeContextStepRequests({
                     contextStepRequests,
                     trustGraphContextStepRequest,
@@ -2142,10 +2145,8 @@ export const createChatService = ({
             trustGraphResult !== undefined
                 ? {
                       ...normalizedResponseMetadata,
-                      trustGraph: toTrustGraphMetadataEnvelope(
-                          trustGraphResult,
-                          ExecutionContract
-                      ),
+                      trustGraph:
+                          toTrustGraphMetadataEnvelope(trustGraphResult),
                   }
                 : normalizedResponseMetadata;
 

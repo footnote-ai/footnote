@@ -375,7 +375,7 @@ test('chatPlanner switches output instructions for text JSON compatibility fallb
     assert.match(textJsonSystemPrompt, /Return plain JSON only/i);
     assert.match(
         textJsonSystemPrompt,
-        /Required fields are action, modality, safetyTier, reasoning, and generation/i
+        /Required fields are action, modality, safetyTier, reasoning, trustGraphTargetIds, and generation/i
     );
     assert.doesNotMatch(
         textJsonSystemPrompt,
@@ -568,10 +568,25 @@ test('chatPlanner forwards bounded capability options context and rejects blank 
             description: 'Balanced generation profile.',
         },
     ];
+    const availableTrustGraphTargets = [
+        {
+            id: 'product-docs',
+            flow: 'product-flow',
+            collection: 'product-docs',
+            description: 'Current product documentation.',
+        },
+        {
+            id: 'meeting-archive',
+            flow: 'meeting-flow',
+            collection: 'meeting-archive',
+            description: 'Historical meeting notes.',
+        },
+    ];
 
     try {
         const planner = createChatPlanner({
             availableCapabilityProfiles,
+            availableTrustGraphTargets,
             executePlanner: async ({ messages }) => {
                 capturedMessages = messages;
                 return {
@@ -623,6 +638,26 @@ test('chatPlanner forwards bounded capability options context and rejects blank 
             encodedProfiles
         ) as ChatPlannerCapabilityProfileOption[];
         assert.deepEqual(parsedProfiles, availableCapabilityProfiles);
+        const targetContextMessage =
+            capturedMessages.find((message) =>
+                message.content.startsWith(
+                    'Configured TrustGraph retrieval targets (bounded, operator-authored descriptions): '
+                )
+            )?.content ?? '';
+        const encodedTargets = targetContextMessage.replace(
+            'Configured TrustGraph retrieval targets (bounded, operator-authored descriptions): ',
+            ''
+        );
+        assert.deepEqual(JSON.parse(encodedTargets), [
+            {
+                id: 'product-docs',
+                description: 'Current product documentation.',
+            },
+            {
+                id: 'meeting-archive',
+                description: 'Historical meeting notes.',
+            },
+        ]);
         const fallbackWarning = warnings.find(
             (warning) =>
                 (warning.meta as { event?: string } | undefined)?.event ===
@@ -2067,4 +2102,41 @@ test('chatPlanner accepts exact GitHub references only when user-authored text n
         repository: 'acme/repo',
         sections: ['pulls'],
     });
+});
+
+test('chatPlanner preserves bounded opaque TrustGraph target suggestions', async () => {
+    const planner = createPlanner(
+        JSON.stringify({
+            action: 'message',
+            modality: 'text',
+            requestedCapabilityProfile: 'balanced-general',
+            safetyTier: 'Low',
+            reasoning: 'Product documentation is relevant.',
+            trustGraphTargetIds: [
+                'product-docs',
+                'product-docs',
+                'meeting-archive',
+                'unknown-target',
+            ],
+            generation: {
+                reasoningEffort: 'low',
+                verbosity: 'low',
+                temperament: {
+                    tightness: 3,
+                    rationale: 3,
+                    attribution: 3,
+                    caution: 3,
+                    extent: 3,
+                },
+            },
+        })
+    );
+
+    const result = await planFromWorkflow(planner, createChatRequest());
+
+    assert.deepEqual(result.plan.trustGraphTargetIds, [
+        'product-docs',
+        'meeting-archive',
+        'unknown-target',
+    ]);
 });

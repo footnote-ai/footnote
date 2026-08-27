@@ -30,8 +30,6 @@ import {
 import { SimpleRateLimiter } from '../src/services/rateLimiter.js';
 import { logger } from '../src/utils/logger.js';
 
-const TEST_PLANNER_MAX_COMPLETION_TOKENS = 700;
-
 type MutableEnv = NodeJS.ProcessEnv & {
     TURNSTILE_SECRET_KEY?: string;
     TURNSTILE_SITE_KEY?: string;
@@ -158,18 +156,60 @@ const createTestServer = (
             process.env.REFLECT_SERVICE_RATE_LIMIT_WINDOW_MS || '60000',
             10
         );
+        const executionContractTrustGraph =
+            options.executionContractTrustGraph === undefined
+                ? undefined
+                : {
+                      ...options.executionContractTrustGraph,
+                      targets: options.executionContractTrustGraph.targets ?? [
+                          {
+                              id: 'test-target',
+                              flow: 'test-flow',
+                              collection: 'test-collection',
+                              description: 'Neutral test retrieval target.',
+                          },
+                      ],
+                  };
+        const plannerTargetIds =
+            executionContractTrustGraph?.targets?.[0]?.id !== undefined
+                ? [executionContractTrustGraph.targets[0].id]
+                : [];
         const generationRuntime =
             options.generationRuntime !== undefined
                 ? options.generationRuntime
                 : ({
                       kind: 'test-runtime',
                       async generate(request: GenerationRequest) {
-                          if (
-                              request.maxOutputTokens ===
-                              TEST_PLANNER_MAX_COMPLETION_TOKENS
-                          ) {
+                          const isPlannerRequest = request.messages.some(
+                              (message) =>
+                                  message.content.includes(
+                                      'Planner request summary:'
+                                  )
+                          );
+                          if (isPlannerRequest) {
                               return {
-                                  text: '{"action":"message","modality":"text","safetyTier":"Low","reasoning":"The request expects a reply.","generation":{"reasoningEffort":"low","verbosity":"low","temperament":{"tightness":4,"rationale":3,"attribution":4,"caution":3,"extent":4}}}',
+                                  text: JSON.stringify({
+                                      action: 'message',
+                                      modality: 'text',
+                                      requestedCapabilityProfile:
+                                          'balanced-general',
+                                      safetyTier: 'Low',
+                                      reasoning: 'The request expects a reply.',
+                                      ...(plannerTargetIds.length > 0 && {
+                                          trustGraphTargetIds: plannerTargetIds,
+                                      }),
+                                      generation: {
+                                          reasoningEffort: 'low',
+                                          verbosity: 'low',
+                                          temperament: {
+                                              tightness: 4,
+                                              rationale: 3,
+                                              attribution: 4,
+                                              caution: 3,
+                                              extent: 3,
+                                          },
+                                      },
+                                  }),
                                   model: 'gpt-5-mini',
                               };
                           }
@@ -204,7 +244,7 @@ const createTestServer = (
             logRequest: options.logRequest ?? (() => undefined),
             buildResponseMetadata: () => createMetadata(),
             maxChatBodyBytes: 20000,
-            executionContractTrustGraph: options.executionContractTrustGraph,
+            executionContractTrustGraph,
         });
 
         const server = http.createServer((req, res) => {
@@ -531,12 +571,12 @@ test('chat does not expose raw upstream error details to clients', async () => {
         generationRuntime: {
             kind: 'test-runtime',
             async generate(request) {
-                if (
-                    request.maxOutputTokens ===
-                    TEST_PLANNER_MAX_COMPLETION_TOKENS
-                ) {
+                const isPlannerRequest = request.messages.some((message) =>
+                    message.content.includes('Planner request summary:')
+                );
+                if (isPlannerRequest) {
                     return {
-                        text: '{"action":"message","modality":"text","safetyTier":"Low","reasoning":"The request expects a reply.","generation":{"reasoningEffort":"low","verbosity":"low","temperament":{"tightness":4,"rationale":3,"attribution":4,"caution":3,"extent":4}}}',
+                        text: '{"action":"message","modality":"text","requestedCapabilityProfile":"balanced-general","safetyTier":"Low","reasoning":"The request expects a reply.","generation":{"reasoningEffort":"low","verbosity":"low","temperament":{"tightness":4,"rationale":3,"attribution":4,"caution":3,"extent":4}}}',
                         model: 'gpt-5-mini',
                     };
                 }
@@ -1310,6 +1350,7 @@ test('Execution Contract TrustGraph target failures preserve safe error details 
                     id: 'history',
                     flow: 'history-flow',
                     collection: 'history-collection',
+                    description: 'Historical meeting notes.',
                 },
             ],
             graphRagLimits: {
@@ -1363,6 +1404,7 @@ test('Execution Contract TrustGraph target failures preserve safe error details 
                     queryIntent: 'What changed?',
                     scopeTuple: { userId: 'user_1', projectId: 'project_1' },
                     budget: { timeoutMs: 100, maxCalls: 1 },
+                    targetIds: ['history'],
                 })
             );
         } finally {
@@ -1403,6 +1445,7 @@ test('Execution Contract TrustGraph response truncation preserves safe size deta
                     id: 'history',
                     flow: 'history-flow',
                     collection: 'history-collection',
+                    description: 'Historical meeting notes.',
                 },
             ],
             graphRagLimits: {
@@ -1460,6 +1503,7 @@ test('Execution Contract TrustGraph response truncation preserves safe size deta
             queryIntent: 'What changed?',
             scopeTuple: { userId: 'user_1', projectId: 'project_1' },
             budget: { timeoutMs: 100, maxCalls: 1 },
+            targetIds: ['history'],
         });
 
         assert.equal(bundle.items.length, 1);
@@ -1500,11 +1544,13 @@ test('Execution Contract TrustGraph runtime wiring binds deployment scope to con
                     id: 'history',
                     flow: 'history-flow',
                     collection: 'history-collection',
+                    description: 'Historical meeting notes.',
                 },
                 {
                     id: 'operator',
                     flow: 'operator-flow',
                     collection: 'operator-collection',
+                    description: 'Operator documentation.',
                 },
             ],
             graphRagLimits: {
@@ -1640,6 +1686,7 @@ test('Execution Contract TrustGraph runtime wiring fails fast when http adapter 
                     id: 'default',
                     flow: 'default',
                     collection: 'footnote-repository-context',
+                    description: 'Repository documentation.',
                 },
             ],
             graphRagLimits: {
@@ -1676,6 +1723,7 @@ test('Execution Contract TrustGraph runtime wiring fails fast when http adapter 
                     id: 'default',
                     flow: 'default',
                     collection: 'footnote-repository-context',
+                    description: 'Repository documentation.',
                 },
             ],
             graphRagLimits: {

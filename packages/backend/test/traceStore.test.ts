@@ -14,6 +14,7 @@ import Database from 'better-sqlite3';
 
 import type { ResponseMetadata } from '@footnote/contracts/policy';
 import type { ResponseCandidate } from '@footnote/contracts/web';
+import { ResponseMetadataSchema } from '@footnote/contracts/web';
 import { SqliteTraceStore } from '../src/storage/traces/sqliteTraceStore.js';
 
 test('TraceStore round trips metadata with citation URLs', async () => {
@@ -66,6 +67,83 @@ test('TraceStore round trips metadata with citation URLs', async () => {
         await store.delete(metadata.responseId);
         const deleted = await store.retrieve(metadata.responseId);
         assert.equal(deleted, null, 'deleted trace should not be retrievable');
+    } finally {
+        store.close();
+        await fs.rm(tempRoot, { recursive: true, force: true });
+    }
+});
+
+test('TraceStore keeps source-backed TrustGraph metadata as a real trace', async () => {
+    const tempRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'trace-store-'));
+    const responseId = 'trustgraph_trace_123';
+    const store = new SqliteTraceStore({
+        dbPath: path.join(tempRoot, 'provenance.db'),
+    });
+    const metadata: ResponseMetadata = {
+        responseId,
+        provenance: 'Retrieved',
+        safetyTier: 'Low',
+        tradeoffCount: 0,
+        chainHash: 'trustgraph_chain_hash',
+        licenseContext: 'MIT',
+        modelVersion: 'gpt-5.3-flash',
+        staleAfter: new Date(Date.now() + 60_000).toISOString(),
+        citations: [
+            {
+                title: 'Product documentation source',
+                url: 'https://example.com/product-docs',
+                snippet: 'Source-backed product note',
+            },
+        ],
+        trace_target: {},
+        trace_final: {},
+        trustGraph: {
+            adapterStatus: 'success',
+            scopeValidation: {
+                ok: true,
+                normalizedScope: { userId: '[redacted]' },
+            },
+            terminalAuthority: 'backend_execution_contract',
+            failOpenBehavior: 'local_behavior',
+            verificationRequired: true,
+            advisoryEvidenceItemCount: 1,
+            droppedEvidenceCount: 0,
+            droppedEvidenceIds: [],
+            provenanceReasonCodes: [],
+            sufficiencyView: {
+                coverageValue: 1,
+                coverageEvaluationUnit: 'source',
+                conflictSignals: [],
+            },
+            evidenceView: {
+                sourceRefs: ['https://example.com/product-docs'],
+                provenancePathRefs: ['target:product-docs'],
+                traceRefs: ['trustgraph://trace/product-docs'],
+            },
+            provenanceJoin: {
+                externalEvidenceBundleId: 'bundle_product_docs_123',
+                externalTraceRefs: ['trustgraph://trace/product-docs'],
+                adapterVersion: 'trustgraph-graph-rag-v1',
+                consumedGovernedFieldPaths: ['items[].sourceRef'],
+                consumedByConsumers: ['P_EVID'],
+                droppedEvidenceIds: [],
+                reasonCodes: [],
+            },
+        },
+    };
+
+    try {
+        assert.equal(ResponseMetadataSchema.safeParse(metadata).success, true);
+        await store.upsert(metadata);
+        const retrieved = await store.retrieve(responseId);
+
+        assert.ok(retrieved);
+        assert.equal(retrieved.modelVersion, 'gpt-5.3-flash');
+        assert.equal(retrieved.trustGraph?.adapterStatus, 'success');
+        assert.deepEqual(retrieved.trustGraph?.evidenceView.sourceRefs, [
+            'https://example.com/product-docs',
+        ]);
+        assert.equal(retrieved.citations[0]?.url, metadata.citations[0]?.url);
     } finally {
         store.close();
         await fs.rm(tempRoot, { recursive: true, force: true });

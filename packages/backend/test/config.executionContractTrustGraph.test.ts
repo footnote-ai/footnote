@@ -32,15 +32,17 @@ test('TrustGraph target configuration accepts an explicit bounded target set', (
             EXECUTION_CONTRACT_TRUSTGRAPH_ENABLED: 'true',
             EXECUTION_CONTRACT_TRUSTGRAPH_TARGETS: JSON.stringify([
                 {
-                    id: 'project-history',
-                    flow: 'project-history-graphrag',
-                    collection: 'footnote-project-history',
+                    id: 'meeting-archive',
+                    flow: 'meeting-flow',
+                    collection: 'meeting-archive',
+                    description: 'Historical meeting notes and decisions.',
                     workspaceRef: 'footnote',
                 },
                 {
-                    id: 'jordan-context',
-                    flow: 'jordan-context-graphrag',
-                    collection: 'jordan-context',
+                    id: 'product-docs',
+                    flow: 'product-flow',
+                    collection: 'product-docs',
+                    description: 'Current product documentation.',
                     workspaceRef: 'footnote',
                 },
             ]),
@@ -50,15 +52,17 @@ test('TrustGraph target configuration accepts an explicit bounded target set', (
 
     assert.deepEqual(config.adapter.targets, [
         {
-            id: 'project-history',
-            flow: 'project-history-graphrag',
-            collection: 'footnote-project-history',
+            id: 'meeting-archive',
+            flow: 'meeting-flow',
+            collection: 'meeting-archive',
+            description: 'Historical meeting notes and decisions.',
             workspaceRef: 'footnote',
         },
         {
-            id: 'jordan-context',
-            flow: 'jordan-context-graphrag',
-            collection: 'jordan-context',
+            id: 'product-docs',
+            flow: 'product-flow',
+            collection: 'product-docs',
+            description: 'Current product documentation.',
             workspaceRef: 'footnote',
         },
     ]);
@@ -75,11 +79,13 @@ test('TrustGraph target configuration rejects duplicate identities', () => {
                             id: 'duplicate',
                             flow: 'flow-a',
                             collection: 'collection-a',
+                            description: 'First target.',
                         },
                         {
                             id: 'duplicate',
                             flow: 'flow-b',
                             collection: 'collection-b',
+                            description: 'Second target.',
                         },
                     ]),
                 },
@@ -100,6 +106,26 @@ test('TrustGraph target configuration rejects malformed target JSON', () => {
                 () => undefined
             ),
         /execution_contract_trustgraph_invalid_targets_json/
+    );
+});
+
+test('TrustGraph target configuration requires a bounded description', () => {
+    assert.throws(
+        () =>
+            buildExecutionContractTrustGraphSection(
+                {
+                    EXECUTION_CONTRACT_TRUSTGRAPH_ENABLED: 'true',
+                    EXECUTION_CONTRACT_TRUSTGRAPH_TARGETS: JSON.stringify([
+                        {
+                            id: 'product-docs',
+                            flow: 'product-flow',
+                            collection: 'product-docs',
+                        },
+                    ]),
+                },
+                () => undefined
+            ),
+        /execution_contract_trustgraph_invalid_targets_missing_description/
     );
 });
 

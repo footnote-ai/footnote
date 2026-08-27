@@ -572,6 +572,7 @@ export class HttpTrustGraphEvidenceAdapter implements TrustGraphEvidenceAdapter 
                 id: target.id.trim(),
                 flow: target.flow.trim(),
                 collection: target.collection.trim(),
+                description: target.description.trim(),
                 ...(target.workspaceRef === null
                     ? { workspaceRef: null }
                     : isNonEmptyString(target.workspaceRef)
@@ -647,6 +648,7 @@ export class HttpTrustGraphEvidenceAdapter implements TrustGraphEvidenceAdapter 
         scopeTuple: ScopeTuple;
         budget: Budget;
         abortSignal?: AbortSignal;
+        targetIds: readonly string[];
     }): Promise<EvidenceBundle> {
         const query = input.queryIntent.trim();
         if (query.length === 0) {
@@ -656,13 +658,65 @@ export class HttpTrustGraphEvidenceAdapter implements TrustGraphEvidenceAdapter 
             throw new Error('trustgraph_graph_rag_query_too_large');
         }
 
+        const requestedTargetIds = new Set(input.targetIds);
+        const selectedTargets = this.targets.filter((target) =>
+            requestedTargetIds.has(target.id)
+        );
+        const admittedTargetIds = new Set(
+            selectedTargets.map((target) => target.id)
+        );
+        logger.info('chat.execution_contract_trustgraph.target_admission', {
+            event: 'chat.execution_contract_trustgraph.target_admission',
+            requestedTargetIds: input.targetIds,
+            admittedTargetIds: selectedTargets.map((target) => target.id),
+            notSelectedTargetIds: this.targets
+                .filter((target) => !admittedTargetIds.has(target.id))
+                .map((target) => target.id),
+            rejectedTargetIds: input.targetIds.filter(
+                (targetId) => !admittedTargetIds.has(targetId)
+            ),
+        });
+        if (selectedTargets.length === 0) {
+            throw new Error('trustgraph_graph_rag_no_admitted_targets');
+        }
+
         const settled = await Promise.allSettled(
-            this.targets.map((target) =>
-                this.fetchTarget({
-                    target,
-                    query,
-                    abortSignal: input.abortSignal,
-                })
+            selectedTargets.map((target) =>
+                (async () => {
+                    const startedAt = Date.now();
+                    try {
+                        const result = await this.fetchTarget({
+                            target,
+                            query,
+                            abortSignal: input.abortSignal,
+                        });
+                        logger.info(
+                            'chat.execution_contract_trustgraph.target_completed',
+                            {
+                                event: 'chat.execution_contract_trustgraph.target_completed',
+                                targetId: target.id,
+                                flow: target.flow,
+                                collection: target.collection,
+                                status: 'success',
+                                durationMs: Math.max(0, Date.now() - startedAt),
+                            }
+                        );
+                        return result;
+                    } catch (error) {
+                        logger.info(
+                            'chat.execution_contract_trustgraph.target_completed',
+                            {
+                                event: 'chat.execution_contract_trustgraph.target_completed',
+                                targetId: target.id,
+                                flow: target.flow,
+                                collection: target.collection,
+                                status: 'failed',
+                                durationMs: Math.max(0, Date.now() - startedAt),
+                            }
+                        );
+                        throw error;
+                    }
+                })()
             )
         );
         const successful: GraphRagTargetResult[] = [];
@@ -671,7 +725,7 @@ export class HttpTrustGraphEvidenceAdapter implements TrustGraphEvidenceAdapter 
             error: unknown;
         }> = [];
         for (const [index, result] of settled.entries()) {
-            const target = this.targets[index];
+            const target = selectedTargets[index];
             if (result.status === 'fulfilled') {
                 successful.push(result.value);
             } else if (target !== undefined) {

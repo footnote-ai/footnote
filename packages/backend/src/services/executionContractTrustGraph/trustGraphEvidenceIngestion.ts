@@ -60,6 +60,7 @@ const invokeAdapterWithTimeout = async (input: {
     queryIntent: string;
     scopeTuple: ScopeTuple;
     budget: Budget;
+    targetIds?: readonly string[];
 }): Promise<EvidenceBundle> => {
     const timeoutMs = Math.max(1, Math.floor(input.budget.timeoutMs));
     const abortController = new AbortController();
@@ -81,6 +82,7 @@ const invokeAdapterWithTimeout = async (input: {
                 scopeTuple: input.scopeTuple,
                 budget: input.budget,
                 abortSignal: abortController.signal,
+                targetIds: input.targetIds ?? [],
             }),
             timeoutPromise,
         ]);
@@ -258,6 +260,8 @@ export type RunEvidenceIngestionInput = {
     scopeTuple: ScopeTuple;
     budget: Budget;
     ownershipValidationPolicy: TrustGraphOwnershipValidationPolicy;
+    /** Backend-admitted opaque target IDs; omitted only by legacy benchmark callers. */
+    targetIds?: readonly string[];
     adapter?: TrustGraphEvidenceAdapter;
     scopeValidationPolicy?: Partial<
         Pick<
@@ -603,6 +607,7 @@ export const runEvidenceIngestion = async (
             queryIntent: input.queryIntent,
             scopeTuple: scopeValidation.normalizedScope,
             budget: input.budget,
+            targetIds: input.targetIds ?? [],
         });
         adapterBundle = adapterInvocation;
         if (

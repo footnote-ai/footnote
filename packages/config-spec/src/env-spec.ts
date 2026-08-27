@@ -2620,7 +2620,7 @@ export const envEntries = [
         secret: false,
         kind: 'string',
         description:
-            'JSON array of explicitly configured TrustGraph retrieval targets. Each target supplies an id, flow, collection, and optional workspaceRef; arbitrary workspace collections are never discovered.',
+            'JSON array of explicitly configured TrustGraph retrieval targets. Each target supplies an opaque id, flow, collection, bounded operator-authored description, and optional workspaceRef; arbitrary workspace collections are never discovered.',
         defaultValue: noDefault(),
         usedBy: ['packages/backend/src/config.ts'],
     }),
