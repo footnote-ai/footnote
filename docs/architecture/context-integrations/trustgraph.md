@@ -177,7 +177,10 @@ logs the original and retained counts. Footnote maps each successful
 configured target to one aggregate advisory evidence item. The target identity
 is retained in the evidence item and provenance path; source URIs and titles
 remain in that path. Footnote does not treat TrustGraph ranking or confidence
-as backend policy.
+as backend policy. The generated Graph RAG response is also passed to final
+generation as lower-authority user context, explicitly labeled as untrusted
+synthesis rather than an original source fact or instruction. Prompt-facing
+provenance references are bounded separately from the response text.
 
 TrustGraph can supply extra context, but Footnote still decides how to handle
 the request. If TrustGraph is unavailable, the local chat path continues
