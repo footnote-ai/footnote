@@ -22,16 +22,10 @@ import { hmacId } from '../utils/pseudonymization.js';
 export type PresentationConfig = {
     enabled: boolean;
     profileId: string | null;
-    /** Retained for configuration compatibility; no validator runs in this flow. */
-    validatorProfileId: string | null;
     timeoutMs: number;
-    /** Retained for configuration compatibility; no validator runs in this flow. */
-    validatorTimeoutMs: number;
     /** Backend-only secret for opaque trace identifiers. Never request-supplied. */
     traceHmacSecret?: string | null;
     profile?: ModelProfile;
-    /** Retained for configuration compatibility; no validator runs in this flow. */
-    validatorProfile?: ModelProfile;
 };
 
 export type PresentationPersona = {
@@ -71,7 +65,8 @@ const withTimeout = async <T>(
     }
 };
 
-const isOrdinaryProse = (text: string): boolean => {
+/** Returns whether presentation text is mechanically usable as ordinary prose. */
+const isAdmissiblePresentationCandidate = (text: string): boolean => {
     const trimmed = text.trim();
     if (!trimmed || trimmed.includes('```')) return false;
     try {
@@ -214,7 +209,10 @@ export const createPresentationFallback = (input: {
     }),
 });
 
-/** Generates one full-prose expression candidate before ordinary answer generation. */
+/**
+ * Generates one full-prose expression candidate before ordinary answer generation.
+ * Admission is mechanical; authoritative generation and review own the answer.
+ */
 export const runPresentationCandidate = async (input: {
     generationRuntime: GenerationRuntime;
     generationRequest: GenerationRequest;
@@ -259,14 +257,14 @@ export const runPresentationCandidate = async (input: {
             'presentation_draft_timeout'
         );
 
-        if (!isOrdinaryProse(draftResult.text)) {
+        if (!isAdmissiblePresentationCandidate(draftResult.text)) {
             return {
                 outcome: 'candidate_unavailable',
                 draftResult,
                 metadata: buildMetadata({
                     outcome: 'candidate_unavailable',
                     attempted: true,
-                    reasonCode: 'structured_output',
+                    reasonCode: 'candidate_not_admissible',
                     persona: input.persona,
                     config: input.config,
                     draft: draftResult,

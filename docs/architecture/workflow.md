@@ -173,13 +173,25 @@ Assess may also return TRACE alignment outputs:
 These assess outputs are used for lineage and metadata finalization. They stay
 inside workflow policy and limits.
 
-When optional presentation is enabled, the candidate is admitted only after a
-conservative reservation for its prompt and output, authoritative generation,
-and the first assessment. Candidate output is counted both as candidate usage
-and as text copied into the authoritative prompt. If that reservation cannot
+When optional presentation is enabled, Footnote first makes a conservative
+reservation for its prompt and output, authoritative generation, and the first
+assessment. Candidate output is counted both as candidate usage and as text
+copied into the authoritative prompt. If that reservation cannot
 fit, the candidate is skipped fail-open with the serializable presentation
 reason `budget_skipped`; authoritative generation still owns the answer, and
 provider-reported usage remains the cumulative source of truth.
+
+A presentation model may draft wording and style before the normal answer is
+written. Footnote then checks only that the returned draft is usable prose. It
+does not ask another model to verify facts, grounding, policy, safety, posture,
+TRACE, or persona correctness. Normal answer generation uses the draft only as
+a style suggestion while working from authoritative context and making the
+answer. The ordinary assessment/revision loop reviews that answer and applies
+semantic corrections.
+
+This prose-usability check is called candidate admission in code and contracts.
+Old traces remain readable, but the current runtime does not emit or execute
+the old validator/audit stages and new runs do not create records for them.
 
 Review decision parsing uses explicit expected-failure results. If assess
 output is empty, not a JSON object, invalid JSON, or schema-invalid, the engine

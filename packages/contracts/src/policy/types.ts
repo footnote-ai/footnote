@@ -451,7 +451,7 @@ export type PresentationReasonCode =
     | 'budget_skipped'
     | 'disabled'
     | 'profile_not_configured'
-    | 'structured_output'
+    | 'candidate_not_admissible'
     | 'draft_timeout'
     | 'draft_provider_error';
 

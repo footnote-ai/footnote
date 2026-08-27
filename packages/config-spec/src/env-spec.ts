@@ -2041,33 +2041,6 @@ export const envEntries = [
         usedBy: ['packages/backend/src/config.ts'],
     }),
     defineEnv({
-        key: 'CHAT_PRESENTATION_VALIDATOR_PROFILE_ID',
-        owner: 'backend',
-        stage: 'runtime',
-        section: 'chat-workflow',
-        required: false,
-        secret: false,
-        kind: 'string',
-        description:
-            'Enabled model profile ID for the bounded presentation audit.',
-        defaultValue: noDefault(),
-        usedBy: ['packages/backend/src/config.ts'],
-    }),
-    defineEnv({
-        key: 'CHAT_PRESENTATION_VALIDATOR_TIMEOUT_MS',
-        owner: 'backend',
-        stage: 'runtime',
-        section: 'chat-workflow',
-        required: false,
-        secret: false,
-        kind: 'integer',
-        description:
-            'Hard timeout in milliseconds for the bounded presentation audit.',
-        defaultValue: literal(10000),
-        usedBy: ['packages/backend/src/config.ts'],
-    }),
-
-    defineEnv({
         key: 'CHAT_MAX_REQUEST_REVIEW_CYCLES',
         owner: 'backend',
         stage: 'runtime',

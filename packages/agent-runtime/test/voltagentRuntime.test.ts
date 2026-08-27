@@ -935,10 +935,10 @@ test('default VoltAgent executor maps structured output to a validated JSON resu
     });
 
     const result = await executor.generateText(
-        [{ role: 'user', content: 'Return the audit.' }],
+        [{ role: 'user', content: 'Return the structured result.' }],
         {
             structuredOutput: {
-                name: 'presentation_audit',
+                name: 'structured_result',
                 schema: {
                     type: 'object',
                     properties: {

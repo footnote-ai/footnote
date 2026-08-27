@@ -249,6 +249,14 @@ const LEGACY_TRUST_GRAPH_SETTINGS_PATHS = new Set([
     'chat-workflow.execution-contract-trustgraph-collection',
 ]);
 
+const DEPRECATED_IGNORED_SETTINGS_PATHS = new Set([
+    'chat-workflow.chat-presentation-validator-profile-id',
+    'chat-workflow.chat-presentation-validator-timeout-ms',
+]);
+
+const deprecatedIgnoredSettingWarning = (path: string): string =>
+    `${path} is deprecated and ignored; candidate admission does not run a model validator. Remove it from footnote.yaml.`;
+
 const unsupportedSettingsKeyMessage = (path: string): string =>
     LEGACY_TRUST_GRAPH_SETTINGS_PATHS.has(path)
         ? `Invalid server settings YAML: ${path} is obsolete. Remove it from footnote.yaml; configure EXECUTION_CONTRACT_TRUSTGRAPH_TARGETS in deployment bootstrap environment instead.`
@@ -257,7 +265,8 @@ const unsupportedSettingsKeyMessage = (path: string): string =>
 const validateSupportedSettingsKeys = (
     root: Record<string, unknown>,
     pointer = 'root',
-    node: SourceNode = SOURCE_TREE
+    node: SourceNode = SOURCE_TREE,
+    ignoredDeprecatedPaths: Set<string> = new Set()
 ): void => {
     for (const [key, value] of Object.entries(root)) {
         if (
@@ -272,6 +281,17 @@ const validateSupportedSettingsKeys = (
         const path = pointer === 'root' ? key : `${pointer}.${key}`;
         const next = node.children.get(key);
         if (!next) {
+            if (DEPRECATED_IGNORED_SETTINGS_PATHS.has(path)) {
+                if (isRecord(value)) {
+                    throw new ServerSettingsValidationError({
+                        message: `Invalid server settings YAML: ${path} must be a scalar or array value.`,
+                        category: 'type_mismatch',
+                        pointer: path,
+                    });
+                }
+                ignoredDeprecatedPaths.add(path);
+                continue;
+            }
             throw new ServerSettingsValidationError({
                 message: unsupportedSettingsKeyMessage(path),
                 category: 'unsupported_key',
@@ -303,7 +323,12 @@ const validateSupportedSettingsKeys = (
                     pointer: path,
                 });
             }
-            validateSupportedSettingsKeys(value, path, next);
+            validateSupportedSettingsKeys(
+                value,
+                path,
+                next,
+                ignoredDeprecatedPaths
+            );
             continue;
         }
 
@@ -560,11 +585,14 @@ const normalizeDiscordBots = (value: unknown, settingsPath: string) => {
  * Outputs:
  * - `yamlSettings`: canonical `FootnoteSettings` (normalized version, discord-bots, and settings map).
  * - `yamlEnv`: `NodeJS.ProcessEnv` projection of YAML-configurable non-secret keys.
+ * - `warnings`: deprecated settings accepted for compatibility but ignored by the runtime.
  *
  * Fail-closed behavior:
  * - Throws on malformed YAML, invalid root/shape, unsupported keys, forbidden secret/bootstrap keys,
  *   type mismatches, or invalid version.
  * - Secrets/bootstrap credentials in YAML are rejected by source-boundary validation, not projected.
+ * - Retired presentation-validator settings are accepted as scalar or array values and returned as
+ *   explicit deprecation warnings; they are never projected into `yamlEnv`.
  *
  * Authority and side effects:
  * - No external I/O or mutations; this function only parses/validates and returns derived objects.
@@ -580,6 +608,7 @@ export const parseServerSettingsYaml = ({
 }): {
     yamlSettings: FootnoteSettings;
     yamlEnv: NodeJS.ProcessEnv;
+    warnings: string[];
 } => {
     let parsed: unknown;
     try {
@@ -620,7 +649,13 @@ export const parseServerSettingsYaml = ({
     }
 
     validateKebabCaseKeys(parsed);
-    validateSupportedSettingsKeys(parsed);
+    const ignoredDeprecatedPaths = new Set<string>();
+    validateSupportedSettingsKeys(
+        parsed,
+        'root',
+        SOURCE_TREE,
+        ignoredDeprecatedPaths
+    );
 
     const version = parsed.version;
     if (version !== 1) {
@@ -664,6 +699,9 @@ export const parseServerSettingsYaml = ({
             settingsEnv,
         },
         yamlEnv,
+        warnings: [...ignoredDeprecatedPaths].map(
+            deprecatedIgnoredSettingWarning
+        ),
     };
 };
 
@@ -683,7 +721,7 @@ export const parseServerSettingsYaml = ({
  *
  * Side effects:
  * - Reads a file from disk
- * - Emits warnings through `warn` for missing optional settings file
+ * - Emits warnings through `warn` for missing optional settings files and ignored deprecated keys
  *
  * @param env Process environment used only for bootstrap path resolution.
  * @param warn Warning sink for fail-open missing-file notices.
@@ -717,10 +755,13 @@ export const loadServerSettings = (
             { cause: error }
         );
     }
-    const { yamlSettings, yamlEnv } = parseServerSettingsYaml({
+    const { yamlSettings, yamlEnv, warnings } = parseServerSettingsYaml({
         rawText,
         settingsPath,
     });
+    for (const warning of warnings) {
+        warn(`Server settings YAML: ${warning}`);
+    }
     return { settingsPath, yamlSettings, yamlEnv };
 };
 

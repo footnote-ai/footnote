@@ -1143,6 +1143,42 @@ test('admin settings validate returns success payload for valid YAML', async () 
     }
 });
 
+test('admin settings validate reports ignored retired presentation validator settings', async () => {
+    const server = await createAdminSettingsTestServer();
+    try {
+        const response = await fetch(
+            `${server.url}/api/admin/settings/validate`,
+            {
+                method: 'POST',
+                headers: {
+                    'x-admin-token': 'test-admin-token',
+                    'content-type': 'text/yaml',
+                },
+                body: [
+                    'version: 1',
+                    'chat-workflow:',
+                    '  chat-presentation-validator-profile-id: ollama-gemma4-31b',
+                    '',
+                ].join('\n'),
+            }
+        );
+        assert.equal(response.status, 200);
+        const payload = (await response.json()) as {
+            ok: boolean;
+            valid: boolean;
+            warnings: string[];
+        };
+        assert.equal(payload.ok, true);
+        assert.equal(payload.valid, true);
+        assert.deepEqual(payload.warnings, [
+            'chat-workflow.chat-presentation-validator-profile-id is deprecated and ignored; candidate admission does not run a model validator. Remove it from footnote.yaml.',
+        ]);
+    } finally {
+        await server.close();
+        server.cleanup();
+    }
+});
+
 test('admin settings validate returns structured validation details for invalid YAML', async () => {
     const server = await createAdminSettingsTestServer();
     try {

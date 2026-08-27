@@ -36,9 +36,7 @@ const config: PresentationConfig = {
     enabled: true,
     profileId: profile.id,
     profile,
-    validatorProfileId: 'legacy-validator',
     timeoutMs: 100,
-    validatorTimeoutMs: 100,
 };
 const generated = (text: string): GenerationResult => ({
     text,

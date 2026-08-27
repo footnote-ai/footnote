@@ -200,13 +200,14 @@ const validateYamlText = ({
               settingsKeysCount: number;
               discordBotsCount: number;
           };
+          warnings: string[];
       }
     | {
           ok: false;
           detail: AdminSettingsValidationErrorDetail;
       } => {
     try {
-        const { yamlSettings } = parseServerSettingsYaml({
+        const { yamlSettings, warnings } = parseServerSettingsYaml({
             rawText,
             settingsPath,
         });
@@ -217,6 +218,7 @@ const validateYamlText = ({
                 settingsKeysCount: Object.keys(yamlSettings.settingsEnv).length,
                 discordBotsCount: yamlSettings['discord-bots'].length,
             },
+            warnings,
         };
     } catch (error) {
         if (error instanceof ServerSettingsValidationError) {
@@ -643,7 +645,7 @@ const createAdminSettingsHandlers = ({
                 ok: true,
                 valid: true,
                 normalizedSummary: result.normalizedSummary,
-                warnings: [],
+                warnings: result.warnings,
                 restartRequired: true,
             });
             logger.info('admin.settings.validate.succeeded', {

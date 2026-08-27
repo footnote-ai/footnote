@@ -35,9 +35,7 @@ const profile: ModelProfile = {
 const config: PresentationConfig = {
     enabled: true,
     profileId: profile.id,
-    validatorProfileId: 'legacy-validator',
     timeoutMs: 100,
-    validatorTimeoutMs: 100,
     traceHmacSecret: 'presentation-test-secret',
     profile,
 };
@@ -191,7 +189,7 @@ test('reports a structured candidate as unavailable without selecting it', async
     });
 
     assert.equal(presentation.outcome, 'candidate_unavailable');
-    assert.equal(presentation.metadata.reasonCode, 'structured_output');
+    assert.equal(presentation.metadata.reasonCode, 'candidate_not_admissible');
     assert.equal(presentation.draftResult?.text, '{"answer":"not prose"}');
 });
 

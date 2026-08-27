@@ -15,3 +15,4 @@ work is done.
 - [Context retrieval and knowledge reporting](./context-retrieval-knowledge-reporting-status.md)
 - [Web search grounding recovery](./web-search-grounding-recovery-status.md)
 - [GitHub context](./github-context-status.md)
+- [Presentation contract](./presentation-contract-status.md)

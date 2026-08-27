@@ -43,36 +43,44 @@ This is the canonical order Footnote uses to build runtime prompt text.
 
 ## Optional Presentation
 
-`presentation` is a backend-owned optional candidate step after planning,
-retrieval, tool, citation, and safety context collection. It is disabled by
-default:
+`presentation` is an optional backend step after planning, retrieval, tool,
+citation, and safety context collection. It drafts possible wording before the
+normal answer is made. It is disabled by default:
 
 ```env
 CHAT_PRESENTATION_ENABLED=false
 CHAT_PRESENTATION_PROFILE_ID=
 CHAT_PRESENTATION_TIMEOUT_MS=2000
-# Retained for reading older deployments; #540 does not run a presentation audit.
-CHAT_PRESENTATION_VALIDATOR_PROFILE_ID=
-CHAT_PRESENTATION_VALIDATOR_TIMEOUT_MS=1500
 ```
 
 The presentation profile selects an enabled backend profile. It is deployment
-policy, not persona identity. It writes one full-prose candidate using the
-collected context and active persona guidance. The candidate has no tools or
-search. The normal main generation then reconciles that candidate with the
-authoritative context, and the ordinary persona-aware assess/revision loop
-reviews the resulting answer. The candidate is preferred expression, not
-evidence or policy: authoritative context owns facts, uncertainty,
-attribution, scope, permissions, refusals, provenance, TRACE, and safety.
+policy, not persona identity. The current flow is:
+
+1. The optional presentation model writes a full-prose draft for wording and
+   style. It has no tools or search.
+2. Footnote checks that the returned draft is usable prose. This is a small
+   mechanical check, not a semantic review of facts, grounding, or safety.
+3. Normal answer generation uses the draft only as a style suggestion while it
+   works from the authoritative context and makes the answer.
+4. The ordinary persona-aware assessment/revision loop reviews the resulting
+   answer for correctness, grounding, posture, TRACE, and corrections.
+
+In the code and serialized contracts, the second step is called `candidate
+admission`. The presentation draft is never evidence or policy authority: it
+does not own facts, uncertainty, attribution, scope, permissions, refusals,
+provenance, TRACE, safety, or the final answer. No separate presentation
+validator model call runs.
 
 If the candidate is disabled, malformed, times out, or fails at its provider,
 the workflow simply runs normal generation and review without candidate text.
 The candidate is never passed into ordinary assessment or revision. New trace
 receipts record whether the candidate was generated or unavailable, its
 requested and observed draft attribution, expression resolution, and an
-opaque candidate identifier. Historical finalizer/audit receipts remain
-readable through an explicit legacy flow, but new runs do not create those
-fields.
+opaque candidate identifier. Old traces remain readable through an explicit
+legacy flow, but new runs do not create validator or audit records. Older
+`CHAT_PRESENTATION_VALIDATOR_*` settings may be accepted during configuration
+loading only to warn that they are deprecated and ignored; they do nothing and
+are not part of the current operator contract.
 
 TRACE caution remains observed presentation metadata and may protect answer
 posture while the candidate is written. It never skips or weakens persona

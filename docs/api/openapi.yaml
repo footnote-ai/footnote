@@ -41,7 +41,7 @@ openapi: 3.1.0
 info:
     title: Footnote Backend API
     # Versioning: bump when request/response shapes, status codes, or auth requirements change; docs-only edits can skip.
-    version: 1.1.0
+    version: 1.2.0
     license:
         name: MIT + Hippocratic License v3 (HL3-CORE)
         url: docs/LICENSE_STRATEGY.md
@@ -3895,10 +3895,10 @@ components:
                 workflow:
                     $ref: '#/components/schemas/WorkflowRecord'
                 presentation:
-                    description: Optional backend-owned presentation receipt. New receipts use the candidate-review flow; historical finalizer/audit receipts remain readable through the legacy branch. Trace upserts that omit flow but contain legacy finalizer/audit or caution-derived fields are normalized to legacy_finalizer_audit before strict validation, without inventing observed model data.
+                    description: Optional backend-owned presentation receipt. In the current flow, an optional presentation model drafts wording and style, Footnote checks that the draft is usable prose, normal answer generation uses it only as a style suggestion while working from authoritative context, and normal assessment/revision reviews the answer. No separate presentation-validator model call runs. Old traces remain readable through the legacy branch, but new runs do not create validator/audit records. Trace upserts that omit flow but contain old finalizer/audit or caution-derived fields are read as legacy data without inventing observed model data.
                     oneOf:
                         - type: object
-                          description: Current full-candidate flow. The candidate influences expression, while authoritative generation and ordinary review own the answer.
+                          description: Current flow. A presentation model may suggest wording and style. Footnote checks only that its draft is usable prose; normal answer generation and assessment/revision make and review the answer from authoritative context.
                           properties:
                               step:
                                   type: string
@@ -3923,7 +3923,7 @@ components:
                                           budget_skipped,
                                           disabled,
                                           profile_not_configured,
-                                          structured_output,
+                                          candidate_not_admissible,
                                           draft_timeout,
                                           draft_provider_error,
                                       ]
@@ -3993,7 +3993,7 @@ components:
                               ]
                           additionalProperties: false
                         - type: object
-                          description: Read-compatible receipt from the pre-#540 finalizer/audit architecture. It is not emitted by the current runtime.
+                          description: Old presentation receipt retained so existing traces remain readable. The current runtime never emits this validator/audit record.
                           properties:
                               step:
                                   type: string
@@ -4568,7 +4568,7 @@ components:
 
         ResponseCandidate:
             type: object
-            description: One model-produced response candidate retained with a trace. A presentation_draft is expression-only input to authoritative generation, not evidence, provenance authority, policy, or a deliverable answer. Plans, prompts, tools, audit output, and hidden reasoning are excluded.
+            description: One model-produced response candidate retained with a trace. A presentation_draft is expression-only input to normal answer generation, not evidence, provenance authority, policy, or a deliverable answer. Plans, prompts, internal prose-usability checks, and hidden reasoning are excluded.
             properties:
                 id:
                     type: string
