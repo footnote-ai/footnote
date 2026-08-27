@@ -27,6 +27,23 @@ test('image prompting defaults to the request-local GPT-5.6 Luna model', () => {
     );
 });
 
+test('retired presentation validator settings are absent from the config spec', () => {
+    assert.equal(
+        Object.prototype.hasOwnProperty.call(
+            envSpecByKey,
+            'CHAT_PRESENTATION_VALIDATOR_PROFILE_ID'
+        ),
+        false
+    );
+    assert.equal(
+        Object.prototype.hasOwnProperty.call(
+            envSpecByKey,
+            'CHAT_PRESENTATION_VALIDATOR_TIMEOUT_MS'
+        ),
+        false
+    );
+});
+
 test('account auth keeps bootstrap values out of settings and the secret in env', () => {
     assert.equal(envConfigSourceByKey.OIDC_ISSUER_URL, 'bootstrap_env');
     assert.equal(envConfigSourceByKey.OIDC_CLIENT_ID, 'bootstrap_env');

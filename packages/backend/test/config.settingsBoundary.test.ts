@@ -147,6 +147,59 @@ test('stale single-target TrustGraph settings fail with migration guidance', () 
     );
 });
 
+test('retired presentation validator settings are accepted with an ignored warning', () => {
+    const rawYaml = [
+        'version: 1',
+        'chat-workflow:',
+        '  chat-presentation-validator-profile-id: ollama-gemma4-31b',
+        '  chat-presentation-validator-timeout-ms: 10000',
+        '',
+    ].join('\n');
+    const settingsPath = withSettingsFile(rawYaml);
+    const parsed = parseServerSettingsYaml({
+        rawText: rawYaml,
+        settingsPath,
+    });
+
+    assert.equal(
+        parsed.yamlSettings.settingsEnv[
+            'chat-workflow.chat-presentation-validator-profile-id'
+        ],
+        undefined
+    );
+    assert.equal(
+        parsed.yamlEnv.CHAT_PRESENTATION_VALIDATOR_PROFILE_ID,
+        undefined
+    );
+    assert.deepEqual(parsed.warnings, [
+        'chat-workflow.chat-presentation-validator-profile-id is deprecated and ignored; candidate admission does not run a model validator. Remove it from footnote.yaml.',
+        'chat-workflow.chat-presentation-validator-timeout-ms is deprecated and ignored; candidate admission does not run a model validator. Remove it from footnote.yaml.',
+    ]);
+});
+
+test('retired presentation validator settings warn during runtime config loading', () => {
+    const rawYaml = [
+        'version: 1',
+        'chat-workflow:',
+        '  chat-presentation-validator-timeout-ms: 10000',
+        '',
+    ].join('\n');
+    const warnings: string[] = [];
+
+    buildRuntimeConfig(
+        {
+            NODE_ENV: 'development',
+            FOOTNOTE_SETTINGS_PATH: withSettingsFile(rawYaml),
+        },
+        (message) => warnings.push(message)
+    );
+
+    assert.equal(
+        warnings[0],
+        'Server settings YAML: chat-workflow.chat-presentation-validator-timeout-ms is deprecated and ignored; candidate admission does not run a model validator. Remove it from footnote.yaml.'
+    );
+});
+
 test('rejects removed settings.localNodes.configPath shape', () => {
     const settingsPath = withSettingsFile(
         [

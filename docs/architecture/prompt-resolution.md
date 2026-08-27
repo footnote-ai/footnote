@@ -51,19 +51,18 @@ default:
 CHAT_PRESENTATION_ENABLED=false
 CHAT_PRESENTATION_PROFILE_ID=
 CHAT_PRESENTATION_TIMEOUT_MS=2000
-# Retained for reading older deployments; #540 does not run a presentation audit.
-CHAT_PRESENTATION_VALIDATOR_PROFILE_ID=
-CHAT_PRESENTATION_VALIDATOR_TIMEOUT_MS=1500
 ```
 
 The presentation profile selects an enabled backend profile. It is deployment
 policy, not persona identity. It writes one full-prose candidate using the
 collected context and active persona guidance. The candidate has no tools or
-search. The normal main generation then reconciles that candidate with the
-authoritative context, and the ordinary persona-aware assess/revision loop
-reviews the resulting answer. The candidate is preferred expression, not
-evidence or policy: authoritative context owns facts, uncertainty,
-attribution, scope, permissions, refusals, provenance, TRACE, and safety.
+search. Candidate admission only checks whether the returned text is mechanically
+usable as ordinary answer prose; it does not perform semantic validation. The
+normal main generation then reconciles that candidate with the authoritative
+context, and the ordinary persona-aware assess/revision loop reviews the
+resulting answer. The candidate is preferred expression, not evidence or
+policy: authoritative context owns facts, uncertainty, attribution, scope,
+permissions, refusals, provenance, TRACE, and safety.
 
 If the candidate is disabled, malformed, times out, or fails at its provider,
 the workflow simply runs normal generation and review without candidate text.
@@ -72,7 +71,9 @@ receipts record whether the candidate was generated or unavailable, its
 requested and observed draft attribution, expression resolution, and an
 opaque candidate identifier. Historical finalizer/audit receipts remain
 readable through an explicit legacy flow, but new runs do not create those
-fields.
+fields. Older `CHAT_PRESENTATION_VALIDATOR_*` settings may be accepted during
+configuration loading only to warn that they are deprecated and ignored; they
+are not part of the current operator contract.
 
 TRACE caution remains observed presentation metadata and may protect answer
 posture while the candidate is written. It never skips or weakens persona

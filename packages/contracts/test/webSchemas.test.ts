@@ -758,6 +758,32 @@ test('current candidate-flow metadata rejects legacy finalizer and audit fields'
     assert.equal(parsed.success, false);
 });
 
+test('current candidate-flow metadata normalizes its former non-prose reason', () => {
+    const parsed = ResponseMetadataSchema.safeParse({
+        ...baseMetadata,
+        presentation: {
+            step: 'presentation',
+            flow: 'candidate_review',
+            outcome: 'candidate_unavailable',
+            attempted: true,
+            reasonCode: 'structured_output',
+            personaId: 'myuri',
+            draftAttemptCount: 1,
+            expressionStrength: 'balanced',
+            expressionSource: 'persona_default',
+        },
+    });
+
+    assert.equal(parsed.success, true);
+    if (!parsed.success) {
+        return;
+    }
+    assert.equal(
+        parsed.data.presentation?.reasonCode,
+        'candidate_not_admissible'
+    );
+});
+
 test('PostTracesRequestSchema normalizes legacy presentation fields', () => {
     const parsed = PostTracesRequestSchema.safeParse({
         ...baseMetadata,

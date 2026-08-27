@@ -220,19 +220,10 @@ export const buildServiceSections = (
             profileId: parseOptionalTrimmedString(
                 env.CHAT_PRESENTATION_PROFILE_ID
             ),
-            validatorProfileId: parseOptionalTrimmedString(
-                env.CHAT_PRESENTATION_VALIDATOR_PROFILE_ID
-            ),
             timeoutMs: parsePositiveIntEnv(
                 env.CHAT_PRESENTATION_TIMEOUT_MS,
                 2000,
                 'CHAT_PRESENTATION_TIMEOUT_MS',
-                warn
-            ),
-            validatorTimeoutMs: parsePositiveIntEnv(
-                env.CHAT_PRESENTATION_VALIDATOR_TIMEOUT_MS,
-                1500,
-                'CHAT_PRESENTATION_VALIDATOR_TIMEOUT_MS',
                 warn
             ),
         },

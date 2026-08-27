@@ -99,7 +99,8 @@ const isRecord = (value: unknown): value is Record<string, unknown> =>
 /**
  * Normalizes historical presentation receipts before strict validation.
  * Current candidate-flow receipts are never repaired into the legacy shape:
- * obsolete finalizer/audit fields remain invalid on new writes.
+ * obsolete finalizer/audit fields remain invalid on new writes. The former
+ * current-flow non-prose reason is normalized to its truthful admission name.
  */
 export const normalizePresentationMetadataForCompatibility = (
     value: unknown
@@ -109,7 +110,13 @@ export const normalizePresentationMetadataForCompatibility = (
     }
 
     if (value.flow === 'candidate_review') {
-        return value;
+        if (value.reasonCode !== 'structured_output') {
+            return value;
+        }
+        return {
+            ...value,
+            reasonCode: 'candidate_not_admissible',
+        };
     }
 
     const hasLegacyFields =
@@ -490,7 +497,7 @@ const CurrentPresentationReasonCodeSchema = z.enum([
     'budget_skipped',
     'disabled',
     'profile_not_configured',
-    'structured_output',
+    'candidate_not_admissible',
     'draft_timeout',
     'draft_provider_error',
 ]);

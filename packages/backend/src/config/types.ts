@@ -136,12 +136,8 @@ export type RuntimeConfig = {
             enabled: boolean;
             /** Deployment-owned model profile. Persona identity never selects this. */
             profileId: string | null;
-            /** Separate deployment-owned profile for bounded presentation audits. */
-            validatorProfileId: string | null;
             /** Hard timeout for one presentation-draft call. */
             timeoutMs: number;
-            /** Hard timeout for the bounded audit when a presentation draft is finalized. */
-            validatorTimeoutMs: number;
         };
         contextIntegrations: {
             /**

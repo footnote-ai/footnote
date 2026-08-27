@@ -181,6 +181,13 @@ fit, the candidate is skipped fail-open with the serializable presentation
 reason `budget_skipped`; authoritative generation still owns the answer, and
 provider-reported usage remains the cumulative source of truth.
 
+Candidate admission is mechanical only. It rejects text that is not suitable
+as ordinary answer prose; it is not a model-backed semantic validator or audit.
+Presentation proposes wording and style, authoritative generation owns the
+answer, and assessment/revision owns semantic review, grounding, posture, and
+corrections. Historical finalizer/audit receipts remain readable as legacy
+data, but the current runtime does not emit or execute that flow.
+
 Review decision parsing uses explicit expected-failure results. If assess
 output is empty, not a JSON object, invalid JSON, or schema-invalid, the engine
 records a failed `assess` step and fails open to the latest successful draft.

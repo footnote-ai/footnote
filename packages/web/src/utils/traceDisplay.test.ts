@@ -122,7 +122,7 @@ test('renders historical finalizer/audit receipts without relabeling them as can
     );
 });
 
-test('explains candidate timeout and structured-output unavailability', () => {
+test('explains candidate timeout and mechanical admission unavailability', () => {
     const base: PresentationMetadata = {
         step: 'presentation',
         flow: 'candidate_review',
@@ -139,7 +139,7 @@ test('explains candidate timeout and structured-output unavailability', () => {
     assert.match(
         getPresentationTraceSummary({
             ...base,
-            reasonCode: 'structured_output',
+            reasonCode: 'candidate_not_admissible',
         }),
         /non-prose output/u
     );

@@ -914,36 +914,19 @@ export const createChatService = ({
                 profile.id === configuredPresentationProfileId &&
                 profile.enabled
         );
-    const configuredPresentationValidatorProfileId =
-        presentationConfig?.validatorProfileId ??
-        runtimeConfig.chatWorkflow.presentation.validatorProfileId;
-    const configuredPresentationValidatorProfile =
-        presentationConfig?.validatorProfile ??
-        runtimeConfig.modelProfiles.catalog.find(
-            (profile) =>
-                profile.id === configuredPresentationValidatorProfileId &&
-                profile.enabled
-        );
     const effectivePresentationConfig: PresentationConfig = {
         enabled:
             presentationConfig?.enabled ??
             runtimeConfig.chatWorkflow.presentation.enabled,
         profileId: configuredPresentationProfileId,
-        validatorProfileId: configuredPresentationValidatorProfileId,
         timeoutMs:
             presentationConfig?.timeoutMs ??
             runtimeConfig.chatWorkflow.presentation.timeoutMs,
-        validatorTimeoutMs:
-            presentationConfig?.validatorTimeoutMs ??
-            runtimeConfig.chatWorkflow.presentation.validatorTimeoutMs,
         // Trace identifiers are backend-owned. Do not accept a caller-supplied
         // key for this incident-pseudonymization boundary.
         traceHmacSecret: runtimeConfig.storage.incidentPseudonymizationSecret,
         ...(configuredPresentationProfile !== undefined && {
             profile: configuredPresentationProfile,
-        }),
-        ...(configuredPresentationValidatorProfile !== undefined && {
-            validatorProfile: configuredPresentationValidatorProfile,
         }),
     };
     /**
