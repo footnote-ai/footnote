@@ -119,6 +119,11 @@ test('Success path returns governed predicate views and hides raw adapter payloa
     assert.equal(result.verificationRequired, true);
     assert.ok(result.predicateViews.P_SUFF.coverageValue !== undefined);
     assert.ok(result.predicateViews.P_EVID.sourceRefs.length > 0);
+    assert.equal(result.advisoryEvidenceItems.length, 1);
+    assert.equal(
+        result.advisoryEvidenceItems[0]?.claimText,
+        'The retrieval corpus contains direct supporting evidence.'
+    );
     assert.equal(
         Object.prototype.hasOwnProperty.call(result, 'adapterBundle'),
         false

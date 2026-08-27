@@ -50,6 +50,20 @@ export type EvidenceItem = {
     targetId?: string;
 };
 
+/**
+ * Sanitized Graph RAG output that may be shown to the generation model.
+ * The response is generated evidence, not an original source fact or policy.
+ */
+export type TrustGraphAdvisoryEvidenceItem = {
+    evidenceId: string;
+    claimText: string;
+    sourceRef: string;
+    provenancePathRef: string[];
+    retrievalReason: string;
+    collectionScope: string;
+    targetId?: string;
+};
+
 export type EvidenceBundle = {
     bundleId: string;
     queryIntent: string;
@@ -219,6 +233,7 @@ export type TrustGraphEvidenceIngestionResult = {
     failOpenBehavior: 'local_behavior';
     verificationRequired: true;
     advisoryEvidenceItemCount: number;
+    advisoryEvidenceItems: TrustGraphAdvisoryEvidenceItem[];
     droppedEvidenceCount: number;
     droppedEvidenceIds: string[];
     provenanceReasonCodes: TrustGraphProvenanceReasonCode[];

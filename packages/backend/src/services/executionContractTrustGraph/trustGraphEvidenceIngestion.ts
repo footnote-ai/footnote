@@ -32,6 +32,7 @@ import type {
     ScopeTuple,
     TrustGraphEvidenceAdapter,
     TrustGraphEvidenceIngestionResult,
+    TrustGraphAdvisoryEvidenceItem,
     TrustGraphProvenanceReasonCode,
 } from './trustGraphEvidenceTypes.js';
 
@@ -236,6 +237,19 @@ const sanitizeEvidenceBundle = (
     };
 };
 
+const toAdvisoryEvidenceItems = (
+    items: readonly EvidenceItem[]
+): TrustGraphAdvisoryEvidenceItem[] =>
+    items.map((item) => ({
+        evidenceId: item.evidenceId,
+        claimText: item.claimText,
+        sourceRef: item.sourceRef,
+        provenancePathRef: [...item.provenancePathRef],
+        retrievalReason: item.retrievalReason,
+        collectionScope: item.collectionScope,
+        ...(item.targetId !== undefined && { targetId: item.targetId }),
+    }));
+
 const defaultLocalExecutionContractOutcome = (): LocalTerminalOutcome =>
     'complete';
 
@@ -394,6 +408,7 @@ export const runEvidenceIngestion = async (
             failOpenBehavior: 'local_behavior',
             verificationRequired: true,
             advisoryEvidenceItemCount: 0,
+            advisoryEvidenceItems: [],
             droppedEvidenceCount: 0,
             droppedEvidenceIds: [],
             provenanceReasonCodes: ['external_scope_validation_failed'],
@@ -422,6 +437,7 @@ export const runEvidenceIngestion = async (
             failOpenBehavior: 'local_behavior',
             verificationRequired: true,
             advisoryEvidenceItemCount: 0,
+            advisoryEvidenceItems: [],
             droppedEvidenceCount: 0,
             droppedEvidenceIds: [],
             provenanceReasonCodes,
@@ -451,6 +467,7 @@ export const runEvidenceIngestion = async (
                 failOpenBehavior: 'local_behavior',
                 verificationRequired: true,
                 advisoryEvidenceItemCount: 0,
+                advisoryEvidenceItems: [],
                 droppedEvidenceCount: 0,
                 droppedEvidenceIds: [],
                 provenanceReasonCodes,
@@ -482,6 +499,7 @@ export const runEvidenceIngestion = async (
                 failOpenBehavior: 'local_behavior',
                 verificationRequired: true,
                 advisoryEvidenceItemCount: 0,
+                advisoryEvidenceItems: [],
                 droppedEvidenceCount: 0,
                 droppedEvidenceIds: [],
                 provenanceReasonCodes,
@@ -508,6 +526,7 @@ export const runEvidenceIngestion = async (
                 failOpenBehavior: 'local_behavior',
                 verificationRequired: true,
                 advisoryEvidenceItemCount: 0,
+                advisoryEvidenceItems: [],
                 droppedEvidenceCount: 0,
                 droppedEvidenceIds: [],
                 provenanceReasonCodes,
@@ -549,6 +568,7 @@ export const runEvidenceIngestion = async (
             failOpenBehavior: 'local_behavior',
             verificationRequired: true,
             advisoryEvidenceItemCount: 0,
+            advisoryEvidenceItems: [],
             droppedEvidenceCount: 0,
             droppedEvidenceIds: [],
             provenanceReasonCodes,
@@ -568,6 +588,7 @@ export const runEvidenceIngestion = async (
             failOpenBehavior: 'local_behavior',
             verificationRequired: true,
             advisoryEvidenceItemCount: 0,
+            advisoryEvidenceItems: [],
             droppedEvidenceCount: 0,
             droppedEvidenceIds: [],
             provenanceReasonCodes,
@@ -602,6 +623,7 @@ export const runEvidenceIngestion = async (
                 failOpenBehavior: 'local_behavior',
                 verificationRequired: true,
                 advisoryEvidenceItemCount: 0,
+                advisoryEvidenceItems: [],
                 droppedEvidenceCount: 0,
                 droppedEvidenceIds: [],
                 provenanceReasonCodes,
@@ -619,6 +641,7 @@ export const runEvidenceIngestion = async (
             failOpenBehavior: 'local_behavior',
             verificationRequired: true,
             advisoryEvidenceItemCount: 0,
+            advisoryEvidenceItems: [],
             droppedEvidenceCount: 0,
             droppedEvidenceIds: [],
             provenanceReasonCodes,
@@ -655,6 +678,7 @@ export const runEvidenceIngestion = async (
                 failOpenBehavior: 'local_behavior',
                 verificationRequired: true,
                 advisoryEvidenceItemCount: 0,
+                advisoryEvidenceItems: [],
                 droppedEvidenceCount,
                 droppedEvidenceIds,
                 provenanceReasonCodes,
@@ -687,6 +711,9 @@ export const runEvidenceIngestion = async (
             failOpenBehavior: 'local_behavior',
             verificationRequired: true,
             advisoryEvidenceItemCount: sanitized.bundle.items.length,
+            advisoryEvidenceItems: toAdvisoryEvidenceItems(
+                sanitized.bundle.items
+            ),
             droppedEvidenceCount,
             droppedEvidenceIds,
             provenanceReasonCodes,
@@ -705,6 +732,7 @@ export const runEvidenceIngestion = async (
             failOpenBehavior: 'local_behavior',
             verificationRequired: true,
             advisoryEvidenceItemCount: 0,
+            advisoryEvidenceItems: [],
             droppedEvidenceCount,
             droppedEvidenceIds,
             provenanceReasonCodes,
