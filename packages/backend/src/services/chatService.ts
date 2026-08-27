@@ -127,6 +127,12 @@ import {
 
 const SURFACED_NO_GENERATION_MESSAGE =
     'I could not generate a response for this request.';
+const SURFACED_INCOMPLETE_GENERATION_MESSAGE =
+    'I could not complete a response within the model generation budget. Please try again.';
+
+const isIncompleteBeforeVisibleOutput = (result: GenerationResult): boolean =>
+    result.completion?.status === 'incomplete' &&
+    result.text.trim().length === 0;
 
 type GenerateWithChainSuccess = {
     generationResult: GenerationResult;
@@ -945,6 +951,7 @@ export const createChatService = ({
                       promptTokens: generationResult.usage.promptTokens,
                       completionTokens: generationResult.usage.completionTokens,
                       totalTokens: generationResult.usage.totalTokens,
+                      reasoningTokens: generationResult.usage.reasoningTokens,
                   }
                 : undefined;
 
@@ -960,6 +967,7 @@ export const createChatService = ({
             model: generationResult.model ?? requestedModel ?? defaultModel,
             usage,
             finishReason: generationResult.finishReason,
+            completion: generationResult.completion,
             reasoningEffort: generation?.reasoningEffort,
             verbosity: generation?.verbosity,
             provenance: generationResult.provenance,
@@ -1766,7 +1774,11 @@ export const createChatService = ({
                 : workflowContextStepResult !== undefined
                   ? getContextStepSources(workflowContextStepResult)
                   : undefined;
-        const deliveredMessage = generationResult.text;
+        const generationIncompleteBeforeOutput =
+            isIncompleteBeforeVisibleOutput(generationResult);
+        const deliveredMessage = generationIncompleteBeforeOutput
+            ? SURFACED_INCOMPLETE_GENERATION_MESSAGE
+            : generationResult.text;
         const generationMetadata = buildGenerationMetadata(
             generationResult,
             effectiveNormalizedGeneration,
@@ -1863,6 +1875,33 @@ export const createChatService = ({
             >['generation']
         >;
         const upstreamGenerationExecutionContext = executionContext?.generation;
+        const generationCompletionOverlay =
+            generationResult.completion !== undefined
+                ? { completion: generationResult.completion }
+                : {};
+        const generationFinishReasonOverlay =
+            generationResult.finishReason !== undefined
+                ? { finishReason: generationResult.finishReason }
+                : {};
+        const generationUsageOverlay =
+            generationResult.usage !== undefined
+                ? {
+                      usage: {
+                          promptTokens: generationResult.usage.promptTokens,
+                          completionTokens:
+                              generationResult.usage.completionTokens,
+                          totalTokens: generationResult.usage.totalTokens,
+                          reasoningTokens:
+                              generationResult.usage.reasoningTokens,
+                      },
+                  }
+                : {};
+        const generationIncompleteOverlay = generationIncompleteBeforeOutput
+            ? {
+                  status: 'failed' as const,
+                  reasonCode: 'generation_incomplete_before_output' as const,
+              }
+            : {};
         const workflowSelectedGenerationProfile =
             workflowPlannerSummary?.selectedResponseProfile;
         const workflowGenerationProfileId =
@@ -1878,6 +1917,10 @@ export const createChatService = ({
             upstreamGenerationExecutionContext
                 ? {
                       ...upstreamGenerationExecutionContext,
+                      ...generationIncompleteOverlay,
+                      ...generationCompletionOverlay,
+                      ...generationFinishReasonOverlay,
+                      ...generationUsageOverlay,
                       ...(upstreamGenerationExecutionContext.originalProfileId !==
                           undefined && {
                           originalProfileId:
@@ -1893,6 +1936,10 @@ export const createChatService = ({
                 : fallbackAfterInternalNoGeneration
                   ? ({
                         status: 'executed',
+                        ...generationIncompleteOverlay,
+                        ...generationCompletionOverlay,
+                        ...generationFinishReasonOverlay,
+                        ...generationUsageOverlay,
                         profileId:
                             routedGenerationSelectedProfile?.id ??
                             'workflow_internal_fallback',
@@ -1908,6 +1955,10 @@ export const createChatService = ({
                   : workflowGenerationProfileId !== undefined
                     ? ({
                           status: 'executed',
+                          ...generationIncompleteOverlay,
+                          ...generationCompletionOverlay,
+                          ...generationFinishReasonOverlay,
+                          ...generationUsageOverlay,
                           profileId: workflowGenerationProfileId,
                           ...(workflowPlannerSummary?.originalSelectedProfileId !==
                               undefined && {
@@ -1925,6 +1976,10 @@ export const createChatService = ({
                     : routedGenerationSelectedProfile !== undefined
                       ? ({
                             status: 'executed',
+                            ...generationIncompleteOverlay,
+                            ...generationCompletionOverlay,
+                            ...generationFinishReasonOverlay,
+                            ...generationUsageOverlay,
                             profileId: routedGenerationSelectedProfile.id,
                             effectiveProfileId:
                                 routedGenerationSelectedProfile.id,

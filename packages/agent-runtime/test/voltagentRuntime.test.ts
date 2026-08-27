@@ -382,6 +382,61 @@ test('voltagent runtime normalizes non-search output into GenerationResult', asy
     assert.equal(result.provenance, 'Inferred');
 });
 
+test('voltagent runtime preserves safe incomplete reasoning metadata without response text', async () => {
+    const runtime = createVoltAgentRuntime({
+        defaultModel: 'gpt-5.6-terra',
+        createExecutor: () => ({
+            async generateText() {
+                return {
+                    text: '',
+                    finishReason: 'length',
+                    usage: {
+                        promptTokens: 2400,
+                        completionTokens: 1200,
+                        totalTokens: 3600,
+                    },
+                    response: {
+                        modelId: 'openai/gpt-5.6-terra',
+                        body: {
+                            status: 'incomplete',
+                            incomplete_details: {
+                                reason: 'max_output_tokens',
+                            },
+                            usage: {
+                                output_tokens: 1200,
+                                output_tokens_details: {
+                                    reasoning_tokens: 1200,
+                                },
+                            },
+                        },
+                    },
+                };
+            },
+        }),
+    });
+
+    const result = await runtime.generate({
+        messages: [{ role: 'user', content: 'Answer briefly.' }],
+        model: 'gpt-5.6-terra',
+        reasoningEffort: 'medium',
+        maxOutputTokens: 1200,
+    });
+
+    assert.equal(result.text, '');
+    assert.equal(result.finishReason, 'length');
+    assert.deepEqual(result.usage, {
+        promptTokens: 2400,
+        completionTokens: 1200,
+        totalTokens: 3600,
+        reasoningTokens: 1200,
+    });
+    assert.deepEqual(result.completion, {
+        status: 'incomplete',
+        reason: 'max_output_tokens',
+        visibleTextLength: 0,
+    });
+});
+
 test('voltagent runtime executes search requests through the VoltAgent executor', async () => {
     let seenOptions: VoltAgentGenerateTextOptions | undefined;
     const runtime = createVoltAgentRuntime({
@@ -1034,6 +1089,7 @@ test('default VoltAgent executor maps usage from the installed AI SDK token fiel
         cachedInputTokens: 5,
         cacheWriteTokens: 3,
         completionTokens: 9,
+        reasoningTokens: 0,
         totalTokens: 30,
     });
 });

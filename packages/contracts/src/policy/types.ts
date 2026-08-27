@@ -198,6 +198,7 @@ export type ExecutionReasonCode =
     | 'planner_invalid_output'
     | 'evaluator_runtime_error'
     | 'generation_runtime_error'
+    | 'generation_incomplete_before_output'
     | 'presentation_finalized'
     | 'presentation_fallback'
     | 'presentation_candidate_generated'
@@ -254,6 +255,7 @@ export type EvaluatorExecutionReasonCode = Extract<
 export type GenerationExecutionReasonCode = Extract<
     ExecutionReasonCode,
     | 'generation_runtime_error'
+    | 'generation_incomplete_before_output'
     | 'routing_chain_exhausted'
     | 'routing_chain_non_transient_error'
 >;
@@ -437,6 +439,24 @@ export type ToolExecutionEvent = BaseExecutionEvent & {
 export type GenerationExecutionEvent = ProfileExecutionEvent & {
     kind: 'generation';
     reasonCode?: GenerationExecutionReasonCode;
+    finishReason?: string;
+    completion?: GenerationCompletion;
+    usage?: GenerationExecutionUsage;
+};
+
+/** Safe provider-neutral completion facts; never contains hidden reasoning text. */
+export type GenerationCompletion = {
+    status: 'completed' | 'incomplete' | 'failed' | 'unknown';
+    reason?: string;
+    visibleTextLength: number;
+};
+
+/** Provider-reported token counts safe for trace persistence. */
+export type GenerationExecutionUsage = {
+    promptTokens?: number;
+    completionTokens?: number;
+    totalTokens?: number;
+    reasoningTokens?: number;
 };
 
 /** Backend-owned receipt flow discriminator for presentation metadata. */
@@ -865,6 +885,7 @@ export type StepRecord = {
         promptTokens?: number;
         completionTokens?: number;
         totalTokens?: number;
+        reasoningTokens?: number;
     };
     cost?: {
         inputCostUsd: number;

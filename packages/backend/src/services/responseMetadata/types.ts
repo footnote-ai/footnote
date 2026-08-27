@@ -15,6 +15,8 @@ import type {
 } from '@footnote/agent-runtime';
 import type {
     Citation,
+    GenerationCompletion,
+    GenerationExecutionUsage,
     ExecutionReasonCode,
     ExecutionStatus,
     EvaluatorOutcome,
@@ -35,16 +37,13 @@ import type {
 // Owns: provider-neutral metadata assembly input contracts.
 // Does not own: runtime adapter behavior, citation parsing, or metadata policy logic.
 
-export type GenerationMetadataUsage = {
-    promptTokens?: number;
-    completionTokens?: number;
-    totalTokens?: number;
-};
+export type GenerationMetadataUsage = GenerationExecutionUsage;
 
 export type ResponseMetadataGenerationInput = {
     model: string;
     usage?: GenerationMetadataUsage;
     finishReason?: string;
+    completion?: GenerationCompletion;
     reasoningEffort?: GenerationReasoningEffort;
     verbosity?: GenerationVerbosity;
     provenance?: Provenance;
@@ -108,6 +107,9 @@ export type ResponseMetadataRuntimeContext = {
         generation?: {
             status: ExecutionStatus;
             reasonCode?: ExecutionReasonCode;
+            finishReason?: string;
+            completion?: GenerationCompletion;
+            usage?: GenerationExecutionUsage;
             profileId: string;
             originalProfileId?: string;
             effectiveProfileId?: string;

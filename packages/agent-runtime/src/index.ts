@@ -19,6 +19,7 @@ import type {
     SupportedReasoningEffort,
 } from '@footnote/contracts';
 import type { ToolExecutionContext } from '@footnote/contracts/policy';
+import type { GenerationCompletion } from '@footnote/contracts/policy';
 import type {
     InternalTtsCosts,
     InternalTtsOptions,
@@ -233,6 +234,8 @@ export interface GenerationUsage {
      * Output or completion token count, when the runtime exposes it.
      */
     completionTokens?: number;
+    /** Hidden reasoning tokens included in provider output accounting, when reported. */
+    reasoningTokens?: number;
     /**
      * Total token count, when the runtime exposes it.
      */
@@ -285,6 +288,8 @@ export interface GenerationResult {
      * assembly.
      */
     finishReason?: string;
+    /** Safe completion facts; never includes hidden reasoning content. */
+    completion?: GenerationCompletion;
     /**
      * Normalized token usage facts, when the runtime exposes them.
      */

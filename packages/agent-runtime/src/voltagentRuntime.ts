@@ -26,7 +26,10 @@ import type {
 } from './index.js';
 import { extractMarkdownLinkCitations } from './citationRecovery.js';
 import type { ModelProfileProviderRouting } from '@footnote/contracts';
-import type { ToolExecutionContext } from '@footnote/contracts/policy';
+import type {
+    GenerationCompletion,
+    ToolExecutionContext,
+} from '@footnote/contracts/policy';
 
 type VoltAgentOpenAiProviderOptions = {
     reasoningEffort?: GenerationRequest['reasoningEffort'];
@@ -76,6 +79,7 @@ export interface VoltAgentUsage {
     cachedInputTokens?: number;
     cacheWriteTokens?: number;
     completionTokens?: number;
+    reasoningTokens?: number;
     totalTokens?: number;
 }
 
@@ -365,6 +369,54 @@ const getVoltAgentProvider = (model: string): string => {
     }
 
     return model.slice(0, slashIndex).toLowerCase();
+};
+
+const asRecord = (value: unknown): Record<string, unknown> | undefined =>
+    typeof value === 'object' && value !== null
+        ? (value as Record<string, unknown>)
+        : undefined;
+
+const readString = (value: unknown): string | undefined =>
+    typeof value === 'string' && value.length > 0 ? value : undefined;
+
+const readBoundedString = (value: unknown): string | undefined => {
+    const stringValue = readString(value);
+    return stringValue === undefined ? undefined : stringValue.slice(0, 100);
+};
+
+const readNonNegativeInteger = (value: unknown): number | undefined =>
+    typeof value === 'number' && Number.isInteger(value) && value >= 0
+        ? value
+        : undefined;
+
+const normalizeCompletionStatus = (input: {
+    responseStatus?: string;
+    finishReason?: string;
+    text: string;
+}): GenerationCompletion['status'] | undefined => {
+    if (input.responseStatus === 'completed') {
+        return 'completed';
+    }
+    if (input.responseStatus === 'incomplete') {
+        return 'incomplete';
+    }
+    if (input.responseStatus === 'failed') {
+        return 'failed';
+    }
+    if (
+        input.finishReason === 'length' ||
+        input.finishReason === 'max_output_tokens'
+    ) {
+        return 'incomplete';
+    }
+    if (
+        input.finishReason === 'stop' ||
+        input.finishReason === 'end_turn' ||
+        input.text.trim().length > 0
+    ) {
+        return 'completed';
+    }
+    return undefined;
 };
 
 /**
@@ -905,23 +957,52 @@ const normalizeVoltAgentResult = (
     result: VoltAgentTextResult,
     fallbackToolExecution?: ToolExecutionContext
 ): GenerationResult => {
+    const responseBody = asRecord(result.response?.body);
+    const responseStatus = readString(responseBody?.status);
+    const incompleteDetails = asRecord(responseBody?.incomplete_details);
+    const incompleteReason = readBoundedString(incompleteDetails?.reason);
+    const responseUsage = asRecord(responseBody?.usage);
+    const outputTokenDetails = asRecord(responseUsage?.output_tokens_details);
+    const reasoningTokens =
+        result.usage?.reasoningTokens ??
+        readNonNegativeInteger(outputTokenDetails?.reasoning_tokens);
+    const promptTokens =
+        result.usage?.promptTokens ??
+        readNonNegativeInteger(responseUsage?.input_tokens);
+    const completionTokens =
+        result.usage?.completionTokens ??
+        readNonNegativeInteger(responseUsage?.output_tokens);
+    const totalTokens =
+        result.usage?.totalTokens ??
+        readNonNegativeInteger(responseUsage?.total_tokens);
+    const completionStatus = normalizeCompletionStatus({
+        responseStatus,
+        finishReason: result.finishReason,
+        text: result.text,
+    });
     const responseModel = result.response?.modelId ?? executedModel;
     const upstreamAttribution = extractOpenRouterAttribution(
         result.providerMetadata
     );
-    const usage: GenerationUsage | undefined = result.usage
-        ? {
-              promptTokens: result.usage.promptTokens,
-              ...(result.usage.cachedInputTokens !== undefined && {
-                  cachedInputTokens: result.usage.cachedInputTokens,
-              }),
-              ...(result.usage.cacheWriteTokens !== undefined && {
-                  cacheWriteTokens: result.usage.cacheWriteTokens,
-              }),
-              completionTokens: result.usage.completionTokens,
-              totalTokens: result.usage.totalTokens,
-          }
-        : undefined;
+    const usage: GenerationUsage | undefined =
+        result.usage !== undefined ||
+        promptTokens !== undefined ||
+        completionTokens !== undefined ||
+        totalTokens !== undefined ||
+        reasoningTokens !== undefined
+            ? {
+                  ...(promptTokens !== undefined && { promptTokens }),
+                  ...(result.usage?.cachedInputTokens !== undefined && {
+                      cachedInputTokens: result.usage.cachedInputTokens,
+                  }),
+                  ...(result.usage?.cacheWriteTokens !== undefined && {
+                      cacheWriteTokens: result.usage.cacheWriteTokens,
+                  }),
+                  ...(completionTokens !== undefined && { completionTokens }),
+                  ...(reasoningTokens !== undefined && { reasoningTokens }),
+                  ...(totalTokens !== undefined && { totalTokens }),
+              }
+            : undefined;
     const hasSearchRequest = request.search !== undefined;
     const hasWebSearchCall = hasWebSearchCallInResponseBody(
         result.response?.body
@@ -953,6 +1034,15 @@ const normalizeVoltAgentResult = (
         model: toFootnoteModel(responseModel),
         ...(upstreamAttribution !== undefined && { upstreamAttribution }),
         finishReason: result.finishReason,
+        ...(completionStatus !== undefined && {
+            completion: {
+                status: completionStatus,
+                ...(incompleteReason !== undefined && {
+                    reason: incompleteReason,
+                }),
+                visibleTextLength: result.text.length,
+            },
+        }),
         usage,
         citations,
         retrieval: {
@@ -1126,6 +1216,11 @@ const createDefaultVoltAgentExecutor = ({
                     cacheWriteTokens:
                         result.usage.inputTokenDetails.cacheWriteTokens,
                     completionTokens: result.usage.outputTokens,
+                    ...(result.usage.outputTokenDetails.reasoningTokens !==
+                        undefined && {
+                        reasoningTokens:
+                            result.usage.outputTokenDetails.reasoningTokens,
+                    }),
                     totalTokens: result.usage.totalTokens,
                 },
                 response: {

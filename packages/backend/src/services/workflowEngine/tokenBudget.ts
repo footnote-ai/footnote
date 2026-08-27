@@ -14,6 +14,19 @@ import type { PostChatRequest } from '@footnote/contracts/web';
 import { UNBOUNDED_EXECUTION_LIMIT } from './limits.js';
 
 export const DEFAULT_WORKFLOW_GENERATION_MAX_OUTPUT_TOKENS = 1200;
+/** Reasoning tokens share the provider output cap, so reserve more room when reasoning is requested. */
+export const DEFAULT_REASONING_GENERATION_MAX_OUTPUT_TOKENS = 2400;
+
+export const resolveDefaultGenerationMaxOutputTokens = (
+    request: Pick<GenerationRequest, 'reasoningEffort' | 'capabilities'>
+): number =>
+    request.reasoningEffort !== undefined &&
+    request.reasoningEffort !== 'none' &&
+    request.capabilities?.supportedReasoningEfforts?.includes(
+        request.reasoningEffort
+    ) === true
+        ? DEFAULT_REASONING_GENERATION_MAX_OUTPUT_TOKENS
+        : DEFAULT_WORKFLOW_GENERATION_MAX_OUTPUT_TOKENS;
 
 const ESTIMATED_CHARS_PER_TOKEN = 4;
 const PLANNER_PROMPT_OVERHEAD_TOKENS = 1_200;
@@ -34,7 +47,8 @@ export const estimateGenerationTokenBudget = (
     request: GenerationRequest
 ): number =>
     estimateRuntimeMessageTokens(request.messages) +
-    (request.maxOutputTokens ?? DEFAULT_WORKFLOW_GENERATION_MAX_OUTPUT_TOKENS);
+    (request.maxOutputTokens ??
+        resolveDefaultGenerationMaxOutputTokens(request));
 
 /** Estimates planner input from the bounded conversation window plus fixed planner scaffolding. */
 export const estimatePlannerInputTokens = (request: PostChatRequest): number =>
@@ -171,7 +185,7 @@ export const boundGenerationRequestToWorkflowBudget = (input: {
 }): GenerationRequest | undefined => {
     const requestedOutputTokens =
         input.request.maxOutputTokens ??
-        DEFAULT_WORKFLOW_GENERATION_MAX_OUTPUT_TOKENS;
+        resolveDefaultGenerationMaxOutputTokens(input.request);
     if (
         input.maxTokensTotal >= UNBOUNDED_EXECUTION_LIMIT ||
         !Number.isFinite(input.maxTokensTotal)
