@@ -175,6 +175,9 @@ test('real VoltAgent executor uses OpenAI Responses and preserves relied-on cont
             );
             assert.equal(normalized.model, 'gpt-5.6-luna');
             assert.equal('responseId' in normalized, false);
+            assert.equal(normalized.completion?.status, 'completed');
+            assert.equal(normalized.completion?.visibleTextLength, 23);
+            assert.equal(normalized.usage?.reasoningTokens, 2);
         }
     );
 });

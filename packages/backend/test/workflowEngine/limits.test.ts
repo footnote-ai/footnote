@@ -16,7 +16,10 @@ import {
     boundGenerationRequestToWorkflowBudget,
     calculatePresentationOutputBudget,
     calculateReviewedGenerationOutputBudget,
+    DEFAULT_REASONING_GENERATION_MAX_OUTPUT_TOKENS,
+    DEFAULT_WORKFLOW_GENERATION_MAX_OUTPUT_TOKENS,
     estimateGenerationTokenBudget,
+    resolveDefaultGenerationMaxOutputTokens,
 } from '../../src/services/workflowEngine/tokenBudget.js';
 
 const createLimits = (): ExecutionLimits => ({
@@ -191,6 +194,38 @@ test('generation admission counts prompt estimate and clamps provider output', (
     assert.ok(bounded);
     assert.equal(bounded.maxOutputTokens, 68);
     assert.ok(estimateGenerationTokenBudget(bounded) <= 100 - 20);
+});
+
+test('reasoning generation receives a larger provider output reserve without changing ordinary defaults', () => {
+    assert.equal(DEFAULT_WORKFLOW_GENERATION_MAX_OUTPUT_TOKENS, 1200);
+    assert.equal(DEFAULT_REASONING_GENERATION_MAX_OUTPUT_TOKENS, 2400);
+    assert.equal(
+        resolveDefaultGenerationMaxOutputTokens({
+            reasoningEffort: 'medium',
+            capabilities: {
+                canUseSearch: false,
+                supportedReasoningEfforts: ['none', 'medium'],
+            },
+        }),
+        2400
+    );
+    assert.equal(
+        resolveDefaultGenerationMaxOutputTokens({ reasoningEffort: 'none' }),
+        1200
+    );
+    const bounded = boundGenerationRequestToWorkflowBudget({
+        request: {
+            messages: [{ role: 'user', content: 'Answer briefly.' }],
+            reasoningEffort: 'medium',
+            capabilities: {
+                canUseSearch: false,
+                supportedReasoningEfforts: ['none', 'medium'],
+            },
+        },
+        totalTokens: 0,
+        maxTokensTotal: 10000,
+    });
+    assert.equal(bounded?.maxOutputTokens, 2400);
 });
 
 test('generation admission fails closed before provider call when prompt uses the remainder', () => {

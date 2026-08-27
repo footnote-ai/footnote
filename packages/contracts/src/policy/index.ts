@@ -53,6 +53,8 @@ export type {
     EvaluatorExecutionEvent,
     ToolExecutionEvent,
     GenerationExecutionEvent,
+    GenerationCompletion,
+    GenerationExecutionUsage,
     PresentationFlow,
     PresentationOutcome,
     PresentationReasonCode,

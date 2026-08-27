@@ -87,6 +87,7 @@ import {
     estimateRuntimeMessageTokens,
     calculatePresentationOutputBudget,
     calculateReviewedGenerationOutputBudget,
+    resolveDefaultGenerationMaxOutputTokens,
 } from './workflowEngine/tokenBudget.js';
 import {
     executeStepRoutingChain,
@@ -547,6 +548,7 @@ export const runBoundedReviewWorkflow = async ({
                 usage: {
                     promptTokens: input.usage.promptTokens,
                     completionTokens: input.usage.completionTokens,
+                    reasoningTokens: input.usage.reasoningTokens,
                     totalTokens: input.usage.totalTokens,
                 },
             }),
@@ -1230,7 +1232,9 @@ export const runBoundedReviewWorkflow = async ({
                             requestedCandidateOutputTokens:
                                 activePresentation?.config.profile
                                     ?.maxOutputTokens ??
-                                DEFAULT_WORKFLOW_GENERATION_MAX_OUTPUT_TOKENS,
+                                resolveDefaultGenerationMaxOutputTokens(
+                                    generationRequestForAttempt
+                                ),
                             candidatePromptTokens: presentationPromptTokens,
                             authoritativePromptTokens: authorityPromptTokens,
                             authoritativeOutputTokens:
@@ -1511,6 +1515,9 @@ export const runBoundedReviewWorkflow = async ({
                 }
                 if (!shouldStop && draftResult !== null) {
                     const initialDraftFinishedAt = Date.now();
+                    const generationIncompleteBeforeOutput =
+                        draftResult.completion?.status === 'incomplete' &&
+                        draftResult.text.trim().length === 0;
                     const initialDraftUsage = captureUsage(
                         draftResult,
                         effectiveGenerationRequest.model
@@ -1524,8 +1531,12 @@ export const runBoundedReviewWorkflow = async ({
                     });
                     const initialDraftStepId = captureStep({
                         stepKind: 'generate',
-                        status: 'executed',
-                        summary: 'Generated initial draft response.',
+                        status: generationIncompleteBeforeOutput
+                            ? 'failed'
+                            : 'executed',
+                        summary: generationIncompleteBeforeOutput
+                            ? 'Generation exhausted its output allowance before producing visible text.'
+                            : 'Generated initial draft response.',
                         startedAtMs: initialDraftStartedAt,
                         finishedAtMs: initialDraftFinishedAt,
                         model: initialDraftUsage.model,
@@ -1533,6 +1544,9 @@ export const runBoundedReviewWorkflow = async ({
                         estimatedCost: initialDraftUsage.estimatedCost,
                         parentStepId: presentationStepId ?? plannerRootStepId,
                         attempt: 1,
+                        ...(generationIncompleteBeforeOutput && {
+                            reasonCode: 'generation_incomplete_before_output',
+                        }),
                         ...(initialDraftCandidateId !== undefined && {
                             artifacts: [initialDraftCandidateId],
                         }),
@@ -1570,6 +1584,17 @@ export const runBoundedReviewWorkflow = async ({
                         0
                     );
                     stopIfTokenBudgetExceeded();
+                    if (generationIncompleteBeforeOutput) {
+                        // Do not feed an empty provider result into assessment or
+                        // revision. Preserve its usage and completion facts, then
+                        // let the chat boundary surface a controlled fallback.
+                        terminationReason =
+                            terminationReason === 'budget_exhausted_tokens'
+                                ? terminationReason
+                                : 'executor_error_fail_open';
+                        workflowStatus = 'degraded';
+                        shouldStop = true;
+                    }
                 } else if (!shouldStop && draftResult === null) {
                     throw new Error(
                         'Initial generation completed without a draft result.'

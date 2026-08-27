@@ -377,3 +377,40 @@ test('presentation does not run when authoritative generation is disabled', asyn
     assert.equal(result.outcome, 'no_generation');
     assert.equal(calls.length, 0);
 });
+
+test('stops review after an incomplete generation with no visible text', async () => {
+    const incomplete = generated('');
+    incomplete.finishReason = 'length';
+    incomplete.completion = {
+        status: 'incomplete',
+        reason: 'max_output_tokens',
+        visibleTextLength: 0,
+    };
+    incomplete.usage = {
+        promptTokens: 40,
+        completionTokens: 1200,
+        reasoningTokens: 1200,
+        totalTokens: 1240,
+    };
+
+    const { calls, result } = await runScenario(async (_request, call) => {
+        if (call === 1) return generated('Presentation candidate.');
+        return incomplete;
+    });
+
+    assert.equal(calls.length, 2);
+    assert.equal(result.outcome, 'generated');
+    if (result.outcome !== 'generated')
+        throw new Error('Expected generated result.');
+    assert.equal(result.generationResult.text, '');
+    assert.deepEqual(result.responseCandidates, []);
+    assert.equal(result.workflowLineage.status, 'degraded');
+    assert.equal(
+        result.workflowLineage.steps.at(-1)?.reasonCode,
+        'generation_incomplete_before_output'
+    );
+    assert.equal(
+        result.workflowLineage.steps.at(-1)?.usage?.reasoningTokens,
+        1200
+    );
+});

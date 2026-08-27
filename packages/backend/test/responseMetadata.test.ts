@@ -11,6 +11,7 @@ import type {
     ToolInvocationReasonCode,
     TraceAxisScore,
 } from '@footnote/contracts/policy';
+import { ResponseMetadataSchema } from '@footnote/contracts/web';
 
 import {
     type ResponseMetadataGenerationInput,
@@ -548,6 +549,62 @@ test('buildResponseMetadata writes execution timeline from runtime context', () 
             ruleId: null,
         },
     });
+});
+
+test('buildResponseMetadata persists safe incomplete-generation facts', () => {
+    const metadata = buildResponseMetadata(
+        baseGenerationMetadata({
+            provenance: 'Inferred',
+            citations: [],
+        }),
+        baseRuntimeContext({
+            executionContext: {
+                generation: {
+                    status: 'failed',
+                    reasonCode: 'generation_incomplete_before_output',
+                    profileId: 'openai-text-medium',
+                    provider: 'openai',
+                    model: 'gpt-5.6-terra',
+                    finishReason: 'length',
+                    completion: {
+                        status: 'incomplete',
+                        reason: 'max_output_tokens',
+                        visibleTextLength: 0,
+                    },
+                    usage: {
+                        promptTokens: 2400,
+                        completionTokens: 1200,
+                        totalTokens: 3600,
+                        reasoningTokens: 1200,
+                    },
+                },
+            },
+        })
+    );
+
+    assert.deepEqual(metadata.execution, [
+        {
+            kind: 'generation',
+            status: 'failed',
+            profileId: 'openai-text-medium',
+            provider: 'openai',
+            model: 'gpt-5.6-terra',
+            reasonCode: 'generation_incomplete_before_output',
+            finishReason: 'length',
+            completion: {
+                status: 'incomplete',
+                reason: 'max_output_tokens',
+                visibleTextLength: 0,
+            },
+            usage: {
+                promptTokens: 2400,
+                completionTokens: 1200,
+                totalTokens: 3600,
+                reasoningTokens: 1200,
+            },
+        },
+    ]);
+    assert.doesNotThrow(() => ResponseMetadataSchema.parse(metadata));
 });
 
 test('buildResponseMetadata ignores planner execution bridge fields and keeps execution timeline non-planner only', () => {

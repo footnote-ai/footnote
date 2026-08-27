@@ -306,6 +306,7 @@ const ExecutionReasonCodeSchema = z.enum([
     'planner_invalid_output',
     'evaluator_runtime_error',
     'generation_runtime_error',
+    'generation_incomplete_before_output',
     'presentation_finalized',
     'presentation_fallback',
     'presentation_candidate_generated',
@@ -358,6 +359,7 @@ const PlannerMatteredControlIdSchema = SteerabilityControlIdSchema;
 const EvaluatorExecutionReasonCodeSchema = z.enum(['evaluator_runtime_error']);
 const GenerationExecutionReasonCodeSchema = z.enum([
     'generation_runtime_error',
+    'generation_incomplete_before_output',
     'routing_chain_exhausted',
     'routing_chain_non_transient_error',
 ]);
@@ -487,6 +489,29 @@ const GenerationExecutionEventSchema = z
         status: ExecutionStatusSchema,
         ...ProfileExecutionShape,
         reasonCode: GenerationExecutionReasonCodeSchema.optional(),
+        finishReason: z.string().max(100).optional(),
+        completion: z
+            .object({
+                status: z.enum([
+                    'completed',
+                    'incomplete',
+                    'failed',
+                    'unknown',
+                ]),
+                reason: z.string().max(100).optional(),
+                visibleTextLength: z.number().int().nonnegative(),
+            })
+            .strict()
+            .optional(),
+        usage: z
+            .object({
+                promptTokens: z.number().int().nonnegative().optional(),
+                completionTokens: z.number().int().nonnegative().optional(),
+                totalTokens: z.number().int().nonnegative().optional(),
+                reasoningTokens: z.number().int().nonnegative().optional(),
+            })
+            .strict()
+            .optional(),
         durationMs: z.number().int().nonnegative().optional(),
     })
     .superRefine(requireReasonCodeWhenNotExecuted)
@@ -860,6 +885,7 @@ const StepRecordSchema = z
                 promptTokens: z.number().int().nonnegative().optional(),
                 completionTokens: z.number().int().nonnegative().optional(),
                 totalTokens: z.number().int().nonnegative().optional(),
+                reasoningTokens: z.number().int().nonnegative().optional(),
             })
             .strict()
             .optional(),
