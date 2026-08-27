@@ -65,6 +65,7 @@ const withTimeout = async <T>(
     }
 };
 
+/** Returns whether presentation text is mechanically usable as ordinary prose. */
 const isAdmissiblePresentationCandidate = (text: string): boolean => {
     const trimmed = text.trim();
     if (!trimmed || trimmed.includes('```')) return false;
@@ -208,7 +209,10 @@ export const createPresentationFallback = (input: {
     }),
 });
 
-/** Generates one full-prose expression candidate before ordinary answer generation. */
+/**
+ * Generates one full-prose expression candidate before ordinary answer generation.
+ * Admission is mechanical; authoritative generation and review own the answer.
+ */
 export const runPresentationCandidate = async (input: {
     generationRuntime: GenerationRuntime;
     generationRequest: GenerationRequest;
