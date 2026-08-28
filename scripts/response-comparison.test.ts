@@ -153,10 +153,9 @@ test('loads the durable core reviewed case suite by name', () => {
         process.cwd()
     );
     assert.equal(loaded.config.cases.length, 6);
-    assert.deepEqual(loaded.config.settings[1], {
-        name: 'temperature-0.7',
-        temperature: 0.7,
-    });
+    assert.equal(loaded.config.models.length, 7);
+    assert.equal(loaded.config.repeats, 2);
+    assert.deepEqual(loaded.config.settings, ['default']);
 });
 
 test('blind report retains judgment context, escapes candidate text, and hides operational metadata', () => {
