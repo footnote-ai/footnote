@@ -46,6 +46,7 @@ import {
     supportedImageOutputFormats,
     supportedReasoningEfforts,
 } from '../providers.js';
+import { PresentationGenerationSettingsSchema } from '../model-profiles.js';
 
 const ProvenanceSchema = z.enum(['Retrieved', 'Inferred', 'Speculative']);
 const SafetyTierSchema = z.enum(['Low', 'Medium', 'High']);
@@ -529,6 +530,49 @@ const CurrentPresentationReasonCodeSchema = z.enum([
     'draft_provider_error',
 ]);
 
+const PresentationSettingsMetadataRequestedSchema = z
+    .object({
+        promptVariant: z.enum(['current', 'compact']).optional(),
+        maxOutputTokens: z.number().int().positive().optional(),
+        reasoningEffort: z
+            .enum(['none', 'low', 'medium', 'high', 'xhigh', 'max'])
+            .optional(),
+        verbosity: z.enum(['low', 'medium', 'high']).optional(),
+        temperature: z.number().finite().min(0).max(2).optional(),
+        topP: z.number().finite().min(0).max(1).optional(),
+    })
+    .strict();
+
+const PresentationSettingsMetadataSchema = z
+    .object({
+        requested: PresentationSettingsMetadataRequestedSchema,
+        forwarded: PresentationGenerationSettingsSchema,
+        omitted: z.array(
+            z
+                .object({
+                    setting: z.enum([
+                        'promptVariant',
+                        'maxOutputTokens',
+                        'reasoningEffort',
+                        'verbosity',
+                        'temperature',
+                        'topP',
+                    ]),
+                    requested: z.union([z.string(), z.number()]),
+                    reasonCode: z.enum([
+                        'sampling_control_not_supported',
+                        'verbosity_not_supported',
+                        'reasoning_effort_not_supported',
+                        'output_limit_exceeds_profile_maximum',
+                        'sampling_controls_mutually_exclusive',
+                    ]),
+                })
+                .strict()
+        ),
+        providerObserved: PresentationGenerationSettingsSchema.optional(),
+    })
+    .strict();
+
 const LegacyPresentationReasonCodeSchema = z.enum([
     'finalized',
     'evidence_repaired',
@@ -555,6 +599,7 @@ const PresentationMetadataFieldsSchema = z
         attempted: z.boolean(),
         reasonCode: CurrentPresentationReasonCodeSchema,
         personaId: z.string().min(1),
+        presentationSettings: PresentationSettingsMetadataSchema.optional(),
         draftProfileId: z.string().min(1).optional(),
         draftRequestedProvider: z.string().min(1).optional(),
         draftRequestedModel: z.string().min(1).optional(),

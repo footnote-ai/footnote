@@ -51,7 +51,9 @@ test('voltagent runtime maps transcript and generation settings into executor op
         messages: [{ role: 'user', content: 'Summarize the repo changes.' }],
         model: 'gpt-5.1',
         maxOutputTokens: 800,
+        temperature: 0.7,
         reasoningEffort: 'max',
+        topP: undefined,
         verbosity: 'high',
         safetyIdentifier: 'derived-safety-id',
         structuredOutput: {
@@ -71,6 +73,8 @@ test('voltagent runtime maps transcript and generation settings into executor op
     assert.equal(seenModel, 'openai/gpt-5.1');
     assert.deepEqual(seenMessages, request.messages);
     assert.equal(seenOptions?.maxOutputTokens, 800);
+    assert.equal(seenOptions?.temperature, 0.7);
+    assert.equal(seenOptions?.topP, undefined);
     assert.equal(seenOptions?.signal, signal);
     assert.deepEqual(seenOptions?.structuredOutput, request.structuredOutput);
     assert.deepEqual(seenOptions?.providerOptions, {

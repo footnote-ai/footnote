@@ -415,6 +415,93 @@ test('ResponseMetadataSchema remains tolerant for forward-compatible responses',
     assert.equal(parsed.success, true);
 });
 
+test('ResponseMetadataSchema accepts presentation settings metadata', () => {
+    const parsed = ResponseMetadataSchema.safeParse({
+        ...baseMetadata,
+        presentation: {
+            step: 'presentation',
+            flow: 'candidate_review',
+            outcome: 'candidate_generated',
+            attempted: true,
+            reasonCode: 'candidate_generated',
+            personaId: 'footnote',
+            expressionStrength: 'balanced',
+            expressionSource: 'request',
+            draftAttemptCount: 1,
+            presentationSettings: {
+                requested: {
+                    promptVariant: 'compact',
+                    maxOutputTokens: 512,
+                    temperature: 0.7,
+                },
+                forwarded: {
+                    promptVariant: 'compact',
+                    maxOutputTokens: 512,
+                    temperature: 0.7,
+                },
+                omitted: [],
+            },
+        },
+    });
+
+    assert.equal(parsed.success, true);
+});
+
+test('ResponseMetadataSchema accepts omitted mutually exclusive sampling controls', () => {
+    const presentationSettings = {
+        requested: { temperature: 0.2, topP: 0.8 },
+        forwarded: {},
+        omitted: [
+            {
+                setting: 'temperature' as const,
+                requested: 0.2,
+                reasonCode: 'sampling_controls_mutually_exclusive' as const,
+            },
+            {
+                setting: 'topP' as const,
+                requested: 0.8,
+                reasonCode: 'sampling_controls_mutually_exclusive' as const,
+            },
+        ],
+    };
+    const parsed = ResponseMetadataSchema.safeParse({
+        ...baseMetadata,
+        presentation: {
+            step: 'presentation',
+            flow: 'candidate_review',
+            outcome: 'candidate_generated',
+            attempted: true,
+            reasonCode: 'candidate_generated',
+            personaId: 'footnote',
+            expressionStrength: 'balanced',
+            expressionSource: 'request',
+            draftAttemptCount: 1,
+            presentationSettings,
+        },
+    });
+    assert.equal(parsed.success, true);
+
+    const invalidForwarded = ResponseMetadataSchema.safeParse({
+        ...baseMetadata,
+        presentation: {
+            step: 'presentation',
+            flow: 'candidate_review',
+            outcome: 'candidate_generated',
+            attempted: true,
+            reasonCode: 'candidate_generated',
+            personaId: 'footnote',
+            expressionStrength: 'balanced',
+            expressionSource: 'request',
+            draftAttemptCount: 1,
+            presentationSettings: {
+                ...presentationSettings,
+                forwarded: { temperature: 0.2, topP: 0.8 },
+            },
+        },
+    });
+    assert.equal(invalidForwarded.success, false);
+});
+
 test('ResponseMetadataSchema accepts typed GitHub context metadata', () => {
     const parsed = ResponseMetadataSchema.safeParse({
         ...baseMetadata,

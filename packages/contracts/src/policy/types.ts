@@ -10,6 +10,7 @@ import type {
     GitHubContextReference,
 } from './contextIntegrations.js';
 import type { ProjectContextMetadata } from './projectContext.js';
+import type { PresentationGenerationSettings } from '../model-profiles.js';
 
 // This file is the single source of truth for cross-package metadata shapes.
 // It primarily defines types and narrow pure helpers for contract-safe checks.
@@ -477,6 +478,35 @@ export type PresentationReasonCode =
     | 'draft_timeout'
     | 'draft_provider_error';
 
+export type PresentationSettingName =
+    | 'promptVariant'
+    | 'maxOutputTokens'
+    | 'reasoningEffort'
+    | 'verbosity'
+    | 'temperature'
+    | 'topP';
+
+export type PresentationSettingOmissionReasonCode =
+    | 'sampling_control_not_supported'
+    | 'verbosity_not_supported'
+    | 'reasoning_effort_not_supported'
+    | 'output_limit_exceeds_profile_maximum'
+    | 'sampling_controls_mutually_exclusive';
+
+/** Serializable evidence of backend presentation-setting resolution. */
+export type PresentationSettingsMetadata = {
+    requested: PresentationGenerationSettings;
+    /** Controls that backend resolved and forwarded to the runtime adapter. */
+    forwarded: PresentationGenerationSettings;
+    omitted: Array<{
+        setting: PresentationSettingName;
+        requested: string | number;
+        reasonCode: PresentationSettingOmissionReasonCode;
+    }>;
+    /** Provider-observed settings, when the adapter reports them verbatim. */
+    providerObserved?: PresentationGenerationSettings;
+};
+
 /** Historical outcomes retained only for stored finalizer/audit receipts. */
 export type LegacyPresentationOutcome =
     | 'finalized'
@@ -524,6 +554,7 @@ export type PresentationMetadata = {
     attempted: boolean;
     reasonCode: PresentationReasonCode;
     personaId: string;
+    presentationSettings?: PresentationSettingsMetadata;
     draftProfileId?: string;
     /** Deployment-requested style-draft provider, distinct from upstream resolution. */
     draftRequestedProvider?: string;

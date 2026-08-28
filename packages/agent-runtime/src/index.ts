@@ -12,6 +12,7 @@ import type {
     ImageGenerationSize as ContractImageGenerationSize,
     ModelProfileCapabilities,
     ModelProfileProviderRouting,
+    PresentationGenerationSettings,
     SupportedImageOutputFormat,
     SupportedOpenAIImageModel,
     SupportedOpenAITextModel,
@@ -160,6 +161,10 @@ export interface GenerationRequest {
      * Optional max token/output budget hint for the runtime.
      */
     maxOutputTokens?: number;
+    /** Optional provider-common sampling temperature. */
+    temperature?: number;
+    /** Optional provider-common nucleus sampling control. */
+    topP?: number;
     /**
      * Requested reasoning effort level for the generation attempt.
      */
@@ -283,6 +288,8 @@ export interface GenerationResult {
         routingAttemptCount?: number;
         upstreamReportedCostUsd?: number;
     };
+    /** Provider-reported presentation controls, when the adapter exposes them verbatim. */
+    providerObservedSettings?: PresentationGenerationSettings;
     /**
      * Optional provider/runtime finish reason for debugging or metadata
      * assembly.

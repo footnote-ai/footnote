@@ -10,8 +10,30 @@ import { z } from 'zod';
 import {
     supportedProviders,
     supportedReasoningEfforts,
+    supportedVerbosityLevels,
     type SupportedReasoningEffort,
+    type SupportedVerbosity,
 } from './providers.js';
+
+/** Prompt variants owned by the Footnote presentation seam. */
+export const presentationPromptVariants = ['current', 'compact'] as const;
+export type PresentationPromptVariant =
+    (typeof presentationPromptVariants)[number];
+
+/** Common sampling controls that adapters may translate or omit. */
+export const presentationSamplingControls = ['temperature', 'topP'] as const;
+export type PresentationSamplingControl =
+    (typeof presentationSamplingControls)[number];
+
+/** Serializable, provider-neutral settings for one presentation draft. */
+export interface PresentationGenerationSettings {
+    promptVariant?: PresentationPromptVariant;
+    maxOutputTokens?: number;
+    reasoningEffort?: SupportedReasoningEffort;
+    verbosity?: SupportedVerbosity;
+    temperature?: number;
+    topP?: number;
+}
 
 /**
  * Shorthand labels for callers that want "fast" or "quality" style routing
@@ -42,6 +64,10 @@ export interface ModelProfileCapabilities {
     canUseSearch: boolean;
     /** Reasoning levels the concrete provider model accepts. */
     supportedReasoningEfforts?: SupportedReasoningEffort[];
+    /** Common sampling controls the concrete provider model accepts. */
+    supportedSamplingControls?: PresentationSamplingControl[];
+    /** Verbosity levels the concrete provider model accepts. */
+    supportedVerbosity?: SupportedVerbosity[];
     toolCapabilities?: Record<string, boolean>;
 }
 
@@ -74,6 +100,8 @@ export interface ModelProfile {
     providerRouting?: ModelProfileProviderRouting;
     /** Fallback effort used only when the caller does not request one. */
     defaultReasoningEffort?: SupportedReasoningEffort;
+    /** Optional backend-owned presentation settings for this profile. */
+    presentationGeneration?: PresentationGenerationSettings;
     maxInputTokens?: number;
     maxOutputTokens?: number;
     costClass?: ModelCostClass;
@@ -128,9 +156,40 @@ export const ModelProfileCapabilitiesSchema = z
         supportedReasoningEfforts: z
             .array(z.enum(supportedReasoningEfforts))
             .optional(),
+        supportedSamplingControls: z
+            .array(z.enum(presentationSamplingControls))
+            .optional(),
+        supportedVerbosity: z
+            .array(z.enum(supportedVerbosityLevels))
+            .optional(),
         toolCapabilities: z.record(z.string(), z.boolean()).optional(),
     })
     .strict();
+
+export const PresentationGenerationSettingsSchema: z.ZodType<PresentationGenerationSettings> =
+    z
+        .object({
+            promptVariant: z.enum(presentationPromptVariants).optional(),
+            maxOutputTokens: z.number().int().positive().optional(),
+            reasoningEffort: z.enum(supportedReasoningEfforts).optional(),
+            verbosity: z.enum(supportedVerbosityLevels).optional(),
+            temperature: z.number().finite().min(0).max(2).optional(),
+            topP: z.number().finite().min(0).max(1).optional(),
+        })
+        .strict()
+        .superRefine((settings, context) => {
+            if (
+                settings.temperature !== undefined &&
+                settings.topP !== undefined
+            ) {
+                context.addIssue({
+                    code: z.ZodIssueCode.custom,
+                    path: ['topP'],
+                    message:
+                        'Presentation settings must choose temperature or topP, not both.',
+                });
+            }
+        });
 
 export const ModelProfileProviderRoutingSchema: z.ZodType<ModelProfileProviderRouting> =
     z
@@ -162,6 +221,7 @@ export const ModelProfileSchema: z.ZodType<ModelProfile> = z
         capabilities: ModelProfileCapabilitiesSchema,
         providerRouting: ModelProfileProviderRoutingSchema.optional(),
         defaultReasoningEffort: z.enum(supportedReasoningEfforts).optional(),
+        presentationGeneration: PresentationGenerationSettingsSchema.optional(),
         maxInputTokens: z.number().int().positive().optional(),
         maxOutputTokens: z.number().int().positive().optional(),
         costClass: z.enum(modelCostClasses).optional(),

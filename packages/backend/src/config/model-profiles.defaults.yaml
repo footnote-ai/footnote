@@ -13,6 +13,7 @@ profiles:
       capabilities:
           canUseSearch: true
           supportedReasoningEfforts: [none, low, medium, high, xhigh, max]
+          supportedVerbosity: [low, medium, high]
           toolCapabilities:
               routing.generation.structured-cheap: true
               routing.generation.balanced-general: true
@@ -96,6 +97,7 @@ profiles:
       tierBindings: []
       capabilities:
           canUseSearch: false
+          supportedSamplingControls: [temperature, topP]
       providerRouting:
           openrouter:
               only: [parasail]

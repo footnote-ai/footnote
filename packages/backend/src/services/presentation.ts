@@ -10,14 +10,24 @@ import type {
     GenerationResult,
     GenerationRuntime,
 } from '@footnote/agent-runtime';
-import type { ModelProfile } from '@footnote/contracts';
+import type {
+    ModelProfile,
+    PresentationGenerationSettings,
+    PresentationPromptVariant,
+} from '@footnote/contracts';
 import type {
     PresentationMetadata,
     PresentationReasonCode,
+    PresentationSettingsMetadata,
     PersonaExpressionSource,
     PersonaExpressionStrength,
 } from '@footnote/contracts/policy';
 import { hmacId } from '../utils/pseudonymization.js';
+import { logger } from '../utils/logger.js';
+import {
+    resolvePresentationGenerationSettings,
+    type PresentationSettingsResolution,
+} from './runtimeRequestControls.js';
 
 export type PresentationConfig = {
     enabled: boolean;
@@ -96,13 +106,49 @@ const candidateSystemPrompt = (input: {
     expressionGuidance: string;
     presentationGuidance: string;
     caution?: PresentationCaution;
+    promptVariant?: PresentationPromptVariant;
 }): string =>
-    `Write a complete presentation candidate using the authoritative context already supplied. You own the preferred expression of this answer: voice, cadence, structure, emphasis, attention, humor, bluntness, warmth, and other active persona qualities. Make those qualities clear and recognizable at the resolved expression strength. Do not use tools or perform search. Return only answer prose. The authoritative context and backend policy own facts, evidence, uncertainty, attribution, scope, permissions, refusals, provenance, TRACE, and safety decisions; do not invent or alter those boundaries. Observed TRACE caution: ${input.caution === undefined ? 'unavailable' : input.caution}; it protects answer posture without weakening persona expression. ${input.expressionGuidance}\n\nPresentation guidance:\n${input.presentationGuidance}`;
+    input.promptVariant === 'compact'
+        ? `Rewrite the answer using the supplied persona and style guidance. Keep its facts, uncertainty, source limits, permissions, refusals, provenance, TRACE posture, and safety decisions intact. Do not use tools or search. Return only the rewritten answer. TRACE caution: ${input.caution === undefined ? 'unavailable' : input.caution}. ${input.expressionGuidance}\n\nStyle guidance:\n${input.presentationGuidance}`
+        : `Rewrite the answer using the supplied persona and style guidance. Do not change what it says or what it is allowed to say. Keep its facts, uncertainty, source limits, permissions, refusals, provenance, TRACE posture, and safety decisions intact. Make the persona clear at the requested expression strength. Do not use tools or search. Return only the rewritten answer. TRACE caution: ${input.caution === undefined ? 'unavailable' : input.caution}. ${input.expressionGuidance}\n\nStyle guidance:\n${input.presentationGuidance}`;
+
+const toPresentationSettingsMetadata = (
+    resolution: PresentationSettingsResolution
+): PresentationSettingsMetadata => ({ ...resolution });
+
+const applyPresentationSettings = (
+    request: GenerationRequest,
+    settings: PresentationSettingsResolution['forwarded']
+): GenerationRequest => {
+    const candidateRequest: GenerationRequest = { ...request };
+    delete candidateRequest.temperature;
+    delete candidateRequest.topP;
+    delete candidateRequest.reasoningEffort;
+    delete candidateRequest.verbosity;
+    delete candidateRequest.maxOutputTokens;
+    return {
+        ...candidateRequest,
+        ...(settings.maxOutputTokens !== undefined && {
+            maxOutputTokens: settings.maxOutputTokens,
+        }),
+        ...(settings.reasoningEffort !== undefined && {
+            reasoningEffort: settings.reasoningEffort,
+        }),
+        ...(settings.verbosity !== undefined && {
+            verbosity: settings.verbosity,
+        }),
+        ...(settings.temperature !== undefined && {
+            temperature: settings.temperature,
+        }),
+        ...(settings.topP !== undefined && { topP: settings.topP }),
+    };
+};
 
 const buildCandidateRequest = (
     request: GenerationRequest,
     persona: PresentationPersona,
-    caution?: PresentationCaution
+    caution?: PresentationCaution,
+    settings?: PresentationGenerationSettings
 ): GenerationRequest => {
     const candidateRequest: GenerationRequest = { ...request };
     delete candidateRequest.search;
@@ -115,6 +161,7 @@ const buildCandidateRequest = (
                     expressionGuidance: persona.expressionGuidance,
                     presentationGuidance: persona.presentationGuidance,
                     caution,
+                    promptVariant: settings?.promptVariant,
                 }),
             },
             ...request.messages,
@@ -132,6 +179,7 @@ const buildMetadata = (input: {
     draftAttemptCount: PresentationDraftAttemptCount;
     startedAt?: number;
     caution?: PresentationCaution;
+    presentationSettings?: PresentationSettingsMetadata;
 }): PresentationMetadata => ({
     step: 'presentation',
     flow: 'candidate_review',
@@ -139,6 +187,14 @@ const buildMetadata = (input: {
     attempted: input.attempted,
     reasonCode: input.reasonCode,
     personaId: input.persona.id,
+    ...(input.presentationSettings !== undefined && {
+        presentationSettings: {
+            ...input.presentationSettings,
+            ...(input.draft?.providerObservedSettings !== undefined && {
+                providerObserved: input.draft.providerObservedSettings,
+            }),
+        },
+    }),
     draftProfileId: input.config.profile?.id,
     draftRequestedProvider: input.config.profile?.provider,
     draftRequestedModel: input.config.profile?.providerModel,
@@ -186,7 +242,11 @@ const buildMetadata = (input: {
     }),
 });
 
-/** Builds a truthful receipt when no candidate is available to the main path. */
+/**
+ * Builds truthful fallback metadata when no presentation candidate is available.
+ * Its optional settings receipt preserves profile-over-request precedence and
+ * recorded omissions; generation failures remain fail-open.
+ */
 export const createPresentationFallback = (input: {
     config: PresentationConfig;
     persona: PresentationPersona;
@@ -195,6 +255,7 @@ export const createPresentationFallback = (input: {
     attempted?: boolean;
     draftAttemptCount?: PresentationDraftAttemptCount;
     startedAt?: number;
+    presentationSettings?: PresentationSettingsMetadata;
 }): PresentationResult => ({
     outcome: 'candidate_unavailable',
     metadata: buildMetadata({
@@ -206,12 +267,14 @@ export const createPresentationFallback = (input: {
         draftAttemptCount: input.draftAttemptCount ?? 0,
         ...(input.startedAt !== undefined && { startedAt: input.startedAt }),
         caution: input.caution,
+        presentationSettings: input.presentationSettings,
     }),
 });
 
 /**
  * Generates one full-prose expression candidate before ordinary answer generation.
- * Admission is mechanical; authoritative generation and review own the answer.
+ * Profile controls override request controls; unsupported controls are omitted
+ * and recorded, and generation failures return fallback metadata.
  */
 export const runPresentationCandidate = async (input: {
     generationRuntime: GenerationRuntime;
@@ -237,6 +300,26 @@ export const runPresentationCandidate = async (input: {
         });
     }
 
+    const settingsResolution = resolvePresentationGenerationSettings({
+        profile: input.config.profile,
+        request: input.generationRequest,
+    });
+    const presentationSettings =
+        toPresentationSettingsMetadata(settingsResolution);
+    for (const omission of settingsResolution.omitted) {
+        logger.warn('Presentation setting omitted before runtime forwarding.', {
+            reasonCode: omission.reasonCode,
+            setting: omission.setting,
+            requested: omission.requested,
+            profileId: input.config.profile.id,
+            provider: input.config.profile.provider,
+            model: input.config.profile.providerModel,
+        });
+    }
+    const candidateRequest = applyPresentationSettings(
+        input.generationRequest,
+        settingsResolution.forwarded
+    );
     const startedAt = Date.now();
     try {
         const draftResult = await withTimeout(
@@ -244,9 +327,10 @@ export const runPresentationCandidate = async (input: {
             (signal) =>
                 input.generationRuntime.generate({
                     ...buildCandidateRequest(
-                        input.generationRequest,
+                        candidateRequest,
                         input.persona,
-                        input.caution
+                        input.caution,
+                        settingsResolution.forwarded
                     ),
                     model: input.config.profile?.providerModel,
                     provider: input.config.profile?.provider,
@@ -271,6 +355,7 @@ export const runPresentationCandidate = async (input: {
                     draftAttemptCount: 1,
                     startedAt,
                     caution: input.caution,
+                    presentationSettings,
                 }),
             };
         }
@@ -288,6 +373,7 @@ export const runPresentationCandidate = async (input: {
                 draftAttemptCount: 1,
                 startedAt,
                 caution: input.caution,
+                presentationSettings,
             }),
         };
     } catch (error) {
@@ -303,6 +389,7 @@ export const runPresentationCandidate = async (input: {
             draftAttemptCount: 1,
             startedAt,
             caution: input.caution,
+            presentationSettings,
         });
     }
 };
