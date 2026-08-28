@@ -394,7 +394,7 @@ const buildAutomaticReviewer =
     async (attempt) => {
         if (!attempt.output) return undefined;
         const instruction =
-            'Review the candidate against every supplied requirement and rating dimension. Preserve uncertainty and do not invent evidence. Return exactly one result for every requirement and dimension.';
+            'Use only the supplied context and response. Check every requirement and rate every requested dimension. Give brief evidence for each result. Return exactly one result for each requirement and dimension. Do not invent evidence.';
         const reviewInput = {
             sourceMessages: attempt.source.messages,
             persona: attempt.source.persona,

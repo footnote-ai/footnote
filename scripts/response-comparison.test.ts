@@ -244,12 +244,12 @@ test('blind report retains judgment context, escapes candidate text, and hides o
         blindnessEvents: [],
     };
     const html = buildReportHtml(report);
-    assert.match(html, /Requirements:/u);
-    assert.match(html, /Source context/u);
-    assert.match(html, /Resolved persona guidance/u);
+    assert.match(html, /Checks:/u);
+    assert.match(html, /Source/u);
+    assert.match(html, /Style guidance/u);
     assert.match(html, /Not rated/u);
-    assert.match(html, /Median output tokens \/ total second/u);
-    assert.match(html, /Automatic review coverage/u);
+    assert.match(html, /Output rate/u);
+    assert.match(html, /Auto reviewed/u);
     assert.match(html, /Generation cost/u);
     assert.match(html, /Reviewer name/u);
     assert.match(html, /Blind view/u);

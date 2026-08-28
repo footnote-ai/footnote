@@ -1,72 +1,62 @@
 # Response comparison
 
-`pnpm responses:compare` is an explicit experiment to compare how models write
-the same responses and review what they preserve. It is not a production
-setting and does not choose a winner automatically.
+Use this workflow to compare how models express the same answers. It keeps
+style separate from facts, uncertainty, sources, authority, and safety. It
+does not change production settings or choose a winner.
 
-## Commands
+## Run a comparison
 
-```text
-pnpm responses:compare --check
-pnpm responses:compare --config response-comparison.yaml
-```
+1. Edit `response-comparison.yaml`.
+2. Check it without generating responses:
 
-`--check` validates the configuration, resolves catalog profiles, checks
-credentials, preflights the automatic reviewer, and checks provider support
-without generating responses. The default command runs every planned
-comparison that is supported, records
-`completed`, `not_tested`, or `failed` for every planned attempt, and continues
-after individual failures. It writes one self-contained
-`response-comparison-<run-id>.html` report.
+    ```text
+    pnpm responses:compare --check
+    ```
 
-The stable configuration hash identifies the comparison definition. A unique
-run ID identifies each observation. An active incomplete run for the same
-configuration resumes from the ignored checkpoint at
-`.footnote/response-comparison/<run-id>/checkpoint.jsonl`; completed runs do
-not get reused by the next invocation.
+3. Run it:
 
-## Configuration rules
+    ```text
+    pnpm responses:compare
+    ```
 
-- Profile IDs must resolve from the real model catalog. Raw `name`/`provider`/`model`
-  entries are ephemeral candidates and must not be added to that catalog.
-- Each entry under `settings` is one independent variant. The runner does not
-  create an implicit Cartesian product.
-- A setting may have an optional name and several intentional controls. The
-  name is a review label, not a runtime control; use it when a combination such
-  as temperature plus verbosity is deliberately being compared.
-- `default` means provider/model defaults. It is distinct from an explicit
-  sampling or output-control request.
-- `cases: core` loads the durable reviewed suite from
-  `packages/backend/test/fixtures/responseComparisonCore.yaml`. Inline cases
-  remain available for a separately scoped experiment.
-- Personas and expression strength use existing backend persona machinery. The
-  YAML names a persona; it does not duplicate persona prompt prose.
-- Requirements are concrete preservation assertions. `mustKeep` categories
-  describe invariants and are not combined into a winner score.
-- The experiment does not expose a generic end-user temperature slider.
+4. Open `response-comparison-<run-id>.html`.
+5. Review responses while the report is blind, then reveal run details.
 
-## Review and evidence
+Check mode validates profiles, credentials, the automatic reviewer, and
+provider support. It reports combinations that cannot be tested without
+calling providers. The live command records supported, unsupported, and
+failed attempts and continues after individual failures. If interrupted, the
+same comparison resumes its active checkpoint. Completed runs are not reused.
 
-The initial report is blind when `review.blind` is true. It keeps the source
-messages, resolved persona context, expression strength, requirements, and
-candidate prose visible while hiding provider, model, settings, cost, latency,
-automatic review, and saved human-review metadata. Reviewer identity and
-blind human judgments are available without revealing model metadata. A
-metadata reveal is persisted locally and recorded. Downloading a reviewed
-report creates a new immutable HTML document and leaves the original report
-unchanged.
+## Configure it
 
-Each response records source messages and resolved guidance, requested,
-forwarded, omitted, and provider-observed settings separately, plus provider
-support evidence, model attribution, completion, latency, usage, cost, and
-output length when available. Unsupported settings are not run and are
-recorded as evidence rather than being guessed. Automatic review records the
-exact instruction and schema and is accepted only when every requested
-must-keep requirement and rating dimension is present. Revealed summaries keep
-automatic review coverage, automatic ratings, human ratings, generation cost,
-review cost, and total cost separate.
+- Catalog profile IDs use the real model catalog. Raw `name`/`provider`/`model`
+  entries are temporary candidates and do not belong in that catalog.
+- Each `settings` entry is one variant. The runner does not build an implicit
+  Cartesian product. `default` uses provider and model defaults.
+- `cases: core` loads the maintained suite from
+  `packages/backend/test/fixtures/responseComparisonCore.yaml`.
+- Personas and expression strength use existing backend persona settings.
+- `mustKeep` lists the facts and limits every response should preserve.
 
-This exercise is related to model-strength escalation in #564, but it does not
-decide that separate question. Do not commit presentation defaults or close the
-tracking issue until the fixed suite, review evidence, and a holdout confirmation
+Unsupported settings are skipped and recorded with their reason. The report
+keeps requested, forwarded, omitted, and provider-observed settings separate.
+It also records model attribution, status, timing, usage, cost, and output
+length when available.
+
+## Review the report
+
+Blind mode shows the source, persona guidance, requirements, and response. It
+hides model, provider, settings, timing, cost, automatic review, and saved
+human-review details. Reviewer identity and blind judgments can still be
+saved. Revealing details is recorded locally, and exporting a reviewed report
+creates a new file without changing the original.
+
+Automatic review supports human judgment; it does not replace it. Human and
+automatic scores stay separate, and the report does not calculate a combined
+winner.
+
+The workflow does not expose a generic end-user temperature slider. Model
+strength escalation remains separate in #564. Do not commit presentation
+defaults or close #571 until the fixed suite, human review, and a holdout run
 support the recommendation.

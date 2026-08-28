@@ -142,7 +142,7 @@ test('resolves profile presentation settings before the runtime call and records
     assert.equal(requests[0]?.maxOutputTokens, 256);
     assert.match(
         requests[0]?.messages[0]?.content ?? '',
-        /^Write only answer prose/u
+        /^Rewrite the answer using the supplied persona and style guidance/u
     );
     assert.deepEqual(presentation.metadata.presentationSettings, {
         requested: {
