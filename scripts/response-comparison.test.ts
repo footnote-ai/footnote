@@ -12,6 +12,7 @@ import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
 import type { GenerationRuntime } from '../packages/agent-runtime/src/index.js';
+import type { PresentationResult } from '../packages/backend/src/services/presentation.js';
 import type { ModelProfile } from '../packages/contracts/src/index.js';
 import {
     buildReportHtml,
@@ -67,7 +68,7 @@ const runtime: GenerationRuntime = {
     kind: 'test',
     generate: async () => ({ text: 'unused' }),
 };
-const fakeCandidate: ComparisonDependencies['runCandidate'] = async () => ({
+const fakeCandidate = async (): Promise<PresentationResult> => ({
     outcome: 'candidate_generated',
     draftResult: {
         text: '<script>alert(1)</script> Hello.',
@@ -97,9 +98,9 @@ const fakeCandidate: ComparisonDependencies['runCandidate'] = async () => ({
 const deps = (calls: { value: number }): ComparisonDependencies => ({
     profiles: new Map([[profile.id, profile]]),
     generationRuntime: runtime,
-    runCandidate: async (input) => {
+    runCandidate: async () => {
         calls.value += 1;
-        return fakeCandidate(input);
+        return fakeCandidate();
     },
 });
 
@@ -274,7 +275,7 @@ test('records support gaps, provider failures, and review evidence without calli
         generatedSettings.push(input.generationRequest.temperature);
         if (input.generationRequest.temperature === 0.4)
             throw new Error('provider generation failed');
-        return fakeCandidate(input);
+        return fakeCandidate();
     };
     const support: NonNullable<
         ComparisonDependencies['checkProviderSupport']
