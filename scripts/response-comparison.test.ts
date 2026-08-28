@@ -147,6 +147,55 @@ test('runs independent variants and resumes from checkpoints', async () => {
     assert.notEqual(second.reportId, first.reportId);
 });
 
+test('resumes an interrupted run from its active pointer', async () => {
+    const checkpointRoot = fs.mkdtempSync(
+        path.join(os.tmpdir(), 'response-comparison-interrupted-')
+    );
+    const calls = { value: 0 };
+    const interruptedConfig = config({ repeats: 1 });
+    const configHash = crypto
+        .createHash('sha256')
+        .update('interrupted')
+        .digest('hex');
+    const interrupted = await runResponseComparison({
+        configPath: 'test.yaml',
+        checkpointRoot,
+        command: 'test',
+        config: interruptedConfig,
+        configHash,
+        dependencies: deps(calls),
+    });
+
+    const checkpoint = path.join(
+        checkpointRoot,
+        interrupted.reportId,
+        'checkpoint.jsonl'
+    );
+    fs.writeFileSync(
+        checkpoint,
+        `${interrupted.attempts.map((attempt) => JSON.stringify(attempt)).join('\n')}\n`,
+        'utf8'
+    );
+    fs.writeFileSync(
+        path.join(checkpointRoot, `${configHash}.active`),
+        `${interrupted.reportId}\n`,
+        'utf8'
+    );
+
+    const resumed = await runResponseComparison({
+        configPath: 'test.yaml',
+        checkpointRoot,
+        command: 'test',
+        config: interruptedConfig,
+        configHash,
+        dependencies: deps(calls),
+    });
+
+    assert.equal(resumed.attempts.length, interrupted.attempts.length);
+    assert.equal(calls.value, 1);
+    assert.equal(resumed.reportId, interrupted.reportId);
+});
+
 test('loads the durable core reviewed case suite by name', () => {
     const loaded = loadResponseComparisonConfig(
         path.join(process.cwd(), 'response-comparison.yaml'),

@@ -3748,6 +3748,10 @@ components:
 
         PresentationGenerationSettings:
             description: Serializable provider-neutral settings used only by the backend presentation evaluation/profile seam.
+            x-codeRefs:
+                - packages/contracts/src/model-profiles.ts#PresentationGenerationSettings
+                - packages/contracts/src/model-profiles.ts#PresentationGenerationSettingsSchema
+                - packages/backend/src/services/runtimeRequestControls.ts#resolvePresentationGenerationSettings
             type: object
             properties:
                 promptVariant:
@@ -3958,6 +3962,10 @@ components:
                                   type: string
                               presentationSettings:
                                   description: Backend-owned presentation setting resolution. Unsupported settings are omitted fail-open and never become user-facing controls.
+                                  x-codeRefs:
+                                      - packages/contracts/src/policy/types.ts#PresentationSettingsMetadata
+                                      - packages/contracts/src/web/schemas.ts#PresentationSettingsMetadataSchema
+                                      - packages/backend/src/services/runtimeRequestControls.ts#resolvePresentationGenerationSettings
                                   type: object
                                   properties:
                                       requested:

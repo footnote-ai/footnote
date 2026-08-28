@@ -8,6 +8,7 @@
  */
 import { execFileSync } from 'node:child_process';
 import crypto from 'node:crypto';
+import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import type {
@@ -34,6 +35,7 @@ import {
 import { estimateOpenAITextCost } from '../packages/contracts/src/pricing.js';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+const OPENROUTER_MODELS_TIMEOUT_MS = 10_000;
 
 const usage = (): string =>
     [
@@ -58,8 +60,9 @@ const parseArgs = (args: string[]): { configPath: string; check: boolean } => {
             case '--config':
                 configPath = path.resolve(
                     root,
-                    requiredValue(args, ++index, '--config')
+                    requiredValue(args, index, '--config')
                 );
+                index += 1;
                 break;
             case '--check':
                 check = true;
@@ -132,6 +135,7 @@ const buildSupportChecker = () => {
                               Authorization: `Bearer ${process.env.OPENROUTER_API_KEY.trim()}`,
                           }
                         : {},
+                    signal: AbortSignal.timeout(OPENROUTER_MODELS_TIMEOUT_MS),
                 }
             );
             if (!response.ok) {
@@ -353,6 +357,28 @@ const modelLabel = (
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
     typeof value === 'object' && value !== null && !Array.isArray(value);
+
+const packageManagerVersion = (): string => {
+    try {
+        const packageJson: unknown = JSON.parse(
+            fs.readFileSync(path.join(root, 'package.json'), 'utf8')
+        );
+        if (
+            isRecord(packageJson) &&
+            typeof packageJson.packageManager === 'string'
+        )
+            return packageJson.packageManager.split('+', 1)[0];
+    } catch {
+        // Fall back to the package-manager-provided user agent below.
+    }
+    const userAgent = process.env.npm_config_user_agent?.trim().split(' ')[0];
+    if (userAgent !== undefined) {
+        const separator = userAgent.indexOf('/');
+        if (separator > 0 && separator < userAgent.length - 1)
+            return `${userAgent.slice(0, separator)}@${userAgent.slice(separator + 1)}`;
+    }
+    return 'unknown';
+};
 
 const hash = (value: unknown): string =>
     crypto.createHash('sha256').update(JSON.stringify(value)).digest('hex');
@@ -608,13 +634,11 @@ const main = async (): Promise<void> => {
     const missingProfiles = loaded.config.models.filter(
         (model) => resolveModel(model, profiles) === null
     );
-    if (
-        loaded.config.review.automaticReviewer &&
-        resolveModel(loaded.config.review.automaticReviewer, profiles) === null
-    )
-        throw new Error(
-            `Automatic reviewer profile not found: ${loaded.config.review.automaticReviewer.profile}`
-        );
+    const automaticReviewer = loaded.config.review.automaticReviewer;
+    const automaticReviewerProfile =
+        automaticReviewer === undefined
+            ? null
+            : resolveModel(automaticReviewer, profiles);
     const credentialProviders = new Set(
         selectedProfiles
             .filter((profile): profile is ModelProfile => profile !== null)
@@ -657,9 +681,9 @@ const main = async (): Promise<void> => {
                 );
             }
         }
-        if (loaded.config.review.automaticReviewer) {
-            const reviewerModel = loaded.config.review.automaticReviewer;
-            const reviewerProfile = resolveModel(reviewerModel, profiles);
+        if (automaticReviewer !== undefined) {
+            const reviewerModel = automaticReviewer;
+            const reviewerProfile = automaticReviewerProfile;
             if (reviewerProfile === null) {
                 checks.push(
                     `automatic reviewer ${reviewerModel.profile}: not_tested (profile_not_found)`
@@ -685,6 +709,10 @@ const main = async (): Promise<void> => {
         console.log(checks.map((line) => `- ${line}`).join('\n'));
         return;
     }
+    if (automaticReviewer !== undefined && automaticReviewerProfile === null)
+        throw new Error(
+            `Automatic reviewer profile not found: ${automaticReviewer.profile}`
+        );
     const defaultProfile =
         selectedProfiles.find(
             (profile): profile is ModelProfile => profile !== null
@@ -730,14 +758,10 @@ const main = async (): Promise<void> => {
         },
         prepareProfile: support.prepareProfile,
         checkProviderSupport: support.check,
-        ...(loaded.config.review.automaticReviewer &&
-            resolveModel(loaded.config.review.automaticReviewer, profiles) !==
-                null && {
+        ...(automaticReviewer !== undefined &&
+            automaticReviewerProfile !== null && {
                 automaticReviewer: buildAutomaticReviewer({
-                    profile: resolveModel(
-                        loaded.config.review.automaticReviewer,
-                        profiles
-                    ) as ModelProfile,
+                    profile: automaticReviewerProfile,
                     runtime,
                     rate: loaded.config.review.rate,
                 }),
@@ -746,7 +770,7 @@ const main = async (): Promise<void> => {
         dependencies: {
             node: process.version,
             runtime: runtime.kind,
-            packageManager: 'pnpm@11.21.0',
+            packageManager: packageManagerVersion(),
         },
     };
     const report = await runResponseComparison({

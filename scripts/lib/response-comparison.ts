@@ -285,16 +285,21 @@ const parseSettings = (value: unknown): ResponseComparisonSetting[] => {
             (typeof item.topP !== 'number' || item.topP < 0 || item.topP > 1)
         )
             throw new Error(`settings[${index}].topP must be between 0 and 1.`);
-        if (item.maxOutputTokens !== undefined)
-            integer(item.maxOutputTokens, `settings[${index}].maxOutputTokens`);
+        const maxOutputTokens =
+            item.maxOutputTokens === undefined
+                ? undefined
+                : integer(
+                      item.maxOutputTokens,
+                      `settings[${index}].maxOutputTokens`
+                  );
         return {
             ...(settingName !== undefined && { name: settingName }),
             ...(item.temperature !== undefined && {
                 temperature: item.temperature,
             }),
             ...(item.topP !== undefined && { topP: item.topP }),
-            ...(item.maxOutputTokens !== undefined && {
-                maxOutputTokens: item.maxOutputTokens,
+            ...(maxOutputTokens !== undefined && {
+                maxOutputTokens,
             }),
             ...(item.reasoningEffort !== undefined && {
                 reasoningEffort: enumValue(
@@ -881,7 +886,7 @@ const renderSummary=()=>{
 const render=()=>{
  app.replaceChildren();app.append(add('h1','Response comparison: '+report.config.name));app.append(add('p','Report '+report.reportId+' | '+report.attempts.length+' planned attempts','muted'));app.append(renderSummary());
  const controls=add('div');const reveal=add('button',blind?'Reveal metadata':'Metadata revealed');reveal.disabled=!blind;reveal.onclick=()=>{blind=false;report.blindnessEvents.push({at:new Date().toISOString(),action:'revealed'});save();render()};controls.append(reveal);
- const download=add('button','Download reviewed HTML');download.onclick=()=>{const reviewed=JSON.parse(JSON.stringify(report));reviewed.parentReportId=report.parentReportId||report.reportId;reviewed.reportId=reviewed.parentReportId+'-reviewed-'+Date.now();reviewed.blindnessEvents.push({at:new Date().toISOString(),action:'exported'});const body=JSON.stringify(reviewed).replaceAll('<','\\u003c').replaceAll('>','\\u003e').replaceAll('&','\\u0026');const source=document.documentElement.outerHTML;const html=source.replace(document.getElementById('canonical-report').textContent,body);const blob=new Blob([html],{type:'text/html'});const url=URL.createObjectURL(blob);const link=document.createElement('a');link.href=url;link.download='response-comparison-'+reviewed.reportId+'.html';link.click();URL.revokeObjectURL(url)};controls.append(download);
+  const download=add('button','Download reviewed HTML');download.onclick=()=>{const reviewed=JSON.parse(JSON.stringify(report));reviewed.parentReportId=report.parentReportId||report.reportId;reviewed.reportId=reviewed.parentReportId+'-reviewed-'+Date.now();reviewed.blindnessEvents.push({at:new Date().toISOString(),action:'exported'});const body=JSON.stringify(reviewed).replaceAll('<','\\u003c').replaceAll('>','\\u003e').replaceAll('&','\\u0026');const source=document.documentElement.outerHTML;const html=source.replace(document.getElementById('canonical-report').textContent,()=>body);const blob=new Blob([html],{type:'text/html'});const url=URL.createObjectURL(blob);const link=document.createElement('a');link.href=url;link.download='response-comparison-'+reviewed.reportId+'.html';link.click();URL.revokeObjectURL(url)};controls.append(download);
  const identity=add('label','Reviewer name: ');const name=document.createElement('input');name.value=report.reviewerName||'';name.placeholder='Optional';name.oninput=()=>{report.reviewerName=name.value;save()};identity.append(name);controls.append(identity)
  app.append(controls);if(blind)app.append(add('p','Blind view: model, provider, settings, cost, latency, automatic review, and saved human reviews are hidden. Source context remains visible.','blind-warning'));app.append(add('h2',blind?'Blind review queue':'Response provenance'));
   for(const attempt of report.attempts){const card=add('article');card.id='attempt-'+attempt.attemptId;card.append(add('h2',attempt.caseId+' / repeat '+attempt.repeat));const reviewRequirements=attempt.source?.reviewRequirements||attempt.source?.requirements||[];if(attempt.source){const context=add('div');context.append(add('h3','Source context'));for(const message of attempt.source.messages)context.append(add('p',message.role+': '+message.content));context.append(add('p','Persona: '+attempt.source.persona+' | expression: '+attempt.source.expressionStrength));context.append(add('p','Resolved persona guidance: '+attempt.source.resolvedGuidance));context.append(add('p','Expression guidance: '+(attempt.source.expressionGuidance||attempt.source.resolvedGuidance)));context.append(add('p','Requirements: '+attempt.source.requirements.map((r)=>r.id+': '+r.statement).join(' | '),'muted'));card.append(context)}card.append(add('p','Status: '+attempt.status+(attempt.reason?' - '+attempt.reason:''),'muted'));if(attempt.output)card.append(add('pre',attempt.output.text));

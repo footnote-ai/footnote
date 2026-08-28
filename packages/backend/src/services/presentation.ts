@@ -242,7 +242,11 @@ const buildMetadata = (input: {
     }),
 });
 
-/** Builds a truthful receipt when no candidate is available to the main path. */
+/**
+ * Builds truthful fallback metadata when no presentation candidate is available.
+ * Its optional settings receipt preserves profile-over-request precedence and
+ * recorded omissions; generation failures remain fail-open.
+ */
 export const createPresentationFallback = (input: {
     config: PresentationConfig;
     persona: PresentationPersona;
@@ -269,7 +273,8 @@ export const createPresentationFallback = (input: {
 
 /**
  * Generates one full-prose expression candidate before ordinary answer generation.
- * Admission is mechanical; authoritative generation and review own the answer.
+ * Profile controls override request controls; unsupported controls are omitted
+ * and recorded, and generation failures return fallback metadata.
  */
 export const runPresentationCandidate = async (input: {
     generationRuntime: GenerationRuntime;

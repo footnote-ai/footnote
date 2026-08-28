@@ -530,9 +530,22 @@ const CurrentPresentationReasonCodeSchema = z.enum([
     'draft_provider_error',
 ]);
 
+const PresentationSettingsMetadataRequestedSchema = z
+    .object({
+        promptVariant: z.enum(['current', 'compact']).optional(),
+        maxOutputTokens: z.number().int().positive().optional(),
+        reasoningEffort: z
+            .enum(['none', 'low', 'medium', 'high', 'xhigh', 'max'])
+            .optional(),
+        verbosity: z.enum(['low', 'medium', 'high']).optional(),
+        temperature: z.number().finite().min(0).max(2).optional(),
+        topP: z.number().finite().min(0).max(1).optional(),
+    })
+    .strict();
+
 const PresentationSettingsMetadataSchema = z
     .object({
-        requested: PresentationGenerationSettingsSchema,
+        requested: PresentationSettingsMetadataRequestedSchema,
         forwarded: PresentationGenerationSettingsSchema,
         omitted: z.array(
             z
