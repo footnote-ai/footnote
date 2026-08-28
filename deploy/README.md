@@ -295,9 +295,10 @@ authorization model. `workspaceRef` selects the TrustGraph workspace route for
 that target. Separately, the adapter token is sent only as a bearer token to
 authorize the TrustGraph request.
 
-The target value is a JSON array. The current deployment uses three entries.
-Only the listed flows and collections are queried; Footnote does not discover
-or enumerate other workspace data. Give each target a stable operator-chosen
+The target value is a JSON array. The example above uses two entries; a
+deployment may configure any number of targets. Only the listed flows and
+collections are queried; Footnote does not discover or enumerate other
+workspace data. Give each target a stable operator-chosen
 `id` so its evidence remains identifiable in provenance. The adapter queries
 configured targets within one shared 60-second default timeout and shared
 aggregate source/response bounds. The aggregate source bound must accommodate

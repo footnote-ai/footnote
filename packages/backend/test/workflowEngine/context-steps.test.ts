@@ -1123,6 +1123,94 @@ test('runBoundedReviewWorkflow still generates when a context step is blocked by
     );
 });
 
+test('runBoundedReviewWorkflow does not generate after a blocked context step consumes the workflow-step limit', async () => {
+    let generationCalls = 0;
+    const generationRuntime: GenerationRuntime = {
+        kind: 'test-runtime',
+        async generate() {
+            generationCalls += 1;
+            throw new Error('generation should be blocked by the step limit');
+        },
+    };
+
+    const result = await runBoundedReviewWorkflowForTest({
+        generationRuntime,
+        generationRequest: {
+            model: 'gpt-5-mini',
+            messages: [{ role: 'user', content: 'Answer without retrieval' }],
+        },
+        messagesWithHints: [
+            { role: 'user', content: 'Answer without retrieval' },
+        ],
+        generationStartedAtMs: Date.now(),
+        workflowConfig: {
+            workflowName: 'message_reviewed',
+            maxIterations: 1,
+            maxDurationMs: 15000,
+            executionLimits: {
+                maxWorkflowSteps: 1,
+                maxToolCalls: 0,
+                maxPlanCycles: 1,
+                maxReviewCycles: 1,
+                maxDeliberationCalls: 2,
+                maxTokensTotal: Number.MAX_SAFE_INTEGER,
+                maxDurationMs: 15000,
+            },
+        },
+        workflowPolicy: {
+            enablePlanning: false,
+            enableToolUse: true,
+            enableReplanning: false,
+            enableGeneration: true,
+            enableAssessment: false,
+            enableRevision: false,
+        },
+        contextStepRequests: [
+            {
+                integrationName: 'trustgraph',
+                requested: true,
+                eligible: true,
+                input: {
+                    queryIntent: 'Answer without retrieval',
+                    scopeTuple: {
+                        userId: 'user-1',
+                        collectionId: 'collection-1',
+                    },
+                    targetIds: ['target-1'],
+                },
+            },
+        ],
+        contextStepExecutor: async () => {
+            throw new Error('context executor should be blocked');
+        },
+        captureUsage: (generationResult) => ({
+            model: generationResult.model ?? 'gpt-5-mini',
+            promptTokens: generationResult.usage?.promptTokens ?? 0,
+            completionTokens: generationResult.usage?.completionTokens ?? 0,
+            totalTokens: generationResult.usage?.totalTokens ?? 0,
+            estimatedCost: {
+                inputCostUsd: 0,
+                outputCostUsd: 0,
+                totalCostUsd: 0,
+            },
+        }),
+    });
+
+    assert.equal(generationCalls, 0);
+    assert.equal(result.outcome, 'no_generation');
+    assert.equal(result.workflowLineage.steps.length, 1);
+    assert.equal(
+        result.workflowLineage.steps[0]?.reasonCode,
+        'max_tool_calls_reached'
+    );
+    assert.equal(result.workflowLineage.stepCount, 1);
+    assert.ok(result.workflowLineage.limitStop);
+    assert.equal(
+        result.workflowLineage.limitStop.exhaustedLimitKey,
+        'maxWorkflowSteps'
+    );
+});
+
 test('runBoundedReviewWorkflow stops before generation when injected context step requires clarification', async () => {
     let generationCalls = 0;
     const generationRuntime: GenerationRuntime = {

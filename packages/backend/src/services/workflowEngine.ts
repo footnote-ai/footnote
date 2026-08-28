@@ -986,6 +986,14 @@ export const runBoundedReviewWorkflow = async ({
                             parentStepId: plannerRootStepId,
                             attempt: 1,
                         });
+                        workflowState = applyStepExecutionToState(
+                            workflowState,
+                            'tool',
+                            0,
+                            0,
+                            0
+                        );
+                        stopIfOverLimits('generate');
                         continue;
                     }
                     if (contextStepOutcome.error !== undefined) {
