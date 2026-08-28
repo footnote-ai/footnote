@@ -654,22 +654,22 @@ const main = async (): Promise<void> => {
     };
     const support = buildSupportChecker();
     const checks = [
-        `config: valid (${options.configPath})`,
-        `models: ${loaded.config.models.length} configured; ${missingProfiles.length} missing profile references`,
+        `Checking comparison: ${options.configPath}`,
+        `Models: ${loaded.config.models.length} configured; ${missingProfiles.length} missing profiles`,
         ...supportedProviders
             .filter((provider) => credentialProviders.has(provider))
             .map(
                 (provider) =>
-                    `credentials ${provider}: ${credentials[provider] ? 'available' : 'missing'}`
+                    `${provider} access: ${credentials[provider] ? 'available' : 'missing'}`
             ),
-        `planned attempts: ${loaded.config.models.length * loaded.config.settings.length * loaded.config.cases.length * loaded.config.repeats}`,
+        `Planned attempts: ${loaded.config.models.length * loaded.config.settings.length * loaded.config.cases.length * loaded.config.repeats}`,
     ];
     if (options.check) {
         for (const model of loaded.config.models) {
             const profile = resolveModel(model, profiles);
             if (profile === null) {
                 checks.push(
-                    `support ${JSON.stringify(model)}: not_tested (profile_not_found)`
+                    `Model ${JSON.stringify(model)}: not_tested (profile_not_found)`
                 );
                 continue;
             }
@@ -686,7 +686,7 @@ const main = async (): Promise<void> => {
             const reviewerProfile = automaticReviewerProfile;
             if (reviewerProfile === null) {
                 checks.push(
-                    `automatic reviewer ${reviewerModel.profile}: not_tested (profile_not_found)`
+                    `Automatic reviewer ${reviewerModel.profile}: not_tested (profile_not_found)`
                 );
             } else {
                 const reviewerSupport = await support.check(
@@ -698,7 +698,7 @@ const main = async (): Promise<void> => {
                         'routing.generation.structured-cheap'
                     ] === true;
                 checks.push(
-                    `automatic reviewer ${modelLabel(reviewerModel, reviewerProfile)} | structured review: ${
+                    `Automatic reviewer ${modelLabel(reviewerModel, reviewerProfile)} | structured review: ${
                         structuredReviewSupported
                             ? describeSupport(reviewerSupport)
                             : 'structured review capability is not advertised (unsupported; structured_review_capability_not_advertised)'

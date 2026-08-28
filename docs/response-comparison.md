@@ -40,9 +40,9 @@ same comparison resumes its active checkpoint. Completed runs are not reused.
 - `mustKeep` lists the facts and limits every response should preserve.
 
 Unsupported settings are skipped and recorded with their reason. The report
-keeps requested, forwarded, omitted, and provider-observed settings separate.
-It also records model attribution, status, timing, usage, cost, and output
-length when available.
+keeps settings requested by the campaign, sent by Footnote, skipped, and
+reported by the provider separate. It also records model attribution, status,
+timing, usage, cost, and output length when available.
 
 ## Review the report
 

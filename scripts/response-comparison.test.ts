@@ -17,9 +17,13 @@ import {
     buildReportHtml,
     loadResponseComparisonConfig,
     parseResponseComparisonConfig,
+    rawProfile,
     runResponseComparison,
+    resolveModel,
+    settingToRequest,
     type ComparisonDependencies,
     type ResponseComparisonConfig,
+    type ResponseComparisonAutomaticReview,
     type ResponseComparisonReport,
 } from './lib/response-comparison.js';
 
@@ -27,7 +31,7 @@ const profile: ModelProfile = {
     id: 'writer',
     description: 'test writer',
     provider: 'openai',
-    providerModel: 'gpt-5.6-luna',
+    providerModel: 'test-model',
     enabled: true,
     tierBindings: [],
     capabilities: {
@@ -84,6 +88,8 @@ const fakeCandidate: ComparisonDependencies['runCandidate'] = async () => ({
         expressionStrength: 'balanced',
         expressionSource: 'request',
         draftAttemptCount: 1,
+        draftObservedProvider: 'test-provider',
+        draftObservedModel: profile.providerModel,
         presentationSettings: { requested: {}, forwarded: {}, omitted: [] },
     },
 });
@@ -111,6 +117,38 @@ test('rejects unknown YAML keys and accepts named intentional combinations', () 
             })
         )
     );
+    const parsed = parseResponseComparisonConfig(
+        config({
+            models: [
+                { profile: profile.id },
+                { name: 'raw', provider: 'openai', model: 'raw-model' },
+            ],
+            settings: [
+                'default',
+                { temperature: 0.2 },
+                { maxOutputTokens: 128 },
+            ],
+        })
+    );
+    const profileModel = parsed.models[0];
+    const rawModel = parsed.models[1];
+    const maxTokenSetting = parsed.settings[2];
+    if (
+        profileModel === undefined ||
+        rawModel === undefined ||
+        maxTokenSetting === undefined
+    )
+        throw new Error('Parsed comparison fixtures lost expected entries.');
+    if (!('name' in rawModel))
+        throw new Error('Raw comparison model did not retain its name.');
+    assert.equal(
+        resolveModel(profileModel, new Map([[profile.id, profile]]))?.id,
+        profile.id
+    );
+    assert.equal(rawProfile(rawModel).providerModel, 'raw-model');
+    assert.deepEqual(settingToRequest(maxTokenSetting), {
+        maxOutputTokens: 128,
+    });
 });
 
 test('runs independent variants and resumes from checkpoints', async () => {
@@ -196,15 +234,138 @@ test('resumes an interrupted run from its active pointer', async () => {
     assert.equal(resumed.reportId, interrupted.reportId);
 });
 
-test('loads the durable core reviewed case suite by name', () => {
+test('records support gaps, provider failures, and review evidence without calling unsupported variants', async () => {
+    const checkpointRoot = fs.mkdtempSync(
+        path.join(os.tmpdir(), 'response-comparison-outcomes-')
+    );
+    const generatedSettings: Array<number | undefined> = [];
+    const automaticReview: ResponseComparisonAutomaticReview = {
+        reviewer: {
+            profile: 'test-reviewer',
+            provider: 'openai',
+            model: 'test-reviewer-model',
+        },
+        promptHash: 'prompt-hash',
+        schemaHash: 'schema-hash',
+        instruction: 'Check the supplied response.',
+        schema: { type: 'object', properties: {} },
+        status: 'completed',
+        mustKeep: [
+            {
+                requirementId: 'hello',
+                result: 'pass',
+                explanation: 'The greeting is present.',
+                evidence: 'Hello.',
+            },
+        ],
+        ratings: [
+            {
+                dimension: 'naturalness',
+                score: 4,
+                rationale: 'The response is direct.',
+                evidence: 'Hello.',
+            },
+        ],
+        timing: { latencyMs: 5, costUsd: 0.001 },
+    };
+    const runCandidate: ComparisonDependencies['runCandidate'] = async (
+        input
+    ) => {
+        generatedSettings.push(input.generationRequest.temperature);
+        if (input.generationRequest.temperature === 0.4)
+            throw new Error('provider generation failed');
+        return fakeCandidate(input);
+    };
+    const support: NonNullable<
+        ComparisonDependencies['checkProviderSupport']
+    > = async (_candidateProfile, settings) => {
+        if (settings.temperature === 0.2)
+            return {
+                checkedAt: new Date(0).toISOString(),
+                source: 'catalog_profile',
+                modelId: profile.providerModel,
+                status: 'unsupported',
+                reasonCode: 'temperature_not_supported',
+            };
+        if (settings.temperature === 0.3)
+            throw new Error('provider support check failed');
+        return {
+            checkedAt: new Date(0).toISOString(),
+            source: 'catalog_profile',
+            modelId: profile.providerModel,
+            status: 'supported',
+        };
+    };
+    const report = await runResponseComparison({
+        configPath: 'test.yaml',
+        checkpointRoot,
+        command: 'test',
+        config: config({
+            settings: [
+                'default',
+                { temperature: 0.2 },
+                { temperature: 0.3 },
+                { temperature: 0.4 },
+            ],
+        }),
+        configHash: crypto
+            .createHash('sha256')
+            .update('outcomes')
+            .digest('hex'),
+        dependencies: {
+            profiles: new Map([[profile.id, profile]]),
+            generationRuntime: runtime,
+            runCandidate,
+            checkProviderSupport: support,
+            automaticReviewer: async () => automaticReview,
+        },
+    });
+
+    const byTemperature = (temperature: number | undefined) =>
+        report.attempts.find((attempt) =>
+            typeof attempt.setting === 'object'
+                ? attempt.setting.temperature === temperature
+                : temperature === undefined && attempt.setting === 'default'
+        );
+    assert.equal(byTemperature(undefined)?.status, 'completed');
+    assert.equal(byTemperature(0.2)?.status, 'not_tested');
+    assert.equal(
+        byTemperature(0.2)?.support?.reasonCode,
+        'temperature_not_supported'
+    );
+    assert.equal(byTemperature(0.3)?.status, 'not_tested');
+    assert.equal(
+        byTemperature(0.3)?.support?.reasonCode,
+        'provider_support_check_failed'
+    );
+    assert.equal(byTemperature(0.4)?.status, 'failed');
+    assert.equal(byTemperature(0.4)?.reason, 'provider generation failed');
+    assert.deepEqual(generatedSettings, [undefined, 0.4]);
+    assert.equal(
+        byTemperature(undefined)?.automaticReview?.status,
+        'completed'
+    );
+    assert.equal(
+        byTemperature(undefined)?.automaticReview?.reviewer.model,
+        'test-reviewer-model'
+    );
+    assert.equal(
+        byTemperature(undefined)?.settingsEvidence?.forwarded.temperature,
+        undefined
+    );
+    assert.equal(
+        byTemperature(undefined)?.attribution?.observedProvider,
+        'test-provider'
+    );
+});
+
+test('loads the editable campaign config without fixing its current matrix', () => {
     const loaded = loadResponseComparisonConfig(
         path.join(process.cwd(), 'response-comparison.yaml'),
         process.cwd()
     );
-    assert.equal(loaded.config.cases.length, 6);
-    assert.equal(loaded.config.models.length, 7);
-    assert.equal(loaded.config.repeats, 2);
-    assert.deepEqual(loaded.config.settings, ['default']);
+    assert.ok(loaded.config.cases.length > 0);
+    assert.ok(loaded.config.models.length > 0);
 });
 
 test('blind report retains judgment context, escapes candidate text, and hides operational metadata', () => {
@@ -244,15 +405,18 @@ test('blind report retains judgment context, escapes candidate text, and hides o
         blindnessEvents: [],
     };
     const html = buildReportHtml(report);
-    assert.match(html, /Checks:/u);
-    assert.match(html, /Source/u);
-    assert.match(html, /Style guidance/u);
-    assert.match(html, /Not rated/u);
-    assert.match(html, /Output rate/u);
-    assert.match(html, /Auto reviewed/u);
-    assert.match(html, /Generation cost/u);
-    assert.match(html, /Reviewer name/u);
-    assert.match(html, /Blind view/u);
+    assert.match(html, /data-role','comparison-summary'/u);
+    assert.match(
+        html,
+        /data-role',blind\?'blind-review':'operational-details'/u
+    );
+    assert.match(html, /data-role','human-review'/u);
+    assert.match(html, /canonical-report/u);
+    assert.match(html, /if\(!blind\)/u);
+    assert.match(html, /parentReportId/u);
+    assert.match(html, /action:'exported'/u);
+    assert.match(html, /"attemptId":"a"/u);
+    assert.match(html, /"expressionStrength":"balanced"/u);
     assert.match(html, /"latencyMs":10/u);
     assert.match(html, /\\u003cscript\\u003e/iu);
 });
