@@ -91,7 +91,11 @@ In the current implementation:
 
 - `server.ts` resolves runtime options
 - the chat handler passes those options into orchestration
-- the orchestrator decides whether retrieval is even attempted
+- the planner receives bounded descriptions of configured TrustGraph targets
+  and suggests opaque target IDs; the backend admits only matching configured
+  targets
+- the orchestrator creates the backend-owned TrustGraph context step after
+  planning
 - `chatService` injects a `trustgraph` context step when runtime options and a
   valid TrustGraph context both exist
 - `workflowEngine` executes that context step before generation
@@ -102,14 +106,19 @@ retrieval is attempted and local behavior continues normally.
 
 ### Configured target set
 
-The HTTP adapter accepts one or more deployment-configured targets. The current
-deployment supplies three targets. Each target
-has a stable operator-chosen `id`, a TrustGraph `flow`, a `collection`, and an
-optional per-target `workspaceRef`. The deployment's bearer token and base URL
+The HTTP adapter accepts one or more deployment-configured targets. Each target
+has a stable operator-chosen `id`, a trusted operator-authored `description`, a
+TrustGraph `flow`, a `collection`, and an optional per-target `workspaceRef`.
+The deployment's bearer token and base URL
 remain shared connection settings. The runtime never enumerates a workspace or
 queries a collection that is not present in this list. Deployments must provide
 the explicit target array; the old single-flow/single-collection settings are
 not part of this runtime path.
+
+The planner sees only bounded target IDs and descriptions. It may request zero,
+one, or several IDs. The backend validates every ID against this deployment's
+allowlist; missing or unmatched IDs fail open without broadcasting the query to
+every configured target.
 
 Target requests share the existing 60-second default retrieval timeout and the
 adapter's aggregate source and response budgets. A target failure is recorded

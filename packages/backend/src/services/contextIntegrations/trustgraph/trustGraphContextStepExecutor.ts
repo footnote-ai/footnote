@@ -31,6 +31,7 @@ import {
 type TrustGraphContextStepInput = {
     queryIntent: unknown;
     scopeTuple: unknown;
+    targetIds: unknown;
 };
 
 export type TrustGraphContextStepRuntimeOptions = {
@@ -61,7 +62,23 @@ const parseTrustGraphContextStepInput = (
     return {
         queryIntent: record.queryIntent,
         scopeTuple: record.scopeTuple,
+        targetIds: record.targetIds,
     };
+};
+
+const parseTargetIds = (value: unknown): string[] | undefined => {
+    if (!Array.isArray(value) || value.length === 0) {
+        return undefined;
+    }
+    const targetIds = value
+        .filter(
+            (targetId): targetId is string =>
+                typeof targetId === 'string' &&
+                targetId.trim().length > 0 &&
+                targetId.trim().length <= 128
+        )
+        .map((targetId) => targetId.trim());
+    return targetIds.length === value.length ? targetIds : undefined;
 };
 
 /**
@@ -148,6 +165,8 @@ const buildCitations = (
 };
 
 const MAX_PROMPT_PROVENANCE_CHARS = 4_000;
+const TRUSTGRAPH_FAILURE_GUIDANCE =
+    'TrustGraph retrieval was unavailable or unverifiable for this request. Continue fail-open, but do not turn that limitation into a fact about the subject and do not use earlier assistant claims or generated retrieval prose as evidence for a new personal-profile inference.';
 
 const formatProvenanceReferences = (references: readonly string[]): string => {
     const retained: string[] = [];
@@ -228,7 +247,8 @@ export const createTrustGraphContextStepExecutor = ({
             parsed === undefined ||
             typeof parsed.queryIntent !== 'string' ||
             parsed.queryIntent.trim().length === 0 ||
-            !isScopeTuple(parsed.scopeTuple)
+            !isScopeTuple(parsed.scopeTuple) ||
+            parseTargetIds(parsed.targetIds) === undefined
         ) {
             return buildSkippedContextStepResult({
                 toolName: request.integrationName,
@@ -239,6 +259,7 @@ export const createTrustGraphContextStepExecutor = ({
             const trustGraphResult = await runEvidenceIngestion({
                 queryIntent: parsed.queryIntent,
                 scopeTuple: parsed.scopeTuple,
+                targetIds: parseTargetIds(parsed.targetIds),
                 budget: runtimeOptions.budget,
                 ownershipValidationPolicy:
                     runtimeOptions.ownershipValidationPolicy,
@@ -251,6 +272,7 @@ export const createTrustGraphContextStepExecutor = ({
                     toolName: request.integrationName,
                     reasonCode: 'tool_timeout',
                     sources: buildCitations(trustGraphResult),
+                    trustedSystemMessages: [TRUSTGRAPH_FAILURE_GUIDANCE],
                     integrationContext: {
                         kind: 'trustgraph',
                         version: 'v1',
@@ -263,6 +285,7 @@ export const createTrustGraphContextStepExecutor = ({
                     toolName: request.integrationName,
                     reasonCode: 'tool_execution_error',
                     sources: buildCitations(trustGraphResult),
+                    trustedSystemMessages: [TRUSTGRAPH_FAILURE_GUIDANCE],
                     integrationContext: {
                         kind: 'trustgraph',
                         version: 'v1',
@@ -294,6 +317,7 @@ export const createTrustGraphContextStepExecutor = ({
             return buildFailedContextStepResult({
                 toolName: request.integrationName,
                 reasonCode: 'tool_execution_error',
+                trustedSystemMessages: [TRUSTGRAPH_FAILURE_GUIDANCE],
             });
         }
     };

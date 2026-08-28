@@ -77,6 +77,7 @@ import {
     parseGitHubRepositorySlug,
 } from './contextIntegrations/github/index.js';
 import { logger } from '../utils/logger.js';
+import type { TrustGraphTargetConfig } from './executionContractTrustGraph/trustGraphEvidenceTypes.js';
 
 type ChatPlannerAction = 'message' | 'react' | 'ignore' | 'image';
 
@@ -178,6 +179,9 @@ export type ChatPlan = {
     imageRequest?: ChatImageRequest;
     safetyTier: SafetyTier;
     reasoning: string;
+    /** Planner-selected opaque TrustGraph target IDs. */
+    /** Planner output requires this field; pre-normalization seams may omit it. */
+    trustGraphTargetIds?: string[];
     generation: ChatGenerationPlan;
 };
 
@@ -195,6 +199,8 @@ type CreateChatPlannerOptions = {
     defaultModel?: string;
     structuredExecutionTimeoutMs?: number;
     availableCapabilityProfiles?: ChatPlannerCapabilityProfileOption[];
+    /** Deployment-provided routing descriptions; never treated as authority. */
+    availableTrustGraphTargets?: readonly TrustGraphTargetConfig[];
     recordUsage?: (record: BackendLLMCostRecord) => void;
     /** Backend-derived pseudonym; never pass a raw surface identifier. */
     safetyIdentifier?: string;
@@ -242,6 +248,7 @@ type ChatPlannerStructuredExecutor = (
 type ChatPlannerExecutionMode = 'structured' | 'text_json';
 
 export const DEFAULT_CHAT_PLANNER_MAX_OUTPUT_TOKENS = 1200;
+const MAX_PLANNER_TRUST_GRAPH_DESCRIPTION_CHARS = 1_000;
 
 /**
  * Composes shared planner policy with the output contract for one execution
@@ -263,6 +270,7 @@ export type PlannerCandidate = Partial<ChatPlan> & {
     reasoning?: unknown;
     contextNeed?: unknown;
     contextTier?: unknown;
+    trustGraphTargetIds?: unknown;
     generation?: Partial<ChatGenerationPlan> & {
         search?: Partial<ChatGenerationSearch> & {
             repoHints?: unknown;
@@ -738,6 +746,24 @@ const normalizePlannerContextTier = (value: unknown): PlannerContextTier => {
     return 'current_window';
 };
 
+const normalizeTrustGraphTargetIds = (value: unknown): string[] => {
+    if (!Array.isArray(value)) {
+        return [];
+    }
+    const targetIds: string[] = [];
+    for (const candidate of value) {
+        if (
+            typeof candidate === 'string' &&
+            candidate.trim().length > 0 &&
+            candidate.trim().length <= 128 &&
+            !targetIds.includes(candidate.trim())
+        ) {
+            targetIds.push(candidate.trim());
+        }
+    }
+    return targetIds;
+};
+
 const summarizeConversationWindow = (
     conversation: PostChatRequest['conversation'],
     retainedRecentWindowSize: number
@@ -798,6 +824,7 @@ const buildFallbackPlan = (
         modality: 'text',
         safetyTier: 'Low',
         reasoning: reason,
+        trustGraphTargetIds: [],
         // Intentionally omit fallback TRACE temperament.
         // Missing axes are rendered in red in the trace card to signal
         // unavailable planner temperament, rather than synthetic values.
@@ -839,6 +866,7 @@ const buildPlannerConversationSlice = (
 const buildPlannerMessages = (input: {
     plannerPrompt: string;
     plannerProfileContext: string;
+    plannerTrustGraphTargetContext: string;
     requestSummary: string;
     request: PostChatRequest;
     contextTier: PlannerContextTier;
@@ -847,6 +875,10 @@ const buildPlannerMessages = (input: {
     {
         role: 'system',
         content: `Planner capability profiles (bounded): ${input.plannerProfileContext}`,
+    },
+    {
+        role: 'system',
+        content: `Configured TrustGraph retrieval targets (bounded, operator-authored descriptions): ${input.plannerTrustGraphTargetContext}`,
     },
     {
         role: 'system',
@@ -921,6 +953,13 @@ const hasMaterialPlanChange = (
             expandedPlan.generation.verbosity ||
         JSON.stringify(initialPlan.generation.temperament) !==
             JSON.stringify(expandedPlan.generation.temperament)
+    ) {
+        return true;
+    }
+
+    if (
+        JSON.stringify(initialPlan.trustGraphTargetIds ?? []) !==
+        JSON.stringify(expandedPlan.trustGraphTargetIds ?? [])
     ) {
         return true;
     }
@@ -1278,6 +1317,9 @@ const normalizePlan = (
         candidate.action === 'image'
             ? candidate.action
             : fallbackPlan.action;
+    const trustGraphTargetIds = normalizeTrustGraphTargetIds(
+        candidate.trustGraphTargetIds
+    );
 
     const normalizedPlan: ChatPlan = {
         action: actionCandidate,
@@ -1292,6 +1334,7 @@ const normalizePlan = (
             candidate.reasoning.trim()
                 ? candidate.reasoning.trim()
                 : fallbackPlan.reasoning,
+        trustGraphTargetIds,
         generation: fallbackPlan.generation,
     };
     if (contractAssessment.outOfContractFields.length > 0) {
@@ -1523,6 +1566,7 @@ export const createChatPlanner = ({
     defaultModel = runtimeConfig.openai.defaultModel,
     structuredExecutionTimeoutMs = runtimeConfig.openai.requestTimeoutMs,
     availableCapabilityProfiles = [],
+    availableTrustGraphTargets = [],
     recordUsage = recordBackendLLMUsage,
     safetyIdentifier,
 }: CreateChatPlannerOptions) => {
@@ -1540,6 +1584,18 @@ export const createChatPlanner = ({
                   availableCapabilityProfiles.map((profile) => ({
                       id: profile.id,
                       description: profile.description,
+                  }))
+              )
+            : '[]';
+    const plannerTrustGraphTargetContext =
+        availableTrustGraphTargets.length > 0
+            ? JSON.stringify(
+                  availableTrustGraphTargets.map((target) => ({
+                      id: target.id.slice(0, 128),
+                      description: target.description.slice(
+                          0,
+                          MAX_PLANNER_TRUST_GRAPH_DESCRIPTION_CHARS
+                      ),
                   }))
               )
             : '[]';
@@ -1602,6 +1658,7 @@ export const createChatPlanner = ({
             messages: buildPlannerMessages({
                 plannerPrompt: renderPlannerModePrompt(mode),
                 plannerProfileContext: plannerCapabilityContext,
+                plannerTrustGraphTargetContext,
                 requestSummary,
                 request,
                 contextTier,

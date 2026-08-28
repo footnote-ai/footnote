@@ -23,6 +23,8 @@ export type TrustGraphTargetConfig = {
     id: string;
     flow: string;
     collection: string;
+    /** Trusted operator-authored routing context, not an authority grant. */
+    description: string;
     workspaceRef?: string | null;
 };
 
@@ -91,6 +93,8 @@ export interface TrustGraphEvidenceAdapter {
         scopeTuple: ScopeTuple;
         budget: Budget;
         abortSignal?: AbortSignal;
+        /** Planner-selected opaque IDs validated against configured targets. */
+        targetIds: readonly string[];
     }): Promise<EvidenceBundle>;
 }
 

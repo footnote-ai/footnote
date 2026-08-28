@@ -198,6 +198,8 @@ export const createChatOrchestrator = ({
 
         return createChatPlanner({
             availableCapabilityProfiles: plannerCapabilityOptions,
+            availableTrustGraphTargets:
+                executionContractTrustGraph?.targets ?? [],
             ...(structuredExecutor !== undefined && {
                 executePlannerStructured: async (request) =>
                     structuredExecutor({
@@ -713,6 +715,49 @@ export const createChatOrchestrator = ({
             invocationContext: plannerInvocationContext,
             capabilityProfiles: plannerCapabilityOptions,
         };
+        const executionContractScopeTuple =
+            executionContractTrustGraph === undefined
+                ? undefined
+                : buildExecutionContractScopeTuple(normalizedRequest, {
+                      collectionId:
+                          executionContractTrustGraph.deploymentCollectionId,
+                  });
+
+        const buildTrustGraphContextStepRequest = (
+            targetIds: readonly string[]
+        ):
+            | {
+                  integrationName: 'trustgraph';
+                  requested: true;
+                  eligible: true;
+                  input: {
+                      queryIntent: string;
+                      scopeTuple: NonNullable<
+                          typeof executionContractScopeTuple
+                      >;
+                      targetIds: readonly string[];
+                  };
+              }
+            | undefined => {
+            if (
+                executionContractTrustGraph === undefined ||
+                executionContractScopeTuple === undefined ||
+                targetIds.length === 0
+            ) {
+                return undefined;
+            }
+            return {
+                integrationName: 'trustgraph',
+                requested: true,
+                eligible: true,
+                input: {
+                    queryIntent: normalizedRequest.latestUserInput,
+                    scopeTuple: executionContractScopeTuple,
+                    targetIds,
+                },
+            };
+        };
+
         // Applies backend policy to planner output and returns the next
         // workflow action (`terminal_action` or `continue_message`).
         const planContinuationBuilder: PlanContinuationBuilder = (input) => {
@@ -808,6 +853,48 @@ export const createChatOrchestrator = ({
                 input.baseMessagesWithHints.length > 0
                     ? [...input.baseMessagesWithHints, plannerPayloadMessage]
                     : postPlanAssembly.conversationMessages;
+            const configuredTrustGraphTargetIds = new Set(
+                (executionContractTrustGraph?.targets ?? []).map(
+                    (target) => target.id
+                )
+            );
+            const requestedTrustGraphTargetIds =
+                executionPlan.trustGraphTargetIds ?? [];
+            const admittedTrustGraphTargetIds =
+                requestedTrustGraphTargetIds.filter((targetId) =>
+                    configuredTrustGraphTargetIds.has(targetId)
+                );
+            chatOrchestratorLogger.info(
+                'chat.execution_contract_trustgraph.target_selection',
+                {
+                    event: 'chat.execution_contract_trustgraph.target_selection',
+                    requestedTargetIds: requestedTrustGraphTargetIds,
+                    admittedTargetIds: admittedTrustGraphTargetIds,
+                    rejectedTargetIds: requestedTrustGraphTargetIds.filter(
+                        (targetId) =>
+                            !configuredTrustGraphTargetIds.has(targetId)
+                    ),
+                    notSelectedTargetIds: [
+                        ...(executionContractTrustGraph?.targets ?? [])
+                            .filter(
+                                (target) =>
+                                    !admittedTrustGraphTargetIds.includes(
+                                        target.id
+                                    )
+                            )
+                            .map((target) => target.id),
+                    ],
+                    selectionReason: executionPlan.reasoning.slice(0, 500),
+                }
+            );
+            const trustGraphContextStepRequest =
+                buildTrustGraphContextStepRequest(admittedTrustGraphTargetIds);
+            const contextStepRequests = [
+                ...(plannerApplication.contextStepRequests ?? []),
+                ...(trustGraphContextStepRequest !== undefined
+                    ? [trustGraphContextStepRequest]
+                    : []),
+            ];
             return {
                 continuation: 'continue_message' as const,
                 messagesWithHints: mergedMessagesWithHints,
@@ -830,9 +917,7 @@ export const createChatOrchestrator = ({
                 plannerTemperament: executionPlan.generation.temperament,
                 conversationSnapshot: postPlanAssembly.conversationSnapshot,
                 contextEnvelope,
-                ...(plannerApplication.contextStepRequests !== undefined && {
-                    contextStepRequests: plannerApplication.contextStepRequests,
-                }),
+                ...(contextStepRequests.length > 0 && { contextStepRequests }),
                 plannerSummary: buildPlannerSummary({
                     plannerStepResult: input.plannerStepResult,
                     plannerApplication,
@@ -853,13 +938,6 @@ export const createChatOrchestrator = ({
             },
             contextEnvelope: toSnapshotContextEnvelope(contextEnvelope),
         });
-        const executionContractScopeTuple =
-            executionContractTrustGraph === undefined
-                ? undefined
-                : buildExecutionContractScopeTuple(normalizedRequest, {
-                      collectionId:
-                          executionContractTrustGraph.deploymentCollectionId,
-                  });
         const response = await chatService.runChatMessagesWithOutcome({
             messages: baseConversationMessages,
             conversationSnapshot: baseConversationSnapshot,
@@ -890,6 +968,7 @@ export const createChatOrchestrator = ({
                 executionContractTrustGraphContext: {
                     queryIntent: normalizedRequest.latestUserInput,
                     scopeTuple: executionContractScopeTuple,
+                    targetIds: [],
                 },
             }),
             executionContext: {
@@ -921,6 +1000,7 @@ export const createChatOrchestrator = ({
             profileId: defaultResponseProfile.id,
             safetyTier: 'Low',
             reasoning: 'Fallback execution plan before planner summary.',
+            trustGraphTargetIds: [],
             generation: {
                 reasoningEffort: 'low',
                 verbosity: 'medium',

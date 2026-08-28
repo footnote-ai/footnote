@@ -322,6 +322,7 @@ const ExecutionReasonCodeSchema = z.enum([
     'tool_http_error',
     'tool_network_error',
     'tool_invalid_response',
+    'max_tool_calls_reached',
     'location_not_resolved',
     'search_not_supported_by_selected_profile',
     'unspecified_tool_outcome',
@@ -375,6 +376,7 @@ const ToolExecutionReasonCodeSchema = z.enum([
     'tool_http_error',
     'tool_network_error',
     'tool_invalid_response',
+    'max_tool_calls_reached',
     'search_not_supported_by_selected_profile',
     'unspecified_tool_outcome',
 ]);

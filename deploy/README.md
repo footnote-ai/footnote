@@ -272,7 +272,7 @@ TAILSCALE_AUTHKEY=<reusable, pre-authorized ephemeral auth key>
 EXECUTION_CONTRACT_TRUSTGRAPH_ADAPTER_API_TOKEN=<workspace-scoped-key>
 EXECUTION_CONTRACT_TRUSTGRAPH_BASE_URL=http://<pc-magicdns-hostname>:8888
 EXECUTION_CONTRACT_TRUSTGRAPH_WORKSPACE_REF=footnote
-EXECUTION_CONTRACT_TRUSTGRAPH_TARGETS=[{"id":"target-1","flow":"<flow-id-1>","collection":"<collection-id-1>","workspaceRef":"footnote"},{"id":"target-2","flow":"<flow-id-2>","collection":"<collection-id-2>","workspaceRef":"footnote"},{"id":"target-3","flow":"<flow-id-3>","collection":"<collection-id-3>","workspaceRef":"footnote"}]
+EXECUTION_CONTRACT_TRUSTGRAPH_TARGETS=[{"id":"target-1","flow":"<flow-id-1>","collection":"<collection-id-1>","description":"<bounded operator-authored description>","workspaceRef":"footnote"},{"id":"target-2","flow":"<flow-id-2>","collection":"<collection-id-2>","description":"<bounded operator-authored description>","workspaceRef":"footnote"}]
 ```
 
 The normal Fly deploy leaves TrustGraph disabled and does not require these
@@ -295,9 +295,10 @@ authorization model. `workspaceRef` selects the TrustGraph workspace route for
 that target. Separately, the adapter token is sent only as a bearer token to
 authorize the TrustGraph request.
 
-The target value is a JSON array. The current deployment uses three entries.
-Only the listed flows and collections are queried; Footnote does not discover
-or enumerate other workspace data. Give each target a stable operator-chosen
+The target value is a JSON array. The example above uses two entries; a
+deployment may configure any number of targets. Only the listed flows and
+collections are queried; Footnote does not discover or enumerate other
+workspace data. Give each target a stable operator-chosen
 `id` so its evidence remains identifiable in provenance. The adapter queries
 configured targets within one shared 60-second default timeout and shared
 aggregate source/response bounds. The aggregate source bound must accommodate

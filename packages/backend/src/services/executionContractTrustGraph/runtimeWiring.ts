@@ -176,6 +176,7 @@ export const resolveExecutionContractTrustGraphRuntimeOptions = (
 
     return {
         adapter,
+        targets: config.adapter.targets,
         ...(deploymentCollectionId !== undefined && {
             deploymentCollectionId,
         }),

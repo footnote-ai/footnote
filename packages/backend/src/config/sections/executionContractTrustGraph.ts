@@ -42,6 +42,7 @@ const STUB_ADAPTER_MODES: ReadonlySet<StubAdapterMode> = new Set([
 
 const MAX_CONFIGURED_TARGETS = 8;
 const TARGET_ID_PATTERN = /^[a-zA-Z0-9._:-]{1,128}$/;
+const MAX_TARGET_DESCRIPTION_CHARS = 1_000;
 
 const invalidTargets = (reason: string): never => {
     throw new Error(`execution_contract_trustgraph_invalid_targets_${reason}`);
@@ -49,7 +50,7 @@ const invalidTargets = (reason: string): never => {
 
 const parseTargetString = (
     value: unknown,
-    field: 'id' | 'flow' | 'collection',
+    field: 'id' | 'flow' | 'collection' | 'description',
     index: number
 ): string => {
     if (typeof value !== 'string') {
@@ -62,6 +63,12 @@ const parseTargetString = (
     const trimmed = value.trim();
     if (field === 'id' && !TARGET_ID_PATTERN.test(trimmed)) {
         invalidTargets(`invalid_id_${index}`);
+    }
+    if (
+        field === 'description' &&
+        trimmed.length > MAX_TARGET_DESCRIPTION_CHARS
+    ) {
+        invalidTargets(`description_too_long_${index}`);
     }
 
     return trimmed;
@@ -118,6 +125,11 @@ const parseConfiguredTargets = (
             collection: parseTargetString(
                 record.collection,
                 'collection',
+                index
+            ),
+            description: parseTargetString(
+                record.description,
+                'description',
                 index
             ),
             ...(workspaceRef !== undefined && {

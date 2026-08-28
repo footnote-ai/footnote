@@ -314,6 +314,8 @@ test('chat planner output prompts are mode-specific', () => {
     assert.match(textJsonPrompt, /Return plain JSON only/i);
     assert.match(textJsonPrompt, /Example for a message action/i);
     assert.match(textJsonPrompt, /Do not return .* a function call/i);
+    assert.match(textJsonPrompt, /trustGraphTargetIds is required/i);
+    assert.match(textJsonPrompt, /trustGraphTargetIds.*\[\]/i);
 
     const example = textJsonPrompt.split('Example for a message action:')[1];
     assert.ok(example);
