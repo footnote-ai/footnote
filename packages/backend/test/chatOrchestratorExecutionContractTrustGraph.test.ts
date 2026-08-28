@@ -340,6 +340,97 @@ test('orchestrator TrustGraph ON/OFF preserves routing and terminal authority se
     );
 });
 
+test('orchestrator skips TrustGraph when the planner explicitly selects no targets', async () => {
+    const scopeOwnershipValidator =
+        createScopeOwnershipValidatorFromTenancyService({
+            validatorId: 'backend_tenancy_v1',
+            service: {
+                validateScopeOwnership: async () => ({
+                    owned: true,
+                    checkedAt: TEST_TIMESTAMP,
+                    evidence: ['ownership_lookup:allow'],
+                }),
+            },
+        });
+    let adapterInvoked = false;
+
+    const orchestrator = createChatOrchestrator({
+        generationRuntime: createGenerationRuntime(
+            async ({ maxOutputTokens }) => {
+                if (maxOutputTokens === PLANNER_TOKEN_SENTINEL) {
+                    return {
+                        text: JSON.stringify({
+                            action: 'message',
+                            modality: 'text',
+                            requestedCapabilityProfile: 'balanced-general',
+                            safetyTier: 'Low',
+                            reasoning:
+                                'No configured retrieval target is relevant.',
+                            trustGraphTargetIds: [],
+                            generation: {
+                                reasoningEffort: 'low',
+                                verbosity: 'low',
+                                temperament: {
+                                    tightness: 3,
+                                    rationale: 3,
+                                    attribution: 3,
+                                    caution: 3,
+                                    extent: 3,
+                                },
+                            },
+                        }),
+                        model: 'gpt-5-mini',
+                    };
+                }
+
+                return {
+                    text: 'ordinary answer without retrieval',
+                    model: 'gpt-5-mini',
+                    provenance: 'Inferred',
+                    citations: [],
+                };
+            }
+        ),
+        storeTrace: async () => undefined,
+        buildResponseMetadata: () => createMetadata(),
+        defaultModel: 'gpt-5-mini',
+        recordUsage: () => undefined,
+        executionContractTrustGraph: {
+            targets: TEST_TARGETS,
+            adapter: {
+                async getEvidenceBundle() {
+                    adapterInvoked = true;
+                    return buildEvidenceBundle({
+                        userId: 'user_1',
+                        collectionId: 'product-docs',
+                    });
+                },
+            },
+            budget: {
+                timeoutMs: 100,
+                maxCalls: 1,
+            },
+            ownershipValidationPolicy:
+                TrustGraphOwnershipValidationPolicy.required({
+                    policyId: 'chat_orchestrator_runtime_policy',
+                }),
+            scopeOwnershipValidator,
+        },
+    });
+
+    const response = await orchestrator.runChat(
+        createChatRequest({
+            surfaceContext: {
+                userId: 'user_1',
+                channelId: 'project_1',
+            },
+        })
+    );
+
+    assert.equal(response.action, 'message');
+    assert.equal(adapterInvoked, false);
+});
+
 test('orchestrator scope builder keeps sessionId correlation-only and uses explicit surface scope fields', async () => {
     const scopeOwnershipValidator =
         createScopeOwnershipValidatorFromTenancyService({

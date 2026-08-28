@@ -180,6 +180,7 @@ export type ChatPlan = {
     safetyTier: SafetyTier;
     reasoning: string;
     /** Planner-selected opaque TrustGraph target IDs. */
+    /** Planner output requires this field; pre-normalization seams may omit it. */
     trustGraphTargetIds?: string[];
     generation: ChatGenerationPlan;
 };
@@ -823,6 +824,7 @@ const buildFallbackPlan = (
         modality: 'text',
         safetyTier: 'Low',
         reasoning: reason,
+        trustGraphTargetIds: [],
         // Intentionally omit fallback TRACE temperament.
         // Missing axes are rendered in red in the trace card to signal
         // unavailable planner temperament, rather than synthetic values.
@@ -1332,7 +1334,7 @@ const normalizePlan = (
             candidate.reasoning.trim()
                 ? candidate.reasoning.trim()
                 : fallbackPlan.reasoning,
-        ...(trustGraphTargetIds.length > 0 && { trustGraphTargetIds }),
+        trustGraphTargetIds,
         generation: fallbackPlan.generation,
     };
     if (contractAssessment.outOfContractFields.length > 0) {

@@ -1000,6 +1000,7 @@ export const createChatOrchestrator = ({
             profileId: defaultResponseProfile.id,
             safetyTier: 'Low',
             reasoning: 'Fallback execution plan before planner summary.',
+            trustGraphTargetIds: [],
             generation: {
                 reasoningEffort: 'low',
                 verbosity: 'medium',

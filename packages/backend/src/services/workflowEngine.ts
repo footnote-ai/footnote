@@ -845,154 +845,246 @@ export const runBoundedReviewWorkflow = async ({
         ) {
             terminationReason = 'transition_blocked_by_policy';
             shouldStop = true;
-        } else if (!stopIfOverLimits('tool').stopped) {
-            // Independent context integrations remain parallel by default. An
-            // explicit GitHub object creates a narrow dependency chain so exact
-            // repository retrieval completes before broad context and web
-            // discovery can be admitted.
-            const remainingToolCalls =
-                executionLimits.maxToolCalls === UNBOUNDED_EXECUTION_LIMIT
-                    ? Number.POSITIVE_INFINITY
-                    : Math.max(
-                          0,
-                          executionLimits.maxToolCalls -
-                              workflowState.toolCallCount
-                      );
-            let reservedToolCallCount = 0;
-            const runContextStepBatch = async (
-                requests: ContextStepRequest[]
-            ): Promise<ContextStepExecutionOutcome[]> =>
-                Promise.all(
-                    requests.map(
-                        async (
-                            request
-                        ): Promise<ContextStepExecutionOutcome> => {
-                            if (reservedToolCallCount >= remainingToolCalls) {
-                                const blockedAtMs = Date.now();
-                                return {
-                                    request,
-                                    blockedByLimit: true,
-                                    startedAtMs: blockedAtMs,
-                                    finishedAtMs: blockedAtMs,
-                                };
-                            }
-                            reservedToolCallCount += 1;
-                            const executor = selectContextStepExecutor(
-                                request,
-                                contextStepExecutor,
-                                contextStepExecutorRegistry
-                            );
-                            if (executor === undefined) {
-                                return {
-                                    request,
-                                    startedAtMs: Date.now(),
-                                    finishedAtMs: Date.now(),
-                                };
-                            }
-                            const startedAtMs = Date.now();
-                            try {
-                                const result = await executor({
-                                    request,
-                                    workflowId,
-                                    workflowName: workflowConfig.workflowName,
-                                    attempt: 1,
-                                });
-                                return {
-                                    request,
-                                    result,
-                                    startedAtMs,
-                                    finishedAtMs: Date.now(),
-                                };
-                            } catch (error) {
-                                return {
-                                    request,
-                                    error,
-                                    startedAtMs,
-                                    finishedAtMs: Date.now(),
-                                };
-                            }
-                        }
-                    )
-                );
-            const hasExplicitGitHubObject = executableContextSteps.some(
-                (request) =>
-                    request.integrationName === 'github_context' &&
-                    request.input?.reference !== undefined
+        } else {
+            const toolLimitEvaluation = checkExecutionLimits(
+                workflowState,
+                executionLimits,
+                Date.now(),
+                'tool'
             );
-            const contextStepBatches = hasExplicitGitHubObject
-                ? [
-                      executableContextSteps.filter(
-                          (request) =>
-                              request.integrationName === 'github_context' &&
-                              request.input?.reference !== undefined
-                      ),
-                      executableContextSteps.filter(
-                          (request) =>
-                              !(
+            if (
+                toolLimitEvaluation.withinLimits ||
+                toolLimitEvaluation.exhaustedBy === 'maxToolCalls'
+            ) {
+                // Independent context integrations remain parallel by default. An
+                // explicit GitHub object creates a narrow dependency chain so exact
+                // repository retrieval completes before broad context and web
+                // discovery can be admitted.
+                const remainingToolCalls =
+                    executionLimits.maxToolCalls === UNBOUNDED_EXECUTION_LIMIT
+                        ? Number.POSITIVE_INFINITY
+                        : Math.max(
+                              0,
+                              executionLimits.maxToolCalls -
+                                  workflowState.toolCallCount
+                          );
+                let reservedToolCallCount = 0;
+                const runContextStepBatch = async (
+                    requests: ContextStepRequest[]
+                ): Promise<ContextStepExecutionOutcome[]> =>
+                    Promise.all(
+                        requests.map(
+                            async (
+                                request
+                            ): Promise<ContextStepExecutionOutcome> => {
+                                if (
+                                    reservedToolCallCount >= remainingToolCalls
+                                ) {
+                                    const blockedAtMs = Date.now();
+                                    return {
+                                        request,
+                                        blockedByLimit: true,
+                                        startedAtMs: blockedAtMs,
+                                        finishedAtMs: blockedAtMs,
+                                    };
+                                }
+                                reservedToolCallCount += 1;
+                                const executor = selectContextStepExecutor(
+                                    request,
+                                    contextStepExecutor,
+                                    contextStepExecutorRegistry
+                                );
+                                if (executor === undefined) {
+                                    return {
+                                        request,
+                                        startedAtMs: Date.now(),
+                                        finishedAtMs: Date.now(),
+                                    };
+                                }
+                                const startedAtMs = Date.now();
+                                try {
+                                    const result = await executor({
+                                        request,
+                                        workflowId,
+                                        workflowName:
+                                            workflowConfig.workflowName,
+                                        attempt: 1,
+                                    });
+                                    return {
+                                        request,
+                                        result,
+                                        startedAtMs,
+                                        finishedAtMs: Date.now(),
+                                    };
+                                } catch (error) {
+                                    return {
+                                        request,
+                                        error,
+                                        startedAtMs,
+                                        finishedAtMs: Date.now(),
+                                    };
+                                }
+                            }
+                        )
+                    );
+                const hasExplicitGitHubObject = executableContextSteps.some(
+                    (request) =>
+                        request.integrationName === 'github_context' &&
+                        request.input?.reference !== undefined
+                );
+                const contextStepBatches = hasExplicitGitHubObject
+                    ? [
+                          executableContextSteps.filter(
+                              (request) =>
                                   request.integrationName ===
                                       'github_context' &&
                                   request.input?.reference !== undefined
-                              ) && request.integrationName !== 'web_search'
-                      ),
-                      executableContextSteps.filter(
-                          (request) => request.integrationName === 'web_search'
-                      ),
-                  ]
-                : [executableContextSteps];
-            const contextStepOutcomes: ContextStepExecutionOutcome[] = [];
-            for (const batch of contextStepBatches) {
-                if (batch.length > 0) {
-                    contextStepOutcomes.push(
-                        ...(await runContextStepBatch(batch))
-                    );
+                          ),
+                          executableContextSteps.filter(
+                              (request) =>
+                                  !(
+                                      request.integrationName ===
+                                          'github_context' &&
+                                      request.input?.reference !== undefined
+                                  ) && request.integrationName !== 'web_search'
+                          ),
+                          executableContextSteps.filter(
+                              (request) =>
+                                  request.integrationName === 'web_search'
+                          ),
+                      ]
+                    : [executableContextSteps];
+                const contextStepOutcomes: ContextStepExecutionOutcome[] = [];
+                for (const batch of contextStepBatches) {
+                    if (batch.length > 0) {
+                        contextStepOutcomes.push(
+                            ...(await runContextStepBatch(batch))
+                        );
+                    }
                 }
-            }
-            for (const contextStepOutcome of contextStepOutcomes) {
-                if (contextStepOutcome.blockedByLimit === true) {
-                    exhaustedLimitKey = 'maxToolCalls';
-                    stoppedBeforeStepKind = 'tool';
-                    terminationReason =
-                        mapLimitExhaustionToTerminationReason('maxToolCalls');
-                    workflowStatus = 'degraded';
-                    shouldStop = true;
-                    continue;
-                }
-                if (contextStepOutcome.error !== undefined) {
-                    contextStepManifestFailures.push({
-                        integrationName:
-                            contextStepOutcome.request.integrationName,
-                        requested: contextStepOutcome.request.requested,
-                        status: 'failed',
-                    });
-                    logger.error(
-                        'Context step execution failed; workflow continued fail-open without context.',
-                        {
+                for (const contextStepOutcome of contextStepOutcomes) {
+                    if (contextStepOutcome.blockedByLimit === true) {
+                        // A tool-call limit prevents this optional context step,
+                        // not the authoritative answer. Record the skipped tool
+                        // as a failed, fail-open step and continue to generation;
+                        // otherwise an unrelated retrieval limit can surface as
+                        // an unsupported no-generation outcome.
+                        contextStepManifestFailures.push({
+                            integrationName:
+                                contextStepOutcome.request.integrationName,
+                            requested: contextStepOutcome.request.requested,
+                            status: 'failed',
+                        });
+                        captureStep({
                             stepKind: 'tool',
+                            status: 'failed',
+                            summary:
+                                'Context step was blocked by the tool-call limit; workflow continued fail-open without context.',
+                            reasonCode: 'max_tool_calls_reached',
+                            startedAtMs: contextStepOutcome.startedAtMs,
+                            finishedAtMs: contextStepOutcome.finishedAtMs,
+                            parentStepId: plannerRootStepId,
+                            attempt: 1,
+                        });
+                        continue;
+                    }
+                    if (contextStepOutcome.error !== undefined) {
+                        contextStepManifestFailures.push({
+                            integrationName:
+                                contextStepOutcome.request.integrationName,
+                            requested: contextStepOutcome.request.requested,
+                            status: 'failed',
+                        });
+                        logger.error(
+                            'Context step execution failed; workflow continued fail-open without context.',
+                            {
+                                stepKind: 'tool',
+                                reasonCode: 'tool_execution_error',
+                                startedAtMs: contextStepOutcome.startedAtMs,
+                                finishedAtMs: contextStepOutcome.finishedAtMs,
+                                parentStepId: plannerRootStepId,
+                                attempt: 1,
+                                workflowName: workflowConfig.workflowName,
+                                workflowId,
+                                integrationName:
+                                    contextStepOutcome.request.integrationName,
+                                error:
+                                    contextStepOutcome.error instanceof Error
+                                        ? contextStepOutcome.error.message
+                                        : String(contextStepOutcome.error),
+                            }
+                        );
+                        captureStep({
+                            stepKind: 'tool',
+                            status: 'failed',
+                            summary:
+                                'Context step execution failed; workflow continued fail-open without context.',
                             reasonCode: 'tool_execution_error',
                             startedAtMs: contextStepOutcome.startedAtMs,
                             finishedAtMs: contextStepOutcome.finishedAtMs,
                             parentStepId: plannerRootStepId,
                             attempt: 1,
-                            workflowName: workflowConfig.workflowName,
-                            workflowId,
-                            integrationName:
-                                contextStepOutcome.request.integrationName,
-                            error:
-                                contextStepOutcome.error instanceof Error
-                                    ? contextStepOutcome.error.message
-                                    : String(contextStepOutcome.error),
-                        }
-                    );
+                        });
+                        workflowState = applyStepExecutionToState(
+                            workflowState,
+                            'tool',
+                            0,
+                            1,
+                            0
+                        );
+                        continue;
+                    }
+                    if (contextStepOutcome.result === undefined) {
+                        continue;
+                    }
+                    const normalizedResult = contextStepOutcome.result;
+                    const normalizedExecutionContext =
+                        normalizedResult.executionContext;
+                    const clarificationSignals:
+                        WorkflowToolClarificationSignals | undefined =
+                        normalizedResult.outcome === 'needs_clarification'
+                            ? {
+                                  clarificationReasonCode:
+                                      normalizedResult.clarification.reasonCode,
+                                  clarificationOptionCount:
+                                      normalizedResult.clarification.options
+                                          .length,
+                              }
+                            : undefined;
+                    executedContextStepResults.push(normalizedResult);
                     captureStep({
                         stepKind: 'tool',
-                        status: 'failed',
+                        status: normalizedExecutionContext.status,
                         summary:
-                            'Context step execution failed; workflow continued fail-open without context.',
-                        reasonCode: 'tool_execution_error',
+                            normalizedResult.outcome === 'failed'
+                                ? 'Context step failed; workflow continued fail-open without context.'
+                                : normalizedResult.outcome ===
+                                    'needs_clarification'
+                                  ? 'Context step requires user clarification before generation.'
+                                  : normalizedResult.outcome === 'skipped'
+                                    ? 'Context step skipped without context.'
+                                    : 'Context step executed and emitted bounded context messages.',
+                        ...(normalizedExecutionContext.reasonCode !==
+                            undefined && {
+                            reasonCode: normalizedExecutionContext.reasonCode,
+                        }),
                         startedAtMs: contextStepOutcome.startedAtMs,
                         finishedAtMs: contextStepOutcome.finishedAtMs,
                         parentStepId: plannerRootStepId,
                         attempt: 1,
+                        ...(normalizedResult.outcome === 'executed' &&
+                            normalizedResult.contextMessages !== undefined && {
+                                artifacts: normalizedResult.contextMessages.map(
+                                    (message) =>
+                                        typeof message === 'string'
+                                            ? message
+                                            : message.content
+                                ),
+                            }),
+                        ...(normalizedResult.outcome ===
+                            'needs_clarification' && {
+                            signals: clarificationSignals,
+                        }),
                     });
                     workflowState = applyStepExecutionToState(
                         workflowState,
@@ -1001,70 +1093,16 @@ export const runBoundedReviewWorkflow = async ({
                         1,
                         0
                     );
-                    continue;
+                    if (normalizedResult.outcome === 'needs_clarification') {
+                        terminationReason = 'goal_satisfied';
+                        workflowStatus = 'completed';
+                        shouldStop = true;
+                    }
                 }
-                if (contextStepOutcome.result === undefined) {
-                    continue;
-                }
-                const normalizedResult = contextStepOutcome.result;
-                const normalizedExecutionContext =
-                    normalizedResult.executionContext;
-                const clarificationSignals:
-                    WorkflowToolClarificationSignals | undefined =
-                    normalizedResult.outcome === 'needs_clarification'
-                        ? {
-                              clarificationReasonCode:
-                                  normalizedResult.clarification.reasonCode,
-                              clarificationOptionCount:
-                                  normalizedResult.clarification.options.length,
-                          }
-                        : undefined;
-                executedContextStepResults.push(normalizedResult);
-                captureStep({
-                    stepKind: 'tool',
-                    status: normalizedExecutionContext.status,
-                    summary:
-                        normalizedResult.outcome === 'failed'
-                            ? 'Context step failed; workflow continued fail-open without context.'
-                            : normalizedResult.outcome === 'needs_clarification'
-                              ? 'Context step requires user clarification before generation.'
-                              : normalizedResult.outcome === 'skipped'
-                                ? 'Context step skipped without context.'
-                                : 'Context step executed and emitted bounded context messages.',
-                    ...(normalizedExecutionContext.reasonCode !== undefined && {
-                        reasonCode: normalizedExecutionContext.reasonCode,
-                    }),
-                    startedAtMs: contextStepOutcome.startedAtMs,
-                    finishedAtMs: contextStepOutcome.finishedAtMs,
-                    parentStepId: plannerRootStepId,
-                    attempt: 1,
-                    ...(normalizedResult.outcome === 'executed' &&
-                        normalizedResult.contextMessages !== undefined && {
-                            artifacts: normalizedResult.contextMessages.map(
-                                (message) =>
-                                    typeof message === 'string'
-                                        ? message
-                                        : message.content
-                            ),
-                        }),
-                    ...(normalizedResult.outcome === 'needs_clarification' && {
-                        signals: clarificationSignals,
-                    }),
-                });
-                workflowState = applyStepExecutionToState(
-                    workflowState,
-                    'tool',
-                    0,
-                    1,
-                    0
-                );
-                if (normalizedResult.outcome === 'needs_clarification') {
-                    terminationReason = 'goal_satisfied';
-                    workflowStatus = 'completed';
-                    shouldStop = true;
-                }
+                executedContextStepResult = executedContextStepResults.at(0);
+            } else {
+                stopIfOverLimits('tool');
             }
-            executedContextStepResult = executedContextStepResults.at(0);
         }
     }
 
@@ -1596,7 +1634,7 @@ export const runBoundedReviewWorkflow = async ({
                         // revision. Preserve its usage and completion facts, then
                         // let the chat boundary surface a controlled fallback.
                         terminationReason =
-                            terminationReason === 'budget_exhausted_tokens'
+                            exhaustedLimitKey === 'maxTokensTotal'
                                 ? terminationReason
                                 : 'executor_error_fail_open';
                         workflowStatus = 'degraded';

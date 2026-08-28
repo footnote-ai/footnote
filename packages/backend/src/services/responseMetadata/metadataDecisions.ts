@@ -131,6 +131,7 @@ export const normalizeToolReasonCode = (
         reasonCode === 'tool_http_error' ||
         reasonCode === 'tool_network_error' ||
         reasonCode === 'tool_invalid_response' ||
+        reasonCode === 'max_tool_calls_reached' ||
         reasonCode === 'search_not_supported_by_selected_profile' ||
         reasonCode === 'unspecified_tool_outcome'
     ) {

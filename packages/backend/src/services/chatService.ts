@@ -688,7 +688,8 @@ const buildTrustGraphContextStepRequest = (
 ): ContextStepRequest | undefined => {
     if (
         executionContractTrustGraph === undefined ||
-        executionContractTrustGraphContext === undefined
+        executionContractTrustGraphContext === undefined ||
+        executionContractTrustGraphContext.targetIds.length === 0
     ) {
         return undefined;
     }
@@ -1511,12 +1512,29 @@ export const createChatService = ({
                                 generationEnabledByPolicy:
                                     workflowPolicy.enableGeneration !== false,
                             });
+                        const handling =
+                            noGenerationResolution.kind === 'mapped'
+                                ? noGenerationResolution.handling
+                                : {
+                                      // Keep the backend fail-open: an
+                                      // unexpected no-generation reason must
+                                      // not turn a missing candidate into an
+                                      // empty transport response. The bounded
+                                      // routing chain still limits this to one
+                                      // fallback attempt.
+                                      runtimeAction:
+                                          'run_fallback_generation' as const,
+                                  };
+                        const noGenerationReasonCode =
+                            noGenerationResolution.kind === 'mapped'
+                                ? noGenerationResolution.reasonCode
+                                : undefined;
                         if (
                             noGenerationResolution.kind ===
                             'unsupported_termination_reason'
                         ) {
-                            logger.error(
-                                'Unsupported no-generation termination reason.',
+                            logger.warn(
+                                'No-generation termination reason lacks a dedicated handling entry; attempting bounded fail-open generation.',
                                 {
                                     workflowName: workflowProfile.workflowName,
                                     terminationReason:
@@ -1524,16 +1542,7 @@ export const createChatService = ({
                                     noGenerationResolution,
                                 }
                             );
-                            generationResult = {
-                                text: SURFACED_NO_GENERATION_MESSAGE,
-                                model: effectiveGenerationRequest.model,
-                                provenance: 'Inferred',
-                                citations: [],
-                            };
-                            break;
                         }
-
-                        const handling = noGenerationResolution.handling;
                         const backendFailOpenAllowed =
                             ExecutionContract?.failOpen
                                 .allowFallbackGeneration ?? true;
@@ -1561,8 +1570,7 @@ export const createChatService = ({
                                     terminationReason:
                                         workflowResult.workflowLineage
                                             .terminationReason,
-                                    reasonCode:
-                                        noGenerationResolution.reasonCode,
+                                    reasonCode: noGenerationReasonCode,
                                 }
                             );
                         }
@@ -1585,6 +1593,7 @@ export const createChatService = ({
                                             workflowName:
                                                 workflowProfile.workflowName,
                                             reasonCode:
+                                                noGenerationReasonCode ??
                                                 chainGenerationResult.error
                                                     .reasonCode,
                                             terminationReason:
@@ -1620,8 +1629,7 @@ export const createChatService = ({
                                     {
                                         workflowName:
                                             workflowProfile.workflowName,
-                                        reasonCode:
-                                            noGenerationResolution.reasonCode,
+                                        reasonCode: noGenerationReasonCode,
                                         terminationReason:
                                             workflowResult.workflowLineage
                                                 .terminationReason,
@@ -1652,8 +1660,7 @@ export const createChatService = ({
                                     failOpenAuthority:
                                         ExecutionContract?.failOpen.authority ??
                                         'backend',
-                                    reasonCode:
-                                        noGenerationResolution.reasonCode,
+                                    reasonCode: noGenerationReasonCode,
                                     terminationReason:
                                         workflowResult.workflowLineage
                                             .terminationReason,

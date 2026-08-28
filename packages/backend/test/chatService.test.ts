@@ -2460,6 +2460,64 @@ test('runChatMessages handles surfaced no-generation reasons without runtime fal
     }
 });
 
+test('runChatMessages uses one bounded fallback for an unmapped no-generation reason', async () => {
+    let generationCalls = 0;
+    const chatService = createChatService({
+        generationRuntime: {
+            kind: 'test-runtime',
+            async generate() {
+                generationCalls += 1;
+                return {
+                    text: 'bounded fallback response',
+                    model: 'gpt-5-mini',
+                    usage: {
+                        promptTokens: 10,
+                        completionTokens: 5,
+                        totalTokens: 15,
+                    },
+                    provenance: 'Inferred',
+                    citations: [],
+                };
+            },
+        },
+        storeTrace: async () => undefined,
+        buildResponseMetadata,
+        defaultModel: 'gpt-5-mini',
+        recordUsage: () => undefined,
+        chatWorkflowConfig: {
+            reviewLoopEnabled: true,
+            maxIterations: 1,
+            maxDurationMs: 15000,
+        },
+        runReviewWorkflow: async () =>
+            ({
+                outcome: 'no_generation',
+                workflowLineage: {
+                    workflowId: 'wf_unmapped_no_generation',
+                    workflowName: 'message_reviewed',
+                    status: 'degraded',
+                    terminationReason: 'max_tool_calls_reached',
+                    stepCount: 1,
+                    maxSteps: 3,
+                    maxDurationMs: 15000,
+                    steps: [],
+                },
+            }) satisfies RunBoundedReviewWorkflowResult,
+    });
+
+    const response = await chatService.runChatMessages({
+        messages: [{ role: 'user', content: 'Answer this without retrieval.' }],
+        conversationSnapshot: 'Answer this without retrieval.',
+    });
+
+    assert.equal(generationCalls, 1);
+    assert.equal(response.message, 'bounded fallback response');
+    assert.equal(
+        response.metadata.workflow?.terminationReason,
+        'max_tool_calls_reached'
+    );
+});
+
 test('runChatMessages handles internal no-generation reasons with fallback generation marker and preserved lineage', async () => {
     const internalReasons: Array<
         Extract<
