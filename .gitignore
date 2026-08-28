@@ -69,6 +69,10 @@ packages/web/vite.config.d.ts
 # Logs
 packages/discord-bot/logs
 logs/
+/.footnote/response-comparison/
+/response-comparison-*.html
+# Legacy outputs from the removed staged presentation evaluator.
+/artifacts/presentation-evaluation/
 artifacts/sea/
 .tmp-start*.log
 

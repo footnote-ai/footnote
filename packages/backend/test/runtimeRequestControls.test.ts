@@ -10,6 +10,7 @@ import test from 'node:test';
 import type { ModelProfile } from '@footnote/contracts';
 import {
     deriveOpenAiSafetyIdentifier,
+    resolvePresentationGenerationSettings,
     resolveProfileReasoningEffort,
 } from '../src/services/runtimeRequestControls.js';
 import { hmacId } from '../src/utils/pseudonymization.js';
@@ -106,4 +107,71 @@ test('safety identifier omission is fail-open and metadata-only', () => {
     );
     assert.equal(logs[0]?.meta?.reasonCode, 'safety_identifier_secret_missing');
     assert.equal(JSON.stringify(logs).includes('raw-user-123'), false);
+});
+
+test('presentation settings apply profile precedence and omit unsupported controls', () => {
+    const resolution = resolvePresentationGenerationSettings({
+        profile: {
+            ...profile,
+            maxOutputTokens: 512,
+            capabilities: {
+                ...profile.capabilities,
+                supportedSamplingControls: ['temperature'],
+                supportedVerbosity: ['low', 'medium'],
+            },
+            presentationGeneration: {
+                promptVariant: 'compact',
+                temperature: 0.7,
+                verbosity: 'medium',
+                maxOutputTokens: 1024,
+            },
+        },
+        request: {
+            maxOutputTokens: 256,
+            topP: 0.95,
+            reasoningEffort: 'low',
+            verbosity: 'high',
+        },
+    });
+
+    assert.deepEqual(resolution.forwarded, {
+        promptVariant: 'compact',
+        maxOutputTokens: 512,
+        reasoningEffort: 'low',
+        verbosity: 'medium',
+        temperature: 0.7,
+    });
+    assert.deepEqual(
+        resolution.omitted.map(({ setting, reasonCode }) => [
+            setting,
+            reasonCode,
+        ]),
+        [['maxOutputTokens', 'output_limit_exceeds_profile_maximum']]
+    );
+});
+
+test('presentation sampling controls fail open when both are requested', () => {
+    const resolution = resolvePresentationGenerationSettings({
+        profile: {
+            ...profile,
+            capabilities: {
+                ...profile.capabilities,
+                supportedSamplingControls: ['temperature', 'topP'],
+            },
+        },
+        request: { temperature: 0.2, topP: 0.8 },
+    });
+
+    assert.equal(resolution.forwarded.temperature, undefined);
+    assert.equal(resolution.forwarded.topP, undefined);
+    assert.deepEqual(
+        resolution.omitted.map(({ setting, reasonCode }) => [
+            setting,
+            reasonCode,
+        ]),
+        [
+            ['temperature', 'sampling_controls_mutually_exclusive'],
+            ['topP', 'sampling_controls_mutually_exclusive'],
+        ]
+    );
 });

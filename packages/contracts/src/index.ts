@@ -66,6 +66,9 @@ export type {
     TraceFinalizationReasonCode,
     PartialResponseTemperament,
     ResponseTemperament,
+    PresentationSettingName,
+    PresentationSettingOmissionReasonCode,
+    PresentationSettingsMetadata,
     TrustGraphMetadata,
     GitHubContextMetadata,
     GitHubContextReference,
@@ -208,6 +211,9 @@ export type {
     ModelProfile,
     ModelProfileCapabilities,
     ModelProfileProviderRouting,
+    PresentationGenerationSettings,
+    PresentationPromptVariant,
+    PresentationSamplingControl,
     WorkflowModeProfileId,
     WorkflowModelStepKind,
     StepRoutingEntry,
@@ -220,6 +226,7 @@ export {
     ModelProfileProviderRoutingSchema,
     ModelProfileCatalogSchema,
     ModelProfileSchema,
+    PresentationGenerationSettingsSchema,
     WorkflowModeProfileIdSchema,
     WorkflowModelStepKindSchema,
     StepRoutingEntrySchema,
@@ -228,6 +235,8 @@ export {
     modelCostClasses,
     modelLatencyClasses,
     modelTierAliases,
+    presentationPromptVariants,
+    presentationSamplingControls,
 } from './model-profiles.js';
 
 // Shared pricing vocabulary and pure cost helpers

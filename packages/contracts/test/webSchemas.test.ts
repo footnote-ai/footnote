@@ -415,6 +415,27 @@ test('ResponseMetadataSchema remains tolerant for forward-compatible responses',
     assert.equal(parsed.success, true);
 });
 
+test('ResponseMetadataSchema accepts presentation settings metadata', () => {
+    const parsed = ResponseMetadataSchema.safeParse({
+        ...baseMetadata,
+        presentationSettings: {
+            requested: {
+                promptVariant: 'compact',
+                maxOutputTokens: 512,
+                temperature: 0.7,
+            },
+            forwarded: {
+                promptVariant: 'compact',
+                maxOutputTokens: 512,
+                temperature: 0.7,
+            },
+            omitted: [],
+        },
+    });
+
+    assert.equal(parsed.success, true);
+});
+
 test('ResponseMetadataSchema accepts typed GitHub context metadata', () => {
     const parsed = ResponseMetadataSchema.safeParse({
         ...baseMetadata,

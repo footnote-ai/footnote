@@ -101,6 +101,7 @@ paths:
                 - packages/contracts/src/web/schemas.ts#ResponseMetadataSchema
                 - packages/contracts/src/web/schemas.ts#PresentationMetadataSchema
                 - packages/contracts/src/policy/types.ts#PresentationMetadata
+                - packages/contracts/src/policy/types.ts#PresentationSettingsMetadata
                 - packages/contracts/src/policy/types.ts#PersonaExpressionStrength
                 - packages/contracts/src/policy/schemas.ts#PersonaExpressionStrengthSchema
             summary: Generate a chat response
@@ -757,6 +758,7 @@ paths:
                 - packages/contracts/src/web/schemas.ts#PostTracesRequestSchema
                 - packages/contracts/src/web/schemas.ts#PresentationMetadataSchema
                 - packages/contracts/src/policy/types.ts#PresentationMetadata
+                - packages/contracts/src/policy/types.ts#PresentationSettingsMetadata
             summary: Upsert trace metadata
             description: |
                 Store ResponseMetadata for a responseId.
@@ -3744,6 +3746,31 @@ components:
                 ]
             additionalProperties: false
 
+        PresentationGenerationSettings:
+            description: Serializable provider-neutral settings used only by the backend presentation evaluation/profile seam.
+            type: object
+            properties:
+                promptVariant:
+                    type: string
+                    enum: [current, compact]
+                maxOutputTokens:
+                    type: integer
+                    minimum: 1
+                reasoningEffort:
+                    type: string
+                    enum: [none, low, medium, high, xhigh, max]
+                verbosity:
+                    type: string
+                    enum: [low, medium, high]
+                temperature:
+                    type: number
+                    minimum: 0
+                    maximum: 2
+                topP:
+                    type: number
+                    minimum: 0
+                    maximum: 1
+            additionalProperties: false
         ResponseMetadataBase:
             type: object
             properties:
@@ -3929,6 +3956,55 @@ components:
                                       ]
                               personaId:
                                   type: string
+                              presentationSettings:
+                                  description: Backend-owned presentation setting resolution. Unsupported settings are omitted fail-open and never become user-facing controls.
+                                  type: object
+                                  properties:
+                                      requested:
+                                          $ref: '#/components/schemas/PresentationGenerationSettings'
+                                      forwarded:
+                                          $ref: '#/components/schemas/PresentationGenerationSettings'
+                                      omitted:
+                                          type: array
+                                          items:
+                                              type: object
+                                              properties:
+                                                  setting:
+                                                      type: string
+                                                      enum:
+                                                          [
+                                                              promptVariant,
+                                                              maxOutputTokens,
+                                                              reasoningEffort,
+                                                              verbosity,
+                                                              temperature,
+                                                              topP,
+                                                          ]
+                                                  requested:
+                                                      oneOf:
+                                                          - type: string
+                                                          - type: number
+                                                  reasonCode:
+                                                      type: string
+                                                      enum:
+                                                          [
+                                                              sampling_control_not_supported,
+                                                              verbosity_not_supported,
+                                                              reasoning_effort_not_supported,
+                                                              output_limit_exceeds_profile_maximum,
+                                                              sampling_controls_mutually_exclusive,
+                                                          ]
+                                              required:
+                                                  [
+                                                      setting,
+                                                      requested,
+                                                      reasonCode,
+                                                  ]
+                                              additionalProperties: false
+                                      providerObserved:
+                                          $ref: '#/components/schemas/PresentationGenerationSettings'
+                                  required: [requested, forwarded, omitted]
+                                  additionalProperties: false
                               draftProfileId:
                                   type: string
                               draftRequestedProvider:

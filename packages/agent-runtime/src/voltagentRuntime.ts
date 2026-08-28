@@ -65,6 +65,8 @@ type OpenRouterProviderPayload = {
  */
 export interface VoltAgentGenerateTextOptions {
     maxOutputTokens?: number;
+    temperature?: number;
+    topP?: number;
     providerOptions?: VoltAgentProviderOptions;
     search?: GenerationSearchRequest;
     structuredOutput?: GenerationStructuredOutput;
@@ -1150,6 +1152,12 @@ const createDefaultVoltAgentExecutor = ({
                 ...(options.maxOutputTokens !== undefined && {
                     maxOutputTokens: options.maxOutputTokens,
                 }),
+                ...(options.temperature !== undefined && {
+                    temperature: options.temperature,
+                }),
+                ...(options.topP !== undefined && {
+                    topP: options.topP,
+                }),
                 ...(options.providerOptions !== undefined && {
                     providerOptions: toVoltAgentCallProviderOptions(
                         options.providerOptions
@@ -1392,6 +1400,12 @@ const createVoltAgentRuntime = ({
             const result = await executor.generateText(request.messages, {
                 ...(request.maxOutputTokens !== undefined && {
                     maxOutputTokens: request.maxOutputTokens,
+                }),
+                ...(request.temperature !== undefined && {
+                    temperature: request.temperature,
+                }),
+                ...(request.topP !== undefined && {
+                    topP: request.topP,
                 }),
                 ...(shouldForwardSearch && {
                     search: request.search,

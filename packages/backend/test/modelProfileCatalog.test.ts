@@ -618,3 +618,20 @@ test('bundled active model profiles are fully covered by pricing or explicit pol
 
     assert.deepEqual(uncovered, []);
 });
+
+test('ephemeral response-comparison candidates are not in the bundled catalog', () => {
+    const section = buildModelProfilesSection(
+        { OPENROUTER_API_KEY: 'test-key' },
+        process.cwd(),
+        () => undefined
+    );
+    const profilesById = new Map(
+        section.catalog.map((profile) => [profile.id, profile])
+    );
+
+    assert.equal(profilesById.has('openrouter-glm-5-3-flash'), false);
+    assert.equal(profilesById.has('openrouter-deepseek-v4-flash-0731'), false);
+    assert.equal(profilesById.has('openrouter-skyfall-36b-v2'), false);
+    assert.equal(profilesById.has('openrouter-venice-uncensored'), false);
+    assert.equal(profilesById.has('openrouter-unslopnemo-12b'), false);
+});

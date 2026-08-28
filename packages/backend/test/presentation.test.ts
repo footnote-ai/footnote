@@ -99,6 +99,70 @@ test('generates a full candidate without provider-native search', async () => {
     assert.equal(presentation.metadata.draftObservedProvider, undefined);
 });
 
+test('resolves profile presentation settings before the runtime call and records them', async () => {
+    const requests: GenerationRequest[] = [];
+    const tunedProfile: ModelProfile = {
+        ...profile,
+        capabilities: {
+            canUseSearch: false,
+            supportedSamplingControls: ['temperature'],
+            supportedReasoningEfforts: ['low'],
+            supportedVerbosity: ['low', 'medium'],
+        },
+        presentationGeneration: {
+            promptVariant: 'compact',
+            temperature: 0.7,
+            reasoningEffort: 'low',
+            verbosity: 'medium',
+            maxOutputTokens: 256,
+        },
+    };
+
+    const presentation = await runPresentationCandidate({
+        generationRuntime: runtime(async (input) => {
+            requests.push(input);
+            return result('A tuned release update.');
+        }),
+        generationRequest: {
+            ...request,
+            maxOutputTokens: 800,
+            topP: 0.95,
+            reasoningEffort: 'high',
+            verbosity: 'high',
+        },
+        config: { ...config, profile: tunedProfile },
+        persona,
+    });
+
+    assert.equal(presentation.outcome, 'candidate_generated');
+    assert.equal(requests[0]?.temperature, 0.7);
+    assert.equal(requests[0]?.topP, undefined);
+    assert.equal(requests[0]?.reasoningEffort, 'low');
+    assert.equal(requests[0]?.verbosity, 'medium');
+    assert.equal(requests[0]?.maxOutputTokens, 256);
+    assert.match(
+        requests[0]?.messages[0]?.content ?? '',
+        /^Write only answer prose/u
+    );
+    assert.deepEqual(presentation.metadata.presentationSettings, {
+        requested: {
+            maxOutputTokens: 256,
+            reasoningEffort: 'low',
+            verbosity: 'medium',
+            temperature: 0.7,
+            promptVariant: 'compact',
+        },
+        forwarded: {
+            promptVariant: 'compact',
+            maxOutputTokens: 256,
+            reasoningEffort: 'low',
+            verbosity: 'medium',
+            temperature: 0.7,
+        },
+        omitted: [],
+    });
+});
+
 test('records upstream provider as observed only when the returned result reports it', async () => {
     const presentation = await runPresentationCandidate({
         generationRuntime: runtime(async () => ({
