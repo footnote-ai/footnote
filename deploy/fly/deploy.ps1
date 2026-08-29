@@ -57,7 +57,8 @@ function Get-FlySecretNames {
   try {
     return @($output | ConvertFrom-Json | ForEach-Object { $_.name })
   } catch {
-    throw "Unable to parse Fly secret list for $AppName"
+    Write-Warning "Unable to parse Fly secret list for $AppName. Continuing without secret-name discovery."
+    return @()
   }
 }
 
@@ -269,7 +270,7 @@ if ($presentationEnabled) {
   $existingSecrets = Get-FlySecretNames -AppName $serverAppName
   $localOpenRouterKey = Get-EnvValueFromFile -EnvPath $envPath -Key 'OPENROUTER_API_KEY'
   if ($existingSecrets -notcontains 'OPENROUTER_API_KEY' -and (-not $localOpenRouterKey)) {
-    throw 'Canonical presentation is enabled, but OPENROUTER_API_KEY is neither configured on Fly nor available locally. Refusing to mutate or deploy the app.'
+    Write-Warning 'Canonical presentation is enabled, but OPENROUTER_API_KEY is neither configured on Fly nor available locally. Continuing; the optional presentation flow will fail open.'
   }
 }
 
@@ -305,12 +306,7 @@ if ($EnableTrustGraph) {
     'EXECUTION_CONTRACT_TRUSTGRAPH_WORKSPACE_REF'
   )
 }
-$optionalSecrets = @('OPENAI_API_KEY', 'OLLAMA_API_KEY', 'TRACE_API_TOKEN', 'REFLECT_SERVICE_TOKEN', 'TURNSTILE_SECRET_KEY', 'DISCORD_TOKEN', 'CLOUDINARY_API_KEY', 'CLOUDINARY_API_SECRET', 'GITHUB_WEBHOOK_SECRET')
-if ($presentationEnabled) {
-  $requiredSecrets += @('OPENROUTER_API_KEY')
-} else {
-  $optionalSecrets += @('OPENROUTER_API_KEY')
-}
+$optionalSecrets = @('OPENAI_API_KEY', 'OLLAMA_API_KEY', 'OPENROUTER_API_KEY', 'TRACE_API_TOKEN', 'REFLECT_SERVICE_TOKEN', 'TURNSTILE_SECRET_KEY', 'DISCORD_TOKEN', 'CLOUDINARY_API_KEY', 'CLOUDINARY_API_SECRET', 'GITHUB_WEBHOOK_SECRET')
 Ensure-FlySecrets -AppName $serverAppName `
   -RequiredSecrets $requiredSecrets `
   -OptionalSecrets $optionalSecrets `

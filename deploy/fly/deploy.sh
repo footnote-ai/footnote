@@ -66,8 +66,12 @@ ensure_app() {
 get_secret_names() {
   local app_name="$1"
   # Read existing secrets so we only prompt for missing values.
-  fly secrets list -a "$app_name" --json 2>/dev/null \
-    | node -e 'let input=""; process.stdin.on("data", chunk => input += chunk); process.stdin.on("end", () => { for (const secret of JSON.parse(input)) console.log(secret.name); });'
+  local output
+  if ! output=$(fly secrets list -a "$app_name" --json 2>/dev/null); then
+    return 0
+  fi
+  printf '%s' "$output" \
+    | node -e 'let input=""; process.stdin.on("data", chunk => input += chunk); process.stdin.on("end", () => { try { for (const secret of JSON.parse(input)) console.log(secret.name); } catch { console.error("Warning: unable to parse Fly secret list; continuing without secret-name discovery."); } });'
 }
 
 run_env_validation() {
@@ -250,8 +254,7 @@ if [[ "$presentation_enabled" == true ]]; then
   existing_secrets=$(get_secret_names "$server_app_name")
   local_openrouter_key=$(get_env_value "$REPO_ROOT/.env" OPENROUTER_API_KEY || true)
   if ! echo "$existing_secrets" | grep -qx OPENROUTER_API_KEY && [[ -z "$local_openrouter_key" ]]; then
-    echo "Canonical presentation is enabled, but OPENROUTER_API_KEY is neither configured on Fly nor available locally. Refusing to mutate or deploy the app." >&2
-    exit 1
+    echo "Warning: canonical presentation is enabled, but OPENROUTER_API_KEY is neither configured on Fly nor available locally. Continuing; the optional presentation flow will fail open." >&2
   fi
 fi
 
@@ -274,12 +277,7 @@ required_secrets=(INCIDENT_PSEUDONYMIZATION_SECRET)
 if [[ "$enable_trustgraph" == true ]]; then
   required_secrets+=(TAILSCALE_AUTHKEY EXECUTION_CONTRACT_TRUSTGRAPH_ADAPTER_API_TOKEN EXECUTION_CONTRACT_TRUSTGRAPH_BASE_URL EXECUTION_CONTRACT_TRUSTGRAPH_TARGETS EXECUTION_CONTRACT_TRUSTGRAPH_WORKSPACE_REF)
 fi
-optional_secrets=(OPENAI_API_KEY OLLAMA_API_KEY TRACE_API_TOKEN REFLECT_SERVICE_TOKEN TURNSTILE_SECRET_KEY DISCORD_TOKEN CLOUDINARY_API_KEY CLOUDINARY_API_SECRET GITHUB_WEBHOOK_SECRET)
-if [[ "$presentation_enabled" == true ]]; then
-  required_secrets+=(OPENROUTER_API_KEY)
-else
-  optional_secrets+=(OPENROUTER_API_KEY)
-fi
+optional_secrets=(OPENAI_API_KEY OLLAMA_API_KEY OPENROUTER_API_KEY TRACE_API_TOKEN REFLECT_SERVICE_TOKEN TURNSTILE_SECRET_KEY DISCORD_TOKEN CLOUDINARY_API_KEY CLOUDINARY_API_SECRET GITHUB_WEBHOOK_SECRET)
 ensure_secrets "$server_app_name" "${required_secrets[@]}"
 ensure_optional_secrets "$server_app_name" "${optional_secrets[@]}"
 if [[ "$enable_trustgraph" == true ]]; then

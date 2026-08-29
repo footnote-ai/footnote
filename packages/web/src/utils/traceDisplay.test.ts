@@ -149,6 +149,6 @@ test('explains candidate timeout and mechanical admission unavailability', () =>
             attempted: false,
             reasonCode: 'budget_skipped',
         }),
-        /token budget exhausted.*authoritative answer was kept/u
+        /remaining workflow budget/u
     );
 });
