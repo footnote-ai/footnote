@@ -8,6 +8,8 @@ primary_region = 'ord'
 [env]
   NODE_ENV = 'production'
   DEFAULT_PROFILE_ID = 'openrouter-deepseek-v4-flash-0731'
+  PLANNER_PROFILE_ID = 'openrouter-deepseek-v4-flash-0731'
+  WEB_BASE_URL = 'https://ai.jordanmakes.dev'
   ALLOWED_ORIGINS = 'https://ai.jordanmakes.dev'
   FRAME_ANCESTORS = 'https://ai.jordanmakes.dev'
   TURNSTILE_ALLOWED_HOSTNAMES = 'ai.jordanmakes.dev'

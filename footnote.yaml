@@ -93,8 +93,8 @@ discord-bots:
           mention-aliases: [winter]
 
 # Model routing
-# The canonical Fly deployment currently uses OpenRouter DeepSeek for normal
-# generation while planner and assessment profiles remain separately routed.
+# The canonical Fly deployment uses OpenRouter DeepSeek for normal generation
+# and planning while assessment remains separately routed.
 openai:
     default-profile-id: 'openrouter-deepseek-v4-flash-0731'
 

@@ -257,3 +257,26 @@ test('default step routing prefers the OpenRouter main model for generation', ()
     assert.equal(balanced[0]?.profileId, 'openrouter-deepseek-v4-flash-0731');
     assert.equal(grounded[0]?.profileId, 'openrouter-deepseek-v4-flash-0731');
 });
+
+test('default step routing prefers the OpenRouter model for planning', () => {
+    for (const modeId of ['express', 'balanced', 'grounded'] as const) {
+        const planner = resolveStepRoutingChain(
+            {
+                modeId,
+                step: 'planner',
+                request: {
+                    sessionId: `session-planner-${modeId}`,
+                    traceTarget: undefined,
+                },
+                correlationId: `corr-planner-${modeId}`,
+            },
+            enabledProfilesById,
+            allProfilesById
+        );
+
+        assert.equal(
+            planner[0]?.profileId,
+            'openrouter-deepseek-v4-flash-0731'
+        );
+    }
+});

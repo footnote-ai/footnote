@@ -84,14 +84,14 @@ profiles:
       latencyClass: high
 
     # ==========
-    # OpenRouter DeepSeek (manual selection and optional presentation)
+    # OpenRouter DeepSeek (manual selection, planning, and presentation)
     # ==========
-    # This profile is selected first for normal generation on deployments that
-    # provide OpenRouter credentials. The optional presentation flow can reuse
-    # the same provider-neutral profile.
+    # This profile is selected first for normal generation and planning on
+    # deployments that provide OpenRouter credentials. The optional presentation
+    # flow can reuse the same provider-neutral profile.
     # https://openrouter.ai/deepseek/deepseek-v4-flash-0731
     - id: openrouter-deepseek-v4-flash-0731
-      description: Faithful presentation writer for the optional post-authority rewrite.
+      description: OpenRouter DeepSeek profile for normal generation, planning, and optional presentation.
       provider: openrouter
       providerModel: deepseek/deepseek-v4-flash-0731
       enabled: true
@@ -426,7 +426,9 @@ pools:
 stepRoutingChains:
     express:
         planner:
-            # Intent: keep quick-mode planning structured with a low-cost fallback.
+            # Intent: keep planning on the configured OpenRouter model first.
+            - openrouter-deepseek-v4-flash-0731
+            # Fallback: retain the OpenAI structured planner when available.
             - openai-json-optimized
             - ollama-text-gptoss
         generate:
@@ -442,7 +444,9 @@ stepRoutingChains:
             - ollama-text-gptoss
     balanced:
         planner:
-            # Intent: prefer low-cost structured planning; fail-open to ollama.
+            # Intent: keep planning on the configured OpenRouter model first.
+            - openrouter-deepseek-v4-flash-0731
+            # Fallback: retain the OpenAI structured planner when available.
             - openai-json-optimized
             - ollama-text-gptoss
         generate:
@@ -458,7 +462,9 @@ stepRoutingChains:
             - ollama-text-gptoss
     grounded:
         planner:
-            # Intent: keep grounded planning on OpenAI structured profile first.
+            # Intent: keep grounded planning on the configured OpenRouter model first.
+            - openrouter-deepseek-v4-flash-0731
+            # Fallback: retain the OpenAI structured planner when available.
             - openai-json-optimized
             - ollama-text-gptoss
         generate:

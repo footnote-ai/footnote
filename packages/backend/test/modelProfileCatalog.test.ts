@@ -410,6 +410,25 @@ test('buildModelProfilesSection enables OpenRouter profiles only with its config
     }
 });
 
+test('buildModelProfilesSection accepts the OpenRouter profile as planner default', () => {
+    const section = buildModelProfilesSection(
+        {
+            OPENROUTER_API_KEY: 'test-key',
+            PLANNER_PROFILE_ID: 'openrouter-deepseek-v4-flash-0731',
+        },
+        process.cwd(),
+        () => undefined
+    );
+
+    assert.equal(section.plannerProfileId, 'openrouter-deepseek-v4-flash-0731');
+    assert.equal(
+        section.catalog.find(
+            (profile) => profile.id === section.plannerProfileId
+        )?.provider,
+        'openrouter'
+    );
+});
+
 test('model profile resolver handles id, tier, and raw selectors with fail-open fallback', () => {
     const warnings: Array<{ message: string; meta?: Record<string, unknown> }> =
         [];
