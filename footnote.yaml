@@ -37,6 +37,12 @@ web:
 # Most users can keep this empty at first.
 discord-bots: []
 
+# Model routing
+# The canonical Fly deployment currently uses OpenRouter DeepSeek for normal
+# generation while planner and assessment profiles remain separately routed.
+openai:
+    default-profile-id: 'openrouter-deepseek-v4-flash-0731'
+
 # Context integrations run in the backend. Project-document lookup stays off
 # until you enable it; chat continues if the lookup fails.
 chat-workflow:
