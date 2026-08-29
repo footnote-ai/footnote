@@ -427,6 +427,12 @@ test('buildModelProfilesSection accepts the OpenRouter profile as planner defaul
         )?.provider,
         'openrouter'
     );
+    for (const modeId of ['express', 'balanced', 'grounded'] as const) {
+        assert.equal(
+            section.stepRoutingChains[modeId].assess[0],
+            'openrouter-deepseek-v4-flash-0731'
+        );
+    }
 });
 
 test('model profile resolver handles id, tier, and raw selectors with fail-open fallback', () => {
