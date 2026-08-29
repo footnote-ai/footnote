@@ -13,6 +13,15 @@ import { resolveStepRoutingChain } from '../src/services/stepRoutingChains.js';
 
 const profiles: ModelProfile[] = [
     {
+        id: 'openrouter-deepseek-v4-flash-0731',
+        description: 'OpenRouter DeepSeek main profile',
+        provider: 'openrouter',
+        providerModel: 'deepseek/deepseek-v4-flash-0731',
+        enabled: true,
+        tierBindings: [],
+        capabilities: { canUseSearch: false },
+    },
+    {
         id: 'openai-text-fast',
         description: 'Fast profile',
         provider: 'openai',
@@ -183,7 +192,7 @@ test('resolveStepRoutingChain uses deterministic chooseOne selection with seed v
             enabledProfilesById,
             allProfilesById
         );
-        if (first[1]?.profileId !== differentSeedResult[1]?.profileId) {
+        if (first[2]?.profileId !== differentSeedResult[2]?.profileId) {
             observedDifferentSeedPick = true;
             break;
         }
@@ -210,14 +219,14 @@ test('resolveStepRoutingChain spreads chooseOne picks across seeds', () => {
             enabledProfilesById,
             allProfilesById
         );
-        if (resolved[1]?.profileId) {
-            selections.add(resolved[1].profileId);
+        if (resolved[2]?.profileId) {
+            selections.add(resolved[2].profileId);
         }
     }
     assert.equal(selections.size >= 2, true);
 });
 
-test('default step routing keeps balanced ollama-first and grounded openai-first generation bias', () => {
+test('default step routing prefers the OpenRouter main model for generation', () => {
     const balanced = resolveStepRoutingChain(
         {
             modeId: 'balanced',
@@ -245,6 +254,6 @@ test('default step routing keeps balanced ollama-first and grounded openai-first
         allProfilesById
     );
 
-    assert.equal(balanced[0]?.profileId?.startsWith('ollama-') ?? false, true);
-    assert.equal(grounded[0]?.profileId?.startsWith('openai-') ?? false, true);
+    assert.equal(balanced[0]?.profileId, 'openrouter-deepseek-v4-flash-0731');
+    assert.equal(grounded[0]?.profileId, 'openrouter-deepseek-v4-flash-0731');
 });

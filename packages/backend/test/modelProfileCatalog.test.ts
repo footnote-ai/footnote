@@ -619,7 +619,7 @@ test('bundled active model profiles are fully covered by pricing or explicit pol
     assert.deepEqual(uncovered, []);
 });
 
-test('bundled presentation profile is separate from ephemeral comparison candidates', () => {
+test('bundled DeepSeek profile is separate from ephemeral comparison candidates', () => {
     const section = buildModelProfilesSection(
         { OPENROUTER_API_KEY: 'test-key' },
         process.cwd(),

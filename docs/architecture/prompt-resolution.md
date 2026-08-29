@@ -58,7 +58,8 @@ policy, not persona identity. The current flow is:
 
 1. Normal generation writes the authoritative answer from the full context.
 2. The optional presentation model writes a faithful wording rewrite. It has no
-   tools or search, and its configured model is unbound from normal routing.
+   tools or search, and its provider-neutral profile may also be selected for
+   normal generation by deployment policy.
 3. Footnote checks that the returned draft is usable prose. This is a small
    mechanical check, not a semantic review of facts, grounding, or safety.
 4. The ordinary persona-aware assessment/revision loop reviews the candidate or

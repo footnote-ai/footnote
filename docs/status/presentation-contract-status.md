@@ -1,8 +1,9 @@
 # Presentation Flow Status
 
 Status: the current runtime uses the authority-first presentation flow. The
-optional DeepSeek V4 Flash 0731 profile is enabled only by the canonical Fly
-settings; fresh installs remain disabled.
+optional DeepSeek V4 Flash 0731 profile is selected for normal generation and
+presentation by the canonical Fly settings; fresh installs keep presentation
+disabled.
 
 The current flow is:
 

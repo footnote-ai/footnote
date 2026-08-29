@@ -84,10 +84,11 @@ profiles:
       latencyClass: high
 
     # ==========
-    # OpenRouter presentation (manual selection only)
+    # OpenRouter DeepSeek (manual selection and optional presentation)
     # ==========
-    # This writer is intentionally unbound from normal routing. The optional
-    # presentation flow selects it by default when that flow is enabled.
+    # This profile is selected first for normal generation on deployments that
+    # provide OpenRouter credentials. The optional presentation flow can reuse
+    # the same provider-neutral profile.
     # https://openrouter.ai/deepseek/deepseek-v4-flash-0731
     - id: openrouter-deepseek-v4-flash-0731
       description: Faithful presentation writer for the optional post-authority rewrite.
@@ -429,7 +430,9 @@ stepRoutingChains:
             - openai-json-optimized
             - ollama-text-gptoss
         generate:
-            # Intent: prefer the lower-allowance express lane first.
+            # Intent: prefer the configured OpenRouter main model when available.
+            - openrouter-deepseek-v4-flash-0731
+            # Fallback: preserve the existing express lane if the provider fails.
             - openai-text-fast
             # Fallback: keep one low-cost pooled option available.
             - chooseOne: [free-ollama-style]
@@ -443,7 +446,9 @@ stepRoutingChains:
             - openai-json-optimized
             - ollama-text-gptoss
         generate:
-            # Intent: prefer stylistic variance and low cost first in balanced mode.
+            # Intent: prefer the configured OpenRouter main model when available.
+            - openrouter-deepseek-v4-flash-0731
+            # Fallback: preserve the existing balanced routing chain.
             - chooseOne: [free-ollama-style]
             # Fallback: stronger deterministic quality pass when ollama path fails.
             - openai-text-medium
@@ -457,7 +462,9 @@ stepRoutingChains:
             - openai-json-optimized
             - ollama-text-gptoss
         generate:
-            # Intent: prefer quality/reliability first in grounded mode.
+            # Intent: prefer the configured OpenRouter main model when available.
+            - openrouter-deepseek-v4-flash-0731
+            # Fallback: preserve the existing grounded routing chain.
             - openai-text-medium
             # Fallback: lower-cost style/creativity pass from free ollama pool.
             - chooseOne: [free-ollama-style]
