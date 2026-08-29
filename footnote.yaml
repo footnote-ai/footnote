@@ -33,9 +33,64 @@ web:
         - 'http://localhost:8080'
         - 'http://localhost:3000'
 
-# Discord bots supervised by the server process.
-# Most users can keep this empty at first.
-discord-bots: []
+# Discord bots supervised by the server process. Keep env key names only,
+# never secret values.
+discord-bots:
+    - id: footnote
+      enabled: true
+      required: false
+      credentials:
+          discord-token-env: FOOTNOTE_DISCORD_TOKEN
+          discord-client-id-env: FOOTNOTE_DISCORD_CLIENT_ID
+          discord-guild-ids-env: FOOTNOTE_DISCORD_GUILD_IDS
+          discord-user-id-env: FOOTNOTE_DISCORD_USER_ID
+          incident-secret-env: INCIDENT_PSEUDONYMIZATION_SECRET
+      profile:
+          id: footnote
+          display-name: Footnote
+          mention-aliases: [footnote, fn]
+    - id: danny
+      enabled: true
+      required: false
+      credentials:
+          discord-token-env: DANNY_DISCORD_TOKEN
+          discord-client-id-env: DANNY_DISCORD_CLIENT_ID
+          discord-guild-ids-env: DANNY_DISCORD_GUILD_IDS
+          discord-user-id-env: DANNY_DISCORD_USER_ID
+          incident-secret-env: INCIDENT_PSEUDONYMIZATION_SECRET
+      profile:
+          id: danny
+          display-name: Danny
+          overlay-path: /app/packages/prompts/src/profile-overlays/danny.md
+          mention-aliases: [danny]
+    - id: myuri
+      enabled: true
+      required: false
+      credentials:
+          discord-token-env: MYURI_DISCORD_TOKEN
+          discord-client-id-env: MYURI_DISCORD_CLIENT_ID
+          discord-guild-ids-env: MYURI_DISCORD_GUILD_IDS
+          discord-user-id-env: MYURI_DISCORD_USER_ID
+          incident-secret-env: INCIDENT_PSEUDONYMIZATION_SECRET
+      profile:
+          id: myuri
+          display-name: Myuri
+          overlay-path: /app/packages/prompts/src/profile-overlays/myuri.md
+          mention-aliases: [myuri]
+    - id: winter
+      enabled: true
+      required: false
+      credentials:
+          discord-token-env: WINTER_DISCORD_TOKEN
+          discord-client-id-env: WINTER_DISCORD_CLIENT_ID
+          discord-guild-ids-env: WINTER_DISCORD_GUILD_IDS
+          discord-user-id-env: WINTER_DISCORD_USER_ID
+          incident-secret-env: INCIDENT_PSEUDONYMIZATION_SECRET
+      profile:
+          id: winter
+          display-name: Winter
+          overlay-path: /app/packages/prompts/src/profile-overlays/winter.md
+          mention-aliases: [winter]
 
 # Model routing
 # The canonical Fly deployment currently uses OpenRouter DeepSeek for normal
