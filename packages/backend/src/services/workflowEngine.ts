@@ -1415,7 +1415,8 @@ export const runBoundedReviewWorkflow = async ({
                             buildAuthoritativeGenerationRequest(
                                 generationRequestForAttempt,
                                 presentationResult.draftResult.text,
-                                activePresentation.persona.expressionGuidance
+                                activePresentation.persona.expressionGuidance,
+                                activePresentation.config.handoffVariant
                             );
                     }
                     if (authoritativeOutputBudget !== undefined) {

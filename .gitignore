@@ -69,10 +69,13 @@ packages/web/vite.config.d.ts
 # Logs
 packages/discord-bot/logs
 logs/
+# Local response-comparison checkpoints and HTML reports are generated evidence,
+# not checked-in experiment definitions.
+/response-comparison/.local/
+# Historical local outputs from earlier comparison runners.
 /.footnote/response-comparison/
-/response-comparison-*.html
-# Legacy outputs from the removed staged presentation evaluator.
 /artifacts/presentation-evaluation/
+/response-comparison-*.html
 artifacts/sea/
 .tmp-start*.log
 

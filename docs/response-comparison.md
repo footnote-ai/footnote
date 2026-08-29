@@ -1,62 +1,64 @@
 # Response comparison
 
-Use this workflow to compare how models express the same answers. It keeps
-style separate from facts, uncertainty, sources, authority, and safety. It
-does not change production settings or choose a winner.
+This harness compares presentation models without changing production defaults.
+It records each model call, its cost and timing, and separate automatic and
+human reviews.
 
-## Run a comparison
+## Campaign
 
-1. Edit `response-comparison.yaml`.
-2. Check it without generating responses:
+The checked-in campaign runs seven conditions across six cases, twice each (84
+attempts):
 
-    ```text
-    pnpm responses:compare --check
-    ```
+- authority only;
+- a faithful rewrite from Cydonia or DeepSeek;
+- a looser style draft from Cydonia or DeepSeek;
+- each style draft either preserved where safe or used only as a style reference.
 
-3. Run it:
+Terra writes the final answer from the original context. A presentation draft
+is wording input, not evidence or policy. If the draft fails, is empty, or
+conflicts with the context, Terra can ignore or correct it.
 
-    ```text
-    pnpm responses:compare
-    ```
+The campaign pins Terra and the reviewer in
+`response-comparison/config.yaml`. These choices apply only to the experiment.
 
-4. Open `response-comparison-<run-id>.html`.
-5. Review responses while the report is blind, then reveal run details.
+## Run the comparison
 
-Check mode validates profiles, credentials, the automatic reviewer, and
-provider support. It reports combinations that cannot be tested without
-calling providers. The live command records supported, unsupported, and
-failed attempts and continues after individual failures. If interrupted, the
-same comparison resumes its active checkpoint. Completed runs are not reused.
+First check the configuration, credentials, and advertised model support. This
+does not generate responses:
 
-## Configure it
+```text
+pnpm responses:compare --check
+```
 
-- Catalog profile IDs use the real model catalog. Raw `name`/`provider`/`model`
-  entries are temporary candidates and do not belong in that catalog.
-- Each `settings` entry is one variant. The runner does not build an implicit
-  Cartesian product. `default` uses provider and model defaults.
-- `cases: core` loads the maintained suite from
-  `packages/backend/test/fixtures/responseComparisonCore.yaml`.
-- Personas and expression strength use existing backend persona settings.
-- `mustKeep` lists the facts and limits every response should preserve.
+Then start or resume the run:
 
-Unsupported settings are skipped and recorded with their reason. The report
-keeps settings requested by the campaign, sent by Footnote, skipped, and
-reported by the provider separate. It also records model attribution, status,
-timing, usage, cost, and output length when available.
+```text
+pnpm responses:compare
+```
 
-## Review the report
+Progress is printed after each stage. A failed attempt does not stop the rest
+of the run. Checkpoints and reports are written to the ignored
+`response-comparison/.local/` directory.
 
-Blind mode shows the source, persona guidance, requirements, and response. It
-hides model, provider, settings, timing, cost, automatic review, and saved
-human-review details. Reviewer identity and blind judgments can still be
-saved. Revealing details is recorded locally, and exporting a reviewed report
-creates a new file without changing the original.
+Open the generated HTML report to review the answers. The report initially
+hides model names, settings, costs, timing, automatic scores, and saved human
+scores. Reveal them only after blind review. Automatic and human reviews remain
+separate; the report does not pick a winner.
 
-Automatic review supports human judgment; it does not replace it. Human and
-automatic scores stay separate, and the report does not calculate a combined
-winner.
+## Evidence boundaries
 
-The workflow does not expose a generic end-user temperature slider. Model
-strength escalation remains separate in #564. Do not commit presentation
-defaults or close #571 until the fixed suite, human review, and a holdout run
-support the recommendation.
+The report records:
+
+- the source messages and review requirements;
+- candidate, authority, assessment, revision, and final stages;
+- requested and observed model details;
+- latency, token use, and cost;
+- candidate failures and possible unsupported changes;
+- automatic review and blind human review.
+
+The cases live in `response-comparison/core-cases.yaml`. The source-boundary
+case uses delimited supplied evidence rather than a previous assistant claim.
+
+No paid run or human review is included in this change. Results and any default
+recommendation belong in a later evidence-backed change. This work does not add
+an end-user temperature control or change the model-strength policy in #564.

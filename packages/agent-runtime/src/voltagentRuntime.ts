@@ -58,6 +58,7 @@ type OpenRouterProviderPayload = {
     allow_fallbacks?: boolean;
     data_collection?: 'allow' | 'deny';
     zdr?: boolean;
+    require_parameters?: boolean;
 };
 
 /**
@@ -576,46 +577,95 @@ const toFootnoteModel = (model: string): string => {
     return slashIndex === -1 ? model : model.slice(slashIndex + 1);
 };
 
-/**
- * Builds the provider option bag for one VoltAgent text call.
- */
 /** Converts the shared routing contract into OpenRouter's request payload. */
 const toOpenRouterProviderPayload = (
-    routing: OpenRouterRouting | undefined
+    routing: OpenRouterRouting | undefined,
+    requireParameters = false
 ): OpenRouterProviderPayload | undefined => {
-    if (routing === undefined) return undefined;
+    if (routing === undefined && !requireParameters) return undefined;
 
     const payload: OpenRouterProviderPayload = {
-        ...(routing.order !== undefined && { order: routing.order }),
-        ...(routing.only !== undefined && { only: routing.only }),
-        ...(routing.allowFallbacks !== undefined && {
+        ...(routing?.order !== undefined && { order: routing.order }),
+        ...(routing?.only !== undefined && { only: routing.only }),
+        ...(routing?.allowFallbacks !== undefined && {
             allow_fallbacks: routing.allowFallbacks,
         }),
-        ...(routing.dataCollection !== undefined && {
+        ...(routing?.dataCollection !== undefined && {
             data_collection: routing.dataCollection,
         }),
-        ...(routing.zdr !== undefined && { zdr: routing.zdr }),
+        ...(routing?.zdr !== undefined && { zdr: routing.zdr }),
+        ...(requireParameters && { require_parameters: true }),
     };
 
     return Object.keys(payload).length > 0 ? payload : undefined;
 };
+
+/**
+ * @description: Merges request-level OpenRouter provider settings over static routing settings.
+ * @footnote-scope: core
+ * @footnote-module: OpenRouterRequestBodyMerge
+ * @footnote-risk: high - Dropping configured routing can send a request to an unintended upstream provider or change fallback behavior.
+ * @footnote-ethics: high - Provider routing controls data handling and must remain faithful to the caller's transparent configuration.
+ */
+export const mergeOpenRouterRequestBody = (
+    body: Record<string, unknown>,
+    staticProvider: Record<string, unknown> | undefined
+): Record<string, unknown> => {
+    const requestProvider = isRecord(body.provider) ? body.provider : undefined;
+    const provider = {
+        ...(staticProvider ?? {}),
+        ...(requestProvider ?? {}),
+    };
+    return {
+        ...body,
+        ...(Object.keys(provider).length > 0 && { provider }),
+    };
+};
+
+/**
+ * @description: Reports whether the VoltAgent adapter can request structured output for a provider.
+ * @footnote-scope: core
+ * @footnote-module: StructuredOutputProviderSupport
+ * @footnote-risk: medium - An incorrect support claim can cause malformed requests or an unsafe fallback path.
+ * @footnote-ethics: medium - Misstating structured-output support can hide limitations that affect reliable, reviewable answers.
+ */
+export const supportsStructuredOutputsForProvider = (
+    provider: string
+): boolean => provider === 'openai' || provider === 'openrouter';
 
 const buildVoltAgentProviderOptions = (
     request: GenerationRequest,
     provider: string
 ): VoltAgentProviderOptions | undefined => {
     if (provider === 'openrouter') {
+        const reasoningEffort =
+            request.reasoningEffort !== undefined &&
+            (request.capabilities?.supportedReasoningEfforts === undefined ||
+                request.capabilities.supportedReasoningEfforts.includes(
+                    request.reasoningEffort
+                ))
+                ? request.reasoningEffort
+                : undefined;
         const routing = toOpenRouterProviderPayload(
-            request.providerRouting?.openrouter
+            request.providerRouting?.openrouter,
+            request.structuredOutput !== undefined ||
+                reasoningEffort !== undefined
         );
-        if (routing === undefined) {
+        const openRouterHints = {
+            ...(routing !== undefined && { provider: routing }),
+            ...(reasoningEffort !== undefined && {
+                reasoning: { effort: reasoningEffort },
+            }),
+            ...(request.structuredOutput !== undefined && {
+                strictJsonSchema: true,
+            }),
+        };
+        if (Object.keys(openRouterHints).length === 0) {
             return undefined;
         }
         return {
             providerHints: {
-                openrouter: {
-                    provider: routing,
-                },
+                openrouter: openRouterHints,
             },
         };
     }
@@ -1109,13 +1159,15 @@ const createDefaultVoltAgentExecutor = ({
                   headers: {
                       'X-OpenRouter-Metadata': 'enabled',
                   },
+                  // The compatible provider only emits response_format when
+                  // this capability is explicit.
+                  supportsStructuredOutputs: true,
                   metadataExtractor: openRouterMetadataExtractor,
-                  transformRequestBody: (body) => ({
-                      ...body,
-                      ...(openRouterProviderPayload !== undefined && {
-                          provider: openRouterProviderPayload,
-                      }),
-                  }),
+                  transformRequestBody: (body) =>
+                      mergeOpenRouterRequestBody(
+                          body,
+                          openRouterProviderPayload
+                      ),
               })(model.slice('openrouter/'.length))
             : undefined;
     const createAgent = (

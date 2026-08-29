@@ -79,9 +79,15 @@ cases:
       expressionStrength: subtle
       messages:
           - role: user
+            content: |
+                FOOTNOTE SOURCE EVIDENCE
+                source_id: prototype-test-report
+                source_status: supplied
+                source_scope: one prototype result; not production reliability
+                source_claim: The source reports a prototype result. It does not establish production reliability.
+                END FOOTNOTE SOURCE EVIDENCE
+          - role: user
             content: State what can be concluded from the supplied source and what still needs verification.
-          - role: assistant
-            content: The source reports a prototype result. It does not establish production reliability.
       requirements:
           - id: source-status
             kind: sources

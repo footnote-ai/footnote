@@ -15,24 +15,33 @@ import type {
     GenerationRuntime,
     GenerationStructuredOutput,
 } from '../packages/agent-runtime/src/index.js';
+import { supportsStructuredOutputsForProvider } from '../packages/agent-runtime/src/voltagentRuntime.js';
 import type {
     ModelProfile,
     PresentationGenerationSettings,
+    SupportedReasoningEffort,
 } from '../packages/contracts/src/index.js';
 import { supportedProviders } from '../packages/contracts/src/providers.js';
 import {
     loadResponseComparisonConfig,
+    RESPONSE_COMPARISON_AUTOMATIC_REVIEW_INSTRUCTION,
+    applyOpenRouterCapabilities,
+    isSupportedReasoningEffort,
     runResponseComparison,
     resolveModel,
+    responseComparisonAuthoritativeModel,
     settingToRequest,
     writeResponseComparisonReport,
     type ComparisonDependencies,
     type ResponseComparisonAttempt,
     type ResponseComparisonAutomaticReview,
+    type ResponseComparisonOpenRouterDiscoveredModel,
     type ResponseComparisonModel,
     type ResponseComparisonSupportEvidence,
 } from './lib/response-comparison.js';
 import { estimateOpenAITextCost } from '../packages/contracts/src/pricing.js';
+import { createResponseComparisonProgressReporter } from './lib/response-comparison-progress.js';
+import { buildResponseComparisonWorkflowRunner } from './lib/response-comparison-workflow.js';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const OPENROUTER_MODELS_TIMEOUT_MS = 10_000;
@@ -42,7 +51,7 @@ const usage = (): string =>
         'Usage: pnpm responses:compare [--config <path>] [--check]',
         '',
         'The default command runs all supported comparisons and writes a self-contained HTML report.',
-        'Resume is automatic from .footnote/response-comparison/<run-id>/checkpoint.jsonl.',
+        'Resume is automatic from response-comparison/.local/<run-id>/checkpoint.jsonl.',
     ].join('\n');
 
 const requiredValue = (args: string[], index: number, flag: string): string => {
@@ -53,7 +62,7 @@ const requiredValue = (args: string[], index: number, flag: string): string => {
 };
 
 const parseArgs = (args: string[]): { configPath: string; check: boolean } => {
-    let configPath = path.join(root, 'response-comparison.yaml');
+    let configPath = path.join(root, 'response-comparison/config.yaml');
     let check = false;
     for (let index = 0; index < args.length; index += 1) {
         switch (args[index]) {
@@ -90,36 +99,8 @@ const gitSha = (): string | undefined => {
     }
 };
 
-type OpenRouterDiscoveredModel = { supportedParameters?: string[] };
+type OpenRouterDiscoveredModel = ResponseComparisonOpenRouterDiscoveredModel;
 type OpenRouterDiscovery = Map<string, OpenRouterDiscoveredModel>;
-
-export const applyOpenRouterCapabilities = (
-    profile: ModelProfile,
-    discovered: OpenRouterDiscoveredModel | undefined
-): ModelProfile => {
-    if (
-        profile.provider !== 'openrouter' ||
-        discovered === undefined ||
-        !profile.id.startsWith('comparison-')
-    )
-        return profile;
-    const supportedParameters = new Set(discovered.supportedParameters ?? []);
-    const supportedSamplingControls = [
-        ...(supportedParameters.has('temperature')
-            ? (['temperature'] as const)
-            : []),
-        ...(supportedParameters.has('top_p') ? (['topP'] as const) : []),
-    ];
-    return {
-        ...profile,
-        capabilities: {
-            ...profile.capabilities,
-            ...(supportedSamplingControls.length > 0 && {
-                supportedSamplingControls: [...supportedSamplingControls],
-            }),
-        },
-    };
-};
 
 const buildSupportChecker = () => {
     const discovery = new Map<string, OpenRouterDiscovery | null>();
@@ -156,7 +137,31 @@ const buildSupportChecker = () => {
                                   typeof value === 'string'
                           )
                         : undefined;
-                    models.set(entry.id, { supportedParameters });
+                    const reasoning = isRecord(entry.reasoning)
+                        ? {
+                              ...(typeof entry.reasoning.mandatory ===
+                                  'boolean' && {
+                                  mandatory: entry.reasoning.mandatory,
+                              }),
+                              ...(Array.isArray(
+                                  entry.reasoning.supported_efforts
+                              ) && {
+                                  supportedEfforts:
+                                      entry.reasoning.supported_efforts.filter(
+                                          (value): value is string =>
+                                              typeof value === 'string'
+                                      ),
+                              }),
+                              ...(typeof entry.reasoning.default_effort ===
+                                  'string' && {
+                                  defaultEffort: entry.reasoning.default_effort,
+                              }),
+                          }
+                        : undefined;
+                    models.set(entry.id, {
+                        supportedParameters,
+                        ...(reasoning !== undefined && { reasoning }),
+                    });
                 }
             discovery.set('openrouter', models);
             return models;
@@ -222,6 +227,11 @@ const buildSupportChecker = () => {
                     reasonCode: 'provider_model_not_discovered',
                 };
             base.observedParameters = discovered.supportedParameters;
+            base.observedReasoningEfforts =
+                discovered.reasoning?.supportedEfforts?.filter(
+                    isSupportedReasoningEffort
+                );
+            base.reasoningMandatory = discovered.reasoning?.mandatory;
         }
         const supportsSamplingControl = (
             control: 'temperature' | 'topP',
@@ -352,8 +362,25 @@ const modelLabel = (
     profile: ModelProfile
 ): string =>
     'profile' in model
-        ? `${profile.description} (${model.profile})`
+        ? `${model.profile} (${profile.provider}/${profile.providerModel})`
         : `${model.name} (${model.provider}/${model.model})`;
+
+const conditionSettingsLabel = (
+    condition: NonNullable<
+        ReturnType<typeof loadResponseComparisonConfig>['config']['conditions']
+    >[number]
+): string => {
+    if (condition.candidateModel === undefined) return 'no candidate';
+    const prompt =
+        condition.candidatePromptVariant === 'style-sketch'
+            ? 'style sketch'
+            : 'faithful rewrite';
+    const handoff =
+        condition.handoffVariant === 'style-reference'
+            ? 'style reference'
+            : 'preserve candidate';
+    return `${prompt} → ${handoff}`;
+};
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
     typeof value === 'object' && value !== null && !Array.isArray(value);
@@ -383,9 +410,11 @@ const packageManagerVersion = (): string => {
 const hash = (value: unknown): string =>
     crypto.createHash('sha256').update(JSON.stringify(value)).digest('hex');
 
-const buildAutomaticReviewer =
+export const buildAutomaticReviewer =
     (input: {
         profile: ModelProfile;
+        name?: string;
+        reasoningEffort?: SupportedReasoningEffort;
         runtime: GenerationRuntime;
         rate: string[];
     }): ((
@@ -393,8 +422,7 @@ const buildAutomaticReviewer =
     ) => Promise<ResponseComparisonAutomaticReview | undefined>) =>
     async (attempt) => {
         if (!attempt.output) return undefined;
-        const instruction =
-            'Use only the supplied context and response. Check every requirement and rate every requested dimension. Give brief evidence for each result. Return exactly one result for each requirement and dimension. Do not invent evidence.';
+        const instruction = RESPONSE_COMPARISON_AUTOMATIC_REVIEW_INSTRUCTION;
         const reviewInput = {
             sourceMessages: attempt.source.messages,
             persona: attempt.source.persona,
@@ -461,8 +489,12 @@ const buildAutomaticReviewer =
         const startedAt = Date.now();
         const reviewer = {
             profile: input.profile.id,
+            ...(input.name !== undefined && { name: input.name }),
             provider: input.profile.provider,
             model: input.profile.providerModel,
+            ...(input.reasoningEffort !== undefined && {
+                reasoningEffort: input.reasoningEffort,
+            }),
         };
         try {
             const result = await input.runtime.generate({
@@ -473,6 +505,9 @@ const buildAutomaticReviewer =
                 model: input.profile.providerModel,
                 provider: input.profile.provider,
                 capabilities: input.profile.capabilities,
+                ...(input.reasoningEffort !== undefined && {
+                    reasoningEffort: input.reasoningEffort,
+                }),
                 structuredOutput: {
                     name: 'response-comparison-review',
                     schema,
@@ -484,7 +519,9 @@ const buildAutomaticReviewer =
                 !Array.isArray(parsed.mustKeep) ||
                 !Array.isArray(parsed.ratings)
             )
-                throw new Error('automatic review shape invalid');
+                throw new Error(
+                    'Automatic review did not match the required object shape.'
+                );
             const mustKeep = parsed.mustKeep.map(
                 (
                     item
@@ -500,7 +537,7 @@ const buildAutomaticReviewer =
                         typeof item.evidence !== 'string'
                     )
                         throw new Error(
-                            'automatic review must-keep item invalid'
+                            'Automatic review returned an invalid requirement result.'
                         );
                     return {
                         requirementId: item.requirementId,
@@ -525,7 +562,9 @@ const buildAutomaticReviewer =
                         typeof item.rationale !== 'string' ||
                         typeof item.evidence !== 'string'
                     )
-                        throw new Error('automatic review rating item invalid');
+                        throw new Error(
+                            'Automatic review returned an invalid rating.'
+                        );
                     return {
                         dimension: item.dimension,
                         score: item.score as 1 | 2 | 3 | 4 | 5,
@@ -552,7 +591,9 @@ const buildAutomaticReviewer =
                     expectedDimensions
                 )
             )
-                throw new Error('incomplete_or_invalid_review');
+                throw new Error(
+                    'Automatic review omitted or repeated a required item.'
+                );
             const reportedCost =
                 result.upstreamAttribution?.upstreamReportedCostUsd;
             const estimatedCost =
@@ -622,23 +663,38 @@ const main = async (): Promise<void> => {
             profile,
         ])
     );
-    const selectedModels = [
-        ...loaded.config.models,
-        ...(loaded.config.review.automaticReviewer
-            ? [loaded.config.review.automaticReviewer]
-            : []),
-    ];
+    const configuredConditions = loaded.config.conditions;
+    const authority = loaded.config.authority;
+    const selectedModels =
+        configuredConditions === undefined
+            ? [
+                  ...(loaded.config.models ?? []),
+                  ...(loaded.config.review.automaticReviewer
+                      ? [loaded.config.review.automaticReviewer.model]
+                      : []),
+              ]
+            : [
+                  ...configuredConditions.flatMap((condition) => [
+                      ...(condition.candidateModel !== undefined
+                          ? [condition.candidateModel]
+                          : []),
+                  ]),
+                  ...(authority !== undefined ? [authority.model] : []),
+                  ...(loaded.config.review.automaticReviewer
+                      ? [loaded.config.review.automaticReviewer.model]
+                      : []),
+              ];
     const selectedProfiles = selectedModels.map((model) =>
         resolveModel(model, profiles)
     );
-    const missingProfiles = loaded.config.models.filter(
+    const missingProfiles = selectedModels.filter(
         (model) => resolveModel(model, profiles) === null
     );
     const automaticReviewer = loaded.config.review.automaticReviewer;
     const automaticReviewerProfile =
         automaticReviewer === undefined
             ? null
-            : resolveModel(automaticReviewer, profiles);
+            : resolveModel(automaticReviewer.model, profiles);
     const credentialProviders = new Set(
         selectedProfiles
             .filter((profile): profile is ModelProfile => profile !== null)
@@ -653,65 +709,151 @@ const main = async (): Promise<void> => {
         ),
     };
     const support = buildSupportChecker();
-    const checks = [
-        `Checking comparison: ${options.configPath}`,
-        `Models: ${loaded.config.models.length} configured; ${missingProfiles.length} missing profiles`,
-        ...supportedProviders
-            .filter((provider) => credentialProviders.has(provider))
-            .map(
-                (provider) =>
-                    `${provider} access: ${credentials[provider] ? 'available' : 'missing'}`
-            ),
-        `Planned attempts: ${loaded.config.models.length * loaded.config.settings.length * loaded.config.cases.length * loaded.config.repeats}`,
-    ];
+    const preparedAutomaticReviewerProfile =
+        automaticReviewerProfile === null
+            ? null
+            : await support.prepareProfile(automaticReviewerProfile);
     if (options.check) {
-        for (const model of loaded.config.models) {
-            const profile = resolveModel(model, profiles);
-            if (profile === null) {
-                checks.push(
-                    `Model ${JSON.stringify(model)}: not_tested (profile_not_found)`
+        const conditionCount =
+            configuredConditions?.length ?? loaded.config.models?.length ?? 0;
+        const plannedAttempts =
+            conditionCount * loaded.config.cases.length * loaded.config.repeats;
+        const checks = [
+            `Comparison: ${path.relative(root, options.configPath).replaceAll(path.sep, '/')}`,
+            `Plan: ${plannedAttempts} attempts (${conditionCount} conditions × ${loaded.config.cases.length} cases × ${loaded.config.repeats} repeats)`,
+            ...supportedProviders
+                .filter((provider) => credentialProviders.has(provider))
+                .map(
+                    (provider) =>
+                        `Credential: ${provider} ${credentials[provider] ? 'available' : 'MISSING'}`
+                ),
+        ];
+        if (missingProfiles.length > 0)
+            checks.push(`Profiles: ${missingProfiles.length} missing`);
+        if (configuredConditions !== undefined) {
+            const authoritativeModel = responseComparisonAuthoritativeModel(
+                loaded.config
+            );
+            const authoritativeProfile = resolveModel(
+                authoritativeModel,
+                profiles
+            );
+            let authoritativeSupport:
+                ResponseComparisonSupportEvidence | undefined;
+            if (authoritativeProfile === null) {
+                checks.push('Authority: NOT READY — profile not found');
+            } else {
+                const preparedAuthoritativeProfile =
+                    await support.prepareProfile(authoritativeProfile);
+                authoritativeSupport = await support.check(
+                    preparedAuthoritativeProfile,
+                    authority?.reasoningEffort === undefined
+                        ? {}
+                        : { reasoningEffort: authority.reasoningEffort }
                 );
-                continue;
+                checks.push(
+                    `Authority: ${modelLabel(authoritativeModel, authoritativeProfile)} — ${describeSupport(authoritativeSupport)}${authority?.reasoningEffort === undefined ? '' : `; reasoning ${authority.reasoningEffort}`}`
+                );
             }
-            for (const setting of loaded.config.settings) {
-                const values: PresentationGenerationSettings =
-                    settingToRequest(setting);
-                checks.push(
-                    `${modelLabel(model, profile)} | ${setting === 'default' ? 'Provider defaults' : JSON.stringify(setting)}: ${describeSupport(await support.check(profile, values))}`
+            checks.push('Conditions:');
+            for (const condition of configuredConditions) {
+                if (condition.candidateModel === undefined) {
+                    checks.push(
+                        `  ${condition.id}: ${authoritativeSupport === undefined ? 'NOT READY' : describeSupport(authoritativeSupport)} — no candidate`
+                    );
+                    continue;
+                }
+                const candidateProfile = resolveModel(
+                    condition.candidateModel,
+                    profiles
                 );
+                if (candidateProfile === null) {
+                    checks.push(
+                        `  ${condition.id}: NOT READY — candidate profile not found`
+                    );
+                    continue;
+                }
+                const candidateSupport = await support.check(candidateProfile, {
+                    promptVariant: condition.candidatePromptVariant,
+                });
+                const conditionSupport =
+                    authoritativeSupport === undefined
+                        ? 'NOT READY — authority unavailable'
+                        : authoritativeSupport.status !== 'supported'
+                          ? describeSupport(authoritativeSupport)
+                          : describeSupport(candidateSupport);
+                checks.push(
+                    `  ${condition.id}: ${conditionSupport} — ${modelLabel(condition.candidateModel, candidateProfile)}; ${conditionSettingsLabel(condition)}`
+                );
+            }
+        } else {
+            for (const model of loaded.config.models ?? []) {
+                const profile = resolveModel(model, profiles);
+                if (profile === null) {
+                    checks.push(
+                        `Model ${JSON.stringify(model)}: not_tested (profile_not_found)`
+                    );
+                    continue;
+                }
+                for (const setting of loaded.config.settings ?? []) {
+                    const values: PresentationGenerationSettings =
+                        settingToRequest(setting);
+                    checks.push(
+                        `${modelLabel(model, profile)} | ${setting === 'default' ? 'Provider defaults' : JSON.stringify(setting)}: ${describeSupport(await support.check(profile, values))}`
+                    );
+                }
             }
         }
         if (automaticReviewer !== undefined) {
-            const reviewerModel = automaticReviewer;
-            const reviewerProfile = automaticReviewerProfile;
+            const reviewerModel = automaticReviewer.model;
+            const reviewerProfile = preparedAutomaticReviewerProfile;
             if (reviewerProfile === null) {
+                const reviewerReference =
+                    'profile' in reviewerModel
+                        ? reviewerModel.profile
+                        : `${reviewerModel.provider}/${reviewerModel.model}`;
                 checks.push(
-                    `Automatic reviewer ${reviewerModel.profile}: not_tested (profile_not_found)`
+                    `Reviewer: NOT READY — profile not found (${reviewerReference})`
                 );
             } else {
                 const reviewerSupport = await support.check(
                     reviewerProfile,
-                    {}
+                    automaticReviewer.reasoningEffort === undefined
+                        ? {}
+                        : {
+                              reasoningEffort:
+                                  automaticReviewer.reasoningEffort,
+                          }
                 );
                 const structuredReviewSupported =
+                    supportsStructuredOutputsForProvider(
+                        reviewerProfile.provider
+                    ) &&
                     reviewerProfile.capabilities.toolCapabilities?.[
                         'routing.generation.structured-cheap'
                     ] === true;
                 checks.push(
-                    `Automatic reviewer ${modelLabel(reviewerModel, reviewerProfile)} | structured review: ${
-                        structuredReviewSupported
-                            ? describeSupport(reviewerSupport)
-                            : 'structured review capability is not advertised (unsupported; structured_review_capability_not_advertised)'
+                    `Reviewer: ${modelLabel(reviewerModel, reviewerProfile)} — ${
+                        !supportsStructuredOutputsForProvider(
+                            reviewerProfile.provider
+                        )
+                            ? 'NOT READY; runtime adapter lacks structured output (structured_review_adapter_unsupported)'
+                            : structuredReviewSupported
+                              ? `${describeSupport(reviewerSupport)}; structured output supported${automaticReviewer.reasoningEffort === undefined ? '' : `; reasoning ${automaticReviewer.reasoningEffort}`}`
+                              : 'NOT READY; model does not advertise structured output (structured_review_capability_not_advertised)'
                     }`
                 );
             }
         }
-        console.log(checks.map((line) => `- ${line}`).join('\n'));
+        console.log(checks.join('\n'));
         return;
     }
-    if (automaticReviewer !== undefined && automaticReviewerProfile === null)
+    if (
+        automaticReviewer !== undefined &&
+        preparedAutomaticReviewerProfile === null
+    )
         throw new Error(
-            `Automatic reviewer profile not found: ${automaticReviewer.profile}`
+            `Automatic reviewer not found: ${'profile' in automaticReviewer.model ? automaticReviewer.model.profile : `${automaticReviewer.model.provider}/${automaticReviewer.model.model}`}`
         );
     const defaultProfile =
         selectedProfiles.find(
@@ -725,8 +867,13 @@ const main = async (): Promise<void> => {
         await import('../packages/agent-runtime/src/voltagentRuntime.js');
     const { runPresentationCandidate } =
         await import('../packages/backend/src/services/presentation.js');
+    const reportProgress = createResponseComparisonProgressReporter({
+        write: (line) => console.log(line),
+    });
     const runtime = createVoltAgentRuntime({
         defaultModel: `${defaultProfile.provider}/${defaultProfile.providerModel}`,
+        // The comparison runner intentionally composes system messages after
+        // transcript content for controlled assessment and handoff stages.
         ollama: {
             baseUrl: runtimeConfig.ollama.baseUrl ?? undefined,
             apiKey: runtimeConfig.ollama.apiKey ?? undefined,
@@ -741,6 +888,8 @@ const main = async (): Promise<void> => {
         profiles,
         generationRuntime: runtime,
         runCandidate: runPresentationCandidate,
+        runWorkflow: buildResponseComparisonWorkflowRunner(runtime),
+        onProgress: reportProgress,
         resolvePersona: (item) => {
             const expression = resolvePersonaExpression(
                 { personaExpressionStrength: item.expressionStrength },
@@ -759,9 +908,13 @@ const main = async (): Promise<void> => {
         prepareProfile: support.prepareProfile,
         checkProviderSupport: support.check,
         ...(automaticReviewer !== undefined &&
-            automaticReviewerProfile !== null && {
+            preparedAutomaticReviewerProfile !== null && {
                 automaticReviewer: buildAutomaticReviewer({
-                    profile: automaticReviewerProfile,
+                    profile: preparedAutomaticReviewerProfile,
+                    ...('name' in automaticReviewer.model && {
+                        name: automaticReviewer.model.name,
+                    }),
+                    reasoningEffort: automaticReviewer.reasoningEffort,
                     runtime,
                     rate: loaded.config.review.rate,
                 }),
@@ -777,13 +930,16 @@ const main = async (): Promise<void> => {
         configPath: path
             .relative(root, options.configPath)
             .replaceAll(path.sep, '/'),
-        checkpointRoot: path.join(root, '.footnote/response-comparison'),
+        checkpointRoot: path.join(root, 'response-comparison/.local'),
         command: `pnpm responses:compare --config ${path.relative(root, options.configPath).replaceAll(path.sep, '/')}`,
         config: loaded.config,
         configHash: loaded.hash,
         dependencies,
     });
-    const reportPath = writeResponseComparisonReport(root, report);
+    const reportPath = writeResponseComparisonReport(
+        path.join(root, 'response-comparison/.local'),
+        report
+    );
     console.log(
         JSON.stringify({
             reportId: report.reportId,
@@ -796,7 +952,12 @@ const main = async (): Promise<void> => {
     );
 };
 
-main().catch((error: unknown) => {
-    console.error(error instanceof Error ? error.message : String(error));
-    process.exitCode = 1;
-});
+if (
+    process.argv[1] !== undefined &&
+    path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)
+) {
+    main().catch((error: unknown) => {
+        console.error(error instanceof Error ? error.message : String(error));
+        process.exitCode = 1;
+    });
+}
