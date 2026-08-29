@@ -600,7 +600,13 @@ const toOpenRouterProviderPayload = (
     return Object.keys(payload).length > 0 ? payload : undefined;
 };
 
-/** Adds per-call OpenRouter requirements without dropping configured routing. */
+/**
+ * @description: Merges request-level OpenRouter provider settings over static routing settings.
+ * @footnote-scope: core
+ * @footnote-module: OpenRouterRequestBodyMerge
+ * @footnote-risk: high - Dropping configured routing can send a request to an unintended upstream provider or change fallback behavior.
+ * @footnote-ethics: high - Provider routing controls data handling and must remain faithful to the caller's transparent configuration.
+ */
 export const mergeOpenRouterRequestBody = (
     body: Record<string, unknown>,
     staticProvider: Record<string, unknown> | undefined
@@ -616,7 +622,13 @@ export const mergeOpenRouterRequestBody = (
     };
 };
 
-/** Lets capability checks distinguish adapter support from model support. */
+/**
+ * @description: Reports whether the VoltAgent adapter can request structured output for a provider.
+ * @footnote-scope: core
+ * @footnote-module: StructuredOutputProviderSupport
+ * @footnote-risk: medium - An incorrect support claim can cause malformed requests or an unsafe fallback path.
+ * @footnote-ethics: medium - Misstating structured-output support can hide limitations that affect reliable, reviewable answers.
+ */
 export const supportsStructuredOutputsForProvider = (
     provider: string
 ): boolean => provider === 'openai' || provider === 'openrouter';

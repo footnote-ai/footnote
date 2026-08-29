@@ -844,7 +844,7 @@ export type ResponseComparisonOpenRouterDiscoveredModel = {
     };
 };
 
-const isSupportedReasoningEffort = (
+export const isSupportedReasoningEffort = (
     value: string
 ): value is SupportedReasoningEffort =>
     ['none', 'low', 'medium', 'high', 'xhigh', 'max'].includes(value);

@@ -26,6 +26,7 @@ import {
     loadResponseComparisonConfig,
     RESPONSE_COMPARISON_AUTOMATIC_REVIEW_INSTRUCTION,
     applyOpenRouterCapabilities,
+    isSupportedReasoningEffort,
     runResponseComparison,
     resolveModel,
     responseComparisonAuthoritativeModel,
@@ -228,15 +229,7 @@ const buildSupportChecker = () => {
             base.observedParameters = discovered.supportedParameters;
             base.observedReasoningEfforts =
                 discovered.reasoning?.supportedEfforts?.filter(
-                    (value): value is SupportedReasoningEffort =>
-                        [
-                            'none',
-                            'low',
-                            'medium',
-                            'high',
-                            'xhigh',
-                            'max',
-                        ].includes(value as SupportedReasoningEffort)
+                    isSupportedReasoningEffort
                 );
             base.reasoningMandatory = discovered.reasoning?.mandatory;
         }

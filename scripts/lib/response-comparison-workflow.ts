@@ -61,10 +61,14 @@ const captureComparisonUsage = (
     const totalTokens =
         result.usage?.totalTokens ?? promptTokens + completionTokens;
     const reportedCost = result.upstreamAttribution?.upstreamReportedCostUsd;
+    const resolvedModel =
+        result.model ??
+        result.upstreamAttribution?.resolvedModel ??
+        requestedModel;
     const costEstimate =
-        reportedCost === undefined && requestedModel !== undefined
+        reportedCost === undefined && resolvedModel !== undefined
             ? estimateOpenAITextCost(
-                  requestedModel,
+                  resolvedModel,
                   promptTokens,
                   completionTokens
               )
@@ -88,7 +92,7 @@ const captureComparisonUsage = (
                 : costEstimate.totalCost,
     };
     return {
-        model: result.model ?? requestedModel ?? 'unknown',
+        model: resolvedModel ?? 'unknown',
         promptTokens,
         completionTokens,
         totalTokens,

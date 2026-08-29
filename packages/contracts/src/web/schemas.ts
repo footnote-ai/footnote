@@ -46,7 +46,10 @@ import {
     supportedImageOutputFormats,
     supportedReasoningEfforts,
 } from '../providers.js';
-import { PresentationGenerationSettingsSchema } from '../model-profiles.js';
+import {
+    presentationPromptVariants,
+    PresentationGenerationSettingsSchema,
+} from '../model-profiles.js';
 
 const ProvenanceSchema = z.enum(['Retrieved', 'Inferred', 'Speculative']);
 const SafetyTierSchema = z.enum(['Low', 'Medium', 'High']);
@@ -532,9 +535,7 @@ const CurrentPresentationReasonCodeSchema = z.enum([
 
 const PresentationSettingsMetadataRequestedSchema = z
     .object({
-        promptVariant: z
-            .enum(['faithful-rewrite', 'style-sketch', 'current', 'compact'])
-            .optional(),
+        promptVariant: z.enum(presentationPromptVariants).optional(),
         maxOutputTokens: z.number().int().positive().optional(),
         reasoningEffort: z
             .enum(['none', 'low', 'medium', 'high', 'xhigh', 'max'])

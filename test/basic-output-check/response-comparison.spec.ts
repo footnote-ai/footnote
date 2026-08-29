@@ -100,7 +100,7 @@ const report: ResponseComparisonReport = {
                 final: { status: 'completed', text: 'Hello.' },
             },
             correctionDecisions: [],
-            candidateContamination: { detected: false, evidence: [] },
+            candidateChangeHint: { detected: false, evidence: [] },
             operations: { latencyMs: 10, costUsd: 0.01 },
         },
     ],
