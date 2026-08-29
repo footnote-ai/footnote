@@ -1,0 +1,64 @@
+version: 2
+name: presentation-handoff-comparison
+authority:
+    model:
+        name: GPT-5.6 Terra via OpenRouter
+        provider: openrouter
+        model: openai/gpt-5.6-terra
+    reasoningEffort: medium
+conditions:
+    - id: authority-only
+    - id: cydonia-faithful-preserve
+      candidateModel:
+          profile: openrouter-cydonia-24b-v4-1
+      candidatePromptVariant: faithful-rewrite
+      handoffVariant: preserve-candidate
+    - id: cydonia-style-preserve
+      candidateModel:
+          profile: openrouter-cydonia-24b-v4-1
+      candidatePromptVariant: style-sketch
+      handoffVariant: preserve-candidate
+    - id: cydonia-style-reference
+      candidateModel:
+          profile: openrouter-cydonia-24b-v4-1
+      candidatePromptVariant: style-sketch
+      handoffVariant: style-reference
+    - id: deepseek-faithful-preserve
+      candidateModel:
+          name: DeepSeek V4 Flash 0731
+          provider: openrouter
+          model: deepseek/deepseek-v4-flash-0731
+      candidatePromptVariant: faithful-rewrite
+      handoffVariant: preserve-candidate
+    - id: deepseek-style-preserve
+      candidateModel:
+          name: DeepSeek V4 Flash 0731
+          provider: openrouter
+          model: deepseek/deepseek-v4-flash-0731
+      candidatePromptVariant: style-sketch
+      handoffVariant: preserve-candidate
+    - id: deepseek-style-reference
+      candidateModel:
+          name: DeepSeek V4 Flash 0731
+          provider: openrouter
+          model: deepseek/deepseek-v4-flash-0731
+      candidatePromptVariant: style-sketch
+      handoffVariant: style-reference
+repeats: 2
+cases: core
+review:
+    mustKeep:
+        - facts
+        - uncertainty
+        - sources
+        - authority
+        - safety
+        - unsupported_additions
+    rate: [naturalness, persona, clarity, usefulness]
+    automaticReviewer:
+        model:
+            name: Claude Sonnet 5 via OpenRouter
+            provider: openrouter
+            model: anthropic/claude-sonnet-5
+        reasoningEffort: medium
+    blind: true

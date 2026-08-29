@@ -532,7 +532,9 @@ const CurrentPresentationReasonCodeSchema = z.enum([
 
 const PresentationSettingsMetadataRequestedSchema = z
     .object({
-        promptVariant: z.enum(['current', 'compact']).optional(),
+        promptVariant: z
+            .enum(['faithful-rewrite', 'style-sketch', 'current', 'compact'])
+            .optional(),
         maxOutputTokens: z.number().int().positive().optional(),
         reasoningEffort: z
             .enum(['none', 'low', 'medium', 'high', 'xhigh', 'max'])

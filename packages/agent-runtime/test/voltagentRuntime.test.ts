@@ -13,14 +13,28 @@ import type { GenerationRequest, RuntimeMessage } from '../src/index.js';
 import {
     createDefaultVoltAgentExecutor,
     createVoltAgentRuntime,
+    buildVoltAgentProviderOptions,
     getToolForProvider,
     hasToolForProvider,
     normalizeVoltAgentResult,
     openRouterMetadataExtractor,
+    mergeOpenRouterRequestBody,
     resolveToolForProvider,
     type VoltAgentGenerateTextOptions,
     type VoltAgentLogger,
 } from '../src/voltagentRuntime.js';
+
+type AgentGenerateTextResult = Awaited<ReturnType<Agent['generateText']>>;
+
+const structuredOutput = {
+    name: 'review_result',
+    schema: {
+        type: 'object' as const,
+        properties: { verdict: { type: 'string' } },
+        required: ['verdict'],
+        additionalProperties: false,
+    },
+};
 
 test('voltagent runtime maps transcript and generation settings into executor options', async () => {
     let seenModel: string | undefined;
@@ -181,6 +195,182 @@ test('voltagent runtime carries explicit OpenRouter routing and reported attribu
         routingAttemptCount: 1,
         upstreamReportedCostUsd: 0.000012,
     });
+});
+
+test('voltagent runtime maps OpenRouter reasoning and structured-output settings', async () => {
+    const providerOptions = buildVoltAgentProviderOptions(
+        {
+            messages: [{ role: 'user', content: 'Review this answer.' }],
+            provider: 'openrouter',
+            model: 'anthropic/claude-sonnet-5',
+            reasoningEffort: 'medium',
+            structuredOutput,
+            providerRouting: {
+                openrouter: {
+                    only: ['anthropic'],
+                    allowFallbacks: false,
+                },
+            },
+        },
+        'openrouter'
+    );
+
+    assert.deepEqual(providerOptions, {
+        providerHints: {
+            openrouter: {
+                provider: {
+                    only: ['anthropic'],
+                    allow_fallbacks: false,
+                    require_parameters: true,
+                },
+                reasoning: { effort: 'medium' },
+                strictJsonSchema: true,
+            },
+        },
+    });
+
+    let configuredModel: unknown;
+    let seenOptions: VoltAgentGenerateTextOptions | undefined;
+    const executor = createDefaultVoltAgentExecutor({
+        model: 'openrouter/anthropic/claude-sonnet-5',
+        openrouter: {
+            apiKey: 'test-openrouter-key',
+            baseUrl: 'https://openrouter.ai/api/v1',
+        },
+        agentFactory: ({ model }) => {
+            configuredModel = model;
+            return {
+                async generateText(
+                    _messages,
+                    options
+                ): Promise<AgentGenerateTextResult> {
+                    seenOptions = options;
+                    return {
+                        text: '{"verdict":"clear"}',
+                        output: { verdict: 'clear' },
+                        finishReason: 'stop',
+                        usage: {
+                            inputTokens: 0,
+                            inputTokenDetails: {
+                                noCacheTokens: 0,
+                                cacheReadTokens: 0,
+                                cacheWriteTokens: 0,
+                            },
+                            outputTokens: 0,
+                            outputTokenDetails: { reasoningTokens: 0 },
+                            totalTokens: 0,
+                        },
+                        response: {
+                            modelId: 'openrouter/anthropic/claude-sonnet-5',
+                        },
+                    } as unknown as AgentGenerateTextResult;
+                },
+            };
+        },
+    });
+    await executor.generateText(
+        [{ role: 'user', content: 'Review this answer.' }],
+        { structuredOutput, providerOptions }
+    );
+
+    const modelCapabilities = configuredModel as {
+        supportsStructuredOutputs?: boolean;
+    };
+    assert.equal(modelCapabilities.supportsStructuredOutputs, true);
+    assert.deepEqual(seenOptions?.providerOptions, {
+        openrouter: providerOptions?.providerHints?.openrouter,
+    });
+});
+
+test('voltagent runtime preserves per-call OpenRouter requirements beside static routing', () => {
+    assert.deepEqual(
+        mergeOpenRouterRequestBody(
+            {
+                model: 'anthropic/claude-sonnet-5',
+                provider: {
+                    require_parameters: true,
+                    reasoning: { effort: 'medium' },
+                },
+            },
+            {
+                only: ['anthropic'],
+                allow_fallbacks: false,
+            }
+        ),
+        {
+            model: 'anthropic/claude-sonnet-5',
+            provider: {
+                only: ['anthropic'],
+                allow_fallbacks: false,
+                require_parameters: true,
+                reasoning: { effort: 'medium' },
+            },
+        }
+    );
+});
+
+test('voltagent runtime preserves explicit OpenRouter none reasoning instead of inventing a fallback', async () => {
+    let seenOptions: VoltAgentGenerateTextOptions | undefined;
+    const runtime = createVoltAgentRuntime({
+        defaultModel: 'openrouter/anthropic/claude-sonnet-5',
+        openrouter: {
+            apiKey: 'test-openrouter-key',
+            baseUrl: 'https://openrouter.ai/api/v1',
+        },
+        createExecutor: () => ({
+            async generateText(_messages, options) {
+                seenOptions = options;
+                return { text: 'reply' };
+            },
+        }),
+    });
+
+    await runtime.generate({
+        messages: [{ role: 'user', content: 'Answer briefly.' }],
+        provider: 'openrouter',
+        model: 'anthropic/claude-sonnet-5',
+        reasoningEffort: 'none',
+    });
+
+    assert.deepEqual(seenOptions?.providerOptions, {
+        providerHints: {
+            openrouter: {
+                provider: { require_parameters: true },
+                reasoning: { effort: 'none' },
+            },
+        },
+    });
+});
+
+test('voltagent runtime omits reasoning efforts absent from OpenRouter discovery', async () => {
+    let seenOptions: VoltAgentGenerateTextOptions | undefined;
+    const runtime = createVoltAgentRuntime({
+        defaultModel: 'openrouter/z-ai/glm-5.3',
+        openrouter: {
+            apiKey: 'test-openrouter-key',
+            baseUrl: 'https://openrouter.ai/api/v1',
+        },
+        createExecutor: () => ({
+            async generateText(_messages, options) {
+                seenOptions = options;
+                return { text: 'fallback answer' };
+            },
+        }),
+    });
+
+    const result = await runtime.generate({
+        messages: [{ role: 'user', content: 'Answer briefly.' }],
+        provider: 'openrouter',
+        model: 'z-ai/glm-5.3',
+        capabilities: {
+            canUseSearch: false,
+            supportedReasoningEfforts: ['low', 'medium', 'high'],
+        },
+        reasoningEffort: 'none',
+    });
+
+    assert.equal(result.text, 'fallback answer');
+    assert.equal(seenOptions?.providerOptions, undefined);
 });
 
 test('voltagent runtime normalizes production OpenRouter metadata', async () => {

@@ -16,7 +16,12 @@ import {
 } from './providers.js';
 
 /** Prompt variants owned by the Footnote presentation seam. */
-export const presentationPromptVariants = ['current', 'compact'] as const;
+export const presentationPromptVariants = [
+    'faithful-rewrite',
+    'style-sketch',
+    'current',
+    'compact',
+] as const;
 export type PresentationPromptVariant =
     (typeof presentationPromptVariants)[number];
 

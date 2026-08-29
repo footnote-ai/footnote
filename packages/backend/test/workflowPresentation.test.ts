@@ -101,6 +101,7 @@ const runScenario = async (
         workflowPolicy?: typeof policy;
         maxWorkflowSteps?: number;
         maxTokensTotal?: number;
+        handoffVariant?: 'preserve-candidate' | 'style-reference';
     }
 ) => {
     const calls: GenerationRequest[] = [];
@@ -135,7 +136,10 @@ const runScenario = async (
         workflowPolicy: options?.workflowPolicy ?? policy,
         captureUsage: usage,
         presentation: {
-            config,
+            config: {
+                ...config,
+                handoffVariant: options?.handoffVariant,
+            },
             persona: presentationPersona,
             caution: 3,
             captureUsage: (value, _profile, feature) => {
@@ -312,6 +316,32 @@ test('runs ordinary revision without carrying the raw presentation candidate', a
         ['presentation_draft', 'initial_generation', 'revision']
     );
     assert.equal(result.responseCandidates?.at(-1)?.state, 'selected');
+});
+
+test('style-reference handoff gives Terra authorship and retains the request', async () => {
+    const candidate = 'A vivid candidate with an unsupported recommendation.';
+    const { calls, result } = await runScenario(
+        async (_request, call) => {
+            if (call === 1) return generated(candidate);
+            if (call === 2) return generated('Authoritative answer.');
+            return generated(reviewFinalize);
+        },
+        { handoffVariant: 'style-reference' }
+    );
+
+    assert.equal(result.outcome, 'generated');
+    assert.match(
+        calls[1]?.messages.map((message) => message.content).join('\n') ?? '',
+        /Write the answer from the original request and context/u
+    );
+    assert.match(
+        calls[1]?.messages.map((message) => message.content).join('\n') ?? '',
+        /only as a style reference/u
+    );
+    assert.match(
+        calls[1]?.messages.map((message) => message.content).join('\n') ?? '',
+        /status/u
+    );
 });
 
 test('falls back to ordinary generation and review without a candidate', async () => {

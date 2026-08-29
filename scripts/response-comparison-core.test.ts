@@ -1,5 +1,5 @@
 /**
- * @description: Protects the core response-comparison suite's semantic coverage without fixing its campaign size.
+ * @description: Checks that the core response-comparison cases cover every required review concern.
  * @footnote-scope: test
  * @footnote-module: ResponseComparisonCoreSuiteTests
  * @footnote-risk: medium - An incomplete suite can produce misleading comparison results.
@@ -17,7 +17,7 @@ import {
 
 const fixturePath = path.join(
     process.cwd(),
-    'packages/backend/test/fixtures/responseComparisonCore.yaml'
+    'response-comparison/core-cases.yaml'
 );
 
 const loadCoreCases = (): ResponseComparisonCase[] => {
@@ -32,7 +32,7 @@ const loadCoreCases = (): ResponseComparisonCase[] => {
     return parseResponseComparisonCases(raw.cases);
 };
 
-test('core comparison suite is complete without fixing its size', () => {
+test('core cases cover every required review concern', () => {
     const cases = loadCoreCases();
     assert.ok(cases.length > 0);
 
@@ -72,4 +72,23 @@ test('core comparison suite is complete without fixing its size', () => {
             true,
             `Missing core concern: ${kind}`
         );
+});
+
+test('represents the source-boundary case as delimited source context', () => {
+    const sourceCase = loadCoreCases().find(
+        (item) => item.id === 'authority-and-sources'
+    );
+    assert.ok(sourceCase);
+    assert.equal(
+        sourceCase.messages.some((message) => message.role === 'assistant'),
+        false
+    );
+    const sourceMessage = sourceCase.messages.find(
+        (message) =>
+            message.role === 'user' &&
+            message.content.includes('FOOTNOTE SOURCE EVIDENCE')
+    );
+    assert.ok(sourceMessage);
+    assert.match(sourceMessage.content, /source_id:/u);
+    assert.match(sourceMessage.content, /END FOOTNOTE SOURCE EVIDENCE/u);
 });

@@ -91,6 +91,16 @@ const report: ResponseComparisonReport = {
                 ],
             },
             output: { text: 'Hello.' },
+            stages: {
+                candidate: { status: 'completed', text: 'candidate secret' },
+                authoritative: {
+                    status: 'completed',
+                    text: 'authoritative stage',
+                },
+                final: { status: 'completed', text: 'Hello.' },
+            },
+            correctionDecisions: [],
+            candidateContamination: { detected: false, evidence: [] },
             operations: { latencyMs: 10, costUsd: 0.01 },
         },
     ],
@@ -117,6 +127,7 @@ test('keeps review blind, saves judgments, reveals metadata, and exports reviewe
         0
     );
     await expect(page.getByText('Model support')).toHaveCount(0);
+    await expect(page.getByText('candidate secret')).toHaveCount(0);
     await expect(
         page.getByText('Keep the supplied facts and limits.')
     ).toBeVisible();
@@ -141,6 +152,7 @@ test('keeps review blind, saves judgments, reveals metadata, and exports reviewe
     ).toBeVisible();
     await expect(page.locator('[data-role="blind-review"]')).toHaveCount(0);
     await expect(page.getByText('Model support')).toBeVisible();
+    await expect(page.getByText('candidate secret')).toBeVisible();
     const state = await page.evaluate(() =>
         localStorage.getItem('response-comparison:browser-smoke')
     );
