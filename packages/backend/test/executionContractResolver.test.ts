@@ -33,6 +33,9 @@ test('resolveExecutionContract maps known preset ids deterministically', () => {
         qualityGrounded.policyContract.response.stoppingRule,
         'bounded_sufficient_answer'
     );
+
+    const balanced = resolveExecutionContract({ presetId: 'balanced' });
+    assert.equal(balanced.policyContract.limits.maxTokensTotal, 16_000);
 });
 
 test('resolveExecutionContract fails open to fast-direct descriptor for unknown preset ids', () => {

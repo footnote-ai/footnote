@@ -74,7 +74,7 @@ export const getPresentationTraceSummary = (
             case 'disabled':
                 return 'Presentation was disabled; the normal answer path was used.';
             case 'budget_skipped':
-                return 'Presentation was skipped because the remaining workflow budget was reserved for the authoritative answer and review.';
+                return 'Presentation skipped: token budget exhausted; the authoritative answer was kept.';
             case 'profile_not_configured':
                 return 'No presentation profile was configured; the normal answer path was used.';
         }
