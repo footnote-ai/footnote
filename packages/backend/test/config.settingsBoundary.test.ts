@@ -71,6 +71,32 @@ test('settings_yaml env keys in process.env are ignored with warning', () => {
     );
 });
 
+test('planner profile is loaded from canonical settings YAML', () => {
+    const settingsPath = withSettingsFile(
+        [
+            'version: 1',
+            'openai:',
+            '  planner-profile-id: openrouter-deepseek-v4-flash-0731',
+            '',
+        ].join('\n')
+    );
+
+    const config = buildRuntimeConfig(
+        {
+            NODE_ENV: 'test',
+            FOOTNOTE_SETTINGS_PATH: settingsPath,
+            OPENROUTER_API_KEY: 'test-key',
+            PLANNER_PROFILE_ID: 'openai-text-fast',
+        },
+        () => undefined
+    );
+
+    assert.equal(
+        config.modelProfiles.plannerProfileId,
+        'openrouter-deepseek-v4-flash-0731'
+    );
+});
+
 test('integer settings reject non-integer numbers', () => {
     const settingsPath = withSettingsFile(
         ['version: 1', 'rate-limits:', '  web-api-rate-limit-ip: 3.5', ''].join(

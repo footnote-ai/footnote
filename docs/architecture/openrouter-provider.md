@@ -15,8 +15,9 @@ posture, and zero-data-retention request. The bundled DeepSeek profile uses
 upstream endpoint. Deployments with OpenRouter credentials can select it first
 for planning and normal generation; the optional presentation flow can reuse
 the same provider-neutral profile. The canonical Fly deployment sets both
-`DEFAULT_PROFILE_ID` and `PLANNER_PROFILE_ID` to this profile so planner calls
-do not depend on an exhausted OpenAI quota.
+the canonical `footnote.yaml` `default-profile-id` and `planner-profile-id`
+settings to this profile so planner calls do not depend on an exhausted OpenAI
+quota.
 
 The profile's provider and model are the **backend request**, not proof of the
 upstream inference provider or resolved model. When OpenRouter returns routing
