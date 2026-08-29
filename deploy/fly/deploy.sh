@@ -66,7 +66,8 @@ ensure_app() {
 get_secret_names() {
   local app_name="$1"
   # Read existing secrets so we only prompt for missing values.
-  fly secrets list -a "$app_name" 2>/dev/null | awk 'NR>1 {print $1}'
+  fly secrets list -a "$app_name" --json 2>/dev/null \
+    | node -e 'let input=""; process.stdin.on("data", chunk => input += chunk); process.stdin.on("end", () => { for (const secret of JSON.parse(input)) console.log(secret.name); });'
 }
 
 run_env_validation() {
@@ -86,7 +87,11 @@ run_env_validation() {
 get_env_value() {
   local env_path="$1"
   local key="$2"
-  # Load a specific key from .env, if present.
+  # Prefer the current process environment, then load a specific key from .env.
+  if [[ -n "${!key-}" ]]; then
+    printf '%s' "${!key}"
+    return 0
+  fi
   [[ -f "$env_path" ]] || return 1
   local line
   line=$(grep -E "^${key}=" "$env_path" | head -n 1 || true)
@@ -94,6 +99,12 @@ get_env_value() {
     return 1
   fi
   echo "${line#*=}"
+}
+
+presentation_enabled_in_settings() {
+  local settings_path="$1"
+  [[ -f "$settings_path" ]] || return 1
+  grep -Eq '^[[:space:]]*chat-presentation-enabled:[[:space:]]*true[[:space:]]*$' "$settings_path"
 }
 
 get_or_create_trace_token() {
@@ -230,6 +241,19 @@ cd "$REPO_ROOT"
 
 SERVER_CONFIG_PATH="$SCRIPT_DIR/server.toml"
 server_app_name=$(get_app_name "$SERVER_CONFIG_PATH")
+SETTINGS_PATH="$REPO_ROOT/footnote.yaml"
+presentation_enabled=false
+if presentation_enabled_in_settings "$SETTINGS_PATH"; then
+  presentation_enabled=true
+fi
+if [[ "$presentation_enabled" == true ]]; then
+  existing_secrets=$(get_secret_names "$server_app_name")
+  local_openrouter_key=$(get_env_value "$REPO_ROOT/.env" OPENROUTER_API_KEY || true)
+  if ! echo "$existing_secrets" | grep -qx OPENROUTER_API_KEY && [[ -z "$local_openrouter_key" ]]; then
+    echo "Canonical presentation is enabled, but OPENROUTER_API_KEY is neither configured on Fly nor available locally. Refusing to mutate or deploy the app." >&2
+    exit 1
+  fi
+fi
 
 echo "Ensuring Fly app exists ($server_app_name)..."
 ensure_app "$SERVER_CONFIG_PATH"
@@ -250,8 +274,14 @@ required_secrets=(INCIDENT_PSEUDONYMIZATION_SECRET)
 if [[ "$enable_trustgraph" == true ]]; then
   required_secrets+=(TAILSCALE_AUTHKEY EXECUTION_CONTRACT_TRUSTGRAPH_ADAPTER_API_TOKEN EXECUTION_CONTRACT_TRUSTGRAPH_BASE_URL EXECUTION_CONTRACT_TRUSTGRAPH_TARGETS EXECUTION_CONTRACT_TRUSTGRAPH_WORKSPACE_REF)
 fi
+optional_secrets=(OPENAI_API_KEY OLLAMA_API_KEY TRACE_API_TOKEN REFLECT_SERVICE_TOKEN TURNSTILE_SECRET_KEY DISCORD_TOKEN CLOUDINARY_API_KEY CLOUDINARY_API_SECRET GITHUB_WEBHOOK_SECRET)
+if [[ "$presentation_enabled" == true ]]; then
+  required_secrets+=(OPENROUTER_API_KEY)
+else
+  optional_secrets+=(OPENROUTER_API_KEY)
+fi
 ensure_secrets "$server_app_name" "${required_secrets[@]}"
-ensure_optional_secrets "$server_app_name" OPENAI_API_KEY OLLAMA_API_KEY TRACE_API_TOKEN REFLECT_SERVICE_TOKEN TURNSTILE_SECRET_KEY DISCORD_TOKEN CLOUDINARY_API_KEY CLOUDINARY_API_SECRET GITHUB_WEBHOOK_SECRET
+ensure_optional_secrets "$server_app_name" "${optional_secrets[@]}"
 if [[ "$enable_trustgraph" == true ]]; then
   enable_trustgraph_runtime "$server_app_name"
 fi

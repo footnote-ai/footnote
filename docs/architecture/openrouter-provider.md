@@ -10,9 +10,10 @@ an OpenAI base-URL override. Set `OPENROUTER_API_KEY`; the backend uses
 Model profiles may use arbitrary OpenRouter model IDs and an optional
 `providerRouting.openrouter` policy. The policy maps to OpenRouter's routing
 controls: provider order or allowlist, fallback permission, data-collection
-posture, and zero-data-retention request. For the bundled Cydonia writer,
-Footnote requests `thedrummer/cydonia-24b-v4.1`, allows only `parasail`, and
-disables routing fallbacks. It never selects `:free` models.
+posture, and zero-data-retention request. The bundled optional presentation
+profile uses `deepseek/deepseek-v4-flash-0731` with low reasoning and does not
+pin an upstream endpoint. It is unbound from normal planner, generation, and
+assessment routing.
 
 The profile's provider and model are the **backend request**, not proof of the
 upstream inference provider or resolved model. When OpenRouter returns routing
@@ -27,9 +28,7 @@ OpenRouter receives the optional presentation-candidate request and may route
 it to the selected upstream provider. OpenRouter's retention and provider data
 policies apply in addition to Footnote's own handling. Operators should review
 [privacy policy](https://openrouter.ai/privacy) and provider data policy before
-enabling this profile. The bundled routing policy requests denied data
-collection; it is a request to OpenRouter, not a guarantee that Footnote can
-independently verify.
+enabling this profile.
 
 The backend still records its own token-based cost estimate. An upstream charge
 is shown separately only when OpenRouter reports one. Neither field is treated
@@ -39,7 +38,8 @@ as proof of the other.
 
 Set the secret with the backend deployment's normal secret mechanism, for
 example `fly secrets set OPENROUTER_API_KEY=... -a <server-app>`. Do not put it
-in browser configuration or bot-only configuration. Configure an enabled
-OpenRouter model profile and the existing presentation profile selector before
-the writer can run. If the key or profile is unavailable, the presentation
-candidate fails open and the normal authoritative generation/review path runs.
+in browser configuration or bot-only configuration. The canonical Fly
+`footnote.yaml` opts into the bundled presentation profile; fresh installs keep
+the feature disabled by default. If the key or profile is unavailable, the
+presentation candidate fails open and the normal authoritative generation and
+review path runs.

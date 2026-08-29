@@ -217,12 +217,12 @@ export const buildServiceSections = (
                 'CHAT_PRESENTATION_ENABLED',
                 warn
             ),
-            profileId: parseOptionalTrimmedString(
-                env.CHAT_PRESENTATION_PROFILE_ID
-            ),
+            profileId:
+                parseOptionalTrimmedString(env.CHAT_PRESENTATION_PROFILE_ID) ??
+                envDefaultValues.CHAT_PRESENTATION_PROFILE_ID,
             timeoutMs: parsePositiveIntEnv(
                 env.CHAT_PRESENTATION_TIMEOUT_MS,
-                2000,
+                envDefaultValues.CHAT_PRESENTATION_TIMEOUT_MS,
                 'CHAT_PRESENTATION_TIMEOUT_MS',
                 warn
             ),

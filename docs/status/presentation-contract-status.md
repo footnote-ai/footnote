@@ -1,25 +1,25 @@
 # Presentation Flow Status
 
-Status: the current runtime uses a simpler presentation flow. This cleanup
-matters because older documentation described presentation as a style writer
-followed by a separate validator or audit model. The workflow changed, but the
-old configuration and terminology remained. Operators and contributors could
-therefore think a review model was running when it was not.
+Status: the current runtime uses the authority-first presentation flow. The
+optional DeepSeek V4 Flash 0731 profile is enabled only by the canonical Fly
+settings; fresh installs remain disabled.
 
 The current flow is:
 
-1. An optional presentation model drafts wording and style.
-2. Footnote checks that the returned draft is usable prose. This small check
+1. Normal generation creates the authoritative answer from the collected
+   context.
+2. An optional presentation model drafts a faithful wording rewrite.
+3. Footnote checks that the returned draft is usable prose. This small check
    does not judge facts, grounding, safety, policy, or persona correctness.
-3. Normal answer generation may use the draft as a style suggestion while it
-   works from the authoritative context and makes the answer.
-4. The normal assessment/revision loop reviews that answer for correctness,
-   grounding, posture, TRACE, and needed corrections.
+4. The normal assessment/revision loop reviews the candidate or authoritative
+   fallback for correctness, grounding, posture, TRACE, and needed corrections.
 
 There is no separate presentation-validator model call. The second step is
 called `candidate admission` in the code and serialized contracts, but that
 name means only the prose-usability check above. The presentation draft never
-owns facts, policy, provenance, safety decisions, or the final answer.
+owns facts, policy, provenance, safety decisions, or the final answer. If
+presentation fails after authority succeeds, the authoritative answer remains
+available and the failure is recorded separately.
 
 New receipts record the actual presentation attempt, model attribution, and
 skip or failure reason. Old traces remain readable, but new runs do not create

@@ -40,6 +40,11 @@ discord-bots: []
 # Context integrations run in the backend. Project-document lookup stays off
 # until you enable it; chat continues if the lookup fails.
 chat-workflow:
+    # Canonical Fly opt-in. Fresh installs remain disabled because the runtime
+    # default for this optional presentation flow is false.
+    chat-presentation-enabled: true
+    chat-presentation-profile-id: 'openrouter-deepseek-v4-flash-0731'
+    chat-presentation-timeout-ms: 30000
     chat-context-project-docs-enabled: false
     chat-context-project-docs-embedding-provider: 'openai'
     chat-context-project-docs-embedding-model: 'text-embedding-3-small'

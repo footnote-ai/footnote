@@ -132,7 +132,7 @@ export type RuntimeConfig = {
         maxDurationMs: number;
         maxRequestReviewCycles: number;
         presentation: {
-            /** Optional draft-first presentation flow after planning and context collection. */
+            /** Optional authority-first presentation flow after authoritative generation. */
             enabled: boolean;
             /** Deployment-owned model profile. Persona identity never selects this. */
             profileId: string | null;

@@ -27,9 +27,17 @@ function Ensure-FlyApp {
   param([string]$ConfigPath)
   # Create app if missing; no-op when it already exists.
   $appName = Get-FlyAppName -ConfigPath $ConfigPath
-  $output = & fly apps create $appName 2>&1
-  if ($LASTEXITCODE -ne 0) {
-    if ($output -match 'already exists|already taken|Name has already been taken') {
+  $previousErrorActionPreference = $ErrorActionPreference
+  $ErrorActionPreference = 'Continue'
+  try {
+    $output = @(& fly apps create $appName 2>&1)
+    $exitCode = $LASTEXITCODE
+  } finally {
+    $ErrorActionPreference = $previousErrorActionPreference
+  }
+  if ($exitCode -ne 0) {
+    $outputText = $output | Out-String
+    if ($outputText -match 'already exists|already taken|Name has already been taken') {
       Write-Host "Fly app already exists: $appName"
       return
     }
@@ -42,12 +50,15 @@ function Ensure-FlyApp {
 function Get-FlySecretNames {
   param([string]$AppName)
   # Read existing secrets so we only prompt for missing values.
-  $output = & fly secrets list -a $AppName 2>$null
+  $output = & fly secrets list -a $AppName --json 2>$null
   if ($LASTEXITCODE -ne 0) {
     return @()
   }
-  $lines = $output -split "`r?`n" | Where-Object { $_ -and $_ -notmatch '^\s*NAME' }
-  return $lines | ForEach-Object { ($_ -split '\s+')[0] }
+  try {
+    return @($output | ConvertFrom-Json | ForEach-Object { $_.name })
+  } catch {
+    throw "Unable to parse Fly secret list for $AppName"
+  }
 }
 
 function Invoke-EnvValidation {
@@ -77,7 +88,11 @@ function Get-EnvValueFromFile {
     [string]$EnvPath,
     [string]$Key
   )
-  # Load a specific key from .env, if present.
+  # Prefer the current process environment, then load a specific key from .env.
+  $processValue = [Environment]::GetEnvironmentVariable($Key, 'Process')
+  if ($processValue -and $processValue.Trim().Length -gt 0) {
+    return $processValue.Trim()
+  }
   if (-not (Test-Path $EnvPath)) {
     return $null
   }
@@ -96,6 +111,15 @@ function Get-EnvValueFromFile {
     }
   }
   return $null
+}
+
+function Test-CanonicalPresentationEnabled {
+  param([string]$SettingsPath)
+
+  if (-not (Test-Path $SettingsPath)) {
+    return $false
+  }
+  return [bool](Select-String -Path $SettingsPath -Pattern '^\s*chat-presentation-enabled:\s*true\s*$' -Quiet)
 }
 
 function Get-OrCreate-TraceToken {
@@ -239,6 +263,15 @@ Push-Location $repoRoot
 try {
 $serverConfigPath = Join-Path $configRoot 'server.toml'
 $serverAppName = Get-FlyAppName -ConfigPath $serverConfigPath
+$settingsPath = Join-Path $repoRoot 'footnote.yaml'
+$presentationEnabled = Test-CanonicalPresentationEnabled -SettingsPath $settingsPath
+if ($presentationEnabled) {
+  $existingSecrets = Get-FlySecretNames -AppName $serverAppName
+  $localOpenRouterKey = Get-EnvValueFromFile -EnvPath $envPath -Key 'OPENROUTER_API_KEY'
+  if ($existingSecrets -notcontains 'OPENROUTER_API_KEY' -and (-not $localOpenRouterKey)) {
+    throw 'Canonical presentation is enabled, but OPENROUTER_API_KEY is neither configured on Fly nor available locally. Refusing to mutate or deploy the app.'
+  }
+}
 
 Write-Host "Ensuring Fly app exists ($serverAppName)..."
 Ensure-FlyApp -ConfigPath $serverConfigPath
@@ -272,9 +305,15 @@ if ($EnableTrustGraph) {
     'EXECUTION_CONTRACT_TRUSTGRAPH_WORKSPACE_REF'
   )
 }
+$optionalSecrets = @('OPENAI_API_KEY', 'OLLAMA_API_KEY', 'TRACE_API_TOKEN', 'REFLECT_SERVICE_TOKEN', 'TURNSTILE_SECRET_KEY', 'DISCORD_TOKEN', 'CLOUDINARY_API_KEY', 'CLOUDINARY_API_SECRET', 'GITHUB_WEBHOOK_SECRET')
+if ($presentationEnabled) {
+  $requiredSecrets += @('OPENROUTER_API_KEY')
+} else {
+  $optionalSecrets += @('OPENROUTER_API_KEY')
+}
 Ensure-FlySecrets -AppName $serverAppName `
   -RequiredSecrets $requiredSecrets `
-  -OptionalSecrets @('OPENAI_API_KEY', 'OLLAMA_API_KEY', 'TRACE_API_TOKEN', 'REFLECT_SERVICE_TOKEN', 'TURNSTILE_SECRET_KEY', 'DISCORD_TOKEN', 'CLOUDINARY_API_KEY', 'CLOUDINARY_API_SECRET', 'GITHUB_WEBHOOK_SECRET') `
+  -OptionalSecrets $optionalSecrets `
   -EnvPath $envPath
 if ($EnableTrustGraph) {
   Enable-FlyTrustGraphRuntime -AppName $serverAppName

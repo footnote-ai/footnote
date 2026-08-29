@@ -619,7 +619,7 @@ test('bundled active model profiles are fully covered by pricing or explicit pol
     assert.deepEqual(uncovered, []);
 });
 
-test('ephemeral response-comparison candidates are not in the bundled catalog', () => {
+test('bundled presentation profile is separate from ephemeral comparison candidates', () => {
     const section = buildModelProfilesSection(
         { OPENROUTER_API_KEY: 'test-key' },
         process.cwd(),
@@ -630,7 +630,15 @@ test('ephemeral response-comparison candidates are not in the bundled catalog', 
     );
 
     assert.equal(profilesById.has('openrouter-glm-5-3-flash'), false);
-    assert.equal(profilesById.has('openrouter-deepseek-v4-flash-0731'), false);
+    assert.equal(
+        profilesById.get('openrouter-deepseek-v4-flash-0731')?.providerModel,
+        'deepseek/deepseek-v4-flash-0731'
+    );
+    assert.deepEqual(
+        profilesById.get('openrouter-deepseek-v4-flash-0731')
+            ?.presentationGeneration,
+        { promptVariant: 'faithful-rewrite', reasoningEffort: 'low' }
+    );
     assert.equal(profilesById.has('openrouter-skyfall-36b-v2'), false);
     assert.equal(profilesById.has('openrouter-venice-uncensored'), false);
     assert.equal(profilesById.has('openrouter-unslopnemo-12b'), false);

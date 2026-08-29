@@ -2010,7 +2010,7 @@ export const envEntries = [
         secret: false,
         kind: 'boolean',
         description:
-            'Enables the optional draft-first presentation flow after planning and context collection. Disabled by default.',
+            'Enables the optional authority-first presentation flow after authoritative generation. Disabled by default.',
         defaultValue: literal(false),
         usedBy: ['packages/backend/src/config.ts'],
     }),
@@ -2024,7 +2024,7 @@ export const envEntries = [
         kind: 'string',
         description:
             'Enabled model profile ID for the optional presentation flow. This is deployment policy, not persona identity.',
-        defaultValue: noDefault(),
+        defaultValue: literal('openrouter-deepseek-v4-flash-0731'),
         usedBy: ['packages/backend/src/config.ts'],
     }),
     defineEnv({
@@ -2037,7 +2037,7 @@ export const envEntries = [
         kind: 'integer',
         description:
             'Hard timeout in milliseconds for the optional presentation flow call.',
-        defaultValue: literal(10000),
+        defaultValue: literal(30000),
         usedBy: ['packages/backend/src/config.ts'],
     }),
     defineEnv({

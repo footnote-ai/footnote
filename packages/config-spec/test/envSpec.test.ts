@@ -27,6 +27,15 @@ test('image prompting defaults to the request-local GPT-5.6 Luna model', () => {
     );
 });
 
+test('presentation defaults stay disabled but select the tested profile and timeout', () => {
+    assert.equal(envDefaultValues.CHAT_PRESENTATION_ENABLED, false);
+    assert.equal(
+        envDefaultValues.CHAT_PRESENTATION_PROFILE_ID,
+        'openrouter-deepseek-v4-flash-0731'
+    );
+    assert.equal(envDefaultValues.CHAT_PRESENTATION_TIMEOUT_MS, 30000);
+});
+
 test('retired presentation validator settings are absent from the config spec', () => {
     assert.equal(
         Object.prototype.hasOwnProperty.call(

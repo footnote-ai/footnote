@@ -209,6 +209,15 @@ const hasConfiguredInferenceProvider = (
         return true;
     }
 
+    const openRouterKey = envSnapshot.get('OPENROUTER_API_KEY');
+    if (
+        (typeof openRouterKey === 'string' &&
+            openRouterKey.trim().length > 0) ||
+        assumedPresent.has('OPENROUTER_API_KEY')
+    ) {
+        return true;
+    }
+
     const ollamaBaseUrl = envSnapshot.get('OLLAMA_BASE_URL');
     if (
         (typeof ollamaBaseUrl === 'string' &&
@@ -269,7 +278,7 @@ const validate = (): void => {
         );
         if (!hasProvider) {
             logger.warn(
-                `[validate-env] ${target} no inference provider is configured. Server startup is allowed, but model-dependent features (/api/chat, image, voice generation) will return setup-required errors until OPENAI_API_KEY or OLLAMA_BASE_URL is configured.`
+                `[validate-env] ${target} no inference provider is configured. Server startup is allowed, but model-dependent features (/api/chat, image, voice generation) will return setup-required errors until OPENAI_API_KEY, OPENROUTER_API_KEY, or OLLAMA_BASE_URL is configured.`
             );
         }
     }
