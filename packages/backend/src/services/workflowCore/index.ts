@@ -1,37 +1,31 @@
 /**
  * @description: Exposes the non-live workflow foundation as one backend-owned
- * seam for definitions, execution, transitions, and bounded run records.
+ * runtime seam for definitions, execution, transitions, and bounded records.
  * @footnote-scope: core
  * @footnote-module: WorkflowCore
  * @footnote-risk: medium - Export drift can make the future cutover depend on private implementation details.
  * @footnote-ethics: high - The exported seam keeps workflow authority explicit and bounded.
  */
 export { executeWorkflow, resolveTransition } from './engine.js';
-export type { WorkflowTransitionResolution } from './engine.js';
+export type { TransitionResolution } from './engine.js';
 export { CURRENT_REVIEWED_CHAT_WORKFLOW } from './reviewedChatWorkflow.js';
 export {
     result,
-    type AttemptRecord,
+    type Attempt,
+    type AttemptResult,
     type AttemptUsage,
-    type ExecuteWorkflowInput,
-    type ExecutionAttemptResult,
-    type ExecutorRegistry,
+    type ExecuteInput,
+    type Executor,
+    type ExecutorInput,
+    type ExecutorKind,
+    type Executors,
+    type InputRef,
     type Result,
-    type ResultContract,
-    type StepExecutionInput,
-    type StepExecutor,
-    type StepInput,
-    type StepRecord,
-    type TypedStepExecutor,
-    type Workflow,
-    type WorkflowExecutionResult,
-    type WorkflowExecutorKind,
-    type WorkflowInputReference,
-    type WorkflowLimitsReference,
-    type WorkflowRun,
-    type WorkflowStepResource,
+    type Run,
+    type RunResult,
+    type RunTermination,
     type Step,
-    type WorkflowTermination,
-    type WorkflowTransition,
+    type Transition,
+    type Workflow,
 } from './types.js';
 export type { ExecutionLimits } from '../workflowEngine/limits.js';

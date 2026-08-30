@@ -322,6 +322,7 @@ export {
     createInitialWorkflowState,
 } from './workflowEngine/state.js';
 export {
+    admitExecution,
     checkExecutionLimits,
     mapLimitExhaustionToTerminationReason,
 } from './workflowEngine/limits.js';

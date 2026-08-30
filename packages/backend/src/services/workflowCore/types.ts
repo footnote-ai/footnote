@@ -1,100 +1,70 @@
 /**
- * @description: Defines the small, backend-owned vocabulary for explicit
- * workflows without coupling the foundation to a provider or runtime.
+ * @description: Defines the small, backend-owned runtime workflow contract.
+ * Dataflow is validated from declared result names at execution time.
  * @footnote-scope: core
  * @footnote-module: WorkflowCoreTypes
  * @footnote-risk: medium - Contract drift can make later workflow cutovers unsafe.
- * @footnote-ethics: high - Typed topology and bounded attempts keep execution authority with the backend.
+ * @footnote-ethics: high - Explicit topology and bounded attempts keep execution authority with the backend.
  */
-import type { ExecutionLimits } from '../workflowEngine/limits.js';
+import type { WorkflowStepKind } from '@footnote/contracts/policy';
+import type {
+    ExecutionLimits,
+    ExhaustedExecutionLimit,
+} from '../workflowEngine/limits.js';
 
-export type WorkflowExecutorKind = 'model' | 'context' | 'code' | 'agent';
+export type ExecutorKind = 'model' | 'context' | 'code' | 'agent';
 
-export type WorkflowStepResource = 'none' | 'tool' | 'deliberation';
+type SerializableValue =
+    | boolean
+    | null
+    | number
+    | string
+    | readonly SerializableValue[]
+    | { readonly [key: string]: SerializableValue };
 
-export type WorkflowInputReference =
-    | {
-          kind: 'context';
-      }
-    | {
-          kind: 'result';
-          name: string;
-          optional?: boolean;
-      };
+export type InputRef =
+    { kind: 'context' } | { kind: 'result'; name: string; optional?: boolean };
 
-/**
- * A semantic input declaration. The optional phantom type preserves the
- * compile-time input seam while the runtime definition remains serializable.
- */
-export type StepInput<TInput = unknown> = {
-    references: readonly WorkflowInputReference[];
-    inputType?: string;
-    readonly __input?: TInput;
-};
-
-/**
- * A named output contract. The value itself stays in bounded in-memory Run
- * data; no durable artifact store is implied by this type.
- */
-export type ResultContract<TOutput = unknown> = {
-    name: string;
-    outputType?: string;
-    readonly __output?: TOutput;
-};
-
-export type Result<TName extends string, TValue> = {
-    readonly name: TName;
-    readonly value: TValue;
+export type Result = {
+    readonly name: string;
+    readonly value: SerializableValue;
     readonly reference?: string;
 };
 
-export const result = <TName extends string, TValue>(
-    name: TName,
-    value: TValue,
+export const result = (
+    name: string,
+    value: SerializableValue,
     reference?: string
-): Result<TName, TValue> => ({
+): Result => ({
     name,
     value,
     ...(reference === undefined ? {} : { reference }),
 });
 
-export type WorkflowTransition =
-    | {
-          kind: 'step';
-          stepId: string;
-      }
-    | {
-          kind: 'finish';
-      };
+export type Transition = { kind: 'step'; stepId: string } | { kind: 'end' };
 
-export type Step<
-    TInput = unknown,
-    TOutput = unknown,
-    TOutcome extends string = string,
-> = {
+export type Step = {
     id: string;
-    executor: WorkflowExecutorKind;
-    resource?: WorkflowStepResource;
-    input: StepInput<TInput>;
-    output: ResultContract<TOutput>;
-    transitions: Readonly<Record<TOutcome, WorkflowTransition>>;
-    /** Maximum semantic executions of this step within one Run. */
+    executor: ExecutorKind;
+    /** Canonical execution category used by shared Execution Contract admission. */
+    kind?: WorkflowStepKind;
+    input: readonly InputRef[];
+    /** The sole Result name this Step may return on success. */
+    output?: { name: string };
+    transitions: Readonly<Record<string, Transition>>;
+    /** Maximum semantic executions of this Step within one Run. */
     maxRuns?: number;
     /** Maximum Attempts for one semantic Step execution. */
     maxAttempts?: number;
+    /** Conservative tokens reserved before each Attempt. */
+    tokenReservation?: number;
 };
 
-export type WorkflowLimitsReference = {
-    source: 'execution-contract';
-};
-
-export type Workflow<TContext = unknown> = {
+export type Workflow = {
     id: string;
     version: 'v1';
     start: string;
     steps: Readonly<Record<string, Step>>;
-    limits: WorkflowLimitsReference;
-    readonly __context?: TContext;
 };
 
 export type AttemptUsage = {
@@ -103,11 +73,11 @@ export type AttemptUsage = {
     deliberationCalls?: number;
 };
 
-export type ExecutionAttemptResult<TOutput = unknown> =
+export type AttemptResult =
     | {
           status: 'succeeded';
           outcome: string;
-          result?: Result<string, TOutput>;
+          result?: Result;
           usage?: AttemptUsage;
       }
     | {
@@ -118,35 +88,28 @@ export type ExecutionAttemptResult<TOutput = unknown> =
           usage?: AttemptUsage;
       };
 
-export type StepExecutionInput<TContext> = {
+/** Input to an executor contains runtime data, not phantom compile-time wiring. */
+export type ExecutorInput<TContext = unknown> = {
+    step: Step;
     context: TContext;
-    stepId: string;
-    runNumber: number;
-    inputs: ReadonlyMap<string, Result<string, unknown>>;
+    results: Readonly<Record<string, Result>>;
+    /** One-based semantic execution ordinal for this Step. */
+    run: number;
+    /** One-based executor Attempt ordinal within this Run. */
+    attempt: number;
 };
 
-export type StepExecutor<TContext> = (
-    input: StepExecutionInput<TContext>
-) => Promise<ExecutionAttemptResult>;
+export type Executor<TContext = unknown> = (
+    input: ExecutorInput<TContext>
+) => Promise<AttemptResult>;
 
-/**
- * Typed adapter seam for a semantic Step. The heterogeneous runtime registry
- * intentionally erases this shape at the engine boundary.
- */
-export type TypedStepExecutor<TContext, TInput, TOutput> = (input: {
-    context: TContext;
-    input: TInput;
-    stepId: string;
-    runNumber: number;
-}) => Promise<ExecutionAttemptResult<TOutput>>;
-
-export type ExecutorRegistry<TContext> = Partial<
-    Record<WorkflowExecutorKind, StepExecutor<TContext>>
+export type Executors<TContext = unknown> = Partial<
+    Record<ExecutorKind, Executor<TContext>>
 >;
 
-export type AttemptRecord = {
+export type Attempt = {
     attempt: number;
-    executor: WorkflowExecutorKind;
+    executor: ExecutorKind;
     status: 'succeeded' | 'failed' | 'rejected';
     startedAtMs: number;
     finishedAtMs: number;
@@ -155,63 +118,60 @@ export type AttemptRecord = {
     errorMessage?: string;
 };
 
-export type StepRecord = {
-    stepId: string;
-    runNumber: number;
-    inputReferences: readonly WorkflowInputReference[];
-    status: 'succeeded' | 'failed';
-    outcome?: string;
-    result?: Result<string, unknown>;
-    attempts: readonly AttemptRecord[];
-};
-
-export type WorkflowRun = {
+export type Run = {
     runId: string;
     workflowId: string;
     workflowVersion: 'v1';
     startedAtMs: number;
     finishedAtMs: number;
-    steps: readonly StepRecord[];
-    results: ReadonlyMap<string, Result<string, unknown>>;
+    steps: readonly {
+        stepId: string;
+        run: number;
+        input: readonly InputRef[];
+        status: 'succeeded' | 'failed';
+        outcome?: string;
+        result?: Result;
+        attempts: readonly Attempt[];
+    }[];
+    results: Readonly<Record<string, Result>>;
     usage: {
         stepCount: number;
         totalTokens: number;
         toolCalls: number;
         deliberationCalls: number;
+        planCalls: number;
+        reviewCalls: number;
     };
 };
 
-export type WorkflowTermination =
+export type RunTermination =
     | { reason: 'finished' }
     | { reason: 'step_run_limit'; stepId: string }
-    | { reason: 'execution_limit'; limit: keyof ExecutionLimits }
+    | { reason: 'execution_limit'; limit: ExhaustedExecutionLimit }
+    | { reason: 'execution_contract_error'; message: string }
     | { reason: 'step_failed'; stepId: string }
-    | {
-          reason: 'missing_required_input';
-          stepId: string;
-          inputName: string;
-      }
+    | { reason: 'missing_required_input'; stepId: string; inputName: string }
     | { reason: 'undeclared_outcome'; stepId: string; outcome: string }
     | {
           reason: 'invalid_result';
           stepId: string;
-          expectedName: string;
-          actualName: string;
+          expectedName?: string;
+          actualName?: string;
       }
     | { reason: 'definition_error'; message: string }
     | { reason: 'executor_unavailable'; stepId: string };
 
-export type WorkflowExecutionResult = {
+export type RunResult = {
     status: 'completed' | 'limited' | 'failed' | 'rejected';
-    run: WorkflowRun;
-    termination: WorkflowTermination;
+    run: Run;
+    termination: RunTermination;
 };
 
-export type ExecuteWorkflowInput<TContext> = {
-    workflow: Workflow<TContext>;
+export type ExecuteInput<TContext = unknown> = {
+    workflow: Workflow;
     context: TContext;
-    executors: ExecutorRegistry<TContext>;
-    /** The existing backend Execution Contract limits are the outer authority. */
+    executors: Executors<TContext>;
+    /** The existing backend Execution Contract remains the outer authority. */
     executionLimits: ExecutionLimits;
     runId?: string;
     startedAtMs?: number;

@@ -1,151 +1,106 @@
 /**
  * @description: Describes the current reviewed chat topology as a non-live
- * proof for the workflow foundation; chat still uses the legacy engine.
+ * runtime proof; chat still uses the existing workflow engine.
  * @footnote-scope: core
  * @footnote-module: ReviewedChatWorkflow
  * @footnote-risk: medium - An inaccurate proof can mislead the later production cutover.
  * @footnote-ethics: high - Keeping the proof non-live avoids changing review and fail-open behavior prematurely.
  */
-import type { Workflow, Step } from './types.js';
+import type { Step, Workflow } from './types.js';
 
 const step = (definition: Step): Step => definition;
 
 /**
- * Coarse topology for the existing reviewed path. Runtime routing chains,
- * prompt assembly, and current StepRecord compatibility details remain in the
- * live engine until the separate cutover work.
+ * Coarse topology for the existing reviewed path. `presentation` is one
+ * executor-owned step: it generates a candidate and applies deterministic
+ * admissibility before the authoritative write. Provider routing, prompt
+ * assembly, and live StepRecord compatibility remain in the existing engine.
  */
 export const CURRENT_REVIEWED_CHAT_WORKFLOW: Workflow = {
     id: 'chat-reviewed',
     version: 'v1',
     start: 'plan',
-    limits: {
-        source: 'execution-contract',
-    },
     steps: {
         plan: step({
             id: 'plan',
             executor: 'model',
-            resource: 'deliberation',
-            input: {
-                inputType: 'Context',
-                references: [{ kind: 'context' }],
-            },
-            output: {
-                name: 'plan',
-                outputType: 'Plan',
-            },
+            kind: 'plan',
+            input: [{ kind: 'context' }],
+            output: { name: 'plan' },
             transitions: {
                 continue: { kind: 'step', stepId: 'context' },
-                terminal: { kind: 'finish' },
-                failed: { kind: 'step', stepId: 'finish' },
+                failed: { kind: 'step', stepId: 'defaultPlan' },
+                terminal: { kind: 'step', stepId: 'finish' },
             },
             maxRuns: 1,
             maxAttempts: 2,
+        }),
+        defaultPlan: step({
+            id: 'defaultPlan',
+            executor: 'code',
+            input: [{ kind: 'context' }],
+            output: { name: 'plan' },
+            transitions: { continue: { kind: 'step', stepId: 'context' } },
+            maxRuns: 1,
         }),
         context: step({
             id: 'context',
             executor: 'context',
-            resource: 'tool',
-            input: {
-                inputType: 'Context + Plan',
-                references: [
-                    { kind: 'context' },
-                    { kind: 'result', name: 'plan' },
-                ],
-            },
-            output: {
-                name: 'evidence',
-                outputType: 'Evidence',
-            },
+            kind: 'tool',
+            input: [{ kind: 'context' }, { kind: 'result', name: 'plan' }],
+            output: { name: 'evidence' },
             transitions: {
-                available: { kind: 'step', stepId: 'style' },
-                failed: { kind: 'step', stepId: 'style' },
-                clarification: { kind: 'finish' },
+                available: { kind: 'step', stepId: 'presentation' },
+                failed: { kind: 'step', stepId: 'presentation' },
+                clarification: { kind: 'step', stepId: 'finish' },
             },
             maxRuns: 1,
         }),
-        style: step({
-            id: 'style',
+        presentation: step({
+            id: 'presentation',
             executor: 'model',
-            input: {
-                inputType: 'Context + Plan + Evidence',
-                references: [
-                    { kind: 'context' },
-                    { kind: 'result', name: 'plan' },
-                    { kind: 'result', name: 'evidence', optional: true },
-                ],
-            },
-            output: {
-                name: 'style',
-                outputType: 'Style',
-            },
+            kind: 'presentation',
+            input: [
+                { kind: 'context' },
+                { kind: 'result', name: 'plan' },
+                { kind: 'result', name: 'evidence', optional: true },
+            ],
+            output: { name: 'presentation' },
             transitions: {
-                generated: { kind: 'step', stepId: 'checkStyle' },
+                admitted: { kind: 'step', stepId: 'write' },
                 skipped: { kind: 'step', stepId: 'write' },
                 failed: { kind: 'step', stepId: 'write' },
             },
-            maxRuns: 2,
-            maxAttempts: 2,
-        }),
-        checkStyle: step({
-            id: 'checkStyle',
-            executor: 'code',
-            input: {
-                inputType: 'Style',
-                references: [{ kind: 'result', name: 'style' }],
-            },
-            output: {
-                name: 'styleCheck',
-                outputType: 'Check',
-            },
-            transitions: {
-                accepted: { kind: 'step', stepId: 'write' },
-                rejected: { kind: 'step', stepId: 'write' },
-                retry: { kind: 'step', stepId: 'style' },
-                failed: { kind: 'step', stepId: 'write' },
-            },
-            maxRuns: 2,
+            maxRuns: 1,
         }),
         write: step({
             id: 'write',
             executor: 'model',
-            input: {
-                inputType: 'Context + Plan + Evidence? + Style? + Draft?',
-                references: [
-                    { kind: 'context' },
-                    { kind: 'result', name: 'plan' },
-                    { kind: 'result', name: 'evidence', optional: true },
-                    { kind: 'result', name: 'style', optional: true },
-                    { kind: 'result', name: 'draft', optional: true },
-                ],
-            },
-            output: {
-                name: 'draft',
-                outputType: 'Draft',
-            },
+            kind: 'generate',
+            input: [
+                { kind: 'context' },
+                { kind: 'result', name: 'plan' },
+                { kind: 'result', name: 'evidence', optional: true },
+                { kind: 'result', name: 'presentation', optional: true },
+                { kind: 'result', name: 'draft', optional: true },
+            ],
+            output: { name: 'draft' },
             transitions: {
                 generated: { kind: 'step', stepId: 'review' },
                 failed: { kind: 'step', stepId: 'finish' },
             },
-            maxRuns: 2,
+            maxRuns: 3,
             maxAttempts: 2,
         }),
         review: step({
             id: 'review',
             executor: 'model',
-            resource: 'deliberation',
-            input: {
-                inputType: 'Draft + Evidence?',
-                references: [
-                    { kind: 'result', name: 'draft' },
-                    { kind: 'result', name: 'evidence', optional: true },
-                ],
-            },
-            output: {
-                name: 'review',
-                outputType: 'Review',
-            },
+            kind: 'assess',
+            input: [
+                { kind: 'result', name: 'draft' },
+                { kind: 'result', name: 'evidence', optional: true },
+            ],
+            output: { name: 'review' },
             transitions: {
                 done: { kind: 'step', stepId: 'finish' },
                 revise: { kind: 'step', stepId: 'write' },
@@ -157,18 +112,10 @@ export const CURRENT_REVIEWED_CHAT_WORKFLOW: Workflow = {
         finish: step({
             id: 'finish',
             executor: 'code',
-            input: {
-                inputType: 'Draft?',
-                references: [{ kind: 'result', name: 'draft', optional: true }],
-            },
-            output: {
-                name: 'answer',
-                outputType: 'Answer',
-            },
-            transitions: {
-                done: { kind: 'finish' },
-                failed: { kind: 'finish' },
-            },
+            kind: 'finalize',
+            input: [{ kind: 'result', name: 'draft', optional: true }],
+            output: { name: 'answer' },
+            transitions: { done: { kind: 'end' }, failed: { kind: 'end' } },
             maxRuns: 1,
         }),
     },

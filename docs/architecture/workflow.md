@@ -20,7 +20,7 @@ Use the following small vocabulary when extending workflows:
 - **Attempt** is one concrete try to complete a Step.
 - **Context** is backend-owned request and conversation information available to
   the Run.
-- **Result** is the typed output produced by a Step.
+- **Result** is a named runtime value produced by a Step.
 
 The work a Run performs is separate from the topology that defines its allowed
 path. A Workflow chooses the path, and a model may choose only among validated
@@ -30,7 +30,7 @@ controls its own internal multi-step work or tool use; a single planner, writer,
 style, or reviewer call is a model-backed Step, not an Agent.
 
 Keep **Context**, **Result**, and **ModelInput** distinct. Context is what
-Footnote knows about the Run. Results are typed values from earlier Steps.
+Footnote knows about the Run. Results are named runtime values from earlier Steps.
 ModelInput is the bounded provider-neutral projection assembled for one model
 Attempt from the Context, declared Results, Step instructions, policy/persona
 material, and allowed capabilities. Do not replace this boundary with one
@@ -61,32 +61,52 @@ engines indefinitely. Every merged migration PR must leave chat usable.
 
 ## Workflow foundation (shipped, not live)
 
-The first foundation slice for #575 now exists in
-`packages/backend/src/services/workflowCore/`. It provides:
+The first foundation slice for #575 lives in
+`packages/backend/src/services/workflowCore/`. It provides a small runtime-only
+contract: `Workflow`, `Step`, `Run`, `Attempt`, `Result`, declared transitions,
+and executor categories for `model`, `context`, `code`, and future delegated
+`agent` work. It does not claim Step-to-executor dataflow at compile time.
+Executors receive the full Step, run context, selected named Results, and
+one-based Run and Attempt ordinals. The engine validates declared Result names
+at runtime instead.
 
-- typed `Workflow`, `Step`, `Result`, `Run`, and `Attempt` contracts;
-- a small executor boundary for `model`, `context`, `code`, and future
-  delegated `agent` work;
-- per-Step declared outcome maps, bounded semantic step runs, and bounded
-  Attempts; and
-- an engine that accepts the existing backend Execution Contract limits as its
-  outer authority.
+Before it invokes an executor, the foundation validates the complete Workflow:
+the start Step exists, every map key matches its Step id, and every transition
+target exists. A successful Attempt must return the Step's declared Result when
+one exists. It must not return a Result from an outputless Step. Missing,
+mismatched, and undeclared Results reject the Run; unavailable executors remain
+a separate configuration rejection from a declared Step failure route.
 
-`reviewedChatWorkflow.ts` is a non-live definition of the current reviewed
-chat topology. It makes planning, context, optional style/check work,
-generation, review/revision, finalization, and fail-open routes visible without
-claiming that chat already executes through the new engine. The live path below
-still uses `workflowEngine.ts`, `reviewLoopExecutor.ts`, and the existing
-profile/transition assembly.
+Both the existing live engine and this foundation use the neutral
+`admitExecution()` seam in `workflowEngine/limits.ts`. That seam keeps the
+Execution Contract authoritative for every Attempt, including retries. It
+preserves plan and review caps, token reservations, tool limits, duration, and
+the rule that optional presentation does not consume deliberation capacity.
+Malformed Execution Contract bounds reject the foundation Run rather than being
+silently clamped or removed.
 
-This foundation deliberately does not add durable result storage, a generic
-workflow DSL, model-control unification, context migration, or canonical
-execution-record migration. Those belong to the later cutover and the related
-issues #576, #577, and #578 work.
+`reviewedChatWorkflow.ts` is an honest, non-live proof of the current coarse
+reviewed-chat shape:
 
-The next cutover PR should switch the reviewed chat path to the definition,
-prove equivalent user-visible behavior, and delete the superseded topology
-instead of adding a long-lived compatibility engine.
+```text
+plan -> context -> presentation -> write -> review/revision -> finish -> end
+  |
+  +-> default-plan recovery -> context
+```
+
+The planner's failure route invokes the explicit conservative default-plan code
+Step. Presentation is one Step whose executor owns candidate generation and
+deterministic admissibility; this proof does not include separate style-check
+or presentation retry Steps. Write and review failure routes go through the
+semantic `finish` Step before the terminal `end`, so finalization and
+no-generation handling are represented rather than bypassed.
+
+This foundation deliberately does not cut live chat over, add durable result
+storage, add a generic workflow DSL, unify model controls, migrate Context or
+ModelInput, or migrate canonical execution records. Strong compile-time linked
+dataflow remains deferred to #577; #576 and #578 remain separate work. The
+later cutover should prove equivalent user-visible behavior and delete
+superseded topology instead of carrying a compatibility engine.
 
 ## How a chat request runs
 

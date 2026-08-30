@@ -1,77 +1,80 @@
 /**
- * @description: Executes a workflow definition through declared transitions,
- * bounded semantic step runs, and first-class Attempts.
+ * @description: Executes runtime workflow definitions through declared transitions,
+ * bounded semantic runs, and Execution Contract admission before every Attempt.
  * @footnote-scope: core
  * @footnote-module: WorkflowCoreEngine
- * @footnote-risk: high - Routing or limit mistakes can create unbounded or unauthorized execution.
- * @footnote-ethics: high - Backend-owned topology and Execution Contract limits constrain model influence.
+ * @footnote-risk: high - Routing or admission mistakes can create unbounded or unauthorized execution.
+ * @footnote-ethics: high - Backend-owned topology and shared limits constrain model influence.
  */
-import type { ExecutionLimits } from '../workflowEngine/limits.js';
 import {
-    type AttemptRecord,
+    admitExecution,
+    validateExecutionLimits,
+} from '../workflowEngine/limits.js';
+import {
+    type Attempt,
+    type AttemptResult,
     type AttemptUsage,
-    type ExecuteWorkflowInput,
-    type ExecutionAttemptResult,
+    type ExecuteInput,
     type Result,
-    type StepRecord,
-    type StepExecutor,
-    type Workflow,
-    type WorkflowExecutionResult,
-    type WorkflowRun,
+    type Run,
+    type RunResult,
+    type RunTermination,
     type Step,
-    type WorkflowTermination,
-    type WorkflowTransition,
+    type Transition,
+    type Workflow,
 } from './types.js';
 
 const DEFAULT_MAX_ATTEMPTS = 1;
 const MAX_ERROR_MESSAGE_LENGTH = 256;
 
-const asSafeCounter = (value: number | undefined): number => {
-    if (value === undefined || !Number.isFinite(value)) {
-        return 0;
-    }
-    return Math.max(0, Math.floor(value));
-};
+type StepRun = Run['steps'][number];
 
-/**
- * Normalizes one Execution Contract limit. An unusable value clamps to zero so
- * malformed limits stop the relevant path instead of removing its bound.
- */
-const asLimit = (value: number): number =>
-    Number.isFinite(value) && value >= 0 ? value : 0;
+const isPositiveInteger = (value: unknown): value is number =>
+    typeof value === 'number' &&
+    Number.isFinite(value) &&
+    Number.isInteger(value) &&
+    value >= 1;
+
+const isNonNegativeInteger = (value: unknown): value is number =>
+    typeof value === 'number' &&
+    Number.isFinite(value) &&
+    Number.isInteger(value) &&
+    value >= 0;
 
 const boundedErrorMessage = (value: string | undefined): string | undefined =>
     value === undefined
         ? undefined
         : value.trim().slice(0, MAX_ERROR_MESSAGE_LENGTH);
 
-const createRun = <TContext>(input: {
-    workflow: Workflow<TContext>;
+const createRun = (input: {
+    workflow: Workflow;
     runId: string;
     startedAtMs: number;
-}): WorkflowRun => ({
+}): Run => ({
     runId: input.runId,
     workflowId: input.workflow.id,
     workflowVersion: input.workflow.version,
     startedAtMs: input.startedAtMs,
     finishedAtMs: input.startedAtMs,
     steps: [],
-    results: new Map(),
+    results: {},
     usage: {
         stepCount: 0,
         totalTokens: 0,
         toolCalls: 0,
         deliberationCalls: 0,
+        planCalls: 0,
+        reviewCalls: 0,
     },
 });
 
-const toAttemptRecord = (input: {
+const toAttempt = (input: {
     attempt: number;
     executor: Step['executor'];
     startedAtMs: number;
     finishedAtMs: number;
-    result: ExecutionAttemptResult;
-}): AttemptRecord => {
+    result: AttemptResult;
+}): Attempt => {
     if (input.result.status === 'succeeded') {
         return {
             attempt: input.attempt,
@@ -97,64 +100,136 @@ const toAttemptRecord = (input: {
         errorCode: input.result.errorCode,
         ...(boundedErrorMessage(input.result.errorMessage) === undefined
             ? {}
-            : {
-                  errorMessage: boundedErrorMessage(input.result.errorMessage),
-              }),
+            : { errorMessage: boundedErrorMessage(input.result.errorMessage) }),
     };
 };
 
-const addUsage = (
-    usage: {
-        totalTokens: number;
-        toolCalls: number;
-        deliberationCalls: number;
-    },
-    attemptUsage: AttemptUsage | undefined
-): void => {
-    usage.totalTokens += asSafeCounter(attemptUsage?.totalTokens);
-    usage.toolCalls += asSafeCounter(attemptUsage?.toolCalls);
-    usage.deliberationCalls += asSafeCounter(attemptUsage?.deliberationCalls);
+const addUsage = (input: {
+    usage: Run['usage'];
+    attemptUsage: AttemptUsage | undefined;
+    step: Step;
+}): void => {
+    const usage = input.attemptUsage;
+    const totalTokens = usage?.totalTokens ?? 0;
+    const toolCalls = usage?.toolCalls ?? 0;
+    const deliberationCalls = usage?.deliberationCalls ?? 0;
+
+    input.usage.totalTokens += isNonNegativeInteger(totalTokens)
+        ? totalTokens
+        : 0;
+    input.usage.toolCalls +=
+        input.step.kind === 'tool'
+            ? Math.max(1, isNonNegativeInteger(toolCalls) ? toolCalls : 0)
+            : isNonNegativeInteger(toolCalls)
+              ? toolCalls
+              : 0;
+
+    if (input.step.kind === 'plan') input.usage.planCalls += 1;
+    if (input.step.kind === 'assess') input.usage.reviewCalls += 1;
+    if (input.step.kind !== 'presentation') {
+        input.usage.deliberationCalls +=
+            input.step.kind === 'plan' || input.step.kind === 'assess'
+                ? Math.max(
+                      1,
+                      isNonNegativeInteger(deliberationCalls)
+                          ? deliberationCalls
+                          : 0
+                  )
+                : isNonNegativeInteger(deliberationCalls)
+                  ? deliberationCalls
+                  : 0;
+    }
 };
 
 const hasDeclaredOutcome = (step: Step, outcome: string): boolean =>
     Object.prototype.hasOwnProperty.call(step.transitions, outcome);
 
-export type WorkflowTransitionResolution =
-    | {
-          kind: 'declared';
-          transition: WorkflowTransition;
-      }
-    | {
-          kind: 'undeclared_outcome';
-          outcome: string;
-      };
+export type TransitionResolution =
+    | { kind: 'declared'; transition: Transition }
+    | { kind: 'undeclared_outcome'; outcome: string };
 
-/** Resolves only outcomes declared on the supplied Step. */
+/** Resolves only outcomes declared by the supplied Step. */
 export const resolveTransition = (
     step: Step,
     outcome: string
-): WorkflowTransitionResolution => {
+): TransitionResolution => {
     const transition = hasDeclaredOutcome(step, outcome)
         ? step.transitions[outcome]
         : undefined;
-    if (transition === undefined) {
-        return {
-            kind: 'undeclared_outcome',
-            outcome,
-        };
+    return transition === undefined
+        ? { kind: 'undeclared_outcome', outcome }
+        : { kind: 'declared', transition };
+};
+
+const validateDefinition = (workflow: Workflow): string | undefined => {
+    if (workflow.steps[workflow.start] === undefined) {
+        return `Workflow start step is not defined: ${workflow.start}`;
     }
-    return {
-        kind: 'declared',
-        transition,
-    };
+
+    for (const [key, step] of Object.entries(workflow.steps) as [
+        string,
+        Step,
+    ][]) {
+        if (step === undefined || step.id !== key) {
+            return `Workflow step key does not match step id: ${key}`;
+        }
+        if (!Array.isArray(step.input)) {
+            return `Workflow step input is invalid: ${key}`;
+        }
+        if (
+            (step.maxRuns !== undefined && !isPositiveInteger(step.maxRuns)) ||
+            (step.maxAttempts !== undefined &&
+                !isPositiveInteger(step.maxAttempts)) ||
+            (step.tokenReservation !== undefined &&
+                !isNonNegativeInteger(step.tokenReservation))
+        ) {
+            return `Workflow step bounds are invalid: ${key}`;
+        }
+        if (
+            step.output !== undefined &&
+            (typeof step.output.name !== 'string' ||
+                step.output.name.length === 0)
+        ) {
+            return `Workflow step output is invalid: ${key}`;
+        }
+        for (const transition of Object.values(step.transitions)) {
+            if (transition.kind === 'end') continue;
+            if (
+                transition.kind !== 'step' ||
+                workflow.steps[transition.stepId] === undefined
+            ) {
+                return `Workflow transition target is not defined: ${key}`;
+            }
+        }
+    }
+
+    return undefined;
+};
+
+const collectStepInputs = (input: {
+    step: Step;
+    results: Readonly<Record<string, Result>>;
+}):
+    | { results: Readonly<Record<string, Result>> }
+    | { missingReference: string } => {
+    const selected: Record<string, Result> = {};
+    for (const reference of input.step.input) {
+        if (reference.kind !== 'result') continue;
+        const value = input.results[reference.name];
+        if (value === undefined && reference.optional !== true) {
+            return { missingReference: reference.name };
+        }
+        if (value !== undefined) selected[reference.name] = value;
+    }
+    return { results: selected };
 };
 
 const buildRun = (input: {
-    run: WorkflowRun;
-    steps: readonly StepRecord[];
-    results: ReadonlyMap<string, Result<string, unknown>>;
+    run: Run;
+    steps: readonly StepRun[];
+    results: Readonly<Record<string, Result>>;
     now: number;
-}): WorkflowRun => ({
+}): Run => ({
     ...input.run,
     finishedAtMs: input.now,
     steps: input.steps,
@@ -162,13 +237,13 @@ const buildRun = (input: {
 });
 
 const finish = (input: {
-    run: WorkflowRun;
-    steps: readonly StepRecord[];
-    results: ReadonlyMap<string, Result<string, unknown>>;
+    run: Run;
+    steps: readonly StepRun[];
+    results: Readonly<Record<string, Result>>;
     now: () => number;
-    status: WorkflowExecutionResult['status'];
-    termination: WorkflowTermination;
-}): WorkflowExecutionResult => ({
+    status: RunResult['status'];
+    termination: RunTermination;
+}): RunResult => ({
     status: input.status,
     run: buildRun({
         run: input.run,
@@ -179,76 +254,37 @@ const finish = (input: {
     termination: input.termination,
 });
 
-const findExecutionLimit = (input: {
-    run: WorkflowRun;
+const validateAttemptResult = (input: {
     step: Step;
-    limits: ExecutionLimits;
-    nowMs: number;
-}): keyof ExecutionLimits | undefined => {
-    if (input.run.usage.stepCount >= asLimit(input.limits.maxWorkflowSteps)) {
-        return 'maxWorkflowSteps';
-    }
-    if (
-        input.run.usage.toolCalls > asLimit(input.limits.maxToolCalls) ||
-        (input.step.resource === 'tool' &&
-            input.run.usage.toolCalls >= asLimit(input.limits.maxToolCalls))
-    ) {
-        return 'maxToolCalls';
-    }
-    if (
-        input.run.usage.deliberationCalls >
-            asLimit(input.limits.maxDeliberationCalls) ||
-        (input.step.resource === 'deliberation' &&
-            input.run.usage.deliberationCalls >=
-                asLimit(input.limits.maxDeliberationCalls))
-    ) {
-        return 'maxDeliberationCalls';
-    }
-    if (input.run.usage.totalTokens >= asLimit(input.limits.maxTokensTotal)) {
-        return 'maxTokensTotal';
-    }
-    if (
-        input.nowMs - input.run.startedAtMs >=
-        asLimit(input.limits.maxDurationMs)
-    ) {
-        return 'maxDurationMs';
-    }
-    return undefined;
-};
-
-const collectStepInputs = (input: {
-    step: Step;
-    results: ReadonlyMap<string, Result<string, unknown>>;
+    result: Result | undefined;
 }):
-    | {
-          inputs: ReadonlyMap<string, Result<string, unknown>>;
-      }
-    | {
-          missingReference: string;
-      } => {
-    const selected = new Map<string, Result<string, unknown>>();
-    for (const reference of input.step.input.references) {
-        if (reference.kind !== 'result') {
-            continue;
-        }
-        const value = input.results.get(reference.name);
-        if (value === undefined && reference.optional !== true) {
-            return { missingReference: reference.name };
-        }
-        if (value !== undefined) {
-            selected.set(reference.name, value);
-        }
+    | { valid: true }
+    | { valid: false; expectedName?: string; actualName?: string } => {
+    if (input.step.output === undefined) {
+        return input.result === undefined
+            ? { valid: true }
+            : { valid: false, actualName: input.result.name };
     }
-    return { inputs: selected };
+    if (input.result === undefined) {
+        return { valid: false, expectedName: input.step.output.name };
+    }
+    return input.result.name === input.step.output.name
+        ? { valid: true }
+        : {
+              valid: false,
+              expectedName: input.step.output.name,
+              actualName: input.result.name,
+          };
 };
 
 /**
- * Runs one explicitly defined workflow. The executor can report an outcome,
- * but only the current Step's declared transition map can choose the path.
+ * Runs one complete Workflow. Definitions and Execution Contract bounds are
+ * rejected before any executor starts; every executor Attempt is then admitted
+ * through the shared limits authority.
  */
 export const executeWorkflow = async <TContext>(
-    input: ExecuteWorkflowInput<TContext>
-): Promise<WorkflowExecutionResult> => {
+    input: ExecuteInput<TContext>
+): Promise<RunResult> => {
     const now = input.now ?? (() => Date.now());
     const startedAtMs = input.startedAtMs ?? now();
     const run = createRun({
@@ -256,11 +292,11 @@ export const executeWorkflow = async <TContext>(
         runId: input.runId ?? `${input.workflow.id}-${startedAtMs}`,
         startedAtMs,
     });
-    const steps: StepRecord[] = [];
-    const results = new Map<string, Result<string, unknown>>();
-    let currentStepId = input.workflow.start;
+    const steps: StepRun[] = [];
+    const results: Record<string, Result> = {};
 
-    if (input.workflow.steps[currentStepId] === undefined) {
+    const definitionError = validateDefinition(input.workflow);
+    if (definitionError !== undefined) {
         return finish({
             run,
             steps,
@@ -269,11 +305,27 @@ export const executeWorkflow = async <TContext>(
             status: 'rejected',
             termination: {
                 reason: 'definition_error',
-                message: `Workflow start step is not defined: ${currentStepId}`,
+                message: definitionError,
             },
         });
     }
 
+    const contractError = validateExecutionLimits(input.executionLimits);
+    if (contractError !== undefined) {
+        return finish({
+            run,
+            steps,
+            results,
+            now,
+            status: 'rejected',
+            termination: {
+                reason: 'execution_contract_error',
+                message: contractError,
+            },
+        });
+    }
+
+    let currentStepId = input.workflow.start;
     while (true) {
         const step = input.workflow.steps[currentStepId];
         if (step === undefined) {
@@ -290,33 +342,10 @@ export const executeWorkflow = async <TContext>(
             });
         }
 
-        const executionLimit = findExecutionLimit({
-            run,
-            step,
-            limits: input.executionLimits,
-            nowMs: now(),
-        });
-        if (executionLimit !== undefined) {
-            return finish({
-                run,
-                steps,
-                results,
-                now,
-                status: 'limited',
-                termination: {
-                    reason: 'execution_limit',
-                    limit: executionLimit,
-                },
-            });
-        }
-
         const priorRuns = steps.filter(
             (record) => record.stepId === step.id
         ).length;
-        if (
-            step.maxRuns !== undefined &&
-            priorRuns >= asSafeCounter(step.maxRuns)
-        ) {
+        if (step.maxRuns !== undefined && priorRuns >= step.maxRuns) {
             return finish({
                 run,
                 steps,
@@ -327,12 +356,8 @@ export const executeWorkflow = async <TContext>(
             });
         }
 
-        const stepRunNumber = priorRuns + 1;
-        const stepAttempts: AttemptRecord[] = [];
-        const collectedStepInputs = collectStepInputs({ step, results });
-        const executor: StepExecutor<TContext> | undefined =
-            input.executors[step.executor];
-        if ('missingReference' in collectedStepInputs) {
+        const collected = collectStepInputs({ step, results });
+        if ('missingReference' in collected) {
             return finish({
                 run,
                 steps,
@@ -342,10 +367,12 @@ export const executeWorkflow = async <TContext>(
                 termination: {
                     reason: 'missing_required_input',
                     stepId: step.id,
-                    inputName: collectedStepInputs.missingReference,
+                    inputName: collected.missingReference,
                 },
             });
         }
+
+        const executor = input.executors[step.executor];
         if (executor === undefined) {
             return finish({
                 run,
@@ -359,30 +386,56 @@ export const executeWorkflow = async <TContext>(
                 },
             });
         }
-        const maximumAttempts = Math.max(
-            1,
-            asSafeCounter(step.maxAttempts) || DEFAULT_MAX_ATTEMPTS
-        );
-        let successfulResult: Result<string, unknown> | undefined;
-        let successfulOutcome: string | undefined;
-        let stepFailed = false;
 
-        for (let attemptNumber = 1; attemptNumber <= maximumAttempts;) {
-            const attemptExecutionLimit = findExecutionLimit({
-                run,
-                step,
+        const stepRunNumber = priorRuns + 1;
+        const maxAttempts = step.maxAttempts ?? DEFAULT_MAX_ATTEMPTS;
+        const attempts: Attempt[] = [];
+        let successfulResult: Result | undefined;
+        let successfulOutcome: string | undefined;
+        let failed = false;
+
+        for (
+            let attemptNumber = 1;
+            attemptNumber <= maxAttempts;
+            attemptNumber += 1
+        ) {
+            const admission = admitExecution({
+                state: {
+                    startedAtMs: run.startedAtMs,
+                    stepCount: run.usage.stepCount,
+                    toolCallCount: run.usage.toolCalls,
+                    planCallCount: run.usage.planCalls,
+                    reviewCallCount: run.usage.reviewCalls,
+                    deliberationCallCount: run.usage.deliberationCalls,
+                    totalTokens: run.usage.totalTokens,
+                },
                 limits: input.executionLimits,
                 nowMs: now(),
+                nextStepKind: step.kind,
+                nextStepTokenBudget: step.tokenReservation,
             });
-            if (attemptExecutionLimit !== undefined) {
-                if (stepAttempts.length > 0) {
+            if (!admission.admitted) {
+                if (attempts.length > 0) {
                     run.usage.stepCount += 1;
                     steps.push({
                         stepId: step.id,
-                        runNumber: stepRunNumber,
-                        inputReferences: step.input.references,
+                        run: stepRunNumber,
+                        input: step.input,
                         status: 'failed',
-                        attempts: stepAttempts,
+                        attempts,
+                    });
+                }
+                if ('error' in admission) {
+                    return finish({
+                        run,
+                        steps,
+                        results,
+                        now,
+                        status: 'rejected',
+                        termination: {
+                            reason: 'execution_contract_error',
+                            message: admission.error,
+                        },
                     });
                 }
                 return finish({
@@ -393,18 +446,20 @@ export const executeWorkflow = async <TContext>(
                     status: 'limited',
                     termination: {
                         reason: 'execution_limit',
-                        limit: attemptExecutionLimit,
+                        limit: admission.exhaustedBy,
                     },
                 });
             }
+
             const attemptStartedAtMs = now();
-            let attemptResult: ExecutionAttemptResult;
+            let attemptResult: AttemptResult;
             try {
                 attemptResult = await executor({
+                    step,
                     context: input.context,
-                    stepId: step.id,
-                    runNumber: stepRunNumber,
-                    inputs: collectedStepInputs.inputs,
+                    results: collected.results,
+                    run: stepRunNumber,
+                    attempt: attemptNumber,
                 });
             } catch (error) {
                 attemptResult = {
@@ -416,8 +471,12 @@ export const executeWorkflow = async <TContext>(
                 };
             }
             const attemptFinishedAtMs = now();
-            addUsage(run.usage, attemptResult.usage);
-            const attemptRecord = toAttemptRecord({
+            addUsage({
+                usage: run.usage,
+                attemptUsage: attemptResult.usage,
+                step,
+            });
+            const attempt = toAttempt({
                 attempt: attemptNumber,
                 executor: step.executor,
                 startedAtMs: attemptStartedAtMs,
@@ -431,23 +490,20 @@ export const executeWorkflow = async <TContext>(
                     attemptResult.outcome
                 );
                 if (transition.kind === 'undeclared_outcome') {
-                    stepAttempts.push({
-                        ...attemptRecord,
+                    attempts.push({
+                        ...attempt,
                         status: 'rejected',
                         errorCode: 'undeclared_outcome',
-                        errorMessage: boundedErrorMessage(
-                            `Outcome is not declared by step: ${attemptResult.outcome}`
-                        ),
+                        errorMessage: `Outcome is not declared by step: ${attemptResult.outcome}`,
                     });
-                    const rejectedStep: StepRecord = {
-                        stepId: step.id,
-                        runNumber: stepRunNumber,
-                        inputReferences: step.input.references,
-                        status: 'failed',
-                        attempts: stepAttempts,
-                    };
-                    steps.push(rejectedStep);
                     run.usage.stepCount += 1;
+                    steps.push({
+                        stepId: step.id,
+                        run: stepRunNumber,
+                        input: step.input,
+                        status: 'failed',
+                        attempts,
+                    });
                     return finish({
                         run,
                         steps,
@@ -462,27 +518,26 @@ export const executeWorkflow = async <TContext>(
                     });
                 }
 
-                if (
-                    attemptResult.result !== undefined &&
-                    attemptResult.result.name !== step.output.name
-                ) {
-                    stepAttempts.push({
-                        ...attemptRecord,
+                const resultValidation = validateAttemptResult({
+                    step,
+                    result: attemptResult.result,
+                });
+                if (!resultValidation.valid) {
+                    attempts.push({
+                        ...attempt,
                         status: 'rejected',
                         errorCode: 'invalid_result',
-                        errorMessage: boundedErrorMessage(
-                            `Result name does not match step output: ${attemptResult.result.name}`
-                        ),
+                        errorMessage:
+                            'Result does not satisfy the Step output declaration',
                     });
-                    const rejectedStep: StepRecord = {
-                        stepId: step.id,
-                        runNumber: stepRunNumber,
-                        inputReferences: step.input.references,
-                        status: 'failed',
-                        attempts: stepAttempts,
-                    };
-                    steps.push(rejectedStep);
                     run.usage.stepCount += 1;
+                    steps.push({
+                        stepId: step.id,
+                        run: stepRunNumber,
+                        input: step.input,
+                        status: 'failed',
+                        attempts,
+                    });
                     return finish({
                         run,
                         steps,
@@ -492,94 +547,73 @@ export const executeWorkflow = async <TContext>(
                         termination: {
                             reason: 'invalid_result',
                             stepId: step.id,
-                            expectedName: step.output.name,
-                            actualName: attemptResult.result.name,
+                            ...(resultValidation.expectedName === undefined
+                                ? {}
+                                : {
+                                      expectedName:
+                                          resultValidation.expectedName,
+                                  }),
+                            ...(resultValidation.actualName === undefined
+                                ? {}
+                                : { actualName: resultValidation.actualName }),
                         },
                     });
                 }
 
-                stepAttempts.push(attemptRecord);
+                attempts.push(attempt);
                 successfulOutcome = attemptResult.outcome;
                 successfulResult = attemptResult.result;
                 break;
             }
 
-            stepAttempts.push(attemptRecord);
-            const shouldRetry =
-                attemptResult.retryable !== false &&
-                attemptNumber < maximumAttempts;
-            if (!shouldRetry) {
-                stepFailed = true;
+            attempts.push(attempt);
+            if (
+                attemptResult.retryable === false ||
+                attemptNumber === maxAttempts
+            ) {
+                failed = true;
                 break;
             }
-            attemptNumber += 1;
         }
 
         run.usage.stepCount += 1;
-        const stepRecord: StepRecord = {
+        steps.push({
             stepId: step.id,
-            runNumber: stepRunNumber,
-            inputReferences: step.input.references,
-            status: stepFailed ? 'failed' : 'succeeded',
+            run: stepRunNumber,
+            input: step.input,
+            status: failed ? 'failed' : 'succeeded',
             ...(successfulOutcome === undefined
                 ? {}
                 : { outcome: successfulOutcome }),
             ...(successfulResult === undefined
                 ? {}
                 : { result: successfulResult }),
-            attempts: stepAttempts,
-        };
-        steps.push(stepRecord);
+            attempts,
+        });
 
-        if (stepFailed) {
-            const failureTransition = resolveTransition(step, 'failed');
-            if (failureTransition.kind === 'undeclared_outcome') {
-                return finish({
-                    run,
-                    steps,
-                    results,
-                    now,
-                    status: 'failed',
-                    termination: {
-                        reason: 'step_failed',
-                        stepId: step.id,
-                    },
-                });
-            }
-            if (failureTransition.transition.kind === 'finish') {
-                return finish({
-                    run,
-                    steps,
-                    results,
-                    now,
-                    status: 'completed',
-                    termination: { reason: 'finished' },
-                });
-            }
-            currentStepId = failureTransition.transition.stepId;
-            continue;
-        }
-
-        if (successfulResult !== undefined) {
-            results.set(successfulResult.name, successfulResult);
-        }
-
-        const transition = resolveTransition(step, successfulOutcome ?? '');
+        const transition = failed
+            ? resolveTransition(step, 'failed')
+            : resolveTransition(step, successfulOutcome ?? '');
         if (transition.kind === 'undeclared_outcome') {
             return finish({
                 run,
                 steps,
                 results,
                 now,
-                status: 'rejected',
-                termination: {
-                    reason: 'undeclared_outcome',
-                    stepId: step.id,
-                    outcome: transition.outcome,
-                },
+                status: failed ? 'failed' : 'rejected',
+                termination: failed
+                    ? { reason: 'step_failed', stepId: step.id }
+                    : {
+                          reason: 'undeclared_outcome',
+                          stepId: step.id,
+                          outcome: transition.outcome,
+                      },
             });
         }
-        if (transition.transition.kind === 'finish') {
+
+        if (successfulResult !== undefined)
+            results[successfulResult.name] = successfulResult;
+        if (transition.transition.kind === 'end') {
             return finish({
                 run,
                 steps,

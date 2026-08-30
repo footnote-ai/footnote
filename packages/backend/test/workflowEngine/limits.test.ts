@@ -8,6 +8,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
+    admitExecution,
     checkExecutionLimits,
     mapLimitExhaustionToTerminationReason,
     type ExecutionLimits,
@@ -281,5 +282,50 @@ test('presentation admission reserves assessment and candidate text copied into 
             assessmentOutputTokens: 50,
         }),
         undefined
+    );
+});
+
+test('admitExecution preserves plan and review caps while excluding presentation', () => {
+    const state = {
+        startedAtMs: 500,
+        stepCount: 0,
+        toolCallCount: 0,
+        planCallCount: 1,
+        reviewCallCount: 1,
+        deliberationCallCount: 2,
+        totalTokens: 0,
+    };
+    const caps: ExecutionLimits = {
+        ...createLimits(),
+        maxPlanCycles: 1,
+        maxReviewCycles: 1,
+    };
+
+    assert.deepEqual(
+        admitExecution({
+            state,
+            limits: caps,
+            nowMs: 600,
+            nextStepKind: 'plan',
+        }),
+        { admitted: false, exhaustedBy: 'maxDeliberationCalls' }
+    );
+    assert.deepEqual(
+        admitExecution({
+            state,
+            limits: caps,
+            nowMs: 600,
+            nextStepKind: 'assess',
+        }),
+        { admitted: false, exhaustedBy: 'maxDeliberationCalls' }
+    );
+    assert.deepEqual(
+        admitExecution({
+            state,
+            limits: caps,
+            nowMs: 600,
+            nextStepKind: 'presentation',
+        }),
+        { admitted: true }
     );
 });

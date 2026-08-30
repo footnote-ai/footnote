@@ -1,6 +1,6 @@
 /**
- * @description: Verifies the non-live workflow foundation's typed inputs,
- * explicit transitions, bounded cycles, attempts, and execution limits.
+ * @description: Verifies the non-live workflow foundation's runtime dataflow,
+ * explicit transitions, bounded attempts, and shared Execution Contract admission.
  * @footnote-scope: test
  * @footnote-module: WorkflowCoreTests
  * @footnote-risk: medium - Missing core coverage can permit unbounded or model-routed workflows.
@@ -13,466 +13,424 @@ import {
     CURRENT_REVIEWED_CHAT_WORKFLOW,
     executeWorkflow,
     result,
-    type ExecutorRegistry,
-    type ExecutionAttemptResult,
+    type AttemptResult,
     type ExecutionLimits,
-    type Workflow,
+    type Executors,
+    type InputRef,
     type Step,
-    type TypedStepExecutor,
+    type Transition,
+    type Workflow,
 } from '../src/services/workflowCore/index.js';
 
-type TestContext = {
-    requestId: string;
-};
-
-type Plan = {
-    route: 'write';
-};
-
-type Draft = {
-    text: string;
-};
+type TestContext = { requestId: string };
 
 const limits: ExecutionLimits = {
     maxWorkflowSteps: 20,
     maxToolCalls: 2,
     maxDeliberationCalls: 10,
-    maxTokensTotal: 1000,
+    maxTokensTotal: 1_000,
     maxDurationMs: 10_000,
 };
 
-const step = (
-    id: string,
-    transitions: Readonly<
-        Record<string, { kind: 'step'; stepId: string } | { kind: 'finish' }>
-    >,
-    inputReferences: Step['input']['references'] = [],
-    options: Pick<Step, 'maxRuns' | 'maxAttempts'> & {
-        outputName?: string;
-    } = {}
-): Step => {
-    const { outputName = id, ...stepOptions } = options;
-    return {
-        id,
-        executor: 'code',
-        input: {
-            references: inputReferences,
-        },
-        output: {
-            name: outputName,
-        },
-        transitions,
-        ...stepOptions,
-    };
-};
+const step = (input: {
+    id: string;
+    transitions: Readonly<Record<string, Transition>>;
+    input?: readonly InputRef[];
+    output?: string;
+    kind?: Step['kind'];
+    maxRuns?: number;
+    maxAttempts?: number;
+    tokenReservation?: number;
+    executor?: Step['executor'];
+}): Step => ({
+    id: input.id,
+    executor: input.executor ?? 'code',
+    ...(input.kind === undefined ? {} : { kind: input.kind }),
+    input: input.input ?? [],
+    ...(input.output === undefined ? {} : { output: { name: input.output } }),
+    transitions: input.transitions,
+    ...(input.maxRuns === undefined ? {} : { maxRuns: input.maxRuns }),
+    ...(input.maxAttempts === undefined
+        ? {}
+        : { maxAttempts: input.maxAttempts }),
+    ...(input.tokenReservation === undefined
+        ? {}
+        : { tokenReservation: input.tokenReservation }),
+});
 
 const workflow = (
     steps: Readonly<Record<string, Step>>,
-    start: string
-): Workflow<TestContext> => ({
+    start = Object.keys(steps)[0] ?? 'missing'
+): Workflow => ({
     id: `test-${start}`,
     version: 'v1',
     start,
     steps,
-    limits: {
-        source: 'execution-contract',
-    },
 });
 
-const runWith = (
-    definition: Workflow<TestContext>,
-    behavior: Readonly<Record<string, ReadonlyArray<ExecutionAttemptResult>>>,
-    executionLimits: ExecutionLimits = limits
-) => {
+const runWith = async (input: {
+    definition: Workflow;
+    behavior: Readonly<Record<string, readonly AttemptResult[]>>;
+    executionLimits?: ExecutionLimits;
+    executors?: Executors<TestContext>;
+    now?: () => number;
+}) => {
     const remaining = new Map(
-        Object.entries(behavior).map(([stepId, outcomes]) => [
+        Object.entries(input.behavior).map(([stepId, outcomes]) => [
             stepId,
             [...outcomes],
         ])
     );
-    const executors: ExecutorRegistry<TestContext> = {
-        code: async ({ stepId }) => {
-            const outcomes = remaining.get(stepId) ?? [];
-            const outcome = outcomes.shift();
-            if (outcome === undefined) {
-                return {
-                    status: 'succeeded',
-                    outcome: 'done',
-                };
-            }
-            return outcome;
-        },
+    const executors: Executors<TestContext> = {
+        code: async ({ step: executingStep }) =>
+            remaining.get(executingStep.id)?.shift() ?? {
+                status: 'succeeded',
+                outcome: 'done',
+            },
+        ...input.executors,
     };
-
     return executeWorkflow({
-        workflow: definition,
+        workflow: input.definition,
         context: { requestId: 'req-1' },
         executors,
-        executionLimits,
+        executionLimits: input.executionLimits ?? limits,
         startedAtMs: 0,
-        now: () => 1,
+        now: input.now ?? (() => 1),
     });
 };
 
-test('runs a simple plan -> write -> finish flow', async () => {
-    const definition = workflow(
-        {
-            plan: step('plan', {
-                done: { kind: 'step', stepId: 'write' },
-            }),
-            write: step(
-                'write',
-                {
-                    done: { kind: 'finish' },
-                },
-                [{ kind: 'result', name: 'plan' }],
-                { outputName: 'draft' }
-            ),
-        },
-        'plan'
-    );
+test('runs declared dataflow and gives executors the full Step, Results, and one-based ordinals', async () => {
+    const definition = workflow({
+        plan: step({
+            id: 'plan',
+            output: 'plan',
+            transitions: { done: { kind: 'step', stepId: 'write' } },
+        }),
+        write: step({
+            id: 'write',
+            input: [{ kind: 'result', name: 'plan' }],
+            output: 'draft',
+            transitions: { done: { kind: 'end' } },
+        }),
+    });
+    const seen: Array<{
+        stepId: string;
+        resultNames: string[];
+        run: number;
+        attempt: number;
+    }> = [];
 
-    const execution = await runWith(definition, {
-        plan: [
-            {
-                status: 'succeeded',
-                outcome: 'done',
-                result: result('plan', { route: 'write' } satisfies Plan),
+    const execution = await runWith({
+        definition,
+        behavior: {},
+        executors: {
+            code: async ({ step: executingStep, results, run, attempt }) => {
+                seen.push({
+                    stepId: executingStep.id,
+                    resultNames: Object.keys(results),
+                    run,
+                    attempt,
+                });
+                return executingStep.id === 'plan'
+                    ? {
+                          status: 'succeeded',
+                          outcome: 'done',
+                          result: result('plan', { route: 'write' }),
+                      }
+                    : {
+                          status: 'succeeded',
+                          outcome: 'done',
+                          result: result('draft', { text: 'answer' }),
+                      };
             },
-        ],
-        write: [
-            {
-                status: 'succeeded',
-                outcome: 'done',
-                result: result('draft', { text: 'answer' } satisfies Draft),
-            },
-        ],
+        },
     });
 
     assert.equal(execution.status, 'completed');
-    assert.deepEqual(
-        execution.run.steps.map((record) => record.stepId),
-        ['plan', 'write']
-    );
-    assert.deepEqual(execution.run.results.get('plan')?.value, {
-        route: 'write',
-    });
+    assert.deepEqual(seen, [
+        { stepId: 'plan', resultNames: [], run: 1, attempt: 1 },
+        { stepId: 'write', resultNames: ['plan'], run: 1, attempt: 1 },
+    ]);
+    assert.deepEqual(execution.run.results.plan?.value, { route: 'write' });
 });
 
-test('uses only declared branch outcomes and supports revise -> write', async () => {
+test('supports a bounded generic style -> check -> retry cycle without special engine branches', async () => {
     const definition = workflow(
         {
-            review: step('review', {
-                done: { kind: 'finish' },
-                revise: { kind: 'step', stepId: 'write' },
-                failed: { kind: 'finish' },
+            style: step({
+                id: 'style',
+                maxRuns: 2,
+                transitions: { done: { kind: 'step', stepId: 'check' } },
             }),
-            write: step('write', {
-                done: { kind: 'step', stepId: 'review' },
-            }),
-        },
-        'review'
-    );
-
-    const execution = await runWith(definition, {
-        review: [
-            { status: 'succeeded', outcome: 'revise' },
-            { status: 'succeeded', outcome: 'done' },
-        ],
-        write: [{ status: 'succeeded', outcome: 'done' }],
-    });
-
-    assert.equal(execution.status, 'completed');
-    assert.deepEqual(
-        execution.run.steps.map((record) => record.stepId),
-        ['review', 'write', 'review']
-    );
-});
-
-test('represents a bounded style -> check -> retry style cycle without engine branches', async () => {
-    const definition = workflow(
-        {
-            style: step(
-                'style',
-                {
-                    done: { kind: 'step', stepId: 'check' },
-                },
-                [],
-                { maxRuns: 2 }
-            ),
-            check: step('check', {
-                retry: { kind: 'step', stepId: 'style' },
-                write: { kind: 'step', stepId: 'write' },
-            }),
-            write: step('write', {
-                done: { kind: 'finish' },
+            check: step({
+                id: 'check',
+                transitions: { retry: { kind: 'step', stepId: 'style' } },
             }),
         },
         'style'
     );
 
-    const execution = await runWith(definition, {
-        style: [
-            { status: 'succeeded', outcome: 'done' },
-            { status: 'succeeded', outcome: 'done' },
-        ],
-        check: [
-            { status: 'succeeded', outcome: 'retry' },
-            { status: 'succeeded', outcome: 'retry' },
-        ],
+    const execution = await runWith({
+        definition,
+        behavior: {
+            style: [
+                { status: 'succeeded', outcome: 'done' },
+                { status: 'succeeded', outcome: 'done' },
+            ],
+            check: [
+                { status: 'succeeded', outcome: 'retry' },
+                { status: 'succeeded', outcome: 'retry' },
+            ],
+        },
     });
 
     assert.equal(execution.status, 'limited');
-    assert.equal(execution.termination.reason, 'step_run_limit');
     assert.deepEqual(
         execution.run.steps.map((record) => record.stepId),
         ['style', 'check', 'style', 'check']
     );
+    assert.deepEqual(execution.termination, {
+        reason: 'step_run_limit',
+        stepId: 'style',
+    });
 });
 
-test('rejects an undeclared executor outcome instead of routing to an arbitrary step', async () => {
-    const definition = workflow(
-        {
-            plan: step('plan', {
-                done: { kind: 'finish' },
+test('rejects undeclared executor outcomes', async () => {
+    const execution = await runWith({
+        definition: workflow({
+            plan: step({
+                id: 'plan',
+                transitions: { done: { kind: 'end' } },
             }),
-            secret: step('secret', {
-                done: { kind: 'finish' },
-            }),
-        },
-        'plan'
-    );
-
-    const execution = await runWith(definition, {
-        plan: [{ status: 'succeeded', outcome: 'secret' }],
+        }),
+        behavior: { plan: [{ status: 'succeeded', outcome: 'secret' }] },
     });
 
     assert.equal(execution.status, 'rejected');
     assert.equal(execution.termination.reason, 'undeclared_outcome');
     assert.equal(execution.run.steps[0]?.attempts[0]?.status, 'rejected');
-    assert.equal(execution.run.steps.length, 1);
 });
 
-test('routes an optional step failure while preserving an earlier valid Result', async () => {
-    const definition = workflow(
-        {
-            plan: step('plan', {
-                done: { kind: 'step', stepId: 'style' },
+test('routes an optional Step failure while preserving earlier Results', async () => {
+    const execution = await runWith({
+        definition: workflow({
+            plan: step({
+                id: 'plan',
+                output: 'plan',
+                transitions: { done: { kind: 'step', stepId: 'style' } },
             }),
-            style: step(
-                'style',
-                {
-                    failed: { kind: 'step', stepId: 'write' },
-                },
-                [{ kind: 'result', name: 'plan' }],
-                { maxAttempts: 2 }
-            ),
-            write: step(
-                'write',
-                {
-                    done: { kind: 'finish' },
-                },
-                [
+            style: step({
+                id: 'style',
+                maxAttempts: 2,
+                input: [{ kind: 'result', name: 'plan' }],
+                transitions: { failed: { kind: 'step', stepId: 'write' } },
+            }),
+            write: step({
+                id: 'write',
+                input: [
                     { kind: 'result', name: 'plan' },
                     { kind: 'result', name: 'style', optional: true },
-                ]
-            ),
+                ],
+                transitions: { done: { kind: 'end' } },
+            }),
+        }),
+        behavior: {
+            plan: [
+                {
+                    status: 'succeeded',
+                    outcome: 'done',
+                    result: result('plan', { route: 'write' }),
+                },
+            ],
+            style: [
+                { status: 'failed', errorCode: 'temporary', retryable: true },
+                { status: 'failed', errorCode: 'temporary', retryable: false },
+            ],
+            write: [{ status: 'succeeded', outcome: 'done' }],
         },
-        'plan'
-    );
-
-    const execution = await runWith(definition, {
-        plan: [
-            {
-                status: 'succeeded',
-                outcome: 'done',
-                result: result('plan', { route: 'write' } satisfies Plan),
-            },
-        ],
-        style: [
-            {
-                status: 'failed',
-                errorCode: 'provider_unavailable',
-                retryable: true,
-            },
-            {
-                status: 'failed',
-                errorCode: 'provider_unavailable',
-                retryable: false,
-            },
-        ],
-        write: [{ status: 'succeeded', outcome: 'done' }],
     });
 
     assert.equal(execution.status, 'completed');
-    assert.deepEqual(execution.run.results.get('plan')?.value, {
-        route: 'write',
-    });
-    assert.equal(execution.run.results.has('style'), false);
+    assert.deepEqual(execution.run.results.plan?.value, { route: 'write' });
+    assert.equal(execution.run.results.style, undefined);
     assert.equal(execution.run.steps[1]?.attempts.length, 2);
-    assert.equal(execution.run.steps[1]?.status, 'failed');
 });
 
-test('records multiple attempts as one semantic Step', async () => {
-    const definition = workflow(
-        {
-            review: step(
-                'review',
-                {
-                    done: { kind: 'finish' },
-                },
-                [{ kind: 'result', name: 'plan', optional: true }],
-                { maxAttempts: 2 }
-            ),
-        },
-        'review'
-    );
-
-    const execution = await runWith(definition, {
-        review: [
+test('rejects invalid definitions before any executor runs', async () => {
+    const invalidDefinitions: readonly Workflow[] = [
+        workflow({}, 'missing'),
+        workflow(
             {
-                status: 'failed',
-                errorCode: 'malformed_output',
-                retryable: true,
+                key: step({
+                    id: 'different',
+                    transitions: { done: { kind: 'end' } },
+                }),
             },
-            {
+            'key'
+        ),
+        workflow({
+            first: step({
+                id: 'first',
+                transitions: { done: { kind: 'step', stepId: 'missing' } },
+            }),
+        }),
+    ];
+
+    for (const definition of invalidDefinitions) {
+        let calls = 0;
+        const execution = await runWith({
+            definition,
+            behavior: {},
+            executors: {
+                code: async () => {
+                    calls += 1;
+                    return { status: 'succeeded', outcome: 'done' };
+                },
+            },
+        });
+        assert.equal(execution.status, 'rejected');
+        assert.equal(execution.termination.reason, 'definition_error');
+        assert.equal(calls, 0);
+    }
+});
+
+test('requires the declared Result and accepts outputless Steps only without Results', async () => {
+    const cases: ReadonlyArray<{
+        name: string;
+        definition: Workflow;
+        response: AttemptResult;
+        expected: { expectedName?: string; actualName?: string } | 'completed';
+    }> = [
+        {
+            name: 'required Result',
+            definition: workflow({
+                write: step({
+                    id: 'write',
+                    output: 'draft',
+                    transitions: { done: { kind: 'end' } },
+                }),
+            }),
+            response: {
                 status: 'succeeded',
                 outcome: 'done',
-                result: result('review', { decision: 'done' }),
+                result: result('draft', 'ok'),
             },
-        ],
-    });
+            expected: 'completed',
+        },
+        {
+            name: 'missing Result',
+            definition: workflow({
+                write: step({
+                    id: 'write',
+                    output: 'draft',
+                    transitions: { done: { kind: 'end' } },
+                }),
+            }),
+            response: { status: 'succeeded', outcome: 'done' },
+            expected: { expectedName: 'draft' },
+        },
+        {
+            name: 'mismatched Result',
+            definition: workflow({
+                write: step({
+                    id: 'write',
+                    output: 'draft',
+                    transitions: { done: { kind: 'end' } },
+                }),
+            }),
+            response: {
+                status: 'succeeded',
+                outcome: 'done',
+                result: result('other', 'bad'),
+            },
+            expected: { expectedName: 'draft', actualName: 'other' },
+        },
+        {
+            name: 'undeclared Result',
+            definition: workflow({
+                write: step({
+                    id: 'write',
+                    transitions: { done: { kind: 'end' } },
+                }),
+            }),
+            response: {
+                status: 'succeeded',
+                outcome: 'done',
+                result: result('unexpected', 'bad'),
+            },
+            expected: { actualName: 'unexpected' },
+        },
+        {
+            name: 'outputless Step',
+            definition: workflow({
+                write: step({
+                    id: 'write',
+                    transitions: { done: { kind: 'end' } },
+                }),
+            }),
+            response: { status: 'succeeded', outcome: 'done' },
+            expected: 'completed',
+        },
+    ];
 
-    assert.equal(execution.status, 'completed');
-    assert.equal(execution.run.steps.length, 1);
-    const firstInputReference = execution.run.steps[0]?.inputReferences[0];
-    assert.equal(firstInputReference?.kind, 'result');
-    if (firstInputReference?.kind === 'result') {
-        assert.equal(firstInputReference.name, 'plan');
+    for (const item of cases) {
+        const execution = await runWith({
+            definition: item.definition,
+            behavior: { write: [item.response] },
+        });
+        if (item.expected === 'completed') {
+            assert.equal(execution.status, 'completed', item.name);
+            continue;
+        }
+        assert.equal(execution.status, 'rejected', item.name);
+        assert.deepEqual(
+            execution.termination,
+            { reason: 'invalid_result', stepId: 'write', ...item.expected },
+            item.name
+        );
     }
-    assert.deepEqual(
-        execution.run.steps[0]?.attempts.map((attempt) => attempt.status),
-        ['failed', 'succeeded']
-    );
-    assert.deepEqual(
-        execution.run.steps[0]?.attempts.map((attempt) => attempt.executor),
-        ['code', 'code']
-    );
-    assert.deepEqual(execution.run.results.get('review')?.value, {
-        decision: 'done',
-    });
 });
 
-test('enforces the existing Execution Contract limits as the outer authority', async () => {
-    const definition = workflow(
-        {
-            first: step('first', {
-                done: { kind: 'step', stepId: 'second' },
-            }),
-            second: step('second', {
-                done: { kind: 'finish' },
-            }),
-        },
-        'first'
-    );
-
-    const execution = await runWith(
-        definition,
-        {
-            first: [
-                {
-                    status: 'succeeded',
-                    outcome: 'done',
-                    usage: { totalTokens: 10 },
-                },
-            ],
-        },
-        {
-            ...limits,
-            maxWorkflowSteps: 10,
-            maxTokensTotal: 10,
-        }
-    );
-
-    assert.equal(execution.status, 'limited');
-    assert.deepEqual(execution.termination, {
-        reason: 'execution_limit',
-        limit: 'maxTokensTotal',
-    });
-    assert.equal(execution.run.steps.length, 1);
-    assert.equal(execution.run.usage.totalTokens, 10);
-});
-
-test('enforces tool-call limits only for steps that declare tool use', async () => {
-    const definition = workflow(
-        {
-            first: {
-                ...step('first', {
-                    done: { kind: 'step', stepId: 'second' },
-                }),
-                resource: 'tool',
-            },
-            second: {
-                ...step('second', {
-                    done: { kind: 'finish' },
-                }),
-                resource: 'tool',
-            },
-        },
-        'first'
-    );
-
-    const execution = await runWith(
-        definition,
-        {
-            first: [
-                {
-                    status: 'succeeded',
-                    outcome: 'done',
-                    usage: { toolCalls: 1 },
-                },
-            ],
-        },
-        {
-            ...limits,
-            maxToolCalls: 1,
-        }
-    );
-
-    assert.equal(execution.status, 'limited');
-    assert.deepEqual(execution.termination, {
-        reason: 'execution_limit',
-        limit: 'maxToolCalls',
-    });
-    assert.deepEqual(
-        execution.run.steps.map((record) => record.stepId),
-        ['first']
-    );
-});
-
-test('rechecks Execution Contract limits before retrying an attempt', async () => {
-    const definition = workflow(
-        {
-            retrieve: {
-                ...step('retrieve', { done: { kind: 'finish' } }, [], {
-                    maxAttempts: 3,
-                }),
-                resource: 'tool',
-            },
-        },
-        'retrieve'
-    );
-    let calls = 0;
-
+test('keeps unavailable executors separate from declared failure recovery', async () => {
     const execution = await executeWorkflow({
-        workflow: definition,
+        workflow: workflow({
+            retrieve: step({
+                id: 'retrieve',
+                transitions: { failed: { kind: 'end' } },
+            }),
+        }),
+        context: { requestId: 'req-1' },
+        executors: {},
+        executionLimits: limits,
+        startedAtMs: 0,
+        now: () => 1,
+    });
+
+    assert.deepEqual(execution.termination, {
+        reason: 'executor_unavailable',
+        stepId: 'retrieve',
+    });
+    assert.equal(execution.run.steps.length, 0);
+});
+
+test('uses shared admission before every retry and supplies distinct Attempt ordinals', async () => {
+    const attempts: number[] = [];
+    const execution = await executeWorkflow({
+        workflow: workflow({
+            retrieve: step({
+                id: 'retrieve',
+                kind: 'tool',
+                maxAttempts: 3,
+                transitions: { failed: { kind: 'end' } },
+            }),
+        }),
         context: { requestId: 'req-1' },
         executors: {
-            code: async () => {
-                calls += 1;
+            code: async ({ attempt }) => {
+                attempts.push(attempt);
                 return {
                     status: 'failed',
-                    errorCode: 'temporary_failure',
+                    errorCode: 'temporary',
                     retryable: true,
                     usage: { toolCalls: 1 },
                 };
@@ -483,240 +441,179 @@ test('rechecks Execution Contract limits before retrying an attempt', async () =
         now: () => 1,
     });
 
+    assert.deepEqual(attempts, [1, 2]);
     assert.equal(execution.status, 'limited');
     assert.deepEqual(execution.termination, {
         reason: 'execution_limit',
         limit: 'maxToolCalls',
     });
-    assert.equal(calls, 2);
-    assert.deepEqual(
-        execution.run.steps[0]?.attempts.map((attempt) => attempt.status),
-        ['failed', 'failed']
-    );
 });
 
-test('keeps executor categories separate from workflow topology', async () => {
-    const definition: Workflow<TestContext> = {
-        id: 'future-executor',
-        version: 'v1',
-        start: 'retrieve',
-        steps: {
-            retrieve: {
-                ...step('retrieve', {
-                    done: { kind: 'finish' },
-                }),
-                executor: 'context',
-            },
+test('applies canonical caps, reservation, duration, and presentation accounting through shared admission', async () => {
+    const plan = await runWith({
+        definition: workflow({
+            plan: step({
+                id: 'plan',
+                kind: 'plan',
+                maxAttempts: 2,
+                transitions: { failed: { kind: 'end' } },
+            }),
+        }),
+        behavior: {
+            plan: [{ status: 'failed', errorCode: 'retry', retryable: true }],
         },
-        limits: { source: 'execution-contract' },
-    };
-    let called = false;
-    const executors: ExecutorRegistry<TestContext> = {
-        context: async () => {
-            called = true;
-            return { status: 'succeeded', outcome: 'done' };
-        },
-    };
+        executionLimits: { ...limits, maxPlanCycles: 1 },
+    });
+    assert.deepEqual(plan.termination, {
+        reason: 'execution_limit',
+        limit: 'maxDeliberationCalls',
+    });
 
-    const execution = await executeWorkflow({
-        workflow: definition,
-        context: { requestId: 'req-1' },
-        executors,
-        executionLimits: limits,
-        startedAtMs: 0,
+    const review = await runWith({
+        definition: workflow({
+            review: step({
+                id: 'review',
+                kind: 'assess',
+                maxAttempts: 2,
+                transitions: { failed: { kind: 'end' } },
+            }),
+        }),
+        behavior: {
+            review: [{ status: 'failed', errorCode: 'retry', retryable: true }],
+        },
+        executionLimits: { ...limits, maxReviewCycles: 1 },
+    });
+    assert.deepEqual(review.termination, {
+        reason: 'execution_limit',
+        limit: 'maxDeliberationCalls',
+    });
+
+    const reservation = await runWith({
+        definition: workflow({
+            write: step({
+                id: 'write',
+                tokenReservation: 11,
+                transitions: { done: { kind: 'end' } },
+            }),
+        }),
+        behavior: { write: [{ status: 'succeeded', outcome: 'done' }] },
+        executionLimits: { ...limits, maxTokensTotal: 10 },
+    });
+    assert.equal(reservation.run.steps.length, 0);
+    assert.equal(reservation.termination.reason, 'execution_limit');
+
+    const duration = await runWith({
+        definition: workflow({
+            write: step({
+                id: 'write',
+                transitions: { done: { kind: 'end' } },
+            }),
+        }),
+        behavior: { write: [{ status: 'succeeded', outcome: 'done' }] },
+        executionLimits: { ...limits, maxDurationMs: 1 },
         now: () => 1,
     });
+    assert.equal(duration.run.steps.length, 0);
+    assert.deepEqual(duration.termination, {
+        reason: 'execution_limit',
+        limit: 'maxDurationMs',
+    });
 
-    assert.equal(execution.status, 'completed');
-    assert.equal(called, true);
-});
-
-test('rejects a step when its executor is unavailable', async () => {
-    const definition = workflow(
-        {
-            retrieve: step('retrieve', {
-                done: { kind: 'finish' },
-                failed: { kind: 'finish' },
+    const presentation = await runWith({
+        definition: workflow({
+            presentation: step({
+                id: 'presentation',
+                kind: 'presentation',
+                transitions: { done: { kind: 'end' } },
             }),
+        }),
+        behavior: {
+            presentation: [
+                {
+                    status: 'succeeded',
+                    outcome: 'done',
+                    usage: { deliberationCalls: 1 },
+                },
+            ],
         },
-        'retrieve'
-    );
-
-    const execution = await executeWorkflow({
-        workflow: definition,
-        context: { requestId: 'req-1' },
-        executors: {},
-        executionLimits: limits,
-        startedAtMs: 0,
-        now: () => 1,
+        executionLimits: { ...limits, maxDeliberationCalls: 0 },
     });
-
-    assert.equal(execution.status, 'rejected');
-    assert.deepEqual(execution.termination, {
-        reason: 'executor_unavailable',
-        stepId: 'retrieve',
-    });
-    assert.equal(execution.run.steps.length, 0);
+    assert.equal(presentation.status, 'completed');
+    assert.equal(presentation.run.usage.deliberationCalls, 0);
 });
 
-test('rejects a step when a required result reference is missing', async () => {
-    const definition = workflow(
-        {
-            write: step('write', { done: { kind: 'finish' } }, [
-                { kind: 'result', name: 'plan' },
-            ]),
-        },
-        'write'
-    );
-
-    const execution = await runWith(definition, {});
-
-    assert.equal(execution.status, 'rejected');
-    assert.deepEqual(execution.termination, {
-        reason: 'missing_required_input',
-        stepId: 'write',
-        inputName: 'plan',
-    });
-    assert.equal(execution.run.steps.length, 0);
-});
-
-test('rejects a result that violates the Step output contract', async () => {
-    const definition = workflow(
-        {
-            write: step('write', { done: { kind: 'finish' } }),
-        },
-        'write'
-    );
-
-    const execution = await runWith(definition, {
-        write: [
-            {
-                status: 'succeeded',
-                outcome: 'done',
-                result: result('unexpected', { text: 'answer' }),
-            },
-        ],
-    });
-
-    assert.equal(execution.status, 'rejected');
-    assert.deepEqual(execution.termination, {
-        reason: 'invalid_result',
-        stepId: 'write',
-        expectedName: 'write',
-        actualName: 'unexpected',
-    });
-    assert.equal(execution.run.steps[0]?.attempts[0]?.status, 'rejected');
-});
-
-test('rejects a transition to an undefined Step', async () => {
-    const definition = workflow(
-        {
-            first: step('first', {
-                done: { kind: 'step', stepId: 'missing' },
+test('rejects malformed Execution Contracts before a Step executes', async () => {
+    let calls = 0;
+    const execution = await runWith({
+        definition: workflow({
+            first: step({
+                id: 'first',
+                transitions: { done: { kind: 'end' } },
             }),
+        }),
+        behavior: {},
+        executionLimits: { ...limits, maxTokensTotal: Number.NaN },
+        executors: {
+            code: async () => {
+                calls += 1;
+                return { status: 'succeeded', outcome: 'done' };
+            },
         },
-        'first'
-    );
-
-    const execution = await runWith(definition, {
-        first: [{ status: 'succeeded', outcome: 'done' }],
     });
 
-    assert.equal(execution.status, 'rejected');
+    assert.equal(calls, 0);
     assert.deepEqual(execution.termination, {
-        reason: 'definition_error',
-        message: 'Workflow step is not defined: missing',
+        reason: 'execution_contract_error',
+        message: 'Execution Contract limit is invalid: maxTokensTotal',
     });
 });
 
-test('clamps invalid Execution Contract limits to zero', async () => {
-    const definition = workflow(
-        {
-            first: step('first', { done: { kind: 'finish' } }),
-        },
-        'first'
-    );
-
-    const invalidLimitCases: readonly ExecutionLimits[] = [
-        { ...limits, maxWorkflowSteps: -1 },
-        { ...limits, maxTokensTotal: Number.NaN },
-    ];
-
-    for (const executionLimits of invalidLimitCases) {
-        const execution = await runWith(
-            definition,
-            { first: [{ status: 'succeeded', outcome: 'done' }] },
-            executionLimits
-        );
-
-        assert.equal(execution.status, 'limited');
-        assert.equal(execution.termination.reason, 'execution_limit');
-        assert.equal(execution.run.steps.length, 0);
-    }
-});
-
-test('exposes a typed semantic input/result seam without requiring predecessor identities', () => {
-    const typedStep: Step<{ context: TestContext; plan: Plan }, Draft, 'done'> =
-        {
-            id: 'write',
-            executor: 'model',
-            input: {
-                references: [
-                    { kind: 'context' },
-                    { kind: 'result', name: 'plan' },
-                ],
-            },
-            output: {
-                name: 'draft',
-            },
-            transitions: {
-                done: { kind: 'finish' },
-            },
-        };
-
-    assert.equal(typedStep.input.references[1]?.kind, 'result');
-    assert.equal(typedStep.output.name, 'draft');
-
-    const typedExecutor: TypedStepExecutor<
-        TestContext,
-        { plan: Plan },
-        Draft
-    > = async ({ input }) => ({
-        status: 'succeeded',
-        outcome: 'done',
-        result: result('draft', { text: input.plan.route }),
-    });
-    assert.equal(typeof typedExecutor, 'function');
-});
-
-test('describes the current reviewed chat topology without making it live', () => {
+test('describes the current non-live reviewed-chat topology honestly', () => {
     assert.equal(CURRENT_REVIEWED_CHAT_WORKFLOW.start, 'plan');
     assert.deepEqual(Object.keys(CURRENT_REVIEWED_CHAT_WORKFLOW.steps), [
         'plan',
+        'defaultPlan',
         'context',
-        'style',
-        'checkStyle',
+        'presentation',
         'write',
         'review',
         'finish',
     ]);
-    assert.deepEqual(CURRENT_REVIEWED_CHAT_WORKFLOW.steps.review?.transitions, {
-        done: { kind: 'step', stepId: 'finish' },
-        revise: { kind: 'step', stepId: 'write' },
-        failed: { kind: 'step', stepId: 'finish' },
-    });
-    assert.deepEqual(CURRENT_REVIEWED_CHAT_WORKFLOW.steps.plan?.transitions, {
-        continue: { kind: 'step', stepId: 'context' },
-        terminal: { kind: 'finish' },
-        failed: { kind: 'step', stepId: 'finish' },
-    });
-    assert.deepEqual(CURRENT_REVIEWED_CHAT_WORKFLOW.steps.write?.transitions, {
-        generated: { kind: 'step', stepId: 'review' },
-        failed: { kind: 'step', stepId: 'finish' },
-    });
-    assert.equal(CURRENT_REVIEWED_CHAT_WORKFLOW.steps.style?.maxRuns, 2);
+    assert.deepEqual(
+        CURRENT_REVIEWED_CHAT_WORKFLOW.steps.plan?.transitions.failed,
+        {
+            kind: 'step',
+            stepId: 'defaultPlan',
+        }
+    );
     assert.equal(
-        CURRENT_REVIEWED_CHAT_WORKFLOW.limits.source,
-        'execution-contract'
+        CURRENT_REVIEWED_CHAT_WORKFLOW.steps.defaultPlan?.executor,
+        'code'
+    );
+    assert.equal(
+        CURRENT_REVIEWED_CHAT_WORKFLOW.steps.defaultPlan?.output?.name,
+        'plan'
+    );
+    assert.equal(
+        CURRENT_REVIEWED_CHAT_WORKFLOW.steps.presentation?.kind,
+        'presentation'
+    );
+    assert.equal(CURRENT_REVIEWED_CHAT_WORKFLOW.steps.presentation?.maxRuns, 1);
+    assert.equal(
+        CURRENT_REVIEWED_CHAT_WORKFLOW.steps.presentation?.maxAttempts,
+        undefined
+    );
+    assert.equal(CURRENT_REVIEWED_CHAT_WORKFLOW.steps.write?.maxRuns, 3);
+    assert.equal(CURRENT_REVIEWED_CHAT_WORKFLOW.steps.review?.maxRuns, 3);
+    for (const currentStep of ['write', 'review'] as const) {
+        assert.deepEqual(
+            CURRENT_REVIEWED_CHAT_WORKFLOW.steps[currentStep]?.transitions
+                .failed,
+            { kind: 'step', stepId: 'finish' }
+        );
+    }
+    assert.deepEqual(
+        CURRENT_REVIEWED_CHAT_WORKFLOW.steps.finish?.transitions.done,
+        { kind: 'end' }
     );
 });
