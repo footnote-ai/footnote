@@ -106,6 +106,30 @@ const buildBalancedPresentationPersona = (id: string): PresentationPersona => ({
 
 const DEFAULT_PRESENTATION_PERSONA =
     buildBalancedPresentationPersona('footnote');
+
+/**
+ * Reads the profile and provider selected by the workflow's routing chain from
+ * its step receipt. These values are more authoritative than the initial
+ * request profile when fail-open routing has selected a different provider.
+ */
+const getWorkflowGenerationRouting = (
+    workflowLineage: WorkflowRecord | undefined
+): { profileId?: string; provider?: string } => {
+    const generationStep = workflowLineage?.steps
+        .slice()
+        .reverse()
+        .find((step) => step.stepKind === 'generate');
+    const routedProfileId = generationStep?.outcome.signals?.routedProfileId;
+    const routedProvider = generationStep?.outcome.signals?.routedProvider;
+    return {
+        ...(typeof routedProfileId === 'string' && routedProfileId.length > 0
+            ? { profileId: routedProfileId }
+            : {}),
+        ...(typeof routedProvider === 'string' && routedProvider.length > 0
+            ? { provider: routedProvider }
+            : {}),
+    };
+};
 import { resolveProfileReasoningEffort } from './runtimeRequestControls.js';
 import { runtimeConfig } from '../config.js';
 import { buildToolClarificationResponse } from './tools/toolClarificationResponse.js';
@@ -1919,10 +1943,21 @@ export const createChatService = ({
         const workflowGenerationProfileId =
             workflowPlannerSummary?.effectiveSelectedProfileId ??
             workflowPlannerSummary?.selectedResponseProfile.id;
+        const workflowGenerationRouting =
+            getWorkflowGenerationRouting(workflowLineage);
+        const effectiveGenerationProvider =
+            routedGenerationSelectedProfile?.provider ??
+            workflowGenerationRouting.provider ??
+            workflowSelectedGenerationProfile?.provider ??
+            effectiveGenerationRequest.provider ??
+            upstreamGenerationExecutionContext?.provider ??
+            defaultProvider ??
+            'internal';
         const effectiveGenerationProfileId = fallbackAfterInternalNoGeneration
             ? 'workflow_internal_fallback'
             : (upstreamGenerationExecutionContext?.effectiveProfileId ??
               upstreamGenerationExecutionContext?.profileId ??
+              workflowGenerationRouting.profileId ??
               workflowGenerationProfileId);
         const effectiveGenerationExecutionContext:
             GenerationExecutionContext | undefined =
@@ -1942,6 +1977,7 @@ export const createChatService = ({
                           profileId: effectiveGenerationProfileId,
                           effectiveProfileId: effectiveGenerationProfileId,
                       }),
+                      provider: effectiveGenerationProvider,
                       model: usageModel,
                       durationMs: generationDurationMs,
                   }
@@ -1958,30 +1994,25 @@ export const createChatService = ({
                         effectiveProfileId:
                             routedGenerationSelectedProfile?.id ??
                             'workflow_internal_fallback',
-                        provider:
-                            routedGenerationSelectedProfile?.provider ??
-                            'internal',
+                        provider: effectiveGenerationProvider,
                         model: usageModel,
                         durationMs: generationDurationMs,
                     } satisfies GenerationExecutionContext)
-                  : workflowGenerationProfileId !== undefined
+                  : effectiveGenerationProfileId !== undefined
                     ? ({
                           status: 'executed',
                           ...generationIncompleteOverlay,
                           ...generationCompletionOverlay,
                           ...generationFinishReasonOverlay,
                           ...generationUsageOverlay,
-                          profileId: workflowGenerationProfileId,
+                          profileId: effectiveGenerationProfileId,
                           ...(workflowPlannerSummary?.originalSelectedProfileId !==
                               undefined && {
                               originalProfileId:
                                   workflowPlannerSummary.originalSelectedProfileId,
                           }),
-                          effectiveProfileId: workflowGenerationProfileId,
-                          provider:
-                              workflowSelectedGenerationProfile?.provider ??
-                              effectiveGenerationRequest.provider ??
-                              'internal',
+                          effectiveProfileId: effectiveGenerationProfileId,
+                          provider: effectiveGenerationProvider,
                           model: usageModel,
                           durationMs: generationDurationMs,
                       } satisfies GenerationExecutionContext)

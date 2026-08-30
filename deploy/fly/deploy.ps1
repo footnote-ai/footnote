@@ -244,16 +244,57 @@ function Upload-FootnoteSettings {
   }
 
   Write-Host "Uploading canonical footnote.yaml to /data/config/footnote.yaml..."
+  $settingsBytes = [IO.File]::ReadAllBytes($settingsPath)
+  $sha256 = [Security.Cryptography.SHA256]::Create()
   try {
-    Get-Content -Path $settingsPath -Raw | fly ssh console -a $AppName -C "mkdir -p /data/config && cat > /data/config/footnote.yaml" | Out-Null
-    if ($LASTEXITCODE -ne 0) {
-      Write-Warning "Unable to upload footnote.yaml to $AppName. Continuing deploy."
-      return
-    }
-    Write-Host "Uploaded footnote.yaml to $AppName."
-  } catch {
-    Write-Warning "Unable to upload footnote.yaml to $AppName. Continuing deploy."
+    $settingsHash = ([Convert]::ToHexString($sha256.ComputeHash($settingsBytes))).ToLowerInvariant()
+  } finally {
+    $sha256.Dispose()
   }
+  $settingsBase64 = [Convert]::ToBase64String($settingsBytes)
+  $remoteScript = @'
+const fs = require('node:fs');
+const crypto = require('node:crypto');
+const targetPath = '/data/config/footnote.yaml';
+const tempPath = `${targetPath}.tmp-${process.pid}`;
+const expectedHash = '__EXPECTED_HASH__';
+const settingsBase64 = '__SETTINGS_BASE64__';
+
+try {
+  fs.mkdirSync('/data/config', { recursive: true });
+  fs.writeFileSync(tempPath, Buffer.from(settingsBase64, 'base64'));
+  const actualHash = crypto.createHash('sha256').update(fs.readFileSync(tempPath)).digest('hex');
+  if (actualHash !== expectedHash) {
+    throw new Error('settings hash mismatch');
+  }
+  fs.renameSync(tempPath, targetPath);
+  console.log(`FOOTNOTE_SETTINGS_SHA256=${actualHash}`);
+} catch (error) {
+  try {
+    fs.unlinkSync(tempPath);
+  } catch {
+    // Best-effort cleanup; the original error is the actionable failure.
+  }
+  const message = error instanceof Error ? error.message : String(error);
+  console.error(`footnote.yaml sync failed: ${message}`);
+  process.exitCode = 1;
+}
+'@
+  $remoteScript = $remoteScript.Replace('__EXPECTED_HASH__', $settingsHash).Replace('__SETTINGS_BASE64__', $settingsBase64)
+  $remoteScriptBase64 = [Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes($remoteScript))
+  $remoteCommand = "node -e `"eval(Buffer.from('$remoteScriptBase64','base64').toString('utf8'))`""
+
+  $remoteOutput = @(& fly ssh console -a $AppName -C $remoteCommand 2>&1)
+  $flyExitCode = $LASTEXITCODE
+  $remoteOutputText = $remoteOutput -join "`n"
+  $verificationMarker = "FOOTNOTE_SETTINGS_SHA256=$settingsHash"
+  if ($remoteOutputText -notmatch [regex]::Escape($verificationMarker)) {
+    throw "Unable to upload footnote.yaml to $AppName; remote hash verification failed (fly exit code $flyExitCode)."
+  }
+  if ($flyExitCode -ne 0) {
+    Write-Warning "Fly CLI returned exit code $flyExitCode after remote hash verification succeeded."
+  }
+  Write-Host "Uploaded footnote.yaml to $AppName (SHA-256 $settingsHash)."
 }
 
 $configRoot = $PSScriptRoot

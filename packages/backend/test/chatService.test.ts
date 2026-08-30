@@ -352,6 +352,9 @@ test('createChatService preserves the caller-requested model when the runtime om
 test('runChatMessages preserves runtime-reported model in workflow generation execution metadata', async () => {
     let capturedRuntimeContextModelVersion: string | null = null;
     let capturedGenerationExecutionModel: string | undefined;
+    let capturedGenerationExecutionProfileId: string | undefined;
+    let capturedGenerationExecutionProvider: string | undefined;
+    let capturedWorkflowGenerationProfileId: string | undefined;
 
     const chatService = createChatService({
         generationRuntime: createRuntime(),
@@ -360,6 +363,16 @@ test('runChatMessages preserves runtime-reported model in workflow generation ex
             capturedRuntimeContextModelVersion = runtimeContext.modelVersion;
             capturedGenerationExecutionModel =
                 runtimeContext.executionContext?.generation?.model;
+            capturedGenerationExecutionProfileId =
+                runtimeContext.executionContext?.generation?.profileId;
+            capturedGenerationExecutionProvider =
+                runtimeContext.executionContext?.generation?.provider;
+            capturedWorkflowGenerationProfileId =
+                typeof runtimeContext.workflow?.steps[0]?.outcome.signals
+                    ?.routedProfileId === 'string'
+                    ? runtimeContext.workflow.steps[0].outcome.signals
+                          .routedProfileId
+                    : undefined;
             return createMetadata();
         },
         defaultModel: 'gpt-5-mini',
@@ -392,7 +405,24 @@ test('runChatMessages preserves runtime-reported model in workflow generation ex
                     stepCount: 1,
                     maxSteps: 3,
                     maxDurationMs: input.workflowConfig.maxDurationMs,
-                    steps: [],
+                    steps: [
+                        {
+                            stepId: 'step_generate',
+                            stepKind: 'generate',
+                            attempt: 1,
+                            startedAt: new Date().toISOString(),
+                            finishedAt: new Date().toISOString(),
+                            durationMs: 1,
+                            outcome: {
+                                status: 'executed',
+                                summary: 'Generated workflow response.',
+                                signals: {
+                                    routedProfileId: 'openrouter-text-profile',
+                                    routedProvider: 'openrouter',
+                                },
+                            },
+                        },
+                    ],
                 },
                 planContinuation: {
                     continuation: 'continue_message',
@@ -466,6 +496,15 @@ test('runChatMessages preserves runtime-reported model in workflow generation ex
         capturedGenerationExecutionModel,
         'openai/gpt-5-mini-2026-05-01'
     );
+    assert.equal(
+        capturedGenerationExecutionProfileId,
+        'openrouter-text-profile'
+    );
+    assert.equal(
+        capturedWorkflowGenerationProfileId,
+        'openrouter-text-profile'
+    );
+    assert.equal(capturedGenerationExecutionProvider, 'openrouter');
 });
 
 test('runChatMessages passes planner temperament into response metadata runtime context', async () => {
@@ -1200,7 +1239,7 @@ test('runChatMessages forwards execution context into metadata runtime context (
         capturedExecutionContext?.generation?.profileId,
         'openai-text-medium'
     );
-    assert.equal(capturedExecutionContext?.generation?.provider, 'openai');
+    assert.equal(capturedExecutionContext?.generation?.provider, 'openrouter');
     assert.equal(capturedExecutionContext?.generation?.model, 'gpt-5-mini');
     assert.ok((capturedExecutionContext?.generation?.durationMs ?? -1) >= 0);
 });

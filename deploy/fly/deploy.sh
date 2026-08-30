@@ -225,15 +225,60 @@ upload_settings_yaml() {
   fi
 
   echo "Uploading canonical footnote.yaml to /data/config/footnote.yaml..."
+  local settings_hash
+  local settings_base64
+  settings_hash=$(sha256sum "$settings_path" | awk '{print $1}')
+  settings_base64=$(base64 < "$settings_path" | tr -d '\n')
+  local remote_script
+  remote_script=$(cat <<'NODE_SCRIPT'
+const fs = require('node:fs');
+const crypto = require('node:crypto');
+const targetPath = '/data/config/footnote.yaml';
+const tempPath = `${targetPath}.tmp-${process.pid}`;
+const expectedHash = '__EXPECTED_HASH__';
+const settingsBase64 = '__SETTINGS_BASE64__';
+
+try {
+  fs.mkdirSync('/data/config', { recursive: true });
+  fs.writeFileSync(tempPath, Buffer.from(settingsBase64, 'base64'));
+  const actualHash = crypto.createHash('sha256').update(fs.readFileSync(tempPath)).digest('hex');
+  if (actualHash !== expectedHash) {
+    throw new Error('settings hash mismatch');
+  }
+  fs.renameSync(tempPath, targetPath);
+  console.log(`FOOTNOTE_SETTINGS_SHA256=${actualHash}`);
+} catch (error) {
+  try {
+    fs.unlinkSync(tempPath);
+  } catch {
+    // Best-effort cleanup; the original error is the actionable failure.
+  }
+  const message = error instanceof Error ? error.message : String(error);
+  console.error(`footnote.yaml sync failed: ${message}`);
+  process.exitCode = 1;
+}
+NODE_SCRIPT
+  )
+  remote_script=${remote_script//__EXPECTED_HASH__/$settings_hash}
+  remote_script=${remote_script//__SETTINGS_BASE64__/$settings_base64}
+  local remote_script_base64
+  remote_script_base64=$(printf '%s' "$remote_script" | base64 | tr -d '\n')
+  local remote_command
+  remote_command="node -e \"eval(Buffer.from('$remote_script_base64','base64').toString('utf8'))\""
+  local output
+  local status
   set +e
-  fly ssh console -a "$app_name" -C "mkdir -p /data/config && cat > /data/config/footnote.yaml" < "$settings_path"
+  output=$(fly ssh console -a "$app_name" -C "$remote_command" 2>&1)
   status=$?
   set -e
-  if [[ $status -ne 0 ]]; then
-    echo "Warning: unable to upload footnote.yaml to $app_name. Continuing deploy."
-    return
+  if ! grep -Fq "FOOTNOTE_SETTINGS_SHA256=$settings_hash" <<<"$output"; then
+    echo "Error: unable to upload footnote.yaml to $app_name; remote hash verification failed (fly exit code $status)." >&2
+    return 1
   fi
-  echo "Uploaded footnote.yaml to $app_name."
+  if [[ $status -ne 0 ]]; then
+    echo "Warning: Fly CLI returned exit code $status after remote hash verification succeeded." >&2
+  fi
+  echo "Uploaded footnote.yaml to $app_name (SHA-256 $settings_hash)."
 }
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
