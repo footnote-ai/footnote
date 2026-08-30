@@ -66,9 +66,9 @@ for the future chat cutover. Live chat still uses `workflowEngine`.
 
 A workflow is a set of named Steps. Each Step declares its Result inputs,
 optional output, outcomes, and bounds. The caller supplies handlers under the
-same Step names. A handler receives the Step, backend-owned Context, selected
-Results, and one-based iteration and attempt numbers. This keeps the Workflow
-serializable while binding each Step to a concrete backend implementation.
+same Step names. A handler receives its Step name, backend-owned Context,
+selected Results, and one-based iteration and attempt numbers. This keeps the
+Workflow serializable while binding each Step to a concrete backend implementation.
 
 The engine validates the definition before starting, follows declared outcomes,
 bounds runs and retries, records Attempts, and uses the shared Execution
@@ -77,8 +77,9 @@ recovery route and produces a degraded Run; a retry that succeeds does not.
 
 Results are the current named values available to later Steps. When a repeated
 Step omits an optional output, its older value is cleared so a later Step cannot
-mistake it for a new result. Attempt accounting records reported usage only;
-activity reserves capacity but does not invent a tool or model call.
+mistake it for a new result. Failed Steps leave earlier Results available for
+their recovery route. Tool and token usage are observed facts; each admitted
+deliberative Attempt counts even when provider usage is absent.
 
 The current chat shape is a test fixture under `packages/backend/test/`. It
 approximates the current path to prove that the core can express the eventual

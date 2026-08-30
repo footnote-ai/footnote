@@ -8,7 +8,6 @@
  */
 export { executeWorkflow } from './engine.js';
 export {
-    result,
     type Attempt,
     type AttemptResult,
     type AttemptUsage,

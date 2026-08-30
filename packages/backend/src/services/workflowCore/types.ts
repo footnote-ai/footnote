@@ -23,15 +23,7 @@ type SerializableValue =
 
 export type ResultRef = { name: string; optional?: boolean };
 
-export type Result = {
-    readonly name: string;
-    readonly value: SerializableValue;
-};
-
-export const result = (name: string, value: SerializableValue): Result => ({
-    name,
-    value,
-});
+export type Result = SerializableValue;
 
 export type Step = {
     /** Minimal resource facts consumed by shared Execution Contract authority. */
@@ -41,8 +33,8 @@ export type Step = {
     /** The sole Result name this Step may return; required by default on success. */
     output?: { name: string; requiredOn?: readonly string[] };
     next: Readonly<Record<string, string | null>>;
-    /** Maximum semantic executions of this Step within one Run. */
-    maxRuns?: number;
+    /** Maximum executions of this Step within one Workflow Run. */
+    maxIterations?: number;
     /** Maximum Attempts for one semantic Step execution. */
     maxAttempts?: number;
 };
@@ -77,7 +69,6 @@ export type AttemptResult =
 /** Input to a Step handler contains runtime data, not phantom compile-time wiring. */
 export type StepHandlerInput<TContext = unknown> = {
     stepId: string;
-    step: Step;
     context: TContext;
     results: Readonly<Record<string, Result>>;
     /** One-based semantic execution ordinal for this Step. */
@@ -112,7 +103,6 @@ export type Run = {
     steps: readonly {
         stepId: string;
         iteration: number;
-        input: readonly ResultRef[];
         status: 'succeeded' | 'failed';
         outcome?: string;
         result?: Result;
@@ -137,12 +127,7 @@ export type RunTermination =
     | { reason: 'step_failed'; stepId: string }
     | { reason: 'missing_required_input'; stepId: string; inputName: string }
     | { reason: 'undeclared_outcome'; stepId: string; outcome: string }
-    | {
-          reason: 'invalid_result';
-          stepId: string;
-          expectedName?: string;
-          actualName?: string;
-      }
+    | { reason: 'invalid_result'; stepId: string }
     | { reason: 'definition_error'; message: string }
     | { reason: 'handler_unavailable'; stepId: string };
 

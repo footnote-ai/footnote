@@ -7,7 +7,11 @@
  * @footnote-ethics: medium - State correctness supports traceable runtime behavior.
  */
 import type { WorkflowStepKind } from '@footnote/contracts/policy';
-import { activityForWorkflowStep, recordExecution } from './limits.js';
+import {
+    activityForWorkflowStep,
+    recordAttempt,
+    recordStep,
+} from './limits.js';
 
 export type WorkflowState = {
     workflowId: string;
@@ -45,7 +49,7 @@ export const cloneWorkflowState = (state: WorkflowState): WorkflowState => ({
 
 /**
  * Retains the live engine's legacy Step-kind boundary while delegating all
- * Execution Contract counter semantics to `recordExecution`.
+ * Execution Contract counter semantics to explicit Attempt and Step records.
  */
 export const applyStepExecutionToState = (
     state: WorkflowState,
@@ -55,15 +59,17 @@ export const applyStepExecutionToState = (
     deliberationCallsExecuted: number
 ): WorkflowState => ({
     ...state,
-    ...recordExecution({
-        state,
+    ...recordStep({
+        state: recordAttempt({
+            state,
+            activity: activityForWorkflowStep(stepKind),
+            usage: {
+                totalTokens: usageTokens,
+                toolCalls: toolCallsExecuted,
+                deliberationCalls: deliberationCallsExecuted,
+            },
+        }),
         activity: activityForWorkflowStep(stepKind),
-        usage: {
-            totalTokens: usageTokens,
-            toolCalls: toolCallsExecuted,
-            deliberationCalls: deliberationCallsExecuted,
-        },
-        completedStep: true,
     }),
     currentStepKind: stepKind,
 });

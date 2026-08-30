@@ -12,7 +12,6 @@ import assert from 'node:assert/strict';
 import { CURRENT_CHAT_WORKFLOW_FIXTURE } from './fixtures/currentChatWorkflow.fixture.js';
 import {
     executeWorkflow as executeWorkflowCore,
-    result,
     type AttemptResult,
     type ExecutionLimits,
     type ExecuteInput,
@@ -49,7 +48,7 @@ const step = (input: {
     output?: string;
     outputRequiredOn?: readonly string[];
     activity?: Step['activity'];
-    maxRuns?: number;
+    maxIterations?: number;
     maxAttempts?: number;
 }): Step => ({
     ...(input.activity === undefined ? {} : { activity: input.activity }),
@@ -65,7 +64,9 @@ const step = (input: {
               },
           }),
     next: input.next,
-    ...(input.maxRuns === undefined ? {} : { maxRuns: input.maxRuns }),
+    ...(input.maxIterations === undefined
+        ? {}
+        : { maxIterations: input.maxIterations }),
     ...(input.maxAttempts === undefined
         ? {}
         : { maxAttempts: input.maxAttempts }),
@@ -148,7 +149,12 @@ test('runs declared dataflow and gives handlers the full Step, Results, and one-
         definition,
         behavior: {},
         handlers: {
-            code: async ({ stepId, results, iteration, attempt }) => {
+            code: async ({
+                stepId,
+                results,
+                iteration,
+                attempt,
+            }): Promise<AttemptResult> => {
                 seen.push({
                     stepId: stepId,
                     resultNames: Object.keys(results),
@@ -159,12 +165,12 @@ test('runs declared dataflow and gives handlers the full Step, Results, and one-
                     ? {
                           status: 'succeeded',
                           outcome: 'done',
-                          result: result('plan', { route: 'write' }),
+                          result: { route: 'write' },
                       }
                     : {
                           status: 'succeeded',
                           outcome: 'done',
-                          result: result('draft', { text: 'answer' }),
+                          result: { text: 'answer' },
                       };
             },
         },
@@ -175,14 +181,14 @@ test('runs declared dataflow and gives handlers the full Step, Results, and one-
         { stepId: 'plan', resultNames: [], iteration: 1, attempt: 1 },
         { stepId: 'write', resultNames: ['plan'], iteration: 1, attempt: 1 },
     ]);
-    assert.deepEqual(execution.run.results.plan?.value, { route: 'write' });
+    assert.deepEqual(execution.run.results.plan, { route: 'write' });
 });
 
 test('supports a bounded generic style -> check -> retry cycle without special engine branches', async () => {
     const definition = workflow(
         {
             style: step({
-                maxRuns: 2,
+                maxIterations: 2,
                 next: { done: 'check' },
             }),
             check: step({
@@ -254,7 +260,7 @@ test('routes an optional Step failure as degraded while preserving earlier Resul
                 {
                     status: 'succeeded',
                     outcome: 'done',
-                    result: result('plan', { route: 'write' }),
+                    result: { route: 'write' },
                 },
             ],
             style: [
@@ -266,7 +272,7 @@ test('routes an optional Step failure as degraded while preserving earlier Resul
     });
 
     assert.equal(execution.status, 'degraded');
-    assert.deepEqual(execution.run.results.plan?.value, { route: 'write' });
+    assert.deepEqual(execution.run.results.plan, { route: 'write' });
     assert.equal(execution.run.results.style, undefined);
     assert.equal(execution.run.steps[1]?.attempts.length, 2);
 });
@@ -300,7 +306,7 @@ test('marks explicit default-plan recovery as degraded', async () => {
                 {
                     status: 'succeeded',
                     outcome: 'done',
-                    result: result('plan', { fallback: true }),
+                    result: { fallback: true },
                 },
             ],
             finish: [{ status: 'succeeded', outcome: 'done' }],
@@ -345,7 +351,6 @@ test('counts a retried plan or review Step once against its semantic cycle cap',
         const execution = await runWith({
             definition: workflow({
                 [stepId]: step({
-                    id: stepId,
                     activity,
                     maxAttempts: 2,
                     next: { done: null },
@@ -404,7 +409,6 @@ test('allows declared skipped outcomes to omit Results while retaining required 
     assert.deepEqual(admittedWithoutResult.termination, {
         reason: 'invalid_result',
         stepId: 'presentation',
-        expectedName: 'presentation',
     });
 });
 
@@ -441,7 +445,7 @@ test('requires the declared Result and accepts outputless Steps only without Res
         name: string;
         definition: Workflow;
         response: AttemptResult;
-        expected: { expectedName?: string; actualName?: string } | 'completed';
+        expected: 'invalid' | 'completed';
     }> = [
         {
             name: 'required Result',
@@ -454,7 +458,7 @@ test('requires the declared Result and accepts outputless Steps only without Res
             response: {
                 status: 'succeeded',
                 outcome: 'done',
-                result: result('draft', 'ok'),
+                result: 'ok',
             },
             expected: 'completed',
         },
@@ -467,7 +471,7 @@ test('requires the declared Result and accepts outputless Steps only without Res
                 }),
             }),
             response: { status: 'succeeded', outcome: 'done' },
-            expected: { expectedName: 'draft' },
+            expected: 'invalid',
         },
         {
             name: 'mismatched Result',
@@ -480,9 +484,9 @@ test('requires the declared Result and accepts outputless Steps only without Res
             response: {
                 status: 'succeeded',
                 outcome: 'done',
-                result: result('other', 'bad'),
+                result: 'bad',
             },
-            expected: { expectedName: 'draft', actualName: 'other' },
+            expected: 'completed',
         },
         {
             name: 'undeclared Result',
@@ -494,9 +498,9 @@ test('requires the declared Result and accepts outputless Steps only without Res
             response: {
                 status: 'succeeded',
                 outcome: 'done',
-                result: result('unexpected', 'bad'),
+                result: 'bad',
             },
-            expected: { actualName: 'unexpected' },
+            expected: 'invalid',
         },
         {
             name: 'outputless Step',
@@ -522,7 +526,7 @@ test('requires the declared Result and accepts outputless Steps only without Res
         assert.equal(execution.status, 'rejected', item.name);
         assert.deepEqual(
             execution.termination,
-            { reason: 'invalid_result', stepId: 'write', ...item.expected },
+            { reason: 'invalid_result', stepId: 'write' },
             item.name
         );
     }
@@ -753,7 +757,7 @@ test('allows explicit zero-token finalization after token exhaustion recovers a 
                     return {
                         status: 'succeeded',
                         outcome: 'generated',
-                        result: result('draft', 'last good draft'),
+                        result: 'last good draft',
                         usage: { totalTokens: 3 },
                     };
                 }
@@ -765,7 +769,7 @@ test('allows explicit zero-token finalization after token exhaustion recovers a 
                 return {
                     status: 'succeeded',
                     outcome: 'done',
-                    result: result('answer', 'finalized draft'),
+                    result: 'finalized draft',
                 };
             },
         },
@@ -782,8 +786,8 @@ test('allows explicit zero-token finalization after token exhaustion recovers a 
     assert.equal(reviewCalls, 0);
     assert.equal(finishCalls, 1);
     assert.equal(execution.status, 'degraded');
-    assert.equal(execution.run.results.draft?.value, 'last good draft');
-    assert.equal(execution.run.results.answer?.value, 'finalized draft');
+    assert.equal(execution.run.results.draft, 'last good draft');
+    assert.equal(execution.run.results.answer, 'finalized draft');
 });
 
 test('stops on observed resource overruns while retaining valid prior Results', async () => {
@@ -799,7 +803,7 @@ test('stops on observed resource overruns while retaining valid prior Results', 
             code: async () => ({
                 status: 'succeeded',
                 outcome: 'done',
-                result: result('draft', 'kept'),
+                result: 'kept',
                 usage: { totalTokens: 4 },
             }),
         },
@@ -850,12 +854,12 @@ test('stops on observed resource overruns while retaining valid prior Results', 
                     ? {
                           status: 'succeeded',
                           outcome: 'generated',
-                          result: result('draft', 'prior draft'),
+                          result: 'prior draft',
                       }
                     : {
                           status: 'succeeded',
                           outcome: 'revise',
-                          result: result('review', 'retry'),
+                          result: 'retry',
                           usage: { totalTokens: 4 },
                       },
         },
@@ -889,7 +893,7 @@ test('stops on observed resource overruns while retaining valid prior Results', 
         reason: 'execution_limit',
         limit: 'maxTokensTotal',
     });
-    assert.equal(tokenOverrun.run.results.draft?.value, 'kept');
+    assert.equal(tokenOverrun.run.results.draft, 'kept');
     assert.deepEqual(toolOverrun.termination, {
         reason: 'execution_limit',
         limit: 'maxToolCalls',
@@ -898,7 +902,7 @@ test('stops on observed resource overruns while retaining valid prior Results', 
         reason: 'execution_limit',
         limit: 'maxTokensTotal',
     });
-    assert.equal(reviewOverrun.run.results.draft?.value, 'prior draft');
+    assert.equal(reviewOverrun.run.results.draft, 'prior draft');
     assert.deepEqual(durationOverrun.termination, {
         reason: 'execution_limit',
         limit: 'maxDurationMs',
@@ -941,7 +945,6 @@ test('applies canonical caps, reservation, duration, and presentation accounting
     const presentation = await runWith({
         definition: workflow({
             presentation: step({
-                activity: { deliberation: 'none' },
                 next: { done: null },
             }),
         }),
@@ -950,7 +953,6 @@ test('applies canonical caps, reservation, duration, and presentation accounting
                 {
                     status: 'succeeded',
                     outcome: 'done',
-                    usage: { deliberationCalls: 1 },
                 },
             ],
         },
@@ -1005,23 +1007,28 @@ test('describes the current chat cutover fixture', () => {
         CURRENT_CHAT_WORKFLOW_FIXTURE.steps.defaultPlan?.output?.name,
         'plan'
     );
-    assert.deepEqual(
-        CURRENT_CHAT_WORKFLOW_FIXTURE.steps.presentation?.activity,
-        {
-            deliberation: 'none',
-        }
+    assert.equal(
+        'activity' in CURRENT_CHAT_WORKFLOW_FIXTURE.steps.presentation
+            ? CURRENT_CHAT_WORKFLOW_FIXTURE.steps.presentation.activity
+            : undefined,
+        undefined
     );
     assert.deepEqual(
         CURRENT_CHAT_WORKFLOW_FIXTURE.steps.presentation?.output?.requiredOn,
         ['admitted']
     );
-    assert.equal(CURRENT_CHAT_WORKFLOW_FIXTURE.steps.presentation?.maxRuns, 1);
     assert.equal(
-        CURRENT_CHAT_WORKFLOW_FIXTURE.steps.presentation?.maxAttempts,
+        CURRENT_CHAT_WORKFLOW_FIXTURE.steps.presentation?.maxIterations,
+        1
+    );
+    assert.equal(
+        'maxAttempts' in CURRENT_CHAT_WORKFLOW_FIXTURE.steps.presentation
+            ? CURRENT_CHAT_WORKFLOW_FIXTURE.steps.presentation.maxAttempts
+            : undefined,
         undefined
     );
-    assert.equal(CURRENT_CHAT_WORKFLOW_FIXTURE.steps.write?.maxRuns, 3);
-    assert.equal(CURRENT_CHAT_WORKFLOW_FIXTURE.steps.review?.maxRuns, 3);
+    assert.equal(CURRENT_CHAT_WORKFLOW_FIXTURE.steps.write?.maxIterations, 3);
+    assert.equal(CURRENT_CHAT_WORKFLOW_FIXTURE.steps.review?.maxIterations, 3);
     assert.deepEqual(
         CURRENT_CHAT_WORKFLOW_FIXTURE.steps.review?.next.revise,
         'replan'
@@ -1062,7 +1069,7 @@ test('describes the current chat cutover fixture', () => {
         CURRENT_CHAT_WORKFLOW_FIXTURE.steps.finish?.input?.map(
             (reference) => reference.name
         ),
-        ['draft', 'plan', 'evidence', 'review']
+        ['draft', 'plan']
     );
     for (const currentStep of ['write', 'review'] as const) {
         assert.deepEqual(
@@ -1088,12 +1095,12 @@ test('executes reviewed-chat presentation and replan skip/failure paths without 
                 plan: async () => ({
                     status: 'succeeded',
                     outcome: 'continue',
-                    result: result('plan', { mode: 'reviewed' }),
+                    result: { mode: 'reviewed' },
                 }),
                 retrieve: async () => ({
                     status: 'succeeded',
                     outcome: 'available',
-                    result: result('evidence', { sources: 1 }),
+                    result: { sources: 1 },
                 }),
                 presentation: async () => ({
                     status: 'succeeded',
@@ -1104,9 +1111,9 @@ test('executes reviewed-chat presentation and replan skip/failure paths without 
                     return {
                         status: 'succeeded',
                         outcome: 'generated',
-                        result: result('draft', {
+                        result: {
                             version: writeInputs.length,
-                        }),
+                        },
                     };
                 },
                 review: async () => {
@@ -1115,12 +1122,12 @@ test('executes reviewed-chat presentation and replan skip/failure paths without 
                         ? {
                               status: 'succeeded',
                               outcome: 'revise',
-                              result: result('review', { action: 'revise' }),
+                              result: { action: 'revise' },
                           }
                         : {
                               status: 'succeeded',
                               outcome: 'done',
-                              result: result('review', { action: 'done' }),
+                              result: { action: 'done' },
                           };
                 },
                 replan: async () =>
@@ -1136,7 +1143,7 @@ test('executes reviewed-chat presentation and replan skip/failure paths without 
                     return {
                         status: 'succeeded',
                         outcome: 'done',
-                        result: result('answer', 'final'),
+                        result: 'final',
                     };
                 },
             },
@@ -1172,7 +1179,7 @@ test('executes reviewed-chat presentation and replan skip/failure paths without 
             'finish',
         ]
     );
-    assert.deepEqual(failed.execution.run.results.draft?.value, { version: 1 });
+    assert.deepEqual(failed.execution.run.results.draft, { version: 1 });
     assert.equal(failed.finishInputs.includes('draft'), true);
 });
 
@@ -1187,7 +1194,7 @@ test('clears an omitted optional Result before a repeated downstream Step', asyn
                     continue: 'write',
                     skipped: 'write',
                 },
-                maxRuns: 2,
+                maxIterations: 2,
             }),
             write: step({
                 input: [
@@ -1200,7 +1207,7 @@ test('clears an omitted optional Result before a repeated downstream Step', asyn
                     again: 'replan',
                     done: null,
                 },
-                maxRuns: 2,
+                maxIterations: 2,
             }),
         }),
         context: { requestId: 'req-1' },
@@ -1211,7 +1218,7 @@ test('clears an omitted optional Result before a repeated downstream Step', asyn
                         ? {
                               status: 'succeeded',
                               outcome: 'continue',
-                              result: result('revisionPlan', { version: 1 }),
+                              result: { version: 1 },
                           }
                         : { status: 'succeeded', outcome: 'skipped' };
                 }
@@ -1232,20 +1239,20 @@ test('clears an omitted optional Result before a repeated downstream Step', asyn
     assert.equal(execution.run.results.revisionPlan, undefined);
 });
 
-test('clears a failed repeated Step output before finalization', async () => {
+test('preserves a failed repeated Step output before finalization', async () => {
     let finishInputs: string[] = [];
     const execution = await executeWorkflow({
         workflow: workflow({
             write: step({
                 output: 'draft',
                 next: { generated: 'review' },
-                maxRuns: 2,
+                maxIterations: 2,
             }),
             review: step({
                 input: [{ name: 'draft' }],
                 output: 'review',
                 next: { revise: 'write', failed: 'finish' },
-                maxRuns: 2,
+                maxIterations: 2,
             }),
             finish: step({
                 input: [
@@ -1261,14 +1268,14 @@ test('clears a failed repeated Step output before finalization', async () => {
             write: async ({ iteration }) => ({
                 status: 'succeeded',
                 outcome: 'generated',
-                result: result('draft', { iteration }),
+                result: { iteration },
             }),
             review: async ({ iteration }) =>
                 iteration === 1
                     ? {
                           status: 'succeeded',
                           outcome: 'revise',
-                          result: result('review', { draft: 1 }),
+                          result: { draft: 1 },
                       }
                     : {
                           status: 'failed',
@@ -1280,7 +1287,7 @@ test('clears a failed repeated Step output before finalization', async () => {
                 return {
                     status: 'succeeded',
                     outcome: 'done',
-                    result: result('answer', 'final'),
+                    result: 'final',
                 };
             },
         },
@@ -1291,6 +1298,59 @@ test('clears a failed repeated Step output before finalization', async () => {
 
     assert.equal(execution.status, 'degraded');
     assert.equal(finishInputs.includes('draft'), true);
-    assert.equal(finishInputs.includes('review'), false);
-    assert.equal(execution.run.results.review, undefined);
+    assert.equal(finishInputs.includes('review'), true);
+    assert.notEqual(execution.run.results.review, undefined);
+});
+
+test('preserves the last valid Draft when a repeated write Step fails', async () => {
+    let finishDraft: unknown;
+    const execution = await executeWorkflow({
+        workflow: workflow({
+            write: step({
+                output: 'draft',
+                next: { generated: 'review', failed: 'finish' },
+                maxIterations: 2,
+            }),
+            review: step({
+                input: [{ name: 'draft' }],
+                next: { revise: 'write' },
+            }),
+            finish: step({
+                input: [{ name: 'draft' }],
+                output: 'answer',
+                next: { done: null },
+            }),
+        }),
+        context: { requestId: 'req-1' },
+        handlers: {
+            write: async ({ iteration }) =>
+                iteration === 1
+                    ? {
+                          status: 'succeeded',
+                          outcome: 'generated',
+                          result: { version: 'A' },
+                      }
+                    : {
+                          status: 'failed',
+                          errorCode: 'write_unavailable',
+                          retryable: false,
+                      },
+            review: async () => ({ status: 'succeeded', outcome: 'revise' }),
+            finish: async ({ results }) => {
+                finishDraft = results.draft;
+                return {
+                    status: 'succeeded',
+                    outcome: 'done',
+                    result: 'final',
+                };
+            },
+        },
+        executionLimits: limits,
+        startedAtMs: 0,
+        now: () => 1,
+    });
+
+    assert.equal(execution.status, 'degraded');
+    assert.deepEqual(finishDraft, { version: 'A' });
+    assert.deepEqual(execution.run.results.draft, { version: 'A' });
 });

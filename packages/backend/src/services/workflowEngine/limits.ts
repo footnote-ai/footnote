@@ -22,8 +22,8 @@ export type ExhaustedExecutionLimit = WorkflowLimitKey;
 
 /** Minimal resource facts used by the Execution Contract, independent of Step names. */
 export type ExecutionActivity = {
-    tool?: 'none' | 'one-or-more';
-    deliberation?: 'none' | 'general' | 'plan' | 'review';
+    tool?: 'one-or-more';
+    deliberation?: 'general' | 'plan' | 'review';
 };
 
 export type ExecutionUsage = {
@@ -178,7 +178,6 @@ export const admitExecution = (input: {
     }
     if (
         deliberation !== undefined &&
-        deliberation !== 'none' &&
         input.state.deliberationCallCount >= input.limits.maxDeliberationCalls
     ) {
         return { admitted: false, exhaustedBy: 'maxDeliberationCalls' };
@@ -222,60 +221,45 @@ export const admitExecution = (input: {
  * remains outside the plan/review deliberation budget without core-specific
  * exceptions.
  */
-export const recordExecution = (input: {
+export const recordAttempt = (input: {
     state: ExecutionLimitState;
     activity?: ExecutionActivity;
     usage?: ExecutionUsage;
-    /** A deliberative Attempt was admitted and invoked, even if usage is absent. */
-    deliberationAttempted?: boolean;
-    completedStep?: boolean;
 }): ExecutionLimitState => {
-    const recordsResourceUsage =
-        input.completedStep !== true || input.usage !== undefined;
-    const reportedToolCalls = recordsResourceUsage
-        ? sanitizeUsageCount(input.usage?.toolCalls)
-        : 0;
-    const reportedDeliberationCalls = recordsResourceUsage
-        ? sanitizeUsageCount(input.usage?.deliberationCalls)
-        : 0;
-    // Activity reserves capacity before an Attempt. Accounting records only
-    // what the executor observed; a blocked or no-op tool Step consumed none.
-    const toolCalls =
-        recordsResourceUsage && input.activity?.tool !== 'none'
-            ? reportedToolCalls
-            : 0;
-    const deliberationCalls = input.deliberationAttempted
-        ? Math.max(1, reportedDeliberationCalls)
-        : recordsResourceUsage && input.activity?.deliberation !== 'none'
-          ? reportedDeliberationCalls
-          : 0;
+    const toolCalls = sanitizeUsageCount(input.usage?.toolCalls);
+    const reportedDeliberationCalls = sanitizeUsageCount(
+        input.usage?.deliberationCalls
+    );
+    const deliberationCalls =
+        input.activity?.deliberation === undefined
+            ? reportedDeliberationCalls
+            : Math.max(1, reportedDeliberationCalls);
 
     return {
         ...input.state,
-        stepCount:
-            input.state.stepCount + (input.completedStep === true ? 1 : 0),
         toolCallCount: input.state.toolCallCount + toolCalls,
-        planCallCount:
-            input.state.planCallCount +
-            (input.completedStep === true &&
-            input.activity?.deliberation === 'plan'
-                ? 1
-                : 0),
-        reviewCallCount:
-            input.state.reviewCallCount +
-            (input.completedStep === true &&
-            input.activity?.deliberation === 'review'
-                ? 1
-                : 0),
         deliberationCallCount:
             input.state.deliberationCallCount + deliberationCalls,
         totalTokens:
             input.state.totalTokens +
-            (recordsResourceUsage
-                ? sanitizeUsageCount(input.usage?.totalTokens)
-                : 0),
+            sanitizeUsageCount(input.usage?.totalTokens),
     };
 };
+
+/** Records one completed semantic Step after its Attempts finish. */
+export const recordStep = (input: {
+    state: ExecutionLimitState;
+    activity?: ExecutionActivity;
+}): ExecutionLimitState => ({
+    ...input.state,
+    stepCount: input.state.stepCount + 1,
+    planCallCount:
+        input.state.planCallCount +
+        (input.activity?.deliberation === 'plan' ? 1 : 0),
+    reviewCallCount:
+        input.state.reviewCallCount +
+        (input.activity?.deliberation === 'review' ? 1 : 0),
+});
 
 /** Adapts the live engine's legacy taxonomy at its boundary to generic resource facts. */
 export const activityForWorkflowStep = (

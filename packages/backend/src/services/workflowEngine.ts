@@ -327,7 +327,8 @@ export {
     checkExecutionLimits,
     findObservedExecutionLimit,
     mapLimitExhaustionToTerminationReason,
-    recordExecution,
+    recordAttempt,
+    recordStep,
 } from './workflowEngine/limits.js';
 export { buildPlannerStepRecord } from './workflowEngine/plannerStepRecord.js';
 export type { BuildPlannerStepRecordInput } from './workflowEngine/plannerStepRecord.js';

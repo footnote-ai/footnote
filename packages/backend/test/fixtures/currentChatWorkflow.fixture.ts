@@ -5,15 +5,13 @@
  * @footnote-risk: low - This fixture only checks the cutover target shape.
  * @footnote-ethics: low - It cannot affect live chat behavior.
  */
-import type { Step, Workflow } from '../../src/services/workflowCore/types.js';
+import type { Workflow } from '../../src/services/workflowCore/types.js';
 
-const step = (definition: Step): Step => definition;
-
-export const CURRENT_CHAT_WORKFLOW_FIXTURE: Workflow = {
-    id: 'chat-reviewed',
+export const CURRENT_CHAT_WORKFLOW_FIXTURE = {
+    id: 'chat',
     start: 'plan',
     steps: {
-        plan: step({
+        plan: {
             activity: { deliberation: 'plan' },
             output: { name: 'plan' },
             next: {
@@ -21,15 +19,15 @@ export const CURRENT_CHAT_WORKFLOW_FIXTURE: Workflow = {
                 failed: 'defaultPlan',
                 terminal: 'finish',
             },
-            maxRuns: 1,
+            maxIterations: 1,
             maxAttempts: 2,
-        }),
-        defaultPlan: step({
+        },
+        defaultPlan: {
             output: { name: 'plan' },
             next: { continue: 'retrieve', failed: 'finish' },
-            maxRuns: 1,
-        }),
-        retrieve: step({
+            maxIterations: 1,
+        },
+        retrieve: {
             activity: { tool: 'one-or-more' },
             input: [{ name: 'plan' }],
             output: { name: 'evidence' },
@@ -38,16 +36,15 @@ export const CURRENT_CHAT_WORKFLOW_FIXTURE: Workflow = {
                 failed: 'presentation',
                 clarification: 'finish',
             },
-            maxRuns: 1,
-        }),
-        presentation: step({
-            activity: { deliberation: 'none' },
+            maxIterations: 1,
+        },
+        presentation: {
             input: [{ name: 'plan' }, { name: 'evidence', optional: true }],
             output: { name: 'presentation', requiredOn: ['admitted'] },
             next: { admitted: 'write', skipped: 'write', failed: 'write' },
-            maxRuns: 1,
-        }),
-        write: step({
+            maxIterations: 1,
+        },
+        write: {
             input: [
                 { name: 'plan' },
                 { name: 'evidence', optional: true },
@@ -58,35 +55,33 @@ export const CURRENT_CHAT_WORKFLOW_FIXTURE: Workflow = {
             ],
             output: { name: 'draft' },
             next: { generated: 'review', failed: 'finish' },
-            maxRuns: 3,
+            maxIterations: 3,
             maxAttempts: 2,
-        }),
-        review: step({
+        },
+        review: {
             activity: { deliberation: 'review' },
             input: [{ name: 'draft' }, { name: 'evidence', optional: true }],
             output: { name: 'review' },
             next: { done: 'finish', revise: 'replan', failed: 'finish' },
-            maxRuns: 3,
+            maxIterations: 3,
             maxAttempts: 2,
-        }),
-        replan: step({
+        },
+        replan: {
             activity: { deliberation: 'plan' },
             input: [{ name: 'plan' }, { name: 'draft' }, { name: 'review' }],
             output: { name: 'revisionPlan', requiredOn: ['continue'] },
             next: { continue: 'write', skipped: 'write', failed: 'finish' },
-            maxRuns: 2,
+            maxIterations: 2,
             maxAttempts: 2,
-        }),
-        finish: step({
+        },
+        finish: {
             input: [
                 { name: 'draft', optional: true },
                 { name: 'plan', optional: true },
-                { name: 'evidence', optional: true },
-                { name: 'review', optional: true },
             ],
             output: { name: 'answer' },
             next: { done: null, failed: null },
-            maxRuns: 1,
-        }),
+            maxIterations: 1,
+        },
     },
-};
+} satisfies Workflow;

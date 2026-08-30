@@ -9,7 +9,8 @@
 import {
     admitExecution,
     findObservedExecutionLimit,
-    recordExecution,
+    recordAttempt,
+    recordStep,
     type ExecutionLimitState,
     type ExhaustedExecutionLimit,
     validateExecutionLimits,
@@ -106,23 +107,32 @@ const executionLimitStateFor = (run: Run): ExecutionLimitState => ({
     totalTokens: run.usage.totalTokens,
 });
 
-const recordRunExecution = (input: {
+const recordRunAttempt = (input: {
     run: Run;
     step?: Step;
     usage?: AttemptResult['usage'];
-    deliberationAttempted?: boolean;
-    completedStep?: boolean;
 }): void => {
-    const state = recordExecution({
+    const state = recordAttempt({
         state: executionLimitStateFor(input.run),
         ...(input.step === undefined ? {} : { activity: input.step.activity }),
         ...(input.usage === undefined ? {} : { usage: input.usage }),
-        ...(input.deliberationAttempted === true
-            ? { deliberationAttempted: true }
-            : {}),
-        ...(input.completedStep === true ? { completedStep: true } : {}),
     });
     input.run.usage = {
+        stepCount: state.stepCount,
+        totalTokens: state.totalTokens,
+        toolCalls: state.toolCallCount,
+        deliberationCalls: state.deliberationCallCount,
+        planCalls: state.planCallCount,
+        reviewCalls: state.reviewCallCount,
+    };
+};
+
+const recordRunStep = (run: Run, step?: Step): void => {
+    const state = recordStep({
+        state: executionLimitStateFor(run),
+        ...(step === undefined ? {} : { activity: step.activity }),
+    });
+    run.usage = {
         stepCount: state.stepCount,
         totalTokens: state.totalTokens,
         toolCalls: state.toolCallCount,
@@ -162,7 +172,8 @@ const validateDefinition = (workflow: Workflow): string | undefined => {
             return `Workflow step input is invalid: ${key}`;
         }
         if (
-            (step.maxRuns !== undefined && !isPositiveInteger(step.maxRuns)) ||
+            (step.maxIterations !== undefined &&
+                !isPositiveInteger(step.maxIterations)) ||
             (step.maxAttempts !== undefined &&
                 !isPositiveInteger(step.maxAttempts))
         ) {
@@ -251,28 +262,14 @@ const validateAttemptResult = (input: {
     step: Step;
     outcome: string;
     result: Result | undefined;
-}):
-    | { valid: true }
-    | { valid: false; expectedName?: string; actualName?: string } => {
+}): boolean => {
     if (input.step.output === undefined) {
-        return input.result === undefined
-            ? { valid: true }
-            : { valid: false, actualName: input.result.name };
+        return input.result === undefined;
     }
     const requiresResult =
         input.step.output.requiredOn === undefined ||
         input.step.output.requiredOn.includes(input.outcome);
-    if (input.result === undefined && requiresResult) {
-        return { valid: false, expectedName: input.step.output.name };
-    }
-    if (input.result === undefined) return { valid: true };
-    return input.result.name === input.step.output.name
-        ? { valid: true }
-        : {
-              valid: false,
-              expectedName: input.step.output.name,
-              actualName: input.result.name,
-          };
+    return input.result !== undefined || !requiresResult;
 };
 
 /**
@@ -341,10 +338,13 @@ export const executeWorkflow = async <TContext>(
             });
         }
 
-        const priorRuns = steps.filter(
+        const priorIterations = steps.filter(
             (record) => record.stepId === currentStepId
         ).length;
-        if (step.maxRuns !== undefined && priorRuns >= step.maxRuns) {
+        if (
+            step.maxIterations !== undefined &&
+            priorIterations >= step.maxIterations
+        ) {
             return finish({
                 run,
                 steps,
@@ -389,7 +389,7 @@ export const executeWorkflow = async <TContext>(
             });
         }
 
-        const stepRunNumber = priorRuns + 1;
+        const stepRunNumber = priorIterations + 1;
         const maxAttempts = step.maxAttempts ?? DEFAULT_MAX_ATTEMPTS;
         const attempts: Attempt[] = [];
         let successfulResult: Result | undefined;
@@ -423,11 +423,10 @@ export const executeWorkflow = async <TContext>(
             if (!admission.admitted) {
                 if ('error' in admission) {
                     if (attempts.length > 0) {
-                        recordRunExecution({ run, step, completedStep: true });
+                        recordRunStep(run, step);
                         steps.push({
                             stepId: currentStepId,
                             iteration: stepRunNumber,
-                            input: step.input ?? [],
                             status: 'failed',
                             attempts,
                         });
@@ -458,11 +457,10 @@ export const executeWorkflow = async <TContext>(
                     break;
                 }
                 if (attempts.length > 0) {
-                    recordRunExecution({ run, step, completedStep: true });
+                    recordRunStep(run, step);
                     steps.push({
                         stepId: currentStepId,
                         iteration: stepRunNumber,
-                        input: step.input ?? [],
                         status: 'failed',
                         attempts,
                     });
@@ -494,13 +492,9 @@ export const executeWorkflow = async <TContext>(
                 };
             }
             const attemptFinishedAtMs = now();
-            recordRunExecution({
+            recordRunAttempt({
                 run,
                 step,
-                ...(step.activity?.deliberation === undefined ||
-                step.activity.deliberation === 'none'
-                    ? {}
-                    : { deliberationAttempted: true }),
                 ...(attemptResult.usage === undefined
                     ? {}
                     : { usage: attemptResult.usage }),
@@ -526,11 +520,10 @@ export const executeWorkflow = async <TContext>(
                         errorCode: 'undeclared_outcome',
                         errorMessage: `Outcome is not declared by step: ${attemptResult.outcome}`,
                     });
-                    recordRunExecution({ run, completedStep: true });
+                    recordRunStep(run);
                     steps.push({
                         stepId: currentStepId,
                         iteration: stepRunNumber,
-                        input: step.input ?? [],
                         status: 'failed',
                         attempts,
                     });
@@ -553,7 +546,7 @@ export const executeWorkflow = async <TContext>(
                     outcome: attemptResult.outcome,
                     result: attemptResult.result,
                 });
-                if (!resultValidation.valid) {
+                if (!resultValidation) {
                     attempts.push({
                         ...attempt,
                         status: 'rejected',
@@ -561,11 +554,10 @@ export const executeWorkflow = async <TContext>(
                         errorMessage:
                             'Result does not satisfy the Step output declaration',
                     });
-                    recordRunExecution({ run, completedStep: true });
+                    recordRunStep(run);
                     steps.push({
                         stepId: currentStepId,
                         iteration: stepRunNumber,
-                        input: step.input ?? [],
                         status: 'failed',
                         attempts,
                     });
@@ -578,15 +570,6 @@ export const executeWorkflow = async <TContext>(
                         termination: {
                             reason: 'invalid_result',
                             stepId: currentStepId,
-                            ...(resultValidation.expectedName === undefined
-                                ? {}
-                                : {
-                                      expectedName:
-                                          resultValidation.expectedName,
-                                  }),
-                            ...(resultValidation.actualName === undefined
-                                ? {}
-                                : { actualName: resultValidation.actualName }),
                         },
                     });
                 }
@@ -611,11 +594,10 @@ export const executeWorkflow = async <TContext>(
             }
         }
 
-        recordRunExecution({ run, step, completedStep: true });
+        recordRunStep(run, step);
         steps.push({
             stepId: currentStepId,
             iteration: stepRunNumber,
-            input: step.input ?? [],
             status: failed ? 'failed' : 'succeeded',
             ...(successfulOutcome === undefined
                 ? {}
@@ -627,8 +609,12 @@ export const executeWorkflow = async <TContext>(
         });
 
         if (successfulResult !== undefined) {
-            results[successfulResult.name] = successfulResult;
-        } else if (step.output !== undefined) {
+            if (step.output !== undefined)
+                results[step.output.name] = successfulResult;
+        } else if (
+            successfulOutcome !== undefined &&
+            step.output !== undefined
+        ) {
             // An omitted output or failed Step leaves no current Result for
             // this Step; an earlier loop iteration cannot stand in for it.
             delete results[step.output.name];
