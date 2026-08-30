@@ -224,7 +224,7 @@ export const executeReviewLoop = async (ctx: {
     };
     const checkLimits = (
         nextStepKind?: WorkflowStepKind,
-        nextStepTokenBudget = 0
+        nextStepTokenBudget?: number
     ): LimitStopEvaluation =>
         ctx.stopIfOverLimits(nextStepKind, nextStepTokenBudget, workflowState);
     const checkTokenBudget = (): LimitStopEvaluation =>

@@ -322,8 +322,13 @@ export {
     createInitialWorkflowState,
 } from './workflowEngine/state.js';
 export {
+    activityForWorkflowStep,
+    admitExecution,
     checkExecutionLimits,
+    findObservedExecutionLimit,
     mapLimitExhaustionToTerminationReason,
+    recordAttempt,
+    recordStep,
 } from './workflowEngine/limits.js';
 export { buildPlannerStepRecord } from './workflowEngine/plannerStepRecord.js';
 export type { BuildPlannerStepRecordInput } from './workflowEngine/plannerStepRecord.js';
@@ -504,12 +509,13 @@ export const runBoundedReviewWorkflow = async ({
             plannerStepRecord.usage?.totalTokens ??
             (plannerStepRecord.usage?.promptTokens ?? 0) +
                 (plannerStepRecord.usage?.completionTokens ?? 0);
-        workflowState = {
-            ...workflowState,
-            stepCount: workflowState.stepCount + 1,
-            planCallCount: workflowState.planCallCount + 1,
-            totalTokens: workflowState.totalTokens + plannerStepUsageTokens,
-        };
+        workflowState = applyStepExecutionToState(
+            workflowState,
+            'plan',
+            plannerStepUsageTokens,
+            0,
+            1
+        );
     }
 
     const captureStep = (input: {
@@ -578,7 +584,7 @@ export const runBoundedReviewWorkflow = async ({
 
     const stopIfOverLimits = (
         nextStepKind?: WorkflowStepKind,
-        nextStepTokenBudget = 0,
+        nextStepTokenBudget: number | undefined = undefined,
         stateForCheck: WorkflowState = workflowState
     ): LimitStopEvaluation => {
         const limitsCheck = checkExecutionLimits(

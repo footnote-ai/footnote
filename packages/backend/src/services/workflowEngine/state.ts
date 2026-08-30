@@ -1,12 +1,17 @@
 /**
- * @description: Defines workflow runtime state and deterministic state updates
- * per executed step.
+ * @description: Defines live workflow runtime state and delegates counter updates
+ * to the shared Execution Contract accounting authority.
  * @footnote-scope: core
  * @footnote-module: WorkflowEngineState
  * @footnote-risk: medium - Counter drift can break limits and lineage accuracy.
  * @footnote-ethics: medium - State correctness supports traceable runtime behavior.
  */
 import type { WorkflowStepKind } from '@footnote/contracts/policy';
+import {
+    activityForWorkflowStep,
+    recordAttempt,
+    recordStep,
+} from './limits.js';
 
 export type WorkflowState = {
     workflowId: string;
@@ -42,37 +47,29 @@ export const cloneWorkflowState = (state: WorkflowState): WorkflowState => ({
     ...state,
 });
 
+/**
+ * Retains the live engine's legacy Step-kind boundary while delegating all
+ * Execution Contract counter semantics to explicit Attempt and Step records.
+ */
 export const applyStepExecutionToState = (
     state: WorkflowState,
     stepKind: WorkflowStepKind,
     usageTokens: number,
     toolCallsExecuted: number,
     deliberationCallsExecuted: number
-): WorkflowState => {
-    const sanitizeDelta = (value: number): number => {
-        if (!Number.isFinite(value)) {
-            return 0;
-        }
-
-        return Math.max(0, Math.floor(value));
-    };
-
-    const sanitizedUsageTokens = sanitizeDelta(usageTokens);
-    const sanitizedToolCallsExecuted = sanitizeDelta(toolCallsExecuted);
-    const sanitizedDeliberationCallsExecuted = sanitizeDelta(
-        deliberationCallsExecuted
-    );
-
-    return {
-        ...state,
-        currentStepKind: stepKind,
-        stepCount: state.stepCount + 1,
-        toolCallCount: state.toolCallCount + sanitizedToolCallsExecuted,
-        planCallCount: state.planCallCount + (stepKind === 'plan' ? 1 : 0),
-        reviewCallCount:
-            state.reviewCallCount + (stepKind === 'assess' ? 1 : 0),
-        deliberationCallCount:
-            state.deliberationCallCount + sanitizedDeliberationCallsExecuted,
-        totalTokens: state.totalTokens + sanitizedUsageTokens,
-    };
-};
+): WorkflowState => ({
+    ...state,
+    ...recordStep({
+        state: recordAttempt({
+            state,
+            activity: activityForWorkflowStep(stepKind),
+            usage: {
+                totalTokens: usageTokens,
+                toolCalls: toolCallsExecuted,
+                deliberationCalls: deliberationCallsExecuted,
+            },
+        }),
+        activity: activityForWorkflowStep(stepKind),
+    }),
+    currentStepKind: stepKind,
+});

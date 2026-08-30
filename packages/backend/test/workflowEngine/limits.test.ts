@@ -8,8 +8,11 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
+    admitExecution,
     checkExecutionLimits,
     mapLimitExhaustionToTerminationReason,
+    recordAttempt,
+    recordStep,
     type ExecutionLimits,
 } from '../../src/services/workflowEngine.js';
 import {
@@ -182,6 +185,36 @@ test('checkExecutionLimits reserves the requested next-step token budget', () =>
     });
 });
 
+test('checkExecutionLimits preserves an explicit zero-token reservation', () => {
+    const state = {
+        workflowId: 'wf_1',
+        workflowName: 'workflow_test',
+        startedAtMs: 500,
+        currentStepKind: null,
+        stepCount: 0,
+        toolCallCount: 0,
+        planCallCount: 0,
+        reviewCallCount: 0,
+        deliberationCallCount: 0,
+        totalTokens: 100,
+    };
+    const limits: ExecutionLimits = {
+        maxWorkflowSteps: 10,
+        maxToolCalls: 2,
+        maxDeliberationCalls: 4,
+        maxTokensTotal: 100,
+        maxDurationMs: 1_000,
+    };
+
+    assert.deepEqual(checkExecutionLimits(state, limits, 600, 'finalize'), {
+        withinLimits: false,
+        exhaustedBy: 'maxTokensTotal',
+    });
+    assert.deepEqual(checkExecutionLimits(state, limits, 600, 'finalize', 0), {
+        withinLimits: true,
+    });
+});
+
 test('generation admission counts prompt estimate and clamps provider output', () => {
     const bounded = boundGenerationRequestToWorkflowBudget({
         request: {
@@ -281,5 +314,115 @@ test('presentation admission reserves assessment and candidate text copied into 
             assessmentOutputTokens: 50,
         }),
         undefined
+    );
+});
+
+test('admitExecution preserves plan and review caps while excluding presentation', () => {
+    const state = {
+        startedAtMs: 500,
+        stepCount: 0,
+        toolCallCount: 0,
+        planCallCount: 1,
+        reviewCallCount: 1,
+        deliberationCallCount: 2,
+        totalTokens: 0,
+    };
+    const caps: ExecutionLimits = {
+        ...createLimits(),
+        maxPlanCycles: 1,
+        maxReviewCycles: 1,
+    };
+
+    assert.deepEqual(
+        admitExecution({
+            state,
+            limits: caps,
+            nowMs: 600,
+            activity: { deliberation: 'plan' },
+        }),
+        { admitted: false, exhaustedBy: 'maxDeliberationCalls' }
+    );
+    assert.deepEqual(
+        admitExecution({
+            state,
+            limits: caps,
+            nowMs: 600,
+            activity: { deliberation: 'review' },
+        }),
+        { admitted: false, exhaustedBy: 'maxDeliberationCalls' }
+    );
+    assert.deepEqual(
+        admitExecution({
+            state,
+            limits: caps,
+            nowMs: 600,
+        }),
+        { admitted: true }
+    );
+    assert.deepEqual(
+        admitExecution({
+            state: { ...state, deliberationCallCount: 3 },
+            limits: caps,
+            nowMs: 600,
+            activity: { deliberation: 'general' },
+        }),
+        { admitted: false, exhaustedBy: 'maxDeliberationCalls' }
+    );
+});
+
+test('recordAttempt and recordStep separate execution accounting', () => {
+    const state = {
+        startedAtMs: 500,
+        stepCount: 0,
+        toolCallCount: 0,
+        planCallCount: 0,
+        reviewCallCount: 0,
+        deliberationCallCount: 0,
+        totalTokens: 0,
+    };
+
+    assert.deepEqual(
+        recordAttempt({
+            state,
+            activity: { tool: 'one-or-more' },
+            usage: { totalTokens: 3, toolCalls: 2 },
+        }),
+        {
+            ...state,
+            stepCount: 0,
+            toolCallCount: 2,
+            totalTokens: 3,
+        }
+    );
+    assert.deepEqual(
+        recordAttempt({
+            state,
+            activity: { deliberation: 'review' },
+            usage: { deliberationCalls: 1 },
+        }),
+        {
+            ...state,
+            stepCount: 0,
+            deliberationCallCount: 1,
+        }
+    );
+    assert.deepEqual(
+        recordAttempt({
+            state,
+            activity: { tool: 'one-or-more' },
+            usage: { toolCalls: 0 },
+        }),
+        {
+            ...state,
+            stepCount: 0,
+        }
+    );
+    assert.deepEqual(
+        recordStep({ state, activity: { deliberation: 'review' } }),
+        {
+            ...state,
+            stepCount: 1,
+            reviewCallCount: 1,
+        }
     );
 });

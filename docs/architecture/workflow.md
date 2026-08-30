@@ -20,7 +20,7 @@ Use the following small vocabulary when extending workflows:
 - **Attempt** is one concrete try to complete a Step.
 - **Context** is backend-owned request and conversation information available to
   the Run.
-- **Result** is the typed output produced by a Step.
+- **Result** is a named runtime value produced by a Step.
 
 The work a Run performs is separate from the topology that defines its allowed
 path. A Workflow chooses the path, and a model may choose only among validated
@@ -30,7 +30,7 @@ controls its own internal multi-step work or tool use; a single planner, writer,
 style, or reviewer call is a model-backed Step, not an Agent.
 
 Keep **Context**, **Result**, and **ModelInput** distinct. Context is what
-Footnote knows about the Run. Results are typed values from earlier Steps.
+Footnote knows about the Run. Results are named runtime values from earlier Steps.
 ModelInput is the bounded provider-neutral projection assembled for one model
 Attempt from the Context, declared Results, Step instructions, policy/persona
 material, and allowed capabilities. Do not replace this boundary with one
@@ -58,6 +58,33 @@ Footnote is pre-production. When a new workflow definition can express the
 current path and the cutover is working, remove superseded internal topology
 and compatibility machinery rather than maintaining two active workflow
 engines indefinitely. Every merged migration PR must leave chat usable.
+
+## Workflow core foundation
+
+`@footnote/contracts` defines portable Workflow topology. `packages/backend/src/services/workflowCore/`
+contains the backend-only execution foundation for the future chat cutover. Live chat still uses
+`workflowEngine`.
+
+A workflow is a set of named Steps. Each Step declares its Result inputs,
+optional output, outcomes, and bounds. The caller supplies handlers under the
+same Step names. A handler receives its Step name, backend-owned Context,
+selected Results, and one-based iteration and attempt numbers. This keeps the
+Workflow serializable while binding each Step to a concrete backend implementation.
+
+The engine validates the definition before starting, follows declared outcomes,
+bounds iterations and Attempts, records Attempts, and uses the shared Execution
+Contract before and after each attempt. A failed Step can follow its declared
+recovery route and produces a degraded Run; a retry that succeeds does not.
+
+Results are the current named values available to later Steps. When a repeated
+Step omits an optional output, its older value is cleared so a later Step cannot
+mistake it for a new result. Failed Steps leave earlier Results available for
+their recovery route. Tool and token usage are observed facts; each admitted
+deliberative Attempt counts even when provider usage is absent.
+
+The current chat shape is a test fixture under `packages/backend/test/`. It
+approximates the current path to prove that the core can express the eventual
+cutover. It is not configuration or runtime behavior.
 
 ## How a chat request runs
 
