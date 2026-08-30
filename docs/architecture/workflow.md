@@ -92,6 +92,9 @@ against the general deliberation limit. A caller calculates conservative token
 and tool-call reservations per concrete Attempt; the Workflow definition does
 not bake a static request budget into a Step. Malformed Execution Contract
 bounds reject the foundation Run rather than being silently clamped or removed.
+At the exact token boundary, an Attempt without a token reservation remains
+conservatively blocked; an explicit zero-token reservation can admit
+deterministic finalization without authorizing another model call.
 
 Resource admission that blocks a Step is represented as that Step's failed
 Attempt and may take its declared recovery route. Duration and workflow-Step

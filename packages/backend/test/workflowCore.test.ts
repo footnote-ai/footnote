@@ -747,6 +747,69 @@ test('routes a retry blocked by consumed tokens through Step recovery', async ()
     assert.equal(execution.run.steps[1]?.stepId, 'write');
 });
 
+test('allows explicit zero-token finalization after token exhaustion recovers a valid Draft', async () => {
+    let reviewCalls = 0;
+    let finishCalls = 0;
+    const execution = await executeWorkflow({
+        workflow: workflow({
+            write: step({
+                id: 'write',
+                output: 'draft',
+                transitions: { generated: { kind: 'step', stepId: 'review' } },
+            }),
+            review: step({
+                id: 'review',
+                activity: { deliberation: 'review' },
+                input: [{ kind: 'result', name: 'draft' }],
+                transitions: { failed: { kind: 'step', stepId: 'finish' } },
+            }),
+            finish: step({
+                id: 'finish',
+                output: 'answer',
+                input: [{ kind: 'result', name: 'draft' }],
+                transitions: { done: { kind: 'end' } },
+            }),
+        }),
+        context: { requestId: 'req-1' },
+        executors: {
+            code: async ({ step: executingStep }) => {
+                if (executingStep.id === 'write') {
+                    return {
+                        status: 'succeeded',
+                        outcome: 'generated',
+                        result: result('draft', 'last good draft'),
+                        usage: { totalTokens: 3 },
+                    };
+                }
+                if (executingStep.id === 'review') {
+                    reviewCalls += 1;
+                    return { status: 'succeeded', outcome: 'done' };
+                }
+                finishCalls += 1;
+                return {
+                    status: 'succeeded',
+                    outcome: 'done',
+                    result: result('answer', 'finalized draft'),
+                };
+            },
+        },
+        executionLimits: { ...limits, maxTokensTotal: 3 },
+        startedAtMs: 0,
+        now: () => 1,
+        reserveAttempt: ({ step: executingStep }) => {
+            if (executingStep.id === 'review') return { tokens: 1 };
+            if (executingStep.id === 'finish') return { tokens: 0 };
+            return undefined;
+        },
+    });
+
+    assert.equal(reviewCalls, 0);
+    assert.equal(finishCalls, 1);
+    assert.equal(execution.status, 'degraded');
+    assert.equal(execution.run.results.draft?.value, 'last good draft');
+    assert.equal(execution.run.results.answer?.value, 'finalized draft');
+});
+
 test('stops on observed resource overruns while retaining valid prior Results', async () => {
     const tokenOverrun = await executeWorkflow({
         workflow: workflow({

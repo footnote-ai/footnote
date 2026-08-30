@@ -184,20 +184,27 @@ export const admitExecution = (input: {
         return { admitted: false, exhaustedBy: 'maxDeliberationCalls' };
     }
 
-    if (input.state.totalTokens >= input.limits.maxTokensTotal) {
-        return { admitted: false, exhaustedBy: 'maxTokensTotal' };
-    }
-
-    const reservedTokens = input.reservation?.tokens ?? 0;
-    if (!isNonNegativeInteger(reservedTokens)) {
+    const requestedTokens = input.reservation?.tokens;
+    if (
+        requestedTokens !== undefined &&
+        !isNonNegativeInteger(requestedTokens)
+    ) {
         return {
             admitted: false,
             error: 'Execution Attempt reservation is invalid: tokens',
         };
     }
     if (
-        reservedTokens > 0 &&
-        input.state.totalTokens + reservedTokens > input.limits.maxTokensTotal
+        input.state.totalTokens > input.limits.maxTokensTotal ||
+        (input.state.totalTokens === input.limits.maxTokensTotal &&
+            requestedTokens === undefined)
+    ) {
+        return { admitted: false, exhaustedBy: 'maxTokensTotal' };
+    }
+    const reservedTokens = requestedTokens ?? 0;
+    if (
+        input.state.totalTokens + reservedTokens >
+        input.limits.maxTokensTotal
     ) {
         return { admitted: false, exhaustedBy: 'maxTokensTotal' };
     }
@@ -314,7 +321,9 @@ export const checkExecutionLimits = (
         limits,
         nowMs,
         activity: activityForWorkflowStep(nextStepKind),
-        reservation: { tokens: nextStepTokenBudget },
+        ...(nextStepTokenBudget === 0
+            ? {}
+            : { reservation: { tokens: nextStepTokenBudget } }),
     });
     if (admission.admitted) return { withinLimits: true };
     if ('exhaustedBy' in admission)
