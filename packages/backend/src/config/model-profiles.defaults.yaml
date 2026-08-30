@@ -98,7 +98,7 @@ profiles:
       tierBindings: []
       capabilities:
           canUseSearch: false
-          supportedReasoningEfforts: [low]
+          supportedReasoningEfforts: [none, low]
       presentationGeneration:
           promptVariant: faithful-rewrite
           reasoningEffort: low

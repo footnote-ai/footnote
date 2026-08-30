@@ -1569,8 +1569,11 @@ export const runBoundedReviewWorkflow = async ({
                 }
                 if (!shouldStop && draftResult !== null) {
                     const initialDraftFinishedAt = Date.now();
+                    // A provider can report a completed stop while returning
+                    // only hidden reasoning. Do not feed an empty draft into
+                    // assessment or revision; the chat boundary will surface
+                    // the controlled fail-open response.
                     const generationIncompleteBeforeOutput =
-                        draftResult.completion?.status === 'incomplete' &&
                         draftResult.text.trim().length === 0;
                     const initialDraftUsage = captureUsage(
                         draftResult,

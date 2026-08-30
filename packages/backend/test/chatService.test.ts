@@ -208,6 +208,38 @@ test('runChat surfaces a controlled message when reasoning exhausts output befor
     );
 });
 
+test('runChat surfaces a controlled message when a provider reports empty completed text', async () => {
+    const chatService = createChatService({
+        generationRuntime: createRuntime({
+            text: '',
+            completion: {
+                status: 'completed',
+                visibleTextLength: 0,
+            },
+            finishReason: 'stop',
+        }),
+        storeTrace: async () => undefined,
+        buildResponseMetadata,
+        defaultModel: 'deepseek-v4-flash-0731',
+        recordUsage: () => undefined,
+        chatWorkflowConfig: {
+            modeId: 'express',
+            reviewLoopEnabled: false,
+            maxIterations: 0,
+            maxDurationMs: 15000,
+        },
+    });
+
+    const response = await chatService.runChat({
+        question: 'Reply briefly.',
+    });
+
+    assert.equal(
+        response.action === 'message' ? response.message : undefined,
+        'I could not complete a response within the model generation budget. Please try again.'
+    );
+});
+
 test('runChat preserves balanced persona guidance for direct generation', async () => {
     let capturedMessages: string[] = [];
     const chatService = createChatService({

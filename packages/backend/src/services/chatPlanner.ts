@@ -196,6 +196,8 @@ type CreateChatPlannerOptions = {
     executePlanner?: ChatPlannerExecutor;
     executePlannerStructured?: ChatPlannerStructuredExecutor;
     allowTextJsonCompatibilityFallback?: boolean;
+    /** Optional provider-specific planner reasoning control. */
+    plannerReasoningEffort?: ChatGenerationPlan['reasoningEffort'];
     defaultModel?: string;
     structuredExecutionTimeoutMs?: number;
     availableCapabilityProfiles?: ChatPlannerCapabilityProfileOption[];
@@ -1563,6 +1565,7 @@ export const createChatPlanner = ({
     executePlanner,
     executePlannerStructured,
     allowTextJsonCompatibilityFallback = false,
+    plannerReasoningEffort = 'low',
     defaultModel = runtimeConfig.openai.defaultModel,
     structuredExecutionTimeoutMs = runtimeConfig.openai.requestTimeoutMs,
     availableCapabilityProfiles = [],
@@ -1665,7 +1668,7 @@ export const createChatPlanner = ({
             }),
             model: defaultModel,
             maxOutputTokens: plannerOutputTokenBudget,
-            reasoningEffort: 'low',
+            reasoningEffort: plannerReasoningEffort,
             ...(safetyIdentifier !== undefined && { safetyIdentifier }),
         });
         const requestPayload = buildPlannerRequestPayload(

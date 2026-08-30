@@ -131,8 +131,10 @@ const SURFACED_NO_GENERATION_MESSAGE =
 const SURFACED_INCOMPLETE_GENERATION_MESSAGE =
     'I could not complete a response within the model generation budget. Please try again.';
 
-const isIncompleteBeforeVisibleOutput = (result: GenerationResult): boolean =>
-    result.completion?.status === 'incomplete' &&
+// Some providers report a successful stop while returning only hidden
+// reasoning or an empty content field. Never pass that empty result to a
+// surface adapter; keep the fail-open response explicit instead.
+const hasNoVisibleGenerationOutput = (result: GenerationResult): boolean =>
     result.text.trim().length === 0;
 
 type GenerateWithChainSuccess = {
@@ -1785,7 +1787,7 @@ export const createChatService = ({
                   ? getContextStepSources(workflowContextStepResult)
                   : undefined;
         const generationIncompleteBeforeOutput =
-            isIncompleteBeforeVisibleOutput(generationResult);
+            hasNoVisibleGenerationOutput(generationResult);
         const deliveredMessage = generationIncompleteBeforeOutput
             ? SURFACED_INCOMPLETE_GENERATION_MESSAGE
             : generationResult.text;

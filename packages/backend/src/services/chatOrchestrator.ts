@@ -200,6 +200,13 @@ export const createChatOrchestrator = ({
             availableCapabilityProfiles: plannerCapabilityOptions,
             availableTrustGraphTargets:
                 executionContractTrustGraph?.targets ?? [],
+            // DeepSeek's reasoning channel can consume the entire bounded
+            // text-JSON planner allowance before emitting its small decision
+            // object. The planner is a routing hint, not a deliberative step;
+            // keep it non-reasoning on OpenRouter while retaining the existing
+            // low-effort default for other planner providers.
+            plannerReasoningEffort:
+                plannerProfile.provider === 'openrouter' ? 'none' : 'low',
             ...(structuredExecutor !== undefined && {
                 executePlannerStructured: async (request) =>
                     structuredExecutor({

@@ -85,6 +85,33 @@ const createPlanner = (
     });
 };
 
+test('chatPlanner forwards the configured planner reasoning effort', async () => {
+    let observedReasoningEffort: string | undefined;
+    const planner = createChatPlanner({
+        plannerReasoningEffort: 'none',
+        executePlanner: async ({ reasoningEffort }) => {
+            observedReasoningEffort = reasoningEffort;
+            return {
+                text: JSON.stringify({
+                    action: 'message',
+                    modality: 'text',
+                    safetyTier: 'Low',
+                    reasoning: 'A normal message is appropriate.',
+                    generation: {
+                        reasoningEffort: 'low',
+                        verbosity: 'low',
+                    },
+                }),
+                model: 'deepseek/deepseek-v4-flash-0731',
+            };
+        },
+    });
+
+    await planFromWorkflow(planner, createChatRequest());
+
+    assert.equal(observedReasoningEffort, 'none');
+});
+
 const createStructuredPlanner = (
     decision: unknown,
     availableCapabilityProfiles: ChatPlannerCapabilityProfileOption[] = []
