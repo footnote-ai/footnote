@@ -486,6 +486,130 @@ test('keeps executor categories separate from workflow topology', async () => {
     assert.equal(called, true);
 });
 
+test('rejects a step when its executor is unavailable', async () => {
+    const definition = workflow(
+        {
+            retrieve: step('retrieve', {
+                done: { kind: 'finish' },
+                failed: { kind: 'finish' },
+            }),
+        },
+        'retrieve'
+    );
+
+    const execution = await executeWorkflow({
+        workflow: definition,
+        context: { requestId: 'req-1' },
+        executors: {},
+        executionLimits: limits,
+        startedAtMs: 0,
+        now: () => 1,
+    });
+
+    assert.equal(execution.status, 'rejected');
+    assert.deepEqual(execution.termination, {
+        reason: 'executor_unavailable',
+        stepId: 'retrieve',
+    });
+    assert.equal(execution.run.steps.length, 0);
+});
+
+test('rejects a step when a required result reference is missing', async () => {
+    const definition = workflow(
+        {
+            write: step('write', { done: { kind: 'finish' } }, [
+                { kind: 'result', name: 'plan' },
+            ]),
+        },
+        'write'
+    );
+
+    const execution = await runWith(definition, {});
+
+    assert.equal(execution.status, 'rejected');
+    assert.deepEqual(execution.termination, {
+        reason: 'missing_required_input',
+        stepId: 'write',
+        inputName: 'plan',
+    });
+    assert.equal(execution.run.steps.length, 0);
+});
+
+test('rejects a result that violates the Step output contract', async () => {
+    const definition = workflow(
+        {
+            write: step('write', { done: { kind: 'finish' } }),
+        },
+        'write'
+    );
+
+    const execution = await runWith(definition, {
+        write: [
+            {
+                status: 'succeeded',
+                outcome: 'done',
+                result: result('unexpected', { text: 'answer' }),
+            },
+        ],
+    });
+
+    assert.equal(execution.status, 'rejected');
+    assert.deepEqual(execution.termination, {
+        reason: 'invalid_result',
+        stepId: 'write',
+        expectedName: 'write',
+        actualName: 'unexpected',
+    });
+    assert.equal(execution.run.steps[0]?.attempts[0]?.status, 'rejected');
+});
+
+test('rejects a transition to an undefined Step', async () => {
+    const definition = workflow(
+        {
+            first: step('first', {
+                done: { kind: 'step', stepId: 'missing' },
+            }),
+        },
+        'first'
+    );
+
+    const execution = await runWith(definition, {
+        first: [{ status: 'succeeded', outcome: 'done' }],
+    });
+
+    assert.equal(execution.status, 'rejected');
+    assert.deepEqual(execution.termination, {
+        reason: 'definition_error',
+        message: 'Workflow step is not defined: missing',
+    });
+});
+
+test('clamps invalid Execution Contract limits to zero', async () => {
+    const definition = workflow(
+        {
+            first: step('first', { done: { kind: 'finish' } }),
+        },
+        'first'
+    );
+
+    const invalidLimitCases: readonly ExecutionLimits[] = [
+        { ...limits, maxWorkflowSteps: -1 },
+        { ...limits, maxTokensTotal: Number.NaN },
+    ];
+
+    for (const executionLimits of invalidLimitCases) {
+        const execution = await runWith(
+            definition,
+            { first: [{ status: 'succeeded', outcome: 'done' }] },
+            executionLimits
+        );
+
+        assert.equal(execution.status, 'limited');
+        assert.equal(execution.termination.reason, 'execution_limit');
+        assert.equal(execution.run.steps.length, 0);
+    }
+});
+
 test('exposes a typed semantic input/result seam without requiring predecessor identities', () => {
     const typedStep: Step<{ context: TestContext; plan: Plan }, Draft, 'done'> =
         {
@@ -534,6 +658,15 @@ test('describes the current reviewed chat topology without making it live', () =
     assert.deepEqual(CURRENT_REVIEWED_CHAT_WORKFLOW.steps.review?.transitions, {
         done: { kind: 'step', stepId: 'finish' },
         revise: { kind: 'step', stepId: 'write' },
+        failed: { kind: 'step', stepId: 'finish' },
+    });
+    assert.deepEqual(CURRENT_REVIEWED_CHAT_WORKFLOW.steps.plan?.transitions, {
+        continue: { kind: 'step', stepId: 'context' },
+        terminal: { kind: 'finish' },
+        failed: { kind: 'step', stepId: 'finish' },
+    });
+    assert.deepEqual(CURRENT_REVIEWED_CHAT_WORKFLOW.steps.write?.transitions, {
+        generated: { kind: 'step', stepId: 'review' },
         failed: { kind: 'step', stepId: 'finish' },
     });
     assert.equal(CURRENT_REVIEWED_CHAT_WORKFLOW.steps.style?.maxRuns, 2);

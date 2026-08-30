@@ -33,8 +33,12 @@ const asSafeCounter = (value: number | undefined): number => {
     return Math.max(0, Math.floor(value));
 };
 
+/**
+ * Normalizes one Execution Contract limit. An unusable value clamps to zero so
+ * malformed limits stop the relevant path instead of removing its bound.
+ */
 const asLimit = (value: number): number =>
-    Number.isFinite(value) && value >= 0 ? value : Number.MAX_SAFE_INTEGER;
+    Number.isFinite(value) && value >= 0 ? value : 0;
 
 const boundedErrorMessage = (value: string | undefined): string | undefined =>
     value === undefined
@@ -215,7 +219,13 @@ const findExecutionLimit = (input: {
 const collectStepInputs = (input: {
     step: Step;
     results: ReadonlyMap<string, Result<string, unknown>>;
-}): ReadonlyMap<string, Result<string, unknown>> | null => {
+}):
+    | {
+          inputs: ReadonlyMap<string, Result<string, unknown>>;
+      }
+    | {
+          missingReference: string;
+      } => {
     const selected = new Map<string, Result<string, unknown>>();
     for (const reference of input.step.input.references) {
         if (reference.kind !== 'result') {
@@ -223,20 +233,14 @@ const collectStepInputs = (input: {
         }
         const value = input.results.get(reference.name);
         if (value === undefined && reference.optional !== true) {
-            return null;
+            return { missingReference: reference.name };
         }
         if (value !== undefined) {
             selected.set(reference.name, value);
         }
     }
-    return selected;
+    return { inputs: selected };
 };
-
-const executorFailure = (errorCode: string): ExecutionAttemptResult => ({
-    status: 'failed',
-    errorCode,
-    retryable: false,
-});
 
 /**
  * Runs one explicitly defined workflow. The executor can report an outcome,
@@ -325,9 +329,36 @@ export const executeWorkflow = async <TContext>(
 
         const stepRunNumber = priorRuns + 1;
         const stepAttempts: AttemptRecord[] = [];
-        const stepInputs = collectStepInputs({ step, results });
+        const collectedStepInputs = collectStepInputs({ step, results });
         const executor: StepExecutor<TContext> | undefined =
             input.executors[step.executor];
+        if ('missingReference' in collectedStepInputs) {
+            return finish({
+                run,
+                steps,
+                results,
+                now,
+                status: 'rejected',
+                termination: {
+                    reason: 'missing_required_input',
+                    stepId: step.id,
+                    inputName: collectedStepInputs.missingReference,
+                },
+            });
+        }
+        if (executor === undefined) {
+            return finish({
+                run,
+                steps,
+                results,
+                now,
+                status: 'rejected',
+                termination: {
+                    reason: 'executor_unavailable',
+                    stepId: step.id,
+                },
+            });
+        }
         const maximumAttempts = Math.max(
             1,
             asSafeCounter(step.maxAttempts) || DEFAULT_MAX_ATTEMPTS
@@ -339,29 +370,21 @@ export const executeWorkflow = async <TContext>(
         for (let attemptNumber = 1; attemptNumber <= maximumAttempts;) {
             const attemptStartedAtMs = now();
             let attemptResult: ExecutionAttemptResult;
-            if (stepInputs === null) {
-                attemptResult = executorFailure('missing_required_input');
-            } else if (executor === undefined) {
-                attemptResult = executorFailure('executor_unavailable');
-            } else {
-                try {
-                    attemptResult = await executor({
-                        context: input.context,
-                        stepId: step.id,
-                        runNumber: stepRunNumber,
-                        inputs: stepInputs,
-                    });
-                } catch (error) {
-                    attemptResult = {
-                        status: 'failed',
-                        errorCode: 'executor_error',
-                        errorMessage:
-                            error instanceof Error
-                                ? error.message
-                                : String(error),
-                        retryable: true,
-                    };
-                }
+            try {
+                attemptResult = await executor({
+                    context: input.context,
+                    stepId: step.id,
+                    runNumber: stepRunNumber,
+                    inputs: collectedStepInputs.inputs,
+                });
+            } catch (error) {
+                attemptResult = {
+                    status: 'failed',
+                    errorCode: 'executor_error',
+                    errorMessage:
+                        error instanceof Error ? error.message : String(error),
+                    retryable: true,
+                };
             }
             const attemptFinishedAtMs = now();
             addUsage(run.usage, attemptResult.usage);
@@ -489,10 +512,7 @@ export const executeWorkflow = async <TContext>(
                     now,
                     status: 'failed',
                     termination: {
-                        reason:
-                            executor === undefined
-                                ? 'executor_unavailable'
-                                : 'step_failed',
+                        reason: 'step_failed',
                         stepId: step.id,
                     },
                 });

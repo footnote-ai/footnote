@@ -38,7 +38,7 @@ export const CURRENT_REVIEWED_CHAT_WORKFLOW: Workflow = {
             transitions: {
                 continue: { kind: 'step', stepId: 'context' },
                 terminal: { kind: 'finish' },
-                failed: { kind: 'step', stepId: 'context' },
+                failed: { kind: 'step', stepId: 'finish' },
             },
             maxRuns: 1,
             maxAttempts: 2,
@@ -126,7 +126,7 @@ export const CURRENT_REVIEWED_CHAT_WORKFLOW: Workflow = {
             },
             transitions: {
                 generated: { kind: 'step', stepId: 'review' },
-                failed: { kind: 'finish' },
+                failed: { kind: 'step', stepId: 'finish' },
             },
             maxRuns: 2,
             maxAttempts: 2,

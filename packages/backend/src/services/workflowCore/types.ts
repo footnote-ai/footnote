@@ -186,6 +186,11 @@ export type WorkflowTermination =
     | { reason: 'step_run_limit'; stepId: string }
     | { reason: 'execution_limit'; limit: keyof ExecutionLimits }
     | { reason: 'step_failed'; stepId: string }
+    | {
+          reason: 'missing_required_input';
+          stepId: string;
+          inputName: string;
+      }
     | { reason: 'undeclared_outcome'; stepId: string; outcome: string }
     | {
           reason: 'invalid_result';

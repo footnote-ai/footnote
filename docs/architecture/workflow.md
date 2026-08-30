@@ -82,7 +82,7 @@ profile/transition assembly.
 This foundation deliberately does not add durable result storage, a generic
 workflow DSL, model-control unification, context migration, or canonical
 execution-record migration. Those belong to the later cutover and the related
-#576, #577, and #578 work.
+issues #576, #577, and #578 work.
 
 The next cutover PR should switch the reviewed chat path to the definition,
 prove equivalent user-visible behavior, and delete the superseded topology
