@@ -59,6 +59,35 @@ current path and the cutover is working, remove superseded internal topology
 and compatibility machinery rather than maintaining two active workflow
 engines indefinitely. Every merged migration PR must leave chat usable.
 
+## Workflow foundation (shipped, not live)
+
+The first foundation slice for #575 now exists in
+`packages/backend/src/services/workflowCore/`. It provides:
+
+- typed `Workflow`, `Step`, `Result`, `Run`, and `Attempt` contracts;
+- a small executor boundary for `model`, `context`, `code`, and future
+  delegated `agent` work;
+- per-Step declared outcome maps, bounded semantic step runs, and bounded
+  Attempts; and
+- an engine that accepts the existing backend Execution Contract limits as its
+  outer authority.
+
+`reviewedChatWorkflow.ts` is a non-live definition of the current reviewed
+chat topology. It makes planning, context, optional style/check work,
+generation, review/revision, finalization, and fail-open routes visible without
+claiming that chat already executes through the new engine. The live path below
+still uses `workflowEngine.ts`, `reviewLoopExecutor.ts`, and the existing
+profile/transition assembly.
+
+This foundation deliberately does not add durable result storage, a generic
+workflow DSL, model-control unification, context migration, or canonical
+execution-record migration. Those belong to the later cutover and the related
+#576, #577, and #578 work.
+
+The next cutover PR should switch the reviewed chat path to the definition,
+prove equivalent user-visible behavior, and delete the superseded topology
+instead of adding a long-lived compatibility engine.
+
 ## How a chat request runs
 
 The normal chat path starts in `chatOrchestrator` and then moves through the
