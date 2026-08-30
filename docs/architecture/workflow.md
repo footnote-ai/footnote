@@ -78,26 +78,39 @@ mismatched, and undeclared Results reject the Run; unavailable executors remain
 a separate configuration rejection from a declared Step failure route.
 
 Both the existing live engine and this foundation use the neutral
-`admitExecution()` seam in `workflowEngine/limits.ts`. That seam keeps the
-Execution Contract authoritative for every Attempt, including retries. It
-preserves plan and review caps, token reservations, tool limits, duration, and
-the rule that optional presentation does not consume deliberation capacity.
-Malformed Execution Contract bounds reject the foundation Run rather than being
-silently clamped or removed.
+`admitExecution()` and `recordExecution()` seams in
+`workflowEngine/limits.ts`. That authority owns both limit checks and the
+counter semantics used by those checks. Steps supply only resource facts:
+tool use or general, planning, or review deliberation. Future verification or
+research Steps can consume deliberation capacity without impersonating a
+legacy Step name. Presentation supplies no deliberation activity, so its
+candidate work remains outside plan/review capacity. A caller calculates a
+token reservation per concrete Attempt; the Workflow definition does not bake
+a static request budget into a Step. Malformed Execution Contract bounds reject
+the foundation Run rather than being silently clamped or removed.
+
+A Run that reaches `end` after a declared recovery route is `degraded`, not
+`completed`. Recovery permits a useful answer to continue; it does not erase
+the failed Attempt from the Run's status or eventual trace.
 
 `reviewedChatWorkflow.ts` is an honest, non-live proof of the current coarse
 reviewed-chat shape:
 
 ```text
-plan -> context -> presentation -> write -> review/revision -> finish -> end
+plan -> context -> presentation -> write -> review -> finish -> end
   |
   +-> default-plan recovery -> context
+
+review -- revise --> replan --> write
 ```
 
 The planner's failure route invokes the explicit conservative default-plan code
 Step. Presentation is one Step whose executor owns candidate generation and
 deterministic admissibility; this proof does not include separate style-check
-or presentation retry Steps. Write and review failure routes go through the
+or presentation retry Steps. Revision re-enters planning explicitly, and the
+revision Write consumes the Review Result and optional revision Plan. Finish
+can consume the Draft, Plan terminal action, context Result, and Review Result
+that led to finalization. Write and review failure routes go through the
 semantic `finish` Step before the terminal `end`, so finalization and
 no-generation handling are represented rather than bypassed.
 

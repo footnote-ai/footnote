@@ -11,6 +11,7 @@ import {
     admitExecution,
     checkExecutionLimits,
     mapLimitExhaustionToTerminationReason,
+    recordExecution,
     type ExecutionLimits,
 } from '../../src/services/workflowEngine.js';
 import {
@@ -306,7 +307,7 @@ test('admitExecution preserves plan and review caps while excluding presentation
             state,
             limits: caps,
             nowMs: 600,
-            nextStepKind: 'plan',
+            activity: { deliberation: 'plan' },
         }),
         { admitted: false, exhaustedBy: 'maxDeliberationCalls' }
     );
@@ -315,7 +316,7 @@ test('admitExecution preserves plan and review caps while excluding presentation
             state,
             limits: caps,
             nowMs: 600,
-            nextStepKind: 'assess',
+            activity: { deliberation: 'review' },
         }),
         { admitted: false, exhaustedBy: 'maxDeliberationCalls' }
     );
@@ -324,8 +325,56 @@ test('admitExecution preserves plan and review caps while excluding presentation
             state,
             limits: caps,
             nowMs: 600,
-            nextStepKind: 'presentation',
+            activity: { deliberation: 'none' },
         }),
         { admitted: true }
+    );
+    assert.deepEqual(
+        admitExecution({
+            state: { ...state, deliberationCallCount: 3 },
+            limits: caps,
+            nowMs: 600,
+            activity: { deliberation: 'general' },
+        }),
+        { admitted: false, exhaustedBy: 'maxDeliberationCalls' }
+    );
+});
+
+test('recordExecution owns resource accounting without legacy Step kinds', () => {
+    const state = {
+        startedAtMs: 500,
+        stepCount: 0,
+        toolCallCount: 0,
+        planCallCount: 0,
+        reviewCallCount: 0,
+        deliberationCallCount: 0,
+        totalTokens: 0,
+    };
+
+    assert.deepEqual(
+        recordExecution({
+            state,
+            activity: { tool: 'one-or-more' },
+            usage: { totalTokens: 3, toolCalls: 2 },
+            completedStep: true,
+        }),
+        {
+            ...state,
+            stepCount: 1,
+            toolCallCount: 2,
+            totalTokens: 3,
+        }
+    );
+    assert.deepEqual(
+        recordExecution({
+            state,
+            activity: { deliberation: 'review' },
+            usage: { deliberationCalls: 1 },
+        }),
+        {
+            ...state,
+            reviewCallCount: 1,
+            deliberationCallCount: 1,
+        }
     );
 });

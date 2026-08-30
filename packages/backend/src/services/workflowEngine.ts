@@ -322,9 +322,11 @@ export {
     createInitialWorkflowState,
 } from './workflowEngine/state.js';
 export {
+    activityForWorkflowStep,
     admitExecution,
     checkExecutionLimits,
     mapLimitExhaustionToTerminationReason,
+    recordExecution,
 } from './workflowEngine/limits.js';
 export { buildPlannerStepRecord } from './workflowEngine/plannerStepRecord.js';
 export type { BuildPlannerStepRecordInput } from './workflowEngine/plannerStepRecord.js';
@@ -505,12 +507,13 @@ export const runBoundedReviewWorkflow = async ({
             plannerStepRecord.usage?.totalTokens ??
             (plannerStepRecord.usage?.promptTokens ?? 0) +
                 (plannerStepRecord.usage?.completionTokens ?? 0);
-        workflowState = {
-            ...workflowState,
-            stepCount: workflowState.stepCount + 1,
-            planCallCount: workflowState.planCallCount + 1,
-            totalTokens: workflowState.totalTokens + plannerStepUsageTokens,
-        };
+        workflowState = applyStepExecutionToState(
+            workflowState,
+            'plan',
+            plannerStepUsageTokens,
+            0,
+            1
+        );
     }
 
     const captureStep = (input: {

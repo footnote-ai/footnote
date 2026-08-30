@@ -1,6 +1,6 @@
 /**
- * @description: Centralizes workflow execution-limit admission and limit metadata
- * serialization for lineage.
+ * @description: Centralizes workflow execution-limit admission, accounting, and
+ * limit metadata serialization for lineage.
  * @footnote-scope: core
  * @footnote-module: WorkflowEngineLimits
  * @footnote-risk: medium - Limit bugs can cause runaway loops or premature stops.
@@ -10,8 +10,8 @@ import type {
     WorkflowEffectiveLimit,
     WorkflowLimitKey,
     WorkflowLimitStop,
-    WorkflowTerminationReason,
     WorkflowStepKind,
+    WorkflowTerminationReason,
 } from '@footnote/contracts/policy';
 import type { WorkflowProfileExecutionLimitsContract } from '../workflowProfileContract.js';
 import type { WorkflowProfilePolicyContract } from '../workflowProfileContract.js';
@@ -20,17 +20,28 @@ import type { WorkflowState } from './state.js';
 export type ExecutionLimits = WorkflowProfileExecutionLimitsContract;
 export type ExhaustedExecutionLimit = WorkflowLimitKey;
 
-/** State required to admit one execution attempt. It is independent of either workflow engine. */
-export type ExecutionLimitState = Pick<
-    WorkflowState,
-    | 'startedAtMs'
-    | 'stepCount'
-    | 'toolCallCount'
-    | 'planCallCount'
-    | 'reviewCallCount'
-    | 'deliberationCallCount'
-    | 'totalTokens'
->;
+/** Minimal resource facts used by the Execution Contract, independent of Step names. */
+export type ExecutionActivity = {
+    tool?: 'none' | 'one-or-more';
+    deliberation?: 'none' | 'general' | 'plan' | 'review';
+};
+
+export type ExecutionUsage = {
+    totalTokens?: number;
+    toolCalls?: number;
+    deliberationCalls?: number;
+};
+
+/** State needed by the shared limit authority, independent of either engine. */
+export type ExecutionLimitState = {
+    startedAtMs: number;
+    stepCount: number;
+    toolCallCount: number;
+    planCallCount: number;
+    reviewCallCount: number;
+    deliberationCallCount: number;
+    totalTokens: number;
+};
 
 export type ExecutionAdmission =
     | { admitted: true }
@@ -51,8 +62,13 @@ const isNonNegativeInteger = (value: unknown): value is number =>
     Number.isInteger(value) &&
     value >= 0;
 
+const sanitizeUsageCount = (value: number | undefined): number =>
+    value !== undefined && Number.isFinite(value)
+        ? Math.max(0, Math.floor(value))
+        : 0;
+
 /**
- * Validates the concrete Execution Contract bounds before work begins. Invalid
+ * Validates concrete Execution Contract bounds before work begins. Invalid
  * values are rejected rather than normalized, because normalization can erase
  * an intended safety boundary.
  */
@@ -76,16 +92,16 @@ export const validateExecutionLimits = (
 };
 
 /**
- * Admits a single attempt against the shared Execution Contract. Both engines
- * use this neutral seam so canonical plan/review caps, token reservations,
- * tool caps, duration, and presentation accounting stay identical.
+ * Admits one Attempt through the shared Execution Contract. Resource facts are
+ * intentionally generic: future verification or research Steps can consume
+ * deliberation capacity without pretending to be a legacy plan or assess Step.
  */
 export const admitExecution = (input: {
     state: ExecutionLimitState;
     limits: ExecutionLimits;
     nowMs: number;
-    nextStepKind?: WorkflowStepKind;
-    nextStepTokenBudget?: number;
+    activity?: ExecutionActivity;
+    tokenReservation?: number;
 }): ExecutionAdmission => {
     const malformedLimits = validateExecutionLimits(input.limits);
     if (malformedLimits !== undefined) {
@@ -97,36 +113,31 @@ export const admitExecution = (input: {
     }
 
     if (
-        input.nextStepKind === 'tool' &&
+        input.activity?.tool === 'one-or-more' &&
         input.state.toolCallCount >= input.limits.maxToolCalls
     ) {
         return { admitted: false, exhaustedBy: 'maxToolCalls' };
     }
 
-    // Presentation candidate usage is intentionally recorded separately; it
-    // does not consume the deliberation capacity reserved for plan and review.
-    const isSemanticDeliberation =
-        input.nextStepKind === 'plan' || input.nextStepKind === 'assess';
+    const deliberation = input.activity?.deliberation;
     const maxPlanCycles =
         input.limits.maxPlanCycles ??
         Math.max(0, input.limits.maxDeliberationCalls);
     const maxReviewCycles =
         input.limits.maxReviewCycles ??
         Math.max(1, input.limits.maxDeliberationCalls - maxPlanCycles);
-    if (
-        input.nextStepKind === 'plan' &&
-        input.state.planCallCount >= maxPlanCycles
-    ) {
+    if (deliberation === 'plan' && input.state.planCallCount >= maxPlanCycles) {
         return { admitted: false, exhaustedBy: 'maxDeliberationCalls' };
     }
     if (
-        input.nextStepKind === 'assess' &&
+        deliberation === 'review' &&
         input.state.reviewCallCount >= maxReviewCycles
     ) {
         return { admitted: false, exhaustedBy: 'maxDeliberationCalls' };
     }
     if (
-        isSemanticDeliberation &&
+        deliberation !== undefined &&
+        deliberation !== 'none' &&
         input.state.deliberationCallCount >= input.limits.maxDeliberationCalls
     ) {
         return { admitted: false, exhaustedBy: 'maxDeliberationCalls' };
@@ -136,7 +147,7 @@ export const admitExecution = (input: {
         return { admitted: false, exhaustedBy: 'maxTokensTotal' };
     }
 
-    const reservation = input.nextStepTokenBudget ?? 0;
+    const reservation = input.tokenReservation ?? 0;
     if (!isNonNegativeInteger(reservation)) {
         return {
             admitted: false,
@@ -157,6 +168,64 @@ export const admitExecution = (input: {
     return { admitted: true };
 };
 
+/**
+ * Records one Attempt or completed semantic Step in the same authority that
+ * admits it. Presentation has no deliberation activity, so its candidate work
+ * remains outside the plan/review deliberation budget without core-specific
+ * exceptions.
+ */
+export const recordExecution = (input: {
+    state: ExecutionLimitState;
+    activity?: ExecutionActivity;
+    usage?: ExecutionUsage;
+    completedStep?: boolean;
+}): ExecutionLimitState => {
+    const reportedToolCalls = sanitizeUsageCount(input.usage?.toolCalls);
+    const reportedDeliberationCalls = sanitizeUsageCount(
+        input.usage?.deliberationCalls
+    );
+    const toolCalls =
+        input.activity?.tool === 'none'
+            ? 0
+            : input.activity?.tool === 'one-or-more'
+              ? Math.max(1, reportedToolCalls)
+              : reportedToolCalls;
+    const deliberationCalls =
+        input.activity?.deliberation === 'none'
+            ? 0
+            : input.activity?.deliberation !== undefined
+              ? Math.max(1, reportedDeliberationCalls)
+              : reportedDeliberationCalls;
+
+    return {
+        ...input.state,
+        stepCount:
+            input.state.stepCount + (input.completedStep === true ? 1 : 0),
+        toolCallCount: input.state.toolCallCount + toolCalls,
+        planCallCount:
+            input.state.planCallCount +
+            (input.activity?.deliberation === 'plan' ? 1 : 0),
+        reviewCallCount:
+            input.state.reviewCallCount +
+            (input.activity?.deliberation === 'review' ? 1 : 0),
+        deliberationCallCount:
+            input.state.deliberationCallCount + deliberationCalls,
+        totalTokens:
+            input.state.totalTokens +
+            sanitizeUsageCount(input.usage?.totalTokens),
+    };
+};
+
+/** Adapts the live engine's legacy taxonomy at its boundary to generic resource facts. */
+export const activityForWorkflowStep = (
+    stepKind: WorkflowStepKind | undefined
+): ExecutionActivity | undefined => {
+    if (stepKind === 'tool') return { tool: 'one-or-more' };
+    if (stepKind === 'plan') return { deliberation: 'plan' };
+    if (stepKind === 'assess') return { deliberation: 'review' };
+    return undefined;
+};
+
 export const mapLimitExhaustionToTerminationReason = (
     exhaustedBy: ExhaustedExecutionLimit
 ): WorkflowTerminationReason => {
@@ -164,9 +233,8 @@ export const mapLimitExhaustionToTerminationReason = (
     if (exhaustedBy === 'maxTokensTotal') return 'budget_exhausted_tokens';
     if (exhaustedBy === 'maxDurationMs') return 'budget_exhausted_time';
     if (exhaustedBy === 'maxToolCalls') return 'max_tool_calls_reached';
-    if (exhaustedBy === 'maxDeliberationCalls') {
+    if (exhaustedBy === 'maxDeliberationCalls')
         return 'max_deliberation_calls_reached';
-    }
 
     const exhaustiveCheck: never = exhaustedBy;
     throw new Error(
@@ -174,7 +242,7 @@ export const mapLimitExhaustionToTerminationReason = (
     );
 };
 
-/** Backward-compatible live-engine adapter over the shared neutral admission seam. */
+/** Live-engine adapter over the shared neutral admission seam. */
 export const checkExecutionLimits = (
     state: WorkflowState,
     limits: ExecutionLimits,
@@ -190,13 +258,12 @@ export const checkExecutionLimits = (
         state,
         limits,
         nowMs,
-        nextStepKind,
-        nextStepTokenBudget,
+        activity: activityForWorkflowStep(nextStepKind),
+        tokenReservation: nextStepTokenBudget,
     });
     if (admission.admitted) return { withinLimits: true };
-    if ('exhaustedBy' in admission) {
+    if ('exhaustedBy' in admission)
         return { withinLimits: false, exhaustedBy: admission.exhaustedBy };
-    }
     return { withinLimits: false, error: admission.error };
 };
 

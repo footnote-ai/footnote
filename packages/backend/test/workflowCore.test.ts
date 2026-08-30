@@ -37,15 +37,14 @@ const step = (input: {
     transitions: Readonly<Record<string, Transition>>;
     input?: readonly InputRef[];
     output?: string;
-    kind?: Step['kind'];
+    activity?: Step['activity'];
     maxRuns?: number;
     maxAttempts?: number;
-    tokenReservation?: number;
     executor?: Step['executor'];
 }): Step => ({
     id: input.id,
     executor: input.executor ?? 'code',
-    ...(input.kind === undefined ? {} : { kind: input.kind }),
+    ...(input.activity === undefined ? {} : { activity: input.activity }),
     input: input.input ?? [],
     ...(input.output === undefined ? {} : { output: { name: input.output } }),
     transitions: input.transitions,
@@ -53,9 +52,6 @@ const step = (input: {
     ...(input.maxAttempts === undefined
         ? {}
         : { maxAttempts: input.maxAttempts }),
-    ...(input.tokenReservation === undefined
-        ? {}
-        : { tokenReservation: input.tokenReservation }),
 });
 
 const workflow = (
@@ -74,6 +70,7 @@ const runWith = async (input: {
     executionLimits?: ExecutionLimits;
     executors?: Executors<TestContext>;
     now?: () => number;
+    reserveTokens?: () => number;
 }) => {
     const remaining = new Map(
         Object.entries(input.behavior).map(([stepId, outcomes]) => [
@@ -96,6 +93,7 @@ const runWith = async (input: {
         executionLimits: input.executionLimits ?? limits,
         startedAtMs: 0,
         now: input.now ?? (() => 1),
+        reserveTokens: input.reserveTokens,
     });
 };
 
@@ -211,7 +209,7 @@ test('rejects undeclared executor outcomes', async () => {
     assert.equal(execution.run.steps[0]?.attempts[0]?.status, 'rejected');
 });
 
-test('routes an optional Step failure while preserving earlier Results', async () => {
+test('routes an optional Step failure as degraded while preserving earlier Results', async () => {
     const execution = await runWith({
         definition: workflow({
             plan: step({
@@ -250,10 +248,56 @@ test('routes an optional Step failure while preserving earlier Results', async (
         },
     });
 
-    assert.equal(execution.status, 'completed');
+    assert.equal(execution.status, 'degraded');
     assert.deepEqual(execution.run.results.plan?.value, { route: 'write' });
     assert.equal(execution.run.results.style, undefined);
     assert.equal(execution.run.steps[1]?.attempts.length, 2);
+});
+
+test('marks explicit default-plan recovery as degraded', async () => {
+    const execution = await runWith({
+        definition: workflow({
+            plan: step({
+                id: 'plan',
+                transitions: {
+                    failed: { kind: 'step', stepId: 'defaultPlan' },
+                },
+            }),
+            defaultPlan: step({
+                id: 'defaultPlan',
+                output: 'plan',
+                transitions: { done: { kind: 'step', stepId: 'finish' } },
+            }),
+            finish: step({
+                id: 'finish',
+                input: [{ kind: 'result', name: 'plan' }],
+                transitions: { done: { kind: 'end' } },
+            }),
+        }),
+        behavior: {
+            plan: [
+                {
+                    status: 'failed',
+                    errorCode: 'planner_unavailable',
+                    retryable: false,
+                },
+            ],
+            defaultPlan: [
+                {
+                    status: 'succeeded',
+                    outcome: 'done',
+                    result: result('plan', { fallback: true }),
+                },
+            ],
+            finish: [{ status: 'succeeded', outcome: 'done' }],
+        },
+    });
+
+    assert.equal(execution.status, 'degraded');
+    assert.deepEqual(
+        execution.run.steps.map((record) => record.stepId),
+        ['plan', 'defaultPlan', 'finish']
+    );
 });
 
 test('rejects invalid definitions before any executor runs', async () => {
@@ -419,7 +463,7 @@ test('uses shared admission before every retry and supplies distinct Attempt ord
         workflow: workflow({
             retrieve: step({
                 id: 'retrieve',
-                kind: 'tool',
+                activity: { tool: 'one-or-more' },
                 maxAttempts: 3,
                 transitions: { failed: { kind: 'end' } },
             }),
@@ -449,12 +493,52 @@ test('uses shared admission before every retry and supplies distinct Attempt ord
     });
 });
 
+test('calculates token reservations for each concrete Attempt', async () => {
+    const reservations: number[] = [];
+    let executorCalls = 0;
+    const execution = await executeWorkflow({
+        workflow: workflow({
+            write: step({
+                id: 'write',
+                maxAttempts: 2,
+                transitions: { failed: { kind: 'end' } },
+            }),
+        }),
+        context: { requestId: 'req-1' },
+        executors: {
+            code: async () => {
+                executorCalls += 1;
+                return {
+                    status: 'failed',
+                    errorCode: 'temporary',
+                    retryable: true,
+                    usage: { totalTokens: 3 },
+                };
+            },
+        },
+        executionLimits: { ...limits, maxTokensTotal: 8 },
+        startedAtMs: 0,
+        now: () => 1,
+        reserveTokens: ({ attempt }) => {
+            reservations.push(attempt);
+            return attempt === 1 ? 3 : 6;
+        },
+    });
+
+    assert.deepEqual(reservations, [1, 2]);
+    assert.equal(executorCalls, 1);
+    assert.deepEqual(execution.termination, {
+        reason: 'execution_limit',
+        limit: 'maxTokensTotal',
+    });
+});
+
 test('applies canonical caps, reservation, duration, and presentation accounting through shared admission', async () => {
     const plan = await runWith({
         definition: workflow({
             plan: step({
                 id: 'plan',
-                kind: 'plan',
+                activity: { deliberation: 'plan' },
                 maxAttempts: 2,
                 transitions: { failed: { kind: 'end' } },
             }),
@@ -473,7 +557,7 @@ test('applies canonical caps, reservation, duration, and presentation accounting
         definition: workflow({
             review: step({
                 id: 'review',
-                kind: 'assess',
+                activity: { deliberation: 'review' },
                 maxAttempts: 2,
                 transitions: { failed: { kind: 'end' } },
             }),
@@ -492,12 +576,12 @@ test('applies canonical caps, reservation, duration, and presentation accounting
         definition: workflow({
             write: step({
                 id: 'write',
-                tokenReservation: 11,
                 transitions: { done: { kind: 'end' } },
             }),
         }),
         behavior: { write: [{ status: 'succeeded', outcome: 'done' }] },
         executionLimits: { ...limits, maxTokensTotal: 10 },
+        reserveTokens: () => 11,
     });
     assert.equal(reservation.run.steps.length, 0);
     assert.equal(reservation.termination.reason, 'execution_limit');
@@ -523,7 +607,7 @@ test('applies canonical caps, reservation, duration, and presentation accounting
         definition: workflow({
             presentation: step({
                 id: 'presentation',
-                kind: 'presentation',
+                activity: { deliberation: 'none' },
                 transitions: { done: { kind: 'end' } },
             }),
         }),
@@ -577,6 +661,7 @@ test('describes the current non-live reviewed-chat topology honestly', () => {
         'presentation',
         'write',
         'review',
+        'replan',
         'finish',
     ]);
     assert.deepEqual(
@@ -594,9 +679,11 @@ test('describes the current non-live reviewed-chat topology honestly', () => {
         CURRENT_REVIEWED_CHAT_WORKFLOW.steps.defaultPlan?.output?.name,
         'plan'
     );
-    assert.equal(
-        CURRENT_REVIEWED_CHAT_WORKFLOW.steps.presentation?.kind,
-        'presentation'
+    assert.deepEqual(
+        CURRENT_REVIEWED_CHAT_WORKFLOW.steps.presentation?.activity,
+        {
+            deliberation: 'none',
+        }
     );
     assert.equal(CURRENT_REVIEWED_CHAT_WORKFLOW.steps.presentation?.maxRuns, 1);
     assert.equal(
@@ -605,6 +692,46 @@ test('describes the current non-live reviewed-chat topology honestly', () => {
     );
     assert.equal(CURRENT_REVIEWED_CHAT_WORKFLOW.steps.write?.maxRuns, 3);
     assert.equal(CURRENT_REVIEWED_CHAT_WORKFLOW.steps.review?.maxRuns, 3);
+    assert.deepEqual(
+        CURRENT_REVIEWED_CHAT_WORKFLOW.steps.review?.transitions.revise,
+        {
+            kind: 'step',
+            stepId: 'replan',
+        }
+    );
+    assert.deepEqual(
+        CURRENT_REVIEWED_CHAT_WORKFLOW.steps.replan?.transitions.continue,
+        {
+            kind: 'step',
+            stepId: 'write',
+        }
+    );
+    assert.deepEqual(
+        CURRENT_REVIEWED_CHAT_WORKFLOW.steps.write?.input.map((reference) =>
+            reference.kind === 'result' ? reference.name : reference.kind
+        ),
+        [
+            'context',
+            'plan',
+            'evidence',
+            'presentation',
+            'draft',
+            'review',
+            'revisionPlan',
+        ]
+    );
+    assert.deepEqual(
+        CURRENT_REVIEWED_CHAT_WORKFLOW.steps.replan?.input.map((reference) =>
+            reference.kind === 'result' ? reference.name : reference.kind
+        ),
+        ['context', 'plan', 'draft', 'review']
+    );
+    assert.deepEqual(
+        CURRENT_REVIEWED_CHAT_WORKFLOW.steps.finish?.input.map((reference) =>
+            reference.kind === 'result' ? reference.name : reference.kind
+        ),
+        ['draft', 'plan', 'evidence', 'review']
+    );
     for (const currentStep of ['write', 'review'] as const) {
         assert.deepEqual(
             CURRENT_REVIEWED_CHAT_WORKFLOW.steps[currentStep]?.transitions

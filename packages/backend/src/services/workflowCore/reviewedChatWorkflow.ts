@@ -24,7 +24,7 @@ export const CURRENT_REVIEWED_CHAT_WORKFLOW: Workflow = {
         plan: step({
             id: 'plan',
             executor: 'model',
-            kind: 'plan',
+            activity: { deliberation: 'plan' },
             input: [{ kind: 'context' }],
             output: { name: 'plan' },
             transitions: {
@@ -46,7 +46,7 @@ export const CURRENT_REVIEWED_CHAT_WORKFLOW: Workflow = {
         context: step({
             id: 'context',
             executor: 'context',
-            kind: 'tool',
+            activity: { tool: 'one-or-more' },
             input: [{ kind: 'context' }, { kind: 'result', name: 'plan' }],
             output: { name: 'evidence' },
             transitions: {
@@ -59,7 +59,7 @@ export const CURRENT_REVIEWED_CHAT_WORKFLOW: Workflow = {
         presentation: step({
             id: 'presentation',
             executor: 'model',
-            kind: 'presentation',
+            activity: { deliberation: 'none' },
             input: [
                 { kind: 'context' },
                 { kind: 'result', name: 'plan' },
@@ -76,13 +76,14 @@ export const CURRENT_REVIEWED_CHAT_WORKFLOW: Workflow = {
         write: step({
             id: 'write',
             executor: 'model',
-            kind: 'generate',
             input: [
                 { kind: 'context' },
                 { kind: 'result', name: 'plan' },
                 { kind: 'result', name: 'evidence', optional: true },
                 { kind: 'result', name: 'presentation', optional: true },
                 { kind: 'result', name: 'draft', optional: true },
+                { kind: 'result', name: 'review', optional: true },
+                { kind: 'result', name: 'revisionPlan', optional: true },
             ],
             output: { name: 'draft' },
             transitions: {
@@ -95,7 +96,7 @@ export const CURRENT_REVIEWED_CHAT_WORKFLOW: Workflow = {
         review: step({
             id: 'review',
             executor: 'model',
-            kind: 'assess',
+            activity: { deliberation: 'review' },
             input: [
                 { kind: 'result', name: 'draft' },
                 { kind: 'result', name: 'evidence', optional: true },
@@ -103,17 +104,39 @@ export const CURRENT_REVIEWED_CHAT_WORKFLOW: Workflow = {
             output: { name: 'review' },
             transitions: {
                 done: { kind: 'step', stepId: 'finish' },
-                revise: { kind: 'step', stepId: 'write' },
+                revise: { kind: 'step', stepId: 'replan' },
                 failed: { kind: 'step', stepId: 'finish' },
             },
             maxRuns: 3,
             maxAttempts: 2,
         }),
+        replan: step({
+            id: 'replan',
+            executor: 'model',
+            activity: { deliberation: 'plan' },
+            input: [
+                { kind: 'context' },
+                { kind: 'result', name: 'plan' },
+                { kind: 'result', name: 'draft' },
+                { kind: 'result', name: 'review' },
+            ],
+            output: { name: 'revisionPlan' },
+            transitions: {
+                continue: { kind: 'step', stepId: 'write' },
+                failed: { kind: 'step', stepId: 'write' },
+            },
+            maxRuns: 2,
+            maxAttempts: 2,
+        }),
         finish: step({
             id: 'finish',
             executor: 'code',
-            kind: 'finalize',
-            input: [{ kind: 'result', name: 'draft', optional: true }],
+            input: [
+                { kind: 'result', name: 'draft', optional: true },
+                { kind: 'result', name: 'plan', optional: true },
+                { kind: 'result', name: 'evidence', optional: true },
+                { kind: 'result', name: 'review', optional: true },
+            ],
             output: { name: 'answer' },
             transitions: { done: { kind: 'end' }, failed: { kind: 'end' } },
             maxRuns: 1,

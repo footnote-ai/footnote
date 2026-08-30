@@ -6,8 +6,8 @@
  * @footnote-risk: medium - Contract drift can make later workflow cutovers unsafe.
  * @footnote-ethics: high - Explicit topology and bounded attempts keep execution authority with the backend.
  */
-import type { WorkflowStepKind } from '@footnote/contracts/policy';
 import type {
+    ExecutionActivity,
     ExecutionLimits,
     ExhaustedExecutionLimit,
 } from '../workflowEngine/limits.js';
@@ -46,8 +46,8 @@ export type Transition = { kind: 'step'; stepId: string } | { kind: 'end' };
 export type Step = {
     id: string;
     executor: ExecutorKind;
-    /** Canonical execution category used by shared Execution Contract admission. */
-    kind?: WorkflowStepKind;
+    /** Minimal resource facts consumed by shared Execution Contract authority. */
+    activity?: ExecutionActivity;
     input: readonly InputRef[];
     /** The sole Result name this Step may return on success. */
     output?: { name: string };
@@ -56,8 +56,6 @@ export type Step = {
     maxRuns?: number;
     /** Maximum Attempts for one semantic Step execution. */
     maxAttempts?: number;
-    /** Conservative tokens reserved before each Attempt. */
-    tokenReservation?: number;
 };
 
 export type Workflow = {
@@ -162,7 +160,7 @@ export type RunTermination =
     | { reason: 'executor_unavailable'; stepId: string };
 
 export type RunResult = {
-    status: 'completed' | 'limited' | 'failed' | 'rejected';
+    status: 'completed' | 'degraded' | 'limited' | 'failed' | 'rejected';
     run: Run;
     termination: RunTermination;
 };
@@ -176,4 +174,6 @@ export type ExecuteInput<TContext = unknown> = {
     runId?: string;
     startedAtMs?: number;
     now?: () => number;
+    /** Calculates the conservative reservation for this concrete Attempt. */
+    reserveTokens?: (input: ExecutorInput<TContext>) => number | undefined;
 };
