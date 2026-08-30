@@ -183,14 +183,16 @@ export type {
     PostInternalVoiceTtsResponse,
 } from './voice/index.js';
 
-// Shared AI/provider vocabulary
+// Workflow contracts
 export type {
     ResultRef,
     Step,
+    StepActivity,
     StepOutput,
     Workflow,
-    WorkflowActivity,
 } from './workflow.js';
+
+// Shared AI/provider vocabulary
 export type {
     ConfiguredProviderModel,
     InternalImageRenderModelId,

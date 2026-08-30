@@ -266,10 +266,12 @@ const validateAttemptResult = (input: {
     if (input.step.output === undefined) {
         return input.result === undefined;
     }
-    const requiresResult =
+    const producesResult =
         input.step.output.on === undefined ||
         input.step.output.on.includes(input.outcome);
-    return input.result !== undefined || !requiresResult;
+    return producesResult
+        ? input.result !== undefined
+        : input.result === undefined;
 };
 
 /**
@@ -614,8 +616,7 @@ export const executeWorkflow = async <TContext>(
             successfulOutcome !== undefined &&
             step.output !== undefined
         ) {
-            // An omitted output or failed Step leaves no current Result for
-            // this Step; an earlier loop iteration cannot stand in for it.
+            // A successful outcome that omits this output clears the previous value.
             delete results[step.output.name];
         }
         if (observedLimit !== undefined) {

@@ -13,7 +13,7 @@ import type {
     WorkflowStepKind,
     WorkflowTerminationReason,
 } from '@footnote/contracts/policy';
-import type { WorkflowActivity } from '@footnote/contracts';
+import type { StepActivity } from '@footnote/contracts';
 import type { WorkflowProfileExecutionLimitsContract } from '../workflowProfileContract.js';
 import type { WorkflowProfilePolicyContract } from '../workflowProfileContract.js';
 import type { WorkflowState } from './state.js';
@@ -125,7 +125,7 @@ export const admitExecution = (input: {
     state: ExecutionLimitState;
     limits: ExecutionLimits;
     nowMs: number;
-    activity?: WorkflowActivity;
+    activity?: StepActivity;
     reservation?: ExecutionReservation;
 }): ExecutionAdmission => {
     const malformedLimits = validateExecutionLimits(input.limits);
@@ -219,7 +219,7 @@ export const admitExecution = (input: {
  */
 export const recordAttempt = (input: {
     state: ExecutionLimitState;
-    activity?: WorkflowActivity;
+    activity?: StepActivity;
     usage?: ExecutionUsage;
 }): ExecutionLimitState => {
     const toolCalls = sanitizeUsageCount(input.usage?.toolCalls);
@@ -245,7 +245,7 @@ export const recordAttempt = (input: {
 /** Records one completed semantic Step after its Attempts finish. */
 export const recordStep = (input: {
     state: ExecutionLimitState;
-    activity?: WorkflowActivity;
+    activity?: StepActivity;
 }): ExecutionLimitState => ({
     ...input.state,
     stepCount: input.state.stepCount + 1,
@@ -260,7 +260,7 @@ export const recordStep = (input: {
 /** Adapts the live engine's legacy taxonomy at its boundary to generic resource facts. */
 export const activityForWorkflowStep = (
     stepKind: WorkflowStepKind | undefined
-): WorkflowActivity | undefined => {
+): StepActivity | undefined => {
     if (stepKind === 'tool') return { tool: 'one-or-more' };
     if (stepKind === 'plan') return { deliberation: 'plan' };
     if (stepKind === 'assess') return { deliberation: 'review' };

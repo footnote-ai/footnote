@@ -413,10 +413,26 @@ test('allows declared skipped outcomes to omit Results while retaining required 
             presentation: [{ status: 'succeeded', outcome: 'admitted' }],
         },
     });
+    const skippedWithResult = await runWith({
+        definition,
+        behavior: {
+            presentation: [
+                {
+                    status: 'succeeded',
+                    outcome: 'skipped',
+                    result: 'unexpected presentation',
+                },
+            ],
+        },
+    });
 
     assert.equal(skipped.status, 'completed');
     assert.equal(skipped.run.results.presentation, undefined);
     assert.deepEqual(admittedWithoutResult.termination, {
+        reason: 'invalid_result',
+        stepId: 'presentation',
+    });
+    assert.deepEqual(skippedWithResult.termination, {
         reason: 'invalid_result',
         stepId: 'presentation',
     });

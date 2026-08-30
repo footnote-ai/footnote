@@ -13,20 +13,20 @@ export type ResultRef = {
 };
 
 export type StepOutput = {
-    /** Saves the handler's Result under this name. */
+    /** Stores this Step's Result under this name. */
     name: string;
-    /** Successful outcomes that produce this Result. All do when omitted. */
+    /** Outcomes that produce this Result. All outcomes do when omitted. */
     on?: readonly string[];
 };
 
-export type WorkflowActivity = {
+export type StepActivity = {
     tool?: 'one-or-more';
     deliberation?: 'general' | 'plan' | 'review';
 };
 
 export type Step = {
     /** Resources this Step may use. */
-    activity?: WorkflowActivity;
+    activity?: StepActivity;
     input?: readonly ResultRef[];
     output?: StepOutput;
     next: Readonly<Record<string, string | null>>;
