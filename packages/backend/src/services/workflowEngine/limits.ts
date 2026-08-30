@@ -226,6 +226,8 @@ export const recordExecution = (input: {
     state: ExecutionLimitState;
     activity?: ExecutionActivity;
     usage?: ExecutionUsage;
+    /** A deliberative Attempt was admitted and invoked, even if usage is absent. */
+    deliberationAttempted?: boolean;
     completedStep?: boolean;
 }): ExecutionLimitState => {
     const recordsResourceUsage =
@@ -242,10 +244,11 @@ export const recordExecution = (input: {
         recordsResourceUsage && input.activity?.tool !== 'none'
             ? reportedToolCalls
             : 0;
-    const deliberationCalls =
-        recordsResourceUsage && input.activity?.deliberation !== 'none'
-            ? reportedDeliberationCalls
-            : 0;
+    const deliberationCalls = input.deliberationAttempted
+        ? Math.max(1, reportedDeliberationCalls)
+        : recordsResourceUsage && input.activity?.deliberation !== 'none'
+          ? reportedDeliberationCalls
+          : 0;
 
     return {
         ...input.state,
@@ -306,7 +309,7 @@ export const checkExecutionLimits = (
     limits: ExecutionLimits,
     nowMs: number,
     nextStepKind?: WorkflowStepKind,
-    nextStepTokenBudget = 0
+    nextStepTokenBudget?: number
 ): {
     withinLimits: boolean;
     exhaustedBy?: ExhaustedExecutionLimit;
@@ -317,7 +320,7 @@ export const checkExecutionLimits = (
         limits,
         nowMs,
         activity: activityForWorkflowStep(nextStepKind),
-        ...(nextStepTokenBudget === 0
+        ...(nextStepTokenBudget === undefined
             ? {}
             : { reservation: { tokens: nextStepTokenBudget } }),
     });

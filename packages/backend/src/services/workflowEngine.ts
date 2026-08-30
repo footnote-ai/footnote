@@ -583,7 +583,7 @@ export const runBoundedReviewWorkflow = async ({
 
     const stopIfOverLimits = (
         nextStepKind?: WorkflowStepKind,
-        nextStepTokenBudget = 0,
+        nextStepTokenBudget: number | undefined = undefined,
         stateForCheck: WorkflowState = workflowState
     ): LimitStopEvaluation => {
         const limitsCheck = checkExecutionLimits(

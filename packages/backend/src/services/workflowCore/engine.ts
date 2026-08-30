@@ -1,5 +1,5 @@
 /**
- * @description: Executes runtime workflow definitions through declared transitions,
+ * @description: Executes runtime workflow definitions through declared next outcomes,
  * bounded semantic runs, and Execution Contract admission before every Attempt.
  * @footnote-scope: core
  * @footnote-module: WorkflowCoreEngine
@@ -23,7 +23,6 @@ import {
     type RunResult,
     type RunTermination,
     type Step,
-    type Transition,
     type Workflow,
 } from './types.js';
 
@@ -66,7 +65,6 @@ const createRun = (input: {
 
 const toAttempt = (input: {
     attempt: number;
-    handler: Step['handler'];
     startedAtMs: number;
     finishedAtMs: number;
     result: AttemptResult;
@@ -74,7 +72,6 @@ const toAttempt = (input: {
     if (input.result.status === 'succeeded') {
         return {
             attempt: input.attempt,
-            handler: input.handler,
             status: 'succeeded',
             startedAtMs: input.startedAtMs,
             finishedAtMs: input.finishedAtMs,
@@ -86,7 +83,6 @@ const toAttempt = (input: {
 
     return {
         attempt: input.attempt,
-        handler: input.handler,
         status: 'failed',
         startedAtMs: input.startedAtMs,
         finishedAtMs: input.finishedAtMs,
@@ -114,12 +110,16 @@ const recordRunExecution = (input: {
     run: Run;
     step?: Step;
     usage?: AttemptResult['usage'];
+    deliberationAttempted?: boolean;
     completedStep?: boolean;
 }): void => {
     const state = recordExecution({
         state: executionLimitStateFor(input.run),
         ...(input.step === undefined ? {} : { activity: input.step.activity }),
         ...(input.usage === undefined ? {} : { usage: input.usage }),
+        ...(input.deliberationAttempted === true
+            ? { deliberationAttempted: true }
+            : {}),
         ...(input.completedStep === true ? { completedStep: true } : {}),
     });
     input.run.usage = {
@@ -137,23 +137,16 @@ const canRecoverFromAdmissionLimit = (
 ): boolean => limit !== 'maxDurationMs' && limit !== 'maxWorkflowSteps';
 
 const hasDeclaredOutcome = (step: Step, outcome: string): boolean =>
-    Object.prototype.hasOwnProperty.call(step.transitions, outcome);
+    Object.prototype.hasOwnProperty.call(step.next, outcome);
 
-export type TransitionResolution =
-    | { kind: 'declared'; transition: Transition }
-    | { kind: 'undeclared_outcome'; outcome: string };
+type NextResolution = { next: string | null } | { outcome: string };
 
 /** Resolves only outcomes declared by the supplied Step. */
-export const resolveTransition = (
-    step: Step,
-    outcome: string
-): TransitionResolution => {
-    const transition = hasDeclaredOutcome(step, outcome)
-        ? step.transitions[outcome]
+const resolveNext = (step: Step, outcome: string): NextResolution => {
+    const next = hasDeclaredOutcome(step, outcome)
+        ? step.next[outcome]
         : undefined;
-    return transition === undefined
-        ? { kind: 'undeclared_outcome', outcome }
-        : { kind: 'declared', transition };
+    return next === undefined ? { outcome } : { next };
 };
 
 const validateDefinition = (workflow: Workflow): string | undefined => {
@@ -165,10 +158,7 @@ const validateDefinition = (workflow: Workflow): string | undefined => {
         string,
         Step,
     ][]) {
-        if (step === undefined || step.id !== key) {
-            return `Workflow step key does not match step id: ${key}`;
-        }
-        if (!Array.isArray(step.input)) {
+        if (step.input !== undefined && !Array.isArray(step.input)) {
             return `Workflow step input is invalid: ${key}`;
         }
         if (
@@ -193,19 +183,15 @@ const validateDefinition = (workflow: Workflow): string | undefined => {
                     (outcome) =>
                         typeof outcome !== 'string' ||
                         !Object.prototype.hasOwnProperty.call(
-                            step.transitions,
+                            step.next,
                             outcome
                         )
                 ))
         ) {
             return `Workflow step output requirements are invalid: ${key}`;
         }
-        for (const transition of Object.values(step.transitions)) {
-            if (transition.kind === 'end') continue;
-            if (
-                transition.kind !== 'step' ||
-                workflow.steps[transition.stepId] === undefined
-            ) {
+        for (const next of Object.values(step.next)) {
+            if (next !== null && workflow.steps[next] === undefined) {
                 return `Workflow transition target is not defined: ${key}`;
             }
         }
@@ -221,8 +207,7 @@ const collectStepInputs = (input: {
     | { results: Readonly<Record<string, Result>> }
     | { missingReference: string } => {
     const selected: Record<string, Result> = {};
-    for (const reference of input.step.input) {
-        if (reference.kind !== 'result') continue;
+    for (const reference of input.step.input ?? []) {
         const value = input.results[reference.name];
         if (value === undefined && reference.optional !== true) {
             return { missingReference: reference.name };
@@ -357,7 +342,7 @@ export const executeWorkflow = async <TContext>(
         }
 
         const priorRuns = steps.filter(
-            (record) => record.stepId === step.id
+            (record) => record.stepId === currentStepId
         ).length;
         if (step.maxRuns !== undefined && priorRuns >= step.maxRuns) {
             return finish({
@@ -366,7 +351,10 @@ export const executeWorkflow = async <TContext>(
                 results,
                 now,
                 status: 'limited',
-                termination: { reason: 'step_run_limit', stepId: step.id },
+                termination: {
+                    reason: 'step_run_limit',
+                    stepId: currentStepId,
+                },
             });
         }
 
@@ -380,13 +368,13 @@ export const executeWorkflow = async <TContext>(
                 status: 'rejected',
                 termination: {
                     reason: 'missing_required_input',
-                    stepId: step.id,
+                    stepId: currentStepId,
                     inputName: collected.missingReference,
                 },
             });
         }
 
-        const handler = input.handlers[step.handler];
+        const handler = input.handlers[currentStepId];
         if (handler === undefined) {
             return finish({
                 run,
@@ -396,7 +384,7 @@ export const executeWorkflow = async <TContext>(
                 status: 'rejected',
                 termination: {
                     reason: 'handler_unavailable',
-                    stepId: step.id,
+                    stepId: currentStepId,
                 },
             });
         }
@@ -415,10 +403,11 @@ export const executeWorkflow = async <TContext>(
             attemptNumber += 1
         ) {
             const handlerInput = {
+                stepId: currentStepId,
                 step,
                 context: input.context,
                 results: collected.results,
-                run: stepRunNumber,
+                iteration: stepRunNumber,
                 attempt: attemptNumber,
             };
             const reservation = input.reserveAttempt?.(handlerInput);
@@ -436,9 +425,9 @@ export const executeWorkflow = async <TContext>(
                     if (attempts.length > 0) {
                         recordRunExecution({ run, step, completedStep: true });
                         steps.push({
-                            stepId: step.id,
-                            run: stepRunNumber,
-                            input: step.input,
+                            stepId: currentStepId,
+                            iteration: stepRunNumber,
+                            input: step.input ?? [],
                             status: 'failed',
                             attempts,
                         });
@@ -459,7 +448,6 @@ export const executeWorkflow = async <TContext>(
                     const admissionAtMs = now();
                     attempts.push({
                         attempt: attemptNumber,
-                        handler: step.handler,
                         status: 'rejected',
                         startedAtMs: admissionAtMs,
                         finishedAtMs: admissionAtMs,
@@ -472,9 +460,9 @@ export const executeWorkflow = async <TContext>(
                 if (attempts.length > 0) {
                     recordRunExecution({ run, step, completedStep: true });
                     steps.push({
-                        stepId: step.id,
-                        run: stepRunNumber,
-                        input: step.input,
+                        stepId: currentStepId,
+                        iteration: stepRunNumber,
+                        input: step.input ?? [],
                         status: 'failed',
                         attempts,
                     });
@@ -509,6 +497,10 @@ export const executeWorkflow = async <TContext>(
             recordRunExecution({
                 run,
                 step,
+                ...(step.activity?.deliberation === undefined ||
+                step.activity.deliberation === 'none'
+                    ? {}
+                    : { deliberationAttempted: true }),
                 ...(attemptResult.usage === undefined
                     ? {}
                     : { usage: attemptResult.usage }),
@@ -520,18 +512,14 @@ export const executeWorkflow = async <TContext>(
             });
             const attempt = toAttempt({
                 attempt: attemptNumber,
-                handler: step.handler,
                 startedAtMs: attemptStartedAtMs,
                 finishedAtMs: attemptFinishedAtMs,
                 result: attemptResult,
             });
 
             if (attemptResult.status === 'succeeded') {
-                const transition = resolveTransition(
-                    step,
-                    attemptResult.outcome
-                );
-                if (transition.kind === 'undeclared_outcome') {
+                const transition = resolveNext(step, attemptResult.outcome);
+                if ('outcome' in transition) {
                     attempts.push({
                         ...attempt,
                         status: 'rejected',
@@ -540,9 +528,9 @@ export const executeWorkflow = async <TContext>(
                     });
                     recordRunExecution({ run, completedStep: true });
                     steps.push({
-                        stepId: step.id,
-                        run: stepRunNumber,
-                        input: step.input,
+                        stepId: currentStepId,
+                        iteration: stepRunNumber,
+                        input: step.input ?? [],
                         status: 'failed',
                         attempts,
                     });
@@ -554,7 +542,7 @@ export const executeWorkflow = async <TContext>(
                         status: 'rejected',
                         termination: {
                             reason: 'undeclared_outcome',
-                            stepId: step.id,
+                            stepId: currentStepId,
                             outcome: transition.outcome,
                         },
                     });
@@ -575,9 +563,9 @@ export const executeWorkflow = async <TContext>(
                     });
                     recordRunExecution({ run, completedStep: true });
                     steps.push({
-                        stepId: step.id,
-                        run: stepRunNumber,
-                        input: step.input,
+                        stepId: currentStepId,
+                        iteration: stepRunNumber,
+                        input: step.input ?? [],
                         status: 'failed',
                         attempts,
                     });
@@ -589,7 +577,7 @@ export const executeWorkflow = async <TContext>(
                         status: 'rejected',
                         termination: {
                             reason: 'invalid_result',
-                            stepId: step.id,
+                            stepId: currentStepId,
                             ...(resultValidation.expectedName === undefined
                                 ? {}
                                 : {
@@ -625,9 +613,9 @@ export const executeWorkflow = async <TContext>(
 
         recordRunExecution({ run, step, completedStep: true });
         steps.push({
-            stepId: step.id,
-            run: stepRunNumber,
-            input: step.input,
+            stepId: currentStepId,
+            iteration: stepRunNumber,
+            input: step.input ?? [],
             status: failed ? 'failed' : 'succeeded',
             ...(successfulOutcome === undefined
                 ? {}
@@ -640,12 +628,9 @@ export const executeWorkflow = async <TContext>(
 
         if (successfulResult !== undefined) {
             results[successfulResult.name] = successfulResult;
-        } else if (
-            successfulOutcome !== undefined &&
-            step.output !== undefined
-        ) {
-            // Optional output omission is a current value of "absent", not a
-            // request to reuse this Step's Result from an earlier loop run.
+        } else if (step.output !== undefined) {
+            // An omitted output or failed Step leaves no current Result for
+            // this Step; an earlier loop iteration cannot stand in for it.
             delete results[step.output.name];
         }
         if (observedLimit !== undefined) {
@@ -663,9 +648,9 @@ export const executeWorkflow = async <TContext>(
         }
 
         const transition = failed
-            ? resolveTransition(step, 'failed')
-            : resolveTransition(step, successfulOutcome ?? '');
-        if (transition.kind === 'undeclared_outcome') {
+            ? resolveNext(step, 'failed')
+            : resolveNext(step, successfulOutcome ?? '');
+        if ('outcome' in transition) {
             return finish({
                 run,
                 steps,
@@ -673,10 +658,10 @@ export const executeWorkflow = async <TContext>(
                 now,
                 status: failed ? 'failed' : 'rejected',
                 termination: failed
-                    ? { reason: 'step_failed', stepId: step.id }
+                    ? { reason: 'step_failed', stepId: currentStepId }
                     : {
                           reason: 'undeclared_outcome',
-                          stepId: step.id,
+                          stepId: currentStepId,
                           outcome: transition.outcome,
                       },
             });
@@ -686,7 +671,7 @@ export const executeWorkflow = async <TContext>(
         // has exhausted Attempts and follows its declared failure route.
         if (failed) degraded = true;
 
-        if (transition.transition.kind === 'end') {
+        if (transition.next === null) {
             return finish({
                 run,
                 steps,
@@ -696,6 +681,6 @@ export const executeWorkflow = async <TContext>(
                 termination: { reason: 'finished' },
             });
         }
-        currentStepId = transition.transition.stepId;
+        currentStepId = transition.next;
     }
 };

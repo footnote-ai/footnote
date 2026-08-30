@@ -1,13 +1,12 @@
 /**
  * @description: Exposes the non-live workflow foundation as one backend-owned
- * runtime seam for definitions, execution, transitions, and bounded records.
+ * runtime seam for definitions, execution, and bounded records.
  * @footnote-scope: core
  * @footnote-module: WorkflowCore
  * @footnote-risk: medium - Export drift can make the future cutover depend on private implementation details.
  * @footnote-ethics: high - The exported seam keeps workflow authority explicit and bounded.
  */
-export { executeWorkflow, resolveTransition } from './engine.js';
-export type { TransitionResolution } from './engine.js';
+export { executeWorkflow } from './engine.js';
 export {
     result,
     type Attempt,
@@ -17,13 +16,12 @@ export {
     type StepHandler,
     type StepHandlerInput,
     type StepHandlers,
-    type InputRef,
+    type ResultRef,
     type Result,
     type Run,
     type RunResult,
     type RunTermination,
     type Step,
-    type Transition,
     type Workflow,
 } from './types.js';
 export type {

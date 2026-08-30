@@ -9,20 +9,31 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { REVIEWED_CHAT_WORKFLOW_FIXTURE } from './fixtures/reviewedChatWorkflow.fixture.js';
+import { CURRENT_CHAT_WORKFLOW_FIXTURE } from './fixtures/currentChatWorkflow.fixture.js';
 import {
-    executeWorkflow,
+    executeWorkflow as executeWorkflowCore,
     result,
     type AttemptResult,
     type ExecutionLimits,
+    type ExecuteInput,
     type StepHandlers,
-    type InputRef,
+    type ResultRef,
     type Step,
-    type Transition,
     type Workflow,
 } from '../src/services/workflowCore/index.js';
 
 type TestContext = { requestId: string };
+
+const executeWorkflow = (input: ExecuteInput<TestContext>) =>
+    executeWorkflowCore({
+        ...input,
+        handlers: new Proxy(input.handlers, {
+            get: (handlers, key) =>
+                typeof key === 'string'
+                    ? (handlers[key] ?? handlers.code)
+                    : undefined,
+        }),
+    });
 
 const limits: ExecutionLimits = {
     maxWorkflowSteps: 20,
@@ -33,20 +44,16 @@ const limits: ExecutionLimits = {
 };
 
 const step = (input: {
-    id: string;
-    transitions: Readonly<Record<string, Transition>>;
-    input?: readonly InputRef[];
+    next: Readonly<Record<string, string | null>>;
+    input?: readonly ResultRef[];
     output?: string;
     outputRequiredOn?: readonly string[];
     activity?: Step['activity'];
     maxRuns?: number;
     maxAttempts?: number;
-    handler?: Step['handler'];
 }): Step => ({
-    id: input.id,
-    handler: input.handler ?? 'code',
     ...(input.activity === undefined ? {} : { activity: input.activity }),
-    input: input.input ?? [],
+    ...(input.input === undefined ? {} : { input: input.input }),
     ...(input.output === undefined
         ? {}
         : {
@@ -57,7 +64,7 @@ const step = (input: {
                       : { requiredOn: input.outputRequiredOn }),
               },
           }),
-    transitions: input.transitions,
+    next: input.next,
     ...(input.maxRuns === undefined ? {} : { maxRuns: input.maxRuns }),
     ...(input.maxAttempts === undefined
         ? {}
@@ -87,12 +94,24 @@ const runWith = async (input: {
             [...outcomes],
         ])
     );
+    const defaultHandler =
+        input.handlers?.code ??
+        (input.handlers === undefined
+            ? async ({ stepId }: { stepId: string }) =>
+                  remaining.get(stepId)?.shift() ?? {
+                      status: 'succeeded' as const,
+                      outcome: 'done',
+                  }
+            : undefined);
     const handlers: StepHandlers<TestContext> = {
-        code: async ({ step: executingStep }) =>
-            remaining.get(executingStep.id)?.shift() ?? {
-                status: 'succeeded',
-                outcome: 'done',
-            },
+        ...(defaultHandler === undefined
+            ? {}
+            : Object.fromEntries(
+                  Object.keys(input.definition.steps).map((stepId) => [
+                      stepId,
+                      defaultHandler,
+                  ])
+              )),
         ...input.handlers,
     };
     return executeWorkflow({
@@ -109,21 +128,19 @@ const runWith = async (input: {
 test('runs declared dataflow and gives handlers the full Step, Results, and one-based ordinals', async () => {
     const definition = workflow({
         plan: step({
-            id: 'plan',
             output: 'plan',
-            transitions: { done: { kind: 'step', stepId: 'write' } },
+            next: { done: 'write' },
         }),
         write: step({
-            id: 'write',
-            input: [{ kind: 'result', name: 'plan' }],
+            input: [{ name: 'plan' }],
             output: 'draft',
-            transitions: { done: { kind: 'end' } },
+            next: { done: null },
         }),
     });
     const seen: Array<{
         stepId: string;
         resultNames: string[];
-        run: number;
+        iteration: number;
         attempt: number;
     }> = [];
 
@@ -131,14 +148,14 @@ test('runs declared dataflow and gives handlers the full Step, Results, and one-
         definition,
         behavior: {},
         handlers: {
-            code: async ({ step: executingStep, results, run, attempt }) => {
+            code: async ({ stepId, results, iteration, attempt }) => {
                 seen.push({
-                    stepId: executingStep.id,
+                    stepId: stepId,
                     resultNames: Object.keys(results),
-                    run,
+                    iteration,
                     attempt,
                 });
-                return executingStep.id === 'plan'
+                return stepId === 'plan'
                     ? {
                           status: 'succeeded',
                           outcome: 'done',
@@ -155,8 +172,8 @@ test('runs declared dataflow and gives handlers the full Step, Results, and one-
 
     assert.equal(execution.status, 'completed');
     assert.deepEqual(seen, [
-        { stepId: 'plan', resultNames: [], run: 1, attempt: 1 },
-        { stepId: 'write', resultNames: ['plan'], run: 1, attempt: 1 },
+        { stepId: 'plan', resultNames: [], iteration: 1, attempt: 1 },
+        { stepId: 'write', resultNames: ['plan'], iteration: 1, attempt: 1 },
     ]);
     assert.deepEqual(execution.run.results.plan?.value, { route: 'write' });
 });
@@ -165,13 +182,11 @@ test('supports a bounded generic style -> check -> retry cycle without special e
     const definition = workflow(
         {
             style: step({
-                id: 'style',
                 maxRuns: 2,
-                transitions: { done: { kind: 'step', stepId: 'check' } },
+                next: { done: 'check' },
             }),
             check: step({
-                id: 'check',
-                transitions: { retry: { kind: 'step', stepId: 'style' } },
+                next: { retry: 'style' },
             }),
         },
         'style'
@@ -206,8 +221,7 @@ test('rejects undeclared handler outcomes', async () => {
     const execution = await runWith({
         definition: workflow({
             plan: step({
-                id: 'plan',
-                transitions: { done: { kind: 'end' } },
+                next: { done: null },
             }),
         }),
         behavior: { plan: [{ status: 'succeeded', outcome: 'secret' }] },
@@ -222,23 +236,17 @@ test('routes an optional Step failure as degraded while preserving earlier Resul
     const execution = await runWith({
         definition: workflow({
             plan: step({
-                id: 'plan',
                 output: 'plan',
-                transitions: { done: { kind: 'step', stepId: 'style' } },
+                next: { done: 'style' },
             }),
             style: step({
-                id: 'style',
                 maxAttempts: 2,
-                input: [{ kind: 'result', name: 'plan' }],
-                transitions: { failed: { kind: 'step', stepId: 'write' } },
+                input: [{ name: 'plan' }],
+                next: { failed: 'write' },
             }),
             write: step({
-                id: 'write',
-                input: [
-                    { kind: 'result', name: 'plan' },
-                    { kind: 'result', name: 'style', optional: true },
-                ],
-                transitions: { done: { kind: 'end' } },
+                input: [{ name: 'plan' }, { name: 'style', optional: true }],
+                next: { done: null },
             }),
         }),
         behavior: {
@@ -267,20 +275,17 @@ test('marks explicit default-plan recovery as degraded', async () => {
     const execution = await runWith({
         definition: workflow({
             plan: step({
-                id: 'plan',
-                transitions: {
-                    failed: { kind: 'step', stepId: 'defaultPlan' },
+                next: {
+                    failed: 'defaultPlan',
                 },
             }),
             defaultPlan: step({
-                id: 'defaultPlan',
                 output: 'plan',
-                transitions: { done: { kind: 'step', stepId: 'finish' } },
+                next: { done: 'finish' },
             }),
             finish: step({
-                id: 'finish',
-                input: [{ kind: 'result', name: 'plan' }],
-                transitions: { done: { kind: 'end' } },
+                input: [{ name: 'plan' }],
+                next: { done: null },
             }),
         }),
         behavior: {
@@ -313,9 +318,8 @@ test('keeps a Run completed when a retryable Attempt succeeds within its Step', 
     const execution = await runWith({
         definition: workflow({
             write: step({
-                id: 'write',
                 maxAttempts: 2,
-                transitions: { done: { kind: 'end' } },
+                next: { done: null },
             }),
         }),
         behavior: {
@@ -344,7 +348,7 @@ test('counts a retried plan or review Step once against its semantic cycle cap',
                     id: stepId,
                     activity,
                     maxAttempts: 2,
-                    transitions: { done: { kind: 'end' } },
+                    next: { done: null },
                 }),
             }),
             behavior: {
@@ -366,19 +370,18 @@ test('counts a retried plan or review Step once against its semantic cycle cap',
             execution.run.usage.reviewCalls,
             stepId === 'review' ? 1 : 0
         );
-        assert.equal(execution.run.usage.deliberationCalls, 0);
+        assert.equal(execution.run.usage.deliberationCalls, 2);
     }
 });
 
 test('allows declared skipped outcomes to omit Results while retaining required output outcomes', async () => {
     const definition = workflow({
         presentation: step({
-            id: 'presentation',
             output: 'presentation',
             outputRequiredOn: ['admitted'],
-            transitions: {
-                admitted: { kind: 'end' },
-                skipped: { kind: 'end' },
+            next: {
+                admitted: null,
+                skipped: null,
             },
         }),
     });
@@ -408,19 +411,9 @@ test('allows declared skipped outcomes to omit Results while retaining required 
 test('rejects invalid definitions before any handler runs', async () => {
     const invalidDefinitions: readonly Workflow[] = [
         workflow({}, 'missing'),
-        workflow(
-            {
-                key: step({
-                    id: 'different',
-                    transitions: { done: { kind: 'end' } },
-                }),
-            },
-            'key'
-        ),
         workflow({
             first: step({
-                id: 'first',
-                transitions: { done: { kind: 'step', stepId: 'missing' } },
+                next: { done: 'missing' },
             }),
         }),
     ];
@@ -454,9 +447,8 @@ test('requires the declared Result and accepts outputless Steps only without Res
             name: 'required Result',
             definition: workflow({
                 write: step({
-                    id: 'write',
                     output: 'draft',
-                    transitions: { done: { kind: 'end' } },
+                    next: { done: null },
                 }),
             }),
             response: {
@@ -470,9 +462,8 @@ test('requires the declared Result and accepts outputless Steps only without Res
             name: 'missing Result',
             definition: workflow({
                 write: step({
-                    id: 'write',
                     output: 'draft',
-                    transitions: { done: { kind: 'end' } },
+                    next: { done: null },
                 }),
             }),
             response: { status: 'succeeded', outcome: 'done' },
@@ -482,9 +473,8 @@ test('requires the declared Result and accepts outputless Steps only without Res
             name: 'mismatched Result',
             definition: workflow({
                 write: step({
-                    id: 'write',
                     output: 'draft',
-                    transitions: { done: { kind: 'end' } },
+                    next: { done: null },
                 }),
             }),
             response: {
@@ -498,8 +488,7 @@ test('requires the declared Result and accepts outputless Steps only without Res
             name: 'undeclared Result',
             definition: workflow({
                 write: step({
-                    id: 'write',
-                    transitions: { done: { kind: 'end' } },
+                    next: { done: null },
                 }),
             }),
             response: {
@@ -513,8 +502,7 @@ test('requires the declared Result and accepts outputless Steps only without Res
             name: 'outputless Step',
             definition: workflow({
                 write: step({
-                    id: 'write',
-                    transitions: { done: { kind: 'end' } },
+                    next: { done: null },
                 }),
             }),
             response: { status: 'succeeded', outcome: 'done' },
@@ -544,8 +532,7 @@ test('keeps unavailable handlers separate from declared failure recovery', async
     const execution = await executeWorkflow({
         workflow: workflow({
             retrieve: step({
-                id: 'retrieve',
-                transitions: { failed: { kind: 'end' } },
+                next: { failed: null },
             }),
         }),
         context: { requestId: 'req-1' },
@@ -567,10 +554,9 @@ test('uses shared admission before every retry and supplies distinct Attempt ord
     const execution = await executeWorkflow({
         workflow: workflow({
             retrieve: step({
-                id: 'retrieve',
                 activity: { tool: 'one-or-more' },
                 maxAttempts: 3,
-                transitions: { failed: { kind: 'end' } },
+                next: { failed: null },
             }),
         }),
         context: { requestId: 'req-1' },
@@ -601,9 +587,8 @@ test('calculates Attempt reservations for each concrete Attempt', async () => {
     const execution = await executeWorkflow({
         workflow: workflow({
             write: step({
-                id: 'write',
                 maxAttempts: 2,
-                transitions: { failed: { kind: 'end' } },
+                next: { failed: null },
             }),
         }),
         context: { requestId: 'req-1' },
@@ -638,9 +623,8 @@ test('rejects a projected tool reservation before a tool Attempt executes', asyn
     const execution = await executeWorkflow({
         workflow: workflow({
             context: step({
-                id: 'context',
                 activity: { tool: 'one-or-more' },
-                transitions: { failed: { kind: 'end' }, done: { kind: 'end' } },
+                next: { failed: null, done: null },
             }),
         }),
         context: { requestId: 'req-1' },
@@ -665,34 +649,32 @@ test('routes a recoverably admission-blocked optional Step through its declared 
     const execution = await executeWorkflow({
         workflow: workflow({
             presentation: step({
-                id: 'presentation',
                 output: 'presentation',
                 outputRequiredOn: ['admitted'],
-                transitions: {
-                    admitted: { kind: 'step', stepId: 'write' },
-                    failed: { kind: 'step', stepId: 'write' },
+                next: {
+                    admitted: 'write',
+                    failed: 'write',
                 },
             }),
             write: step({
-                id: 'write',
-                transitions: {
-                    failed: { kind: 'end' },
-                    done: { kind: 'end' },
+                next: {
+                    failed: null,
+                    done: null,
                 },
             }),
         }),
         context: { requestId: 'req-1' },
         handlers: {
-            code: async ({ step: executingStep }) => ({
+            code: async ({ stepId }) => ({
                 status: 'succeeded',
-                outcome: executingStep.id === 'write' ? 'done' : 'admitted',
+                outcome: stepId === 'write' ? 'done' : 'admitted',
             }),
         },
         executionLimits: { ...limits, maxTokensTotal: 5 },
         startedAtMs: 0,
         now: () => 1,
-        reserveAttempt: ({ step: executingStep }) =>
-            executingStep.id === 'presentation' ? { tokens: 6 } : undefined,
+        reserveAttempt: ({ stepId }) =>
+            stepId === 'presentation' ? { tokens: 6 } : undefined,
     });
 
     assert.equal(execution.status, 'degraded');
@@ -707,22 +689,20 @@ test('routes a retry blocked by consumed tokens through Step recovery', async ()
     const execution = await executeWorkflow({
         workflow: workflow({
             presentation: step({
-                id: 'presentation',
                 maxAttempts: 2,
-                transitions: { failed: { kind: 'step', stepId: 'write' } },
+                next: { failed: 'write' },
             }),
             write: step({
-                id: 'write',
-                transitions: {
-                    failed: { kind: 'end' },
-                    done: { kind: 'end' },
+                next: {
+                    failed: null,
+                    done: null,
                 },
             }),
         }),
         context: { requestId: 'req-1' },
         handlers: {
-            code: async ({ step: executingStep }) =>
-                executingStep.id === 'presentation'
+            code: async ({ stepId }) =>
+                stepId === 'presentation'
                     ? {
                           status: 'failed',
                           errorCode: 'temporary',
@@ -734,8 +714,8 @@ test('routes a retry blocked by consumed tokens through Step recovery', async ()
         executionLimits: { ...limits, maxTokensTotal: 5 },
         startedAtMs: 0,
         now: () => 1,
-        reserveAttempt: ({ step: executingStep }) =>
-            executingStep.id === 'presentation' ? { tokens: 3 } : undefined,
+        reserveAttempt: ({ stepId }) =>
+            stepId === 'presentation' ? { tokens: 3 } : undefined,
     });
 
     assert.equal(execution.status, 'degraded');
@@ -752,27 +732,24 @@ test('allows explicit zero-token finalization after token exhaustion recovers a 
     const execution = await executeWorkflow({
         workflow: workflow({
             write: step({
-                id: 'write',
                 output: 'draft',
-                transitions: { generated: { kind: 'step', stepId: 'review' } },
+                next: { generated: 'review' },
             }),
             review: step({
-                id: 'review',
                 activity: { deliberation: 'review' },
-                input: [{ kind: 'result', name: 'draft' }],
-                transitions: { failed: { kind: 'step', stepId: 'finish' } },
+                input: [{ name: 'draft' }],
+                next: { failed: 'finish' },
             }),
             finish: step({
-                id: 'finish',
                 output: 'answer',
-                input: [{ kind: 'result', name: 'draft' }],
-                transitions: { done: { kind: 'end' } },
+                input: [{ name: 'draft' }],
+                next: { done: null },
             }),
         }),
         context: { requestId: 'req-1' },
         handlers: {
-            code: async ({ step: executingStep }) => {
-                if (executingStep.id === 'write') {
+            code: async ({ stepId }) => {
+                if (stepId === 'write') {
                     return {
                         status: 'succeeded',
                         outcome: 'generated',
@@ -780,7 +757,7 @@ test('allows explicit zero-token finalization after token exhaustion recovers a 
                         usage: { totalTokens: 3 },
                     };
                 }
-                if (executingStep.id === 'review') {
+                if (stepId === 'review') {
                     reviewCalls += 1;
                     return { status: 'succeeded', outcome: 'done' };
                 }
@@ -795,9 +772,9 @@ test('allows explicit zero-token finalization after token exhaustion recovers a 
         executionLimits: { ...limits, maxTokensTotal: 3 },
         startedAtMs: 0,
         now: () => 1,
-        reserveAttempt: ({ step: executingStep }) => {
-            if (executingStep.id === 'review') return { tokens: 1 };
-            if (executingStep.id === 'finish') return { tokens: 0 };
+        reserveAttempt: ({ stepId }) => {
+            if (stepId === 'review') return { tokens: 1 };
+            if (stepId === 'finish') return { tokens: 0 };
             return undefined;
         },
     });
@@ -813,9 +790,8 @@ test('stops on observed resource overruns while retaining valid prior Results', 
     const tokenOverrun = await executeWorkflow({
         workflow: workflow({
             write: step({
-                id: 'write',
                 output: 'draft',
-                transitions: { done: { kind: 'end' } },
+                next: { done: null },
             }),
         }),
         context: { requestId: 'req-1' },
@@ -836,9 +812,8 @@ test('stops on observed resource overruns while retaining valid prior Results', 
     const toolOverrun = await executeWorkflow({
         workflow: workflow({
             retrieve: step({
-                id: 'retrieve',
                 activity: { tool: 'one-or-more' },
-                transitions: { done: { kind: 'end' } },
+                next: { done: null },
             }),
         }),
         context: { requestId: 'req-1' },
@@ -858,22 +833,20 @@ test('stops on observed resource overruns while retaining valid prior Results', 
     const reviewOverrun = await executeWorkflow({
         workflow: workflow({
             write: step({
-                id: 'write',
                 output: 'draft',
-                transitions: { generated: { kind: 'step', stepId: 'review' } },
+                next: { generated: 'review' },
             }),
             review: step({
-                id: 'review',
                 activity: { deliberation: 'review' },
-                input: [{ kind: 'result', name: 'draft' }],
+                input: [{ name: 'draft' }],
                 output: 'review',
-                transitions: { revise: { kind: 'end' } },
+                next: { revise: null },
             }),
         }),
         context: { requestId: 'req-1' },
         handlers: {
-            code: async ({ step: executingStep }) =>
-                executingStep.id === 'write'
+            code: async ({ stepId }) =>
+                stepId === 'write'
                     ? {
                           status: 'succeeded',
                           outcome: 'generated',
@@ -889,16 +862,15 @@ test('stops on observed resource overruns while retaining valid prior Results', 
         executionLimits: { ...limits, maxTokensTotal: 3 },
         startedAtMs: 0,
         now: () => 1,
-        reserveAttempt: ({ step: executingStep }) =>
-            executingStep.id === 'review' ? { tokens: 1 } : undefined,
+        reserveAttempt: ({ stepId }) =>
+            stepId === 'review' ? { tokens: 1 } : undefined,
     });
 
     let time = 0;
     const durationOverrun = await executeWorkflow({
         workflow: workflow({
             write: step({
-                id: 'write',
-                transitions: { done: { kind: 'end' } },
+                next: { done: null },
             }),
         }),
         context: { requestId: 'req-1' },
@@ -937,10 +909,9 @@ test('applies canonical caps, reservation, duration, and presentation accounting
     const reservation = await runWith({
         definition: workflow({
             write: step({
-                id: 'write',
-                transitions: {
-                    failed: { kind: 'end' },
-                    done: { kind: 'end' },
+                next: {
+                    failed: null,
+                    done: null,
                 },
             }),
         }),
@@ -954,8 +925,7 @@ test('applies canonical caps, reservation, duration, and presentation accounting
     const duration = await runWith({
         definition: workflow({
             write: step({
-                id: 'write',
-                transitions: { done: { kind: 'end' } },
+                next: { done: null },
             }),
         }),
         behavior: { write: [{ status: 'succeeded', outcome: 'done' }] },
@@ -971,9 +941,8 @@ test('applies canonical caps, reservation, duration, and presentation accounting
     const presentation = await runWith({
         definition: workflow({
             presentation: step({
-                id: 'presentation',
                 activity: { deliberation: 'none' },
-                transitions: { done: { kind: 'end' } },
+                next: { done: null },
             }),
         }),
         behavior: {
@@ -996,8 +965,7 @@ test('rejects malformed Execution Contracts before a Step executes', async () =>
     const execution = await runWith({
         definition: workflow({
             first: step({
-                id: 'first',
-                transitions: { done: { kind: 'end' } },
+                next: { done: null },
             }),
         }),
         behavior: {},
@@ -1017,9 +985,9 @@ test('rejects malformed Execution Contracts before a Step executes', async () =>
     });
 });
 
-test('describes the reviewed-chat cutover fixture', () => {
-    assert.equal(REVIEWED_CHAT_WORKFLOW_FIXTURE.start, 'plan');
-    assert.deepEqual(Object.keys(REVIEWED_CHAT_WORKFLOW_FIXTURE.steps), [
+test('describes the current chat cutover fixture', () => {
+    assert.equal(CURRENT_CHAT_WORKFLOW_FIXTURE.start, 'plan');
+    assert.deepEqual(Object.keys(CURRENT_CHAT_WORKFLOW_FIXTURE.steps), [
         'plan',
         'defaultPlan',
         'retrieve',
@@ -1030,112 +998,81 @@ test('describes the reviewed-chat cutover fixture', () => {
         'finish',
     ]);
     assert.deepEqual(
-        REVIEWED_CHAT_WORKFLOW_FIXTURE.steps.plan?.transitions.failed,
-        {
-            kind: 'step',
-            stepId: 'defaultPlan',
-        }
-    );
-    assert.equal(
-        REVIEWED_CHAT_WORKFLOW_FIXTURE.steps.defaultPlan?.handler,
+        CURRENT_CHAT_WORKFLOW_FIXTURE.steps.plan?.next.failed,
         'defaultPlan'
     );
     assert.equal(
-        REVIEWED_CHAT_WORKFLOW_FIXTURE.steps.defaultPlan?.output?.name,
+        CURRENT_CHAT_WORKFLOW_FIXTURE.steps.defaultPlan?.output?.name,
         'plan'
     );
     assert.deepEqual(
-        REVIEWED_CHAT_WORKFLOW_FIXTURE.steps.presentation?.activity,
+        CURRENT_CHAT_WORKFLOW_FIXTURE.steps.presentation?.activity,
         {
             deliberation: 'none',
         }
     );
     assert.deepEqual(
-        REVIEWED_CHAT_WORKFLOW_FIXTURE.steps.presentation?.output?.requiredOn,
+        CURRENT_CHAT_WORKFLOW_FIXTURE.steps.presentation?.output?.requiredOn,
         ['admitted']
     );
-    assert.equal(REVIEWED_CHAT_WORKFLOW_FIXTURE.steps.presentation?.maxRuns, 1);
+    assert.equal(CURRENT_CHAT_WORKFLOW_FIXTURE.steps.presentation?.maxRuns, 1);
     assert.equal(
-        REVIEWED_CHAT_WORKFLOW_FIXTURE.steps.presentation?.maxAttempts,
+        CURRENT_CHAT_WORKFLOW_FIXTURE.steps.presentation?.maxAttempts,
         undefined
     );
-    assert.equal(REVIEWED_CHAT_WORKFLOW_FIXTURE.steps.write?.maxRuns, 3);
-    assert.equal(REVIEWED_CHAT_WORKFLOW_FIXTURE.steps.review?.maxRuns, 3);
+    assert.equal(CURRENT_CHAT_WORKFLOW_FIXTURE.steps.write?.maxRuns, 3);
+    assert.equal(CURRENT_CHAT_WORKFLOW_FIXTURE.steps.review?.maxRuns, 3);
     assert.deepEqual(
-        REVIEWED_CHAT_WORKFLOW_FIXTURE.steps.review?.transitions.revise,
-        {
-            kind: 'step',
-            stepId: 'replan',
-        }
+        CURRENT_CHAT_WORKFLOW_FIXTURE.steps.review?.next.revise,
+        'replan'
     );
     assert.deepEqual(
-        REVIEWED_CHAT_WORKFLOW_FIXTURE.steps.replan?.transitions.continue,
-        {
-            kind: 'step',
-            stepId: 'write',
-        }
+        CURRENT_CHAT_WORKFLOW_FIXTURE.steps.replan?.next.continue,
+        'write'
     );
     assert.deepEqual(
-        REVIEWED_CHAT_WORKFLOW_FIXTURE.steps.replan?.output?.requiredOn,
+        CURRENT_CHAT_WORKFLOW_FIXTURE.steps.replan?.output?.requiredOn,
         ['continue']
     );
     assert.deepEqual(
-        REVIEWED_CHAT_WORKFLOW_FIXTURE.steps.replan?.transitions.skipped,
-        {
-            kind: 'step',
-            stepId: 'write',
-        }
+        CURRENT_CHAT_WORKFLOW_FIXTURE.steps.replan?.next.skipped,
+        'write'
     );
     assert.deepEqual(
-        REVIEWED_CHAT_WORKFLOW_FIXTURE.steps.replan?.transitions.failed,
-        {
-            kind: 'step',
-            stepId: 'finish',
-        }
+        CURRENT_CHAT_WORKFLOW_FIXTURE.steps.replan?.next.failed,
+        'finish'
     );
     assert.deepEqual(
-        REVIEWED_CHAT_WORKFLOW_FIXTURE.steps.defaultPlan?.transitions.failed,
-        {
-            kind: 'step',
-            stepId: 'finish',
-        }
+        CURRENT_CHAT_WORKFLOW_FIXTURE.steps.defaultPlan?.next.failed,
+        'finish'
     );
     assert.deepEqual(
-        REVIEWED_CHAT_WORKFLOW_FIXTURE.steps.write?.input.map((reference) =>
-            reference.kind === 'result' ? reference.name : reference.kind
+        CURRENT_CHAT_WORKFLOW_FIXTURE.steps.write?.input?.map(
+            (reference) => reference.name
         ),
-        [
-            'context',
-            'plan',
-            'evidence',
-            'presentation',
-            'draft',
-            'review',
-            'revisionPlan',
-        ]
+        ['plan', 'evidence', 'presentation', 'draft', 'review', 'revisionPlan']
     );
     assert.deepEqual(
-        REVIEWED_CHAT_WORKFLOW_FIXTURE.steps.replan?.input.map((reference) =>
-            reference.kind === 'result' ? reference.name : reference.kind
+        CURRENT_CHAT_WORKFLOW_FIXTURE.steps.replan?.input?.map(
+            (reference) => reference.name
         ),
-        ['context', 'plan', 'draft', 'review']
+        ['plan', 'draft', 'review']
     );
     assert.deepEqual(
-        REVIEWED_CHAT_WORKFLOW_FIXTURE.steps.finish?.input.map((reference) =>
-            reference.kind === 'result' ? reference.name : reference.kind
+        CURRENT_CHAT_WORKFLOW_FIXTURE.steps.finish?.input?.map(
+            (reference) => reference.name
         ),
         ['draft', 'plan', 'evidence', 'review']
     );
     for (const currentStep of ['write', 'review'] as const) {
         assert.deepEqual(
-            REVIEWED_CHAT_WORKFLOW_FIXTURE.steps[currentStep]?.transitions
-                .failed,
-            { kind: 'step', stepId: 'finish' }
+            CURRENT_CHAT_WORKFLOW_FIXTURE.steps[currentStep]?.next.failed,
+            'finish'
         );
     }
     assert.deepEqual(
-        REVIEWED_CHAT_WORKFLOW_FIXTURE.steps.finish?.transitions.done,
-        { kind: 'end' }
+        CURRENT_CHAT_WORKFLOW_FIXTURE.steps.finish?.next.done,
+        null
     );
 });
 
@@ -1145,7 +1082,7 @@ test('executes reviewed-chat presentation and replan skip/failure paths without 
         const writeInputs: string[][] = [];
         let finishInputs: string[] = [];
         const execution = await executeWorkflow({
-            workflow: REVIEWED_CHAT_WORKFLOW_FIXTURE,
+            workflow: CURRENT_CHAT_WORKFLOW_FIXTURE,
             context: { requestId: 'req-1' },
             handlers: {
                 plan: async () => ({
@@ -1244,36 +1181,33 @@ test('clears an omitted optional Result before a repeated downstream Step', asyn
     const execution = await executeWorkflow({
         workflow: workflow({
             replan: step({
-                id: 'replan',
                 output: 'revisionPlan',
                 outputRequiredOn: ['continue'],
-                transitions: {
-                    continue: { kind: 'step', stepId: 'write' },
-                    skipped: { kind: 'step', stepId: 'write' },
+                next: {
+                    continue: 'write',
+                    skipped: 'write',
                 },
                 maxRuns: 2,
             }),
             write: step({
-                id: 'write',
                 input: [
                     {
-                        kind: 'result',
                         name: 'revisionPlan',
                         optional: true,
                     },
                 ],
-                transitions: {
-                    again: { kind: 'step', stepId: 'replan' },
-                    done: { kind: 'end' },
+                next: {
+                    again: 'replan',
+                    done: null,
                 },
                 maxRuns: 2,
             }),
         }),
         context: { requestId: 'req-1' },
         handlers: {
-            code: async ({ step: executingStep, results, run }) => {
-                if (executingStep.id === 'replan') {
-                    return run === 1
+            code: async ({ stepId, results, iteration }) => {
+                if (stepId === 'replan') {
+                    return iteration === 1
                         ? {
                               status: 'succeeded',
                               outcome: 'continue',
@@ -1284,7 +1218,7 @@ test('clears an omitted optional Result before a repeated downstream Step', asyn
                 seenRevisionPlans.push(results.revisionPlan !== undefined);
                 return {
                     status: 'succeeded',
-                    outcome: run === 1 ? 'again' : 'done',
+                    outcome: iteration === 1 ? 'again' : 'done',
                 };
             },
         },
@@ -1296,4 +1230,67 @@ test('clears an omitted optional Result before a repeated downstream Step', asyn
     assert.equal(execution.status, 'completed');
     assert.deepEqual(seenRevisionPlans, [true, false]);
     assert.equal(execution.run.results.revisionPlan, undefined);
+});
+
+test('clears a failed repeated Step output before finalization', async () => {
+    let finishInputs: string[] = [];
+    const execution = await executeWorkflow({
+        workflow: workflow({
+            write: step({
+                output: 'draft',
+                next: { generated: 'review' },
+                maxRuns: 2,
+            }),
+            review: step({
+                input: [{ name: 'draft' }],
+                output: 'review',
+                next: { revise: 'write', failed: 'finish' },
+                maxRuns: 2,
+            }),
+            finish: step({
+                input: [
+                    { name: 'draft', optional: true },
+                    { name: 'review', optional: true },
+                ],
+                output: 'answer',
+                next: { done: null },
+            }),
+        }),
+        context: { requestId: 'req-1' },
+        handlers: {
+            write: async ({ iteration }) => ({
+                status: 'succeeded',
+                outcome: 'generated',
+                result: result('draft', { iteration }),
+            }),
+            review: async ({ iteration }) =>
+                iteration === 1
+                    ? {
+                          status: 'succeeded',
+                          outcome: 'revise',
+                          result: result('review', { draft: 1 }),
+                      }
+                    : {
+                          status: 'failed',
+                          errorCode: 'review_unavailable',
+                          retryable: false,
+                      },
+            finish: async ({ results }) => {
+                finishInputs = Object.keys(results);
+                return {
+                    status: 'succeeded',
+                    outcome: 'done',
+                    result: result('answer', 'final'),
+                };
+            },
+        },
+        executionLimits: limits,
+        startedAtMs: 0,
+        now: () => 1,
+    });
+
+    assert.equal(execution.status, 'degraded');
+    assert.equal(finishInputs.includes('draft'), true);
+    assert.equal(finishInputs.includes('review'), false);
+    assert.equal(execution.run.results.review, undefined);
 });

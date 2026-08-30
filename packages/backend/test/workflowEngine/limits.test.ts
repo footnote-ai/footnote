@@ -184,6 +184,36 @@ test('checkExecutionLimits reserves the requested next-step token budget', () =>
     });
 });
 
+test('checkExecutionLimits preserves an explicit zero-token reservation', () => {
+    const state = {
+        workflowId: 'wf_1',
+        workflowName: 'workflow_test',
+        startedAtMs: 500,
+        currentStepKind: null,
+        stepCount: 0,
+        toolCallCount: 0,
+        planCallCount: 0,
+        reviewCallCount: 0,
+        deliberationCallCount: 0,
+        totalTokens: 100,
+    };
+    const limits: ExecutionLimits = {
+        maxWorkflowSteps: 10,
+        maxToolCalls: 2,
+        maxDeliberationCalls: 4,
+        maxTokensTotal: 100,
+        maxDurationMs: 1_000,
+    };
+
+    assert.deepEqual(checkExecutionLimits(state, limits, 600, 'finalize'), {
+        withinLimits: false,
+        exhaustedBy: 'maxTokensTotal',
+    });
+    assert.deepEqual(checkExecutionLimits(state, limits, 600, 'finalize', 0), {
+        withinLimits: true,
+    });
+});
+
 test('generation admission counts prompt estimate and clamps provider output', () => {
     const bounded = boundGenerationRequestToWorkflowBudget({
         request: {

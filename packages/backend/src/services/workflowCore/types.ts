@@ -21,8 +21,7 @@ type SerializableValue =
     | readonly SerializableValue[]
     | { readonly [key: string]: SerializableValue };
 
-export type InputRef =
-    { kind: 'context' } | { kind: 'result'; name: string; optional?: boolean };
+export type ResultRef = { name: string; optional?: boolean };
 
 export type Result = {
     readonly name: string;
@@ -34,17 +33,14 @@ export const result = (name: string, value: SerializableValue): Result => ({
     value,
 });
 
-export type Transition = { kind: 'step'; stepId: string } | { kind: 'end' };
-
 export type Step = {
-    id: string;
-    handler: string;
     /** Minimal resource facts consumed by shared Execution Contract authority. */
     activity?: ExecutionActivity;
-    input: readonly InputRef[];
+    /** Results required from earlier Steps. Context is available to every handler. */
+    input?: readonly ResultRef[];
     /** The sole Result name this Step may return; required by default on success. */
     output?: { name: string; requiredOn?: readonly string[] };
-    transitions: Readonly<Record<string, Transition>>;
+    next: Readonly<Record<string, string | null>>;
     /** Maximum semantic executions of this Step within one Run. */
     maxRuns?: number;
     /** Maximum Attempts for one semantic Step execution. */
@@ -80,11 +76,12 @@ export type AttemptResult =
 
 /** Input to a Step handler contains runtime data, not phantom compile-time wiring. */
 export type StepHandlerInput<TContext = unknown> = {
+    stepId: string;
     step: Step;
     context: TContext;
     results: Readonly<Record<string, Result>>;
     /** One-based semantic execution ordinal for this Step. */
-    run: number;
+    iteration: number;
     /** One-based handler Attempt ordinal within this Run. */
     attempt: number;
 };
@@ -99,7 +96,6 @@ export type StepHandlers<TContext = unknown> = Readonly<
 
 export type Attempt = {
     attempt: number;
-    handler: string;
     status: 'succeeded' | 'failed' | 'rejected';
     startedAtMs: number;
     finishedAtMs: number;
@@ -115,8 +111,8 @@ export type Run = {
     finishedAtMs: number;
     steps: readonly {
         stepId: string;
-        run: number;
-        input: readonly InputRef[];
+        iteration: number;
+        input: readonly ResultRef[];
         status: 'succeeded' | 'failed';
         outcome?: string;
         result?: Result;

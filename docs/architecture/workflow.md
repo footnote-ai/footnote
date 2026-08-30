@@ -64,11 +64,11 @@ engines indefinitely. Every merged migration PR must leave chat usable.
 `packages/backend/src/services/workflowCore/` contains a backend-only foundation
 for the future chat cutover. Live chat still uses `workflowEngine`.
 
-A workflow is a set of named Steps. Each Step declares its inputs, optional
-output, handler name, outcomes, and bounds. The caller supplies the handler
-implementations. A handler receives the full Step, Context, selected Results,
-and one-based run and attempt numbers. This keeps the Workflow serializable
-while binding each Step to a concrete backend implementation.
+A workflow is a set of named Steps. Each Step declares its Result inputs,
+optional output, outcomes, and bounds. The caller supplies handlers under the
+same Step names. A handler receives the Step, backend-owned Context, selected
+Results, and one-based iteration and attempt numbers. This keeps the Workflow
+serializable while binding each Step to a concrete backend implementation.
 
 The engine validates the definition before starting, follows declared outcomes,
 bounds runs and retries, records Attempts, and uses the shared Execution
@@ -80,7 +80,7 @@ Step omits an optional output, its older value is cleared so a later Step cannot
 mistake it for a new result. Attempt accounting records reported usage only;
 activity reserves capacity but does not invent a tool or model call.
 
-The reviewed-chat shape is a test fixture under `packages/backend/test/`. It
+The current chat shape is a test fixture under `packages/backend/test/`. It
 approximates the current path to prove that the core can express the eventual
 cutover. It is not configuration or runtime behavior.
 
