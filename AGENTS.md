@@ -1,14 +1,6 @@
 # Footnote Agent Contract
 
-This is the main guidance file for AI coding agents in this repo.
-Keep it short, clear, and current.
-
-## Rule Architecture
-
-- `AGENTS.md` is the canonical ruleset.
-- Tool-specific files (for example `cursor.rules`, `.codexrules`, `.github/copilot-instructions.md`) are thin adapters.
-- Adapters should only point to this file and include tool-only details when absolutely needed.
-- Skills in `.agents/skills/` own the workflow. `AGENTS.md` facts and Non-Negotiables win on conflict.
+This is the canonical ruleset for AI coding agents in this repo. Tool-specific files (for example `cursor.rules`, `.codexrules`, `.github/copilot-instructions.md`) are thin adapters.
 
 ## Agent Skills
 
@@ -40,9 +32,9 @@ Footnote is a transparency- and provenance-focused AI framework.
 
 ## Package Roles
 
-- `packages/backend`: Public runtime and HTTP boundary for web and Discord. Owns orchestration, persistence, and LLM cost recording.
-- `packages/discord-bot`: Discord interface adapter. Presents backend-owned decisions without becoming the authority for Footnote semantics.
-- `packages/web`: Browser interface. Displays backend-owned provenance, trace, review, incident, and cost data.
+- `packages/backend`: Public runtime and HTTP boundary for web and Discord.
+- `packages/discord-bot`: Discord interface adapter.
+- `packages/web`: Browser interface.
 - `packages/contracts`: Serializable shared schemas, types, and pure contract helpers. Do not add application orchestration here.
 - `packages/api-client`: Typed transport for backend APIs. Do not duplicate backend policy or authority.
 - `packages/agent-runtime`: Framework- and provider-specific runtime adapters. Keep Footnote governance semantics outside adapters.
