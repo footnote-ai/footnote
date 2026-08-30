@@ -368,6 +368,35 @@ export const executeWorkflow = async <TContext>(
         let stepFailed = false;
 
         for (let attemptNumber = 1; attemptNumber <= maximumAttempts;) {
+            const attemptExecutionLimit = findExecutionLimit({
+                run,
+                step,
+                limits: input.executionLimits,
+                nowMs: now(),
+            });
+            if (attemptExecutionLimit !== undefined) {
+                if (stepAttempts.length > 0) {
+                    run.usage.stepCount += 1;
+                    steps.push({
+                        stepId: step.id,
+                        runNumber: stepRunNumber,
+                        inputReferences: step.input.references,
+                        status: 'failed',
+                        attempts: stepAttempts,
+                    });
+                }
+                return finish({
+                    run,
+                    steps,
+                    results,
+                    now,
+                    status: 'limited',
+                    termination: {
+                        reason: 'execution_limit',
+                        limit: attemptExecutionLimit,
+                    },
+                });
+            }
             const attemptStartedAtMs = now();
             let attemptResult: ExecutionAttemptResult;
             try {

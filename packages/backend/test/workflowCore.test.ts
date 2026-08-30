@@ -450,6 +450,51 @@ test('enforces tool-call limits only for steps that declare tool use', async () 
     );
 });
 
+test('rechecks Execution Contract limits before retrying an attempt', async () => {
+    const definition = workflow(
+        {
+            retrieve: {
+                ...step('retrieve', { done: { kind: 'finish' } }, [], {
+                    maxAttempts: 3,
+                }),
+                resource: 'tool',
+            },
+        },
+        'retrieve'
+    );
+    let calls = 0;
+
+    const execution = await executeWorkflow({
+        workflow: definition,
+        context: { requestId: 'req-1' },
+        executors: {
+            code: async () => {
+                calls += 1;
+                return {
+                    status: 'failed',
+                    errorCode: 'temporary_failure',
+                    retryable: true,
+                    usage: { toolCalls: 1 },
+                };
+            },
+        },
+        executionLimits: { ...limits, maxToolCalls: 2 },
+        startedAtMs: 0,
+        now: () => 1,
+    });
+
+    assert.equal(execution.status, 'limited');
+    assert.deepEqual(execution.termination, {
+        reason: 'execution_limit',
+        limit: 'maxToolCalls',
+    });
+    assert.equal(calls, 2);
+    assert.deepEqual(
+        execution.run.steps[0]?.attempts.map((attempt) => attempt.status),
+        ['failed', 'failed']
+    );
+});
+
 test('keeps executor categories separate from workflow topology', async () => {
     const definition: Workflow<TestContext> = {
         id: 'future-executor',
