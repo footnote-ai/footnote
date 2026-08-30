@@ -13,8 +13,6 @@ import type {
     ExhaustedExecutionLimit,
 } from '../workflowEngine/limits.js';
 
-export type ExecutorKind = 'model' | 'context' | 'code' | 'agent';
-
 type SerializableValue =
     | boolean
     | null
@@ -40,7 +38,7 @@ export type Transition = { kind: 'step'; stepId: string } | { kind: 'end' };
 
 export type Step = {
     id: string;
-    executor: ExecutorKind;
+    handler: string;
     /** Minimal resource facts consumed by shared Execution Contract authority. */
     activity?: ExecutionActivity;
     input: readonly InputRef[];
@@ -55,7 +53,6 @@ export type Step = {
 
 export type Workflow = {
     id: string;
-    version: 'v1';
     start: string;
     steps: Readonly<Record<string, Step>>;
 };
@@ -81,28 +78,28 @@ export type AttemptResult =
           usage?: AttemptUsage;
       };
 
-/** Input to an executor contains runtime data, not phantom compile-time wiring. */
-export type ExecutorInput<TContext = unknown> = {
+/** Input to a Step handler contains runtime data, not phantom compile-time wiring. */
+export type StepHandlerInput<TContext = unknown> = {
     step: Step;
     context: TContext;
     results: Readonly<Record<string, Result>>;
     /** One-based semantic execution ordinal for this Step. */
     run: number;
-    /** One-based executor Attempt ordinal within this Run. */
+    /** One-based handler Attempt ordinal within this Run. */
     attempt: number;
 };
 
-export type Executor<TContext = unknown> = (
-    input: ExecutorInput<TContext>
+export type StepHandler<TContext = unknown> = (
+    input: StepHandlerInput<TContext>
 ) => Promise<AttemptResult>;
 
-export type Executors<TContext = unknown> = Partial<
-    Record<ExecutorKind, Executor<TContext>>
+export type StepHandlers<TContext = unknown> = Readonly<
+    Record<string, StepHandler<TContext>>
 >;
 
 export type Attempt = {
     attempt: number;
-    executor: ExecutorKind;
+    handler: string;
     status: 'succeeded' | 'failed' | 'rejected';
     startedAtMs: number;
     finishedAtMs: number;
@@ -114,7 +111,6 @@ export type Attempt = {
 export type Run = {
     runId: string;
     workflowId: string;
-    workflowVersion: 'v1';
     startedAtMs: number;
     finishedAtMs: number;
     steps: readonly {
@@ -152,7 +148,7 @@ export type RunTermination =
           actualName?: string;
       }
     | { reason: 'definition_error'; message: string }
-    | { reason: 'executor_unavailable'; stepId: string };
+    | { reason: 'handler_unavailable'; stepId: string };
 
 export type RunResult = {
     status: 'completed' | 'degraded' | 'limited' | 'failed' | 'rejected';
@@ -163,7 +159,7 @@ export type RunResult = {
 export type ExecuteInput<TContext = unknown> = {
     workflow: Workflow;
     context: TContext;
-    executors: Executors<TContext>;
+    handlers: StepHandlers<TContext>;
     /** The existing backend Execution Contract remains the outer authority. */
     executionLimits: ExecutionLimits;
     runId?: string;
@@ -171,6 +167,6 @@ export type ExecuteInput<TContext = unknown> = {
     now?: () => number;
     /** Calculates conservative resource bounds for this concrete Attempt. */
     reserveAttempt?: (
-        input: ExecutorInput<TContext>
+        input: StepHandlerInput<TContext>
     ) => ExecutionReservation | undefined;
 };

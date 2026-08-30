@@ -50,7 +50,6 @@ const createRun = (input: {
 }): Run => ({
     runId: input.runId,
     workflowId: input.workflow.id,
-    workflowVersion: input.workflow.version,
     startedAtMs: input.startedAtMs,
     finishedAtMs: input.startedAtMs,
     steps: [],
@@ -67,7 +66,7 @@ const createRun = (input: {
 
 const toAttempt = (input: {
     attempt: number;
-    executor: Step['executor'];
+    handler: Step['handler'];
     startedAtMs: number;
     finishedAtMs: number;
     result: AttemptResult;
@@ -75,7 +74,7 @@ const toAttempt = (input: {
     if (input.result.status === 'succeeded') {
         return {
             attempt: input.attempt,
-            executor: input.executor,
+            handler: input.handler,
             status: 'succeeded',
             startedAtMs: input.startedAtMs,
             finishedAtMs: input.finishedAtMs,
@@ -87,7 +86,7 @@ const toAttempt = (input: {
 
     return {
         attempt: input.attempt,
-        executor: input.executor,
+        handler: input.handler,
         status: 'failed',
         startedAtMs: input.startedAtMs,
         finishedAtMs: input.finishedAtMs,
@@ -293,7 +292,7 @@ const validateAttemptResult = (input: {
 
 /**
  * Runs one complete Workflow. Definitions and Execution Contract bounds are
- * rejected before any executor starts; every executor Attempt is then admitted
+ * rejected before any Step handler starts; every Attempt is then admitted
  * through the shared limits authority.
  */
 export const executeWorkflow = async <TContext>(
@@ -387,8 +386,8 @@ export const executeWorkflow = async <TContext>(
             });
         }
 
-        const executor = input.executors[step.executor];
-        if (executor === undefined) {
+        const handler = input.handlers[step.handler];
+        if (handler === undefined) {
             return finish({
                 run,
                 steps,
@@ -396,7 +395,7 @@ export const executeWorkflow = async <TContext>(
                 now,
                 status: 'rejected',
                 termination: {
-                    reason: 'executor_unavailable',
+                    reason: 'handler_unavailable',
                     stepId: step.id,
                 },
             });
@@ -415,14 +414,14 @@ export const executeWorkflow = async <TContext>(
             attemptNumber <= maxAttempts;
             attemptNumber += 1
         ) {
-            const executorInput = {
+            const handlerInput = {
                 step,
                 context: input.context,
                 results: collected.results,
                 run: stepRunNumber,
                 attempt: attemptNumber,
             };
-            const reservation = input.reserveAttempt?.(executorInput);
+            const reservation = input.reserveAttempt?.(handlerInput);
             const admission = admitExecution({
                 state: executionLimitStateFor(run),
                 limits: input.executionLimits,
@@ -460,7 +459,7 @@ export const executeWorkflow = async <TContext>(
                     const admissionAtMs = now();
                     attempts.push({
                         attempt: attemptNumber,
-                        executor: step.executor,
+                        handler: step.handler,
                         status: 'rejected',
                         startedAtMs: admissionAtMs,
                         finishedAtMs: admissionAtMs,
@@ -496,11 +495,11 @@ export const executeWorkflow = async <TContext>(
             const attemptStartedAtMs = now();
             let attemptResult: AttemptResult;
             try {
-                attemptResult = await executor(executorInput);
+                attemptResult = await handler(handlerInput);
             } catch (error) {
                 attemptResult = {
                     status: 'failed',
-                    errorCode: 'executor_error',
+                    errorCode: 'handler_error',
                     errorMessage:
                         error instanceof Error ? error.message : String(error),
                     retryable: true,
@@ -521,7 +520,7 @@ export const executeWorkflow = async <TContext>(
             });
             const attempt = toAttempt({
                 attempt: attemptNumber,
-                executor: step.executor,
+                handler: step.handler,
                 startedAtMs: attemptStartedAtMs,
                 finishedAtMs: attemptFinishedAtMs,
                 result: attemptResult,
@@ -639,8 +638,16 @@ export const executeWorkflow = async <TContext>(
             attempts,
         });
 
-        if (successfulResult !== undefined)
+        if (successfulResult !== undefined) {
             results[successfulResult.name] = successfulResult;
+        } else if (
+            successfulOutcome !== undefined &&
+            step.output !== undefined
+        ) {
+            // Optional output omission is a current value of "absent", not a
+            // request to reuse this Step's Result from an earlier loop run.
+            delete results[step.output.name];
+        }
         if (observedLimit !== undefined) {
             return finish({
                 run,

@@ -59,86 +59,30 @@ current path and the cutover is working, remove superseded internal topology
 and compatibility machinery rather than maintaining two active workflow
 engines indefinitely. Every merged migration PR must leave chat usable.
 
-## Workflow foundation (shipped, not live)
+## Workflow core foundation
 
-The first foundation slice for #575 lives in
-`packages/backend/src/services/workflowCore/`. It provides a small runtime-only
-contract: `Workflow`, `Step`, `Run`, `Attempt`, `Result`, declared transitions,
-and executor categories for `model`, `context`, `code`, and future delegated
-`agent` work. It does not claim Step-to-executor dataflow at compile time.
-Executors receive the full Step, run context, selected named Results, and
-one-based Run and Attempt ordinals. The engine validates declared Result names
-at runtime instead.
+`packages/backend/src/services/workflowCore/` contains a backend-only foundation
+for the future chat cutover. Live chat still uses `workflowEngine`.
 
-Before it invokes an executor, the foundation validates the complete Workflow:
-the start Step exists, every map key matches its Step id, and every transition
-target exists. A successful Attempt must return the Step's declared Result when
-one exists, unless that output explicitly marks its successful outcome as one
-that may omit the Result. It must not return a Result from an outputless Step.
-Missing, mismatched, and undeclared Results reject the Run; unavailable
-executors remain a separate configuration rejection from a declared Step
-failure route.
+A workflow is a set of named Steps. Each Step declares its inputs, optional
+output, handler name, outcomes, and bounds. The caller supplies the handler
+implementations. A handler receives the full Step, Context, selected Results,
+and one-based run and attempt numbers. This keeps the Workflow serializable
+while binding each Step to a concrete backend implementation.
 
-Both the existing live engine and this foundation use the neutral
-`admitExecution()` and `recordExecution()` seams in
-`workflowEngine/limits.ts`. That authority owns both limit checks and the
-counter semantics used by those checks. Steps supply only resource facts:
-tool use or general, planning, or review deliberation. Future verification or
-research Steps can consume deliberation capacity without impersonating a
-legacy Step name. Presentation supplies no deliberation activity, so its
-candidate work remains outside plan/review capacity. Plan and review cycles
-count completed semantic Step runs; their individual Attempts still count
-against the general deliberation limit. A caller calculates conservative token
-and tool-call reservations per concrete Attempt; the Workflow definition does
-not bake a static request budget into a Step. Malformed Execution Contract
-bounds reject the foundation Run rather than being silently clamped or removed.
-At the exact token boundary, an Attempt without a token reservation remains
-conservatively blocked; an explicit zero-token reservation can admit
-deterministic finalization without authorizing another model call.
+The engine validates the definition before starting, follows declared outcomes,
+bounds runs and retries, records Attempts, and uses the shared Execution
+Contract before and after each attempt. A failed Step can follow its declared
+recovery route and produces a degraded Run; a retry that succeeds does not.
 
-Resource admission that blocks a Step is represented as that Step's failed
-Attempt and may take its declared recovery route. Duration and workflow-Step
-limits still stop the whole Run. After every executor Attempt,
-`findObservedExecutionLimit()` checks reported token/tool usage and elapsed
-duration; an observed overrun preserves valid prior Results but stops further
-work with a limit termination.
+Results are the current named values available to later Steps. When a repeated
+Step omits an optional output, its older value is cleared so a later Step cannot
+mistake it for a new result. Attempt accounting records reported usage only;
+activity reserves capacity but does not invent a tool or model call.
 
-A Run that reaches `end` after a Step exhausts its Attempts and follows a
-declared recovery route is `degraded`, not `completed`. A retryable Attempt
-that succeeds within its Step is normal error correction and leaves the Run
-`completed`; all Attempts remain available in the trace.
-
-`reviewedChatWorkflow.ts` is an honest, non-live proof of the current coarse
-reviewed-chat shape:
-
-```text
-plan -> retrieve -> presentation -> write -> review -> finish -> end
-  |
-  +-> default-plan recovery -> retrieve
-
-review -- revise --> replan -- continue/skipped --> write
-                             |
-                             +-> failed -> finish
-```
-
-The planner's failure route invokes the explicit conservative default-plan code
-Step. A failed default-plan Step routes through finish. Presentation is one
-Step whose executor owns candidate generation and deterministic admissibility;
-this proof does not include separate style-check or presentation retry Steps.
-Revision re-enters planning explicitly, and the revision Write consumes the
-Review Result and optional revision Plan. A replan that is skipped continues
-revision; one that fails finalizes the last good Draft instead. Finish
-can consume the Draft, Plan terminal action, context Result, and Review Result
-that led to finalization. Write and review failure routes go through the
-semantic `finish` Step before the terminal `end`, so finalization and
-no-generation handling are represented rather than bypassed.
-
-This foundation deliberately does not cut live chat over, add durable result
-storage, add a generic workflow DSL, unify model controls, migrate Context or
-ModelInput, or migrate canonical execution records. Strong compile-time linked
-dataflow remains deferred to #577; #576 and #578 remain separate work. The
-later cutover should prove equivalent user-visible behavior and delete
-superseded topology instead of carrying a compatibility engine.
+The reviewed-chat shape is a test fixture under `packages/backend/test/`. It
+approximates the current path to prove that the core can express the eventual
+cutover. It is not configuration or runtime behavior.
 
 ## How a chat request runs
 

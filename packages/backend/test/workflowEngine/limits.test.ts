@@ -379,4 +379,16 @@ test('recordExecution owns resource accounting without legacy Step kinds', () =>
             deliberationCallCount: 1,
         }
     );
+    assert.deepEqual(
+        recordExecution({
+            state,
+            activity: { tool: 'one-or-more' },
+            usage: { toolCalls: 0 },
+            completedStep: true,
+        }),
+        {
+            ...state,
+            stepCount: 1,
+        }
+    );
 });

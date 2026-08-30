@@ -158,6 +158,20 @@ test('applyStepExecutionToState increments counters deterministically', () => {
     assert.equal(updated.totalTokens, 33);
 });
 
+test('applyStepExecutionToState records no tool call for a blocked context Step', () => {
+    const initial = createInitialWorkflowState({
+        workflowId: 'wf_1',
+        workflowName: 'workflow_test',
+        startedAtMs: 100,
+    });
+
+    const updated = applyStepExecutionToState(initial, 'tool', 0, 0, 0);
+
+    assert.equal(updated.stepCount, 1);
+    assert.equal(updated.toolCallCount, 0);
+    assert.equal(updated.deliberationCallCount, 0);
+});
+
 test('applyStepExecutionToState sanitizes invalid deltas and increments stepCount by exactly 1', () => {
     const initial = createInitialWorkflowState({
         workflowId: 'wf_2',

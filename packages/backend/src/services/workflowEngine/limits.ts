@@ -236,20 +236,16 @@ export const recordExecution = (input: {
     const reportedDeliberationCalls = recordsResourceUsage
         ? sanitizeUsageCount(input.usage?.deliberationCalls)
         : 0;
-    const toolCalls = !recordsResourceUsage
-        ? 0
-        : input.activity?.tool === 'none'
-          ? 0
-          : input.activity?.tool === 'one-or-more'
-            ? Math.max(1, reportedToolCalls)
-            : reportedToolCalls;
-    const deliberationCalls = !recordsResourceUsage
-        ? 0
-        : input.activity?.deliberation === 'none'
-          ? 0
-          : input.activity?.deliberation !== undefined
-            ? Math.max(1, reportedDeliberationCalls)
-            : reportedDeliberationCalls;
+    // Activity reserves capacity before an Attempt. Accounting records only
+    // what the executor observed; a blocked or no-op tool Step consumed none.
+    const toolCalls =
+        recordsResourceUsage && input.activity?.tool !== 'none'
+            ? reportedToolCalls
+            : 0;
+    const deliberationCalls =
+        recordsResourceUsage && input.activity?.deliberation !== 'none'
+            ? reportedDeliberationCalls
+            : 0;
 
     return {
         ...input.state,

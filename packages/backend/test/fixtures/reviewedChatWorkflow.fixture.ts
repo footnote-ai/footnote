@@ -1,29 +1,21 @@
 /**
- * @description: Describes the current reviewed chat topology as a non-live
- * runtime proof; chat still uses the existing workflow engine.
- * @footnote-scope: core
- * @footnote-module: ReviewedChatWorkflow
- * @footnote-risk: medium - An inaccurate proof can mislead the later production cutover.
- * @footnote-ethics: high - Keeping the proof non-live avoids changing review and fail-open behavior prematurely.
+ * @description: Approximation of the current chat path used to test the workflow core. It is not used at runtime.
+ * @footnote-scope: test
+ * @footnote-module: ReviewedChatWorkflowFixture
+ * @footnote-risk: low - This fixture only checks the cutover target shape.
+ * @footnote-ethics: low - It cannot affect live chat behavior.
  */
-import type { Step, Workflow } from './types.js';
+import type { Step, Workflow } from '../../src/services/workflowCore/types.js';
 
 const step = (definition: Step): Step => definition;
 
-/**
- * Coarse topology for the existing reviewed path. `presentation` is one
- * executor-owned step: it generates a candidate and applies deterministic
- * admissibility before the authoritative write. Provider routing, prompt
- * assembly, and live StepRecord compatibility remain in the existing engine.
- */
-export const CURRENT_REVIEWED_CHAT_WORKFLOW: Workflow = {
+export const REVIEWED_CHAT_WORKFLOW_FIXTURE: Workflow = {
     id: 'chat-reviewed',
-    version: 'v1',
     start: 'plan',
     steps: {
         plan: step({
             id: 'plan',
-            executor: 'model',
+            handler: 'plan',
             activity: { deliberation: 'plan' },
             input: [{ kind: 'context' }],
             output: { name: 'plan' },
@@ -37,7 +29,7 @@ export const CURRENT_REVIEWED_CHAT_WORKFLOW: Workflow = {
         }),
         defaultPlan: step({
             id: 'defaultPlan',
-            executor: 'code',
+            handler: 'defaultPlan',
             input: [{ kind: 'context' }],
             output: { name: 'plan' },
             transitions: {
@@ -48,7 +40,7 @@ export const CURRENT_REVIEWED_CHAT_WORKFLOW: Workflow = {
         }),
         retrieve: step({
             id: 'retrieve',
-            executor: 'context',
+            handler: 'retrieve',
             activity: { tool: 'one-or-more' },
             input: [{ kind: 'context' }, { kind: 'result', name: 'plan' }],
             output: { name: 'evidence' },
@@ -61,7 +53,7 @@ export const CURRENT_REVIEWED_CHAT_WORKFLOW: Workflow = {
         }),
         presentation: step({
             id: 'presentation',
-            executor: 'model',
+            handler: 'presentation',
             activity: { deliberation: 'none' },
             input: [
                 { kind: 'context' },
@@ -78,7 +70,7 @@ export const CURRENT_REVIEWED_CHAT_WORKFLOW: Workflow = {
         }),
         write: step({
             id: 'write',
-            executor: 'model',
+            handler: 'write',
             input: [
                 { kind: 'context' },
                 { kind: 'result', name: 'plan' },
@@ -98,7 +90,7 @@ export const CURRENT_REVIEWED_CHAT_WORKFLOW: Workflow = {
         }),
         review: step({
             id: 'review',
-            executor: 'model',
+            handler: 'review',
             activity: { deliberation: 'review' },
             input: [
                 { kind: 'result', name: 'draft' },
@@ -115,7 +107,7 @@ export const CURRENT_REVIEWED_CHAT_WORKFLOW: Workflow = {
         }),
         replan: step({
             id: 'replan',
-            executor: 'model',
+            handler: 'replan',
             activity: { deliberation: 'plan' },
             input: [
                 { kind: 'context' },
@@ -134,7 +126,7 @@ export const CURRENT_REVIEWED_CHAT_WORKFLOW: Workflow = {
         }),
         finish: step({
             id: 'finish',
-            executor: 'code',
+            handler: 'finish',
             input: [
                 { kind: 'result', name: 'draft', optional: true },
                 { kind: 'result', name: 'plan', optional: true },

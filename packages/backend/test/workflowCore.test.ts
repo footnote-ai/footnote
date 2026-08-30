@@ -9,13 +9,13 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
+import { REVIEWED_CHAT_WORKFLOW_FIXTURE } from './fixtures/reviewedChatWorkflow.fixture.js';
 import {
-    CURRENT_REVIEWED_CHAT_WORKFLOW,
     executeWorkflow,
     result,
     type AttemptResult,
     type ExecutionLimits,
-    type Executors,
+    type StepHandlers,
     type InputRef,
     type Step,
     type Transition,
@@ -41,10 +41,10 @@ const step = (input: {
     activity?: Step['activity'];
     maxRuns?: number;
     maxAttempts?: number;
-    executor?: Step['executor'];
+    handler?: Step['handler'];
 }): Step => ({
     id: input.id,
-    executor: input.executor ?? 'code',
+    handler: input.handler ?? 'code',
     ...(input.activity === undefined ? {} : { activity: input.activity }),
     input: input.input ?? [],
     ...(input.output === undefined
@@ -69,7 +69,6 @@ const workflow = (
     start = Object.keys(steps)[0] ?? 'missing'
 ): Workflow => ({
     id: `test-${start}`,
-    version: 'v1',
     start,
     steps,
 });
@@ -78,7 +77,7 @@ const runWith = async (input: {
     definition: Workflow;
     behavior: Readonly<Record<string, readonly AttemptResult[]>>;
     executionLimits?: ExecutionLimits;
-    executors?: Executors<TestContext>;
+    handlers?: StepHandlers<TestContext>;
     now?: () => number;
     reserveAttempt?: () => { tokens?: number; toolCalls?: number };
 }) => {
@@ -88,18 +87,18 @@ const runWith = async (input: {
             [...outcomes],
         ])
     );
-    const executors: Executors<TestContext> = {
+    const handlers: StepHandlers<TestContext> = {
         code: async ({ step: executingStep }) =>
             remaining.get(executingStep.id)?.shift() ?? {
                 status: 'succeeded',
                 outcome: 'done',
             },
-        ...input.executors,
+        ...input.handlers,
     };
     return executeWorkflow({
         workflow: input.definition,
         context: { requestId: 'req-1' },
-        executors,
+        handlers,
         executionLimits: input.executionLimits ?? limits,
         startedAtMs: 0,
         now: input.now ?? (() => 1),
@@ -107,7 +106,7 @@ const runWith = async (input: {
     });
 };
 
-test('runs declared dataflow and gives executors the full Step, Results, and one-based ordinals', async () => {
+test('runs declared dataflow and gives handlers the full Step, Results, and one-based ordinals', async () => {
     const definition = workflow({
         plan: step({
             id: 'plan',
@@ -131,7 +130,7 @@ test('runs declared dataflow and gives executors the full Step, Results, and one
     const execution = await runWith({
         definition,
         behavior: {},
-        executors: {
+        handlers: {
             code: async ({ step: executingStep, results, run, attempt }) => {
                 seen.push({
                     stepId: executingStep.id,
@@ -203,7 +202,7 @@ test('supports a bounded generic style -> check -> retry cycle without special e
     });
 });
 
-test('rejects undeclared executor outcomes', async () => {
+test('rejects undeclared handler outcomes', async () => {
     const execution = await runWith({
         definition: workflow({
             plan: step({
@@ -367,7 +366,7 @@ test('counts a retried plan or review Step once against its semantic cycle cap',
             execution.run.usage.reviewCalls,
             stepId === 'review' ? 1 : 0
         );
-        assert.equal(execution.run.usage.deliberationCalls, 2);
+        assert.equal(execution.run.usage.deliberationCalls, 0);
     }
 });
 
@@ -406,7 +405,7 @@ test('allows declared skipped outcomes to omit Results while retaining required 
     });
 });
 
-test('rejects invalid definitions before any executor runs', async () => {
+test('rejects invalid definitions before any handler runs', async () => {
     const invalidDefinitions: readonly Workflow[] = [
         workflow({}, 'missing'),
         workflow(
@@ -431,7 +430,7 @@ test('rejects invalid definitions before any executor runs', async () => {
         const execution = await runWith({
             definition,
             behavior: {},
-            executors: {
+            handlers: {
                 code: async () => {
                     calls += 1;
                     return { status: 'succeeded', outcome: 'done' };
@@ -541,7 +540,7 @@ test('requires the declared Result and accepts outputless Steps only without Res
     }
 });
 
-test('keeps unavailable executors separate from declared failure recovery', async () => {
+test('keeps unavailable handlers separate from declared failure recovery', async () => {
     const execution = await executeWorkflow({
         workflow: workflow({
             retrieve: step({
@@ -550,14 +549,14 @@ test('keeps unavailable executors separate from declared failure recovery', asyn
             }),
         }),
         context: { requestId: 'req-1' },
-        executors: {},
+        handlers: {},
         executionLimits: limits,
         startedAtMs: 0,
         now: () => 1,
     });
 
     assert.deepEqual(execution.termination, {
-        reason: 'executor_unavailable',
+        reason: 'handler_unavailable',
         stepId: 'retrieve',
     });
     assert.equal(execution.run.steps.length, 0);
@@ -575,7 +574,7 @@ test('uses shared admission before every retry and supplies distinct Attempt ord
             }),
         }),
         context: { requestId: 'req-1' },
-        executors: {
+        handlers: {
             code: async ({ attempt }) => {
                 attempts.push(attempt);
                 return {
@@ -598,7 +597,7 @@ test('uses shared admission before every retry and supplies distinct Attempt ord
 
 test('calculates Attempt reservations for each concrete Attempt', async () => {
     const reservations: number[] = [];
-    let executorCalls = 0;
+    let handlerCalls = 0;
     const execution = await executeWorkflow({
         workflow: workflow({
             write: step({
@@ -608,9 +607,9 @@ test('calculates Attempt reservations for each concrete Attempt', async () => {
             }),
         }),
         context: { requestId: 'req-1' },
-        executors: {
+        handlers: {
             code: async () => {
-                executorCalls += 1;
+                handlerCalls += 1;
                 return {
                     status: 'failed',
                     errorCode: 'temporary',
@@ -629,13 +628,13 @@ test('calculates Attempt reservations for each concrete Attempt', async () => {
     });
 
     assert.deepEqual(reservations, [1, 2]);
-    assert.equal(executorCalls, 1);
+    assert.equal(handlerCalls, 1);
     assert.equal(execution.status, 'degraded');
     assert.deepEqual(execution.termination, { reason: 'finished' });
 });
 
 test('rejects a projected tool reservation before a tool Attempt executes', async () => {
-    let executorCalls = 0;
+    let handlerCalls = 0;
     const execution = await executeWorkflow({
         workflow: workflow({
             context: step({
@@ -645,9 +644,9 @@ test('rejects a projected tool reservation before a tool Attempt executes', asyn
             }),
         }),
         context: { requestId: 'req-1' },
-        executors: {
+        handlers: {
             code: async () => {
-                executorCalls += 1;
+                handlerCalls += 1;
                 return { status: 'succeeded', outcome: 'done' };
             },
         },
@@ -657,7 +656,7 @@ test('rejects a projected tool reservation before a tool Attempt executes', asyn
         reserveAttempt: () => ({ toolCalls: 3 }),
     });
 
-    assert.equal(executorCalls, 0);
+    assert.equal(handlerCalls, 0);
     assert.equal(execution.status, 'degraded');
     assert.deepEqual(execution.termination, { reason: 'finished' });
 });
@@ -683,7 +682,7 @@ test('routes a recoverably admission-blocked optional Step through its declared 
             }),
         }),
         context: { requestId: 'req-1' },
-        executors: {
+        handlers: {
             code: async ({ step: executingStep }) => ({
                 status: 'succeeded',
                 outcome: executingStep.id === 'write' ? 'done' : 'admitted',
@@ -721,7 +720,7 @@ test('routes a retry blocked by consumed tokens through Step recovery', async ()
             }),
         }),
         context: { requestId: 'req-1' },
-        executors: {
+        handlers: {
             code: async ({ step: executingStep }) =>
                 executingStep.id === 'presentation'
                     ? {
@@ -771,7 +770,7 @@ test('allows explicit zero-token finalization after token exhaustion recovers a 
             }),
         }),
         context: { requestId: 'req-1' },
-        executors: {
+        handlers: {
             code: async ({ step: executingStep }) => {
                 if (executingStep.id === 'write') {
                     return {
@@ -820,7 +819,7 @@ test('stops on observed resource overruns while retaining valid prior Results', 
             }),
         }),
         context: { requestId: 'req-1' },
-        executors: {
+        handlers: {
             code: async () => ({
                 status: 'succeeded',
                 outcome: 'done',
@@ -843,7 +842,7 @@ test('stops on observed resource overruns while retaining valid prior Results', 
             }),
         }),
         context: { requestId: 'req-1' },
-        executors: {
+        handlers: {
             code: async () => ({
                 status: 'succeeded',
                 outcome: 'done',
@@ -872,7 +871,7 @@ test('stops on observed resource overruns while retaining valid prior Results', 
             }),
         }),
         context: { requestId: 'req-1' },
-        executors: {
+        handlers: {
             code: async ({ step: executingStep }) =>
                 executingStep.id === 'write'
                     ? {
@@ -903,7 +902,7 @@ test('stops on observed resource overruns while retaining valid prior Results', 
             }),
         }),
         context: { requestId: 'req-1' },
-        executors: {
+        handlers: {
             code: async () => {
                 time = 2;
                 return { status: 'succeeded', outcome: 'done' };
@@ -1003,7 +1002,7 @@ test('rejects malformed Execution Contracts before a Step executes', async () =>
         }),
         behavior: {},
         executionLimits: { ...limits, maxTokensTotal: Number.NaN },
-        executors: {
+        handlers: {
             code: async () => {
                 calls += 1;
                 return { status: 'succeeded', outcome: 'done' };
@@ -1018,9 +1017,9 @@ test('rejects malformed Execution Contracts before a Step executes', async () =>
     });
 });
 
-test('describes the current non-live reviewed-chat topology honestly', () => {
-    assert.equal(CURRENT_REVIEWED_CHAT_WORKFLOW.start, 'plan');
-    assert.deepEqual(Object.keys(CURRENT_REVIEWED_CHAT_WORKFLOW.steps), [
+test('describes the reviewed-chat cutover fixture', () => {
+    assert.equal(REVIEWED_CHAT_WORKFLOW_FIXTURE.start, 'plan');
+    assert.deepEqual(Object.keys(REVIEWED_CHAT_WORKFLOW_FIXTURE.steps), [
         'plan',
         'defaultPlan',
         'retrieve',
@@ -1031,78 +1030,78 @@ test('describes the current non-live reviewed-chat topology honestly', () => {
         'finish',
     ]);
     assert.deepEqual(
-        CURRENT_REVIEWED_CHAT_WORKFLOW.steps.plan?.transitions.failed,
+        REVIEWED_CHAT_WORKFLOW_FIXTURE.steps.plan?.transitions.failed,
         {
             kind: 'step',
             stepId: 'defaultPlan',
         }
     );
     assert.equal(
-        CURRENT_REVIEWED_CHAT_WORKFLOW.steps.defaultPlan?.executor,
-        'code'
+        REVIEWED_CHAT_WORKFLOW_FIXTURE.steps.defaultPlan?.handler,
+        'defaultPlan'
     );
     assert.equal(
-        CURRENT_REVIEWED_CHAT_WORKFLOW.steps.defaultPlan?.output?.name,
+        REVIEWED_CHAT_WORKFLOW_FIXTURE.steps.defaultPlan?.output?.name,
         'plan'
     );
     assert.deepEqual(
-        CURRENT_REVIEWED_CHAT_WORKFLOW.steps.presentation?.activity,
+        REVIEWED_CHAT_WORKFLOW_FIXTURE.steps.presentation?.activity,
         {
             deliberation: 'none',
         }
     );
     assert.deepEqual(
-        CURRENT_REVIEWED_CHAT_WORKFLOW.steps.presentation?.output?.requiredOn,
+        REVIEWED_CHAT_WORKFLOW_FIXTURE.steps.presentation?.output?.requiredOn,
         ['admitted']
     );
-    assert.equal(CURRENT_REVIEWED_CHAT_WORKFLOW.steps.presentation?.maxRuns, 1);
+    assert.equal(REVIEWED_CHAT_WORKFLOW_FIXTURE.steps.presentation?.maxRuns, 1);
     assert.equal(
-        CURRENT_REVIEWED_CHAT_WORKFLOW.steps.presentation?.maxAttempts,
+        REVIEWED_CHAT_WORKFLOW_FIXTURE.steps.presentation?.maxAttempts,
         undefined
     );
-    assert.equal(CURRENT_REVIEWED_CHAT_WORKFLOW.steps.write?.maxRuns, 3);
-    assert.equal(CURRENT_REVIEWED_CHAT_WORKFLOW.steps.review?.maxRuns, 3);
+    assert.equal(REVIEWED_CHAT_WORKFLOW_FIXTURE.steps.write?.maxRuns, 3);
+    assert.equal(REVIEWED_CHAT_WORKFLOW_FIXTURE.steps.review?.maxRuns, 3);
     assert.deepEqual(
-        CURRENT_REVIEWED_CHAT_WORKFLOW.steps.review?.transitions.revise,
+        REVIEWED_CHAT_WORKFLOW_FIXTURE.steps.review?.transitions.revise,
         {
             kind: 'step',
             stepId: 'replan',
         }
     );
     assert.deepEqual(
-        CURRENT_REVIEWED_CHAT_WORKFLOW.steps.replan?.transitions.continue,
+        REVIEWED_CHAT_WORKFLOW_FIXTURE.steps.replan?.transitions.continue,
         {
             kind: 'step',
             stepId: 'write',
         }
     );
     assert.deepEqual(
-        CURRENT_REVIEWED_CHAT_WORKFLOW.steps.replan?.output?.requiredOn,
+        REVIEWED_CHAT_WORKFLOW_FIXTURE.steps.replan?.output?.requiredOn,
         ['continue']
     );
     assert.deepEqual(
-        CURRENT_REVIEWED_CHAT_WORKFLOW.steps.replan?.transitions.skipped,
+        REVIEWED_CHAT_WORKFLOW_FIXTURE.steps.replan?.transitions.skipped,
         {
             kind: 'step',
             stepId: 'write',
         }
     );
     assert.deepEqual(
-        CURRENT_REVIEWED_CHAT_WORKFLOW.steps.replan?.transitions.failed,
+        REVIEWED_CHAT_WORKFLOW_FIXTURE.steps.replan?.transitions.failed,
         {
             kind: 'step',
             stepId: 'finish',
         }
     );
     assert.deepEqual(
-        CURRENT_REVIEWED_CHAT_WORKFLOW.steps.defaultPlan?.transitions.failed,
+        REVIEWED_CHAT_WORKFLOW_FIXTURE.steps.defaultPlan?.transitions.failed,
         {
             kind: 'step',
             stepId: 'finish',
         }
     );
     assert.deepEqual(
-        CURRENT_REVIEWED_CHAT_WORKFLOW.steps.write?.input.map((reference) =>
+        REVIEWED_CHAT_WORKFLOW_FIXTURE.steps.write?.input.map((reference) =>
             reference.kind === 'result' ? reference.name : reference.kind
         ),
         [
@@ -1116,26 +1115,26 @@ test('describes the current non-live reviewed-chat topology honestly', () => {
         ]
     );
     assert.deepEqual(
-        CURRENT_REVIEWED_CHAT_WORKFLOW.steps.replan?.input.map((reference) =>
+        REVIEWED_CHAT_WORKFLOW_FIXTURE.steps.replan?.input.map((reference) =>
             reference.kind === 'result' ? reference.name : reference.kind
         ),
         ['context', 'plan', 'draft', 'review']
     );
     assert.deepEqual(
-        CURRENT_REVIEWED_CHAT_WORKFLOW.steps.finish?.input.map((reference) =>
+        REVIEWED_CHAT_WORKFLOW_FIXTURE.steps.finish?.input.map((reference) =>
             reference.kind === 'result' ? reference.name : reference.kind
         ),
         ['draft', 'plan', 'evidence', 'review']
     );
     for (const currentStep of ['write', 'review'] as const) {
         assert.deepEqual(
-            CURRENT_REVIEWED_CHAT_WORKFLOW.steps[currentStep]?.transitions
+            REVIEWED_CHAT_WORKFLOW_FIXTURE.steps[currentStep]?.transitions
                 .failed,
             { kind: 'step', stepId: 'finish' }
         );
     }
     assert.deepEqual(
-        CURRENT_REVIEWED_CHAT_WORKFLOW.steps.finish?.transitions.done,
+        REVIEWED_CHAT_WORKFLOW_FIXTURE.steps.finish?.transitions.done,
         { kind: 'end' }
     );
 });
@@ -1146,76 +1145,62 @@ test('executes reviewed-chat presentation and replan skip/failure paths without 
         const writeInputs: string[][] = [];
         let finishInputs: string[] = [];
         const execution = await executeWorkflow({
-            workflow: CURRENT_REVIEWED_CHAT_WORKFLOW,
+            workflow: REVIEWED_CHAT_WORKFLOW_FIXTURE,
             context: { requestId: 'req-1' },
-            executors: {
-                model: async ({ step: executingStep, results }) => {
-                    switch (executingStep.id) {
-                        case 'plan':
-                            return {
-                                status: 'succeeded',
-                                outcome: 'continue',
-                                result: result('plan', { mode: 'reviewed' }),
-                            };
-                        case 'presentation':
-                            return { status: 'succeeded', outcome: 'skipped' };
-                        case 'write':
-                            writeInputs.push(Object.keys(results));
-                            return {
-                                status: 'succeeded',
-                                outcome: 'generated',
-                                result: result('draft', {
-                                    version: writeInputs.length,
-                                }),
-                            };
-                        case 'review':
-                            reviewRuns += 1;
-                            return reviewRuns === 1
-                                ? {
-                                      status: 'succeeded',
-                                      outcome: 'revise',
-                                      result: result('review', {
-                                          action: 'revise',
-                                      }),
-                                  }
-                                : {
-                                      status: 'succeeded',
-                                      outcome: 'done',
-                                      result: result('review', {
-                                          action: 'done',
-                                      }),
-                                  };
-                        case 'replan':
-                            return replan === 'skipped'
-                                ? { status: 'succeeded', outcome: 'skipped' }
-                                : {
-                                      status: 'failed',
-                                      errorCode: 'planner_unavailable',
-                                      retryable: false,
-                                  };
-                        default:
-                            throw new Error(
-                                `Unexpected model Step: ${executingStep.id}`
-                            );
-                    }
-                },
-                context: async () => ({
+            handlers: {
+                plan: async () => ({
+                    status: 'succeeded',
+                    outcome: 'continue',
+                    result: result('plan', { mode: 'reviewed' }),
+                }),
+                retrieve: async () => ({
                     status: 'succeeded',
                     outcome: 'available',
                     result: result('evidence', { sources: 1 }),
                 }),
-                code: async ({ step: executingStep, results }) => {
-                    if (executingStep.id === 'finish') {
-                        finishInputs = Object.keys(results);
-                        return {
-                            status: 'succeeded',
-                            outcome: 'done',
-                            result: result('answer', 'final'),
-                        };
-                    }
-                    throw new Error(
-                        `Unexpected code Step: ${executingStep.id}`
-                    );
+                presentation: async () => ({
+                    status: 'succeeded',
+                    outcome: 'skipped',
+                }),
+                write: async ({ results }) => {
+                    writeInputs.push(Object.keys(results));
+                    return {
+                        status: 'succeeded',
+                        outcome: 'generated',
+                        result: result('draft', {
+                            version: writeInputs.length,
+                        }),
+                    };
+                },
+                review: async () => {
+                    reviewRuns += 1;
+                    return reviewRuns === 1
+                        ? {
+                              status: 'succeeded',
+                              outcome: 'revise',
+                              result: result('review', { action: 'revise' }),
+                          }
+                        : {
+                              status: 'succeeded',
+                              outcome: 'done',
+                              result: result('review', { action: 'done' }),
+                          };
+                },
+                replan: async () =>
+                    replan === 'skipped'
+                        ? { status: 'succeeded', outcome: 'skipped' }
+                        : {
+                              status: 'failed',
+                              errorCode: 'planner_unavailable',
+                              retryable: false,
+                          },
+                finish: async ({ results }) => {
+                    finishInputs = Object.keys(results);
+                    return {
+                        status: 'succeeded',
+                        outcome: 'done',
+                        result: result('answer', 'final'),
+                    };
                 },
             },
             executionLimits: {
@@ -1252,4 +1237,63 @@ test('executes reviewed-chat presentation and replan skip/failure paths without 
     );
     assert.deepEqual(failed.execution.run.results.draft?.value, { version: 1 });
     assert.equal(failed.finishInputs.includes('draft'), true);
+});
+
+test('clears an omitted optional Result before a repeated downstream Step', async () => {
+    const seenRevisionPlans: boolean[] = [];
+    const execution = await executeWorkflow({
+        workflow: workflow({
+            replan: step({
+                id: 'replan',
+                output: 'revisionPlan',
+                outputRequiredOn: ['continue'],
+                transitions: {
+                    continue: { kind: 'step', stepId: 'write' },
+                    skipped: { kind: 'step', stepId: 'write' },
+                },
+                maxRuns: 2,
+            }),
+            write: step({
+                id: 'write',
+                input: [
+                    {
+                        kind: 'result',
+                        name: 'revisionPlan',
+                        optional: true,
+                    },
+                ],
+                transitions: {
+                    again: { kind: 'step', stepId: 'replan' },
+                    done: { kind: 'end' },
+                },
+                maxRuns: 2,
+            }),
+        }),
+        context: { requestId: 'req-1' },
+        handlers: {
+            code: async ({ step: executingStep, results, run }) => {
+                if (executingStep.id === 'replan') {
+                    return run === 1
+                        ? {
+                              status: 'succeeded',
+                              outcome: 'continue',
+                              result: result('revisionPlan', { version: 1 }),
+                          }
+                        : { status: 'succeeded', outcome: 'skipped' };
+                }
+                seenRevisionPlans.push(results.revisionPlan !== undefined);
+                return {
+                    status: 'succeeded',
+                    outcome: run === 1 ? 'again' : 'done',
+                };
+            },
+        },
+        executionLimits: limits,
+        startedAtMs: 0,
+        now: () => 1,
+    });
+
+    assert.equal(execution.status, 'completed');
+    assert.deepEqual(seenRevisionPlans, [true, false]);
+    assert.equal(execution.run.results.revisionPlan, undefined);
 });

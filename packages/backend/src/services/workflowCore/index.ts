@@ -8,17 +8,15 @@
  */
 export { executeWorkflow, resolveTransition } from './engine.js';
 export type { TransitionResolution } from './engine.js';
-export { CURRENT_REVIEWED_CHAT_WORKFLOW } from './reviewedChatWorkflow.js';
 export {
     result,
     type Attempt,
     type AttemptResult,
     type AttemptUsage,
     type ExecuteInput,
-    type Executor,
-    type ExecutorInput,
-    type ExecutorKind,
-    type Executors,
+    type StepHandler,
+    type StepHandlerInput,
+    type StepHandlers,
     type InputRef,
     type Result,
     type Run,
