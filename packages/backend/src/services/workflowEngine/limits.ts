@@ -98,6 +98,29 @@ export const validateExecutionLimits = (
 };
 
 /**
+ * Reports a limit crossed by observed execution. Unlike admission, this only
+ * reports a resource already over its bound; equality leaves no capacity for a
+ * later Attempt but does not rewrite a completed Attempt as an overrun.
+ */
+export const findObservedExecutionLimit = (input: {
+    state: ExecutionLimitState;
+    limits: ExecutionLimits;
+    nowMs: number;
+}): ExhaustedExecutionLimit | undefined => {
+    if (input.state.stepCount > input.limits.maxWorkflowSteps)
+        return 'maxWorkflowSteps';
+    if (input.state.toolCallCount > input.limits.maxToolCalls)
+        return 'maxToolCalls';
+    if (input.state.deliberationCallCount > input.limits.maxDeliberationCalls)
+        return 'maxDeliberationCalls';
+    if (input.state.totalTokens > input.limits.maxTokensTotal)
+        return 'maxTokensTotal';
+    if (input.nowMs - input.state.startedAtMs >= input.limits.maxDurationMs)
+        return 'maxDurationMs';
+    return undefined;
+};
+
+/**
  * Admits one Attempt through the shared Execution Contract. Resource facts are
  * intentionally generic: future verification or research Steps can consume
  * deliberation capacity without pretending to be a legacy plan or assess Step.
@@ -130,8 +153,9 @@ export const admitExecution = (input: {
         requestedToolCalls
     );
     if (
+        reservedToolCalls > 0 &&
         input.state.toolCallCount + reservedToolCalls >
-        input.limits.maxToolCalls
+            input.limits.maxToolCalls
     ) {
         return { admitted: false, exhaustedBy: 'maxToolCalls' };
     }
@@ -197,22 +221,28 @@ export const recordExecution = (input: {
     usage?: ExecutionUsage;
     completedStep?: boolean;
 }): ExecutionLimitState => {
-    const reportedToolCalls = sanitizeUsageCount(input.usage?.toolCalls);
-    const reportedDeliberationCalls = sanitizeUsageCount(
-        input.usage?.deliberationCalls
-    );
-    const toolCalls =
-        input.activity?.tool === 'none'
-            ? 0
-            : input.activity?.tool === 'one-or-more'
-              ? Math.max(1, reportedToolCalls)
-              : reportedToolCalls;
-    const deliberationCalls =
-        input.activity?.deliberation === 'none'
-            ? 0
-            : input.activity?.deliberation !== undefined
-              ? Math.max(1, reportedDeliberationCalls)
-              : reportedDeliberationCalls;
+    const recordsResourceUsage =
+        input.completedStep !== true || input.usage !== undefined;
+    const reportedToolCalls = recordsResourceUsage
+        ? sanitizeUsageCount(input.usage?.toolCalls)
+        : 0;
+    const reportedDeliberationCalls = recordsResourceUsage
+        ? sanitizeUsageCount(input.usage?.deliberationCalls)
+        : 0;
+    const toolCalls = !recordsResourceUsage
+        ? 0
+        : input.activity?.tool === 'none'
+          ? 0
+          : input.activity?.tool === 'one-or-more'
+            ? Math.max(1, reportedToolCalls)
+            : reportedToolCalls;
+    const deliberationCalls = !recordsResourceUsage
+        ? 0
+        : input.activity?.deliberation === 'none'
+          ? 0
+          : input.activity?.deliberation !== undefined
+            ? Math.max(1, reportedDeliberationCalls)
+            : reportedDeliberationCalls;
 
     return {
         ...input.state,
@@ -221,15 +251,23 @@ export const recordExecution = (input: {
         toolCallCount: input.state.toolCallCount + toolCalls,
         planCallCount:
             input.state.planCallCount +
-            (input.activity?.deliberation === 'plan' ? 1 : 0),
+            (input.completedStep === true &&
+            input.activity?.deliberation === 'plan'
+                ? 1
+                : 0),
         reviewCallCount:
             input.state.reviewCallCount +
-            (input.activity?.deliberation === 'review' ? 1 : 0),
+            (input.completedStep === true &&
+            input.activity?.deliberation === 'review'
+                ? 1
+                : 0),
         deliberationCallCount:
             input.state.deliberationCallCount + deliberationCalls,
         totalTokens:
             input.state.totalTokens +
-            sanitizeUsageCount(input.usage?.totalTokens),
+            (recordsResourceUsage
+                ? sanitizeUsageCount(input.usage?.totalTokens)
+                : 0),
     };
 };
 

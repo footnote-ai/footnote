@@ -29,17 +29,11 @@ export type InputRef =
 export type Result = {
     readonly name: string;
     readonly value: SerializableValue;
-    readonly reference?: string;
 };
 
-export const result = (
-    name: string,
-    value: SerializableValue,
-    reference?: string
-): Result => ({
+export const result = (name: string, value: SerializableValue): Result => ({
     name,
     value,
-    ...(reference === undefined ? {} : { reference }),
 });
 
 export type Transition = { kind: 'step'; stepId: string } | { kind: 'end' };
@@ -50,8 +44,8 @@ export type Step = {
     /** Minimal resource facts consumed by shared Execution Contract authority. */
     activity?: ExecutionActivity;
     input: readonly InputRef[];
-    /** The sole Result name this Step may return on success. */
-    output?: { name: string };
+    /** The sole Result name this Step may return; required by default on success. */
+    output?: { name: string; requiredOn?: readonly string[] };
     transitions: Readonly<Record<string, Transition>>;
     /** Maximum semantic executions of this Step within one Run. */
     maxRuns?: number;

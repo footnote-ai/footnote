@@ -370,9 +370,11 @@ test('recordExecution owns resource accounting without legacy Step kinds', () =>
             state,
             activity: { deliberation: 'review' },
             usage: { deliberationCalls: 1 },
+            completedStep: true,
         }),
         {
             ...state,
+            stepCount: 1,
             reviewCallCount: 1,
             deliberationCallCount: 1,
         }

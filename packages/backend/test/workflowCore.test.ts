@@ -37,6 +37,7 @@ const step = (input: {
     transitions: Readonly<Record<string, Transition>>;
     input?: readonly InputRef[];
     output?: string;
+    outputRequiredOn?: readonly string[];
     activity?: Step['activity'];
     maxRuns?: number;
     maxAttempts?: number;
@@ -46,7 +47,16 @@ const step = (input: {
     executor: input.executor ?? 'code',
     ...(input.activity === undefined ? {} : { activity: input.activity }),
     input: input.input ?? [],
-    ...(input.output === undefined ? {} : { output: { name: input.output } }),
+    ...(input.output === undefined
+        ? {}
+        : {
+              output: {
+                  name: input.output,
+                  ...(input.outputRequiredOn === undefined
+                      ? {}
+                      : { requiredOn: input.outputRequiredOn }),
+              },
+          }),
     transitions: input.transitions,
     ...(input.maxRuns === undefined ? {} : { maxRuns: input.maxRuns }),
     ...(input.maxAttempts === undefined
@@ -324,6 +334,78 @@ test('keeps a Run completed when a retryable Attempt succeeds within its Step', 
     );
 });
 
+test('counts a retried plan or review Step once against its semantic cycle cap', async () => {
+    for (const [stepId, activity, cycleLimit] of [
+        ['plan', { deliberation: 'plan' }, { maxPlanCycles: 1 }],
+        ['review', { deliberation: 'review' }, { maxReviewCycles: 1 }],
+    ] as const) {
+        const execution = await runWith({
+            definition: workflow({
+                [stepId]: step({
+                    id: stepId,
+                    activity,
+                    maxAttempts: 2,
+                    transitions: { done: { kind: 'end' } },
+                }),
+            }),
+            behavior: {
+                [stepId]: [
+                    {
+                        status: 'failed',
+                        errorCode: 'temporary',
+                        retryable: true,
+                    },
+                    { status: 'succeeded', outcome: 'done' },
+                ],
+            },
+            executionLimits: { ...limits, ...cycleLimit },
+        });
+
+        assert.equal(execution.status, 'completed', stepId);
+        assert.equal(execution.run.usage.planCalls, stepId === 'plan' ? 1 : 0);
+        assert.equal(
+            execution.run.usage.reviewCalls,
+            stepId === 'review' ? 1 : 0
+        );
+        assert.equal(execution.run.usage.deliberationCalls, 2);
+    }
+});
+
+test('allows declared skipped outcomes to omit Results while retaining required output outcomes', async () => {
+    const definition = workflow({
+        presentation: step({
+            id: 'presentation',
+            output: 'presentation',
+            outputRequiredOn: ['admitted'],
+            transitions: {
+                admitted: { kind: 'end' },
+                skipped: { kind: 'end' },
+            },
+        }),
+    });
+
+    const skipped = await runWith({
+        definition,
+        behavior: {
+            presentation: [{ status: 'succeeded', outcome: 'skipped' }],
+        },
+    });
+    const admittedWithoutResult = await runWith({
+        definition,
+        behavior: {
+            presentation: [{ status: 'succeeded', outcome: 'admitted' }],
+        },
+    });
+
+    assert.equal(skipped.status, 'completed');
+    assert.equal(skipped.run.results.presentation, undefined);
+    assert.deepEqual(admittedWithoutResult.termination, {
+        reason: 'invalid_result',
+        stepId: 'presentation',
+        expectedName: 'presentation',
+    });
+});
+
 test('rejects invalid definitions before any executor runs', async () => {
     const invalidDefinitions: readonly Workflow[] = [
         workflow({}, 'missing'),
@@ -510,11 +592,8 @@ test('uses shared admission before every retry and supplies distinct Attempt ord
     });
 
     assert.deepEqual(attempts, [1, 2]);
-    assert.equal(execution.status, 'limited');
-    assert.deepEqual(execution.termination, {
-        reason: 'execution_limit',
-        limit: 'maxToolCalls',
-    });
+    assert.equal(execution.status, 'degraded');
+    assert.deepEqual(execution.termination, { reason: 'finished' });
 });
 
 test('calculates Attempt reservations for each concrete Attempt', async () => {
@@ -551,10 +630,8 @@ test('calculates Attempt reservations for each concrete Attempt', async () => {
 
     assert.deepEqual(reservations, [1, 2]);
     assert.equal(executorCalls, 1);
-    assert.deepEqual(execution.termination, {
-        reason: 'execution_limit',
-        limit: 'maxTokensTotal',
-    });
+    assert.equal(execution.status, 'degraded');
+    assert.deepEqual(execution.termination, { reason: 'finished' });
 });
 
 test('rejects a projected tool reservation before a tool Attempt executes', async () => {
@@ -564,7 +641,7 @@ test('rejects a projected tool reservation before a tool Attempt executes', asyn
             context: step({
                 id: 'context',
                 activity: { tool: 'one-or-more' },
-                transitions: { done: { kind: 'end' } },
+                transitions: { failed: { kind: 'end' }, done: { kind: 'end' } },
             }),
         }),
         context: { requestId: 'req-1' },
@@ -581,64 +658,236 @@ test('rejects a projected tool reservation before a tool Attempt executes', asyn
     });
 
     assert.equal(executorCalls, 0);
-    assert.deepEqual(execution.termination, {
+    assert.equal(execution.status, 'degraded');
+    assert.deepEqual(execution.termination, { reason: 'finished' });
+});
+
+test('routes a recoverably admission-blocked optional Step through its declared failure transition', async () => {
+    const execution = await executeWorkflow({
+        workflow: workflow({
+            presentation: step({
+                id: 'presentation',
+                output: 'presentation',
+                outputRequiredOn: ['admitted'],
+                transitions: {
+                    admitted: { kind: 'step', stepId: 'write' },
+                    failed: { kind: 'step', stepId: 'write' },
+                },
+            }),
+            write: step({
+                id: 'write',
+                transitions: {
+                    failed: { kind: 'end' },
+                    done: { kind: 'end' },
+                },
+            }),
+        }),
+        context: { requestId: 'req-1' },
+        executors: {
+            code: async ({ step: executingStep }) => ({
+                status: 'succeeded',
+                outcome: executingStep.id === 'write' ? 'done' : 'admitted',
+            }),
+        },
+        executionLimits: { ...limits, maxTokensTotal: 5 },
+        startedAtMs: 0,
+        now: () => 1,
+        reserveAttempt: ({ step: executingStep }) =>
+            executingStep.id === 'presentation' ? { tokens: 6 } : undefined,
+    });
+
+    assert.equal(execution.status, 'degraded');
+    assert.deepEqual(
+        execution.run.steps.map((record) => record.stepId),
+        ['presentation', 'write']
+    );
+    assert.equal(execution.run.steps[0]?.attempts[0]?.status, 'rejected');
+});
+
+test('routes a retry blocked by consumed tokens through Step recovery', async () => {
+    const execution = await executeWorkflow({
+        workflow: workflow({
+            presentation: step({
+                id: 'presentation',
+                maxAttempts: 2,
+                transitions: { failed: { kind: 'step', stepId: 'write' } },
+            }),
+            write: step({
+                id: 'write',
+                transitions: {
+                    failed: { kind: 'end' },
+                    done: { kind: 'end' },
+                },
+            }),
+        }),
+        context: { requestId: 'req-1' },
+        executors: {
+            code: async ({ step: executingStep }) =>
+                executingStep.id === 'presentation'
+                    ? {
+                          status: 'failed',
+                          errorCode: 'temporary',
+                          retryable: true,
+                          usage: { totalTokens: 3 },
+                      }
+                    : { status: 'succeeded', outcome: 'done' },
+        },
+        executionLimits: { ...limits, maxTokensTotal: 5 },
+        startedAtMs: 0,
+        now: () => 1,
+        reserveAttempt: ({ step: executingStep }) =>
+            executingStep.id === 'presentation' ? { tokens: 3 } : undefined,
+    });
+
+    assert.equal(execution.status, 'degraded');
+    assert.deepEqual(
+        execution.run.steps[0]?.attempts.map((attempt) => attempt.status),
+        ['failed', 'rejected']
+    );
+    assert.equal(execution.run.steps[1]?.stepId, 'write');
+});
+
+test('stops on observed resource overruns while retaining valid prior Results', async () => {
+    const tokenOverrun = await executeWorkflow({
+        workflow: workflow({
+            write: step({
+                id: 'write',
+                output: 'draft',
+                transitions: { done: { kind: 'end' } },
+            }),
+        }),
+        context: { requestId: 'req-1' },
+        executors: {
+            code: async () => ({
+                status: 'succeeded',
+                outcome: 'done',
+                result: result('draft', 'kept'),
+                usage: { totalTokens: 4 },
+            }),
+        },
+        executionLimits: { ...limits, maxTokensTotal: 3 },
+        startedAtMs: 0,
+        now: () => 1,
+        reserveAttempt: () => ({ tokens: 1 }),
+    });
+
+    const toolOverrun = await executeWorkflow({
+        workflow: workflow({
+            retrieve: step({
+                id: 'retrieve',
+                activity: { tool: 'one-or-more' },
+                transitions: { done: { kind: 'end' } },
+            }),
+        }),
+        context: { requestId: 'req-1' },
+        executors: {
+            code: async () => ({
+                status: 'succeeded',
+                outcome: 'done',
+                usage: { toolCalls: 3 },
+            }),
+        },
+        executionLimits: { ...limits, maxToolCalls: 2 },
+        startedAtMs: 0,
+        now: () => 1,
+        reserveAttempt: () => ({ toolCalls: 1 }),
+    });
+
+    const reviewOverrun = await executeWorkflow({
+        workflow: workflow({
+            write: step({
+                id: 'write',
+                output: 'draft',
+                transitions: { generated: { kind: 'step', stepId: 'review' } },
+            }),
+            review: step({
+                id: 'review',
+                activity: { deliberation: 'review' },
+                input: [{ kind: 'result', name: 'draft' }],
+                output: 'review',
+                transitions: { revise: { kind: 'end' } },
+            }),
+        }),
+        context: { requestId: 'req-1' },
+        executors: {
+            code: async ({ step: executingStep }) =>
+                executingStep.id === 'write'
+                    ? {
+                          status: 'succeeded',
+                          outcome: 'generated',
+                          result: result('draft', 'prior draft'),
+                      }
+                    : {
+                          status: 'succeeded',
+                          outcome: 'revise',
+                          result: result('review', 'retry'),
+                          usage: { totalTokens: 4 },
+                      },
+        },
+        executionLimits: { ...limits, maxTokensTotal: 3 },
+        startedAtMs: 0,
+        now: () => 1,
+        reserveAttempt: ({ step: executingStep }) =>
+            executingStep.id === 'review' ? { tokens: 1 } : undefined,
+    });
+
+    let time = 0;
+    const durationOverrun = await executeWorkflow({
+        workflow: workflow({
+            write: step({
+                id: 'write',
+                transitions: { done: { kind: 'end' } },
+            }),
+        }),
+        context: { requestId: 'req-1' },
+        executors: {
+            code: async () => {
+                time = 2;
+                return { status: 'succeeded', outcome: 'done' };
+            },
+        },
+        executionLimits: { ...limits, maxDurationMs: 1 },
+        startedAtMs: 0,
+        now: () => time,
+    });
+
+    assert.deepEqual(tokenOverrun.termination, {
+        reason: 'execution_limit',
+        limit: 'maxTokensTotal',
+    });
+    assert.equal(tokenOverrun.run.results.draft?.value, 'kept');
+    assert.deepEqual(toolOverrun.termination, {
         reason: 'execution_limit',
         limit: 'maxToolCalls',
+    });
+    assert.deepEqual(reviewOverrun.termination, {
+        reason: 'execution_limit',
+        limit: 'maxTokensTotal',
+    });
+    assert.equal(reviewOverrun.run.results.draft?.value, 'prior draft');
+    assert.deepEqual(durationOverrun.termination, {
+        reason: 'execution_limit',
+        limit: 'maxDurationMs',
     });
 });
 
 test('applies canonical caps, reservation, duration, and presentation accounting through shared admission', async () => {
-    const plan = await runWith({
-        definition: workflow({
-            plan: step({
-                id: 'plan',
-                activity: { deliberation: 'plan' },
-                maxAttempts: 2,
-                transitions: { failed: { kind: 'end' } },
-            }),
-        }),
-        behavior: {
-            plan: [{ status: 'failed', errorCode: 'retry', retryable: true }],
-        },
-        executionLimits: { ...limits, maxPlanCycles: 1 },
-    });
-    assert.deepEqual(plan.termination, {
-        reason: 'execution_limit',
-        limit: 'maxDeliberationCalls',
-    });
-
-    const review = await runWith({
-        definition: workflow({
-            review: step({
-                id: 'review',
-                activity: { deliberation: 'review' },
-                maxAttempts: 2,
-                transitions: { failed: { kind: 'end' } },
-            }),
-        }),
-        behavior: {
-            review: [{ status: 'failed', errorCode: 'retry', retryable: true }],
-        },
-        executionLimits: { ...limits, maxReviewCycles: 1 },
-    });
-    assert.deepEqual(review.termination, {
-        reason: 'execution_limit',
-        limit: 'maxDeliberationCalls',
-    });
-
     const reservation = await runWith({
         definition: workflow({
             write: step({
                 id: 'write',
-                transitions: { done: { kind: 'end' } },
+                transitions: {
+                    failed: { kind: 'end' },
+                    done: { kind: 'end' },
+                },
             }),
         }),
         behavior: { write: [{ status: 'succeeded', outcome: 'done' }] },
         executionLimits: { ...limits, maxTokensTotal: 10 },
         reserveAttempt: () => ({ tokens: 11 }),
     });
-    assert.equal(reservation.run.steps.length, 0);
-    assert.equal(reservation.termination.reason, 'execution_limit');
+    assert.equal(reservation.run.steps.length, 1);
+    assert.equal(reservation.status, 'degraded');
 
     const duration = await runWith({
         definition: workflow({
@@ -711,7 +960,7 @@ test('describes the current non-live reviewed-chat topology honestly', () => {
     assert.deepEqual(Object.keys(CURRENT_REVIEWED_CHAT_WORKFLOW.steps), [
         'plan',
         'defaultPlan',
-        'context',
+        'retrieve',
         'presentation',
         'write',
         'review',
@@ -739,6 +988,10 @@ test('describes the current non-live reviewed-chat topology honestly', () => {
             deliberation: 'none',
         }
     );
+    assert.deepEqual(
+        CURRENT_REVIEWED_CHAT_WORKFLOW.steps.presentation?.output?.requiredOn,
+        ['admitted']
+    );
     assert.equal(CURRENT_REVIEWED_CHAT_WORKFLOW.steps.presentation?.maxRuns, 1);
     assert.equal(
         CURRENT_REVIEWED_CHAT_WORKFLOW.steps.presentation?.maxAttempts,
@@ -759,6 +1012,10 @@ test('describes the current non-live reviewed-chat topology honestly', () => {
             kind: 'step',
             stepId: 'write',
         }
+    );
+    assert.deepEqual(
+        CURRENT_REVIEWED_CHAT_WORKFLOW.steps.replan?.output?.requiredOn,
+        ['continue']
     );
     assert.deepEqual(
         CURRENT_REVIEWED_CHAT_WORKFLOW.steps.replan?.transitions.skipped,
@@ -818,4 +1075,118 @@ test('describes the current non-live reviewed-chat topology honestly', () => {
         CURRENT_REVIEWED_CHAT_WORKFLOW.steps.finish?.transitions.done,
         { kind: 'end' }
     );
+});
+
+test('executes reviewed-chat presentation and replan skip/failure paths without synthetic Results', async () => {
+    const executeProof = async (replan: 'skipped' | 'failed') => {
+        let reviewRuns = 0;
+        const writeInputs: string[][] = [];
+        let finishInputs: string[] = [];
+        const execution = await executeWorkflow({
+            workflow: CURRENT_REVIEWED_CHAT_WORKFLOW,
+            context: { requestId: 'req-1' },
+            executors: {
+                model: async ({ step: executingStep, results }) => {
+                    switch (executingStep.id) {
+                        case 'plan':
+                            return {
+                                status: 'succeeded',
+                                outcome: 'continue',
+                                result: result('plan', { mode: 'reviewed' }),
+                            };
+                        case 'presentation':
+                            return { status: 'succeeded', outcome: 'skipped' };
+                        case 'write':
+                            writeInputs.push(Object.keys(results));
+                            return {
+                                status: 'succeeded',
+                                outcome: 'generated',
+                                result: result('draft', {
+                                    version: writeInputs.length,
+                                }),
+                            };
+                        case 'review':
+                            reviewRuns += 1;
+                            return reviewRuns === 1
+                                ? {
+                                      status: 'succeeded',
+                                      outcome: 'revise',
+                                      result: result('review', {
+                                          action: 'revise',
+                                      }),
+                                  }
+                                : {
+                                      status: 'succeeded',
+                                      outcome: 'done',
+                                      result: result('review', {
+                                          action: 'done',
+                                      }),
+                                  };
+                        case 'replan':
+                            return replan === 'skipped'
+                                ? { status: 'succeeded', outcome: 'skipped' }
+                                : {
+                                      status: 'failed',
+                                      errorCode: 'planner_unavailable',
+                                      retryable: false,
+                                  };
+                        default:
+                            throw new Error(
+                                `Unexpected model Step: ${executingStep.id}`
+                            );
+                    }
+                },
+                context: async () => ({
+                    status: 'succeeded',
+                    outcome: 'available',
+                    result: result('evidence', { sources: 1 }),
+                }),
+                code: async ({ step: executingStep, results }) => {
+                    if (executingStep.id === 'finish') {
+                        finishInputs = Object.keys(results);
+                        return {
+                            status: 'succeeded',
+                            outcome: 'done',
+                            result: result('answer', 'final'),
+                        };
+                    }
+                    throw new Error(
+                        `Unexpected code Step: ${executingStep.id}`
+                    );
+                },
+            },
+            executionLimits: {
+                ...limits,
+                maxPlanCycles: 3,
+                maxReviewCycles: 3,
+            },
+            startedAtMs: 0,
+            now: () => 1,
+        });
+        return { execution, finishInputs, writeInputs };
+    };
+
+    const skipped = await executeProof('skipped');
+    assert.equal(skipped.execution.status, 'completed');
+    assert.equal(skipped.writeInputs.length, 2);
+    assert.equal(skipped.writeInputs[0]?.includes('presentation'), false);
+    assert.equal(skipped.writeInputs[1]?.includes('revisionPlan'), false);
+    assert.equal(skipped.writeInputs[1]?.includes('review'), true);
+
+    const failed = await executeProof('failed');
+    assert.equal(failed.execution.status, 'degraded');
+    assert.deepEqual(
+        failed.execution.run.steps.map((record) => record.stepId),
+        [
+            'plan',
+            'retrieve',
+            'presentation',
+            'write',
+            'review',
+            'replan',
+            'finish',
+        ]
+    );
+    assert.deepEqual(failed.execution.run.results.draft?.value, { version: 1 });
+    assert.equal(failed.finishInputs.includes('draft'), true);
 });

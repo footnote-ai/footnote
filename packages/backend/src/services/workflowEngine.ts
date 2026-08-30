@@ -325,6 +325,7 @@ export {
     activityForWorkflowStep,
     admitExecution,
     checkExecutionLimits,
+    findObservedExecutionLimit,
     mapLimitExhaustionToTerminationReason,
     recordExecution,
 } from './workflowEngine/limits.js';

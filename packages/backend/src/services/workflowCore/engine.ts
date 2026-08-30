@@ -8,7 +8,10 @@
  */
 import {
     admitExecution,
+    findObservedExecutionLimit,
     recordExecution,
+    type ExecutionLimitState,
+    type ExhaustedExecutionLimit,
     validateExecutionLimits,
 } from '../workflowEngine/limits.js';
 import {
@@ -98,6 +101,16 @@ const toAttempt = (input: {
     };
 };
 
+const executionLimitStateFor = (run: Run): ExecutionLimitState => ({
+    startedAtMs: run.startedAtMs,
+    stepCount: run.usage.stepCount,
+    toolCallCount: run.usage.toolCalls,
+    planCallCount: run.usage.planCalls,
+    reviewCallCount: run.usage.reviewCalls,
+    deliberationCallCount: run.usage.deliberationCalls,
+    totalTokens: run.usage.totalTokens,
+});
+
 const recordRunExecution = (input: {
     run: Run;
     step?: Step;
@@ -105,15 +118,7 @@ const recordRunExecution = (input: {
     completedStep?: boolean;
 }): void => {
     const state = recordExecution({
-        state: {
-            startedAtMs: input.run.startedAtMs,
-            stepCount: input.run.usage.stepCount,
-            toolCallCount: input.run.usage.toolCalls,
-            planCallCount: input.run.usage.planCalls,
-            reviewCallCount: input.run.usage.reviewCalls,
-            deliberationCallCount: input.run.usage.deliberationCalls,
-            totalTokens: input.run.usage.totalTokens,
-        },
+        state: executionLimitStateFor(input.run),
         ...(input.step === undefined ? {} : { activity: input.step.activity }),
         ...(input.usage === undefined ? {} : { usage: input.usage }),
         ...(input.completedStep === true ? { completedStep: true } : {}),
@@ -127,6 +132,10 @@ const recordRunExecution = (input: {
         reviewCalls: state.reviewCallCount,
     };
 };
+
+const canRecoverFromAdmissionLimit = (
+    limit: ExhaustedExecutionLimit
+): boolean => limit !== 'maxDurationMs' && limit !== 'maxWorkflowSteps';
 
 const hasDeclaredOutcome = (step: Step, outcome: string): boolean =>
     Object.prototype.hasOwnProperty.call(step.transitions, outcome);
@@ -176,6 +185,21 @@ const validateDefinition = (workflow: Workflow): string | undefined => {
                 step.output.name.length === 0)
         ) {
             return `Workflow step output is invalid: ${key}`;
+        }
+        if (
+            step.output?.requiredOn !== undefined &&
+            (!Array.isArray(step.output.requiredOn) ||
+                step.output.requiredOn.length === 0 ||
+                step.output.requiredOn.some(
+                    (outcome) =>
+                        typeof outcome !== 'string' ||
+                        !Object.prototype.hasOwnProperty.call(
+                            step.transitions,
+                            outcome
+                        )
+                ))
+        ) {
+            return `Workflow step output requirements are invalid: ${key}`;
         }
         for (const transition of Object.values(step.transitions)) {
             if (transition.kind === 'end') continue;
@@ -241,6 +265,7 @@ const finish = (input: {
 
 const validateAttemptResult = (input: {
     step: Step;
+    outcome: string;
     result: Result | undefined;
 }):
     | { valid: true }
@@ -250,9 +275,13 @@ const validateAttemptResult = (input: {
             ? { valid: true }
             : { valid: false, actualName: input.result.name };
     }
-    if (input.result === undefined) {
+    const requiresResult =
+        input.step.output.requiredOn === undefined ||
+        input.step.output.requiredOn.includes(input.outcome);
+    if (input.result === undefined && requiresResult) {
         return { valid: false, expectedName: input.step.output.name };
     }
+    if (input.result === undefined) return { valid: true };
     return input.result.name === input.step.output.name
         ? { valid: true }
         : {
@@ -379,6 +408,7 @@ export const executeWorkflow = async <TContext>(
         let successfulResult: Result | undefined;
         let successfulOutcome: string | undefined;
         let failed = false;
+        let observedLimit: ExhaustedExecutionLimit | undefined;
 
         for (
             let attemptNumber = 1;
@@ -394,15 +424,7 @@ export const executeWorkflow = async <TContext>(
             };
             const reservation = input.reserveAttempt?.(executorInput);
             const admission = admitExecution({
-                state: {
-                    startedAtMs: run.startedAtMs,
-                    stepCount: run.usage.stepCount,
-                    toolCallCount: run.usage.toolCalls,
-                    planCallCount: run.usage.planCalls,
-                    reviewCallCount: run.usage.reviewCalls,
-                    deliberationCallCount: run.usage.deliberationCalls,
-                    totalTokens: run.usage.totalTokens,
-                },
+                state: executionLimitStateFor(run),
                 limits: input.executionLimits,
                 nowMs: now(),
                 ...(step.activity === undefined
@@ -411,17 +433,17 @@ export const executeWorkflow = async <TContext>(
                 ...(reservation === undefined ? {} : { reservation }),
             });
             if (!admission.admitted) {
-                if (attempts.length > 0) {
-                    recordRunExecution({ run, completedStep: true });
-                    steps.push({
-                        stepId: step.id,
-                        run: stepRunNumber,
-                        input: step.input,
-                        status: 'failed',
-                        attempts,
-                    });
-                }
                 if ('error' in admission) {
+                    if (attempts.length > 0) {
+                        recordRunExecution({ run, step, completedStep: true });
+                        steps.push({
+                            stepId: step.id,
+                            run: stepRunNumber,
+                            input: step.input,
+                            status: 'failed',
+                            attempts,
+                        });
+                    }
                     return finish({
                         run,
                         steps,
@@ -432,6 +454,30 @@ export const executeWorkflow = async <TContext>(
                             reason: 'execution_contract_error',
                             message: admission.error,
                         },
+                    });
+                }
+                if (canRecoverFromAdmissionLimit(admission.exhaustedBy)) {
+                    const admissionAtMs = now();
+                    attempts.push({
+                        attempt: attemptNumber,
+                        executor: step.executor,
+                        status: 'rejected',
+                        startedAtMs: admissionAtMs,
+                        finishedAtMs: admissionAtMs,
+                        errorCode: 'execution_limit',
+                        errorMessage: `Execution Contract limit blocks Attempt: ${admission.exhaustedBy}`,
+                    });
+                    failed = true;
+                    break;
+                }
+                if (attempts.length > 0) {
+                    recordRunExecution({ run, step, completedStep: true });
+                    steps.push({
+                        stepId: step.id,
+                        run: stepRunNumber,
+                        input: step.input,
+                        status: 'failed',
+                        attempts,
                     });
                 }
                 return finish({
@@ -467,6 +513,11 @@ export const executeWorkflow = async <TContext>(
                 ...(attemptResult.usage === undefined
                     ? {}
                     : { usage: attemptResult.usage }),
+            });
+            observedLimit = findObservedExecutionLimit({
+                state: executionLimitStateFor(run),
+                limits: input.executionLimits,
+                nowMs: now(),
             });
             const attempt = toAttempt({
                 attempt: attemptNumber,
@@ -512,6 +563,7 @@ export const executeWorkflow = async <TContext>(
 
                 const resultValidation = validateAttemptResult({
                     step,
+                    outcome: attemptResult.outcome,
                     result: attemptResult.result,
                 });
                 if (!resultValidation.valid) {
@@ -559,6 +611,10 @@ export const executeWorkflow = async <TContext>(
             }
 
             attempts.push(attempt);
+            if (observedLimit !== undefined) {
+                failed = true;
+                break;
+            }
             if (
                 attemptResult.retryable === false ||
                 attemptNumber === maxAttempts
@@ -568,7 +624,7 @@ export const executeWorkflow = async <TContext>(
             }
         }
 
-        recordRunExecution({ run, completedStep: true });
+        recordRunExecution({ run, step, completedStep: true });
         steps.push({
             stepId: step.id,
             run: stepRunNumber,
@@ -582,6 +638,22 @@ export const executeWorkflow = async <TContext>(
                 : { result: successfulResult }),
             attempts,
         });
+
+        if (successfulResult !== undefined)
+            results[successfulResult.name] = successfulResult;
+        if (observedLimit !== undefined) {
+            return finish({
+                run,
+                steps,
+                results,
+                now,
+                status: 'limited',
+                termination: {
+                    reason: 'execution_limit',
+                    limit: observedLimit,
+                },
+            });
+        }
 
         const transition = failed
             ? resolveTransition(step, 'failed')
@@ -607,8 +679,6 @@ export const executeWorkflow = async <TContext>(
         // has exhausted Attempts and follows its declared failure route.
         if (failed) degraded = true;
 
-        if (successfulResult !== undefined)
-            results[successfulResult.name] = successfulResult;
         if (transition.transition.kind === 'end') {
             return finish({
                 run,

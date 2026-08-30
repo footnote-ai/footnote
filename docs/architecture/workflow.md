@@ -73,9 +73,11 @@ at runtime instead.
 Before it invokes an executor, the foundation validates the complete Workflow:
 the start Step exists, every map key matches its Step id, and every transition
 target exists. A successful Attempt must return the Step's declared Result when
-one exists. It must not return a Result from an outputless Step. Missing,
-mismatched, and undeclared Results reject the Run; unavailable executors remain
-a separate configuration rejection from a declared Step failure route.
+one exists, unless that output explicitly marks its successful outcome as one
+that may omit the Result. It must not return a Result from an outputless Step.
+Missing, mismatched, and undeclared Results reject the Run; unavailable
+executors remain a separate configuration rejection from a declared Step
+failure route.
 
 Both the existing live engine and this foundation use the neutral
 `admitExecution()` and `recordExecution()` seams in
@@ -84,10 +86,19 @@ counter semantics used by those checks. Steps supply only resource facts:
 tool use or general, planning, or review deliberation. Future verification or
 research Steps can consume deliberation capacity without impersonating a
 legacy Step name. Presentation supplies no deliberation activity, so its
-candidate work remains outside plan/review capacity. A caller calculates a
-token reservation per concrete Attempt; the Workflow definition does not bake
-a static request budget into a Step. Malformed Execution Contract bounds reject
-the foundation Run rather than being silently clamped or removed.
+candidate work remains outside plan/review capacity. Plan and review cycles
+count completed semantic Step runs; their individual Attempts still count
+against the general deliberation limit. A caller calculates conservative token
+and tool-call reservations per concrete Attempt; the Workflow definition does
+not bake a static request budget into a Step. Malformed Execution Contract
+bounds reject the foundation Run rather than being silently clamped or removed.
+
+Resource admission that blocks a Step is represented as that Step's failed
+Attempt and may take its declared recovery route. Duration and workflow-Step
+limits still stop the whole Run. After every executor Attempt,
+`findObservedExecutionLimit()` checks reported token/tool usage and elapsed
+duration; an observed overrun preserves valid prior Results but stops further
+work with a limit termination.
 
 A Run that reaches `end` after a Step exhausts its Attempts and follows a
 declared recovery route is `degraded`, not `completed`. A retryable Attempt
@@ -98,9 +109,9 @@ that succeeds within its Step is normal error correction and leaves the Run
 reviewed-chat shape:
 
 ```text
-plan -> context -> presentation -> write -> review -> finish -> end
+plan -> retrieve -> presentation -> write -> review -> finish -> end
   |
-  +-> default-plan recovery -> context
+  +-> default-plan recovery -> retrieve
 
 review -- revise --> replan -- continue/skipped --> write
                              |

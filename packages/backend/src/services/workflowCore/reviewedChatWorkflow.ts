@@ -28,7 +28,7 @@ export const CURRENT_REVIEWED_CHAT_WORKFLOW: Workflow = {
             input: [{ kind: 'context' }],
             output: { name: 'plan' },
             transitions: {
-                continue: { kind: 'step', stepId: 'context' },
+                continue: { kind: 'step', stepId: 'retrieve' },
                 failed: { kind: 'step', stepId: 'defaultPlan' },
                 terminal: { kind: 'step', stepId: 'finish' },
             },
@@ -41,13 +41,13 @@ export const CURRENT_REVIEWED_CHAT_WORKFLOW: Workflow = {
             input: [{ kind: 'context' }],
             output: { name: 'plan' },
             transitions: {
-                continue: { kind: 'step', stepId: 'context' },
+                continue: { kind: 'step', stepId: 'retrieve' },
                 failed: { kind: 'step', stepId: 'finish' },
             },
             maxRuns: 1,
         }),
-        context: step({
-            id: 'context',
+        retrieve: step({
+            id: 'retrieve',
             executor: 'context',
             activity: { tool: 'one-or-more' },
             input: [{ kind: 'context' }, { kind: 'result', name: 'plan' }],
@@ -68,7 +68,7 @@ export const CURRENT_REVIEWED_CHAT_WORKFLOW: Workflow = {
                 { kind: 'result', name: 'plan' },
                 { kind: 'result', name: 'evidence', optional: true },
             ],
-            output: { name: 'presentation' },
+            output: { name: 'presentation', requiredOn: ['admitted'] },
             transitions: {
                 admitted: { kind: 'step', stepId: 'write' },
                 skipped: { kind: 'step', stepId: 'write' },
@@ -123,7 +123,7 @@ export const CURRENT_REVIEWED_CHAT_WORKFLOW: Workflow = {
                 { kind: 'result', name: 'draft' },
                 { kind: 'result', name: 'review' },
             ],
-            output: { name: 'revisionPlan' },
+            output: { name: 'revisionPlan', requiredOn: ['continue'] },
             transitions: {
                 continue: { kind: 'step', stepId: 'write' },
                 skipped: { kind: 'step', stepId: 'write' },

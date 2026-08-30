@@ -28,4 +28,7 @@ export {
     type Transition,
     type Workflow,
 } from './types.js';
-export type { ExecutionLimits } from '../workflowEngine/limits.js';
+export type {
+    ExecutionLimits,
+    ExecutionReservation,
+} from '../workflowEngine/limits.js';
