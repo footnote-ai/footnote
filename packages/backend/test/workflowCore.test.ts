@@ -70,7 +70,7 @@ const runWith = async (input: {
     executionLimits?: ExecutionLimits;
     executors?: Executors<TestContext>;
     now?: () => number;
-    reserveTokens?: () => number;
+    reserveAttempt?: () => { tokens?: number; toolCalls?: number };
 }) => {
     const remaining = new Map(
         Object.entries(input.behavior).map(([stepId, outcomes]) => [
@@ -93,7 +93,7 @@ const runWith = async (input: {
         executionLimits: input.executionLimits ?? limits,
         startedAtMs: 0,
         now: input.now ?? (() => 1),
-        reserveTokens: input.reserveTokens,
+        reserveAttempt: input.reserveAttempt,
     });
 };
 
@@ -300,6 +300,30 @@ test('marks explicit default-plan recovery as degraded', async () => {
     );
 });
 
+test('keeps a Run completed when a retryable Attempt succeeds within its Step', async () => {
+    const execution = await runWith({
+        definition: workflow({
+            write: step({
+                id: 'write',
+                maxAttempts: 2,
+                transitions: { done: { kind: 'end' } },
+            }),
+        }),
+        behavior: {
+            write: [
+                { status: 'failed', errorCode: 'temporary', retryable: true },
+                { status: 'succeeded', outcome: 'done' },
+            ],
+        },
+    });
+
+    assert.equal(execution.status, 'completed');
+    assert.deepEqual(
+        execution.run.steps[0]?.attempts.map((attempt) => attempt.status),
+        ['failed', 'succeeded']
+    );
+});
+
 test('rejects invalid definitions before any executor runs', async () => {
     const invalidDefinitions: readonly Workflow[] = [
         workflow({}, 'missing'),
@@ -493,7 +517,7 @@ test('uses shared admission before every retry and supplies distinct Attempt ord
     });
 });
 
-test('calculates token reservations for each concrete Attempt', async () => {
+test('calculates Attempt reservations for each concrete Attempt', async () => {
     const reservations: number[] = [];
     let executorCalls = 0;
     const execution = await executeWorkflow({
@@ -519,9 +543,9 @@ test('calculates token reservations for each concrete Attempt', async () => {
         executionLimits: { ...limits, maxTokensTotal: 8 },
         startedAtMs: 0,
         now: () => 1,
-        reserveTokens: ({ attempt }) => {
+        reserveAttempt: ({ attempt }) => {
             reservations.push(attempt);
-            return attempt === 1 ? 3 : 6;
+            return { tokens: attempt === 1 ? 3 : 6 };
         },
     });
 
@@ -530,6 +554,36 @@ test('calculates token reservations for each concrete Attempt', async () => {
     assert.deepEqual(execution.termination, {
         reason: 'execution_limit',
         limit: 'maxTokensTotal',
+    });
+});
+
+test('rejects a projected tool reservation before a tool Attempt executes', async () => {
+    let executorCalls = 0;
+    const execution = await executeWorkflow({
+        workflow: workflow({
+            context: step({
+                id: 'context',
+                activity: { tool: 'one-or-more' },
+                transitions: { done: { kind: 'end' } },
+            }),
+        }),
+        context: { requestId: 'req-1' },
+        executors: {
+            code: async () => {
+                executorCalls += 1;
+                return { status: 'succeeded', outcome: 'done' };
+            },
+        },
+        executionLimits: { ...limits, maxToolCalls: 2 },
+        startedAtMs: 0,
+        now: () => 1,
+        reserveAttempt: () => ({ toolCalls: 3 }),
+    });
+
+    assert.equal(executorCalls, 0);
+    assert.deepEqual(execution.termination, {
+        reason: 'execution_limit',
+        limit: 'maxToolCalls',
     });
 });
 
@@ -581,7 +635,7 @@ test('applies canonical caps, reservation, duration, and presentation accounting
         }),
         behavior: { write: [{ status: 'succeeded', outcome: 'done' }] },
         executionLimits: { ...limits, maxTokensTotal: 10 },
-        reserveTokens: () => 11,
+        reserveAttempt: () => ({ tokens: 11 }),
     });
     assert.equal(reservation.run.steps.length, 0);
     assert.equal(reservation.termination.reason, 'execution_limit');
@@ -704,6 +758,27 @@ test('describes the current non-live reviewed-chat topology honestly', () => {
         {
             kind: 'step',
             stepId: 'write',
+        }
+    );
+    assert.deepEqual(
+        CURRENT_REVIEWED_CHAT_WORKFLOW.steps.replan?.transitions.skipped,
+        {
+            kind: 'step',
+            stepId: 'write',
+        }
+    );
+    assert.deepEqual(
+        CURRENT_REVIEWED_CHAT_WORKFLOW.steps.replan?.transitions.failed,
+        {
+            kind: 'step',
+            stepId: 'finish',
+        }
+    );
+    assert.deepEqual(
+        CURRENT_REVIEWED_CHAT_WORKFLOW.steps.defaultPlan?.transitions.failed,
+        {
+            kind: 'step',
+            stepId: 'finish',
         }
     );
     assert.deepEqual(

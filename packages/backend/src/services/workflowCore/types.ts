@@ -9,6 +9,7 @@
 import type {
     ExecutionActivity,
     ExecutionLimits,
+    ExecutionReservation,
     ExhaustedExecutionLimit,
 } from '../workflowEngine/limits.js';
 
@@ -174,6 +175,8 @@ export type ExecuteInput<TContext = unknown> = {
     runId?: string;
     startedAtMs?: number;
     now?: () => number;
-    /** Calculates the conservative reservation for this concrete Attempt. */
-    reserveTokens?: (input: ExecutorInput<TContext>) => number | undefined;
+    /** Calculates conservative resource bounds for this concrete Attempt. */
+    reserveAttempt?: (
+        input: ExecutorInput<TContext>
+    ) => ExecutionReservation | undefined;
 };

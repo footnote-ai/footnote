@@ -89,9 +89,10 @@ token reservation per concrete Attempt; the Workflow definition does not bake
 a static request budget into a Step. Malformed Execution Contract bounds reject
 the foundation Run rather than being silently clamped or removed.
 
-A Run that reaches `end` after a declared recovery route is `degraded`, not
-`completed`. Recovery permits a useful answer to continue; it does not erase
-the failed Attempt from the Run's status or eventual trace.
+A Run that reaches `end` after a Step exhausts its Attempts and follows a
+declared recovery route is `degraded`, not `completed`. A retryable Attempt
+that succeeds within its Step is normal error correction and leaves the Run
+`completed`; all Attempts remain available in the trace.
 
 `reviewedChatWorkflow.ts` is an honest, non-live proof of the current coarse
 reviewed-chat shape:
@@ -101,14 +102,18 @@ plan -> context -> presentation -> write -> review -> finish -> end
   |
   +-> default-plan recovery -> context
 
-review -- revise --> replan --> write
+review -- revise --> replan -- continue/skipped --> write
+                             |
+                             +-> failed -> finish
 ```
 
 The planner's failure route invokes the explicit conservative default-plan code
-Step. Presentation is one Step whose executor owns candidate generation and
-deterministic admissibility; this proof does not include separate style-check
-or presentation retry Steps. Revision re-enters planning explicitly, and the
-revision Write consumes the Review Result and optional revision Plan. Finish
+Step. A failed default-plan Step routes through finish. Presentation is one
+Step whose executor owns candidate generation and deterministic admissibility;
+this proof does not include separate style-check or presentation retry Steps.
+Revision re-enters planning explicitly, and the revision Write consumes the
+Review Result and optional revision Plan. A replan that is skipped continues
+revision; one that fails finalizes the last good Draft instead. Finish
 can consume the Draft, Plan terminal action, context Result, and Review Result
 that led to finalization. Write and review failure routes go through the
 semantic `finish` Step before the terminal `end`, so finalization and

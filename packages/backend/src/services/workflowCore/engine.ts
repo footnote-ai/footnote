@@ -392,6 +392,7 @@ export const executeWorkflow = async <TContext>(
                 run: stepRunNumber,
                 attempt: attemptNumber,
             };
+            const reservation = input.reserveAttempt?.(executorInput);
             const admission = admitExecution({
                 state: {
                     startedAtMs: run.startedAtMs,
@@ -407,7 +408,7 @@ export const executeWorkflow = async <TContext>(
                 ...(step.activity === undefined
                     ? {}
                     : { activity: step.activity }),
-                tokenReservation: input.reserveTokens?.(executorInput),
+                ...(reservation === undefined ? {} : { reservation }),
             });
             if (!admission.admitted) {
                 if (attempts.length > 0) {
@@ -557,7 +558,6 @@ export const executeWorkflow = async <TContext>(
                 break;
             }
 
-            degraded = true;
             attempts.push(attempt);
             if (
                 attemptResult.retryable === false ||
@@ -602,6 +602,10 @@ export const executeWorkflow = async <TContext>(
                       },
             });
         }
+
+        // A retried Attempt can recover normally. Degrade only once this Step
+        // has exhausted Attempts and follows its declared failure route.
+        if (failed) degraded = true;
 
         if (successfulResult !== undefined)
             results[successfulResult.name] = successfulResult;

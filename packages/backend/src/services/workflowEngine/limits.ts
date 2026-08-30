@@ -32,6 +32,12 @@ export type ExecutionUsage = {
     deliberationCalls?: number;
 };
 
+/** Conservative maximum resource capacity reserved before one Attempt starts. */
+export type ExecutionReservation = {
+    tokens?: number;
+    toolCalls?: number;
+};
+
 /** State needed by the shared limit authority, independent of either engine. */
 export type ExecutionLimitState = {
     startedAtMs: number;
@@ -101,7 +107,7 @@ export const admitExecution = (input: {
     limits: ExecutionLimits;
     nowMs: number;
     activity?: ExecutionActivity;
-    tokenReservation?: number;
+    reservation?: ExecutionReservation;
 }): ExecutionAdmission => {
     const malformedLimits = validateExecutionLimits(input.limits);
     if (malformedLimits !== undefined) {
@@ -112,9 +118,20 @@ export const admitExecution = (input: {
         return { admitted: false, exhaustedBy: 'maxWorkflowSteps' };
     }
 
+    const requestedToolCalls = input.reservation?.toolCalls ?? 0;
+    if (!isNonNegativeInteger(requestedToolCalls)) {
+        return {
+            admitted: false,
+            error: 'Execution Attempt reservation is invalid: toolCalls',
+        };
+    }
+    const reservedToolCalls = Math.max(
+        input.activity?.tool === 'one-or-more' ? 1 : 0,
+        requestedToolCalls
+    );
     if (
-        input.activity?.tool === 'one-or-more' &&
-        input.state.toolCallCount >= input.limits.maxToolCalls
+        input.state.toolCallCount + reservedToolCalls >
+        input.limits.maxToolCalls
     ) {
         return { admitted: false, exhaustedBy: 'maxToolCalls' };
     }
@@ -147,16 +164,16 @@ export const admitExecution = (input: {
         return { admitted: false, exhaustedBy: 'maxTokensTotal' };
     }
 
-    const reservation = input.tokenReservation ?? 0;
-    if (!isNonNegativeInteger(reservation)) {
+    const reservedTokens = input.reservation?.tokens ?? 0;
+    if (!isNonNegativeInteger(reservedTokens)) {
         return {
             admitted: false,
-            error: 'Execution token reservation is invalid',
+            error: 'Execution Attempt reservation is invalid: tokens',
         };
     }
     if (
-        reservation > 0 &&
-        input.state.totalTokens + reservation > input.limits.maxTokensTotal
+        reservedTokens > 0 &&
+        input.state.totalTokens + reservedTokens > input.limits.maxTokensTotal
     ) {
         return { admitted: false, exhaustedBy: 'maxTokensTotal' };
     }
@@ -259,7 +276,7 @@ export const checkExecutionLimits = (
         limits,
         nowMs,
         activity: activityForWorkflowStep(nextStepKind),
-        tokenReservation: nextStepTokenBudget,
+        reservation: { tokens: nextStepTokenBudget },
     });
     if (admission.admitted) return { withinLimits: true };
     if ('exhaustedBy' in admission)

@@ -40,7 +40,10 @@ export const CURRENT_REVIEWED_CHAT_WORKFLOW: Workflow = {
             executor: 'code',
             input: [{ kind: 'context' }],
             output: { name: 'plan' },
-            transitions: { continue: { kind: 'step', stepId: 'context' } },
+            transitions: {
+                continue: { kind: 'step', stepId: 'context' },
+                failed: { kind: 'step', stepId: 'finish' },
+            },
             maxRuns: 1,
         }),
         context: step({
@@ -123,7 +126,8 @@ export const CURRENT_REVIEWED_CHAT_WORKFLOW: Workflow = {
             output: { name: 'revisionPlan' },
             transitions: {
                 continue: { kind: 'step', stepId: 'write' },
-                failed: { kind: 'step', stepId: 'write' },
+                skipped: { kind: 'step', stepId: 'write' },
+                failed: { kind: 'step', stepId: 'finish' },
             },
             maxRuns: 2,
             maxAttempts: 2,
