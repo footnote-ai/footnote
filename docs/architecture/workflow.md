@@ -10,6 +10,55 @@ The current chat path supports three public modes: `express`, `balanced`, and
 All three map to the reviewed workflow profile, but they run with different
 contract presets, limits, model routing, and evidence posture.
 
+## Stable design vocabulary and boundaries
+
+Use the following small vocabulary when extending workflows:
+
+- **Workflow** describes how work proceeds.
+- **Run** is one execution of a workflow.
+- **Step** is a named unit of work.
+- **Attempt** is one concrete try to complete a Step.
+- **Context** is backend-owned request and conversation information available to
+  the Run.
+- **Result** is the typed output produced by a Step.
+
+The work a Run performs is separate from the topology that defines its allowed
+path. A Workflow chooses the path, and a model may choose only among validated
+outcomes that the Step exposes. Use **Executor** and **Adapter** for
+implementation terms. Reserve **Agent** for a genuinely delegated system that
+controls its own internal multi-step work or tool use; a single planner, writer,
+style, or reviewer call is a model-backed Step, not an Agent.
+
+Keep **Context**, **Result**, and **ModelInput** distinct. Context is what
+Footnote knows about the Run. Results are typed values from earlier Steps.
+ModelInput is the bounded provider-neutral projection assembled for one model
+Attempt from the Context, declared Results, Step instructions, policy/persona
+material, and allowed capabilities. Do not replace this boundary with one
+shared mutable workflow state object or let retrieved text acquire instruction
+authority through a prompt role.
+
+Attempt-level recovery handles provider, adapter, or model failures. Workflow
+failure routes handle the meaning of a failed Step: an optional failure may
+preserve an earlier valid Result, while a required write failure may produce an
+explicit no-generation outcome. Both the Attempt facts and the Step outcome
+belong in the backend-owned Run record.
+
+Capability reporting must distinguish **supported**, **unsupported**, and
+**unknown**, and must distinguish what the concrete model/provider supports from
+what the active Adapter/runtime can request or observe. Effective support is the
+intersection of those layers; fail-open behavior must not turn unknown into a
+false claim.
+
+A delegated Agent may run inside a bounded Agent-backed Step, but it does not
+own Footnote's outer Workflow, Execution Contract, provenance, trace, review,
+or failure semantics. W3C PROV, OpenTelemetry, A2A, and MCP are useful alignment
+or export references, not replacements for Footnote's everyday domain names.
+
+Footnote is pre-production. When a new workflow definition can express the
+current path and the cutover is working, remove superseded internal topology
+and compatibility machinery rather than maintaining two active workflow
+engines indefinitely. Every merged migration PR must leave chat usable.
+
 ## How a chat request runs
 
 The normal chat path starts in `chatOrchestrator` and then moves through the
@@ -230,10 +279,12 @@ reproducible while still spreading traffic across the pool.
 
 Current default routing intent:
 
-- `express` generate favors the lower-allowance OpenAI fast profile first
-- `balanced` generate favors Ollama first, then OpenAI fallback
-- `grounded` generate favors OpenAI first, then Ollama fallback
-- `planner` and `assess` favor `openai-json-optimized` first in all modes
+- all modes prefer the configured OpenRouter DeepSeek profile for planner,
+  generation, and assessment
+- optional presentation uses the configured OpenRouter DeepSeek profile when it
+  is enabled
+- OpenAI and Ollama profiles remain bounded fallbacks where configured and
+  available
 
 Routing is fail-open where possible:
 
