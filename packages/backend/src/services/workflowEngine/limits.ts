@@ -13,6 +13,7 @@ import type {
     WorkflowStepKind,
     WorkflowTerminationReason,
 } from '@footnote/contracts/policy';
+import type { WorkflowActivity } from '@footnote/contracts';
 import type { WorkflowProfileExecutionLimitsContract } from '../workflowProfileContract.js';
 import type { WorkflowProfilePolicyContract } from '../workflowProfileContract.js';
 import type { WorkflowState } from './state.js';
@@ -20,12 +21,7 @@ import type { WorkflowState } from './state.js';
 export type ExecutionLimits = WorkflowProfileExecutionLimitsContract;
 export type ExhaustedExecutionLimit = WorkflowLimitKey;
 
-/** Minimal resource facts used by the Execution Contract, independent of Step names. */
-export type ExecutionActivity = {
-    tool?: 'one-or-more';
-    deliberation?: 'general' | 'plan' | 'review';
-};
-
+/** Workflow resource facts are shared by contracts and the Execution Contract. */
 export type ExecutionUsage = {
     totalTokens?: number;
     toolCalls?: number;
@@ -129,7 +125,7 @@ export const admitExecution = (input: {
     state: ExecutionLimitState;
     limits: ExecutionLimits;
     nowMs: number;
-    activity?: ExecutionActivity;
+    activity?: WorkflowActivity;
     reservation?: ExecutionReservation;
 }): ExecutionAdmission => {
     const malformedLimits = validateExecutionLimits(input.limits);
@@ -223,7 +219,7 @@ export const admitExecution = (input: {
  */
 export const recordAttempt = (input: {
     state: ExecutionLimitState;
-    activity?: ExecutionActivity;
+    activity?: WorkflowActivity;
     usage?: ExecutionUsage;
 }): ExecutionLimitState => {
     const toolCalls = sanitizeUsageCount(input.usage?.toolCalls);
@@ -249,7 +245,7 @@ export const recordAttempt = (input: {
 /** Records one completed semantic Step after its Attempts finish. */
 export const recordStep = (input: {
     state: ExecutionLimitState;
-    activity?: ExecutionActivity;
+    activity?: WorkflowActivity;
 }): ExecutionLimitState => ({
     ...input.state,
     stepCount: input.state.stepCount + 1,
@@ -264,7 +260,7 @@ export const recordStep = (input: {
 /** Adapts the live engine's legacy taxonomy at its boundary to generic resource facts. */
 export const activityForWorkflowStep = (
     stepKind: WorkflowStepKind | undefined
-): ExecutionActivity | undefined => {
+): WorkflowActivity | undefined => {
     if (stepKind === 'tool') return { tool: 'one-or-more' };
     if (stepKind === 'plan') return { deliberation: 'plan' };
     if (stepKind === 'assess') return { deliberation: 'review' };

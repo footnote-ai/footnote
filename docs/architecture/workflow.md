@@ -61,8 +61,9 @@ engines indefinitely. Every merged migration PR must leave chat usable.
 
 ## Workflow core foundation
 
-`packages/backend/src/services/workflowCore/` contains a backend-only foundation
-for the future chat cutover. Live chat still uses `workflowEngine`.
+`@footnote/contracts` defines portable Workflow topology. `packages/backend/src/services/workflowCore/`
+contains the backend-only execution foundation for the future chat cutover. Live chat still uses
+`workflowEngine`.
 
 A workflow is a set of named Steps. Each Step declares its Result inputs,
 optional output, outcomes, and bounds. The caller supplies handlers under the
@@ -71,7 +72,7 @@ selected Results, and one-based iteration and attempt numbers. This keeps the
 Workflow serializable while binding each Step to a concrete backend implementation.
 
 The engine validates the definition before starting, follows declared outcomes,
-bounds runs and retries, records Attempts, and uses the shared Execution
+bounds iterations and Attempts, records Attempts, and uses the shared Execution
 Contract before and after each attempt. A failed Step can follow its declared
 recovery route and produces a degraded Run; a retry that succeeds does not.
 

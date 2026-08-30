@@ -1,17 +1,19 @@
 /**
- * @description: Defines the small, backend-owned runtime workflow contract.
- * Dataflow is validated from declared result names at execution time.
+ * @description: Defines backend-only Workflow execution inputs and records.
+ * Workflow topology is shared from the contracts package.
  * @footnote-scope: core
  * @footnote-module: WorkflowCoreTypes
  * @footnote-risk: medium - Contract drift can make later workflow cutovers unsafe.
  * @footnote-ethics: high - Explicit topology and bounded attempts keep execution authority with the backend.
  */
 import type {
-    ExecutionActivity,
     ExecutionLimits,
     ExecutionReservation,
     ExhaustedExecutionLimit,
 } from '../workflowEngine/limits.js';
+import type { Workflow } from '@footnote/contracts';
+
+export type { ResultRef, Step, Workflow } from '@footnote/contracts';
 
 type SerializableValue =
     | boolean
@@ -21,29 +23,7 @@ type SerializableValue =
     | readonly SerializableValue[]
     | { readonly [key: string]: SerializableValue };
 
-export type ResultRef = { name: string; optional?: boolean };
-
 export type Result = SerializableValue;
-
-export type Step = {
-    /** Minimal resource facts consumed by shared Execution Contract authority. */
-    activity?: ExecutionActivity;
-    /** Results required from earlier Steps. Context is available to every handler. */
-    input?: readonly ResultRef[];
-    /** The sole Result name this Step may return; required by default on success. */
-    output?: { name: string; requiredOn?: readonly string[] };
-    next: Readonly<Record<string, string | null>>;
-    /** Maximum executions of this Step within one Workflow Run. */
-    maxIterations?: number;
-    /** Maximum Attempts for one semantic Step execution. */
-    maxAttempts?: number;
-};
-
-export type Workflow = {
-    id: string;
-    start: string;
-    steps: Readonly<Record<string, Step>>;
-};
 
 export type AttemptUsage = {
     totalTokens?: number;
@@ -66,14 +46,13 @@ export type AttemptResult =
           usage?: AttemptUsage;
       };
 
-/** Input to a Step handler contains runtime data, not phantom compile-time wiring. */
 export type StepHandlerInput<TContext = unknown> = {
     stepId: string;
     context: TContext;
     results: Readonly<Record<string, Result>>;
-    /** One-based semantic execution ordinal for this Step. */
+    /** How many times this Step has run, starting at 1. */
     iteration: number;
-    /** One-based handler Attempt ordinal within this Run. */
+    /** This Step's current Attempt, starting at 1. */
     attempt: number;
 };
 
@@ -121,7 +100,7 @@ export type Run = {
 
 export type RunTermination =
     | { reason: 'finished' }
-    | { reason: 'step_run_limit'; stepId: string }
+    | { reason: 'step_iteration_limit'; stepId: string }
     | { reason: 'execution_limit'; limit: ExhaustedExecutionLimit }
     | { reason: 'execution_contract_error'; message: string }
     | { reason: 'step_failed'; stepId: string }

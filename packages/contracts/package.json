@@ -41,6 +41,10 @@
         "./pricing": {
             "types": "./dist/pricing.d.ts",
             "default": "./dist/pricing.js"
+        },
+        "./workflow": {
+            "types": "./dist/workflow.d.ts",
+            "default": "./dist/workflow.js"
         }
     },
     "scripts": {

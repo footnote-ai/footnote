@@ -5,7 +5,7 @@
  * @footnote-risk: low - This fixture only checks the cutover target shape.
  * @footnote-ethics: low - It cannot affect live chat behavior.
  */
-import type { Workflow } from '../../src/services/workflowCore/types.js';
+import type { Workflow } from '@footnote/contracts';
 
 export const CURRENT_CHAT_WORKFLOW_FIXTURE = {
     id: 'chat',
@@ -40,7 +40,7 @@ export const CURRENT_CHAT_WORKFLOW_FIXTURE = {
         },
         presentation: {
             input: [{ name: 'plan' }, { name: 'evidence', optional: true }],
-            output: { name: 'presentation', requiredOn: ['admitted'] },
+            output: { name: 'presentation', on: ['admitted'] },
             next: { admitted: 'write', skipped: 'write', failed: 'write' },
             maxIterations: 1,
         },
@@ -69,7 +69,7 @@ export const CURRENT_CHAT_WORKFLOW_FIXTURE = {
         replan: {
             activity: { deliberation: 'plan' },
             input: [{ name: 'plan' }, { name: 'draft' }, { name: 'review' }],
-            output: { name: 'revisionPlan', requiredOn: ['continue'] },
+            output: { name: 'revisionPlan', on: ['continue'] },
             next: { continue: 'write', skipped: 'write', failed: 'finish' },
             maxIterations: 2,
             maxAttempts: 2,

@@ -46,7 +46,7 @@ const step = (input: {
     next: Readonly<Record<string, string | null>>;
     input?: readonly ResultRef[];
     output?: string;
-    outputRequiredOn?: readonly string[];
+    outputOn?: readonly string[];
     activity?: Step['activity'];
     maxIterations?: number;
     maxAttempts?: number;
@@ -58,9 +58,9 @@ const step = (input: {
         : {
               output: {
                   name: input.output,
-                  ...(input.outputRequiredOn === undefined
+                  ...(input.outputOn === undefined
                       ? {}
-                      : { requiredOn: input.outputRequiredOn }),
+                      : { on: input.outputOn }),
               },
           }),
     next: input.next,
@@ -126,7 +126,7 @@ const runWith = async (input: {
     });
 };
 
-test('runs declared dataflow and gives handlers the full Step, Results, and one-based ordinals', async () => {
+test('runs declared dataflow and gives handlers Step names, Results, and one-based ordinals', async () => {
     const definition = workflow({
         plan: step({
             output: 'plan',
@@ -143,23 +143,21 @@ test('runs declared dataflow and gives handlers the full Step, Results, and one-
         resultNames: string[];
         iteration: number;
         attempt: number;
+        hasStep: boolean;
     }> = [];
 
     const execution = await runWith({
         definition,
         behavior: {},
         handlers: {
-            code: async ({
-                stepId,
-                results,
-                iteration,
-                attempt,
-            }): Promise<AttemptResult> => {
+            code: async (handlerInput): Promise<AttemptResult> => {
+                const { stepId, results, iteration, attempt } = handlerInput;
                 seen.push({
-                    stepId: stepId,
+                    stepId,
                     resultNames: Object.keys(results),
                     iteration,
                     attempt,
+                    hasStep: Object.hasOwn(handlerInput, 'step'),
                 });
                 return stepId === 'plan'
                     ? {
@@ -178,8 +176,20 @@ test('runs declared dataflow and gives handlers the full Step, Results, and one-
 
     assert.equal(execution.status, 'completed');
     assert.deepEqual(seen, [
-        { stepId: 'plan', resultNames: [], iteration: 1, attempt: 1 },
-        { stepId: 'write', resultNames: ['plan'], iteration: 1, attempt: 1 },
+        {
+            stepId: 'plan',
+            resultNames: [],
+            iteration: 1,
+            attempt: 1,
+            hasStep: false,
+        },
+        {
+            stepId: 'write',
+            resultNames: ['plan'],
+            iteration: 1,
+            attempt: 1,
+            hasStep: false,
+        },
     ]);
     assert.deepEqual(execution.run.results.plan, { route: 'write' });
 });
@@ -218,7 +228,7 @@ test('supports a bounded generic style -> check -> retry cycle without special e
         ['style', 'check', 'style', 'check']
     );
     assert.deepEqual(execution.termination, {
-        reason: 'step_run_limit',
+        reason: 'step_iteration_limit',
         stepId: 'style',
     });
 });
@@ -383,7 +393,7 @@ test('allows declared skipped outcomes to omit Results while retaining required 
     const definition = workflow({
         presentation: step({
             output: 'presentation',
-            outputRequiredOn: ['admitted'],
+            outputOn: ['admitted'],
             next: {
                 admitted: null,
                 skipped: null,
@@ -654,7 +664,7 @@ test('routes a recoverably admission-blocked optional Step through its declared 
         workflow: workflow({
             presentation: step({
                 output: 'presentation',
-                outputRequiredOn: ['admitted'],
+                outputOn: ['admitted'],
                 next: {
                     admitted: 'write',
                     failed: 'write',
@@ -1014,7 +1024,7 @@ test('describes the current chat cutover fixture', () => {
         undefined
     );
     assert.deepEqual(
-        CURRENT_CHAT_WORKFLOW_FIXTURE.steps.presentation?.output?.requiredOn,
+        CURRENT_CHAT_WORKFLOW_FIXTURE.steps.presentation?.output?.on,
         ['admitted']
     );
     assert.equal(
@@ -1037,10 +1047,9 @@ test('describes the current chat cutover fixture', () => {
         CURRENT_CHAT_WORKFLOW_FIXTURE.steps.replan?.next.continue,
         'write'
     );
-    assert.deepEqual(
-        CURRENT_CHAT_WORKFLOW_FIXTURE.steps.replan?.output?.requiredOn,
-        ['continue']
-    );
+    assert.deepEqual(CURRENT_CHAT_WORKFLOW_FIXTURE.steps.replan?.output?.on, [
+        'continue',
+    ]);
     assert.deepEqual(
         CURRENT_CHAT_WORKFLOW_FIXTURE.steps.replan?.next.skipped,
         'write'
@@ -1189,7 +1198,7 @@ test('clears an omitted optional Result before a repeated downstream Step', asyn
         workflow: workflow({
             replan: step({
                 output: 'revisionPlan',
-                outputRequiredOn: ['continue'],
+                outputOn: ['continue'],
                 next: {
                     continue: 'write',
                     skipped: 'write',

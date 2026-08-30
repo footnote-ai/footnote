@@ -1,6 +1,6 @@
 /**
  * @description: Executes runtime workflow definitions through declared next outcomes,
- * bounded semantic runs, and Execution Contract admission before every Attempt.
+ * bounded iterations, and Execution Contract admission before every Attempt.
  * @footnote-scope: core
  * @footnote-module: WorkflowCoreEngine
  * @footnote-risk: high - Routing or admission mistakes can create unbounded or unauthorized execution.
@@ -187,10 +187,10 @@ const validateDefinition = (workflow: Workflow): string | undefined => {
             return `Workflow step output is invalid: ${key}`;
         }
         if (
-            step.output?.requiredOn !== undefined &&
-            (!Array.isArray(step.output.requiredOn) ||
-                step.output.requiredOn.length === 0 ||
-                step.output.requiredOn.some(
+            step.output?.on !== undefined &&
+            (!Array.isArray(step.output.on) ||
+                step.output.on.length === 0 ||
+                step.output.on.some(
                     (outcome) =>
                         typeof outcome !== 'string' ||
                         !Object.prototype.hasOwnProperty.call(
@@ -267,8 +267,8 @@ const validateAttemptResult = (input: {
         return input.result === undefined;
     }
     const requiresResult =
-        input.step.output.requiredOn === undefined ||
-        input.step.output.requiredOn.includes(input.outcome);
+        input.step.output.on === undefined ||
+        input.step.output.on.includes(input.outcome);
     return input.result !== undefined || !requiresResult;
 };
 
@@ -352,7 +352,7 @@ export const executeWorkflow = async <TContext>(
                 now,
                 status: 'limited',
                 termination: {
-                    reason: 'step_run_limit',
+                    reason: 'step_iteration_limit',
                     stepId: currentStepId,
                 },
             });
@@ -404,7 +404,6 @@ export const executeWorkflow = async <TContext>(
         ) {
             const handlerInput = {
                 stepId: currentStepId,
-                step,
                 context: input.context,
                 results: collected.results,
                 iteration: stepRunNumber,

@@ -185,6 +185,13 @@ export type {
 
 // Shared AI/provider vocabulary
 export type {
+    ResultRef,
+    Step,
+    StepOutput,
+    Workflow,
+    WorkflowActivity,
+} from './workflow.js';
+export type {
     ConfiguredProviderModel,
     InternalImageRenderModelId,
     InternalImageTextModelId,
