@@ -138,15 +138,16 @@ primary labels under an answer.
 
 All three modes use the reviewed workflow shape:
 
-| Workflow shape | Purpose                     | Main steps                                                                    |
-| -------------- | --------------------------- | ----------------------------------------------------------------------------- |
-| `reviewed`     | reviewed message generation | `plan? -> tool? -> presentation? -> generate -> assess? -> replan? -> finish` |
+| Workflow shape | Purpose                     | Main steps                                                                                             |
+| -------------- | --------------------------- | ------------------------------------------------------------------------------------------------------ |
+| `reviewed`     | reviewed message generation | `plan? -> tool? -> presentation? -> generate -> assess? -> [replan? -> generate -> assess?] -> finish` |
 
 The live conditional topology is `plan? -> tool? -> presentation? -> generate
--> assess? -> replan? -> finish`. A `?` step runs only when the active policy
-and dependencies enable it; `generate` and `finish` remain the core path. This
-is the post-cutover topology, and the superseded internal topology has been
-removed.
+-> assess? -> [replan? -> generate -> assess?] -> finish`. A `?` step runs only
+when the active policy and dependencies enable it. When assessment requests a
+revision, `replan` returns to `generate`, which may enter `assess` again before
+`finish`. This is the post-cutover topology, and the superseded internal
+topology has been removed.
 
 Mode details:
 

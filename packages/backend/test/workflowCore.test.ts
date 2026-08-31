@@ -398,6 +398,7 @@ test('allows declared skipped outcomes to omit Results while retaining required 
         presentation: step({
             output: 'presentation',
             outputOn: ['admitted'],
+            countsAsWorkflowStep: 'successful',
             next: {
                 admitted: null,
                 skipped: null,
@@ -436,10 +437,12 @@ test('allows declared skipped outcomes to omit Results while retaining required 
         reason: 'invalid_result',
         stepId: 'presentation',
     });
+    assert.equal(admittedWithoutResult.run.usage.stepCount, 0);
     assert.deepEqual(skippedWithResult.termination, {
         reason: 'invalid_result',
         stepId: 'presentation',
     });
+    assert.equal(skippedWithResult.run.usage.stepCount, 0);
 });
 
 test('lets an optional failed Step recover without consuming a workflow-step allowance', async () => {

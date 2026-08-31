@@ -71,7 +71,7 @@ const toAttempt = (input: {
     finishedAtMs: number;
     result: AttemptResult;
 }): Attempt => {
-    const usage =
+    const usage: AttemptUsage | undefined =
         input.result.usage === undefined
             ? undefined
             : {
@@ -407,9 +407,14 @@ const validateAttemptResult = (input: {
 };
 
 /**
- * Runs one complete Workflow. Definitions and Execution Contract bounds are
- * rejected before any Step handler starts; every Attempt is then admitted
- * through the shared limits authority.
+ * @description: Executes a declared workflow through bounded Steps and Attempts.
+ * Validates handler Results before recording the backend-owned Run.
+ * Definitions and Execution Contract bounds are rejected before handlers start;
+ * every Attempt passes through the shared limits authority.
+ * @footnote-scope: core
+ * @footnote-module: WorkflowCoreEngine
+ * @footnote-risk: high - Invalid routing or records can affect every bounded workflow run.
+ * @footnote-ethics: high - Backend-owned limits and validation govern automated execution records.
  */
 export const executeWorkflow = async <TContext>(
     input: ExecuteInput<TContext>
@@ -643,7 +648,7 @@ export const executeWorkflow = async <TContext>(
                             finishedAtMs: attemptFinishedAtMs,
                         })
                     );
-                    recordRunStep(run, step);
+                    recordRunStep(run, step, false);
                     steps.push({
                         stepId: currentStepId,
                         iteration: stepRunNumber,
@@ -701,7 +706,7 @@ export const executeWorkflow = async <TContext>(
                         errorCode: 'undeclared_outcome',
                         errorMessage: `Outcome is not declared by step: ${attemptResult.outcome}`,
                     });
-                    recordRunStep(run);
+                    recordRunStep(run, step, false);
                     steps.push({
                         stepId: currentStepId,
                         iteration: stepRunNumber,
@@ -735,7 +740,7 @@ export const executeWorkflow = async <TContext>(
                         errorMessage:
                             'Result does not satisfy the Step output declaration',
                     });
-                    recordRunStep(run);
+                    recordRunStep(run, step, false);
                     steps.push({
                         stepId: currentStepId,
                         iteration: stepRunNumber,
