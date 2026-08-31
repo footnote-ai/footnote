@@ -482,7 +482,7 @@ export const executeWorkflow = async <TContext>(
             if (!admission.admitted) {
                 if ('error' in admission) {
                     if (attempts.length > 0) {
-                        recordRunStep(run, step);
+                        recordRunStep(run, step, false);
                         steps.push({
                             stepId: currentStepId,
                             iteration: stepRunNumber,
@@ -526,7 +526,7 @@ export const executeWorkflow = async <TContext>(
                     break;
                 }
                 if (attempts.length > 0) {
-                    recordRunStep(run, step);
+                    recordRunStep(run, step, false);
                     steps.push({
                         stepId: currentStepId,
                         iteration: stepRunNumber,

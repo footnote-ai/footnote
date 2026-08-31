@@ -500,13 +500,13 @@ make a run look cleaner.
 
 Use this split when ownership is unclear:
 
-| Concern             | Engine core                                                                                       | Workflow profile                                                        | Adapters and callers                                       |
+| Concern             | workflowCore and workflowEngine/limits                                                            | Workflow profile                                                        | Adapters and callers                                       |
 | ------------------- | ------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------- | ---------------------------------------------------------- |
 | Step legality       | handles the legality check before execution                                                       | declares intended flow and policy toggles                               | supplies policy and uses engine legality results           |
-| Limits              | handles hard-stop checks and stop-reason mapping                                                  | declares default budgets within the shared limits model                 | passes config and surfaces the final result                |
+| Limits              | `workflowCore` invokes admission; `workflowEngine/limits.ts` owns hard-stop checks and accounting | declares default budgets within the shared limits model                 | passes config and surfaces the final result                |
 | Workflow state      | tracks step count, token totals, current step, and lineage progression                            | declares expected step shape                                            | treats engine-produced workflow state as the runtime state |
 | Step execution      | runs concrete steps today (`generate`, `assess`, refinement `generate`) and records step outcomes | defines step-specific behavior such as review parsing                   | builds requests and calls runtimes or providers            |
-| Termination reasons | assigns shared termination reasons                                                                | can request stop using shared reason handling                           | persists and returns engine-assigned reasons unchanged     |
+| Termination reasons | `workflowCore` assigns workflow reasons; `workflowEngine/limits.ts` maps exhausted limits         | can request stop using shared reason handling                           | persists and returns engine-assigned reasons unchanged     |
 | Fail-open behavior  | handles degraded fail-open workflow behavior                                                      | can define recoverable profile behavior within shared fail-open meaning | keeps telemetry or persistence failures out of user blocks |
 
 These rules stay stable as profiles expand:

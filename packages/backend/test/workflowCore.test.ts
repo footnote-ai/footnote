@@ -473,6 +473,82 @@ test('lets an optional failed Step recover without consuming a workflow-step all
     assert.deepEqual(execution.termination, { reason: 'finished' });
 });
 
+test('does not count a successful-only Step after a later Attempt admission error', async () => {
+    let handlerCalls = 0;
+    const execution = await executeWorkflow({
+        workflow: workflow({
+            write: step({
+                countsAsWorkflowStep: 'successful',
+                maxAttempts: 2,
+                next: { failed: null },
+            }),
+        }),
+        context: { requestId: 'req-1' },
+        handlers: {
+            code: async (): Promise<AttemptResult> => {
+                handlerCalls += 1;
+                return {
+                    status: 'failed',
+                    errorCode: 'temporary',
+                    retryable: true,
+                };
+            },
+        },
+        executionLimits: limits,
+        startedAtMs: 0,
+        now: () => 1,
+        reserveAttempt: ({ attempt }) =>
+            attempt === 1 ? undefined : { tokens: -1 },
+    });
+
+    assert.equal(handlerCalls, 1);
+    assert.equal(execution.status, 'rejected');
+    assert.deepEqual(execution.termination, {
+        reason: 'execution_contract_error',
+        message: 'Execution Attempt reservation is invalid: tokens',
+    });
+    assert.equal(execution.run.usage.stepCount, 0);
+    assert.deepEqual(
+        execution.run.steps[0]?.attempts.map((attempt) => attempt.status),
+        ['failed']
+    );
+});
+
+test('does not count a successful-only Step after duration stops its retry', async () => {
+    let time = 0;
+    const execution = await executeWorkflow({
+        workflow: workflow({
+            write: step({
+                countsAsWorkflowStep: 'successful',
+                maxAttempts: 2,
+                next: { failed: null },
+            }),
+        }),
+        context: { requestId: 'req-1' },
+        handlers: {
+            code: async (): Promise<AttemptResult> => {
+                time = 1;
+                return {
+                    status: 'failed',
+                    errorCode: 'temporary',
+                    retryable: true,
+                };
+            },
+        },
+        executionLimits: { ...limits, maxDurationMs: 1 },
+        startedAtMs: 0,
+        now: () => time,
+    });
+
+    assert.equal(execution.status, 'limited');
+    assert.deepEqual(execution.termination, {
+        reason: 'execution_limit',
+        limit: 'maxDurationMs',
+    });
+    assert.equal(execution.run.usage.stepCount, 0);
+    assert.equal(execution.run.steps[0]?.status, 'failed');
+});
+
 test('rejects invalid definitions before any handler runs', async () => {
     const invalidDefinitions: readonly Workflow[] = [
         workflow({}, 'missing'),
