@@ -62,8 +62,8 @@ engines indefinitely. Every merged migration PR must leave chat usable.
 ## Workflow core foundation
 
 `@footnote/contracts` defines portable Workflow topology. `packages/backend/src/services/workflowCore/`
-contains the backend-only execution foundation for the future chat cutover. Live chat still uses
-`workflowEngine`.
+contains the backend-only execution foundation and the live reviewed-chat definition. The shared
+Execution Contract authority remains in `packages/backend/src/services/workflowEngine/limits.ts`.
 
 A workflow is a set of named Steps. Each Step declares its Result inputs,
 optional output, outcomes, and bounds. The caller supplies handlers under the
@@ -82,9 +82,9 @@ mistake it for a new result. Failed Steps leave earlier Results available for
 their recovery route. Tool and token usage are observed facts; each admitted
 deliberative Attempt counts even when provider usage is absent.
 
-The current chat shape is a test fixture under `packages/backend/test/`. It
-approximates the current path to prove that the core can express the eventual
-cutover. It is not configuration or runtime behavior.
+The live reviewed-chat definition is `packages/backend/src/services/workflowCore/reviewedChatWorkflow.ts`.
+It is a concrete backend workflow, not user-provided configuration. The generic core does not know
+about chat, models, prompts, or integrations.
 
 ## How a chat request runs
 
@@ -96,7 +96,7 @@ backend workflow runtime.
 3. The backend resolves the workflow mode and runtime config.
 4. `chatOrchestrator` provides the planner and context-step dependencies used
    during workflow execution.
-5. `chatService` runs `workflowEngine` with the reviewed workflow shape.
+5. `chatService` runs the declared reviewed-chat Workflow through `workflowCore`.
 6. Response metadata records the mode outcome, planner influence, workflow
    lineage, cost, trace fields, and provenance fields.
 
@@ -110,15 +110,19 @@ The main runtime pieces are:
 
 Workflow logic is split across backend layers:
 
-- Engine core handles transition checks, hard limits, workflow state, and
-  termination reasons.
+- Workflow core handles declared outcomes, bounded Attempts, named Results, and
+  termination records.
+- The shared Execution Contract limit authority handles admission and usage
+  accounting for every Attempt and semantic Step.
 - Workflow profiles describe the step shape and step-specific behavior for one
   workflow kind.
 - Adapters and callers assemble requests, call runtimes or providers, persist
   metadata, and connect workflow results to routes.
 
-The engine is the source for step legality and workflow lineage. Profiles
-describe the intended workflow. Adapters connect that workflow to the app.
+The Workflow definition is the source for legal outcomes and next paths. The
+reviewed-chat adapter maps backend-owned handlers and model inputs onto that
+definition. Profiles resolve policy and limits; adapters connect the workflow
+to the app.
 
 ## Modes and workflow shape
 
@@ -209,7 +213,8 @@ The pattern is:
 1. `chatOrchestrator` builds a `ContextStepRequest` for the requested
    integration and provides a `ContextStepExecutor`.
 2. `chatService` passes those values to `runBoundedReviewWorkflow`.
-3. `workflowEngine` executes the context step before `generate`.
+3. `workflowCore/reviewedChatWorkflow` executes the context Step before
+   `generate`.
 
 Context-step outcomes:
 
@@ -224,11 +229,21 @@ bounded context to generation.
 
 ### Review loop
 
-The reviewed workflow runs this bounded path:
+The reviewed workflow declares this bounded path:
 
 ```text
-generate -> assess(refinementRequested?) -> planner re-entry(guidance) -> generate(refinementApplied?) -> assess(finalize)
+plan(defaultPlan on failure) -> tool(fail-open) -> presentation(optional) -> generate -> assess
+  -> replan(optional) -> generate -> assess ... -> finish
 ```
+
+The exact start and optional Steps are selected by backend policy before the
+Run begins. Each Step declares its accepted outcomes, named Result output, and
+next Step. `presentation` is an optional candidate: an unavailable candidate
+routes to authoritative generation and does not consume a workflow-step
+allowance. `generate` is the authoritative writer, and `assess` can emit only
+`done`, `revise`, or `limit`. A revision uses `replan` when configured and
+otherwise follows the declared direct-generation route. `finish` emits no
+Result and is not counted as a semantic workflow Step.
 
 The `generate` step produces the current draft. The `assess` step returns
 `reviewDecision` and `reviewReason`.
@@ -588,7 +603,7 @@ or equivalent error instead of a generated assistant message.
 `Internal termination` means the workflow record still terminates with a reason
 code, even when there is no dedicated blocked UI state.
 
-The mapping lives in `WORKFLOW_NO_GENERATION_HANDLING_MAP`:
+The no-generation mapping still lives in `WORKFLOW_NO_GENERATION_HANDLING_MAP`:
 
 ```text
 packages/backend/src/services/workflowProfileContract.ts
@@ -615,26 +630,32 @@ rule is documented.
 
 ## Where the code lives
 
-The workflow engine mainly powers the reviewed chat path in:
+The reviewed-chat Workflow and its shared engine live in:
 
 ```text
-packages/backend/src/services/workflowEngine.ts
+packages/backend/src/services/workflowCore/reviewedChatWorkflow.ts
+packages/backend/src/services/workflowCore/engine.ts
 ```
 
-It handles transition checks, hard limits, bounded review/refinement execution,
-termination reasons, fail-open handling, `WorkflowRecord` output, and
-`StepRecord` output.
+The reviewed-chat adapter declares the topology, assembles backend-owned model
+inputs, handles fail-open routes, and adapts the generic Run into
+`WorkflowRecord` and `StepRecord` output. The shared engine follows declared
+outcomes, enforces iteration and Attempt bounds, validates serializable named
+Results, and records the Run. `workflowEngine/limits.ts` remains the one
+Execution Contract admission and accounting authority.
 
 The shared workflow vocabulary includes `plan`, `tool`, `generate`, `assess`,
 and `finalize`.
 
 Current implementation responsibilities:
 
-| Component          | Responsibility                                                                                              |
-| ------------------ | ----------------------------------------------------------------------------------------------------------- |
-| `workflowEngine`   | Runs reviewed workflow steps (`generate`, `assess`, refinement `generate`) and injected context steps.      |
-| `chatOrchestrator` | Resolves mode/profile/contract, applies planner policy, and builds tool intent.                             |
-| `chatService`      | Invokes `workflowEngine` and handles context-step short-circuit responses such as clarification or failure. |
+| Component               | Responsibility                                                                                                   |
+| ----------------------- | ---------------------------------------------------------------------------------------------------------------- |
+| `workflowCore`          | Executes declared Workflow Steps, Attempts, Results, outcomes, and bounded Run records.                          |
+| `reviewedChatWorkflow`  | Declares the live reviewed-chat path and adapts backend handlers, prompts, context, and lineage.                 |
+| `workflowEngine/limits` | Admits Attempts and records resource usage under the Execution Contract.                                         |
+| `chatOrchestrator`      | Resolves mode/profile/contract, applies planner policy, and builds tool intent.                                  |
+| `chatService`           | Invokes the reviewed Workflow and handles context-step short-circuit responses such as clarification or failure. |
 
 Current first-slice review module posture:
 
@@ -642,6 +663,16 @@ Current first-slice review module posture:
 - Module wording comes from shared prompts YAML fragments.
 - Module selection is backend/profile-selected only.
 - Planner hints and user-facing module controls are not active in this slice.
+
+### Boundary for future workflows
+
+New backend workflows should add a serializable `Workflow` definition and
+explicit Step handlers behind `workflowCore`. A handler may emit only a
+declared outcome and a serializable named Result. The backend remains the
+authority for policy, model fallback, limits, provenance, trace, review, and
+incident semantics; framework/provider adapters do not own those decisions.
+Do not add a generic DAG, workflow DSL, durable workflow store, or second live
+engine for this boundary.
 
 ## Future work
 

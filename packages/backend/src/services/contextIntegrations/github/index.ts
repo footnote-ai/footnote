@@ -18,7 +18,7 @@ import {
 import type {
     ContextStepExecutor,
     ContextStepResult,
-} from '../../workflowEngine.js';
+} from '../../workflowCore/reviewedChatWorkflow.js';
 
 export const GITHUB_CONTEXT_NAME = 'github_context' as const;
 export const GITHUB_CONTEXT_SECTIONS = [

@@ -111,7 +111,8 @@ reviewed workflow modes.
 workflow modes (`express`, `balanced`, and `grounded`) when workflow execution
 is active. In this pattern:
 
-- Executes through `workflowEngine` with an injected `ContextStepExecutor`
+- Executes through `workflowCore/reviewedChatWorkflow` with an injected
+  `ContextStepExecutor`
 - Executes before the `generate` step in bounded-review workflows
 - Handles clarification, failure, and success through the workflow termination
   flow

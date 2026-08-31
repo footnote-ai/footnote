@@ -10,7 +10,7 @@
 import type {
     ContextStepResult,
     ContextStepExecutorInput,
-} from '../workflowEngine.js';
+} from '../workflowCore/reviewedChatWorkflow.js';
 import type {
     Citation,
     ContextStepIntegrationContext,

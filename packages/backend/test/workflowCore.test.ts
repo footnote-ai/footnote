@@ -1,6 +1,6 @@
 /**
- * @description: Verifies the non-live workflow foundation's runtime dataflow,
- * explicit transitions, bounded attempts, and shared Execution Contract admission.
+ * @description: Verifies the shared workflow foundation's runtime dataflow,
+ * explicit transitions, bounded attempts, and live cutover contracts.
  * @footnote-scope: test
  * @footnote-module: WorkflowCoreTests
  * @footnote-risk: medium - Missing core coverage can permit unbounded or model-routed workflows.
@@ -48,10 +48,14 @@ const step = (input: {
     output?: string;
     outputOn?: readonly string[];
     activity?: Step['activity'];
+    countsAsWorkflowStep?: Step['countsAsWorkflowStep'];
     maxIterations?: number;
     maxAttempts?: number;
 }): Step => ({
     ...(input.activity === undefined ? {} : { activity: input.activity }),
+    ...(input.countsAsWorkflowStep === undefined
+        ? {}
+        : { countsAsWorkflowStep: input.countsAsWorkflowStep }),
     ...(input.input === undefined ? {} : { input: input.input }),
     ...(input.output === undefined
         ? {}
@@ -436,6 +440,37 @@ test('allows declared skipped outcomes to omit Results while retaining required 
         reason: 'invalid_result',
         stepId: 'presentation',
     });
+});
+
+test('lets an optional failed Step recover without consuming a workflow-step allowance', async () => {
+    const execution = await runWith({
+        definition: workflow({
+            presentation: step({
+                countsAsWorkflowStep: 'successful',
+                next: { admitted: null, failed: 'write' },
+            }),
+            write: step({ next: { done: null } }),
+        }),
+        executionLimits: { ...limits, maxWorkflowSteps: 1 },
+        behavior: {
+            presentation: [
+                {
+                    status: 'failed',
+                    errorCode: 'candidate_unavailable',
+                    retryable: false,
+                },
+            ],
+            write: [{ status: 'succeeded', outcome: 'done' }],
+        },
+    });
+
+    assert.equal(execution.status, 'degraded');
+    assert.deepEqual(
+        execution.run.steps.map((record) => record.stepId),
+        ['presentation', 'write']
+    );
+    assert.equal(execution.run.usage.stepCount, 1);
+    assert.deepEqual(execution.termination, { reason: 'finished' });
 });
 
 test('rejects invalid definitions before any handler runs', async () => {

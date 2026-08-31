@@ -33,7 +33,7 @@ import {
     TrustGraphOwnershipValidationPolicy,
 } from '../src/services/executionContractTrustGraph/index.js';
 import type { BackendLLMCostRecord } from '../src/services/llmCostRecorder.js';
-import type { RunBoundedReviewWorkflowResult } from '../src/services/workflowEngine.js';
+import type { RunBoundedReviewWorkflowResult } from '../src/services/workflowCore/reviewedChatWorkflow.js';
 import type { ConversationContextEnvelope } from '../src/services/conversationContextService.js';
 
 const createRuntime = (

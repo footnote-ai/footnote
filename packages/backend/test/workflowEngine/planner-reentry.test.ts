@@ -7,7 +7,7 @@
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { buildPlannerStepRecord } from '../../src/services/workflowEngine.js';
+import { buildPlannerStepRecord } from '../../src/services/workflowCore/reviewedChatWorkflow.js';
 import type { GenerationRuntime } from '@footnote/agent-runtime';
 import { runBoundedReviewWorkflowForTest } from './helpers.js';
 

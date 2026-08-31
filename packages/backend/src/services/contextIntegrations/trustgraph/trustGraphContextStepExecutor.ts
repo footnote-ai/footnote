@@ -21,7 +21,7 @@ import type { ScopeValidationPolicy } from '../../executionContractTrustGraph/sc
 import type {
     ContextStepExecutor,
     ContextStepResult,
-} from '../../workflowEngine.js';
+} from '../../workflowCore/reviewedChatWorkflow.js';
 import {
     buildExecutedContextStepResult,
     buildFailedContextStepResult,

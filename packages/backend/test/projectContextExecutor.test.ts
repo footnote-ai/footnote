@@ -13,7 +13,7 @@ import {
     createProjectContextStepExecutor,
     formatProjectContext,
 } from '../src/services/contextIntegrations/projectContext/index.js';
-import type { ContextStepExecutorInput } from '../src/services/workflowEngine.js';
+import type { ContextStepExecutorInput } from '../src/services/workflowCore/reviewedChatWorkflow.js';
 import type { EmbeddingRuntimeResult } from '@footnote/agent-runtime';
 import type { ProjectContextMetadata } from '@footnote/contracts/policy';
 

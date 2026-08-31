@@ -16,7 +16,6 @@ import type {
 import type { StepActivity } from '@footnote/contracts';
 import type { WorkflowProfileExecutionLimitsContract } from '../workflowProfileContract.js';
 import type { WorkflowProfilePolicyContract } from '../workflowProfileContract.js';
-import type { WorkflowState } from './state.js';
 
 export type ExecutionLimits = WorkflowProfileExecutionLimitsContract;
 export type ExhaustedExecutionLimit = WorkflowLimitKey;
@@ -126,6 +125,7 @@ export const admitExecution = (input: {
     limits: ExecutionLimits;
     nowMs: number;
     activity?: StepActivity;
+    countsAsWorkflowStep?: 'always' | 'successful' | 'never';
     reservation?: ExecutionReservation;
 }): ExecutionAdmission => {
     const malformedLimits = validateExecutionLimits(input.limits);
@@ -133,7 +133,10 @@ export const admitExecution = (input: {
         return { admitted: false, error: malformedLimits };
     }
 
-    if (input.state.stepCount >= input.limits.maxWorkflowSteps) {
+    if (
+        input.countsAsWorkflowStep !== 'never' &&
+        input.state.stepCount >= input.limits.maxWorkflowSteps
+    ) {
         return { admitted: false, exhaustedBy: 'maxWorkflowSteps' };
     }
 
@@ -283,9 +286,18 @@ export const mapLimitExhaustionToTerminationReason = (
     );
 };
 
-/** Live-engine adapter over the shared neutral admission seam. */
+/** Backend adapter over the shared neutral admission seam. */
 export const checkExecutionLimits = (
-    state: WorkflowState,
+    state: Pick<
+        ExecutionLimitState,
+        | 'startedAtMs'
+        | 'stepCount'
+        | 'toolCallCount'
+        | 'planCallCount'
+        | 'reviewCallCount'
+        | 'deliberationCallCount'
+        | 'totalTokens'
+    >,
     limits: ExecutionLimits,
     nowMs: number,
     nextStepKind?: WorkflowStepKind,

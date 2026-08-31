@@ -30,7 +30,8 @@ search.
 ## Runtime shape
 
 `chatOrchestrator` injects `web_search` into workflow context-step execution.
-`workflowEngine` executes it before `generate` when requested and eligible.
+`workflowCore/reviewedChatWorkflow` executes it before `generate` when requested
+and eligible.
 
 Provider attempts are deterministic by configured priority and recorded as
 attempt metadata:

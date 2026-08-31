@@ -79,6 +79,9 @@ const toAttempt = (input: {
             ...(input.result.usage === undefined
                 ? {}
                 : { usage: input.result.usage }),
+            ...(input.result.metadata === undefined
+                ? {}
+                : { metadata: input.result.metadata }),
         };
     }
 
@@ -90,6 +93,9 @@ const toAttempt = (input: {
         ...(input.result.usage === undefined
             ? {}
             : { usage: input.result.usage }),
+        ...(input.result.metadata === undefined
+            ? {}
+            : { metadata: input.result.metadata }),
         errorCode: input.result.errorCode,
         ...(boundedErrorMessage(input.result.errorMessage) === undefined
             ? {}
@@ -127,7 +133,13 @@ const recordRunAttempt = (input: {
     };
 };
 
-const recordRunStep = (run: Run, step?: Step): void => {
+const recordRunStep = (run: Run, step?: Step, successful = true): void => {
+    if (
+        step?.countsAsWorkflowStep === 'never' ||
+        (step?.countsAsWorkflowStep === 'successful' && !successful)
+    ) {
+        return;
+    }
     const state = recordStep({
         state: executionLimitStateFor(run),
         ...(step === undefined ? {} : { activity: step.activity }),
@@ -178,6 +190,14 @@ const validateDefinition = (workflow: Workflow): string | undefined => {
                 !isPositiveInteger(step.maxAttempts))
         ) {
             return `Workflow step bounds are invalid: ${key}`;
+        }
+        if (
+            step.countsAsWorkflowStep !== undefined &&
+            step.countsAsWorkflowStep !== 'always' &&
+            step.countsAsWorkflowStep !== 'successful' &&
+            step.countsAsWorkflowStep !== 'never'
+        ) {
+            return `Workflow step counting mode is invalid: ${key}`;
         }
         if (
             step.output !== undefined &&
@@ -258,11 +278,40 @@ const finish = (input: {
     termination: input.termination,
 });
 
+const isSerializableValue = (
+    value: unknown,
+    ancestors: ReadonlySet<object> = new Set()
+): value is Result => {
+    if (
+        value === null ||
+        typeof value === 'boolean' ||
+        typeof value === 'string'
+    ) {
+        return true;
+    }
+    if (typeof value === 'number') return Number.isFinite(value);
+    if (typeof value !== 'object' || ancestors.has(value)) return false;
+
+    const nextAncestors = new Set(ancestors);
+    nextAncestors.add(value);
+    if (Array.isArray(value)) {
+        return value.every((item) => isSerializableValue(item, nextAncestors));
+    }
+    const prototype = Object.getPrototypeOf(value);
+    if (prototype !== Object.prototype && prototype !== null) return false;
+    return Object.values(value).every((item) =>
+        isSerializableValue(item, nextAncestors)
+    );
+};
+
 const validateAttemptResult = (input: {
     step: Step;
     outcome: string;
     result: Result | undefined;
 }): boolean => {
+    if (input.result !== undefined && !isSerializableValue(input.result)) {
+        return false;
+    }
     if (input.step.output === undefined) {
         return input.result === undefined;
     }
@@ -398,6 +447,7 @@ export const executeWorkflow = async <TContext>(
         let successfulOutcome: string | undefined;
         let failed = false;
         let observedLimit: ExhaustedExecutionLimit | undefined;
+        let admissionBlocked = false;
 
         for (
             let attemptNumber = 1;
@@ -408,10 +458,15 @@ export const executeWorkflow = async <TContext>(
                 stepId: currentStepId,
                 context: input.context,
                 results: collected.results,
+                execution: executionLimitStateFor(run),
                 iteration: stepRunNumber,
                 attempt: attemptNumber,
             };
-            const reservation = input.reserveAttempt?.(handlerInput);
+            const executionBeforeAttempt = executionLimitStateFor(run);
+            const reservation = input.reserveAttempt?.(
+                handlerInput,
+                executionBeforeAttempt
+            );
             const admission = admitExecution({
                 state: executionLimitStateFor(run),
                 limits: input.executionLimits,
@@ -419,6 +474,9 @@ export const executeWorkflow = async <TContext>(
                 ...(step.activity === undefined
                     ? {}
                     : { activity: step.activity }),
+                ...(step.countsAsWorkflowStep === 'never'
+                    ? { countsAsWorkflowStep: 'never' as const }
+                    : {}),
                 ...(reservation === undefined ? {} : { reservation }),
             });
             if (!admission.admitted) {
@@ -445,6 +503,13 @@ export const executeWorkflow = async <TContext>(
                     });
                 }
                 if (canRecoverFromAdmissionLimit(admission.exhaustedBy)) {
+                    if (
+                        attempts.length === 0 &&
+                        step.countsAsWorkflowStep === 'successful'
+                    ) {
+                        observedLimit = admission.exhaustedBy;
+                        break;
+                    }
                     const admissionAtMs = now();
                     attempts.push({
                         attempt: attemptNumber,
@@ -452,9 +517,12 @@ export const executeWorkflow = async <TContext>(
                         startedAtMs: admissionAtMs,
                         finishedAtMs: admissionAtMs,
                         errorCode: 'execution_limit',
+                        exhaustedLimit: admission.exhaustedBy,
                         errorMessage: `Execution Contract limit blocks Attempt: ${admission.exhaustedBy}`,
                     });
                     failed = true;
+                    admissionBlocked = true;
+                    observedLimit = admission.exhaustedBy;
                     break;
                 }
                 if (attempts.length > 0) {
@@ -595,7 +663,20 @@ export const executeWorkflow = async <TContext>(
             }
         }
 
-        recordRunStep(run, step);
+        if (observedLimit !== undefined && attempts.length === 0) {
+            return finish({
+                run,
+                steps,
+                results,
+                now,
+                status: 'limited',
+                termination: {
+                    reason: 'execution_limit',
+                    limit: observedLimit,
+                },
+            });
+        }
+        recordRunStep(run, step, !failed);
         steps.push({
             stepId: currentStepId,
             iteration: stepRunNumber,
@@ -619,7 +700,7 @@ export const executeWorkflow = async <TContext>(
             // A successful outcome that omits this output clears the previous value.
             delete results[step.output.name];
         }
-        if (observedLimit !== undefined) {
+        if (observedLimit !== undefined && !admissionBlocked) {
             return finish({
                 run,
                 steps,

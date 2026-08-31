@@ -23,7 +23,7 @@ import type {
     ContextStepExecutor,
     ContextStepExecutorInput,
     ContextStepResult,
-} from '../../workflowEngine.js';
+} from '../../workflowCore/reviewedChatWorkflow.js';
 
 type FileScanningExecutorLogger = {
     warn: (message: string, meta?: Record<string, unknown>) => void;

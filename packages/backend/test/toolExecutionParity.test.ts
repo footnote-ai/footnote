@@ -10,7 +10,7 @@ import assert from 'node:assert/strict';
 
 import type { GenerationRuntime } from '@footnote/agent-runtime';
 import type { WeatherForecastTool } from '../src/services/contextIntegrations/weather/index.js';
-import { runBoundedReviewWorkflow } from '../src/services/workflowEngine.js';
+import { runBoundedReviewWorkflow } from '../src/services/workflowCore/reviewedChatWorkflow.js';
 import type { ConversationContextEnvelope } from '../src/services/conversationContextService.js';
 
 const createTestRuntime = (

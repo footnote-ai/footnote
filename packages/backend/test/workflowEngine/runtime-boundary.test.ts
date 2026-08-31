@@ -1,7 +1,7 @@
 /**
- * @description: Ensures workflow engine remains runtime-policy neutral at module boundary.
+ * @description: Ensures the shared workflow core remains runtime-policy neutral at its module boundary.
  * @footnote-scope: test
- * @footnote-module: WorkflowEngineBoundaryTests
+ * @footnote-module: WorkflowCoreBoundaryTests
  * @footnote-risk: medium - Boundary drift can couple engine to orchestration layers.
  * @footnote-ethics: high - Separation supports auditable control surfaces.
  */
@@ -11,23 +11,23 @@ import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-test('workflowEngine remains policy/runtime neutral and avoids orchestrator policy imports', () => {
+test('workflow core remains policy/runtime neutral and avoids orchestrator policy imports', () => {
     const testDir = dirname(fileURLToPath(import.meta.url));
-    const workflowEngineSource = readFileSync(
-        join(testDir, '..', '..', 'src', 'services', 'workflowEngine.ts'),
+    const workflowCoreSource = readFileSync(
+        join(
+            testDir,
+            '..',
+            '..',
+            'src',
+            'services',
+            'workflowCore',
+            'engine.ts'
+        ),
         'utf8'
     );
     assert.equal(
-        workflowEngineSource.includes(
-            "from './chatOrchestrator/plannerResultApplier"
-        ),
+        workflowCoreSource.includes("from './chatOrchestrator/"),
         false
     );
-    assert.equal(
-        workflowEngineSource.includes(
-            "from './chatOrchestrator/profileResolution"
-        ),
-        false
-    );
-    assert.equal(workflowEngineSource.includes("from './chatPlanner"), false);
+    assert.equal(workflowCoreSource.includes("from './chatPlanner"), false);
 });

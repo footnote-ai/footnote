@@ -11,7 +11,7 @@ import type {
     ContextStepRequest,
     ContextStepResult,
     ContextStepExecutor,
-} from '../workflowEngine.js';
+} from '../workflowCore/reviewedChatWorkflow.js';
 import type { ContextPromptMessage } from '@footnote/contracts/policy';
 import type { GenerationRequest } from '@footnote/agent-runtime';
 

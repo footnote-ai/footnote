@@ -69,7 +69,7 @@ import {
     type ContextStepExecutor,
     type RunBoundedReviewWorkflowResult,
     type WorkflowRunPolicy,
-} from './workflowEngine.js';
+} from './workflowCore/reviewedChatWorkflow.js';
 import { createTrustGraphContextStepExecutor } from './contextIntegrations/trustgraph/index.js';
 import {
     planTerminalActionToResponse,

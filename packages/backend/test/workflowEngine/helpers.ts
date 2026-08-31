@@ -5,7 +5,7 @@
  * @footnote-risk: low - Test helper drift can cause broad test breakage.
  * @footnote-ethics: low - Test utilities do not impact runtime governance behavior.
  */
-import { runBoundedReviewWorkflow } from '../../src/services/workflowEngine.js';
+import { runBoundedReviewWorkflow } from '../../src/services/workflowCore/reviewedChatWorkflow.js';
 import type { ConversationContextEnvelope } from '../../src/services/conversationContextService.js';
 
 export const TEST_CONTEXT_ENVELOPE: ConversationContextEnvelope = {

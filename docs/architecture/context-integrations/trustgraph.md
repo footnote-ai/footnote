@@ -98,7 +98,7 @@ In the current implementation:
   planning
 - `chatService` injects a `trustgraph` context step when runtime options and a
   valid TrustGraph context both exist
-- `workflowEngine` executes that context step before generation
+- `workflowCore/reviewedChatWorkflow` executes that context Step before generation
 - `chatService` reuses context-step TrustGraph results for metadata/provenance
 
 The kill switch lives at the runtime wiring boundary. If it is on, no external
