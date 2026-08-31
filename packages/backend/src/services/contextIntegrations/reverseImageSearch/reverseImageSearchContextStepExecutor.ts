@@ -22,7 +22,7 @@ import type {
     ContextStepExecutor,
     ContextStepExecutorInput,
     ContextStepResult,
-} from '../../workflowEngine.js';
+} from '../../workflowCore/reviewedChatWorkflow.js';
 
 type ReverseImageSearchExecutorLogger = {
     warn: (message: string, meta?: Record<string, unknown>) => void;

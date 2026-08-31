@@ -18,6 +18,7 @@ import {
 import {
     type Attempt,
     type AttemptResult,
+    type AttemptUsage,
     type ExecuteInput,
     type Result,
     type Run,
@@ -70,15 +71,33 @@ const toAttempt = (input: {
     finishedAtMs: number;
     result: AttemptResult;
 }): Attempt => {
+    const usage: AttemptUsage | undefined =
+        input.result.usage === undefined
+            ? undefined
+            : {
+                  ...(input.result.usage.totalTokens === undefined
+                      ? {}
+                      : { totalTokens: input.result.usage.totalTokens }),
+                  ...(input.result.usage.toolCalls === undefined
+                      ? {}
+                      : { toolCalls: input.result.usage.toolCalls }),
+                  ...(input.result.usage.deliberationCalls === undefined
+                      ? {}
+                      : {
+                            deliberationCalls:
+                                input.result.usage.deliberationCalls,
+                        }),
+              };
     if (input.result.status === 'succeeded') {
         return {
             attempt: input.attempt,
             status: 'succeeded',
             startedAtMs: input.startedAtMs,
             finishedAtMs: input.finishedAtMs,
-            ...(input.result.usage === undefined
+            ...(usage === undefined ? {} : { usage }),
+            ...(input.result.metadata === undefined
                 ? {}
-                : { usage: input.result.usage }),
+                : { metadata: input.result.metadata }),
         };
     }
 
@@ -87,9 +106,10 @@ const toAttempt = (input: {
         status: 'failed',
         startedAtMs: input.startedAtMs,
         finishedAtMs: input.finishedAtMs,
-        ...(input.result.usage === undefined
+        ...(usage === undefined ? {} : { usage }),
+        ...(input.result.metadata === undefined
             ? {}
-            : { usage: input.result.usage }),
+            : { metadata: input.result.metadata }),
         errorCode: input.result.errorCode,
         ...(boundedErrorMessage(input.result.errorMessage) === undefined
             ? {}
@@ -127,7 +147,13 @@ const recordRunAttempt = (input: {
     };
 };
 
-const recordRunStep = (run: Run, step?: Step): void => {
+const recordRunStep = (run: Run, step?: Step, successful = true): void => {
+    if (
+        step?.countsAsWorkflowStep === 'never' ||
+        (step?.countsAsWorkflowStep === 'successful' && !successful)
+    ) {
+        return;
+    }
     const state = recordStep({
         state: executionLimitStateFor(run),
         ...(step === undefined ? {} : { activity: step.activity }),
@@ -178,6 +204,14 @@ const validateDefinition = (workflow: Workflow): string | undefined => {
                 !isPositiveInteger(step.maxAttempts))
         ) {
             return `Workflow step bounds are invalid: ${key}`;
+        }
+        if (
+            step.countsAsWorkflowStep !== undefined &&
+            step.countsAsWorkflowStep !== 'always' &&
+            step.countsAsWorkflowStep !== 'successful' &&
+            step.countsAsWorkflowStep !== 'never'
+        ) {
+            return `Workflow step counting mode is invalid: ${key}`;
         }
         if (
             step.output !== undefined &&
@@ -258,11 +292,109 @@ const finish = (input: {
     termination: input.termination,
 });
 
+const isSerializableValue = (
+    value: unknown,
+    ancestors: ReadonlySet<object> = new Set()
+): value is Result => {
+    if (
+        value === null ||
+        typeof value === 'boolean' ||
+        typeof value === 'string'
+    ) {
+        return true;
+    }
+    if (typeof value === 'number') return Number.isFinite(value);
+    if (typeof value !== 'object' || ancestors.has(value)) return false;
+
+    const nextAncestors = new Set(ancestors);
+    nextAncestors.add(value);
+    if (Array.isArray(value)) {
+        return value.every((item) => isSerializableValue(item, nextAncestors));
+    }
+    const prototype = Object.getPrototypeOf(value);
+    if (prototype !== Object.prototype && prototype !== null) return false;
+    return Object.values(value).every((item) =>
+        isSerializableValue(item, nextAncestors)
+    );
+};
+
+const isPlainRecord = (value: unknown): value is Record<string, unknown> => {
+    if (typeof value !== 'object' || value === null || Array.isArray(value)) {
+        return false;
+    }
+    const prototype = Object.getPrototypeOf(value);
+    return prototype === Object.prototype || prototype === null;
+};
+
+const isNonNegativeInteger = (value: unknown): value is number =>
+    typeof value === 'number' &&
+    Number.isFinite(value) &&
+    Number.isInteger(value) &&
+    value >= 0;
+
+const isValidUsage = (value: unknown): value is AttemptUsage => {
+    if (value === undefined) return true;
+    if (!isPlainRecord(value)) return false;
+    return (
+        (value.totalTokens === undefined ||
+            isNonNegativeInteger(value.totalTokens)) &&
+        (value.toolCalls === undefined ||
+            isNonNegativeInteger(value.toolCalls)) &&
+        (value.deliberationCalls === undefined ||
+            isNonNegativeInteger(value.deliberationCalls))
+    );
+};
+
+/** Validates untrusted handler payloads before they can enter a Run record. */
+const isValidHandlerResult = (value: unknown): value is AttemptResult => {
+    if (!isPlainRecord(value)) return false;
+    if (!isValidUsage(value.usage)) return false;
+    if (value.metadata !== undefined && !isSerializableValue(value.metadata)) {
+        return false;
+    }
+
+    if (value.status === 'succeeded') {
+        return (
+            typeof value.outcome === 'string' &&
+            (value.result === undefined || isSerializableValue(value.result))
+        );
+    }
+
+    if (value.status !== 'failed') return false;
+    if (typeof value.errorCode !== 'string') return false;
+    if (
+        value.errorMessage !== undefined &&
+        typeof value.errorMessage !== 'string'
+    ) {
+        return false;
+    }
+    if (value.retryable !== undefined && typeof value.retryable !== 'boolean') {
+        return false;
+    }
+    return value.result === undefined || isSerializableValue(value.result);
+};
+
+const invalidAttempt = (input: {
+    attempt: number;
+    startedAtMs: number;
+    finishedAtMs: number;
+}): Attempt => ({
+    attempt: input.attempt,
+    status: 'rejected',
+    startedAtMs: input.startedAtMs,
+    finishedAtMs: input.finishedAtMs,
+    errorCode: 'invalid_result',
+    errorMessage: 'Attempt result payload is invalid.',
+});
+
 const validateAttemptResult = (input: {
     step: Step;
     outcome: string;
     result: Result | undefined;
 }): boolean => {
+    if (input.result !== undefined && !isSerializableValue(input.result)) {
+        return false;
+    }
     if (input.step.output === undefined) {
         return input.result === undefined;
     }
@@ -275,9 +407,14 @@ const validateAttemptResult = (input: {
 };
 
 /**
- * Runs one complete Workflow. Definitions and Execution Contract bounds are
- * rejected before any Step handler starts; every Attempt is then admitted
- * through the shared limits authority.
+ * @description: Executes a declared workflow through bounded Steps and Attempts.
+ * Validates handler Results before recording the backend-owned Run.
+ * Definitions and Execution Contract bounds are rejected before handlers start;
+ * every Attempt passes through the shared limits authority.
+ * @footnote-scope: core
+ * @footnote-module: WorkflowCoreEngine
+ * @footnote-risk: high - Invalid routing or records can affect every bounded workflow run.
+ * @footnote-ethics: high - Backend-owned limits and validation govern automated execution records.
  */
 export const executeWorkflow = async <TContext>(
     input: ExecuteInput<TContext>
@@ -398,6 +535,7 @@ export const executeWorkflow = async <TContext>(
         let successfulOutcome: string | undefined;
         let failed = false;
         let observedLimit: ExhaustedExecutionLimit | undefined;
+        let admissionBlocked = false;
 
         for (
             let attemptNumber = 1;
@@ -408,10 +546,15 @@ export const executeWorkflow = async <TContext>(
                 stepId: currentStepId,
                 context: input.context,
                 results: collected.results,
+                execution: executionLimitStateFor(run),
                 iteration: stepRunNumber,
                 attempt: attemptNumber,
             };
-            const reservation = input.reserveAttempt?.(handlerInput);
+            const executionBeforeAttempt = executionLimitStateFor(run);
+            const reservation = input.reserveAttempt?.(
+                handlerInput,
+                executionBeforeAttempt
+            );
             const admission = admitExecution({
                 state: executionLimitStateFor(run),
                 limits: input.executionLimits,
@@ -419,12 +562,15 @@ export const executeWorkflow = async <TContext>(
                 ...(step.activity === undefined
                     ? {}
                     : { activity: step.activity }),
+                ...(step.countsAsWorkflowStep === 'never'
+                    ? { countsAsWorkflowStep: 'never' as const }
+                    : {}),
                 ...(reservation === undefined ? {} : { reservation }),
             });
             if (!admission.admitted) {
                 if ('error' in admission) {
                     if (attempts.length > 0) {
-                        recordRunStep(run, step);
+                        recordRunStep(run, step, false);
                         steps.push({
                             stepId: currentStepId,
                             iteration: stepRunNumber,
@@ -445,6 +591,13 @@ export const executeWorkflow = async <TContext>(
                     });
                 }
                 if (canRecoverFromAdmissionLimit(admission.exhaustedBy)) {
+                    if (
+                        attempts.length === 0 &&
+                        step.countsAsWorkflowStep === 'successful'
+                    ) {
+                        observedLimit = admission.exhaustedBy;
+                        break;
+                    }
                     const admissionAtMs = now();
                     attempts.push({
                         attempt: attemptNumber,
@@ -452,13 +605,16 @@ export const executeWorkflow = async <TContext>(
                         startedAtMs: admissionAtMs,
                         finishedAtMs: admissionAtMs,
                         errorCode: 'execution_limit',
+                        exhaustedLimit: admission.exhaustedBy,
                         errorMessage: `Execution Contract limit blocks Attempt: ${admission.exhaustedBy}`,
                     });
                     failed = true;
+                    admissionBlocked = true;
+                    observedLimit = admission.exhaustedBy;
                     break;
                 }
                 if (attempts.length > 0) {
-                    recordRunStep(run, step);
+                    recordRunStep(run, step, false);
                     steps.push({
                         stepId: currentStepId,
                         iteration: stepRunNumber,
@@ -482,7 +638,36 @@ export const executeWorkflow = async <TContext>(
             const attemptStartedAtMs = now();
             let attemptResult: AttemptResult;
             try {
-                attemptResult = await handler(handlerInput);
+                const rawAttemptResult: unknown = await handler(handlerInput);
+                if (!isValidHandlerResult(rawAttemptResult)) {
+                    const attemptFinishedAtMs = now();
+                    attempts.push(
+                        invalidAttempt({
+                            attempt: attemptNumber,
+                            startedAtMs: attemptStartedAtMs,
+                            finishedAtMs: attemptFinishedAtMs,
+                        })
+                    );
+                    recordRunStep(run, step, false);
+                    steps.push({
+                        stepId: currentStepId,
+                        iteration: stepRunNumber,
+                        status: 'failed',
+                        attempts,
+                    });
+                    return finish({
+                        run,
+                        steps,
+                        results,
+                        now,
+                        status: 'rejected',
+                        termination: {
+                            reason: 'invalid_result',
+                            stepId: currentStepId,
+                        },
+                    });
+                }
+                attemptResult = rawAttemptResult;
             } catch (error) {
                 attemptResult = {
                     status: 'failed',
@@ -521,7 +706,7 @@ export const executeWorkflow = async <TContext>(
                         errorCode: 'undeclared_outcome',
                         errorMessage: `Outcome is not declared by step: ${attemptResult.outcome}`,
                     });
-                    recordRunStep(run);
+                    recordRunStep(run, step, false);
                     steps.push({
                         stepId: currentStepId,
                         iteration: stepRunNumber,
@@ -555,7 +740,7 @@ export const executeWorkflow = async <TContext>(
                         errorMessage:
                             'Result does not satisfy the Step output declaration',
                     });
-                    recordRunStep(run);
+                    recordRunStep(run, step, false);
                     steps.push({
                         stepId: currentStepId,
                         iteration: stepRunNumber,
@@ -595,7 +780,20 @@ export const executeWorkflow = async <TContext>(
             }
         }
 
-        recordRunStep(run, step);
+        if (observedLimit !== undefined && attempts.length === 0) {
+            return finish({
+                run,
+                steps,
+                results,
+                now,
+                status: 'limited',
+                termination: {
+                    reason: 'execution_limit',
+                    limit: observedLimit,
+                },
+            });
+        }
+        recordRunStep(run, step, !failed);
         steps.push({
             stepId: currentStepId,
             iteration: stepRunNumber,
@@ -619,7 +817,7 @@ export const executeWorkflow = async <TContext>(
             // A successful outcome that omits this output clears the previous value.
             delete results[step.output.name];
         }
-        if (observedLimit !== undefined) {
+        if (observedLimit !== undefined && !admissionBlocked) {
             return finish({
                 run,
                 steps,

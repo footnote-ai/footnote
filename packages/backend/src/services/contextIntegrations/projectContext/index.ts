@@ -27,7 +27,7 @@ import type {
     ContextStepExecutor,
     ContextStepExecutorInput,
     ContextStepResult,
-} from '../../workflowEngine.js';
+} from '../../workflowCore/reviewedChatWorkflow.js';
 import type { ProjectDocumentSource } from './documentLoader.js';
 import type { ProjectDocumentSet } from './documentSource.js';
 import { createProjectContextRetriever } from './retriever.js';

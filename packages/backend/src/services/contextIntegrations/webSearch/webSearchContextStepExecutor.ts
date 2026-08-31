@@ -14,7 +14,7 @@ import {
 import type {
     ContextStepExecutor,
     ContextStepResult,
-} from '../../workflowEngine.js';
+} from '../../workflowCore/reviewedChatWorkflow.js';
 import {
     normalizeCitation,
     parseWebSearchInput,

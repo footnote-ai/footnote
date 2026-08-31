@@ -14,7 +14,7 @@ import {
     recordAttempt,
     recordStep,
     type ExecutionLimits,
-} from '../../src/services/workflowEngine.js';
+} from '../../src/services/workflowEngine/limits.js';
 import {
     boundGenerationRequestToWorkflowBudget,
     calculatePresentationOutputBudget,
@@ -41,10 +41,7 @@ test('checkExecutionLimits reports each exhausted limit key', () => {
 
     const exhaustedBySteps = checkExecutionLimits(
         {
-            workflowId: 'wf_1',
-            workflowName: 'workflow_test',
             startedAtMs,
-            currentStepKind: 'generate',
             stepCount: 5,
             toolCallCount: 0,
             planCallCount: 0,
@@ -60,10 +57,7 @@ test('checkExecutionLimits reports each exhausted limit key', () => {
 
     const exhaustedByTools = checkExecutionLimits(
         {
-            workflowId: 'wf_1',
-            workflowName: 'workflow_test',
             startedAtMs,
-            currentStepKind: 'generate',
             stepCount: 0,
             toolCallCount: 2,
             planCallCount: 0,
@@ -80,10 +74,7 @@ test('checkExecutionLimits reports each exhausted limit key', () => {
 
     const exhaustedByDeliberation = checkExecutionLimits(
         {
-            workflowId: 'wf_1',
-            workflowName: 'workflow_test',
             startedAtMs,
-            currentStepKind: 'assess',
             stepCount: 0,
             toolCallCount: 0,
             planCallCount: 1,
@@ -100,10 +91,7 @@ test('checkExecutionLimits reports each exhausted limit key', () => {
 
     const exhaustedByTokens = checkExecutionLimits(
         {
-            workflowId: 'wf_1',
-            workflowName: 'workflow_test',
             startedAtMs,
-            currentStepKind: 'assess',
             stepCount: 0,
             toolCallCount: 0,
             planCallCount: 0,
@@ -119,10 +107,7 @@ test('checkExecutionLimits reports each exhausted limit key', () => {
 
     const exhaustedByDuration = checkExecutionLimits(
         {
-            workflowId: 'wf_1',
-            workflowName: 'workflow_test',
             startedAtMs,
-            currentStepKind: 'assess',
             stepCount: 0,
             toolCallCount: 0,
             planCallCount: 0,

@@ -27,6 +27,8 @@ export type StepActivity = {
 export type Step = {
     /** Resources this Step may use. */
     activity?: StepActivity;
+    /** Whether a failed optional Step consumes one workflow-step allowance. */
+    countsAsWorkflowStep?: 'always' | 'successful' | 'never';
     input?: readonly ResultRef[];
     output?: StepOutput;
     next: Readonly<Record<string, string | null>>;

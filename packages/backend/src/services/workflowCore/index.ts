@@ -1,12 +1,24 @@
 /**
- * @description: Exposes the non-live workflow foundation as one backend-owned
- * runtime seam for definitions, execution, and bounded records.
+ * @description: Exposes the generic workflow execution kernel and live
+ * reviewed-chat adapter as one backend-owned runtime seam for bounded records.
  * @footnote-scope: core
  * @footnote-module: WorkflowCore
- * @footnote-risk: medium - Export drift can make the future cutover depend on private implementation details.
+ * @footnote-risk: medium - Export drift can expose private implementation details at the runtime seam.
  * @footnote-ethics: high - The exported seam keeps workflow authority explicit and bounded.
  */
 export { executeWorkflow } from './engine.js';
+export {
+    runBoundedReviewWorkflow,
+    type ContextStepExecutor,
+    type ContextStepExecutorInput,
+    type ContextStepRequest,
+    type ContextStepResult,
+    type ReviewWorkflowRuntimeConfig,
+    type ReviewWorkflowUsageSummary,
+    type RunBoundedReviewWorkflowInput,
+    type RunBoundedReviewWorkflowResult,
+    type WorkflowRunPolicy,
+} from './reviewedChatWorkflow.js';
 export {
     type Attempt,
     type AttemptResult,

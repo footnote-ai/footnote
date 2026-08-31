@@ -10,6 +10,7 @@ import type {
     ExecutionLimits,
     ExecutionReservation,
     ExhaustedExecutionLimit,
+    ExecutionLimitState,
 } from '../workflowEngine/limits.js';
 import type { Workflow } from '@footnote/contracts';
 
@@ -37,6 +38,7 @@ export type AttemptResult =
           outcome: string;
           result?: Result;
           usage?: AttemptUsage;
+          metadata?: Result;
       }
     | {
           status: 'failed';
@@ -44,12 +46,15 @@ export type AttemptResult =
           errorMessage?: string;
           retryable?: boolean;
           usage?: AttemptUsage;
+          metadata?: Result;
       };
 
 export type StepHandlerInput<TContext = unknown> = {
     stepId: string;
     context: TContext;
     results: Readonly<Record<string, Result>>;
+    /** Canonical cumulative Execution Contract facts before this Attempt. */
+    execution: ExecutionLimitState;
     /** How many times this Step has run, starting at 1. */
     iteration: number;
     /** This Step's current Attempt, starting at 1. */
@@ -72,6 +77,8 @@ export type Attempt = {
     usage?: AttemptUsage;
     errorCode?: string;
     errorMessage?: string;
+    exhaustedLimit?: ExhaustedExecutionLimit;
+    metadata?: Result;
 };
 
 export type Run = {
@@ -127,6 +134,7 @@ export type ExecuteInput<TContext = unknown> = {
     now?: () => number;
     /** Calculates conservative resource bounds for this concrete Attempt. */
     reserveAttempt?: (
-        input: StepHandlerInput<TContext>
+        input: StepHandlerInput<TContext>,
+        execution: ExecutionLimitState
     ) => ExecutionReservation | undefined;
 };

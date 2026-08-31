@@ -16,7 +16,6 @@ import type {
 import type { StepActivity } from '@footnote/contracts';
 import type { WorkflowProfileExecutionLimitsContract } from '../workflowProfileContract.js';
 import type { WorkflowProfilePolicyContract } from '../workflowProfileContract.js';
-import type { WorkflowState } from './state.js';
 
 export type ExecutionLimits = WorkflowProfileExecutionLimitsContract;
 export type ExhaustedExecutionLimit = WorkflowLimitKey;
@@ -119,13 +118,15 @@ export const findObservedExecutionLimit = (input: {
 /**
  * Admits one Attempt through the shared Execution Contract. Resource facts are
  * intentionally generic: future verification or research Steps can consume
- * deliberation capacity without pretending to be a legacy plan or assess Step.
+ * deliberation capacity without coupling the shared authority to one workflow's
+ * plan or assess taxonomy.
  */
 export const admitExecution = (input: {
     state: ExecutionLimitState;
     limits: ExecutionLimits;
     nowMs: number;
     activity?: StepActivity;
+    countsAsWorkflowStep?: 'always' | 'successful' | 'never';
     reservation?: ExecutionReservation;
 }): ExecutionAdmission => {
     const malformedLimits = validateExecutionLimits(input.limits);
@@ -133,7 +134,10 @@ export const admitExecution = (input: {
         return { admitted: false, error: malformedLimits };
     }
 
-    if (input.state.stepCount >= input.limits.maxWorkflowSteps) {
+    if (
+        input.countsAsWorkflowStep !== 'never' &&
+        input.state.stepCount >= input.limits.maxWorkflowSteps
+    ) {
         return { admitted: false, exhaustedBy: 'maxWorkflowSteps' };
     }
 
@@ -257,7 +261,7 @@ export const recordStep = (input: {
         (input.activity?.deliberation === 'review' ? 1 : 0),
 });
 
-/** Adapts the live engine's legacy taxonomy at its boundary to generic resource facts. */
+/** Maps workflow step kinds to generic resource activity facts at the policy seam. */
 export const activityForWorkflowStep = (
     stepKind: WorkflowStepKind | undefined
 ): StepActivity | undefined => {
@@ -283,9 +287,18 @@ export const mapLimitExhaustionToTerminationReason = (
     );
 };
 
-/** Live-engine adapter over the shared neutral admission seam. */
+/** Backend adapter over the shared neutral admission seam. */
 export const checkExecutionLimits = (
-    state: WorkflowState,
+    state: Pick<
+        ExecutionLimitState,
+        | 'startedAtMs'
+        | 'stepCount'
+        | 'toolCallCount'
+        | 'planCallCount'
+        | 'reviewCallCount'
+        | 'deliberationCallCount'
+        | 'totalTokens'
+    >,
     limits: ExecutionLimits,
     nowMs: number,
     nextStepKind?: WorkflowStepKind,

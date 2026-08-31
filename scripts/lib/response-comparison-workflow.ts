@@ -16,7 +16,7 @@ import type { ConversationContextEnvelope } from '../../packages/backend/src/ser
 import type {
     ReviewWorkflowUsageSummary,
     WorkflowRunPolicy,
-} from '../../packages/backend/src/services/workflowEngine.js';
+} from '../../packages/backend/src/services/workflowCore/reviewedChatWorkflow.js';
 import type { ResponseComparisonProgressStage } from './response-comparison-progress.js';
 import {
     classifyCandidateAvailability,
@@ -199,7 +199,7 @@ export const buildResponseComparisonWorkflowRunner =
             },
         };
         const { runBoundedReviewWorkflow } =
-            await import('../../packages/backend/src/services/workflowEngine.js');
+            await import('../../packages/backend/src/services/workflowCore/reviewedChatWorkflow.js');
         const result = await runBoundedReviewWorkflow({
             generationRuntime: recordingRuntime,
             generationRequest: {

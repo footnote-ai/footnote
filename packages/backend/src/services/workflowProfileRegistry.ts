@@ -12,7 +12,7 @@ import {
     DEFAULT_REVIEW_DECISION_PROMPT,
     DEFAULT_REVISION_PROMPT_PREFIX,
     parseReviewDecisionOutputResult,
-} from './workflowEngine.js';
+} from './workflowEngine/reviewDecision.js';
 import type {
     ExecutionContract,
     ExecutionResponseMode,

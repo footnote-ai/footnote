@@ -54,16 +54,16 @@ own Footnote's outer Workflow, Execution Contract, provenance, trace, review,
 or failure semantics. W3C PROV, OpenTelemetry, A2A, and MCP are useful alignment
 or export references, not replacements for Footnote's everyday domain names.
 
-Footnote is pre-production. When a new workflow definition can express the
-current path and the cutover is working, remove superseded internal topology
-and compatibility machinery rather than maintaining two active workflow
-engines indefinitely. Every merged migration PR must leave chat usable.
+Footnote is pre-production. The workflow cutover now expresses the current path
+through the shared core and removes the superseded internal topology. Keep
+future workflow changes on that single path rather than adding a second live
+engine. Every merged migration PR must leave chat usable.
 
 ## Workflow core foundation
 
 `@footnote/contracts` defines portable Workflow topology. `packages/backend/src/services/workflowCore/`
-contains the backend-only execution foundation for the future chat cutover. Live chat still uses
-`workflowEngine`.
+contains the backend-only execution foundation and the live reviewed-chat definition. The shared
+Execution Contract authority remains in `packages/backend/src/services/workflowEngine/limits.ts`.
 
 A workflow is a set of named Steps. Each Step declares its Result inputs,
 optional output, outcomes, and bounds. The caller supplies handlers under the
@@ -82,9 +82,9 @@ mistake it for a new result. Failed Steps leave earlier Results available for
 their recovery route. Tool and token usage are observed facts; each admitted
 deliberative Attempt counts even when provider usage is absent.
 
-The current chat shape is a test fixture under `packages/backend/test/`. It
-approximates the current path to prove that the core can express the eventual
-cutover. It is not configuration or runtime behavior.
+The live reviewed-chat definition is `packages/backend/src/services/workflowCore/reviewedChatWorkflow.ts`.
+It is a concrete backend workflow, not user-provided configuration. The generic core does not know
+about chat, models, prompts, or integrations.
 
 ## How a chat request runs
 
@@ -96,7 +96,7 @@ backend workflow runtime.
 3. The backend resolves the workflow mode and runtime config.
 4. `chatOrchestrator` provides the planner and context-step dependencies used
    during workflow execution.
-5. `chatService` runs `workflowEngine` with the reviewed workflow shape.
+5. `chatService` runs the declared reviewed-chat Workflow through `workflowCore`.
 6. Response metadata records the mode outcome, planner influence, workflow
    lineage, cost, trace fields, and provenance fields.
 
@@ -110,15 +110,19 @@ The main runtime pieces are:
 
 Workflow logic is split across backend layers:
 
-- Engine core handles transition checks, hard limits, workflow state, and
-  termination reasons.
+- Workflow core handles declared outcomes, bounded Attempts, named Results, and
+  termination records.
+- The shared Execution Contract limit authority handles admission and usage
+  accounting for every Attempt and semantic Step.
 - Workflow profiles describe the step shape and step-specific behavior for one
   workflow kind.
 - Adapters and callers assemble requests, call runtimes or providers, persist
   metadata, and connect workflow results to routes.
 
-The engine is the source for step legality and workflow lineage. Profiles
-describe the intended workflow. Adapters connect that workflow to the app.
+The Workflow definition is the source for legal outcomes and next paths. The
+reviewed-chat adapter maps backend-owned handlers and model inputs onto that
+definition. Profiles resolve policy and limits; adapters connect the workflow
+to the app.
 
 ## Modes and workflow shape
 
@@ -134,9 +138,16 @@ primary labels under an answer.
 
 All three modes use the reviewed workflow shape:
 
-| Workflow shape | Purpose                     | Main steps                                           |
-| -------------- | --------------------------- | ---------------------------------------------------- |
-| `reviewed`     | reviewed message generation | `generate -> assess -> planner re-entry -> generate` |
+| Workflow shape | Purpose                     | Main steps                                                                                             |
+| -------------- | --------------------------- | ------------------------------------------------------------------------------------------------------ |
+| `reviewed`     | reviewed message generation | `plan? -> tool? -> presentation? -> generate -> assess? -> [replan? -> generate -> assess?] -> finish` |
+
+The live conditional topology is `plan? -> tool? -> presentation? -> generate
+-> assess? -> [replan? -> generate -> assess?] -> finish`. A `?` step runs only
+when the active policy and dependencies enable it. When assessment requests a
+revision, `replan` returns to `generate`, which may enter `assess` again before
+`finish`. This is the post-cutover topology, and the superseded internal
+topology has been removed.
 
 Mode details:
 
@@ -190,7 +201,7 @@ happened before generation.
 Planner output is guidance for the run. It can suggest action shape, search or
 tool details, capability profile, response posture, and planner-facing
 explanation metadata. The selected mode, profile, Execution Contract, limits,
-safety behavior, provenance behavior, and final response behavior still come
+safety behavior, provenance behavior, and final response behavior come
 from backend policy and runtime config.
 
 Planner information appears in workflow metadata as a `plan` step. Trace copy
@@ -209,7 +220,8 @@ The pattern is:
 1. `chatOrchestrator` builds a `ContextStepRequest` for the requested
    integration and provides a `ContextStepExecutor`.
 2. `chatService` passes those values to `runBoundedReviewWorkflow`.
-3. `workflowEngine` executes the context step before `generate`.
+3. `workflowCore/reviewedChatWorkflow` executes the context Step before
+   `generate`.
 
 Context-step outcomes:
 
@@ -217,18 +229,28 @@ Context-step outcomes:
 - On clarification needed, the workflow terminates with `goal_satisfied` and
   returns a user-facing clarification response.
 - On failure, the workflow continues fail-open without injected context. The
-  no-fabrication guardrail still applies.
+  no-fabrication guardrail applies.
 
-This keeps the engine provider-neutral while still letting integrations add
+This keeps the engine provider-neutral while letting integrations add
 bounded context to generation.
 
 ### Review loop
 
-The reviewed workflow runs this bounded path:
+The reviewed workflow declares this bounded path:
 
 ```text
-generate -> assess(refinementRequested?) -> planner re-entry(guidance) -> generate(refinementApplied?) -> assess(finalize)
+plan(defaultPlan on failure) -> tool(fail-open) -> presentation(optional) -> generate -> assess
+  -> replan(optional) -> generate -> assess ... -> finish
 ```
+
+The exact start and optional Steps are selected by backend policy before the
+Run begins. Each Step declares its accepted outcomes, named Result output, and
+next Step. `presentation` is an optional candidate: an unavailable candidate
+routes to authoritative generation and does not consume a workflow-step
+allowance. `generate` is the authoritative writer, and `assess` can emit only
+`done`, `revise`, or `limit`. A revision uses `replan` when configured and
+otherwise follows the declared direct-generation route. `finish` emits no
+Result and is not counted as a semantic workflow Step.
 
 The `generate` step produces the current draft. The `assess` step returns
 `reviewDecision` and `reviewReason`.
@@ -254,7 +276,7 @@ reservation for its prompt and output, authoritative generation, and the first
 assessment. Candidate output is counted both as candidate usage and as text
 copied into the authoritative prompt. If that reservation cannot
 fit, the candidate is skipped fail-open with the serializable presentation
-reason `budget_skipped`; authoritative generation still owns the answer, and
+reason `budget_skipped`; authoritative generation owns the answer, and
 provider-reported usage remains the cumulative source of truth.
 
 A presentation model may draft wording and style before the normal answer is
@@ -302,7 +324,7 @@ packages/backend/src/config/model-profiles.defaults.yaml
 Each mode resolves independent chains for `planner`, `generate`, and `assess`.
 Chain entries can be direct profile ids or `chooseOne` pools. `chooseOne`
 selection is deterministic for the request seed and step, so the choice is
-reproducible while still spreading traffic across the pool.
+reproducible while spreading traffic across the pool.
 
 Current default routing intent:
 
@@ -385,7 +407,7 @@ Example assess signals:
 }
 ```
 
-`recommendations` are guidance only. Backend legality checks still decide which
+`recommendations` are guidance only. Backend legality checks decide which
 transitions can run.
 
 Step records need to stay serializable, bounded, and safe to expose in trace or
@@ -485,13 +507,13 @@ make a run look cleaner.
 
 Use this split when ownership is unclear:
 
-| Concern             | Engine core                                                                                       | Workflow profile                                                        | Adapters and callers                                       |
+| Concern             | workflowCore and workflowEngine/limits                                                            | Workflow profile                                                        | Adapters and callers                                       |
 | ------------------- | ------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------- | ---------------------------------------------------------- |
 | Step legality       | handles the legality check before execution                                                       | declares intended flow and policy toggles                               | supplies policy and uses engine legality results           |
-| Limits              | handles hard-stop checks and stop-reason mapping                                                  | declares default budgets within the shared limits model                 | passes config and surfaces the final result                |
+| Limits              | `workflowCore` invokes admission; `workflowEngine/limits.ts` owns hard-stop checks and accounting | declares default budgets within the shared limits model                 | passes config and surfaces the final result                |
 | Workflow state      | tracks step count, token totals, current step, and lineage progression                            | declares expected step shape                                            | treats engine-produced workflow state as the runtime state |
 | Step execution      | runs concrete steps today (`generate`, `assess`, refinement `generate`) and records step outcomes | defines step-specific behavior such as review parsing                   | builds requests and calls runtimes or providers            |
-| Termination reasons | assigns shared termination reasons                                                                | can request stop using shared reason handling                           | persists and returns engine-assigned reasons unchanged     |
+| Termination reasons | `workflowCore` assigns workflow reasons; `workflowEngine/limits.ts` maps exhausted limits         | can request stop using shared reason handling                           | persists and returns engine-assigned reasons unchanged     |
 | Fail-open behavior  | handles degraded fail-open workflow behavior                                                      | can define recoverable profile behavior within shared fail-open meaning | keeps telemetry or persistence failures out of user blocks |
 
 These rules stay stable as profiles expand:
@@ -499,7 +521,7 @@ These rules stay stable as profiles expand:
 - no step runs unless policy and legality allow it
 - engine checks limits before bounded step execution
 - engine assigns limit-exhaustion reasons
-- profile recommendations are guidance; transition decisions still pass through
+- profile recommendations are guidance; transition decisions pass through
   the runtime checks
 - mode chooses the kind of run first
 - profile chooses the executable step shape second
@@ -567,11 +589,11 @@ engine records the actual step usage, stops further deliberation, and reports
 records; UIs must label sums as partial when any executed model step lacks cost
 data.
 
-Profiles may narrow budgets. Hard-limit enforcement still happens in the
+Profiles may narrow budgets. Hard-limit enforcement happens in the
 engine. Adapters may pass configured limits, but exhausted-limit reason codes
 come from the workflow runtime.
 
-No-generation outcomes still need valid workflow metadata.
+No-generation outcomes need valid workflow metadata.
 
 | Condition                                              | Surface to caller | Internal termination | Required `terminationReason`   |
 | ------------------------------------------------------ | ----------------- | -------------------- | ------------------------------ |
@@ -585,10 +607,10 @@ No-generation outcomes still need valid workflow metadata.
 `Surface to caller` means the caller receives an explicit no-generation result
 or equivalent error instead of a generated assistant message.
 
-`Internal termination` means the workflow record still terminates with a reason
+`Internal termination` means the workflow record terminates with a reason
 code, even when there is no dedicated blocked UI state.
 
-The mapping lives in `WORKFLOW_NO_GENERATION_HANDLING_MAP`:
+The no-generation mapping lives in `WORKFLOW_NO_GENERATION_HANDLING_MAP`:
 
 ```text
 packages/backend/src/services/workflowProfileContract.ts
@@ -615,26 +637,32 @@ rule is documented.
 
 ## Where the code lives
 
-The workflow engine mainly powers the reviewed chat path in:
+The reviewed-chat Workflow and its shared engine live in:
 
 ```text
-packages/backend/src/services/workflowEngine.ts
+packages/backend/src/services/workflowCore/reviewedChatWorkflow.ts
+packages/backend/src/services/workflowCore/engine.ts
 ```
 
-It handles transition checks, hard limits, bounded review/refinement execution,
-termination reasons, fail-open handling, `WorkflowRecord` output, and
-`StepRecord` output.
+The reviewed-chat adapter declares the topology, assembles backend-owned model
+inputs, handles fail-open routes, and adapts the generic Run into
+`WorkflowRecord` and `StepRecord` output. The shared engine follows declared
+outcomes, enforces iteration and Attempt bounds, validates serializable named
+Results, and records the Run. `workflowEngine/limits.ts` remains the one
+Execution Contract admission and accounting authority.
 
 The shared workflow vocabulary includes `plan`, `tool`, `generate`, `assess`,
 and `finalize`.
 
 Current implementation responsibilities:
 
-| Component          | Responsibility                                                                                              |
-| ------------------ | ----------------------------------------------------------------------------------------------------------- |
-| `workflowEngine`   | Runs reviewed workflow steps (`generate`, `assess`, refinement `generate`) and injected context steps.      |
-| `chatOrchestrator` | Resolves mode/profile/contract, applies planner policy, and builds tool intent.                             |
-| `chatService`      | Invokes `workflowEngine` and handles context-step short-circuit responses such as clarification or failure. |
+| Component               | Responsibility                                                                                                   |
+| ----------------------- | ---------------------------------------------------------------------------------------------------------------- |
+| `workflowCore`          | Executes declared Workflow Steps, Attempts, Results, outcomes, and bounded Run records.                          |
+| `reviewedChatWorkflow`  | Declares the live reviewed-chat path and adapts backend handlers, prompts, context, and lineage.                 |
+| `workflowEngine/limits` | Admits Attempts and records resource usage under the Execution Contract.                                         |
+| `chatOrchestrator`      | Resolves mode/profile/contract, applies planner policy, and builds tool intent.                                  |
+| `chatService`           | Invokes the reviewed Workflow and handles context-step short-circuit responses such as clarification or failure. |
 
 Current first-slice review module posture:
 
@@ -642,6 +670,16 @@ Current first-slice review module posture:
 - Module wording comes from shared prompts YAML fragments.
 - Module selection is backend/profile-selected only.
 - Planner hints and user-facing module controls are not active in this slice.
+
+### Boundary for future workflows
+
+New backend workflows should add a serializable `Workflow` definition and
+explicit Step handlers behind `workflowCore`. A handler may emit only a
+declared outcome and a serializable named Result. The backend remains the
+authority for policy, model fallback, limits, provenance, trace, review, and
+incident semantics; framework/provider adapters do not own those decisions.
+Do not add a generic DAG, workflow DSL, durable workflow store, or second live
+engine for this boundary.
 
 ## Future work
 

@@ -4,7 +4,7 @@ TrustGraph is an optional context integration for Footnote.
 
 It lets the backend ask an external service for extra evidence during a chat
 request. That evidence can improve context, but it does not get to decide what
-response Footnote sends, when execution is done, or whether verification still
+response Footnote sends, when execution is done, or whether verification
 applies.
 
 This path is implemented as an optional, guarded runtime integration. It is not
@@ -14,11 +14,11 @@ parent [README](./README.md).
 
 ## Request path
 
-| Case             | What happens                                                                                                                                                                                                                                                                                           | What Footnote still decides                                                              |
-| ---------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------- |
-| Normal retrieval | The orchestrator builds a TrustGraph scope tuple from explicit request inputs. Scope and ownership pass. The adapter queries the small explicitly configured target set in parallel under one timeout and shared source budget. Returned evidence is sanitized and mapped into governed backend views. | The normal backend path still decides the final response.                                |
-| Scope denied     | Scope is missing, malformed, ambiguous, conflicting, or fails ownership validation. External retrieval does not run.                                                                                                                                                                                   | The backend still completes the local chat request and records why retrieval was denied. |
-| Timeout or error | Scope passes, but one or more targets fail. Successful evidence from the other targets is preserved. External evidence is dropped only for a shared timeout or when all targets fail. Each target failure is recorded.                                                                                 | The backend still produces the local response and records what failed.                   |
+| Case             | What happens                                                                                                                                                                                                                                                                                           | What Footnote decides                                                              |
+| ---------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------- |
+| Normal retrieval | The orchestrator builds a TrustGraph scope tuple from explicit request inputs. Scope and ownership pass. The adapter queries the small explicitly configured target set in parallel under one timeout and shared source budget. Returned evidence is sanitized and mapped into governed backend views. | The normal backend path decides the final response.                                |
+| Scope denied     | Scope is missing, malformed, ambiguous, conflicting, or fails ownership validation. External retrieval does not run.                                                                                                                                                                                   | The backend completes the local chat request and records why retrieval was denied. |
+| Timeout or error | Scope passes, but one or more targets fail. Successful evidence from the other targets is preserved. External evidence is dropped only for a shared timeout or when all targets fail. Each target failure is recorded.                                                                                 | The backend produces the local response and records what failed.                   |
 
 ## Scope and ownership
 
@@ -45,11 +45,11 @@ There is no fallback from a narrow scope to a broader one.
 
 TrustGraph data matters only after it passes through governed backend mappings.
 
-| Use         | Example                                              | Why                                                                                |
-| ----------- | ---------------------------------------------------- | ---------------------------------------------------------------------------------- |
-| Allowed     | `items[].sourceRef -> evidence view shown in trace`  | TrustGraph can add reviewer-facing evidence context without deciding execution.    |
-| Allowed     | `coverageEstimate.value -> bounded sufficiency view` | The backend still decides what that sufficiency view means and how it may be used. |
-| Not allowed | `confidenceScore -> skip verification`               | TrustGraph would be deciding a backend policy outcome.                             |
+| Use         | Example                                              | Why                                                                             |
+| ----------- | ---------------------------------------------------- | ------------------------------------------------------------------------------- |
+| Allowed     | `items[].sourceRef -> evidence view shown in trace`  | TrustGraph can add reviewer-facing evidence context without deciding execution. |
+| Allowed     | `coverageEstimate.value -> bounded sufficiency view` | The backend decides what that sufficiency view means and how it may be used.    |
+| Not allowed | `confidenceScore -> skip verification`               | TrustGraph would be deciding a backend policy outcome.                          |
 
 The current predicate views are:
 
@@ -98,7 +98,7 @@ In the current implementation:
   planning
 - `chatService` injects a `trustgraph` context step when runtime options and a
   valid TrustGraph context both exist
-- `workflowEngine` executes that context step before generation
+- `workflowCore/reviewedChatWorkflow` executes that context Step before generation
 - `chatService` reuses context-step TrustGraph results for metadata/provenance
 
 The kill switch lives at the runtime wiring boundary. If it is on, no external
@@ -138,7 +138,7 @@ must back up its persisted YAML and remove only
 rejects those obsolete keys with guidance to configure
 `EXECUTION_CONTRACT_TRUSTGRAPH_TARGETS`; it does not rewrite YAML at startup.
 
-`chatOrchestrator` is still the authority for action selection. It may:
+`chatOrchestrator` is the authority for action selection. It may:
 
 - decide whether retrieval is attempted
 - build a TrustGraph scope tuple from explicit scope-bearing request fields
@@ -193,7 +193,7 @@ per-target character bound is retained as an explicitly marked, sentence-aware
 bounded excerpt instead of discarding that target. Footnote also applies a
 shared aggregate response bound across configured targets, so adding targets
 does not silently multiply prompt context. Transport bodies that exceed the
-hard HTTP body bound still fail open. If a target returns more source
+hard HTTP body bound fail open. If a target returns more source
 references than the per-target source bound, Footnote retains the first
 bounded set in TrustGraph order, marks the evidence as source-truncated, and
 logs the original and retained counts. Footnote maps each successful
@@ -207,7 +207,7 @@ generation as lower-authority user context, explicitly labeled as untrusted
 synthesis rather than an original source fact or instruction. Prompt-facing
 provenance references are bounded separately from the response text.
 
-TrustGraph can supply extra context, but Footnote still decides how to handle
+TrustGraph can supply extra context, but Footnote decides how to handle
 the request. If TrustGraph is unavailable, the local chat path continues
 without it.
 
@@ -281,7 +281,7 @@ What is already in good shape:
 - unsafe retrieval paths fail closed
 - local chat execution keeps working when retrieval fails
 
-What still needs care before broader operational rollout:
+What needs care before broader operational rollout:
 
 - real TrustGraph service deployment details
 - real tenancy ownership service deployment details

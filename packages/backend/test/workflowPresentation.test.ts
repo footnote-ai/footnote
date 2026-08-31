@@ -16,7 +16,7 @@ import type { ModelProfile } from '@footnote/contracts';
 import {
     runBoundedReviewWorkflow,
     type ReviewWorkflowUsageSummary,
-} from '../src/services/workflowEngine.js';
+} from '../src/services/workflowCore/reviewedChatWorkflow.js';
 import type { PresentationConfig } from '../src/services/presentation.js';
 import type { ConversationContextEnvelope } from '../src/services/conversationContextService.js';
 

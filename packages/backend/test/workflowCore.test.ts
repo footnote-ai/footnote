@@ -1,6 +1,6 @@
 /**
- * @description: Verifies the non-live workflow foundation's runtime dataflow,
- * explicit transitions, bounded attempts, and shared Execution Contract admission.
+ * @description: Verifies the shared workflow foundation's runtime dataflow,
+ * explicit transitions, bounded attempts, and live cutover contracts.
  * @footnote-scope: test
  * @footnote-module: WorkflowCoreTests
  * @footnote-risk: medium - Missing core coverage can permit unbounded or model-routed workflows.
@@ -48,10 +48,14 @@ const step = (input: {
     output?: string;
     outputOn?: readonly string[];
     activity?: Step['activity'];
+    countsAsWorkflowStep?: Step['countsAsWorkflowStep'];
     maxIterations?: number;
     maxAttempts?: number;
 }): Step => ({
     ...(input.activity === undefined ? {} : { activity: input.activity }),
+    ...(input.countsAsWorkflowStep === undefined
+        ? {}
+        : { countsAsWorkflowStep: input.countsAsWorkflowStep }),
     ...(input.input === undefined ? {} : { input: input.input }),
     ...(input.output === undefined
         ? {}
@@ -394,6 +398,7 @@ test('allows declared skipped outcomes to omit Results while retaining required 
         presentation: step({
             output: 'presentation',
             outputOn: ['admitted'],
+            countsAsWorkflowStep: 'successful',
             next: {
                 admitted: null,
                 skipped: null,
@@ -432,10 +437,119 @@ test('allows declared skipped outcomes to omit Results while retaining required 
         reason: 'invalid_result',
         stepId: 'presentation',
     });
+    assert.equal(admittedWithoutResult.run.usage.stepCount, 0);
     assert.deepEqual(skippedWithResult.termination, {
         reason: 'invalid_result',
         stepId: 'presentation',
     });
+    assert.equal(skippedWithResult.run.usage.stepCount, 0);
+});
+
+test('lets an optional failed Step recover without consuming a workflow-step allowance', async () => {
+    const execution = await runWith({
+        definition: workflow({
+            presentation: step({
+                countsAsWorkflowStep: 'successful',
+                next: { admitted: null, failed: 'write' },
+            }),
+            write: step({ next: { done: null } }),
+        }),
+        executionLimits: { ...limits, maxWorkflowSteps: 1 },
+        behavior: {
+            presentation: [
+                {
+                    status: 'failed',
+                    errorCode: 'candidate_unavailable',
+                    retryable: false,
+                },
+            ],
+            write: [{ status: 'succeeded', outcome: 'done' }],
+        },
+    });
+
+    assert.equal(execution.status, 'degraded');
+    assert.deepEqual(
+        execution.run.steps.map((record) => record.stepId),
+        ['presentation', 'write']
+    );
+    assert.equal(execution.run.usage.stepCount, 1);
+    assert.deepEqual(execution.termination, { reason: 'finished' });
+});
+
+test('does not count a successful-only Step after a later Attempt admission error', async () => {
+    let handlerCalls = 0;
+    const execution = await executeWorkflow({
+        workflow: workflow({
+            write: step({
+                countsAsWorkflowStep: 'successful',
+                maxAttempts: 2,
+                next: { failed: null },
+            }),
+        }),
+        context: { requestId: 'req-1' },
+        handlers: {
+            code: async (): Promise<AttemptResult> => {
+                handlerCalls += 1;
+                return {
+                    status: 'failed',
+                    errorCode: 'temporary',
+                    retryable: true,
+                };
+            },
+        },
+        executionLimits: limits,
+        startedAtMs: 0,
+        now: () => 1,
+        reserveAttempt: ({ attempt }) =>
+            attempt === 1 ? undefined : { tokens: -1 },
+    });
+
+    assert.equal(handlerCalls, 1);
+    assert.equal(execution.status, 'rejected');
+    assert.deepEqual(execution.termination, {
+        reason: 'execution_contract_error',
+        message: 'Execution Attempt reservation is invalid: tokens',
+    });
+    assert.equal(execution.run.usage.stepCount, 0);
+    assert.deepEqual(
+        execution.run.steps[0]?.attempts.map((attempt) => attempt.status),
+        ['failed']
+    );
+});
+
+test('does not count a successful-only Step after duration stops its retry', async () => {
+    let time = 0;
+    const execution = await executeWorkflow({
+        workflow: workflow({
+            write: step({
+                countsAsWorkflowStep: 'successful',
+                maxAttempts: 2,
+                next: { failed: null },
+            }),
+        }),
+        context: { requestId: 'req-1' },
+        handlers: {
+            code: async (): Promise<AttemptResult> => {
+                time = 1;
+                return {
+                    status: 'failed',
+                    errorCode: 'temporary',
+                    retryable: true,
+                };
+            },
+        },
+        executionLimits: { ...limits, maxDurationMs: 1 },
+        startedAtMs: 0,
+        now: () => time,
+    });
+
+    assert.equal(execution.status, 'limited');
+    assert.deepEqual(execution.termination, {
+        reason: 'execution_limit',
+        limit: 'maxDurationMs',
+    });
+    assert.equal(execution.run.usage.stepCount, 0);
+    assert.equal(execution.run.steps[0]?.status, 'failed');
 });
 
 test('rejects invalid definitions before any handler runs', async () => {
@@ -555,6 +669,215 @@ test('requires the declared Result and accepts outputless Steps only without Res
             { reason: 'invalid_result', stepId: 'write' },
             item.name
         );
+    }
+});
+
+test('rejects non-serializable handler Results at the workflow seam', async () => {
+    const cyclic: { self?: unknown } = {};
+    cyclic.self = cyclic;
+    const nullPrototypeRecord = Object.create(null) as Record<string, unknown>;
+    nullPrototypeRecord.value = 'accepted';
+    const cases: ReadonlyArray<{
+        name: string;
+        result: unknown;
+        expectedStatus: 'completed' | 'rejected';
+    }> = [
+        { name: 'NaN', result: Number.NaN, expectedStatus: 'rejected' },
+        {
+            name: 'Infinity',
+            result: Number.POSITIVE_INFINITY,
+            expectedStatus: 'rejected',
+        },
+        { name: 'Date', result: new Date(0), expectedStatus: 'rejected' },
+        { name: 'cycle', result: cyclic, expectedStatus: 'rejected' },
+        {
+            name: 'nested invalid value',
+            result: { nested: Number.NaN },
+            expectedStatus: 'rejected',
+        },
+        {
+            name: 'unsupported array member',
+            result: [Symbol('unsupported')],
+            expectedStatus: 'rejected',
+        },
+        {
+            name: 'null-prototype record',
+            result: nullPrototypeRecord,
+            expectedStatus: 'completed',
+        },
+    ];
+
+    for (const item of cases) {
+        const execution = await executeWorkflow({
+            workflow: workflow({
+                write: step({
+                    output: 'draft',
+                    next: { done: null },
+                }),
+            }),
+            context: { requestId: 'req-1' },
+            handlers: {
+                write: async (): Promise<AttemptResult> =>
+                    ({
+                        status: 'succeeded',
+                        outcome: 'done',
+                        result: item.result,
+                    }) as unknown as AttemptResult,
+            },
+            executionLimits: limits,
+            startedAtMs: 0,
+            now: () => 1,
+        });
+
+        assert.equal(execution.status, item.expectedStatus, item.name);
+        assert.doesNotThrow(() => JSON.stringify(execution.run), item.name);
+        if (item.expectedStatus === 'completed') continue;
+        assert.deepEqual(
+            execution.termination,
+            { reason: 'invalid_result', stepId: 'write' },
+            item.name
+        );
+        assert.deepEqual(
+            execution.run.steps[0]?.attempts[0],
+            {
+                attempt: 1,
+                status: 'rejected',
+                startedAtMs: 1,
+                finishedAtMs: 1,
+                errorCode: 'invalid_result',
+                errorMessage: 'Attempt result payload is invalid.',
+            },
+            item.name
+        );
+    }
+});
+
+test('rejects malformed metadata and usage for successful and failed handlers', async () => {
+    const invalidUsageCases: ReadonlyArray<{
+        name: string;
+        usage: unknown;
+    }> = [
+        { name: 'NaN totalTokens', usage: { totalTokens: Number.NaN } },
+        {
+            name: 'Infinity toolCalls',
+            usage: { toolCalls: Number.POSITIVE_INFINITY },
+        },
+        {
+            name: 'negative deliberationCalls',
+            usage: { deliberationCalls: -1 },
+        },
+        { name: 'fractional totalTokens', usage: { totalTokens: 1.5 } },
+    ];
+
+    for (const status of ['succeeded', 'failed'] as const) {
+        const malformedMetadata = new Date(0);
+        const metadataExecution = await executeWorkflow({
+            workflow: workflow({
+                write: step({
+                    output: status === 'succeeded' ? 'draft' : undefined,
+                    next: { done: null },
+                }),
+            }),
+            context: { requestId: 'req-1' },
+            handlers: {
+                write: async (): Promise<AttemptResult> =>
+                    (status === 'succeeded'
+                        ? {
+                              status,
+                              outcome: 'done',
+                              result: 'safe',
+                              metadata: malformedMetadata,
+                          }
+                        : {
+                              status,
+                              errorCode: 'handler_failure',
+                              retryable: false,
+                              metadata: malformedMetadata,
+                          }) as unknown as AttemptResult,
+            },
+            executionLimits: limits,
+            startedAtMs: 0,
+            now: () => 1,
+        });
+
+        assert.deepEqual(metadataExecution.termination, {
+            reason: 'invalid_result',
+            stepId: 'write',
+        });
+        assert.deepEqual(metadataExecution.run.steps[0]?.attempts[0], {
+            attempt: 1,
+            status: 'rejected',
+            startedAtMs: 1,
+            finishedAtMs: 1,
+            errorCode: 'invalid_result',
+            errorMessage: 'Attempt result payload is invalid.',
+        });
+        assert.doesNotThrow(() => JSON.stringify(metadataExecution.run));
+
+        for (const usageCase of invalidUsageCases) {
+            const usageExecution = await executeWorkflow({
+                workflow: workflow({
+                    write: step({
+                        output: status === 'succeeded' ? 'draft' : undefined,
+                        next: { done: null },
+                    }),
+                }),
+                context: { requestId: 'req-1' },
+                handlers: {
+                    write: async (): Promise<AttemptResult> =>
+                        (status === 'succeeded'
+                            ? {
+                                  status,
+                                  outcome: 'done',
+                                  result: 'safe',
+                                  usage: usageCase.usage,
+                              }
+                            : {
+                                  status,
+                                  errorCode: 'handler_failure',
+                                  retryable: false,
+                                  usage: usageCase.usage,
+                              }) as unknown as AttemptResult,
+                },
+                executionLimits: limits,
+                startedAtMs: 0,
+                now: () => 1,
+            });
+
+            assert.deepEqual(
+                usageExecution.termination,
+                { reason: 'invalid_result', stepId: 'write' },
+                `${status}: ${usageCase.name}`
+            );
+            assert.equal(
+                usageExecution.run.usage.totalTokens,
+                0,
+                `${status}: ${usageCase.name}`
+            );
+            assert.equal(
+                usageExecution.run.usage.toolCalls,
+                0,
+                `${status}: ${usageCase.name}`
+            );
+            assert.equal(
+                usageExecution.run.usage.deliberationCalls,
+                0,
+                `${status}: ${usageCase.name}`
+            );
+            assert.deepEqual(
+                usageExecution.run.steps[0]?.attempts[0],
+                {
+                    attempt: 1,
+                    status: 'rejected',
+                    startedAtMs: 1,
+                    finishedAtMs: 1,
+                    errorCode: 'invalid_result',
+                    errorMessage: 'Attempt result payload is invalid.',
+                },
+                `${status}: ${usageCase.name}`
+            );
+            assert.doesNotThrow(() => JSON.stringify(usageExecution.run));
+        }
     }
 });
 

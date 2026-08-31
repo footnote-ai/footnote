@@ -8,7 +8,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import type { ContextStepExecutorInput } from '../src/services/workflowEngine.js';
+import type { ContextStepExecutorInput } from '../src/services/workflowCore/reviewedChatWorkflow.js';
 import { createTrustGraphContextStepExecutor } from '../src/services/contextIntegrations/trustgraph/index.js';
 import {
     TrustGraphOwnershipBypassCapability,

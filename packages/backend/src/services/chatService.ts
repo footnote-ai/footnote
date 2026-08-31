@@ -69,7 +69,7 @@ import {
     type ContextStepExecutor,
     type RunBoundedReviewWorkflowResult,
     type WorkflowRunPolicy,
-} from './workflowEngine.js';
+} from './workflowCore/reviewedChatWorkflow.js';
 import { createTrustGraphContextStepExecutor } from './contextIntegrations/trustgraph/index.js';
 import {
     planTerminalActionToResponse,
@@ -206,7 +206,7 @@ const collectContextStepSources = (
  * This branch consumes the full context-step result list when available and
  * falls back to single-result shape when only that field is present.
  *
- * Citation rule: short-circuit responses still preserve citations produced by
+ * Citation rule: short-circuit responses preserve citations produced by
  * executed or failed sibling context integrations.
  *
  */
@@ -1546,7 +1546,7 @@ export const createChatService = ({
                                       // unexpected no-generation reason must
                                       // not turn a missing candidate into an
                                       // empty transport response. The bounded
-                                      // routing chain still limits this to one
+                                      // routing chain limits this to one
                                       // fallback attempt.
                                       runtimeAction:
                                           'run_fallback_generation' as const,
@@ -2219,7 +2219,7 @@ export const createChatService = ({
     const runChatMessages = async (
         input: RunChatMessagesCompatibilityInput
     ): Promise<RunChatMessagesLegacyResult> => {
-        // Compatibility seam for older internal/test callers that still invoke
+        // Compatibility seam for older internal/test callers that invoke
         // runChatMessages directly without orchestrator-owned context assembly.
         const compatibilityEnvelope: ConversationContextEnvelope =
             input.contextEnvelope ?? {
