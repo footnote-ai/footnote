@@ -669,6 +669,215 @@ test('requires the declared Result and accepts outputless Steps only without Res
     }
 });
 
+test('rejects non-serializable handler Results at the workflow seam', async () => {
+    const cyclic: { self?: unknown } = {};
+    cyclic.self = cyclic;
+    const nullPrototypeRecord = Object.create(null) as Record<string, unknown>;
+    nullPrototypeRecord.value = 'accepted';
+    const cases: ReadonlyArray<{
+        name: string;
+        result: unknown;
+        expectedStatus: 'completed' | 'rejected';
+    }> = [
+        { name: 'NaN', result: Number.NaN, expectedStatus: 'rejected' },
+        {
+            name: 'Infinity',
+            result: Number.POSITIVE_INFINITY,
+            expectedStatus: 'rejected',
+        },
+        { name: 'Date', result: new Date(0), expectedStatus: 'rejected' },
+        { name: 'cycle', result: cyclic, expectedStatus: 'rejected' },
+        {
+            name: 'nested invalid value',
+            result: { nested: Number.NaN },
+            expectedStatus: 'rejected',
+        },
+        {
+            name: 'unsupported array member',
+            result: [Symbol('unsupported')],
+            expectedStatus: 'rejected',
+        },
+        {
+            name: 'null-prototype record',
+            result: nullPrototypeRecord,
+            expectedStatus: 'completed',
+        },
+    ];
+
+    for (const item of cases) {
+        const execution = await executeWorkflow({
+            workflow: workflow({
+                write: step({
+                    output: 'draft',
+                    next: { done: null },
+                }),
+            }),
+            context: { requestId: 'req-1' },
+            handlers: {
+                write: async (): Promise<AttemptResult> =>
+                    ({
+                        status: 'succeeded',
+                        outcome: 'done',
+                        result: item.result,
+                    }) as unknown as AttemptResult,
+            },
+            executionLimits: limits,
+            startedAtMs: 0,
+            now: () => 1,
+        });
+
+        assert.equal(execution.status, item.expectedStatus, item.name);
+        assert.doesNotThrow(() => JSON.stringify(execution.run), item.name);
+        if (item.expectedStatus === 'completed') continue;
+        assert.deepEqual(
+            execution.termination,
+            { reason: 'invalid_result', stepId: 'write' },
+            item.name
+        );
+        assert.deepEqual(
+            execution.run.steps[0]?.attempts[0],
+            {
+                attempt: 1,
+                status: 'rejected',
+                startedAtMs: 1,
+                finishedAtMs: 1,
+                errorCode: 'invalid_result',
+                errorMessage: 'Attempt result payload is invalid.',
+            },
+            item.name
+        );
+    }
+});
+
+test('rejects malformed metadata and usage for successful and failed handlers', async () => {
+    const invalidUsageCases: ReadonlyArray<{
+        name: string;
+        usage: unknown;
+    }> = [
+        { name: 'NaN totalTokens', usage: { totalTokens: Number.NaN } },
+        {
+            name: 'Infinity toolCalls',
+            usage: { toolCalls: Number.POSITIVE_INFINITY },
+        },
+        {
+            name: 'negative deliberationCalls',
+            usage: { deliberationCalls: -1 },
+        },
+        { name: 'fractional totalTokens', usage: { totalTokens: 1.5 } },
+    ];
+
+    for (const status of ['succeeded', 'failed'] as const) {
+        const malformedMetadata = new Date(0);
+        const metadataExecution = await executeWorkflow({
+            workflow: workflow({
+                write: step({
+                    output: status === 'succeeded' ? 'draft' : undefined,
+                    next: { done: null },
+                }),
+            }),
+            context: { requestId: 'req-1' },
+            handlers: {
+                write: async (): Promise<AttemptResult> =>
+                    (status === 'succeeded'
+                        ? {
+                              status,
+                              outcome: 'done',
+                              result: 'safe',
+                              metadata: malformedMetadata,
+                          }
+                        : {
+                              status,
+                              errorCode: 'handler_failure',
+                              retryable: false,
+                              metadata: malformedMetadata,
+                          }) as unknown as AttemptResult,
+            },
+            executionLimits: limits,
+            startedAtMs: 0,
+            now: () => 1,
+        });
+
+        assert.deepEqual(metadataExecution.termination, {
+            reason: 'invalid_result',
+            stepId: 'write',
+        });
+        assert.deepEqual(metadataExecution.run.steps[0]?.attempts[0], {
+            attempt: 1,
+            status: 'rejected',
+            startedAtMs: 1,
+            finishedAtMs: 1,
+            errorCode: 'invalid_result',
+            errorMessage: 'Attempt result payload is invalid.',
+        });
+        assert.doesNotThrow(() => JSON.stringify(metadataExecution.run));
+
+        for (const usageCase of invalidUsageCases) {
+            const usageExecution = await executeWorkflow({
+                workflow: workflow({
+                    write: step({
+                        output: status === 'succeeded' ? 'draft' : undefined,
+                        next: { done: null },
+                    }),
+                }),
+                context: { requestId: 'req-1' },
+                handlers: {
+                    write: async (): Promise<AttemptResult> =>
+                        (status === 'succeeded'
+                            ? {
+                                  status,
+                                  outcome: 'done',
+                                  result: 'safe',
+                                  usage: usageCase.usage,
+                              }
+                            : {
+                                  status,
+                                  errorCode: 'handler_failure',
+                                  retryable: false,
+                                  usage: usageCase.usage,
+                              }) as unknown as AttemptResult,
+                },
+                executionLimits: limits,
+                startedAtMs: 0,
+                now: () => 1,
+            });
+
+            assert.deepEqual(
+                usageExecution.termination,
+                { reason: 'invalid_result', stepId: 'write' },
+                `${status}: ${usageCase.name}`
+            );
+            assert.equal(
+                usageExecution.run.usage.totalTokens,
+                0,
+                `${status}: ${usageCase.name}`
+            );
+            assert.equal(
+                usageExecution.run.usage.toolCalls,
+                0,
+                `${status}: ${usageCase.name}`
+            );
+            assert.equal(
+                usageExecution.run.usage.deliberationCalls,
+                0,
+                `${status}: ${usageCase.name}`
+            );
+            assert.deepEqual(
+                usageExecution.run.steps[0]?.attempts[0],
+                {
+                    attempt: 1,
+                    status: 'rejected',
+                    startedAtMs: 1,
+                    finishedAtMs: 1,
+                    errorCode: 'invalid_result',
+                    errorMessage: 'Attempt result payload is invalid.',
+                },
+                `${status}: ${usageCase.name}`
+            );
+            assert.doesNotThrow(() => JSON.stringify(usageExecution.run));
+        }
+    }
+});
+
 test('keeps unavailable handlers separate from declared failure recovery', async () => {
     const execution = await executeWorkflow({
         workflow: workflow({

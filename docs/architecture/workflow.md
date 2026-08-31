@@ -54,10 +54,10 @@ own Footnote's outer Workflow, Execution Contract, provenance, trace, review,
 or failure semantics. W3C PROV, OpenTelemetry, A2A, and MCP are useful alignment
 or export references, not replacements for Footnote's everyday domain names.
 
-Footnote is pre-production. When a new workflow definition can express the
-current path and the cutover is working, remove superseded internal topology
-and compatibility machinery rather than maintaining two active workflow
-engines indefinitely. Every merged migration PR must leave chat usable.
+Footnote is pre-production. The workflow cutover now expresses the current path
+through the shared core and removes the superseded internal topology. Keep
+future workflow changes on that single path rather than adding a second live
+engine. Every merged migration PR must leave chat usable.
 
 ## Workflow core foundation
 
@@ -138,9 +138,15 @@ primary labels under an answer.
 
 All three modes use the reviewed workflow shape:
 
-| Workflow shape | Purpose                     | Main steps                                           |
-| -------------- | --------------------------- | ---------------------------------------------------- |
-| `reviewed`     | reviewed message generation | `generate -> assess -> planner re-entry -> generate` |
+| Workflow shape | Purpose                     | Main steps                                                                    |
+| -------------- | --------------------------- | ----------------------------------------------------------------------------- |
+| `reviewed`     | reviewed message generation | `plan? -> tool? -> presentation? -> generate -> assess? -> replan? -> finish` |
+
+The live conditional topology is `plan? -> tool? -> presentation? -> generate
+-> assess? -> replan? -> finish`. A `?` step runs only when the active policy
+and dependencies enable it; `generate` and `finish` remain the core path. This
+is the post-cutover topology, and the superseded internal topology has been
+removed.
 
 Mode details:
 
@@ -194,7 +200,7 @@ happened before generation.
 Planner output is guidance for the run. It can suggest action shape, search or
 tool details, capability profile, response posture, and planner-facing
 explanation metadata. The selected mode, profile, Execution Contract, limits,
-safety behavior, provenance behavior, and final response behavior still come
+safety behavior, provenance behavior, and final response behavior come
 from backend policy and runtime config.
 
 Planner information appears in workflow metadata as a `plan` step. Trace copy
@@ -222,9 +228,9 @@ Context-step outcomes:
 - On clarification needed, the workflow terminates with `goal_satisfied` and
   returns a user-facing clarification response.
 - On failure, the workflow continues fail-open without injected context. The
-  no-fabrication guardrail still applies.
+  no-fabrication guardrail applies.
 
-This keeps the engine provider-neutral while still letting integrations add
+This keeps the engine provider-neutral while letting integrations add
 bounded context to generation.
 
 ### Review loop
@@ -269,7 +275,7 @@ reservation for its prompt and output, authoritative generation, and the first
 assessment. Candidate output is counted both as candidate usage and as text
 copied into the authoritative prompt. If that reservation cannot
 fit, the candidate is skipped fail-open with the serializable presentation
-reason `budget_skipped`; authoritative generation still owns the answer, and
+reason `budget_skipped`; authoritative generation owns the answer, and
 provider-reported usage remains the cumulative source of truth.
 
 A presentation model may draft wording and style before the normal answer is
@@ -317,7 +323,7 @@ packages/backend/src/config/model-profiles.defaults.yaml
 Each mode resolves independent chains for `planner`, `generate`, and `assess`.
 Chain entries can be direct profile ids or `chooseOne` pools. `chooseOne`
 selection is deterministic for the request seed and step, so the choice is
-reproducible while still spreading traffic across the pool.
+reproducible while spreading traffic across the pool.
 
 Current default routing intent:
 
@@ -400,7 +406,7 @@ Example assess signals:
 }
 ```
 
-`recommendations` are guidance only. Backend legality checks still decide which
+`recommendations` are guidance only. Backend legality checks decide which
 transitions can run.
 
 Step records need to stay serializable, bounded, and safe to expose in trace or
@@ -514,7 +520,7 @@ These rules stay stable as profiles expand:
 - no step runs unless policy and legality allow it
 - engine checks limits before bounded step execution
 - engine assigns limit-exhaustion reasons
-- profile recommendations are guidance; transition decisions still pass through
+- profile recommendations are guidance; transition decisions pass through
   the runtime checks
 - mode chooses the kind of run first
 - profile chooses the executable step shape second
@@ -582,11 +588,11 @@ engine records the actual step usage, stops further deliberation, and reports
 records; UIs must label sums as partial when any executed model step lacks cost
 data.
 
-Profiles may narrow budgets. Hard-limit enforcement still happens in the
+Profiles may narrow budgets. Hard-limit enforcement happens in the
 engine. Adapters may pass configured limits, but exhausted-limit reason codes
 come from the workflow runtime.
 
-No-generation outcomes still need valid workflow metadata.
+No-generation outcomes need valid workflow metadata.
 
 | Condition                                              | Surface to caller | Internal termination | Required `terminationReason`   |
 | ------------------------------------------------------ | ----------------- | -------------------- | ------------------------------ |
@@ -600,10 +606,10 @@ No-generation outcomes still need valid workflow metadata.
 `Surface to caller` means the caller receives an explicit no-generation result
 or equivalent error instead of a generated assistant message.
 
-`Internal termination` means the workflow record still terminates with a reason
+`Internal termination` means the workflow record terminates with a reason
 code, even when there is no dedicated blocked UI state.
 
-The no-generation mapping still lives in `WORKFLOW_NO_GENERATION_HANDLING_MAP`:
+The no-generation mapping lives in `WORKFLOW_NO_GENERATION_HANDLING_MAP`:
 
 ```text
 packages/backend/src/services/workflowProfileContract.ts

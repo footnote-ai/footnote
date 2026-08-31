@@ -5,7 +5,7 @@ request.
 
 They can add context, evidence, references, or other useful signals.
 
-Footnote still decides how to handle the request. The outside system does not
+Footnote decides how to handle the request. The outside system does not
 choose the action, end execution, or change policy and verification rules.
 
 This category exists because an outside system can start as "extra evidence"
@@ -17,7 +17,7 @@ much control.
 
 ## How outside data can be used
 
-Context integrations can still influence a request in limited ways.
+Context integrations can influence a request in limited ways.
 
 The backend may use approved integration outputs through backend-owned
 mappings, rules, and checks. That can help with things like evidence views,
@@ -45,11 +45,11 @@ backend expects. If a raw outside result can directly trigger execution
 behavior, a public-facing integration can start shaping decisions the backend
 no longer fully owns.
 
-| Use         | Example                                                           | Why                                                                                                     |
-| ----------- | ----------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------- |
-| Allowed     | `outside source link -> trace link list`                          | The outside result adds context for the reviewer, but Footnote still decides how to handle the request. |
-| Allowed     | `coverage estimate -> trace note that evidence may be incomplete` | The outside result can help describe the evidence without taking control of execution.                  |
-| Not allowed | `outside confidence score -> skip verification`                   | The outside system would be deciding a backend policy outcome.                                          |
+| Use         | Example                                                           | Why                                                                                               |
+| ----------- | ----------------------------------------------------------------- | ------------------------------------------------------------------------------------------------- |
+| Allowed     | `outside source link -> trace link list`                          | The outside result adds context for the reviewer, but Footnote decides how to handle the request. |
+| Allowed     | `coverage estimate -> trace note that evidence may be incomplete` | The outside result can help describe the evidence without taking control of execution.            |
+| Not allowed | `outside confidence score -> skip verification`                   | The outside system would be deciding a backend policy outcome.                                    |
 
 The guardrail has three parts: by design, the integration is advisory; by
 policy, some decisions stay backend-owned; and by implementation, only
@@ -78,7 +78,7 @@ Sometimes the backend should ignore the outside failure and keep serving the
 local request. This happens when the external system is slow, unavailable,
 disabled, or otherwise not required for the base response path.
 
-The exact boundary depends on the integration. Footnote still decides which
+The exact boundary depends on the integration. Footnote decides which
 failure becomes a hard stop and which one only drops outside context.
 
 ## Provenance and observability
@@ -134,7 +134,7 @@ repository context branches are tracked in
 
 ### Tool-registry path
 
-Provider/runtime protocol boundaries still use tool-oriented protocol semantics
+Provider/runtime protocol boundaries use tool-oriented protocol semantics
 where required. Footnote orchestration remains Context Step-owned.
 
 ## Current docs

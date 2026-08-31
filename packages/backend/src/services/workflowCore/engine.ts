@@ -18,6 +18,7 @@ import {
 import {
     type Attempt,
     type AttemptResult,
+    type AttemptUsage,
     type ExecuteInput,
     type Result,
     type Run,
@@ -70,15 +71,30 @@ const toAttempt = (input: {
     finishedAtMs: number;
     result: AttemptResult;
 }): Attempt => {
+    const usage =
+        input.result.usage === undefined
+            ? undefined
+            : {
+                  ...(input.result.usage.totalTokens === undefined
+                      ? {}
+                      : { totalTokens: input.result.usage.totalTokens }),
+                  ...(input.result.usage.toolCalls === undefined
+                      ? {}
+                      : { toolCalls: input.result.usage.toolCalls }),
+                  ...(input.result.usage.deliberationCalls === undefined
+                      ? {}
+                      : {
+                            deliberationCalls:
+                                input.result.usage.deliberationCalls,
+                        }),
+              };
     if (input.result.status === 'succeeded') {
         return {
             attempt: input.attempt,
             status: 'succeeded',
             startedAtMs: input.startedAtMs,
             finishedAtMs: input.finishedAtMs,
-            ...(input.result.usage === undefined
-                ? {}
-                : { usage: input.result.usage }),
+            ...(usage === undefined ? {} : { usage }),
             ...(input.result.metadata === undefined
                 ? {}
                 : { metadata: input.result.metadata }),
@@ -90,9 +106,7 @@ const toAttempt = (input: {
         status: 'failed',
         startedAtMs: input.startedAtMs,
         finishedAtMs: input.finishedAtMs,
-        ...(input.result.usage === undefined
-            ? {}
-            : { usage: input.result.usage }),
+        ...(usage === undefined ? {} : { usage }),
         ...(input.result.metadata === undefined
             ? {}
             : { metadata: input.result.metadata }),
@@ -303,6 +317,75 @@ const isSerializableValue = (
         isSerializableValue(item, nextAncestors)
     );
 };
+
+const isPlainRecord = (value: unknown): value is Record<string, unknown> => {
+    if (typeof value !== 'object' || value === null || Array.isArray(value)) {
+        return false;
+    }
+    const prototype = Object.getPrototypeOf(value);
+    return prototype === Object.prototype || prototype === null;
+};
+
+const isNonNegativeInteger = (value: unknown): value is number =>
+    typeof value === 'number' &&
+    Number.isFinite(value) &&
+    Number.isInteger(value) &&
+    value >= 0;
+
+const isValidUsage = (value: unknown): value is AttemptUsage => {
+    if (value === undefined) return true;
+    if (!isPlainRecord(value)) return false;
+    return (
+        (value.totalTokens === undefined ||
+            isNonNegativeInteger(value.totalTokens)) &&
+        (value.toolCalls === undefined ||
+            isNonNegativeInteger(value.toolCalls)) &&
+        (value.deliberationCalls === undefined ||
+            isNonNegativeInteger(value.deliberationCalls))
+    );
+};
+
+/** Validates untrusted handler payloads before they can enter a Run record. */
+const isValidHandlerResult = (value: unknown): value is AttemptResult => {
+    if (!isPlainRecord(value)) return false;
+    if (!isValidUsage(value.usage)) return false;
+    if (value.metadata !== undefined && !isSerializableValue(value.metadata)) {
+        return false;
+    }
+
+    if (value.status === 'succeeded') {
+        return (
+            typeof value.outcome === 'string' &&
+            (value.result === undefined || isSerializableValue(value.result))
+        );
+    }
+
+    if (value.status !== 'failed') return false;
+    if (typeof value.errorCode !== 'string') return false;
+    if (
+        value.errorMessage !== undefined &&
+        typeof value.errorMessage !== 'string'
+    ) {
+        return false;
+    }
+    if (value.retryable !== undefined && typeof value.retryable !== 'boolean') {
+        return false;
+    }
+    return value.result === undefined || isSerializableValue(value.result);
+};
+
+const invalidAttempt = (input: {
+    attempt: number;
+    startedAtMs: number;
+    finishedAtMs: number;
+}): Attempt => ({
+    attempt: input.attempt,
+    status: 'rejected',
+    startedAtMs: input.startedAtMs,
+    finishedAtMs: input.finishedAtMs,
+    errorCode: 'invalid_result',
+    errorMessage: 'Attempt result payload is invalid.',
+});
 
 const validateAttemptResult = (input: {
     step: Step;
@@ -550,7 +633,36 @@ export const executeWorkflow = async <TContext>(
             const attemptStartedAtMs = now();
             let attemptResult: AttemptResult;
             try {
-                attemptResult = await handler(handlerInput);
+                const rawAttemptResult: unknown = await handler(handlerInput);
+                if (!isValidHandlerResult(rawAttemptResult)) {
+                    const attemptFinishedAtMs = now();
+                    attempts.push(
+                        invalidAttempt({
+                            attempt: attemptNumber,
+                            startedAtMs: attemptStartedAtMs,
+                            finishedAtMs: attemptFinishedAtMs,
+                        })
+                    );
+                    recordRunStep(run, step);
+                    steps.push({
+                        stepId: currentStepId,
+                        iteration: stepRunNumber,
+                        status: 'failed',
+                        attempts,
+                    });
+                    return finish({
+                        run,
+                        steps,
+                        results,
+                        now,
+                        status: 'rejected',
+                        termination: {
+                            reason: 'invalid_result',
+                            stepId: currentStepId,
+                        },
+                    });
+                }
+                attemptResult = rawAttemptResult;
             } catch (error) {
                 attemptResult = {
                     status: 'failed',

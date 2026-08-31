@@ -118,7 +118,8 @@ export const findObservedExecutionLimit = (input: {
 /**
  * Admits one Attempt through the shared Execution Contract. Resource facts are
  * intentionally generic: future verification or research Steps can consume
- * deliberation capacity without pretending to be a legacy plan or assess Step.
+ * deliberation capacity without coupling the shared authority to one workflow's
+ * plan or assess taxonomy.
  */
 export const admitExecution = (input: {
     state: ExecutionLimitState;
@@ -260,7 +261,7 @@ export const recordStep = (input: {
         (input.activity?.deliberation === 'review' ? 1 : 0),
 });
 
-/** Adapts the live engine's legacy taxonomy at its boundary to generic resource facts. */
+/** Maps workflow step kinds to generic resource activity facts at the policy seam. */
 export const activityForWorkflowStep = (
     stepKind: WorkflowStepKind | undefined
 ): StepActivity | undefined => {

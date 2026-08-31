@@ -48,7 +48,7 @@ export const buildSkippedContextStepResult = (input: {
 
 /**
  * Builds an executed context-step result with optional advisory payload fields.
- * Use for successful or non-blocking-complete executions that still continue flow.
+ * Use for successful or non-blocking-complete executions that continue flow.
  */
 export const buildExecutedContextStepResult = (input: {
     toolName: ToolInvocationName;
