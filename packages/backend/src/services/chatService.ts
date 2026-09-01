@@ -59,6 +59,7 @@ import type { ChatGenerationPlan } from './chatGenerationTypes.js';
 import type { ExecutionContract } from './executionContract.js';
 import { renderConversationPromptLayers } from './prompts/conversationPromptLayers.js';
 import { buildPersonaExpressionGuidance } from './prompts/personaExpression.js';
+import { capGenerationRequestToProfileMax } from './workflowEngine/tokenBudget.js';
 import { resolveNoGenerationHandlingFromTermination } from './workflowProfileContract.js';
 import {
     resolveWorkflowRuntimeConfig,
@@ -1168,6 +1169,8 @@ export const createChatService = ({
                 maxRequestReviewCycles:
                     chatWorkflowConfig.maxRequestReviewCycles ??
                     runtimeConfig.chatWorkflow.maxRequestReviewCycles,
+                maxTokensTotalOverride:
+                    runtimeConfig.chatWorkflow.maxTokensTotalOverride,
                 requestMaxReviewCycles: workflowMaxReviewCycles,
                 ExecutionContract:
                     ExecutionContract !== undefined
@@ -1230,7 +1233,10 @@ export const createChatService = ({
                     requiresSearch: request.search !== undefined,
                     runWithProfile: async (profile) =>
                         generationRuntime.generate({
-                            ...request,
+                            ...capGenerationRequestToProfileMax({
+                                request,
+                                profile,
+                            }),
                             model: profile.providerModel,
                             provider: profile.provider,
                             capabilities: profile.capabilities,

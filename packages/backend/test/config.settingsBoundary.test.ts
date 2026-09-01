@@ -97,6 +97,27 @@ test('planner profile is loaded from canonical settings YAML', () => {
     );
 });
 
+test('workflow token override is loaded from canonical settings YAML', () => {
+    const settingsPath = withSettingsFile(
+        [
+            'version: 1',
+            'chat-workflow:',
+            '  max-tokens-total-override: 512000',
+            '',
+        ].join('\n')
+    );
+
+    const config = buildRuntimeConfig(
+        {
+            NODE_ENV: 'test',
+            FOOTNOTE_SETTINGS_PATH: settingsPath,
+        },
+        () => undefined
+    );
+
+    assert.equal(config.chatWorkflow.maxTokensTotalOverride, 512_000);
+});
+
 test('integer settings reject non-integer numbers', () => {
     const settingsPath = withSettingsFile(
         ['version: 1', 'rate-limits:', '  web-api-rate-limit-ip: 3.5', ''].join(

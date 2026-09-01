@@ -12,6 +12,7 @@ import {
     envConfigSourceByKey,
     envDefaultValues,
     envSpecByKey,
+    settingsSpecEntries,
 } from '../src/index.js';
 
 test('OpenAI defaults use the balanced GPT-5.6 Terra profile', () => {
@@ -33,7 +34,18 @@ test('presentation defaults stay disabled but select the tested profile and time
         envDefaultValues.CHAT_PRESENTATION_PROFILE_ID,
         'openrouter-deepseek-v4-flash-0731'
     );
-    assert.equal(envDefaultValues.CHAT_PRESENTATION_TIMEOUT_MS, 30000);
+    assert.equal(envDefaultValues.CHAT_PRESENTATION_TIMEOUT_MS, 90000);
+    assert.equal(
+        envSpecByKey.CHAT_WORKFLOW_MAX_TOKENS_TOTAL_OVERRIDE?.kind,
+        'integer'
+    );
+    assert.deepEqual(
+        settingsSpecEntries.find(
+            (entry) =>
+                entry.envKey === 'CHAT_WORKFLOW_MAX_TOKENS_TOTAL_OVERRIDE'
+        )?.path,
+        ['chat-workflow', 'max-tokens-total-override']
+    );
 });
 
 test('retired presentation validator settings are absent from the config spec', () => {

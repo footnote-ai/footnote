@@ -74,9 +74,12 @@ import {
 } from '../workflowEngine/contextStepHelpers.js';
 import {
     boundGenerationRequestToWorkflowBudget,
+    capGenerationRequestToProfileMax,
     calculatePresentationOutputBudget,
     calculateReviewedGenerationOutputBudget,
+    DEFAULT_WORKFLOW_ASSESSMENT_MAX_OUTPUT_TOKENS,
     DEFAULT_WORKFLOW_GENERATION_MAX_OUTPUT_TOKENS,
+    DEFAULT_WORKFLOW_PLANNER_MAX_OUTPUT_TOKENS,
     estimateGenerationTokenBudget,
     estimatePlannerInputTokens,
     estimatePlannerTokenBudget,
@@ -1002,12 +1005,12 @@ export const runBoundedReviewWorkflow = async (
                 invocationContext: {
                     ...plannerStepRequest.invocationContext,
                     maxOutputTokens: Math.min(
-                        1200,
+                        DEFAULT_WORKFLOW_PLANNER_MAX_OUTPUT_TOKENS,
                         Math.max(
                             1,
                             executionLimits.maxTokensTotal >=
                                 UNBOUNDED_EXECUTION_LIMIT
-                                ? 1200
+                                ? DEFAULT_WORKFLOW_PLANNER_MAX_OUTPUT_TOKENS
                                 : Math.max(
                                       1,
                                       executionLimits.maxTokensTotal -
@@ -1076,6 +1079,16 @@ export const runBoundedReviewWorkflow = async (
                     estimatedCost: plannerResult.execution.cost,
                     signals: {
                         action: plannerResult.plan.action,
+                        purpose: plannerResult.execution.purpose,
+                        contractType: plannerResult.execution.contractType,
+                        applyOutcome:
+                            plannerResult.ingestion.outputApplyOutcome ===
+                            'accepted'
+                                ? 'applied'
+                                : plannerResult.ingestion.outputApplyOutcome ===
+                                    'partially_applied'
+                                  ? 'adjusted_by_policy'
+                                  : 'not_applied',
                         ...(plannerResult.execution.reasonCode !== undefined
                             ? {
                                   plannerReasonCode:
@@ -1100,6 +1113,9 @@ export const runBoundedReviewWorkflow = async (
                     terminationReason: 'executor_error_fail_open',
                     signals: {
                         durationMs: Math.max(0, Date.now() - startedAt),
+                        purpose: 'chat_orchestrator_action_selection',
+                        contractType: 'fallback',
+                        applyOutcome: 'not_applied',
                     },
                 }),
             };
@@ -1140,6 +1156,11 @@ export const runBoundedReviewWorkflow = async (
                     'Planner failed; workflow continued with the backend default plan.',
                 reasonCode: 'planner_runtime_error',
                 terminationReason: 'executor_error_fail_open',
+                signals: {
+                    purpose: 'chat_orchestrator_action_selection',
+                    contractType: 'fallback',
+                    applyOutcome: 'not_applied',
+                },
             }),
         };
     };
@@ -1358,7 +1379,8 @@ export const runBoundedReviewWorkflow = async (
                                     authorityPromptTokens,
                                 assessmentPromptTokensWithoutDraft:
                                     presentationPromptTokens,
-                                assessmentOutputTokens: 200,
+                                assessmentOutputTokens:
+                                    DEFAULT_WORKFLOW_ASSESSMENT_MAX_OUTPUT_TOKENS,
                             });
                         const effectiveAuthorityOutputTokens =
                             authorityOutputTokens ??
@@ -1378,7 +1400,8 @@ export const runBoundedReviewWorkflow = async (
                             assessmentPromptTokens:
                                 presentationPromptTokens +
                                 effectiveAuthorityOutputTokens,
-                            assessmentOutputTokens: 200,
+                            assessmentOutputTokens:
+                                DEFAULT_WORKFLOW_ASSESSMENT_MAX_OUTPUT_TOKENS,
                         });
                         return budget === undefined
                             ? undefined
@@ -1625,7 +1648,10 @@ export const runBoundedReviewWorkflow = async (
                       requiresSearch: boundedRequest.search !== undefined,
                       runWithProfile: async (profile) =>
                           generationRuntime.generate({
-                              ...boundedRequest,
+                              ...capGenerationRequestToProfileMax({
+                                  request: boundedRequest,
+                                  profile,
+                              }),
                               model: profile.providerModel,
                               provider: profile.provider,
                               capabilities: profile.capabilities,
@@ -1793,7 +1819,7 @@ export const runBoundedReviewWorkflow = async (
                 { role: 'assistant', content: draft.text },
                 { role: 'system', content: assessPrompt.prompt },
             ],
-            maxOutputTokens: 200,
+            maxOutputTokens: DEFAULT_WORKFLOW_ASSESSMENT_MAX_OUTPUT_TOKENS,
             reasoningEffort: 'low',
             verbosity: 'low',
         };
@@ -1828,7 +1854,10 @@ export const runBoundedReviewWorkflow = async (
                       requiresSearch: false,
                       runWithProfile: async (profile) =>
                           generationRuntime.generate({
-                              ...bounded,
+                              ...capGenerationRequestToProfileMax({
+                                  request: bounded,
+                                  profile,
+                              }),
                               model: profile.providerModel,
                               provider: profile.provider,
                               capabilities: profile.capabilities,
@@ -2020,12 +2049,12 @@ export const runBoundedReviewWorkflow = async (
                 invocationContext: {
                     ...plannerStepRequest.invocationContext,
                     maxOutputTokens: Math.min(
-                        1200,
+                        DEFAULT_WORKFLOW_PLANNER_MAX_OUTPUT_TOKENS,
                         Math.max(
                             1,
                             executionLimits.maxTokensTotal >=
                                 UNBOUNDED_EXECUTION_LIMIT
-                                ? 1200
+                                ? DEFAULT_WORKFLOW_PLANNER_MAX_OUTPUT_TOKENS
                                 : Math.max(
                                       1,
                                       executionLimits.maxTokensTotal -
@@ -2087,6 +2116,18 @@ export const runBoundedReviewWorkflow = async (
                     model: plannerResult.execution.model,
                     usage: plannerResult.execution.usage,
                     estimatedCost: plannerResult.execution.cost,
+                    signals: {
+                        purpose: plannerResult.execution.purpose,
+                        contractType: plannerResult.execution.contractType,
+                        applyOutcome:
+                            plannerResult.ingestion.outputApplyOutcome ===
+                            'accepted'
+                                ? 'applied'
+                                : plannerResult.ingestion.outputApplyOutcome ===
+                                    'partially_applied'
+                                  ? 'adjusted_by_policy'
+                                  : 'not_applied',
+                    },
                 }),
             };
         } catch (error) {
@@ -2102,6 +2143,11 @@ export const runBoundedReviewWorkflow = async (
                         'Planner re-entry failed; the latest valid draft was preserved.',
                     reasonCode: 'planner_runtime_error',
                     terminationReason: 'executor_error_fail_open',
+                    signals: {
+                        purpose: 'chat_orchestrator_action_selection',
+                        contractType: 'fallback',
+                        applyOutcome: 'not_applied',
+                    },
                 }),
             };
         }
@@ -2159,7 +2205,7 @@ export const runBoundedReviewWorkflow = async (
             if (executionLimits.maxTokensTotal >= UNBOUNDED_EXECUTION_LIMIT)
                 return undefined;
             const output = Math.min(
-                1200,
+                DEFAULT_WORKFLOW_PLANNER_MAX_OUTPUT_TOKENS,
                 Math.max(
                     1,
                     executionLimits.maxTokensTotal -
@@ -2208,7 +2254,8 @@ export const runBoundedReviewWorkflow = async (
                                       DEFAULT_REVIEW_DECISION_PROMPT,
                               },
                           ],
-                          maxOutputTokens: 200,
+                          maxOutputTokens:
+                              DEFAULT_WORKFLOW_ASSESSMENT_MAX_OUTPUT_TOKENS,
                       }
                     : projected.request;
             if (step === 'generate') {

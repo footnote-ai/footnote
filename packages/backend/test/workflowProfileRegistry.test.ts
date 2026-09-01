@@ -164,6 +164,22 @@ test('resolveWorkflowRuntimeConfig applies reviewed workflow defaults and review
     );
 });
 
+test('resolveWorkflowRuntimeConfig applies a bounded deployment token override without changing mode policy', () => {
+    const config = resolveWorkflowRuntimeConfig({
+        modeId: 'balanced',
+        reviewLoopEnabled: true,
+        maxIterations: 2,
+        maxDurationMs: 90_000,
+        maxRequestReviewCycles: 7,
+        maxTokensTotalOverride: 512_000,
+    });
+
+    assert.equal(config.modeId, 'balanced');
+    assert.equal(config.workflowExecutionLimits.maxTokensTotal, 512_000);
+    assert.equal(config.workflowExecutionLimits.maxWorkflowSteps, 4);
+    assert.equal(config.workflowExecutionLimits.maxDeliberationCalls, 2);
+});
+
 test('resolveWorkflowModeDecision maps requested mode ids and emits inspectable routing behavior', () => {
     const requested = resolveWorkflowModeDecision({
         modeId: 'balanced',

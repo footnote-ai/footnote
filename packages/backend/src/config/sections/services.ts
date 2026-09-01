@@ -43,6 +43,22 @@ const PROJECT_DOCS_MAX_CHUNKS = 5_000;
 const PROJECT_DOCS_MAX_TOP_K_PER_CATEGORY = 50;
 const PROJECT_DOCS_MAX_MATCHES = 20;
 const PROJECT_DOCS_MAX_TIMEOUT_MS = 30_000;
+const parseOptionalWorkflowTokenOverride = (
+    value: string | undefined,
+    warn: WarningSink
+): number | undefined => {
+    if (value === undefined || value.trim().length === 0) return undefined;
+
+    const parsed = Number(value.trim());
+    if (Number.isSafeInteger(parsed) && parsed > 0) {
+        return parsed;
+    }
+
+    warn(
+        `Ignoring invalid CHAT_WORKFLOW_MAX_TOKENS_TOTAL_OVERRIDE: "${value}". Use a positive safe integer.`
+    );
+    return undefined;
+};
 
 const parseProjectDocsLimit = (
     raw: string | undefined,
@@ -114,8 +130,10 @@ const parseWebSearchProviderPriority = (
 };
 
 /**
- * Resolves auth tokens and body-size limits for trusted backend-only service
- * endpoints.
+ * Resolves auth tokens, body-size limits, and chat-workflow settings for
+ * trusted backend-only service endpoints. The workflow token override accepts
+ * only positive integers through 512,000; invalid deployment input warns and
+ * falls back to undefined so the configured workflow default remains active.
  */
 export const buildServiceSections = (
     env: NodeJS.ProcessEnv,
@@ -208,6 +226,10 @@ export const buildServiceSections = (
             env.CHAT_MAX_REQUEST_REVIEW_CYCLES,
             7,
             'CHAT_MAX_REQUEST_REVIEW_CYCLES',
+            warn
+        ),
+        maxTokensTotalOverride: parseOptionalWorkflowTokenOverride(
+            env.CHAT_WORKFLOW_MAX_TOKENS_TOTAL_OVERRIDE,
             warn
         ),
         presentation: {

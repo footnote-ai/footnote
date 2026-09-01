@@ -50,7 +50,7 @@ by default:
 ```env
 CHAT_PRESENTATION_ENABLED=false
 CHAT_PRESENTATION_PROFILE_ID=openrouter-deepseek-v4-flash-0731
-CHAT_PRESENTATION_TIMEOUT_MS=30000
+CHAT_PRESENTATION_TIMEOUT_MS=90000
 ```
 
 The presentation profile selects an enabled backend profile. It is deployment

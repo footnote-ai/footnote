@@ -11,11 +11,14 @@ import type {
     RuntimeMessage,
 } from '@footnote/agent-runtime';
 import type { PostChatRequest } from '@footnote/contracts/web';
+import type { ModelProfile } from '@footnote/contracts';
 import { UNBOUNDED_EXECUTION_LIMIT } from './limits.js';
 
-export const DEFAULT_WORKFLOW_GENERATION_MAX_OUTPUT_TOKENS = 1200;
+export const DEFAULT_WORKFLOW_GENERATION_MAX_OUTPUT_TOKENS = 128_000;
 /** Reasoning tokens share the provider output cap, so reserve more room when reasoning is requested. */
-export const DEFAULT_REASONING_GENERATION_MAX_OUTPUT_TOKENS = 2400;
+export const DEFAULT_REASONING_GENERATION_MAX_OUTPUT_TOKENS = 256_000;
+export const DEFAULT_WORKFLOW_PLANNER_MAX_OUTPUT_TOKENS = 2_000;
+export const DEFAULT_WORKFLOW_ASSESSMENT_MAX_OUTPUT_TOKENS = 512;
 
 export const resolveDefaultGenerationMaxOutputTokens = (
     request: Pick<GenerationRequest, 'reasoningEffort' | 'capabilities'>
@@ -49,6 +52,35 @@ export const estimateGenerationTokenBudget = (
     estimateRuntimeMessageTokens(request.messages) +
     (request.maxOutputTokens ??
         resolveDefaultGenerationMaxOutputTokens(request));
+
+/** Applies a selected profile's declared output ceiling after request defaults resolve. */
+export const capGenerationRequestToProfileMax = (input: {
+    request: GenerationRequest;
+    profile: Pick<
+        ModelProfile,
+        'capabilities' | 'defaultReasoningEffort' | 'maxOutputTokens'
+    >;
+}): GenerationRequest & { maxOutputTokens: number } => {
+    const requestWithProfileDefaults = {
+        ...input.request,
+        reasoningEffort:
+            input.request.reasoningEffort ??
+            input.profile.defaultReasoningEffort,
+        capabilities: input.profile.capabilities,
+    };
+    const requestedOutputTokens =
+        input.request.maxOutputTokens ??
+        resolveDefaultGenerationMaxOutputTokens(requestWithProfileDefaults);
+    const profileMaximum = input.profile.maxOutputTokens;
+
+    return {
+        ...input.request,
+        maxOutputTokens:
+            profileMaximum === undefined
+                ? requestedOutputTokens
+                : Math.min(requestedOutputTokens, profileMaximum),
+    };
+};
 
 /** Estimates planner input from the bounded conversation window plus fixed planner scaffolding. */
 export const estimatePlannerInputTokens = (request: PostChatRequest): number =>

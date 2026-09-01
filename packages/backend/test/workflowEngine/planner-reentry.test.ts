@@ -203,6 +203,16 @@ test('runBoundedReviewWorkflow returns latest safe draft when planner re-entry f
         ),
         false
     );
+    const replanStep = result.workflowLineage.steps.find(
+        (step) => step.stepKind === 'plan' && step.attempt === 2
+    );
+    assert.ok(replanStep);
+    assert.equal(
+        replanStep.outcome.signals?.purpose,
+        'chat_orchestrator_action_selection'
+    );
+    assert.equal(replanStep.outcome.signals?.contractType, 'fallback');
+    assert.equal(replanStep.outcome.signals?.applyOutcome, 'not_applied');
 });
 
 test('runBoundedReviewWorkflow attaches planner plan step to lineage and links initial generate step to planner root', async () => {
@@ -390,6 +400,18 @@ test('runBoundedReviewWorkflow attaches planner plan step to lineage and links i
     assert.equal(result.workflowLineage.steps[0].model, 'gpt-5-mini');
     assert.equal(result.workflowLineage.steps[0].usage?.totalTokens, 25);
     assert.equal(result.workflowLineage.steps[0].cost?.totalCostUsd, 0.00003);
+    assert.equal(
+        result.workflowLineage.steps[0].outcome.signals?.purpose,
+        'chat_orchestrator_action_selection'
+    );
+    assert.equal(
+        result.workflowLineage.steps[0].outcome.signals?.contractType,
+        'structured'
+    );
+    assert.equal(
+        result.workflowLineage.steps[0].outcome.signals?.applyOutcome,
+        'applied'
+    );
     assert.equal(result.workflowLineage.steps[1].stepKind, 'generate');
     assert.equal(
         result.workflowLineage.steps[1].parentStepId,

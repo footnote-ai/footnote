@@ -10,19 +10,10 @@ import { envConfigSourceByKey, envEntries } from './env-spec.js';
 import type { EnvLiteralValue } from './types.js';
 
 export type SettingsValueKind =
-    | 'string'
-    | 'boolean'
-    | 'integer'
-    | 'number'
-    | 'csv'
-    | 'enum'
-    | 'json';
+    'string' | 'boolean' | 'integer' | 'number' | 'csv' | 'enum' | 'json';
 
 export type SettingsDefaultValue =
-    | string
-    | number
-    | boolean
-    | readonly string[];
+    string | number | boolean | readonly string[];
 
 export type SettingsSpecEntry = {
     envKey: string;
@@ -54,6 +45,10 @@ const ENV_PATH_OVERRIDES: Record<string, string[]> = {
     WEB_TRUST_PROXY: ['server', 'trust-proxy'],
     ALLOWED_ORIGINS: ['web', 'allowed-origins'],
     FRAME_ANCESTORS: ['web', 'frame-ancestors'],
+    CHAT_WORKFLOW_MAX_TOKENS_TOTAL_OVERRIDE: [
+        'chat-workflow',
+        'max-tokens-total-override',
+    ],
 };
 
 const resolveEnvPath = (entry: { key: string; section: string }): string[] =>

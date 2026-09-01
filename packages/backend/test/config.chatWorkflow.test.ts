@@ -17,7 +17,8 @@ test('presentation stays disabled but has the tested DeepSeek profile and timeou
         chatWorkflow.presentation.profileId,
         'openrouter-deepseek-v4-flash-0731'
     );
-    assert.equal(chatWorkflow.presentation.timeoutMs, 30000);
+    assert.equal(chatWorkflow.presentation.timeoutMs, 90000);
+    assert.equal(chatWorkflow.maxTokensTotalOverride, undefined);
 });
 
 test('presentation settings accept an explicit deployment override', () => {
@@ -36,4 +37,35 @@ test('presentation settings accept an explicit deployment override', () => {
         'explicit-presentation-profile'
     );
     assert.equal(chatWorkflow.presentation.timeoutMs, 45000);
+});
+
+test('workflow token override accepts positive safe deployment values', () => {
+    const { chatWorkflow } = buildServiceSections(
+        { CHAT_WORKFLOW_MAX_TOKENS_TOTAL_OVERRIDE: '1048576' },
+        () => undefined
+    );
+
+    assert.equal(chatWorkflow.maxTokensTotalOverride, 1_048_576);
+});
+
+test('workflow token override rejects unsafe values', () => {
+    const warnings: string[] = [];
+    const { chatWorkflow } = buildServiceSections(
+        { CHAT_WORKFLOW_MAX_TOKENS_TOTAL_OVERRIDE: '9007199254740992' },
+        (warning) => warnings.push(warning)
+    );
+
+    assert.equal(chatWorkflow.maxTokensTotalOverride, undefined);
+    assert.equal(warnings.length, 1);
+});
+
+test('workflow token override rejects malformed integer values', () => {
+    const warnings: string[] = [];
+    const { chatWorkflow } = buildServiceSections(
+        { CHAT_WORKFLOW_MAX_TOKENS_TOTAL_OVERRIDE: '512000tokens' },
+        (warning) => warnings.push(warning)
+    );
+
+    assert.equal(chatWorkflow.maxTokensTotalOverride, undefined);
+    assert.equal(warnings.length, 1);
 });
