@@ -309,8 +309,11 @@ export type ChatAddressingEvidence = {
 };
 
 /**
- * Trusted adapter-supplied identity facts used only for surface formatting.
- * These facts do not select persona prompts or grant policy authority.
+ * @description: Serializable adapter-supplied identity facts used only for surface formatting.
+ * @footnote-scope: interface
+ * @footnote-module: ChatAssistantIdentity
+ * @footnote-risk: low - Invalid identity data can alter presentation but cannot select policy or persona behavior.
+ * @footnote-ethics: medium - Clear identity boundaries protect user trust without granting authority to adapters.
  */
 export type ChatAssistantIdentity = {
     displayName: string;

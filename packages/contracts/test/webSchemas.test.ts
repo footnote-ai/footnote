@@ -311,6 +311,32 @@ test('PostChatRequestSchema enforces strict request payload rules', () => {
         false
     );
     assert.equal(
+        PostChatRequestSchema.safeParse({
+            surface: 'web',
+            assistantIdentity: {
+                displayName: '   ',
+                mentionAliases: ['Ari'],
+            },
+            trigger: { kind: 'submit' },
+            latestUserInput: 'What is Footnote?',
+            conversation: [{ role: 'user', content: 'What is Footnote?' }],
+        }).success,
+        false
+    );
+    assert.equal(
+        PostChatRequestSchema.safeParse({
+            surface: 'web',
+            assistantIdentity: {
+                displayName: 'Ari Vendor',
+                mentionAliases: ['   '],
+            },
+            trigger: { kind: 'submit' },
+            latestUserInput: 'What is Footnote?',
+            conversation: [{ role: 'user', content: 'What is Footnote?' }],
+        }).success,
+        false
+    );
+    assert.equal(
         ChatAssistantIdentitySchema.safeParse({
             displayName: 'Ari Vendor',
             mentionAliases: Array.from(

@@ -1990,6 +1990,7 @@ components:
                     type: string
                     minLength: 1
                     maxLength: 64
+                    pattern: '.*\\S.*'
                 mentionAliases:
                     type: array
                     maxItems: 32
@@ -1997,6 +1998,7 @@ components:
                         type: string
                         minLength: 1
                         maxLength: 64
+                        pattern: '.*\\S.*'
             required:
                 - displayName
                 - mentionAliases

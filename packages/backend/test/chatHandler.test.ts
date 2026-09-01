@@ -40,6 +40,22 @@ type MutableEnv = NodeJS.ProcessEnv & {
     REFLECT_SERVICE_RATE_LIMIT_WINDOW_MS?: string;
 };
 
+const restoreTurnstileEnv = (
+    env: MutableEnv,
+    key:
+        | 'TURNSTILE_SECRET_KEY'
+        | 'TURNSTILE_SITE_KEY'
+        | 'TURNSTILE_ALLOWED_HOSTNAMES',
+    value: string | undefined
+): void => {
+    if (value === undefined) {
+        delete env[key];
+        return;
+    }
+
+    env[key] = value;
+};
+
 type TestServer = {
     close: () => Promise<void>;
     url: string;
@@ -703,9 +719,17 @@ test('chat accepts public calls when allowlist is unset and Turnstile hostname m
     } finally {
         globalThis.fetch = originalFetch;
         await server.close();
-        env.TURNSTILE_SECRET_KEY = previousTurnstileSecret;
-        env.TURNSTILE_SITE_KEY = previousTurnstileSite;
-        env.TURNSTILE_ALLOWED_HOSTNAMES = previousAllowedHostnames;
+        restoreTurnstileEnv(
+            env,
+            'TURNSTILE_SECRET_KEY',
+            previousTurnstileSecret
+        );
+        restoreTurnstileEnv(env, 'TURNSTILE_SITE_KEY', previousTurnstileSite);
+        restoreTurnstileEnv(
+            env,
+            'TURNSTILE_ALLOWED_HOSTNAMES',
+            previousAllowedHostnames
+        );
     }
 });
 
@@ -773,9 +797,17 @@ test('chat ignores formatting identity supplied by an untrusted public caller', 
     } finally {
         globalThis.fetch = originalFetch;
         await server.close();
-        env.TURNSTILE_SECRET_KEY = previousTurnstileSecret;
-        env.TURNSTILE_SITE_KEY = previousTurnstileSite;
-        env.TURNSTILE_ALLOWED_HOSTNAMES = previousAllowedHostnames;
+        restoreTurnstileEnv(
+            env,
+            'TURNSTILE_SECRET_KEY',
+            previousTurnstileSecret
+        );
+        restoreTurnstileEnv(env, 'TURNSTILE_SITE_KEY', previousTurnstileSite);
+        restoreTurnstileEnv(
+            env,
+            'TURNSTILE_ALLOWED_HOSTNAMES',
+            previousAllowedHostnames
+        );
     }
 });
 

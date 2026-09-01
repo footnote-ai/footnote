@@ -67,7 +67,13 @@ export const readBotProfileConfig = (
         },
     });
 
-/** Builds the formatting-only identity descriptor sent by trusted Discord calls. */
+/**
+ * @description: Projects configured Discord profile identity into formatting-only chat request data.
+ * @footnote-scope: utility
+ * @footnote-module: ChatAssistantIdentityProjection
+ * @footnote-risk: low - Projection errors can affect Discord formatting but do not change backend policy authority.
+ * @footnote-ethics: medium - Accurate identity presentation supports transparent assistant behavior.
+ */
 export const toChatAssistantIdentity = (
     profile: BotProfileConfig
 ): ChatAssistantIdentity => ({

@@ -45,6 +45,21 @@ test('normalizes leading display-name and alias prefixes for arbitrary identitie
     }
 });
 
+test('matches the longest configured identity term first', () => {
+    const options = {
+        ...discordOptions,
+        assistantIdentity: {
+            displayName: 'Ari',
+            mentionAliases: ['Ari Vendor'],
+        } satisfies ChatAssistantIdentity,
+    };
+
+    assert.equal(
+        normalizeChatOutput('@Ari Vendor Answer directly.', options).content,
+        'Answer directly.'
+    );
+});
+
 test('preserves non-leading, nonmatching, quoted, and code-formatted labels', () => {
     const cases = [
         'Taylor: Answer directly.',

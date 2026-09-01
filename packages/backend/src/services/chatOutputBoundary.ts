@@ -117,7 +117,10 @@ export const buildChatOutputBoundaryOptions = (
 const getLeadingLabelPatterns = (
     identity: ChatAssistantIdentity
 ): LeadingLabelPattern[] => {
-    return getIdentityTerms(identity).flatMap((term) => {
+    const terms = [...getIdentityTerms(identity)].sort(
+        (left, right) => right.length - left.length
+    );
+    return terms.flatMap((term) => {
         const escapedName = escapeRegExp(term);
         return [
             {
