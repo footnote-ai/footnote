@@ -390,6 +390,18 @@ test('runBoundedReviewWorkflow attaches planner plan step to lineage and links i
     assert.equal(result.workflowLineage.steps[0].model, 'gpt-5-mini');
     assert.equal(result.workflowLineage.steps[0].usage?.totalTokens, 25);
     assert.equal(result.workflowLineage.steps[0].cost?.totalCostUsd, 0.00003);
+    assert.equal(
+        result.workflowLineage.steps[0].outcome.signals?.purpose,
+        'chat_orchestrator_action_selection'
+    );
+    assert.equal(
+        result.workflowLineage.steps[0].outcome.signals?.contractType,
+        'structured'
+    );
+    assert.equal(
+        result.workflowLineage.steps[0].outcome.signals?.applyOutcome,
+        'applied'
+    );
     assert.equal(result.workflowLineage.steps[1].stepKind, 'generate');
     assert.equal(
         result.workflowLineage.steps[1].parentStepId,

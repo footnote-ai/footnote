@@ -1079,6 +1079,16 @@ export const runBoundedReviewWorkflow = async (
                     estimatedCost: plannerResult.execution.cost,
                     signals: {
                         action: plannerResult.plan.action,
+                        purpose: plannerResult.execution.purpose,
+                        contractType: plannerResult.execution.contractType,
+                        applyOutcome:
+                            plannerResult.ingestion.outputApplyOutcome ===
+                            'accepted'
+                                ? 'applied'
+                                : plannerResult.ingestion.outputApplyOutcome ===
+                                    'partially_applied'
+                                  ? 'adjusted_by_policy'
+                                  : 'not_applied',
                         ...(plannerResult.execution.reasonCode !== undefined
                             ? {
                                   plannerReasonCode:
@@ -1103,6 +1113,9 @@ export const runBoundedReviewWorkflow = async (
                     terminationReason: 'executor_error_fail_open',
                     signals: {
                         durationMs: Math.max(0, Date.now() - startedAt),
+                        purpose: 'chat_orchestrator_action_selection',
+                        contractType: 'fallback',
+                        applyOutcome: 'not_applied',
                     },
                 }),
             };
@@ -1143,6 +1156,11 @@ export const runBoundedReviewWorkflow = async (
                     'Planner failed; workflow continued with the backend default plan.',
                 reasonCode: 'planner_runtime_error',
                 terminationReason: 'executor_error_fail_open',
+                signals: {
+                    purpose: 'chat_orchestrator_action_selection',
+                    contractType: 'fallback',
+                    applyOutcome: 'not_applied',
+                },
             }),
         };
     };
