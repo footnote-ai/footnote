@@ -137,8 +137,10 @@ const parseWebSearchProviderPriority = (
 };
 
 /**
- * Resolves auth tokens and body-size limits for trusted backend-only service
- * endpoints.
+ * Resolves auth tokens, body-size limits, and chat-workflow settings for
+ * trusted backend-only service endpoints. The workflow token override accepts
+ * only positive integers through 128,000; invalid deployment input warns and
+ * falls back to undefined so the configured workflow default remains active.
  */
 export const buildServiceSections = (
     env: NodeJS.ProcessEnv,

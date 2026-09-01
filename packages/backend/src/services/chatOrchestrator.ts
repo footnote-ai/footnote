@@ -209,18 +209,25 @@ export const createChatOrchestrator = ({
             plannerReasoningEffort:
                 plannerProfile.provider === 'openrouter' ? 'none' : 'low',
             ...(structuredExecutor !== undefined && {
-                executePlannerStructured: async (request) =>
-                    structuredExecutor({
-                        ...request,
+                executePlannerStructured: async (request) => {
+                    const activePlannerProfile = getActivePlannerProfile();
+                    const cappedRequest = capGenerationRequestToProfileMax({
+                        request,
+                        profile: activePlannerProfile,
+                    });
+                    return structuredExecutor({
+                        ...cappedRequest,
+                        model: request.model,
                         reasoningEffort: resolveProfileReasoningEffort(
-                            getActivePlannerProfile(),
+                            activePlannerProfile,
                             request.reasoningEffort,
                             chatOrchestratorLogger
                         ),
                         ...(safetyIdentifier !== undefined && {
                             safetyIdentifier,
                         }),
-                    }),
+                    });
+                },
             }),
             executePlanner: async ({
                 messages,

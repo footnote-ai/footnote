@@ -257,10 +257,35 @@ test('profile output ceilings cap resolved generation defaults', () => {
                 supportedReasoningEfforts: ['none', 'medium'],
             },
         },
-        profile: { maxOutputTokens: 9_000 },
+        profile: {
+            maxOutputTokens: 9_000,
+            defaultReasoningEffort: 'medium',
+            capabilities: {
+                canUseSearch: false,
+                supportedReasoningEfforts: ['none', 'medium'],
+            },
+        },
     });
 
     assert.equal(capped.maxOutputTokens, 9_000);
+});
+
+test('profile output ceilings use the supported profile reasoning default', () => {
+    const capped = capGenerationRequestToProfileMax({
+        request: {
+            messages: [{ role: 'user', content: 'Write a detailed answer.' }],
+        },
+        profile: {
+            maxOutputTokens: 100_000,
+            defaultReasoningEffort: 'medium',
+            capabilities: {
+                canUseSearch: false,
+                supportedReasoningEfforts: ['none', 'medium'],
+            },
+        },
+    });
+
+    assert.equal(capped.maxOutputTokens, 12_000);
 });
 
 test('generation admission fails closed before provider call when prompt uses the remainder', () => {

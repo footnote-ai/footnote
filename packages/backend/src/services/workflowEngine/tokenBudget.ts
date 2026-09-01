@@ -56,11 +56,21 @@ export const estimateGenerationTokenBudget = (
 /** Applies a selected profile's declared output ceiling after request defaults resolve. */
 export const capGenerationRequestToProfileMax = (input: {
     request: GenerationRequest;
-    profile: Pick<ModelProfile, 'maxOutputTokens'>;
-}): GenerationRequest => {
+    profile: Pick<
+        ModelProfile,
+        'capabilities' | 'defaultReasoningEffort' | 'maxOutputTokens'
+    >;
+}): GenerationRequest & { maxOutputTokens: number } => {
+    const requestWithProfileDefaults = {
+        ...input.request,
+        reasoningEffort:
+            input.request.reasoningEffort ??
+            input.profile.defaultReasoningEffort,
+        capabilities: input.profile.capabilities,
+    };
     const requestedOutputTokens =
         input.request.maxOutputTokens ??
-        resolveDefaultGenerationMaxOutputTokens(input.request);
+        resolveDefaultGenerationMaxOutputTokens(requestWithProfileDefaults);
     const profileMaximum = input.profile.maxOutputTokens;
 
     return {
