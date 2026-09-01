@@ -40,6 +40,7 @@
         "context:repo:list": "pnpm exec tsx scripts/list-repository-context.ts",
         "context:repo:load": "pnpm exec tsx scripts/load-repository-context.ts",
         "responses:compare": "pnpm exec tsx scripts/responses-compare.ts",
+        "eval:planner": "pnpm exec tsx scripts/planner-comparison.mts",
         "check-annotation-schema": "pnpm exec tsx scripts/check-annotation-schema.ts",
         "validate-footnote-tags": "pnpm exec tsx scripts/validate-footnote-tags.ts",
         "validate-env": "pnpm exec tsx scripts/validate-env.ts",

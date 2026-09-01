@@ -6,7 +6,10 @@
  * @footnote-ethics: high - Planner contract integrity affects action choice, retrieval grounding, and user trust.
  */
 import { chatPlannerDecisionParametersSchema } from './chatPlannerOutputContract.js';
-import { projectPlannerSchemaForProvider } from './plannerSchemaAdapter.js';
+import {
+    projectPlannerSchemaForProvider,
+    projectPlannerSchemaForStrictOutput,
+} from './plannerSchemaAdapter.js';
 
 export const CHAT_PLANNER_TOOL_NAME = 'submit_planner_decision';
 
@@ -20,6 +23,22 @@ export const chatPlannerDecisionTool = {
         'Submit one planner decision object for the backend chat orchestrator.',
     strict: false,
     parameters: projectPlannerSchemaForProvider(
+        chatPlannerDecisionParametersSchema
+    ),
+};
+
+/**
+ * @description: Provider-neutral strict structured-output descriptor for planner runtime adapters.
+ * @footnote-scope: interface
+ * @footnote-module: ChatPlannerDecisionStructuredOutput
+ * @footnote-risk: medium - Descriptor drift can reject planner requests at provider boundaries.
+ * @footnote-ethics: high - Strict transport preserves explicit missing facts without inventing policy inputs.
+ */
+export const chatPlannerDecisionStructuredOutput = {
+    name: CHAT_PLANNER_TOOL_NAME,
+    description:
+        'Return one planner decision object for the backend chat orchestrator.',
+    schema: projectPlannerSchemaForStrictOutput(
         chatPlannerDecisionParametersSchema
     ),
 };

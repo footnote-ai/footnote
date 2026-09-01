@@ -714,14 +714,26 @@ export const runBoundedReviewWorkflow = async (
                 contextStepExecutorRegistry
             ) !== undefined
     );
-    const hasToolStep =
-        initialContextRequests.some(
-            (request) => request.requested && request.eligible
-        ) && hasContextExecutor;
     const hasPlannerStep =
         workflowPolicy.enablePlanning &&
         plannerStepRequest !== undefined &&
         plannerStepExecutor !== undefined;
+    // Planner continuations can add context requests after the static topology
+    // is built, so reserve the declared tool step when that late path is wired.
+    const hasPlannerContextExecutor =
+        workflowPolicy.enableToolUse &&
+        hasPlannerStep &&
+        planContinuationBuilder !== undefined &&
+        (contextStepExecutor !== undefined ||
+            Object.values(contextStepExecutorRegistry ?? {}).some(
+                (executor) => executor !== undefined
+            ));
+    const hasToolStep =
+        (initialContextRequests.some(
+            (request) => request.requested && request.eligible
+        ) &&
+            hasContextExecutor) ||
+        hasPlannerContextExecutor;
     const hasPresentationStep =
         presentation?.config.enabled === true &&
         workflowPolicy.enableGeneration !== false;
@@ -1089,6 +1101,31 @@ export const runBoundedReviewWorkflow = async (
                                     'partially_applied'
                                   ? 'adjusted_by_policy'
                                   : 'not_applied',
+                        ...(plannerResult.execution.structuredOutputOutcome !==
+                        undefined
+                            ? {
+                                  structuredOutputOutcome:
+                                      plannerResult.execution
+                                          .structuredOutputOutcome,
+                              }
+                            : {}),
+                        ...(plannerResult.execution.upstreamAttribution
+                            ?.inferenceProvider !== undefined
+                            ? {
+                                  upstreamProvider:
+                                      plannerResult.execution
+                                          .upstreamAttribution
+                                          .inferenceProvider,
+                              }
+                            : {}),
+                        ...(plannerResult.execution.upstreamAttribution
+                            ?.resolvedModel !== undefined
+                            ? {
+                                  upstreamModel:
+                                      plannerResult.execution
+                                          .upstreamAttribution.resolvedModel,
+                              }
+                            : {}),
                         ...(plannerResult.execution.reasonCode !== undefined
                             ? {
                                   plannerReasonCode:
@@ -2127,6 +2164,31 @@ export const runBoundedReviewWorkflow = async (
                                     'partially_applied'
                                   ? 'adjusted_by_policy'
                                   : 'not_applied',
+                        ...(plannerResult.execution.structuredOutputOutcome !==
+                        undefined
+                            ? {
+                                  structuredOutputOutcome:
+                                      plannerResult.execution
+                                          .structuredOutputOutcome,
+                              }
+                            : {}),
+                        ...(plannerResult.execution.upstreamAttribution
+                            ?.inferenceProvider !== undefined
+                            ? {
+                                  upstreamProvider:
+                                      plannerResult.execution
+                                          .upstreamAttribution
+                                          .inferenceProvider,
+                              }
+                            : {}),
+                        ...(plannerResult.execution.upstreamAttribution
+                            ?.resolvedModel !== undefined
+                            ? {
+                                  upstreamModel:
+                                      plannerResult.execution
+                                          .upstreamAttribution.resolvedModel,
+                              }
+                            : {}),
                     },
                 }),
             };

@@ -943,7 +943,21 @@ export type GetTraceCardSvgResponse = string;
  * @api.operationId: getTrace
  * @api.path: GET /api/traces/{responseId}
  */
-export type GetTraceResponse = ResponseMetadata;
+export type GetTraceResponse = TraceDisplayMetadata;
+
+/**
+ * Backend-owned trace-read projection. Valid records are complete; malformed
+ * optional fields may be omitted and listed in displayIntegrity instead.
+ */
+export type TraceDisplayMetadata = ResponseMetadata & {
+    displayIntegrity: {
+        status: 'complete' | 'partial';
+        unavailableFields: string[];
+    };
+};
+
+/** @api.operationId: getTrace @api.path: GET /api/traces/{responseId} */
+export type GetTraceDisplayResponse = TraceDisplayMetadata;
 
 /**
  * @api.operationId: getTrace
@@ -951,7 +965,7 @@ export type GetTraceResponse = ResponseMetadata;
  */
 export type GetTraceStaleResponse = {
     message: 'Trace is stale';
-    metadata: ResponseMetadata;
+    metadata: TraceDisplayMetadata;
 };
 
 /**

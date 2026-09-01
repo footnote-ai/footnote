@@ -890,9 +890,10 @@ paths:
                 - packages/web/src/utils/api.ts#getTrace
                 - packages/contracts/src/web/types.ts#GetTraceResponse
                 - packages/contracts/src/web/types.ts#GetTraceStaleResponse
+                - packages/contracts/src/web/types.ts#TraceDisplayMetadata
             summary: Fetch a stored trace
             description: |
-                Return stored ResponseMetadata by response ID.
+                Return stored trace metadata by response ID. Malformed nested provenance fields are omitted and listed in displayIntegrity; a partial response is never presented as complete.
                 Public endpoint; no auth or rate limits.
             tags:
                 - Traces
@@ -3822,6 +3823,40 @@ components:
                                 type: string
                                 enum: [structured, text_json, fallback]
                                 description: Required for planner events. Planner decision contract execution style used by backend-owned orchestration.
+                            structuredOutputOutcome:
+                                type: string
+                                enum:
+                                    [
+                                        strict_success,
+                                        unsupported_route,
+                                        refusal,
+                                        incomplete,
+                                        no_output,
+                                        schema_rejected,
+                                        parse_failure,
+                                        policy_invalid,
+                                        runtime_failure,
+                                        text_json_compatibility,
+                                        safe_default_fallback,
+                                    ]
+                                description: Sanitized planner transport outcome. This is diagnostic metadata, not policy authority.
+                            upstreamAttribution:
+                                type: object
+                                properties:
+                                    resolvedModel:
+                                        type: string
+                                    inferenceProvider:
+                                        type: string
+                                    routingAttempt:
+                                        type: integer
+                                        minimum: 1
+                                    routingAttemptCount:
+                                        type: integer
+                                        minimum: 1
+                                    upstreamReportedCostUsd:
+                                        type: number
+                                        minimum: 0
+                                additionalProperties: false
                             applyOutcome:
                                 type: string
                                 enum: [applied, adjusted_by_policy, not_applied]
@@ -4533,6 +4568,26 @@ components:
                   required:
                       - responseId
 
+        TraceDisplayMetadata:
+            description: Backend-owned trace-read projection. Complete records have an empty unavailableFields list; partial records explicitly name omitted malformed fields.
+            allOf:
+                - $ref: '#/components/schemas/ResponseMetadata'
+                - type: object
+                  properties:
+                      displayIntegrity:
+                          type: object
+                          properties:
+                              status:
+                                  type: string
+                                  enum: [complete, partial]
+                              unavailableFields:
+                                  type: array
+                                  items:
+                                      type: string
+                          required: [status, unavailableFields]
+                          additionalProperties: false
+                  required: [displayIntegrity]
+
         TraceUpsertRequest:
             description: ResponseMetadata payload for trace ingestion.
             allOf:
@@ -4644,7 +4699,7 @@ components:
                 message:
                     type: string
                 metadata:
-                    $ref: '#/components/schemas/ResponseMetadata'
+                    $ref: '#/components/schemas/TraceDisplayMetadata'
             required:
                 - message
                 - metadata
@@ -5255,7 +5310,7 @@ components:
             content:
                 application/json:
                     schema:
-                        $ref: '#/components/schemas/ResponseMetadata'
+                        $ref: '#/components/schemas/TraceDisplayMetadata'
         ResponseVersionsFetchOk:
             description: Ordered model-produced response candidate history.
             content:

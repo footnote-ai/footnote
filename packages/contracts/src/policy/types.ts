@@ -243,6 +243,23 @@ export type PlannerExecutionContractType =
     'structured' | 'text_json' | 'fallback';
 
 /**
+ * Sanitized outcome of planner structured transport and normalization.
+ * These labels describe observed runtime facts; policy remains backend-owned.
+ */
+export type PlannerStructuredOutputOutcome =
+    | 'strict_success'
+    | 'unsupported_route'
+    | 'refusal'
+    | 'incomplete'
+    | 'no_output'
+    | 'schema_rejected'
+    | 'parse_failure'
+    | 'policy_invalid'
+    | 'runtime_failure'
+    | 'text_json_compatibility'
+    | 'safe_default_fallback';
+
+/**
  * How planner output was applied by workflow-owned policy/routing.
  * This records execution effect, not planner authority.
  */
@@ -412,6 +429,13 @@ type ProfileExecutionEvent = BaseExecutionEvent & {
     profileId?: string;
     provider?: string;
     model?: string;
+    upstreamAttribution?: {
+        resolvedModel?: string;
+        inferenceProvider?: string;
+        routingAttempt?: number;
+        routingAttemptCount?: number;
+        upstreamReportedCostUsd?: number;
+    };
 };
 
 export type PlannerExecutionEvent = ProfileExecutionEvent & {
@@ -424,6 +448,7 @@ export type PlannerExecutionEvent = ProfileExecutionEvent & {
     mattered: boolean;
     matteredControlIds: SteerabilityControlId[];
     reasonCode?: PlannerExecutionReasonCode;
+    structuredOutputOutcome?: PlannerStructuredOutputOutcome;
 };
 
 export type EvaluatorExecutionEvent = BaseExecutionEvent & {
@@ -791,6 +816,12 @@ export type WorkflowPlannerStepSignals = StepSignals & {
     provider?: string;
     mattered?: boolean;
     matteredControlCount?: number;
+    structuredOutputOutcome?: PlannerStructuredOutputOutcome;
+    upstreamProvider?: string;
+    upstreamModel?: string;
+    upstreamRoutingAttempt?: number;
+    upstreamRoutingAttemptCount?: number;
+    upstreamReportedCostUsd?: number;
 };
 
 /**

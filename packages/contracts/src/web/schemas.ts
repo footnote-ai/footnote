@@ -38,6 +38,7 @@ import type {
     GetAuthSessionResponse,
     GetTraceResponse,
     GetTraceStaleResponse,
+    TraceDisplayMetadata,
     PostChatResponse,
 } from './types.js';
 import {
@@ -352,6 +353,19 @@ const PlannerExecutionApplyOutcomeSchema = z.enum([
     'adjusted_by_policy',
     'not_applied',
 ]);
+const PlannerStructuredOutputOutcomeSchema = z.enum([
+    'strict_success',
+    'unsupported_route',
+    'refusal',
+    'incomplete',
+    'no_output',
+    'schema_rejected',
+    'parse_failure',
+    'policy_invalid',
+    'runtime_failure',
+    'text_json_compatibility',
+    'safe_default_fallback',
+]);
 const SteerabilityControlIdSchema = z.enum([
     'workflow_mode',
     'evidence_strictness',
@@ -430,6 +444,16 @@ const ProfileExecutionShape = {
     profileId: z.string().min(1).optional(),
     provider: z.string().min(1).optional(),
     model: z.string().min(1).optional(),
+    upstreamAttribution: z
+        .object({
+            resolvedModel: z.string().min(1).optional(),
+            inferenceProvider: z.string().min(1).optional(),
+            routingAttempt: z.number().int().positive().optional(),
+            routingAttemptCount: z.number().int().positive().optional(),
+            upstreamReportedCostUsd: z.number().nonnegative().optional(),
+        })
+        .strict()
+        .optional(),
 } as const;
 
 const requireReasonCodeWhenNotExecuted = (
@@ -462,6 +486,8 @@ const PlannerExecutionEventSchema = z
         mattered: z.boolean(),
         matteredControlIds: z.array(PlannerMatteredControlIdSchema),
         reasonCode: PlannerExecutionReasonCodeSchema.optional(),
+        structuredOutputOutcome:
+            PlannerStructuredOutputOutcomeSchema.optional(),
         durationMs: z.number().int().nonnegative().optional(),
     })
     .superRefine(requireReasonCodeWhenNotExecuted)
@@ -765,6 +791,18 @@ const validatePlannerStepSignals = (
     signals: StepSignalRecord | undefined,
     context: z.RefinementCtx
 ): void => {
+    if (
+        signals?.structuredOutputOutcome !== undefined &&
+        !PlannerStructuredOutputOutcomeSchema.safeParse(
+            signals.structuredOutputOutcome
+        ).success
+    ) {
+        addSignalIssue(
+            context,
+            'structuredOutputOutcome',
+            'plan steps must include a valid structuredOutputOutcome signal.'
+        );
+    }
     if (!PlannerExecutionPurposeSchema.safeParse(signals?.purpose).success) {
         addSignalIssue(
             context,
@@ -1778,6 +1816,23 @@ export const ResponseMetadataSchema: z.ZodType<ResponseMetadata> = z
     .passthrough();
 
 /**
+ * Read-only trace schema. It keeps the canonical field validation but omits
+ * the write-time TRACE cross-field refinement so a backend display projection
+ * can report an unavailable field without inventing a replacement.
+ */
+export const TraceDisplayMetadataSchema: z.ZodType<TraceDisplayMetadata> = z
+    .object({
+        ...responseMetadataShape,
+        displayIntegrity: z
+            .object({
+                status: z.enum(['complete', 'partial']),
+                unavailableFields: z.array(z.string().min(1)),
+            })
+            .strict(),
+    })
+    .passthrough();
+
+/**
  * @api.operationId: postChat
  * @api.path: POST /api/chat
  */
@@ -2217,7 +2272,7 @@ export const PostTraceCardFromTraceResponseSchema = PostTraceCardResponseSchema;
  * @api.path: GET /api/traces/{responseId}
  */
 export const GetTraceResponseSchema: z.ZodType<GetTraceResponse> =
-    ResponseMetadataSchema;
+    TraceDisplayMetadataSchema;
 
 /**
  * @api.operationId: getTrace
@@ -2226,7 +2281,7 @@ export const GetTraceResponseSchema: z.ZodType<GetTraceResponse> =
 export const GetTraceStaleResponseSchema: z.ZodType<GetTraceStaleResponse> = z
     .object({
         message: z.literal('Trace is stale'),
-        metadata: ResponseMetadataSchema,
+        metadata: TraceDisplayMetadataSchema,
     })
     .passthrough();
 

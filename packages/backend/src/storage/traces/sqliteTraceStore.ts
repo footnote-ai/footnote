@@ -10,7 +10,10 @@ import {
     type Citation,
     type ResponseMetadata,
 } from '@footnote/contracts/policy';
-import type { ResponseCandidate } from '@footnote/contracts/web';
+import type {
+    ResponseCandidate,
+    TraceDisplayMetadata,
+} from '@footnote/contracts/web';
 import {
     normalizePresentationMetadataForCompatibility,
     ResponseCandidateSchema,
@@ -21,6 +24,7 @@ import fs from 'fs';
 import path from 'path';
 import { logger } from '../../utils/logger.js';
 import { traceStoreJsonReplacer } from './traceStoreUtils.js';
+import { projectTraceMetadataForDisplay } from './traceDisplayProjection.js';
 
 const BUSY_MAX_ATTEMPTS = 5;
 const BUSY_RETRY_DELAY_MS = 50;
@@ -501,6 +505,41 @@ export class SqliteTraceStore {
         }
 
         return this.parseTraceMetadataJson(row.metadata_json, responseId);
+    }
+
+    /**
+     * Reads a trace through the backend-owned display projection. Strict trace
+     * writes and canonical internal reads remain unchanged.
+     */
+    async retrieveForDisplay(
+        responseId: string
+    ): Promise<TraceDisplayMetadata | null> {
+        const row = await this.withRetry(
+            () =>
+                this.retrieveStatement.get(responseId) as
+                    { metadata_json: string } | undefined
+        );
+        if (!row) {
+            return null;
+        }
+
+        let parsedJson: unknown;
+        try {
+            parsedJson = JSON.parse(row.metadata_json) as unknown;
+        } catch (error) {
+            traceLogger.warn(
+                `Trace record "${responseId}" failed JSON parsing for display; returning null fail-open.`,
+                {
+                    responseId,
+                    reasonCode: 'trace_json_parse_error',
+                    error:
+                        error instanceof Error ? error.message : String(error),
+                }
+            );
+            return null;
+        }
+
+        return projectTraceMetadataForDisplay(parsedJson, responseId);
     }
 
     async delete(responseId: string): Promise<void> {

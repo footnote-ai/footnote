@@ -81,6 +81,7 @@ type DisplayTrace = {
         modelVersion: string | null;
         conversationSnapshot: string | null;
     } | null;
+    displayIntegrity: NonNullable<ServerMetadata['displayIntegrity']>;
 };
 
 type SummarySignal = {
@@ -258,7 +259,18 @@ const buildDisplayTrace = (traceData: ServerMetadata): DisplayTrace => ({
                   : null,
           }
         : null,
+    displayIntegrity: traceData.displayIntegrity,
 });
+
+const renderPartialProvenanceNotice = (
+    displayIntegrity: ServerMetadata['displayIntegrity'] | undefined
+): JSX.Element | null =>
+    displayIntegrity?.status === 'partial' ? (
+        <p className="trace-page__notice" role="status">
+            Some provenance is unavailable in this stored trace. The fields
+            shown below are the valid fields only; this record is not complete.
+        </p>
+    ) : null;
 
 const tracePageLogger = createScopedLogger('TracePage');
 
@@ -687,6 +699,7 @@ const TracePage = (): JSX.Element => {
     if (loadingState === 'stale') {
         return (
             <TracePageShell>
+                {renderPartialProvenanceNotice(traceData?.displayIntegrity)}
                 <article className="card">
                     <h1>Trace Stale</h1>
                     <p>
@@ -832,6 +845,7 @@ const TracePage = (): JSX.Element => {
     ];
     return (
         <TracePageShell>
+            {renderPartialProvenanceNotice(sanitizedTraceData.displayIntegrity)}
             <header className="trace-page__header" aria-live="polite">
                 <div>
                     <h1>Response Trace</h1>
@@ -987,6 +1001,14 @@ const TracePage = (): JSX.Element => {
                 aria-label="Sources"
             >
                 <h2>Sources and Evidence</h2>
+                {sanitizedTraceData.displayIntegrity.unavailableFields.some(
+                    (field) =>
+                        field === 'citations' || field.startsWith('citations[')
+                ) && (
+                    <p role="status">
+                        Some stored citations are unavailable and were omitted.
+                    </p>
+                )}
                 {traceData?.citations && traceData.citations.length > 0 ? (
                     <ul>
                         {traceData.citations.map(

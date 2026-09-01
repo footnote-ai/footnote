@@ -223,6 +223,11 @@ const baseMetadata: ResponseMetadata = {
     },
 };
 
+const completeTraceMetadata = {
+    ...baseMetadata,
+    displayIntegrity: { status: 'complete' as const, unavailableFields: [] },
+};
+
 type WorkflowMetadataPayload = ResponseMetadata & {
     workflow: NonNullable<ResponseMetadata['workflow']>;
 };
@@ -1933,7 +1938,7 @@ test('PostChatResponseSchema and GetTraceStaleResponseSchema accept extensible r
     const staleParsed = GetTraceStaleResponseSchema.safeParse({
         message: 'Trace is stale',
         metadata: {
-            ...baseMetadata,
+            ...completeTraceMetadata,
             archivalHint: 'cold-storage',
         },
         extraTopLevel: true,
@@ -1943,14 +1948,14 @@ test('PostChatResponseSchema and GetTraceStaleResponseSchema accept extensible r
 
 test('GetTraceApiResponseSchema accepts both live and stale trace payloads', () => {
     assert.equal(
-        GetTraceApiResponseSchema.safeParse(baseMetadata).success,
+        GetTraceApiResponseSchema.safeParse(completeTraceMetadata).success,
         true
     );
 
     assert.equal(
         GetTraceApiResponseSchema.safeParse({
             message: 'Trace is stale',
-            metadata: baseMetadata,
+            metadata: completeTraceMetadata,
         }).success,
         true
     );
@@ -2024,7 +2029,7 @@ test('createSchemaResponseValidator returns normalized validation results', () =
         GetTraceApiResponseSchema
     );
 
-    const success = validateTraceResponse(baseMetadata);
+    const success = validateTraceResponse(completeTraceMetadata);
     assert.equal(success.success, true);
 
     const failure = validateTraceResponse({ invalid: true });

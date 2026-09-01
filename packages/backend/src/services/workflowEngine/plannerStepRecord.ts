@@ -12,6 +12,7 @@ import type {
     PlannerExecutionApplyOutcome,
     PlannerExecutionContractType,
     PlannerExecutionPurpose,
+    PlannerStructuredOutputOutcome,
     StepRecord,
     StepSignals,
     WorkflowPlannerAction,
@@ -43,6 +44,14 @@ type PlannerStepRecordSummary = {
     mattered?: boolean;
     matteredControlIds?: string[];
     routingChainAttempts?: WorkflowRoutingChainAttemptSignal[];
+    structuredOutputOutcome?: PlannerStructuredOutputOutcome;
+    upstreamAttribution?: {
+        resolvedModel?: string;
+        inferenceProvider?: string;
+        routingAttempt?: number;
+        routingAttemptCount?: number;
+        upstreamReportedCostUsd?: number;
+    };
 };
 
 export type BuildPlannerStepRecordInput = {
@@ -130,6 +139,27 @@ export const buildPlannerStepRecord = ({
             effectiveProfileId: summary.effectiveProfileId,
         }),
         ...(summary.provider !== undefined && { provider: summary.provider }),
+        ...(summary.structuredOutputOutcome !== undefined && {
+            structuredOutputOutcome: summary.structuredOutputOutcome,
+        }),
+        ...(summary.upstreamAttribution?.inferenceProvider !== undefined && {
+            upstreamProvider: summary.upstreamAttribution.inferenceProvider,
+        }),
+        ...(summary.upstreamAttribution?.resolvedModel !== undefined && {
+            upstreamModel: summary.upstreamAttribution.resolvedModel,
+        }),
+        ...(summary.upstreamAttribution?.routingAttempt !== undefined && {
+            upstreamRoutingAttempt: summary.upstreamAttribution.routingAttempt,
+        }),
+        ...(summary.upstreamAttribution?.routingAttemptCount !== undefined && {
+            upstreamRoutingAttemptCount:
+                summary.upstreamAttribution.routingAttemptCount,
+        }),
+        ...(summary.upstreamAttribution?.upstreamReportedCostUsd !==
+            undefined && {
+            upstreamReportedCostUsd:
+                summary.upstreamAttribution.upstreamReportedCostUsd,
+        }),
         ...(summary.mattered !== undefined && { mattered: summary.mattered }),
         ...(Array.isArray(summary.matteredControlIds) && {
             matteredControlCount: summary.matteredControlIds.length,

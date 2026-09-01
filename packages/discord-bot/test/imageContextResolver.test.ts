@@ -8,14 +8,14 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import type { ResponseMetadata } from '@footnote/contracts/policy';
+import type { TraceDisplayMetadata } from '@footnote/contracts/web';
 import { botApi } from '../src/api/botApi.js';
 import {
     recoverContextDetailsFromMessage,
     recoverContextDetailsFromTrace,
 } from '../src/commands/image/contextResolver.js';
 
-const createTraceMetadata = (): ResponseMetadata => ({
+const createTraceMetadata = (): TraceDisplayMetadata => ({
     responseId: 'resp_trace_image_1',
     provenance: 'Speculative',
     safetyTier: 'Low',
@@ -27,6 +27,7 @@ const createTraceMetadata = (): ResponseMetadata => ({
     citations: [],
     trace_target: {},
     trace_final: {},
+    displayIntegrity: { status: 'complete', unavailableFields: [] },
     imageGeneration: {
         version: 'v1',
         prompts: {
@@ -186,6 +187,7 @@ test('recoverContextDetailsFromTrace returns null for non-image traces', async (
                 citations: [],
                 trace_target: {},
                 trace_final: {},
+                displayIntegrity: { status: 'complete', unavailableFields: [] },
             },
         },
     })) as unknown as typeof botApi.getTrace;

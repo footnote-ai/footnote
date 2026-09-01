@@ -68,6 +68,7 @@ test('details action renders markdown sections with execution table and trace vi
                 extent: 4,
             },
             trace_final_reason_code: 'runtime_posture_adjustment',
+            displayIntegrity: { status: 'complete', unavailableFields: [] },
             citations: [
                 {
                     title: 'Primary source ] title',
@@ -257,6 +258,7 @@ test('details action truncates oversized payloads while preserving section reada
                 extent: 4,
             },
             trace_final_reason_code: 'runtime_posture_adjustment',
+            displayIntegrity: { status: 'complete', unavailableFields: [] },
         },
     })) as typeof botApi.getTrace;
 
@@ -357,6 +359,7 @@ test('details action shows explicit missing grounding evidence state when metada
             },
             trace_target: {},
             trace_final: {},
+            displayIntegrity: { status: 'complete', unavailableFields: [] },
         },
     })) as typeof botApi.getTrace;
 

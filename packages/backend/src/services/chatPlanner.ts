@@ -24,6 +24,7 @@ import type {
     ExecutionReasonCode,
     PlannerExecutionContractType,
     PlannerExecutionPurpose,
+    PlannerStructuredOutputOutcome,
     ExecutionStatus,
     SafetyTier,
     ResponseTemperament,
@@ -105,6 +106,16 @@ export type ChatPlannerExecution = {
         inputCostUsd: number;
         outputCostUsd: number;
         totalCostUsd: number;
+    };
+    structuredOutputOutcome?: PlannerStructuredOutputOutcome;
+    provider?: string;
+    model?: string;
+    upstreamAttribution?: {
+        resolvedModel?: string;
+        inferenceProvider?: string;
+        routingAttempt?: number;
+        routingAttemptCount?: number;
+        upstreamReportedCostUsd?: number;
     };
 };
 
@@ -230,8 +241,10 @@ type ChatPlannerExecutionRequest = {
  */
 type ChatPlannerExecutionResult = {
     text: string;
+    provider?: string;
     model?: string;
     usage?: GenerationUsage;
+    upstreamAttribution?: ChatPlannerExecution['upstreamAttribution'];
 };
 
 type ChatPlannerExecutor = (
@@ -240,10 +253,30 @@ type ChatPlannerExecutor = (
 
 type ChatPlannerStructuredExecutionResult = {
     decision: unknown;
+    provider?: string;
     model?: string;
     usage?: GenerationUsage;
     rawArguments?: string;
+    upstreamAttribution?: ChatPlannerExecution['upstreamAttribution'];
 };
+
+/** Carries a bounded, serializable classification across the planner seam. */
+export class ChatPlannerStructuredOutputError extends Error {
+    readonly outcome: PlannerStructuredOutputOutcome;
+    readonly retryable: boolean;
+
+    constructor(
+        outcome: PlannerStructuredOutputOutcome,
+        message: string,
+        options?: ErrorOptions,
+        retryable = true
+    ) {
+        super(message, options);
+        this.name = 'ChatPlannerStructuredOutputError';
+        this.outcome = outcome;
+        this.retryable = retryable;
+    }
+}
 
 type ChatPlannerStructuredExecutor = (
     request: ChatPlannerExecutionRequest
@@ -1655,6 +1688,10 @@ export const createChatPlanner = ({
             : 'text_json';
         let plannerResponseText: string | undefined;
         let plannerStructuredArguments: string | undefined;
+        let structuredOutputOutcome: PlannerStructuredOutputOutcome | undefined;
+        let upstreamAttribution: ChatPlannerExecution['upstreamAttribution'];
+        let plannerProvider: string | undefined;
+        let plannerModel: string | undefined;
         const requestSummary = summarizeRequest(request);
         const buildPlannerRequestPayload = (
             mode: ChatPlannerExecutionMode,
@@ -1693,6 +1730,12 @@ export const createChatPlanner = ({
             execution: ChatPlannerExecution
         ): ChatPlannerExecution => ({
             ...execution,
+            ...(structuredOutputOutcome !== undefined && {
+                structuredOutputOutcome,
+            }),
+            ...(upstreamAttribution !== undefined && { upstreamAttribution }),
+            ...(plannerProvider !== undefined && { provider: plannerProvider }),
+            ...(plannerModel !== undefined && { model: plannerModel }),
             ...(plannerUsageRecorded && {
                 usage: {
                     promptTokens: plannerUsageTotals.promptTokens,
@@ -1777,6 +1820,9 @@ export const createChatPlanner = ({
                 expandedRequestPayload
             );
             plannerResponseText = expandedResponse.text;
+            upstreamAttribution = expandedResponse.upstreamAttribution;
+            plannerModel = expandedResponse.model;
+            plannerProvider = expandedResponse.provider;
             recordPlannerUsage(
                 expandedResponse.model || defaultModel,
                 expandedResponse.usage
@@ -1949,6 +1995,10 @@ export const createChatPlanner = ({
                     structuredAbortContext.cleanup();
                 }
                 plannerStructuredArguments = structuredResponse.rawArguments;
+                upstreamAttribution = structuredResponse.upstreamAttribution;
+                plannerModel = structuredResponse.model;
+                plannerProvider = structuredResponse.provider;
+                structuredOutputOutcome = 'strict_success';
                 recordPlannerUsage(
                     structuredResponse.model || defaultModel,
                     structuredResponse.usage
@@ -1964,6 +2014,7 @@ export const createChatPlanner = ({
                     request,
                 });
                 if (normalization.fallbackTier === 'safe_default_plan') {
+                    structuredOutputOutcome = 'policy_invalid';
                     logPlannerPolicyInvalidFallback({
                         normalization,
                         mode: 'structured',
@@ -1989,6 +2040,9 @@ export const createChatPlanner = ({
             plannerMode = 'text_json';
             const plannerResponse = await executePlanner(requestPayload);
             plannerResponseText = plannerResponse.text;
+            upstreamAttribution = plannerResponse.upstreamAttribution;
+            plannerModel = plannerResponse.model;
+            plannerProvider = plannerResponse.provider;
             recordPlannerUsage(
                 plannerResponse.model || defaultModel,
                 plannerResponse.usage
@@ -2026,6 +2080,7 @@ export const createChatPlanner = ({
             }
             */
             if (normalization.fallbackTier === 'safe_default_plan') {
+                structuredOutputOutcome = 'policy_invalid';
                 logPlannerPolicyInvalidFallback({
                     normalization,
                     mode: 'text_json',
@@ -2091,6 +2146,9 @@ export const createChatPlanner = ({
                         )
                     );
                     plannerResponseText = textJsonResponse.text;
+                    upstreamAttribution = textJsonResponse.upstreamAttribution;
+                    plannerModel = textJsonResponse.model;
+                    plannerProvider = textJsonResponse.provider;
                     recordPlannerUsage(
                         textJsonResponse.model || defaultModel,
                         textJsonResponse.usage
@@ -2106,6 +2164,7 @@ export const createChatPlanner = ({
                         request,
                     });
                     if (normalization.fallbackTier === 'safe_default_plan') {
+                        structuredOutputOutcome = 'policy_invalid';
                         logPlannerPolicyInvalidFallback({
                             normalization,
                             mode: 'text_json',
@@ -2113,6 +2172,8 @@ export const createChatPlanner = ({
                             plannerStructuredArguments,
                             plannerResponseText,
                         });
+                    } else {
+                        structuredOutputOutcome = 'text_json_compatibility';
                     }
                     return resolveAdaptivePlan(normalization, {
                         status:
@@ -2141,6 +2202,12 @@ export const createChatPlanner = ({
                 resolvedError instanceof SyntaxError
                     ? 'planner_invalid_output'
                     : 'planner_runtime_error';
+            structuredOutputOutcome =
+                resolvedError instanceof ChatPlannerStructuredOutputError
+                    ? resolvedError.outcome
+                    : resolvedError instanceof SyntaxError
+                      ? 'parse_failure'
+                      : 'runtime_failure';
             logger.warn(
                 `chat planner failed; using fallback plan. reasonCode=${reasonCode} error=${resolvedError instanceof Error ? resolvedError.message : String(resolvedError)}`,
                 {

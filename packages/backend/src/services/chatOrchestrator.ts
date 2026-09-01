@@ -20,8 +20,11 @@ import {
     createChatPlanner,
     type ChatPlan,
     type ChatPlannerInvocationContext,
+    ChatPlannerStructuredOutputError,
 } from './chatPlanner.js';
 import { createOpenAiChatPlannerStructuredExecutor } from './chatPlannerStructuredOpenAi.js';
+import { chatPlannerDecisionStructuredOutput } from './chatPlannerDecisionContract.js';
+import { removePlannerTransportNulls } from './plannerSchemaAdapter.js';
 import {
     resolveActiveProfileOverlayPrompt,
     resolveBotProfileDisplayName,
@@ -187,15 +190,19 @@ export const createChatOrchestrator = ({
         getActivePlannerProfile: () => ModelProfile,
         safetyIdentifier: string | undefined
     ) => {
-        const structuredExecutor =
+        const directOpenAiStructuredExecutor =
             runtimeConfig.openai.plannerStructuredOutputEnabled &&
-            plannerProfile.provider === 'openai' &&
             runtimeConfig.openai.apiKey &&
             generationRuntime.kind !== 'test-runtime'
                 ? createOpenAiChatPlannerStructuredExecutor({
                       apiKey: runtimeConfig.openai.apiKey,
                   })
                 : undefined;
+        const useRuntimeStructuredExecutor =
+            runtimeConfig.openai.plannerStructuredOutputEnabled &&
+            (getActivePlannerProfile().provider === 'openrouter' ||
+                getActivePlannerProfile().provider === 'openai') &&
+            generationRuntime.kind !== 'test-runtime';
 
         return createChatPlanner({
             availableCapabilityProfiles: plannerCapabilityOptions,
@@ -208,25 +215,115 @@ export const createChatOrchestrator = ({
             // low-effort default for other planner providers.
             plannerReasoningEffort:
                 plannerProfile.provider === 'openrouter' ? 'none' : 'low',
-            ...(structuredExecutor !== undefined && {
+            ...((directOpenAiStructuredExecutor !== undefined ||
+                useRuntimeStructuredExecutor) && {
                 executePlannerStructured: async (request) => {
                     const activePlannerProfile = getActivePlannerProfile();
                     const cappedRequest = capGenerationRequestToProfileMax({
                         request,
                         profile: activePlannerProfile,
                     });
-                    return structuredExecutor({
-                        ...cappedRequest,
-                        model: request.model,
-                        reasoningEffort: resolveProfileReasoningEffort(
-                            activePlannerProfile,
-                            request.reasoningEffort,
-                            chatOrchestratorLogger
-                        ),
-                        ...(safetyIdentifier !== undefined && {
-                            safetyIdentifier,
-                        }),
-                    });
+                    const reasoningEffort = resolveProfileReasoningEffort(
+                        activePlannerProfile,
+                        request.reasoningEffort,
+                        chatOrchestratorLogger
+                    );
+                    if (
+                        activePlannerProfile.provider === 'openai' &&
+                        directOpenAiStructuredExecutor !== undefined
+                    ) {
+                        return directOpenAiStructuredExecutor({
+                            ...cappedRequest,
+                            model: activePlannerProfile.providerModel,
+                            reasoningEffort,
+                            ...(safetyIdentifier !== undefined && {
+                                safetyIdentifier,
+                            }),
+                        });
+                    }
+
+                    try {
+                        const result = await generationRuntime.generate({
+                            ...cappedRequest,
+                            model: activePlannerProfile.providerModel,
+                            provider: activePlannerProfile.provider,
+                            capabilities: activePlannerProfile.capabilities,
+                            providerRouting:
+                                activePlannerProfile.providerRouting,
+                            reasoningEffort,
+                            structuredOutput:
+                                chatPlannerDecisionStructuredOutput,
+                            ...(safetyIdentifier !== undefined && {
+                                safetyIdentifier,
+                            }),
+                        });
+                        if (result.completion?.status === 'incomplete') {
+                            throw new ChatPlannerStructuredOutputError(
+                                'incomplete',
+                                'Structured planner output was incomplete.'
+                            );
+                        }
+                        if (result.completion?.status === 'failed') {
+                            throw new ChatPlannerStructuredOutputError(
+                                'runtime_failure',
+                                'Structured planner runtime failed.'
+                            );
+                        }
+                        if (
+                            result.finishReason === 'refusal' ||
+                            result.finishReason === 'content-filter'
+                        ) {
+                            throw new ChatPlannerStructuredOutputError(
+                                'refusal',
+                                'Structured planner output was refused.'
+                            );
+                        }
+                        if (result.text.trim().length === 0) {
+                            throw new ChatPlannerStructuredOutputError(
+                                'no_output',
+                                'Structured planner returned no output.'
+                            );
+                        }
+                        let decision: unknown;
+                        try {
+                            decision = JSON.parse(result.text) as unknown;
+                        } catch (error) {
+                            throw new ChatPlannerStructuredOutputError(
+                                'parse_failure',
+                                'Structured planner output was not valid JSON.',
+                                { cause: error }
+                            );
+                        }
+                        return {
+                            decision: removePlannerTransportNulls(decision),
+                            provider: activePlannerProfile.provider,
+                            model: result.model,
+                            usage: result.usage,
+                            upstreamAttribution: result.upstreamAttribution,
+                            rawArguments: result.text.slice(0, 2_000),
+                        };
+                    } catch (error) {
+                        if (error instanceof ChatPlannerStructuredOutputError) {
+                            throw error;
+                        }
+                        const message =
+                            error instanceof Error
+                                ? error.message
+                                : String(error);
+                        const outcome =
+                            /unsupported|not support|require_parameters/i.test(
+                                message
+                            )
+                                ? 'unsupported_route'
+                                : /schema|validated output|400/i.test(message)
+                                  ? 'schema_rejected'
+                                  : 'runtime_failure';
+                        throw new ChatPlannerStructuredOutputError(
+                            outcome,
+                            'Structured planner runtime failed.',
+                            { cause: error }
+                        );
+                    }
                 },
             }),
             executePlanner: async ({
@@ -252,6 +349,7 @@ export const createChatOrchestrator = ({
                     model: activePlannerProfile.providerModel,
                     provider: activePlannerProfile.provider,
                     capabilities: activePlannerProfile.capabilities,
+                    providerRouting: activePlannerProfile.providerRouting,
                     reasoningEffort: resolveProfileReasoningEffort(
                         activePlannerProfile,
                         reasoningEffort,
@@ -264,8 +362,10 @@ export const createChatOrchestrator = ({
 
                 return {
                     text: plannerResult.text,
+                    provider: activePlannerProfile.provider,
                     model: plannerResult.model,
                     usage: plannerResult.usage,
+                    upstreamAttribution: plannerResult.upstreamAttribution,
                 };
             },
             allowTextJsonCompatibilityFallback:
@@ -442,8 +542,14 @@ export const createChatOrchestrator = ({
             execution: {
                 ...plannerResult.execution,
                 profileId: activePlannerProfile.id,
-                provider: activePlannerProfile.provider,
-                model: activePlannerProfile.providerModel,
+                provider:
+                    plannerResult.execution.upstreamAttribution
+                        ?.inferenceProvider ?? activePlannerProfile.provider,
+                model:
+                    plannerResult.execution.upstreamAttribution
+                        ?.resolvedModel ??
+                    plannerResult.execution.model ??
+                    activePlannerProfile.providerModel,
             },
             ingestion: {
                 outputApplyOutcome:
@@ -483,10 +589,26 @@ export const createChatOrchestrator = ({
                 requiresSearch: false,
                 runWithProfile: async (profile) => {
                     activePlannerProfile = profile;
-                    return chatPlanner.planChat(
+                    const plannerResult = await chatPlanner.planChat(
                         input.request,
                         input.invocationContext
                     );
+                    const transportOutcome =
+                        plannerResult.execution.structuredOutputOutcome;
+                    if (
+                        profile.provider === 'openrouter' &&
+                        (transportOutcome === 'unsupported_route' ||
+                            transportOutcome === 'schema_rejected' ||
+                            transportOutcome === 'incomplete' ||
+                            transportOutcome === 'no_output' ||
+                            transportOutcome === 'runtime_failure')
+                    ) {
+                        throw new ChatPlannerStructuredOutputError(
+                            transportOutcome,
+                            `OpenRouter planner transport failed with outcome ${transportOutcome}.`
+                        );
+                    }
+                    return plannerResult;
                 },
             });
 
