@@ -71,7 +71,7 @@ test('shared conversational prompts prevent response echoing and self-labeling',
     );
     assert.match(
         content,
-        /Do not prefix ordinary replies with a name, bracketed label, colon-heading, or @mention\./
+        /Do not prefix ordinary replies with a self-identifying name, bracketed speaker label, colon-heading, or mention-like token\./
     );
     assert.match(
         content,

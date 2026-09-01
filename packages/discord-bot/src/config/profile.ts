@@ -11,8 +11,10 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {
     readBotProfileConfig as readSharedBotProfileConfig,
+    type BotProfileConfig,
     type ReadBotProfileConfigOptions as SharedReadBotProfileConfigOptions,
 } from '@footnote/config-spec/bot-profile';
+import type { ChatAssistantIdentity } from '@footnote/contracts/web';
 import { bootstrapLogger } from '../utils/logger.js';
 
 export type {
@@ -64,3 +66,11 @@ export const readBotProfileConfig = (
             profileLogger.warn(message);
         },
     });
+
+/** Builds the formatting-only identity descriptor sent by trusted Discord calls. */
+export const toChatAssistantIdentity = (
+    profile: BotProfileConfig
+): ChatAssistantIdentity => ({
+    displayName: profile.displayName,
+    mentionAliases: [...profile.mentionAliases],
+});

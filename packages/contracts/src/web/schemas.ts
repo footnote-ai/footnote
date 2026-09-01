@@ -35,6 +35,7 @@ import {
 import type { ApiResponseValidationResult } from './client-core.js';
 import type {
     AuthenticatedPrincipal,
+    ChatAssistantIdentity,
     GetAuthSessionResponse,
     GetTraceResponse,
     GetTraceStaleResponse,
@@ -91,6 +92,13 @@ const ChatAddressingEvidenceSchema = z
     })
     .strict();
 const ChatPersonaIdSchema = z.string().regex(/^[a-z0-9][a-z0-9-]{0,31}$/);
+/** Identity facts supplied by a trusted surface adapter for formatting only. */
+export const ChatAssistantIdentitySchema: z.ZodType<ChatAssistantIdentity> = z
+    .object({
+        displayName: z.string().trim().min(1).max(64),
+        mentionAliases: z.array(z.string().trim().min(1).max(64)).max(32),
+    })
+    .strict();
 const ChatModeIdSchema = z.enum(['express', 'balanced', 'grounded']);
 const PersonaExpressionSourceSchema = z.enum([
     'request',
@@ -1840,6 +1848,7 @@ export const PostChatRequestSchema = z
     .object({
         surface: ChatSurfaceSchema,
         botPersonaId: ChatPersonaIdSchema.optional(),
+        assistantIdentity: ChatAssistantIdentitySchema.optional(),
         personaExpressionProfileStrength:
             PersonaExpressionStrengthSchema.optional(),
         personaExpressionStrength: PersonaExpressionStrengthSchema.optional(),

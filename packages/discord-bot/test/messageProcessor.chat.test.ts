@@ -889,7 +889,7 @@ test('processMessage replies with a red code-block error when backend chat reque
     );
 });
 
-test('buildChatRequestFromMessage includes botPersonaId and leaves overlay composition to backend', async () => {
+test('buildChatRequestFromMessage includes backend persona routing and formatting identity', async () => {
     const processor = createProcessor();
     const processorAccess = processor as unknown as ProcessorPrivateAccess;
     const originalProfile = runtimeConfig.profile;
@@ -923,6 +923,10 @@ test('buildChatRequestFromMessage includes botPersonaId and leaves overlay compo
         }
 
         assert.equal(built.request.botPersonaId, 'ari-vendor');
+        assert.deepEqual(built.request.assistantIdentity, {
+            displayName: 'Ari',
+            mentionAliases: [],
+        });
         assert.equal(built.request.personaExpressionProfileStrength, 'strong');
         assert.equal(built.request.personaExpressionStrength, undefined);
         assert.equal(built.request.conversation[0].role, 'user');

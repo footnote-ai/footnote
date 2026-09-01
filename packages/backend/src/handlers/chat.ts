@@ -15,6 +15,7 @@ import type {
     ResponseMetadataRuntimeContext,
 } from '../services/responseMetadata.js';
 import type { CreateChatServiceOptions } from '../services/chatService.js';
+import type { PostChatRequest } from '@footnote/contracts/web';
 import { runtimeConfig } from '../config.js';
 import { createChatOrchestrator } from '../services/chatOrchestrator.js';
 import { ConversationContextAssemblyError } from '../services/conversationContextService.js';
@@ -315,10 +316,19 @@ const createChatHandler = ({
                 return;
             }
 
+            // Only authenticated service adapters may supply identity facts for
+            // the formatting boundary. They never select persona or policy.
+            const chatRequest: PostChatRequest =
+                parsedRequestResult.data.surface === 'discord' &&
+                authResult.data.serviceAuth.isTrustedService
+                    ? parsedRequestResult.data
+                    : {
+                          ...parsedRequestResult.data,
+                          assistantIdentity: undefined,
+                      };
+
             // From here on, the request is fully normalized and can delegate to the shared workflow.
-            const chatResponse = await chatOrchestrator.runChat(
-                parsedRequestResult.data
-            );
+            const chatResponse = await chatOrchestrator.runChat(chatRequest);
             sendJson(res, 200, chatResponse);
             logRequest(
                 req,

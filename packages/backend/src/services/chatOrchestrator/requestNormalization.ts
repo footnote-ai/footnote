@@ -12,6 +12,10 @@ import {
     buildConversationContext,
     type ConversationContextEnvelope,
 } from '../conversationContextService.js';
+import {
+    normalizeAssistantHistory,
+    type ChatOutputBoundaryOptions,
+} from '../chatOutputBoundary.js';
 import type { ScopeTuple } from '../executionContractTrustGraph/trustGraphEvidenceTypes.js';
 
 type ConversationNormalizationLogger = {
@@ -30,13 +34,21 @@ const normalizeScopeValue = (value: string | undefined): string | undefined => {
 
 export const normalizeRequest = (
     request: PostChatRequest,
-    logger: ConversationNormalizationLogger
+    logger: ConversationNormalizationLogger,
+    outputBoundaryOptions?: ChatOutputBoundaryOptions
 ): {
     normalizedConversation: PostChatRequest['conversation'];
     normalizedRequest: PostChatRequest;
     contextEnvelope: ConversationContextEnvelope;
 } => {
-    const context = buildConversationContext(request, logger);
+    const modelConversation = outputBoundaryOptions
+        ? normalizeAssistantHistory(request.conversation, outputBoundaryOptions)
+        : request.conversation;
+    const requestForContext = {
+        ...request,
+        conversation: modelConversation,
+    };
+    const context = buildConversationContext(requestForContext, logger);
     const normalizedConversation = context.messages;
 
     return {

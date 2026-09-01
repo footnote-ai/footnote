@@ -309,6 +309,15 @@ export type ChatAddressingEvidence = {
 };
 
 /**
+ * Trusted adapter-supplied identity facts used only for surface formatting.
+ * These facts do not select persona prompts or grant policy authority.
+ */
+export type ChatAssistantIdentity = {
+    displayName: string;
+    mentionAliases: string[];
+};
+
+/**
  * Transport-neutral conversation entry sent to the backend chat workflow.
  */
 export type ChatConversationMessage = {
@@ -368,6 +377,8 @@ export type ChatImageRequest = {
 export type PostChatRequest = {
     surface: ChatSurface;
     botPersonaId?: string;
+    /** Trusted Discord adapter identity used only for response formatting. */
+    assistantIdentity?: ChatAssistantIdentity;
     /** Operator default carried by a configured persona adapter, not a request override. */
     personaExpressionProfileStrength?: PersonaExpressionStrength;
     personaExpressionStrength?: PersonaExpressionStrength;

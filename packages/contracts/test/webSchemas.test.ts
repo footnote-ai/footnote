@@ -46,6 +46,7 @@ import {
     PostIncidentReportResponseSchema,
     PostIncidentStatusRequestSchema,
     PostChatRequestSchema,
+    ChatAssistantIdentitySchema,
     PostChatResponseSchema,
     PostTraceCardFromTraceRequestSchema,
     PostTraceCardFromTraceResponseSchema,
@@ -271,6 +272,10 @@ test('PostChatRequestSchema enforces strict request payload rules', () => {
     assert.equal(
         PostChatRequestSchema.safeParse({
             surface: 'web',
+            assistantIdentity: {
+                displayName: 'Ari Vendor',
+                mentionAliases: ['Ari'],
+            },
             modeId: 'grounded',
             personaExpressionProfileStrength: 'balanced',
             personaExpressionStrength: 'strong',
@@ -288,6 +293,32 @@ test('PostChatRequestSchema enforces strict request payload rules', () => {
             ],
         }).success,
         true
+    );
+
+    assert.equal(
+        ChatAssistantIdentitySchema.safeParse({
+            displayName: 'Ari Vendor',
+            mentionAliases: ['Ari'],
+        }).success,
+        true
+    );
+    assert.equal(
+        ChatAssistantIdentitySchema.safeParse({
+            displayName: 'Ari Vendor',
+            mentionAliases: ['Ari'],
+            promptOverlay: 'must not cross the boundary',
+        }).success,
+        false
+    );
+    assert.equal(
+        ChatAssistantIdentitySchema.safeParse({
+            displayName: 'Ari Vendor',
+            mentionAliases: Array.from(
+                { length: 33 },
+                (_, index) => `alias-${index}`
+            ),
+        }).success,
+        false
     );
 
     assert.equal(
@@ -382,6 +413,10 @@ test('openapi ChatRequest documents optional mode/review/trace request controls'
     assert.match(chatRequestSection, /botPersonaId:\s*\n\s*type:\s*string/);
     assert.match(
         chatRequestSection,
+        /assistantIdentity:\s*\n\s*\$ref: '#\/components\/schemas\/ChatAssistantIdentity'/
+    );
+    assert.match(
+        chatRequestSection,
         /personaExpressionStrength:\s*\n\s*type:\s*string/
     );
     assert.match(
@@ -394,6 +429,10 @@ test('openapi ChatRequest documents optional mode/review/trace request controls'
     assert.equal(
         /required:\s*[\s\S]*-\s*botPersonaId/.test(chatRequestSection),
         false
+    );
+    assert.match(
+        openApiSource,
+        /ChatAssistantIdentity:\s*\n\s*type:\s*object[\s\S]*?mentionAliases:/m
     );
     assert.equal(
         /required:\s*[\s\S]*-\s*modeId/.test(chatRequestSection),

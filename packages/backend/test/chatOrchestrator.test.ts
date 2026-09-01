@@ -354,6 +354,68 @@ test('message plans pass planner generation options into chatService', async () 
     );
 });
 
+test('Discord orchestration decontaminates accidental labels in assistant history', async () => {
+    let finalMessages: Array<{ role: string; content: string }> = [];
+    const orchestrator = createChatOrchestrator({
+        generationRuntime: createGenerationRuntime(async (request) => {
+            if (request.maxOutputTokens === PLANNER_TOKEN_SENTINEL) {
+                return {
+                    text: JSON.stringify({
+                        action: 'message',
+                        modality: 'text',
+                        safetyTier: 'Low',
+                        reasoning: 'Continue the conversation.',
+                        generation: {
+                            reasoningEffort: 'low',
+                            verbosity: 'low',
+                        },
+                    }),
+                    model: 'gpt-5-mini',
+                };
+            }
+
+            finalMessages = request.messages;
+            return {
+                text: 'Ari: Current answer.',
+                model: 'gpt-5-mini',
+                provenance: 'Inferred',
+                citations: [],
+            };
+        }),
+        storeTrace: async () => undefined,
+        buildResponseMetadata: () => createMetadata(),
+        defaultModel: 'gpt-5-mini',
+        recordUsage: () => undefined,
+    });
+
+    const response = await orchestrator.runChat(
+        createChatRequest({
+            assistantIdentity: {
+                displayName: 'Ari Vendor',
+                mentionAliases: ['Ari'],
+            },
+            latestUserInput: 'Continue.',
+            conversation: [
+                { role: 'assistant', content: 'Ari: Earlier answer.' },
+                { role: 'user', content: 'Continue.' },
+            ],
+        })
+    );
+
+    assert.equal(response.action, 'message');
+    assert.equal(response.message, 'Current answer.');
+    assert.equal(
+        finalMessages.some((message) => message.content === 'Earlier answer.'),
+        true
+    );
+    assert.equal(
+        finalMessages.some(
+            (message) => message.content === 'Ari: Earlier answer.'
+        ),
+        false
+    );
+});
+
 test('planner invocation runs inside workflow and precedes generation', async () => {
     const callOrder: string[] = [];
     const orchestrator = createChatOrchestrator({

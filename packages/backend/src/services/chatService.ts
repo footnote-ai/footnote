@@ -93,6 +93,10 @@ import type {
 } from './executionContractTrustGraph/trustGraphEvidenceTypes.js';
 import type { ScopeValidationPolicy } from './executionContractTrustGraph/scopeValidator.js';
 import { logger } from '../utils/logger.js';
+import {
+    normalizeChatOutput,
+    type ChatOutputBoundaryOptions,
+} from './chatOutputBoundary.js';
 
 const BALANCED_PERSONA_EXPRESSION_GUIDANCE =
     buildPersonaExpressionGuidance('balanced');
@@ -878,6 +882,8 @@ export type RunChatMessagesInput = {
     steerabilityControls?: ResponseMetadata['steerabilityControls'];
     /** Active backend persona source for optional presentation-only rewriting. */
     presentationPersona?: PresentationPersona;
+    /** Optional surface-scoped response formatting policy. */
+    outputBoundary?: ChatOutputBoundaryOptions;
 };
 
 export type FinalToolExecutionTelemetry = {
@@ -1094,12 +1100,18 @@ export const createChatService = ({
         ExecutionContract,
         steerabilityControls,
         presentationPersona,
+        outputBoundary,
     }: RunChatMessagesInput): Promise<RunChatMessagesResult> => {
         if (!contextEnvelope) {
             throw new Error(
                 'contextEnvelope is required for runChatMessagesWithOutcome.'
             );
         }
+        const effectiveOutputBoundary: ChatOutputBoundaryOptions =
+            outputBoundary ?? {
+                surface: 'web',
+                preserveLeadingBotLabel: false,
+            };
         const toShortCircuitMessageResult = (
             response: PostChatResponse,
             finalToolExecutionTelemetry: FinalToolExecutionTelemetry
@@ -1110,9 +1122,13 @@ export const createChatService = ({
                 );
             }
 
+            const normalizedMessage = normalizeChatOutput(
+                response.message,
+                effectiveOutputBoundary
+            );
             return {
                 kind: 'message',
-                message: response.message,
+                message: normalizedMessage.content,
                 metadata: response.metadata,
                 generationDurationMs: Math.max(
                     0,
@@ -1821,6 +1837,26 @@ export const createChatService = ({
         const deliveredMessage = generationIncompleteBeforeOutput
             ? SURFACED_INCOMPLETE_GENERATION_MESSAGE
             : generationResult.text;
+        const normalizedDeliveredMessage = normalizeChatOutput(
+            deliveredMessage,
+            effectiveOutputBoundary
+        );
+        const normalizedResponseCandidates = responseCandidates?.map(
+            (candidate) => ({
+                ...candidate,
+                text: normalizeChatOutput(
+                    candidate.text,
+                    effectiveOutputBoundary
+                ).content,
+            })
+        );
+        if (normalizedDeliveredMessage.changed) {
+            logger.debug('chat.output_boundary.normalized', {
+                event: 'chat.output_boundary.normalized',
+                surface: effectiveOutputBoundary.surface,
+                removedForm: normalizedDeliveredMessage.removedForm,
+            });
+        }
         const generationMetadata = buildGenerationMetadata(
             generationResult,
             effectiveNormalizedGeneration,
@@ -2102,7 +2138,7 @@ export const createChatService = ({
         );
         const runtimeContext: ResponseMetadataRuntimeContext = {
             modelVersion: usageModel,
-            conversationSnapshot: `${workflowConversationSnapshot ?? conversationSnapshot}\n\n${generationResult.text}`,
+            conversationSnapshot: `${workflowConversationSnapshot ?? conversationSnapshot}\n\n${normalizedDeliveredMessage.content}`,
             ...(totalDurationMs !== undefined && { totalDurationMs }),
             plannerTemperament: effectivePlannerTemperament,
             ...(finalTemperamentFromAssess !== undefined && {
@@ -2197,7 +2233,7 @@ export const createChatService = ({
                 : normalizedResponseMetadata;
 
         // Trace writes stay fire-and-forget so a storage hiccup does not block the user response.
-        storeTrace(metadataWithTrustGraph, responseCandidates).catch(
+        storeTrace(metadataWithTrustGraph, normalizedResponseCandidates).catch(
             (error) => {
                 logger.error(
                     `Background trace storage error: ${error instanceof Error ? error.message : String(error)}`
@@ -2207,7 +2243,7 @@ export const createChatService = ({
 
         return {
             kind: 'message',
-            message: deliveredMessage,
+            message: normalizedDeliveredMessage.content,
             metadata: metadataWithTrustGraph,
             generationDurationMs,
             ...(workflowPlannerSummary !== undefined && {

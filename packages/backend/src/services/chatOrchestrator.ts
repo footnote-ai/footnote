@@ -6,6 +6,7 @@
  * @footnote-ethics: high - This is the canonical action-selection boundary for user-facing chat behavior.
  */
 import type {
+    ChatAssistantIdentity,
     PostChatRequest,
     PostChatResponse,
 } from '@footnote/contracts/web';
@@ -27,7 +28,6 @@ import { chatPlannerDecisionStructuredOutput } from './chatPlannerDecisionContra
 import { removePlannerTransportNulls } from './plannerSchemaAdapter.js';
 import {
     resolveActiveProfileOverlayPrompt,
-    resolveBotProfileDisplayName,
     resolveChatPersonaProfile,
     resolvePersonaExpression,
     resolvePersonaPresentationGuidance,
@@ -89,6 +89,10 @@ import {
     deriveOpenAiSafetyIdentifier,
     resolveProfileReasoningEffort,
 } from './runtimeRequestControls.js';
+import {
+    buildChatOutputBoundaryOptions,
+    type ChatOutputBoundaryOptions,
+} from './chatOutputBoundary.js';
 
 type CreateChatOrchestratorOptions = CreateChatServiceOptions & {
     weatherForecastTool?: WeatherForecastTool;
@@ -413,13 +417,28 @@ export const createChatOrchestrator = ({
         // Total wall-clock budget for this request from planner entry to
         // final response payload. This is exposed as telemetry only.
         const orchestrationStartedAt = Date.now();
+        const personaProfile = resolveChatPersonaProfile(
+            request,
+            chatOrchestratorLogger
+        );
+        const personaExpression = resolvePersonaExpression(
+            request,
+            personaProfile
+        );
+        const fallbackAssistantIdentity: ChatAssistantIdentity = {
+            displayName: personaProfile.displayName,
+            mentionAliases: [...personaProfile.mentionAliases],
+        };
+        const outputBoundaryOptions: ChatOutputBoundaryOptions =
+            buildChatOutputBoundaryOptions(request, fallbackAssistantIdentity);
         let normalizedConversation: PostChatRequest['conversation'];
         let normalizedRequest: PostChatRequest;
         let contextEnvelope: ConversationContextEnvelope;
         try {
             const normalized = normalizeRequest(
                 request,
-                chatOrchestratorLogger
+                chatOrchestratorLogger,
+                outputBoundaryOptions
             );
             normalizedConversation = normalized.normalizedConversation;
             normalizedRequest = normalized.normalizedRequest;
@@ -437,6 +456,7 @@ export const createChatOrchestrator = ({
             });
             throw error;
         }
+        const botProfileDisplayName = personaProfile.displayName;
         const clarificationContinuation =
             resolveWeatherClarificationContinuation(normalizedRequest);
         let evaluatorExecutionContext: EvaluatorExecutionContext | undefined;
@@ -514,18 +534,6 @@ export const createChatOrchestrator = ({
         evaluatorExecutionContext = evaluatorResult.evaluatorExecutionContext;
         const evaluatorSafetyTierHint = evaluatorResult.evaluatorSafetyTierHint;
 
-        const personaProfile = resolveChatPersonaProfile(
-            normalizedRequest,
-            chatOrchestratorLogger
-        );
-        const personaExpression = resolvePersonaExpression(
-            normalizedRequest,
-            personaProfile
-        );
-        const botProfileDisplayName = resolveBotProfileDisplayName(
-            normalizedRequest,
-            chatOrchestratorLogger
-        );
         // Planner is a bounded, execution-relevant helper. It can suggest
         // action-selection details, but it is not policy authority, contract
         // authority, runtime ownership, or a second orchestrator.
@@ -1106,6 +1114,7 @@ export const createChatOrchestrator = ({
             planContinuationBuilder,
             contextStepExecutorRegistry,
             latestUserInput: normalizedRequest.latestUserInput,
+            outputBoundary: outputBoundaryOptions,
             ExecutionContract: resolvedExecutionContract,
             ...(executionContractScopeTuple !== undefined && {
                 executionContractTrustGraphContext: {
