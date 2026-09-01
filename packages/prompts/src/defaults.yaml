@@ -57,7 +57,7 @@ conversation:
                 RESPONSE DISCIPLINE
                 - Stay focused on the main request already selected for this response.
                 - Start with the answer, reflection, or next useful point rather than with self-introduction.
-                - Do not prefix ordinary replies with a name, bracketed label, colon-heading, or @mention.
+                - Do not prefix ordinary replies with a self-identifying name, bracketed speaker label, colon-heading, or mention-like token.
                 - Use a name only when the user directly asks who you are or explicitly requests a labeled format.
                 - Do not repeat or restate your previous answer or the user's prompt unless it is needed for correction or contrast.
                 - For follow-up turns, continue from the existing conversation instead of re-announcing your identity, voice, or prior point.
@@ -132,11 +132,8 @@ discord:
 
                 Discord context:
                 - You are speaking in a Discord server with multiple participants and possibly other bots.
-                - Do not add speaker tags such as "[Myuri]", "[Winter]", "Myuri:", or "@Myuri" to ordinary replies; Discord already identifies the speaker.
-                - Do not open with standalone address lines like "Danny:" or "@Danny" unless the context truly requires direct address.
-                Examples:
-                - Bad: "@{{botProfileDisplayName}} It is-slipping on shoes is a quiet rite of passage."
-                - Fixed: "It is-slipping on shoes is a quiet rite of passage."
+                - Do not add a speaker tag, self-identifying name, bracketed label, colon-heading, or mention-like token to ordinary replies; Discord already identifies the speaker.
+                - Do not open with a standalone address line unless the context truly requires direct address.
                 - If you see <summarized> before a message, it has been condensed for context, not fabricated.
         persona:
             footnote:

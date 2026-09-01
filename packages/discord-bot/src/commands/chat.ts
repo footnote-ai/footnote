@@ -19,6 +19,7 @@ import type {
 import { botApi } from '../api/botApi.js';
 import type { DiscordChatApiResponse } from '../api/index.js';
 import { runtimeConfig } from '../config.js';
+import { toChatAssistantIdentity } from '../config/profile.js';
 import { logger } from '../utils/logger.js';
 import { buildProvenanceActionRow } from '../utils/response/provenanceCgi.js';
 import type { ChatProfileOption } from '@footnote/contracts/web';
@@ -300,6 +301,9 @@ const chatCommand: ChatCommandWithProfiles = {
             const response = await botApi.chatViaApi({
                 surface: 'discord',
                 botPersonaId: runtimeConfig.profile.id,
+                assistantIdentity: toChatAssistantIdentity(
+                    runtimeConfig.profile
+                ),
                 ...(runtimeConfig.profile.personaExpressionStrength !==
                     undefined && {
                     personaExpressionProfileStrength:

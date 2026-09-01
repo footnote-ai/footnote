@@ -309,6 +309,18 @@ export type ChatAddressingEvidence = {
 };
 
 /**
+ * @description: Serializable adapter-supplied identity facts used only for surface formatting.
+ * @footnote-scope: interface
+ * @footnote-module: ChatAssistantIdentity
+ * @footnote-risk: low - Invalid identity data can alter presentation but cannot select policy or persona behavior.
+ * @footnote-ethics: medium - Clear identity boundaries protect user trust without granting authority to adapters.
+ */
+export type ChatAssistantIdentity = {
+    displayName: string;
+    mentionAliases: string[];
+};
+
+/**
  * Transport-neutral conversation entry sent to the backend chat workflow.
  */
 export type ChatConversationMessage = {
@@ -368,6 +380,8 @@ export type ChatImageRequest = {
 export type PostChatRequest = {
     surface: ChatSurface;
     botPersonaId?: string;
+    /** Trusted Discord adapter identity used only for response formatting. */
+    assistantIdentity?: ChatAssistantIdentity;
     /** Operator default carried by a configured persona adapter, not a request override. */
     personaExpressionProfileStrength?: PersonaExpressionStrength;
     personaExpressionStrength?: PersonaExpressionStrength;

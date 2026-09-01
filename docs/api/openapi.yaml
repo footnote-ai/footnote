@@ -97,7 +97,9 @@ paths:
                 - packages/backend/src/handlers/chat.ts#createChatHandler
                 - packages/web/src/utils/api.ts#chatQuestion
                 - packages/contracts/src/web/types.ts#PostChatRequest
+                - packages/contracts/src/web/types.ts#ChatAssistantIdentity
                 - packages/contracts/src/web/types.ts#PostChatResponse
+                - packages/contracts/src/web/schemas.ts#ChatAssistantIdentitySchema
                 - packages/contracts/src/web/schemas.ts#ResponseMetadataSchema
                 - packages/contracts/src/web/schemas.ts#PresentationMetadataSchema
                 - packages/contracts/src/policy/types.ts#PresentationMetadata
@@ -110,6 +112,7 @@ paths:
                 Public web callers use Turnstile when enabled; trusted internal callers may authenticate with service headers.
                 Send X-Session-Id / X-Turnstile-Token headers when needed for browser traffic.
                 Optionally provide `botPersonaId` to select the backend-owned bot persona overlay (discord).
+                Trusted Discord adapters may provide `assistantIdentity` for formatting-only cleanup of accidental self-labels. The backend does not use it for persona, policy, or provenance authority.
                 Optionally provide `personaExpressionStrength` to request prose-only persona expression (`subtle`, `balanced`, or `strong`).
                 Configured Discord adapters carry their operator default separately as `personaExpressionProfileStrength`; the backend records that value as profile-sourced rather than request-sourced.
                 Optionally provide `maxReviewCycles` and `traceTarget` to tune workflow depth and TRACE posture for this request.
@@ -1858,6 +1861,8 @@ components:
                     type: string
                     pattern: '^[a-z0-9][a-z0-9-]{0,31}$'
                     description: Optional bot persona selector used for backend-owned persona overlays (discord).
+                assistantIdentity:
+                    $ref: '#/components/schemas/ChatAssistantIdentity'
                 personaExpressionStrength:
                     type: string
                     enum: [subtle, balanced, strong]
@@ -1975,6 +1980,28 @@ components:
                 - trigger
                 - latestUserInput
                 - conversation
+            additionalProperties: false
+
+        ChatAssistantIdentity:
+            type: object
+            description: Trusted Discord adapter identity used only for response-formatting cleanup; it does not select persona prompts or policy authority.
+            properties:
+                displayName:
+                    type: string
+                    minLength: 1
+                    maxLength: 64
+                    pattern: '.*\\S.*'
+                mentionAliases:
+                    type: array
+                    maxItems: 32
+                    items:
+                        type: string
+                        minLength: 1
+                        maxLength: 64
+                        pattern: '.*\\S.*'
+            required:
+                - displayName
+                - mentionAliases
             additionalProperties: false
 
         ChatProfileOption:

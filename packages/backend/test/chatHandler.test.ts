@@ -40,6 +40,22 @@ type MutableEnv = NodeJS.ProcessEnv & {
     REFLECT_SERVICE_RATE_LIMIT_WINDOW_MS?: string;
 };
 
+const restoreTurnstileEnv = (
+    env: MutableEnv,
+    key:
+        | 'TURNSTILE_SECRET_KEY'
+        | 'TURNSTILE_SITE_KEY'
+        | 'TURNSTILE_ALLOWED_HOSTNAMES',
+    value: string | undefined
+): void => {
+    if (value === undefined) {
+        delete env[key];
+        return;
+    }
+
+    env[key] = value;
+};
+
 type TestServer = {
     close: () => Promise<void>;
     url: string;
@@ -47,6 +63,7 @@ type TestServer = {
 
 type CreateTestServerOptions = {
     generationRuntime?: GenerationRuntime | null;
+    responseText?: string;
     ipRateLimiter?: SimpleRateLimiter;
     sessionRateLimiter?: SimpleRateLimiter;
     serviceRateLimiter?: SimpleRateLimiter;
@@ -215,7 +232,7 @@ const createTestServer = (
                           }
 
                           return {
-                              text: 'service response',
+                              text: options.responseText ?? 'service response',
                               model: 'gpt-5-mini',
                               provenance: 'Inferred',
                               citations: [],
@@ -280,7 +297,9 @@ test('chat accepts trusted service calls with x-trace-token and no turnstile tok
     env.TURNSTILE_SECRET_KEY = 'turnstile-secret';
     env.TURNSTILE_SITE_KEY = 'turnstile-site';
 
-    const server = await createTestServer();
+    const server = await createTestServer({
+        responseText: 'Ari: service response',
+    });
 
     try {
         const response = await fetch(`${server.url}/api/chat`, {
@@ -289,7 +308,14 @@ test('chat accepts trusted service calls with x-trace-token and no turnstile tok
                 'Content-Type': 'application/json',
                 'X-Trace-Token': 'trace-secret',
             },
-            body: JSON.stringify(createChatRequest()),
+            body: JSON.stringify(
+                createChatRequest({
+                    assistantIdentity: {
+                        displayName: 'Ari Vendor',
+                        mentionAliases: ['Ari'],
+                    },
+                })
+            ),
         });
 
         assert.equal(response.status, 200);
@@ -693,9 +719,95 @@ test('chat accepts public calls when allowlist is unset and Turnstile hostname m
     } finally {
         globalThis.fetch = originalFetch;
         await server.close();
-        env.TURNSTILE_SECRET_KEY = previousTurnstileSecret;
-        env.TURNSTILE_SITE_KEY = previousTurnstileSite;
-        env.TURNSTILE_ALLOWED_HOSTNAMES = previousAllowedHostnames;
+        restoreTurnstileEnv(
+            env,
+            'TURNSTILE_SECRET_KEY',
+            previousTurnstileSecret
+        );
+        restoreTurnstileEnv(env, 'TURNSTILE_SITE_KEY', previousTurnstileSite);
+        restoreTurnstileEnv(
+            env,
+            'TURNSTILE_ALLOWED_HOSTNAMES',
+            previousAllowedHostnames
+        );
+    }
+});
+
+test('chat ignores formatting identity supplied by an untrusted public caller', async () => {
+    const env = process.env as MutableEnv;
+    const previousTurnstileSecret = env.TURNSTILE_SECRET_KEY;
+    const previousTurnstileSite = env.TURNSTILE_SITE_KEY;
+    const previousAllowedHostnames = env.TURNSTILE_ALLOWED_HOSTNAMES;
+    const originalFetch = globalThis.fetch;
+
+    env.TURNSTILE_SECRET_KEY = 'turnstile-secret';
+    env.TURNSTILE_SITE_KEY = 'turnstile-site';
+    delete env.TURNSTILE_ALLOWED_HOSTNAMES;
+
+    globalThis.fetch = (async (input, init) => {
+        const url =
+            typeof input === 'string'
+                ? input
+                : input instanceof URL
+                  ? input.toString()
+                  : input.url;
+        if (
+            url === 'https://challenges.cloudflare.com/turnstile/v0/siteverify'
+        ) {
+            return new Response(
+                JSON.stringify({
+                    success: true,
+                    hostname: '127.0.0.1',
+                    'challenge-ts': new Date().toISOString(),
+                }),
+                {
+                    status: 200,
+                    headers: { 'Content-Type': 'application/json' },
+                }
+            );
+        }
+
+        return originalFetch(input, init);
+    }) as typeof fetch;
+
+    const server = await createTestServer({
+        responseText: 'Ari: service response',
+    });
+
+    try {
+        const response = await fetch(`${server.url}/api/chat`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-Turnstile-Token': 'captcha-token',
+            },
+            body: JSON.stringify(
+                createChatRequest({
+                    assistantIdentity: {
+                        displayName: 'Ari Vendor',
+                        mentionAliases: ['Ari'],
+                    },
+                })
+            ),
+        });
+
+        assert.equal(response.status, 200);
+        const payload = (await response.json()) as { message: string };
+        assert.equal(payload.message, 'Ari: service response');
+    } finally {
+        globalThis.fetch = originalFetch;
+        await server.close();
+        restoreTurnstileEnv(
+            env,
+            'TURNSTILE_SECRET_KEY',
+            previousTurnstileSecret
+        );
+        restoreTurnstileEnv(env, 'TURNSTILE_SITE_KEY', previousTurnstileSite);
+        restoreTurnstileEnv(
+            env,
+            'TURNSTILE_ALLOWED_HOSTNAMES',
+            previousAllowedHostnames
+        );
     }
 });
 

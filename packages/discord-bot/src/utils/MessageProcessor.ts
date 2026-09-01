@@ -27,6 +27,7 @@ import { logger } from './logger.js';
 import { ResponseHandler } from './response/ResponseHandler.js';
 import { RateLimiter } from './RateLimiter.js';
 import { runtimeConfig } from '../config.js';
+import { toChatAssistantIdentity } from '../config/profile.js';
 import {
     DEFAULT_IMAGE_MODEL,
     DEFAULT_IMAGE_OUTPUT_COMPRESSION,
@@ -601,6 +602,9 @@ export class MessageProcessor {
             request: {
                 surface: 'discord',
                 botPersonaId: runtimeConfig.profile.id,
+                assistantIdentity: toChatAssistantIdentity(
+                    runtimeConfig.profile
+                ),
                 ...(runtimeConfig.profile.personaExpressionStrength !==
                     undefined && {
                     personaExpressionProfileStrength:

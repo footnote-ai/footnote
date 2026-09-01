@@ -80,7 +80,10 @@ test('resolves Winter as a first-class Discord persona with its authored overlay
         profile.promptOverlay.path ?? '',
         /profile-overlays[\\/]winter\.md$/
     );
-    assert.match(profile.promptOverlay.text ?? '', /You are Winter: sharp/);
+    assert.match(
+        profile.promptOverlay.text ?? '',
+        /The active persona is Winter, sharp/
+    );
     assert.match(
         profile.promptOverlay.text ?? '',
         /Winter is permissive, not credulous/

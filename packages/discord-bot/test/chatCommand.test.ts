@@ -169,6 +169,10 @@ test('/chat forwards prompt/workflow options and renders message action', async 
             {
                 surface: 'discord',
                 botPersonaId: 'footnote',
+                assistantIdentity: {
+                    displayName: 'Footnote',
+                    mentionAliases: [],
+                },
                 modeId: 'grounded',
                 maxReviewCycles: 4,
                 traceTarget: {
@@ -280,6 +284,10 @@ test('/chat renders the shared basic output fixture', async () => {
             {
                 surface: 'discord',
                 botPersonaId: 'footnote',
+                assistantIdentity: {
+                    displayName: 'Footnote',
+                    mentionAliases: [],
+                },
                 trigger: {
                     kind: 'submit',
                     messageId: 'interaction-1',

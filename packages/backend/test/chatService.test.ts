@@ -150,6 +150,55 @@ test('createChatService records backend token usage and estimated cost', async (
     assert.equal(usageRecords[0].totalCostUsd, 0.00019);
 });
 
+test('runChatMessages normalizes Discord output at the backend boundary', async () => {
+    const chatService = createChatService({
+        generationRuntime: {
+            kind: 'test-runtime',
+            async generate() {
+                return {
+                    text: 'Ari: Current answer.',
+                    model: 'gpt-5-mini',
+                    usage: {
+                        promptTokens: 10,
+                        completionTokens: 5,
+                        totalTokens: 15,
+                    },
+                    provenance: 'Inferred',
+                    citations: [],
+                };
+            },
+        },
+        storeTrace: async () => undefined,
+        buildResponseMetadata: () => createMetadata(),
+        defaultModel: 'gpt-5-mini',
+        recordUsage: () => undefined,
+        chatWorkflowConfig: {
+            modeId: 'fast',
+            reviewLoopEnabled: false,
+            maxIterations: 0,
+            maxDurationMs: 15000,
+        },
+    });
+
+    const response = await chatService.runChatMessages({
+        messages: [
+            { role: 'assistant', content: 'Ari: Earlier answer.' },
+            { role: 'user', content: 'Continue.' },
+        ],
+        conversationSnapshot: 'Continue.',
+        outputBoundary: {
+            surface: 'discord',
+            assistantIdentity: {
+                displayName: 'Ari Vendor',
+                mentionAliases: ['Ari'],
+            },
+            preserveLeadingBotLabel: false,
+        },
+    });
+
+    assert.equal(response.message, 'Current answer.');
+});
+
 test('runChat surfaces a controlled message when reasoning exhausts output before visible text', async () => {
     let capturedGeneration:
         | NonNullable<

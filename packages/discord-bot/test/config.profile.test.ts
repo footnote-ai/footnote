@@ -15,6 +15,7 @@ import path from 'path';
 import {
     parseBotProfileConfig,
     readBotProfileConfig,
+    toChatAssistantIdentity,
     type BotProfileConfig,
 } from '../src/config/profile.js';
 
@@ -34,6 +35,25 @@ const restoreProcessEnv = (originalEnv: NodeJS.ProcessEnv): void => {
         process.env[key] = value;
     }
 };
+
+test('toChatAssistantIdentity exposes only formatting identity facts', () => {
+    const profile: BotProfileConfig = {
+        id: 'ari-vendor',
+        displayName: 'Ari',
+        mentionAliases: ['ari-vendor'],
+        promptOverlay: {
+            source: 'inline',
+            text: 'private overlay',
+            path: null,
+            length: 15,
+        },
+    };
+
+    assert.deepEqual(toChatAssistantIdentity(profile), {
+        displayName: 'Ari',
+        mentionAliases: ['ari-vendor'],
+    });
+});
 
 test('readBotProfileConfig applies defaults when env values are missing', () => {
     const parsed = readBotProfileConfig({

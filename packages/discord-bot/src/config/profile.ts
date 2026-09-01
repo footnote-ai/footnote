@@ -11,8 +11,10 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {
     readBotProfileConfig as readSharedBotProfileConfig,
+    type BotProfileConfig,
     type ReadBotProfileConfigOptions as SharedReadBotProfileConfigOptions,
 } from '@footnote/config-spec/bot-profile';
+import type { ChatAssistantIdentity } from '@footnote/contracts/web';
 import { bootstrapLogger } from '../utils/logger.js';
 
 export type {
@@ -64,3 +66,17 @@ export const readBotProfileConfig = (
             profileLogger.warn(message);
         },
     });
+
+/**
+ * @description: Projects configured Discord profile identity into formatting-only chat request data.
+ * @footnote-scope: utility
+ * @footnote-module: ChatAssistantIdentityProjection
+ * @footnote-risk: low - Projection errors can affect Discord formatting but do not change backend policy authority.
+ * @footnote-ethics: medium - Accurate identity presentation supports transparent assistant behavior.
+ */
+export const toChatAssistantIdentity = (
+    profile: BotProfileConfig
+): ChatAssistantIdentity => ({
+    displayName: profile.displayName,
+    mentionAliases: [...profile.mentionAliases],
+});
