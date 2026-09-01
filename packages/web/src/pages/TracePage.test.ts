@@ -33,3 +33,14 @@ test('trace response versions load final-first with controls, warnings, and unav
     assert.match(source, /getPresentationTraceSummary/);
     assert.match(source, /Main answer after presentation fallback/);
 });
+
+test('trace page makes partial provenance explicit', async () => {
+    const source = await readFile(tracePagePath, 'utf8');
+
+    assert.match(source, /Some provenance is unavailable in this stored trace/);
+    assert.match(source, /this record[\s\S]{0,80}not complete/);
+    assert.match(
+        source,
+        /Some stored citations are unavailable and were omitted/
+    );
+});

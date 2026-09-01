@@ -8,6 +8,7 @@
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { createHash, randomUUID } from 'node:crypto';
 import type { ResponseMetadata } from '@footnote/contracts/policy';
+import type { TraceDisplayMetadata } from '@footnote/contracts/web';
 import {
     PostTraceCardFromTraceRequestSchema,
     PostTraceCardRequestSchema,
@@ -42,7 +43,7 @@ type TraceHandlerDeps = {
 
 // Read results are modeled as simple statuses to avoid nested try/catch.
 type TraceReadResult =
-    | { status: 'found'; metadata: ResponseMetadata }
+    | { status: 'found'; metadata: TraceDisplayMetadata }
     | { status: 'not-found' }
     | { status: 'error'; errorMessage: string };
 
@@ -97,7 +98,7 @@ const readTraceMetadata = async (
     responseId: string
 ): Promise<TraceReadResult> => {
     try {
-        const metadata = await store.retrieve(responseId);
+        const metadata = await store.retrieveForDisplay(responseId);
         if (!metadata) {
             return { status: 'not-found' };
         }
