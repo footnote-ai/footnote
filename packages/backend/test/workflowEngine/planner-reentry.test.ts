@@ -203,6 +203,16 @@ test('runBoundedReviewWorkflow returns latest safe draft when planner re-entry f
         ),
         false
     );
+    const replanStep = result.workflowLineage.steps.find(
+        (step) => step.stepKind === 'plan' && step.attempt === 2
+    );
+    assert.ok(replanStep);
+    assert.equal(
+        replanStep.outcome.signals?.purpose,
+        'chat_orchestrator_action_selection'
+    );
+    assert.equal(replanStep.outcome.signals?.contractType, 'fallback');
+    assert.equal(replanStep.outcome.signals?.applyOutcome, 'not_applied');
 });
 
 test('runBoundedReviewWorkflow attaches planner plan step to lineage and links initial generate step to planner root', async () => {

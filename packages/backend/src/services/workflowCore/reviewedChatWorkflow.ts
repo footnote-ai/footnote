@@ -2116,6 +2116,18 @@ export const runBoundedReviewWorkflow = async (
                     model: plannerResult.execution.model,
                     usage: plannerResult.execution.usage,
                     estimatedCost: plannerResult.execution.cost,
+                    signals: {
+                        purpose: plannerResult.execution.purpose,
+                        contractType: plannerResult.execution.contractType,
+                        applyOutcome:
+                            plannerResult.ingestion.outputApplyOutcome ===
+                            'accepted'
+                                ? 'applied'
+                                : plannerResult.ingestion.outputApplyOutcome ===
+                                    'partially_applied'
+                                  ? 'adjusted_by_policy'
+                                  : 'not_applied',
+                    },
                 }),
             };
         } catch (error) {
@@ -2131,6 +2143,11 @@ export const runBoundedReviewWorkflow = async (
                         'Planner re-entry failed; the latest valid draft was preserved.',
                     reasonCode: 'planner_runtime_error',
                     terminationReason: 'executor_error_fail_open',
+                    signals: {
+                        purpose: 'chat_orchestrator_action_selection',
+                        contractType: 'fallback',
+                        applyOutcome: 'not_applied',
+                    },
                 }),
             };
         }
