@@ -2160,6 +2160,23 @@ export const runBoundedReviewWorkflow = async (
                                           .structuredOutputOutcome,
                               }
                             : {}),
+                        ...(plannerResult.execution.upstreamAttribution
+                            ?.inferenceProvider !== undefined
+                            ? {
+                                  upstreamProvider:
+                                      plannerResult.execution
+                                          .upstreamAttribution
+                                          .inferenceProvider,
+                              }
+                            : {}),
+                        ...(plannerResult.execution.upstreamAttribution
+                            ?.resolvedModel !== undefined
+                            ? {
+                                  upstreamModel:
+                                      plannerResult.execution
+                                          .upstreamAttribution.resolvedModel,
+                              }
+                            : {}),
                     },
                 }),
             };

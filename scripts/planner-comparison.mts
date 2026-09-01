@@ -79,27 +79,42 @@ const readMetric = (
         };
     } | null,
     plannerResult: Awaited<ReturnType<ReturnType<typeof createChatPlanner>['planChat']>> | null,
-    validTransport: boolean,
     note?: string
-): ComparisonMetric => ({
-    mode,
-    status,
-    validTransport,
-    normalizationFallback:
-        plannerResult?.execution.structuredOutputOutcome === 'policy_invalid' ||
-        plannerResult?.execution.status === 'failed',
-    latencyMs: runtimeResult ? Date.now() - startedAt : null,
-    promptTokens: runtimeResult?.usage?.promptTokens ?? null,
-    completionTokens: runtimeResult?.usage?.completionTokens ?? null,
-    totalTokens: runtimeResult?.usage?.totalTokens ?? null,
-    costUsd: plannerResult?.execution.cost?.totalCostUsd ?? null,
-    actualProvider: mode === 'luna_strict' ? 'openai' : 'openrouter',
-    actualModel: runtimeResult?.model ?? null,
-    upstreamProvider: runtimeResult?.upstreamAttribution?.inferenceProvider ?? null,
-    upstreamModel: runtimeResult?.upstreamAttribution?.resolvedModel ?? null,
-    fallbackFrequency: plannerResult?.execution.status === 'failed' ? 1 : 0,
-    ...(note !== undefined && { note }),
-});
+): ComparisonMetric => {
+    const structuredOutputOutcome =
+        plannerResult?.execution.structuredOutputOutcome;
+    const plannerSucceeded = plannerResult?.execution.status === 'executed';
+    const strictSuccess =
+        plannerSucceeded && structuredOutputOutcome === 'strict_success';
+    const textJsonRecovery =
+        plannerSucceeded &&
+        structuredOutputOutcome === 'text_json_compatibility';
+    const fallbackOccurred =
+        plannerResult === null ||
+        plannerResult?.execution.status === 'failed' ||
+        structuredOutputOutcome === 'policy_invalid' ||
+        textJsonRecovery;
+
+    return {
+        mode,
+        status,
+        validTransport: strictSuccess,
+        normalizationFallback: fallbackOccurred,
+        latencyMs: runtimeResult ? Date.now() - startedAt : null,
+        promptTokens: runtimeResult?.usage?.promptTokens ?? null,
+        completionTokens: runtimeResult?.usage?.completionTokens ?? null,
+        totalTokens: runtimeResult?.usage?.totalTokens ?? null,
+        costUsd: plannerResult?.execution.cost?.totalCostUsd ?? null,
+        actualProvider: mode === 'luna_strict' ? 'openai' : 'openrouter',
+        actualModel: runtimeResult?.model ?? null,
+        upstreamProvider:
+            runtimeResult?.upstreamAttribution?.inferenceProvider ?? null,
+        upstreamModel:
+            runtimeResult?.upstreamAttribution?.resolvedModel ?? null,
+        fallbackFrequency: fallbackOccurred ? 1 : 0,
+        ...(note !== undefined && { note }),
+    };
+};
 
 const runComparison = async (
     mode: ComparisonMode
@@ -122,11 +137,15 @@ const runComparison = async (
                 maxOutputTokens,
                 reasoningEffort,
                 verbosity,
+                providerRouting: {
+                    openrouter: { allowFallbacks: true },
+                },
             });
             return {
                 text: runtimeResult.text,
                 model: runtimeResult.model,
                 usage: runtimeResult.usage,
+                upstreamAttribution: runtimeResult.upstreamAttribution,
             };
         },
         ...(mode !== 'deepseek_text_json' && {
@@ -138,6 +157,9 @@ const runComparison = async (
                     maxOutputTokens,
                     reasoningEffort,
                     verbosity,
+                    providerRouting: {
+                        openrouter: { allowFallbacks: true },
+                    },
                     structuredOutput: chatPlannerDecisionStructuredOutput,
                 });
                 const decision = JSON.parse(runtimeResult.text) as unknown;
@@ -145,6 +167,7 @@ const runComparison = async (
                     decision: removePlannerTransportNulls(decision),
                     model: runtimeResult.model,
                     usage: runtimeResult.usage,
+                    upstreamAttribution: runtimeResult.upstreamAttribution,
                 };
             },
         }),
@@ -160,8 +183,7 @@ const runComparison = async (
             plannerResult.execution.status,
             startedAt,
             runtimeResult,
-            plannerResult,
-            runtimeResult !== null
+            plannerResult
         );
     } catch (error) {
         return readMetric(
@@ -170,7 +192,6 @@ const runComparison = async (
             startedAt,
             runtimeResult,
             null,
-            false,
             error instanceof Error ? error.name : 'runtime_error'
         );
     }

@@ -104,6 +104,7 @@ test('resolveProvenanceMetadata rejects mismatched trace payload response IDs', 
                 citations: [],
                 trace_target: {},
                 trace_final: {},
+                displayIntegrity: { status: 'complete', unavailableFields: [] },
             },
         }) as Awaited<ReturnType<typeof botApi.getTrace>>;
 

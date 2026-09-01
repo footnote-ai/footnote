@@ -72,7 +72,11 @@
             },
             "checks": {
                 "deterministic": ["planner_schema_valid", "trace_complete"],
-                "objective": ["retrieval_requested", "current_state_intent"],
+                "objective": [
+                    "action_message",
+                    "retrieval_requested",
+                    "current_state_intent"
+                ],
                 "qualitative": ["retrieval_scope_is_bounded"]
             }
         },

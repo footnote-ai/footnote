@@ -444,6 +444,16 @@ const ProfileExecutionShape = {
     profileId: z.string().min(1).optional(),
     provider: z.string().min(1).optional(),
     model: z.string().min(1).optional(),
+    upstreamAttribution: z
+        .object({
+            resolvedModel: z.string().min(1).optional(),
+            inferenceProvider: z.string().min(1).optional(),
+            routingAttempt: z.number().int().positive().optional(),
+            routingAttemptCount: z.number().int().positive().optional(),
+            upstreamReportedCostUsd: z.number().nonnegative().optional(),
+        })
+        .strict()
+        .optional(),
 } as const;
 
 const requireReasonCodeWhenNotExecuted = (
@@ -478,16 +488,6 @@ const PlannerExecutionEventSchema = z
         reasonCode: PlannerExecutionReasonCodeSchema.optional(),
         structuredOutputOutcome:
             PlannerStructuredOutputOutcomeSchema.optional(),
-        upstreamAttribution: z
-            .object({
-                resolvedModel: z.string().min(1).optional(),
-                inferenceProvider: z.string().min(1).optional(),
-                routingAttempt: z.number().int().positive().optional(),
-                routingAttemptCount: z.number().int().positive().optional(),
-                upstreamReportedCostUsd: z.number().nonnegative().optional(),
-            })
-            .strict()
-            .optional(),
         durationMs: z.number().int().nonnegative().optional(),
     })
     .superRefine(requireReasonCodeWhenNotExecuted)
@@ -1828,8 +1828,7 @@ export const TraceDisplayMetadataSchema: z.ZodType<TraceDisplayMetadata> = z
                 status: z.enum(['complete', 'partial']),
                 unavailableFields: z.array(z.string().min(1)),
             })
-            .strict()
-            .optional(),
+            .strict(),
     })
     .passthrough();
 

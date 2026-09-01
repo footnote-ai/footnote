@@ -116,6 +116,7 @@ export type {
 export type {
     GetTraceResponse,
     GetTraceStaleResponse,
+    GetTraceDisplayResponse,
     TraceDisplayMetadata,
 } from './types.js';
 

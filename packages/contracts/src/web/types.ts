@@ -950,7 +950,7 @@ export type GetTraceResponse = TraceDisplayMetadata;
  * optional fields may be omitted and listed in displayIntegrity instead.
  */
 export type TraceDisplayMetadata = ResponseMetadata & {
-    displayIntegrity?: {
+    displayIntegrity: {
         status: 'complete' | 'partial';
         unavailableFields: string[];
     };

@@ -259,11 +259,18 @@ const buildDisplayTrace = (traceData: ServerMetadata): DisplayTrace => ({
                   : null,
           }
         : null,
-    displayIntegrity: traceData.displayIntegrity ?? {
-        status: 'complete',
-        unavailableFields: [],
-    },
+    displayIntegrity: traceData.displayIntegrity,
 });
+
+const renderPartialProvenanceNotice = (
+    displayIntegrity: ServerMetadata['displayIntegrity'] | undefined
+): JSX.Element | null =>
+    displayIntegrity?.status === 'partial' ? (
+        <p className="trace-page__notice" role="status">
+            Some provenance is unavailable in this stored trace. The fields
+            shown below are the valid fields only; this record is not complete.
+        </p>
+    ) : null;
 
 const tracePageLogger = createScopedLogger('TracePage');
 
@@ -692,6 +699,7 @@ const TracePage = (): JSX.Element => {
     if (loadingState === 'stale') {
         return (
             <TracePageShell>
+                {renderPartialProvenanceNotice(traceData?.displayIntegrity)}
                 <article className="card">
                     <h1>Trace Stale</h1>
                     <p>
@@ -837,13 +845,7 @@ const TracePage = (): JSX.Element => {
     ];
     return (
         <TracePageShell>
-            {sanitizedTraceData.displayIntegrity.status === 'partial' && (
-                <p className="trace-page__notice" role="status">
-                    Some provenance is unavailable in this stored trace. The
-                    fields shown below are the valid fields only; this record is
-                    not complete.
-                </p>
-            )}
+            {renderPartialProvenanceNotice(sanitizedTraceData.displayIntegrity)}
             <header className="trace-page__header" aria-live="polite">
                 <div>
                     <h1>Response Trace</h1>

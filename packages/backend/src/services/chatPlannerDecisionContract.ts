@@ -28,8 +28,11 @@ export const chatPlannerDecisionTool = {
 };
 
 /**
- * Provider-neutral structured output descriptor for runtime adapters. The
- * schema is strict at transport time; nulls are removed before normalization.
+ * @description: Provider-neutral strict structured-output descriptor for planner runtime adapters.
+ * @footnote-scope: interface
+ * @footnote-module: ChatPlannerDecisionStructuredOutput
+ * @footnote-risk: medium - Descriptor drift can reject planner requests at provider boundaries.
+ * @footnote-ethics: high - Strict transport preserves explicit missing facts without inventing policy inputs.
  */
 export const chatPlannerDecisionStructuredOutput = {
     name: CHAT_PLANNER_TOOL_NAME,

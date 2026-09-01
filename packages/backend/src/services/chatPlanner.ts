@@ -2138,7 +2138,6 @@ export const createChatPlanner = ({
                     }
                 );
                 try {
-                    structuredOutputOutcome = 'text_json_compatibility';
                     plannerMode = 'text_json';
                     const textJsonResponse = await executePlanner(
                         buildPlannerRequestPayload(
@@ -2165,6 +2164,7 @@ export const createChatPlanner = ({
                         request,
                     });
                     if (normalization.fallbackTier === 'safe_default_plan') {
+                        structuredOutputOutcome = 'policy_invalid';
                         logPlannerPolicyInvalidFallback({
                             normalization,
                             mode: 'text_json',
@@ -2172,6 +2172,8 @@ export const createChatPlanner = ({
                             plannerStructuredArguments,
                             plannerResponseText,
                         });
+                    } else {
+                        structuredOutputOutcome = 'text_json_compatibility';
                     }
                     return resolveAdaptivePlan(normalization, {
                         status:

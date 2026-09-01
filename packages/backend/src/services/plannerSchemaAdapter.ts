@@ -77,10 +77,11 @@ const projectNullableSchema = (schema: unknown): unknown => {
 };
 
 /**
- * Projects the canonical planner contract into the strict, provider-safe
- * shape used by OpenRouter structured output. Optional planner values remain
- * required at the transport layer, but accept null so no policy fact is
- * invented by the adapter.
+ * @description: Projects the canonical planner contract into a strict, provider-safe transport schema.
+ * @footnote-scope: utility
+ * @footnote-module: StrictPlannerSchemaProjection
+ * @footnote-risk: medium - Incorrect required or nullable fields can reject valid provider responses.
+ * @footnote-ethics: high - Nullable transport values prevent the adapter from inventing policy facts.
  */
 export const projectPlannerSchemaForStrictOutput = (
     canonicalSchema: Record<string, unknown>
@@ -114,7 +115,13 @@ export const projectPlannerSchemaForStrictOutput = (
     return root;
 };
 
-/** Removes transport-only nulls before the canonical planner normalizer runs. */
+/**
+ * @description: Removes transport-only nulls before canonical planner normalization.
+ * @footnote-scope: utility
+ * @footnote-module: PlannerTransportNullRemoval
+ * @footnote-risk: medium - Removing the wrong value could alter a planner decision before policy checks.
+ * @footnote-ethics: high - The normalizer, not transport cleanup, remains authoritative for policy facts.
+ */
 export const removePlannerTransportNulls = (value: unknown): unknown => {
     if (Array.isArray(value)) {
         return value.map(removePlannerTransportNulls);
