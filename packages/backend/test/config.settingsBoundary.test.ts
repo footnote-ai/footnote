@@ -102,7 +102,7 @@ test('workflow token override is loaded from canonical settings YAML', () => {
         [
             'version: 1',
             'chat-workflow:',
-            '  max-tokens-total-override: 96000',
+            '  max-tokens-total-override: 512000',
             '',
         ].join('\n')
     );
@@ -115,7 +115,7 @@ test('workflow token override is loaded from canonical settings YAML', () => {
         () => undefined
     );
 
-    assert.equal(config.chatWorkflow.maxTokensTotalOverride, 96_000);
+    assert.equal(config.chatWorkflow.maxTokensTotalOverride, 512_000);
 });
 
 test('integer settings reject non-integer numbers', () => {

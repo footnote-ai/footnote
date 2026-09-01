@@ -39,19 +39,19 @@ test('presentation settings accept an explicit deployment override', () => {
     assert.equal(chatWorkflow.presentation.timeoutMs, 45000);
 });
 
-test('workflow token override accepts bounded positive deployment values', () => {
+test('workflow token override accepts positive safe deployment values', () => {
     const { chatWorkflow } = buildServiceSections(
-        { CHAT_WORKFLOW_MAX_TOKENS_TOTAL_OVERRIDE: '96000' },
+        { CHAT_WORKFLOW_MAX_TOKENS_TOTAL_OVERRIDE: '1048576' },
         () => undefined
     );
 
-    assert.equal(chatWorkflow.maxTokensTotalOverride, 96000);
+    assert.equal(chatWorkflow.maxTokensTotalOverride, 1_048_576);
 });
 
-test('workflow token override rejects values above the hard safety ceiling', () => {
+test('workflow token override rejects unsafe values', () => {
     const warnings: string[] = [];
     const { chatWorkflow } = buildServiceSections(
-        { CHAT_WORKFLOW_MAX_TOKENS_TOTAL_OVERRIDE: '128001' },
+        { CHAT_WORKFLOW_MAX_TOKENS_TOTAL_OVERRIDE: '9007199254740992' },
         (warning) => warnings.push(warning)
     );
 
@@ -62,7 +62,7 @@ test('workflow token override rejects values above the hard safety ceiling', () 
 test('workflow token override rejects malformed integer values', () => {
     const warnings: string[] = [];
     const { chatWorkflow } = buildServiceSections(
-        { CHAT_WORKFLOW_MAX_TOKENS_TOTAL_OVERRIDE: '96000tokens' },
+        { CHAT_WORKFLOW_MAX_TOKENS_TOTAL_OVERRIDE: '512000tokens' },
         (warning) => warnings.push(warning)
     );
 

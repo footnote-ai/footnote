@@ -328,23 +328,27 @@ Deploy normally without TrustGraph:
 ./deploy/fly/deploy.ps1
 ```
 
-### Temporary high-token Fly testing
+### High-budget Fly configuration
 
-For a bounded live test after deployment, edit the persisted
+The canonical `footnote.yaml` keeps the presentation candidate disabled and
+allows a finite 512,000-token workflow budget. To apply the same configuration
+to an existing Machine before the next canonical deploy, edit the persisted
 `/data/config/footnote.yaml` and restart the app with:
 
 ```yaml
 chat-workflow:
-    max-tokens-total-override: 96000
+    chat-presentation-enabled: false
+    max-tokens-total-override: 512000
     chat-presentation-timeout-ms: 90000
 ```
 
 `max-tokens-total-override` is optional. When set, it replaces only the
-selected workflow's cumulative token limit and must be a positive integer no
-greater than 128000. It does not change workflow mode, evidence policy, or
-per-call output ceilings. A later canonical deploy uploads the repository
-`footnote.yaml` and overwrites this manual test setting, so reapply it only
-when another bounded live test is intended.
+selected workflow's cumulative token limit and must be a positive safe integer.
+It does not change workflow mode, evidence policy, or per-call output ceilings.
+The configured DeepSeek profile accepts up to 384,000
+output tokens per call; ordinary and reasoning defaults request 128,000 and
+256,000 respectively. A later canonical deploy uploads the repository
+`footnote.yaml` and overwrites this manual setting.
 
 After deployment, verify `TAILSCALE_STATUS=ready`,
 `ownershipBindingMode=deployment`, and `ownershipValidatorConfigured=true` in

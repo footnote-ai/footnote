@@ -215,9 +215,9 @@ test('generation admission counts prompt estimate and clamps provider output', (
     assert.ok(estimateGenerationTokenBudget(bounded) <= 100 - 20);
 });
 
-test('reasoning generation receives a larger provider output reserve without changing ordinary defaults', () => {
-    assert.equal(DEFAULT_WORKFLOW_GENERATION_MAX_OUTPUT_TOKENS, 8000);
-    assert.equal(DEFAULT_REASONING_GENERATION_MAX_OUTPUT_TOKENS, 12000);
+test('reasoning generation receives an expanded provider output reserve', () => {
+    assert.equal(DEFAULT_WORKFLOW_GENERATION_MAX_OUTPUT_TOKENS, 128_000);
+    assert.equal(DEFAULT_REASONING_GENERATION_MAX_OUTPUT_TOKENS, 256_000);
     assert.equal(
         resolveDefaultGenerationMaxOutputTokens({
             reasoningEffort: 'medium',
@@ -226,11 +226,11 @@ test('reasoning generation receives a larger provider output reserve without cha
                 supportedReasoningEfforts: ['none', 'medium'],
             },
         }),
-        12000
+        256_000
     );
     assert.equal(
         resolveDefaultGenerationMaxOutputTokens({ reasoningEffort: 'none' }),
-        8000
+        128_000
     );
     const bounded = boundGenerationRequestToWorkflowBudget({
         request: {
@@ -242,9 +242,9 @@ test('reasoning generation receives a larger provider output reserve without cha
             },
         },
         totalTokens: 0,
-        maxTokensTotal: 20_000,
+        maxTokensTotal: 300_000,
     });
-    assert.equal(bounded?.maxOutputTokens, 12000);
+    assert.equal(bounded?.maxOutputTokens, 256_000);
 });
 
 test('profile output ceilings cap resolved generation defaults', () => {
@@ -276,7 +276,7 @@ test('profile output ceilings use the supported profile reasoning default', () =
             messages: [{ role: 'user', content: 'Write a detailed answer.' }],
         },
         profile: {
-            maxOutputTokens: 100_000,
+            maxOutputTokens: 384_000,
             defaultReasoningEffort: 'medium',
             capabilities: {
                 canUseSearch: false,
@@ -285,7 +285,7 @@ test('profile output ceilings use the supported profile reasoning default', () =
         },
     });
 
-    assert.equal(capped.maxOutputTokens, 12_000);
+    assert.equal(capped.maxOutputTokens, 256_000);
 });
 
 test('generation admission fails closed before provider call when prompt uses the remainder', () => {

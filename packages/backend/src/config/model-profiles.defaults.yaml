@@ -102,8 +102,8 @@ profiles:
       presentationGeneration:
           promptVariant: faithful-rewrite
           reasoningEffort: low
-      maxInputTokens: 131072
-      maxOutputTokens: 12000
+      maxInputTokens: 1310720
+      maxOutputTokens: 384000
       costClass: low
       latencyClass: high
 

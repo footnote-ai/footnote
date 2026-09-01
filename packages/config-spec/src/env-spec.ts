@@ -1971,7 +1971,7 @@ export const envEntries = [
         secret: false,
         kind: 'integer',
         description:
-            'Optional bounded override for the cumulative token budget of one chat workflow run.',
+            'Optional positive safe-integer override for the cumulative budget of one chat workflow run.',
         defaultValue: noDefault(),
         usedBy: ['packages/backend/src/config.ts'],
     }),

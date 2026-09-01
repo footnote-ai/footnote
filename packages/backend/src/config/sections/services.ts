@@ -43,8 +43,6 @@ const PROJECT_DOCS_MAX_CHUNKS = 5_000;
 const PROJECT_DOCS_MAX_TOP_K_PER_CATEGORY = 50;
 const PROJECT_DOCS_MAX_MATCHES = 20;
 const PROJECT_DOCS_MAX_TIMEOUT_MS = 30_000;
-const CHAT_WORKFLOW_MAX_TOKENS_TOTAL_OVERRIDE_MAXIMUM = 128_000;
-
 const parseOptionalWorkflowTokenOverride = (
     value: string | undefined,
     warn: WarningSink
@@ -52,17 +50,12 @@ const parseOptionalWorkflowTokenOverride = (
     if (value === undefined || value.trim().length === 0) return undefined;
 
     const parsed = Number(value.trim());
-    if (
-        Number.isFinite(parsed) &&
-        Number.isInteger(parsed) &&
-        parsed > 0 &&
-        parsed <= CHAT_WORKFLOW_MAX_TOKENS_TOTAL_OVERRIDE_MAXIMUM
-    ) {
+    if (Number.isSafeInteger(parsed) && parsed > 0) {
         return parsed;
     }
 
     warn(
-        `Ignoring invalid CHAT_WORKFLOW_MAX_TOKENS_TOTAL_OVERRIDE: "${value}". Use a positive integer no greater than ${CHAT_WORKFLOW_MAX_TOKENS_TOTAL_OVERRIDE_MAXIMUM}.`
+        `Ignoring invalid CHAT_WORKFLOW_MAX_TOKENS_TOTAL_OVERRIDE: "${value}". Use a positive safe integer.`
     );
     return undefined;
 };
@@ -139,7 +132,7 @@ const parseWebSearchProviderPriority = (
 /**
  * Resolves auth tokens, body-size limits, and chat-workflow settings for
  * trusted backend-only service endpoints. The workflow token override accepts
- * only positive integers through 128,000; invalid deployment input warns and
+ * only positive integers through 512,000; invalid deployment input warns and
  * falls back to undefined so the configured workflow default remains active.
  */
 export const buildServiceSections = (

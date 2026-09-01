@@ -171,11 +171,11 @@ test('resolveWorkflowRuntimeConfig applies a bounded deployment token override w
         maxIterations: 2,
         maxDurationMs: 90_000,
         maxRequestReviewCycles: 7,
-        maxTokensTotalOverride: 96_000,
+        maxTokensTotalOverride: 512_000,
     });
 
     assert.equal(config.modeId, 'balanced');
-    assert.equal(config.workflowExecutionLimits.maxTokensTotal, 96_000);
+    assert.equal(config.workflowExecutionLimits.maxTokensTotal, 512_000);
     assert.equal(config.workflowExecutionLimits.maxWorkflowSteps, 4);
     assert.equal(config.workflowExecutionLimits.maxDeliberationCalls, 2);
 });
