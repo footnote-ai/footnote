@@ -11,6 +11,7 @@ import assert from 'node:assert/strict';
 import type { PostChatRequest } from '@footnote/contracts/web';
 import {
     createChatPlanner,
+    DEFAULT_CHAT_PLANNER_MAX_OUTPUT_TOKENS,
     type ChatPlannerCapabilityProfileOption,
     type ChatPlannerInvocationContext,
 } from '../src/services/chatPlanner.js';
@@ -84,6 +85,30 @@ const createPlanner = (
         availableCapabilityProfiles,
     });
 };
+
+test('chat planner uses the shared workflow output default', async () => {
+    let observedMaxOutputTokens: number | undefined;
+    const planner = createChatPlanner({
+        executePlanner: async ({ maxOutputTokens }) => {
+            observedMaxOutputTokens = maxOutputTokens;
+            return {
+                text: JSON.stringify({
+                    action: 'message',
+                    modality: 'text',
+                    safetyTier: 'Low',
+                    reasoning: 'A normal message is appropriate.',
+                    generation: { verbosity: 'low' },
+                }),
+                model: 'deepseek/deepseek-v4-flash-0731',
+            };
+        },
+    });
+
+    await planFromWorkflow(planner, createChatRequest());
+
+    assert.equal(DEFAULT_CHAT_PLANNER_MAX_OUTPUT_TOKENS, 2_000);
+    assert.equal(observedMaxOutputTokens, 2_000);
+});
 
 test('chatPlanner forwards the configured planner reasoning effort', async () => {
     let observedReasoningEffort: string | undefined;

@@ -13,9 +13,10 @@ import {
     DEFAULT_REVISION_PROMPT_PREFIX,
     parseReviewDecisionOutputResult,
 } from './workflowEngine/reviewDecision.js';
-import type {
-    ExecutionContract,
-    ExecutionResponseMode,
+import {
+    EXECUTION_CONTRACT_LIMIT_PRESETS,
+    type ExecutionContract,
+    type ExecutionResponseMode,
 } from './executionContract.js';
 import type {
     ReviewIntensity,
@@ -60,8 +61,10 @@ const QUALITY_GROUNDED_DEFAULT_LIMITS: Readonly<
     maxPlanCycles: 1,
     maxReviewCycles: 3,
     maxDeliberationCalls: 4,
-    maxTokensTotal: Number.MAX_SAFE_INTEGER,
-    maxDurationMs: 70000,
+    maxTokensTotal:
+        EXECUTION_CONTRACT_LIMIT_PRESETS['quality-grounded'].maxTokensTotal,
+    maxDurationMs:
+        EXECUTION_CONTRACT_LIMIT_PRESETS['quality-grounded'].maxDurationMs,
 };
 
 const REVIEWED_WORKFLOW_PROFILE: WorkflowProfileRuntime = {
@@ -528,6 +531,7 @@ export const resolveWorkflowRuntimeConfig = (input: {
     maxIterations: number;
     maxDurationMs: number;
     maxRequestReviewCycles: number;
+    maxTokensTotalOverride?: number;
     requestMaxReviewCycles?: number;
     ExecutionContract?: Pick<ExecutionContract, 'response' | 'limits'>;
     modeEscalationRequest?: WorkflowModeEscalationRequest;
@@ -642,7 +646,8 @@ export const resolveWorkflowRuntimeConfig = (input: {
         maxReviewCycles: resolvedMaxReviewCycles,
         maxDeliberationCalls: resolvedMaxDeliberationCalls,
         maxTokensTotal: sanitizeNonNegativeInteger(
-            executionContract?.limits.maxTokensTotal ??
+            input.maxTokensTotalOverride ??
+                executionContract?.limits.maxTokensTotal ??
                 workflowProfile.defaultLimits.maxTokensTotal,
             workflowProfile.defaultLimits.maxTokensTotal
         ),

@@ -29,6 +29,8 @@ test('resolveExecutionContract maps known preset ids deterministically', () => {
     assert.equal(qualityGrounded.policyContract.limits.maxWorkflowSteps, 8);
     assert.equal(qualityGrounded.policyContract.limits.maxToolCalls, 3);
     assert.equal(qualityGrounded.policyContract.limits.maxDeliberationCalls, 3);
+    assert.equal(qualityGrounded.policyContract.limits.maxTokensTotal, 96_000);
+    assert.equal(qualityGrounded.policyContract.limits.maxDurationMs, 180_000);
     assert.equal(
         qualityGrounded.policyContract.response.stoppingRule,
         'bounded_sufficient_answer'
@@ -97,9 +99,9 @@ test('resolveExecutionContract sanitizes unsafe numeric overrides and keeps hard
     assert.equal(resolved.policyContract.evidence.maxEscalationRounds, 1);
     assert.equal(resolved.policyContract.limits.maxWorkflowSteps, 4);
     assert.equal(resolved.policyContract.limits.maxToolCalls, 1);
-    assert.equal(resolved.policyContract.limits.maxDeliberationCalls, 1);
-    assert.equal(resolved.policyContract.limits.maxTokensTotal, 8000);
-    assert.equal(resolved.policyContract.limits.maxDurationMs, 25000);
+    assert.equal(resolved.policyContract.limits.maxDeliberationCalls, 2);
+    assert.equal(resolved.policyContract.limits.maxTokensTotal, 48_000);
+    assert.equal(resolved.policyContract.limits.maxDurationMs, 90_000);
     assert.equal(resolved.policyContract.failOpen.authority, 'backend');
     assert.equal(
         resolved.policyContract.failOpen.fallbackTemperature,

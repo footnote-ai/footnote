@@ -103,7 +103,7 @@ profiles:
           promptVariant: faithful-rewrite
           reasoningEffort: low
       maxInputTokens: 131072
-      maxOutputTokens: 2048
+      maxOutputTokens: 12000
       costClass: low
       latencyClass: high
 

@@ -328,6 +328,24 @@ Deploy normally without TrustGraph:
 ./deploy/fly/deploy.ps1
 ```
 
+### Temporary high-token Fly testing
+
+For a bounded live test after deployment, edit the persisted
+`/data/config/footnote.yaml` and restart the app with:
+
+```yaml
+chat-workflow:
+    max-tokens-total-override: 96000
+    chat-presentation-timeout-ms: 90000
+```
+
+`max-tokens-total-override` is optional. When set, it replaces only the
+selected workflow's cumulative token limit and must be a positive integer no
+greater than 128000. It does not change workflow mode, evidence policy, or
+per-call output ceilings. A later canonical deploy uploads the repository
+`footnote.yaml` and overwrites this manual test setting, so reapply it only
+when another bounded live test is intended.
+
 After deployment, verify `TAILSCALE_STATUS=ready`,
 `ownershipBindingMode=deployment`, and `ownershipValidatorConfigured=true` in
 the Fly logs. Before treating retrieval as

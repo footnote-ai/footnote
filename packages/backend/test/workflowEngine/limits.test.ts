@@ -17,6 +17,7 @@ import {
 } from '../../src/services/workflowEngine/limits.js';
 import {
     boundGenerationRequestToWorkflowBudget,
+    capGenerationRequestToProfileMax,
     calculatePresentationOutputBudget,
     calculateReviewedGenerationOutputBudget,
     DEFAULT_REASONING_GENERATION_MAX_OUTPUT_TOKENS,
@@ -215,8 +216,8 @@ test('generation admission counts prompt estimate and clamps provider output', (
 });
 
 test('reasoning generation receives a larger provider output reserve without changing ordinary defaults', () => {
-    assert.equal(DEFAULT_WORKFLOW_GENERATION_MAX_OUTPUT_TOKENS, 1200);
-    assert.equal(DEFAULT_REASONING_GENERATION_MAX_OUTPUT_TOKENS, 2400);
+    assert.equal(DEFAULT_WORKFLOW_GENERATION_MAX_OUTPUT_TOKENS, 8000);
+    assert.equal(DEFAULT_REASONING_GENERATION_MAX_OUTPUT_TOKENS, 12000);
     assert.equal(
         resolveDefaultGenerationMaxOutputTokens({
             reasoningEffort: 'medium',
@@ -225,11 +226,11 @@ test('reasoning generation receives a larger provider output reserve without cha
                 supportedReasoningEfforts: ['none', 'medium'],
             },
         }),
-        2400
+        12000
     );
     assert.equal(
         resolveDefaultGenerationMaxOutputTokens({ reasoningEffort: 'none' }),
-        1200
+        8000
     );
     const bounded = boundGenerationRequestToWorkflowBudget({
         request: {
@@ -241,9 +242,25 @@ test('reasoning generation receives a larger provider output reserve without cha
             },
         },
         totalTokens: 0,
-        maxTokensTotal: 10000,
+        maxTokensTotal: 20_000,
     });
-    assert.equal(bounded?.maxOutputTokens, 2400);
+    assert.equal(bounded?.maxOutputTokens, 12000);
+});
+
+test('profile output ceilings cap resolved generation defaults', () => {
+    const capped = capGenerationRequestToProfileMax({
+        request: {
+            messages: [{ role: 'user', content: 'Write a detailed answer.' }],
+            reasoningEffort: 'medium',
+            capabilities: {
+                canUseSearch: false,
+                supportedReasoningEfforts: ['none', 'medium'],
+            },
+        },
+        profile: { maxOutputTokens: 9_000 },
+    });
+
+    assert.equal(capped.maxOutputTokens, 9_000);
 });
 
 test('generation admission fails closed before provider call when prompt uses the remainder', () => {

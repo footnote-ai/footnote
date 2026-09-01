@@ -37,6 +37,7 @@ import {
     type PlannerSelectionSource,
 } from './plannerFallbackTelemetryRollup.js';
 import { resolveExecutionContract } from './executionContractResolver.js';
+import { capGenerationRequestToProfileMax } from './workflowEngine/tokenBudget.js';
 import { resolveWorkflowModeDecision } from './workflowProfileRegistry.js';
 import { buildSteerabilityControls } from './steerabilityControls.js';
 import type { WeatherForecastTool } from './contextIntegrations/weather/index.js';
@@ -232,17 +233,23 @@ export const createChatOrchestrator = ({
                 // Planner calls go through the same runtime seam so model usage
                 // and behavior stay aligned with normal generation calls.
                 const plannerResult = await generationRuntime.generate({
-                    messages,
+                    ...capGenerationRequestToProfileMax({
+                        request: {
+                            messages,
+                            maxOutputTokens,
+                            reasoningEffort,
+                            verbosity,
+                        },
+                        profile: activePlannerProfile,
+                    }),
                     model: activePlannerProfile.providerModel,
                     provider: activePlannerProfile.provider,
                     capabilities: activePlannerProfile.capabilities,
-                    maxOutputTokens,
                     reasoningEffort: resolveProfileReasoningEffort(
                         activePlannerProfile,
                         reasoningEffort,
                         chatOrchestratorLogger
                     ),
-                    verbosity,
                     ...(safetyIdentifier !== undefined && {
                         safetyIdentifier,
                     }),

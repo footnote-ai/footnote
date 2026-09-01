@@ -33,7 +33,11 @@ test('presentation defaults stay disabled but select the tested profile and time
         envDefaultValues.CHAT_PRESENTATION_PROFILE_ID,
         'openrouter-deepseek-v4-flash-0731'
     );
-    assert.equal(envDefaultValues.CHAT_PRESENTATION_TIMEOUT_MS, 30000);
+    assert.equal(envDefaultValues.CHAT_PRESENTATION_TIMEOUT_MS, 90000);
+    assert.equal(
+        envSpecByKey.CHAT_WORKFLOW_MAX_TOKENS_TOTAL_OVERRIDE?.kind,
+        'integer'
+    );
 });
 
 test('retired presentation validator settings are absent from the config spec', () => {

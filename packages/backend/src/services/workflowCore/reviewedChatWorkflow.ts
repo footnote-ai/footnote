@@ -74,9 +74,12 @@ import {
 } from '../workflowEngine/contextStepHelpers.js';
 import {
     boundGenerationRequestToWorkflowBudget,
+    capGenerationRequestToProfileMax,
     calculatePresentationOutputBudget,
     calculateReviewedGenerationOutputBudget,
+    DEFAULT_WORKFLOW_ASSESSMENT_MAX_OUTPUT_TOKENS,
     DEFAULT_WORKFLOW_GENERATION_MAX_OUTPUT_TOKENS,
+    DEFAULT_WORKFLOW_PLANNER_MAX_OUTPUT_TOKENS,
     estimateGenerationTokenBudget,
     estimatePlannerInputTokens,
     estimatePlannerTokenBudget,
@@ -1002,12 +1005,12 @@ export const runBoundedReviewWorkflow = async (
                 invocationContext: {
                     ...plannerStepRequest.invocationContext,
                     maxOutputTokens: Math.min(
-                        1200,
+                        DEFAULT_WORKFLOW_PLANNER_MAX_OUTPUT_TOKENS,
                         Math.max(
                             1,
                             executionLimits.maxTokensTotal >=
                                 UNBOUNDED_EXECUTION_LIMIT
-                                ? 1200
+                                ? DEFAULT_WORKFLOW_PLANNER_MAX_OUTPUT_TOKENS
                                 : Math.max(
                                       1,
                                       executionLimits.maxTokensTotal -
@@ -1358,7 +1361,8 @@ export const runBoundedReviewWorkflow = async (
                                     authorityPromptTokens,
                                 assessmentPromptTokensWithoutDraft:
                                     presentationPromptTokens,
-                                assessmentOutputTokens: 200,
+                                assessmentOutputTokens:
+                                    DEFAULT_WORKFLOW_ASSESSMENT_MAX_OUTPUT_TOKENS,
                             });
                         const effectiveAuthorityOutputTokens =
                             authorityOutputTokens ??
@@ -1378,7 +1382,8 @@ export const runBoundedReviewWorkflow = async (
                             assessmentPromptTokens:
                                 presentationPromptTokens +
                                 effectiveAuthorityOutputTokens,
-                            assessmentOutputTokens: 200,
+                            assessmentOutputTokens:
+                                DEFAULT_WORKFLOW_ASSESSMENT_MAX_OUTPUT_TOKENS,
                         });
                         return budget === undefined
                             ? undefined
@@ -1625,7 +1630,10 @@ export const runBoundedReviewWorkflow = async (
                       requiresSearch: boundedRequest.search !== undefined,
                       runWithProfile: async (profile) =>
                           generationRuntime.generate({
-                              ...boundedRequest,
+                              ...capGenerationRequestToProfileMax({
+                                  request: boundedRequest,
+                                  profile,
+                              }),
                               model: profile.providerModel,
                               provider: profile.provider,
                               capabilities: profile.capabilities,
@@ -1793,7 +1801,7 @@ export const runBoundedReviewWorkflow = async (
                 { role: 'assistant', content: draft.text },
                 { role: 'system', content: assessPrompt.prompt },
             ],
-            maxOutputTokens: 200,
+            maxOutputTokens: DEFAULT_WORKFLOW_ASSESSMENT_MAX_OUTPUT_TOKENS,
             reasoningEffort: 'low',
             verbosity: 'low',
         };
@@ -1828,7 +1836,10 @@ export const runBoundedReviewWorkflow = async (
                       requiresSearch: false,
                       runWithProfile: async (profile) =>
                           generationRuntime.generate({
-                              ...bounded,
+                              ...capGenerationRequestToProfileMax({
+                                  request: bounded,
+                                  profile,
+                              }),
                               model: profile.providerModel,
                               provider: profile.provider,
                               capabilities: profile.capabilities,
@@ -2020,12 +2031,12 @@ export const runBoundedReviewWorkflow = async (
                 invocationContext: {
                     ...plannerStepRequest.invocationContext,
                     maxOutputTokens: Math.min(
-                        1200,
+                        DEFAULT_WORKFLOW_PLANNER_MAX_OUTPUT_TOKENS,
                         Math.max(
                             1,
                             executionLimits.maxTokensTotal >=
                                 UNBOUNDED_EXECUTION_LIMIT
-                                ? 1200
+                                ? DEFAULT_WORKFLOW_PLANNER_MAX_OUTPUT_TOKENS
                                 : Math.max(
                                       1,
                                       executionLimits.maxTokensTotal -
@@ -2159,7 +2170,7 @@ export const runBoundedReviewWorkflow = async (
             if (executionLimits.maxTokensTotal >= UNBOUNDED_EXECUTION_LIMIT)
                 return undefined;
             const output = Math.min(
-                1200,
+                DEFAULT_WORKFLOW_PLANNER_MAX_OUTPUT_TOKENS,
                 Math.max(
                     1,
                     executionLimits.maxTokensTotal -
@@ -2208,7 +2219,8 @@ export const runBoundedReviewWorkflow = async (
                                       DEFAULT_REVIEW_DECISION_PROMPT,
                               },
                           ],
-                          maxOutputTokens: 200,
+                          maxOutputTokens:
+                              DEFAULT_WORKFLOW_ASSESSMENT_MAX_OUTPUT_TOKENS,
                       }
                     : projected.request;
             if (step === 'generate') {

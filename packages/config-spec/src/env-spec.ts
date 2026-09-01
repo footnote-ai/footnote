@@ -1963,6 +1963,19 @@ export const envEntries = [
         usedBy: ['packages/backend/src/config.ts'],
     }),
     defineEnv({
+        key: 'CHAT_WORKFLOW_MAX_TOKENS_TOTAL_OVERRIDE',
+        owner: 'backend',
+        stage: 'runtime',
+        section: 'chat-workflow',
+        required: false,
+        secret: false,
+        kind: 'integer',
+        description:
+            'Optional bounded override for the cumulative token budget of one chat workflow run.',
+        defaultValue: noDefault(),
+        usedBy: ['packages/backend/src/config.ts'],
+    }),
+    defineEnv({
         key: 'CHAT_REVIEW_LOOP_ENABLED',
         owner: 'backend',
         stage: 'runtime',
@@ -2037,7 +2050,7 @@ export const envEntries = [
         kind: 'integer',
         description:
             'Hard timeout in milliseconds for the optional presentation flow call.',
-        defaultValue: literal(30000),
+        defaultValue: literal(90000),
         usedBy: ['packages/backend/src/config.ts'],
     }),
     defineEnv({

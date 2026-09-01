@@ -129,7 +129,7 @@ const runScenario = async (
                 maxWorkflowSteps: options?.maxWorkflowSteps ?? 8,
                 maxToolCalls: 0,
                 maxDeliberationCalls: 4,
-                maxTokensTotal: options?.maxTokensTotal ?? 5000,
+                maxTokensTotal: options?.maxTokensTotal ?? 50_000,
                 maxDurationMs: 1000,
             },
         },
@@ -263,15 +263,15 @@ test('records a provider overrun for an admitted presentation and stops later wo
     const overrunCandidate = {
         ...generated('Candidate text.'),
         usage: {
-            promptTokens: 6500,
-            completionTokens: 4500,
-            totalTokens: 11000,
+            promptTokens: 14_000,
+            completionTokens: 11_000,
+            totalTokens: 25_000,
         },
     };
     const { calls, result } = await runScenario(
         async (_request, call) =>
             call === 1 ? overrunCandidate : generated('Should not run.'),
-        { maxTokensTotal: 10000 }
+        { maxTokensTotal: 20_000 }
     );
 
     assert.equal(calls.length, 1);
@@ -287,7 +287,7 @@ test('records a provider overrun for an admitted presentation and stops later wo
         result.workflowLineage.steps.map((step) => step.stepKind),
         ['presentation']
     );
-    assert.equal(result.workflowLineage.steps[0]?.usage?.totalTokens, 11000);
+    assert.equal(result.workflowLineage.steps[0]?.usage?.totalTokens, 25_000);
 });
 
 test('runs ordinary revision without carrying the raw presentation candidate', async () => {

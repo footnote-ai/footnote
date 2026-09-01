@@ -19,6 +19,7 @@ import {
     chatRepoSearchHints,
     type ChatRepoSearchHint,
 } from '@footnote/contracts';
+import { DEFAULT_WORKFLOW_PLANNER_MAX_OUTPUT_TOKENS } from './workflowEngine/tokenBudget.js';
 import type {
     ExecutionReasonCode,
     PlannerExecutionContractType,
@@ -249,7 +250,8 @@ type ChatPlannerStructuredExecutor = (
 ) => Promise<ChatPlannerStructuredExecutionResult>;
 type ChatPlannerExecutionMode = 'structured' | 'text_json';
 
-export const DEFAULT_CHAT_PLANNER_MAX_OUTPUT_TOKENS = 1200;
+export const DEFAULT_CHAT_PLANNER_MAX_OUTPUT_TOKENS =
+    DEFAULT_WORKFLOW_PLANNER_MAX_OUTPUT_TOKENS;
 const MAX_PLANNER_TRUST_GRAPH_DESCRIPTION_CHARS = 1_000;
 
 /**

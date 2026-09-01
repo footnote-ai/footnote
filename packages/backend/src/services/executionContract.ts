@@ -109,6 +109,40 @@ export type ExecutionContractLimits = {
 };
 
 /**
+ * Canonical finite resource budgets for the built-in chat execution postures.
+ * They remain distinct from model output caps so a multi-step run cannot spend
+ * indefinitely even when a provider accepts a very large completion request.
+ */
+export const EXECUTION_CONTRACT_LIMIT_PRESETS: Readonly<
+    Record<
+        'fast-direct' | 'balanced' | 'quality-grounded',
+        ExecutionContractLimits
+    >
+> = {
+    'fast-direct': {
+        maxWorkflowSteps: 3,
+        maxToolCalls: 0,
+        maxDeliberationCalls: 0,
+        maxTokensTotal: 24_000,
+        maxDurationMs: 45_000,
+    },
+    balanced: {
+        maxWorkflowSteps: 4,
+        maxToolCalls: 1,
+        maxDeliberationCalls: 2,
+        maxTokensTotal: 48_000,
+        maxDurationMs: 90_000,
+    },
+    'quality-grounded': {
+        maxWorkflowSteps: 8,
+        maxToolCalls: 3,
+        maxDeliberationCalls: 3,
+        maxTokensTotal: 96_000,
+        maxDurationMs: 180_000,
+    },
+};
+
+/**
  * Fail-open behavior remains backend-owned and explicit.
  *
  * Execution Contract carries policy intent only. Incident response and operator controls stay
@@ -234,11 +268,7 @@ const EXECUTION_CONTRACT_DEFAULTS: Omit<
         requireEvidenceBackedClaims: false,
     },
     limits: {
-        maxWorkflowSteps: 4,
-        maxToolCalls: 1,
-        maxDeliberationCalls: 1,
-        maxTokensTotal: 8_000,
-        maxDurationMs: 25_000,
+        ...EXECUTION_CONTRACT_LIMIT_PRESETS.balanced,
     },
     failOpen: {
         authority: 'backend',
@@ -290,11 +320,7 @@ export const EXECUTION_CONTRACT_PRESETS: Readonly<
                 requireEvidenceBackedClaims: false,
             },
             limits: {
-                maxWorkflowSteps: 3,
-                maxToolCalls: 0,
-                maxDeliberationCalls: 0,
-                maxTokensTotal: 6_000,
-                maxDurationMs: 18_000,
+                ...EXECUTION_CONTRACT_LIMIT_PRESETS['fast-direct'],
             },
             routing: {
                 strategy: 'profile-first',
@@ -324,11 +350,7 @@ export const EXECUTION_CONTRACT_PRESETS: Readonly<
                 requireEvidenceBackedClaims: false,
             },
             limits: {
-                maxWorkflowSteps: 4,
-                maxToolCalls: 1,
-                maxDeliberationCalls: 2,
-                maxTokensTotal: 9_000,
-                maxDurationMs: 30_000,
+                ...EXECUTION_CONTRACT_LIMIT_PRESETS.balanced,
             },
             routing: {
                 strategy: 'capability-first',
@@ -359,11 +381,7 @@ export const EXECUTION_CONTRACT_PRESETS: Readonly<
                 requireEvidenceBackedClaims: true,
             },
             limits: {
-                maxWorkflowSteps: 8,
-                maxToolCalls: 3,
-                maxDeliberationCalls: 3,
-                maxTokensTotal: 20_000,
-                maxDurationMs: 70_000,
+                ...EXECUTION_CONTRACT_LIMIT_PRESETS['quality-grounded'],
             },
             routing: {
                 strategy: 'capability-first',

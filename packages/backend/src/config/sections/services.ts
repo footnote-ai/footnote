@@ -43,6 +43,29 @@ const PROJECT_DOCS_MAX_CHUNKS = 5_000;
 const PROJECT_DOCS_MAX_TOP_K_PER_CATEGORY = 50;
 const PROJECT_DOCS_MAX_MATCHES = 20;
 const PROJECT_DOCS_MAX_TIMEOUT_MS = 30_000;
+const CHAT_WORKFLOW_MAX_TOKENS_TOTAL_OVERRIDE_MAXIMUM = 128_000;
+
+const parseOptionalWorkflowTokenOverride = (
+    value: string | undefined,
+    warn: WarningSink
+): number | undefined => {
+    if (value === undefined || value.trim().length === 0) return undefined;
+
+    const parsed = Number(value.trim());
+    if (
+        Number.isFinite(parsed) &&
+        Number.isInteger(parsed) &&
+        parsed > 0 &&
+        parsed <= CHAT_WORKFLOW_MAX_TOKENS_TOTAL_OVERRIDE_MAXIMUM
+    ) {
+        return parsed;
+    }
+
+    warn(
+        `Ignoring invalid CHAT_WORKFLOW_MAX_TOKENS_TOTAL_OVERRIDE: "${value}". Use a positive integer no greater than ${CHAT_WORKFLOW_MAX_TOKENS_TOTAL_OVERRIDE_MAXIMUM}.`
+    );
+    return undefined;
+};
 
 const parseProjectDocsLimit = (
     raw: string | undefined,
@@ -208,6 +231,10 @@ export const buildServiceSections = (
             env.CHAT_MAX_REQUEST_REVIEW_CYCLES,
             7,
             'CHAT_MAX_REQUEST_REVIEW_CYCLES',
+            warn
+        ),
+        maxTokensTotalOverride: parseOptionalWorkflowTokenOverride(
+            env.CHAT_WORKFLOW_MAX_TOKENS_TOTAL_OVERRIDE,
             warn
         ),
         presentation: {
