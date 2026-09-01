@@ -1089,6 +1089,31 @@ export const runBoundedReviewWorkflow = async (
                                     'partially_applied'
                                   ? 'adjusted_by_policy'
                                   : 'not_applied',
+                        ...(plannerResult.execution.structuredOutputOutcome !==
+                        undefined
+                            ? {
+                                  structuredOutputOutcome:
+                                      plannerResult.execution
+                                          .structuredOutputOutcome,
+                              }
+                            : {}),
+                        ...(plannerResult.execution.upstreamAttribution
+                            ?.inferenceProvider !== undefined
+                            ? {
+                                  upstreamProvider:
+                                      plannerResult.execution
+                                          .upstreamAttribution
+                                          .inferenceProvider,
+                              }
+                            : {}),
+                        ...(plannerResult.execution.upstreamAttribution
+                            ?.resolvedModel !== undefined
+                            ? {
+                                  upstreamModel:
+                                      plannerResult.execution
+                                          .upstreamAttribution.resolvedModel,
+                              }
+                            : {}),
                         ...(plannerResult.execution.reasonCode !== undefined
                             ? {
                                   plannerReasonCode:
@@ -2127,6 +2152,14 @@ export const runBoundedReviewWorkflow = async (
                                     'partially_applied'
                                   ? 'adjusted_by_policy'
                                   : 'not_applied',
+                        ...(plannerResult.execution.structuredOutputOutcome !==
+                        undefined
+                            ? {
+                                  structuredOutputOutcome:
+                                      plannerResult.execution
+                                          .structuredOutputOutcome,
+                              }
+                            : {}),
                     },
                 }),
             };

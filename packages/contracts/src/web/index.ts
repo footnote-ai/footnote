@@ -113,7 +113,11 @@ export type {
  * @api.operationId: getTrace
  * @api.path: GET /api/traces/{responseId}
  */
-export type { GetTraceResponse, GetTraceStaleResponse } from './types.js';
+export type {
+    GetTraceResponse,
+    GetTraceStaleResponse,
+    TraceDisplayMetadata,
+} from './types.js';
 
 /**
  * @api.operationId: getResponseVersions

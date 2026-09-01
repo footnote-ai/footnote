@@ -29,6 +29,7 @@ export type {
     PlannerExecutionReasonCode,
     PlannerExecutionPurpose,
     PlannerExecutionContractType,
+    PlannerStructuredOutputOutcome,
     PlannerExecutionApplyOutcome,
     EvaluatorExecutionReasonCode,
     GenerationExecutionReasonCode,

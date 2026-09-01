@@ -14,6 +14,7 @@ import type {
     PlannerExecutionApplyOutcome,
     PlannerExecutionContractType,
     PlannerExecutionPurpose,
+    PlannerStructuredOutputOutcome,
     SteerabilityControlId,
     ToolExecutionContext,
     ToolInvocationRequest,
@@ -74,6 +75,14 @@ export type PlannerStepResult = {
             outputCostUsd: number;
             totalCostUsd: number;
         };
+        structuredOutputOutcome?: PlannerStructuredOutputOutcome;
+        upstreamAttribution?: {
+            resolvedModel?: string;
+            inferenceProvider?: string;
+            routingAttempt?: number;
+            routingAttemptCount?: number;
+            upstreamReportedCostUsd?: number;
+        };
         routingChainAttempts?: RoutingChainAttemptLog[];
     };
     ingestion: {
@@ -90,6 +99,8 @@ export type PlannerExecutionSummaryExtras = {
     model?: PlannerStepResult['execution']['model'];
     usage?: PlannerStepResult['execution']['usage'];
     cost?: PlannerStepResult['execution']['cost'];
+    structuredOutputOutcome?: PlannerStepResult['execution']['structuredOutputOutcome'];
+    upstreamAttribution?: PlannerStepResult['execution']['upstreamAttribution'];
     routingChainAttempts?: PlannerStepResult['execution']['routingChainAttempts'];
 };
 
@@ -103,6 +114,12 @@ export const buildPlannerExecutionSummaryExtras = (
     ...(execution.model !== undefined && { model: execution.model }),
     ...(execution.usage !== undefined && { usage: execution.usage }),
     ...(execution.cost !== undefined && { cost: execution.cost }),
+    ...(execution.structuredOutputOutcome !== undefined && {
+        structuredOutputOutcome: execution.structuredOutputOutcome,
+    }),
+    ...(execution.upstreamAttribution !== undefined && {
+        upstreamAttribution: execution.upstreamAttribution,
+    }),
     ...(execution.routingChainAttempts !== undefined && {
         routingChainAttempts: execution.routingChainAttempts,
     }),

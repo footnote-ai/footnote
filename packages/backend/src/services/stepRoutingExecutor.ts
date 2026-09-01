@@ -52,6 +52,14 @@ export type RoutingChainExecutionResult<TSuccess> =
       };
 
 const isTransientError = (error: unknown): boolean => {
+    if (
+        error !== null &&
+        typeof error === 'object' &&
+        'retryable' in error &&
+        (error as { retryable?: unknown }).retryable === true
+    ) {
+        return true;
+    }
     const message =
         error instanceof Error
             ? error.message.toLowerCase()
