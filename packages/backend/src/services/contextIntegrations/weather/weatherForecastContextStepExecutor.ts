@@ -141,7 +141,7 @@ const normalizeWeatherLocation = (
  *   - Returns status:'skipped' with reasonCode:'not_requested' if request.requested is false
  *   - Returns status:'skipped' with reasonCode:'not_eligible' if request.eligible is false
  *   - Returns status:'failed' with reasonCode:'unspecified_tool_outcome' for invalid input
- *   - Returns status:'executed' with contextMessages for successful weather retrieval
+ *   - Returns status:'executed' with advisory evidence for successful weather retrieval
  *   - Returns status:'executed' with clarification for ambiguous location queries
  *   - Returns status:'failed' with appropriate reasonCode for API errors
  *
@@ -265,9 +265,11 @@ export const createWeatherForecastContextStepExecutor = ({
         return buildExecutedContextStepResult({
             toolName: request.integrationName,
             durationMs: weatherToolDurationMs,
-            contextMessages: [
-                formatWeatherToolResultMessage(weatherToolResult),
-            ],
+            evidence: {
+                content: [formatWeatherToolResultMessage(weatherToolResult)],
+                visibility: 'model_visible',
+                authority: 'advisory',
+            },
             ...(sources !== undefined && { sources }),
         });
     };

@@ -756,7 +756,11 @@ export const createGitHubContextStepExecutor = (input: {
             return buildExecutedContextStepResult({
                 toolName: GITHUB_CONTEXT_NAME,
                 durationMs: now() - startedAt,
-                contextMessages: formatGitHubContext(cached.payload),
+                evidence: {
+                    content: formatGitHubContext(cached.payload),
+                    visibility: 'model_visible',
+                    authority: 'advisory',
+                },
                 sources: citationsFromGitHubContext(cached.payload),
                 integrationContext: {
                     kind: GITHUB_CONTEXT_NAME,
@@ -798,7 +802,11 @@ export const createGitHubContextStepExecutor = (input: {
             return buildExecutedContextStepResult({
                 toolName: GITHUB_CONTEXT_NAME,
                 durationMs: now() - startedAt,
-                contextMessages: formatGitHubContext(stale),
+                evidence: {
+                    content: formatGitHubContext(stale),
+                    visibility: 'model_visible',
+                    authority: 'advisory',
+                },
                 sources: citationsFromGitHubContext(stale),
                 integrationContext: {
                     kind: GITHUB_CONTEXT_NAME,
@@ -822,7 +830,11 @@ export const createGitHubContextStepExecutor = (input: {
         return buildExecutedContextStepResult({
             toolName: GITHUB_CONTEXT_NAME,
             durationMs: now() - startedAt,
-            contextMessages: formatGitHubContext(payload),
+            evidence: {
+                content: formatGitHubContext(payload),
+                visibility: 'model_visible',
+                authority: 'advisory',
+            },
             sources: citationsFromGitHubContext(payload),
             integrationContext: {
                 kind: GITHUB_CONTEXT_NAME,

@@ -1,7 +1,7 @@
 /**
- * @description: Prompt-facing formatting helpers for web-search context integration.
+ * @description: Bounded evidence formatting helpers for web-search context integration.
  * @footnote-scope: utility
- * @footnote-module: WebSearchPromptFormatting
+ * @footnote-module: WebSearchEvidenceFormatting
  * @footnote-risk: medium - Formatting regressions can degrade model grounding clarity.
  * @footnote-ethics: medium - Incorrect labeling could overstate trust in unverified search snippets.
  */
@@ -11,7 +11,7 @@ import type {
     WebSearchRecord,
 } from './webSearchTypes.js';
 
-export const formatContextMessages = (
+export const formatWebSearchEvidence = (
     query: string,
     records: WebSearchRecord[]
 ): string[] => {

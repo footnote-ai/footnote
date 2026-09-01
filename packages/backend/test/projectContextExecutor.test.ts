@@ -90,15 +90,12 @@ test('executor retrieves project context and labels it as untrusted data', async
     const result = await executor(createExecutorInput());
     assert.equal(result.outcome, 'executed');
     if (result.outcome !== 'executed') return;
-    const message = (result.contextMessages ?? [])
-        .map((entry) => (typeof entry === 'string' ? entry : entry.content))
-        .join('\n');
+    const message = (result.evidence?.content ?? []).join('\n');
     assert.match(message, /UNTRUSTED PROJECT CONTEXT/i);
     assert.match(message, /documented_intent/i);
     assert.match(message, /docs\/Philosophy\.md/);
-    assert.equal(result.contextMessageRole, 'user');
     assert.ok(
-        (result.trustedSystemMessages ?? []).some((message) =>
+        (result.trustedInstructions ?? []).some((message) =>
             message.includes('project documents')
         )
     );
@@ -121,9 +118,7 @@ test('project executor keeps instruction-bearing docs inside the untrusted envel
     const result = await executor(createExecutorInput());
     assert.equal(result.outcome, 'executed');
     if (result.outcome !== 'executed') return;
-    const message = (result.contextMessages ?? [])
-        .map((entry) => (typeof entry === 'string' ? entry : entry.content))
-        .join('\n');
+    const message = (result.evidence?.content ?? []).join('\n');
     assert.match(message, /UNTRUSTED PROJECT CONTEXT/i);
     assert.match(message, /ignore all previous instructions/i);
     assert.ok(

@@ -15,7 +15,6 @@ import type {
     ToolInvocationRequest,
 } from '@footnote/contracts/policy';
 import type { PlannerPayloadChatPlan } from '../chatOrchestrator/plannerPayload.js';
-import { buildPlannerPayload } from '../chatOrchestrator/plannerPayload.js';
 import type { ChatGenerationToolIntent } from '../chatGenerationTypes.js';
 import {
     toSnapshotContextEnvelope,
@@ -63,23 +62,6 @@ export const assemblePlanGenerationInput = (
             content: input.personaPrompt,
         },
         ...input.normalizedConversation,
-        {
-            role: 'system',
-            content: [
-                '// ==========',
-                '// BEGIN Planner Output',
-                '// This bounded planner output was selected by backend policy for this response.',
-                '// It is execution input for this run, not execution-contract authority.',
-                '// ==========',
-                buildPlannerPayload(
-                    input.executionPlanForPrompt,
-                    input.surfacePolicy
-                ),
-                '// ==========',
-                '// END Planner Output',
-                '// ==========',
-            ].join('\n'),
-        },
     ];
 
     const conversationSnapshot = JSON.stringify({

@@ -1,7 +1,7 @@
 /**
  * @description: Reverse image search context-step executor for attachment grounding.
  * Runs provider-backed reverse lookup on image attachments and emits advisory
- * context messages plus citations with fail-open behavior.
+ * evidence plus citations with fail-open behavior.
  * @footnote-scope: core
  * @footnote-module: ReverseImageSearchContextStepExecutor
  * @footnote-risk: medium - Incorrect lookup shaping can degrade attachment evidence quality for image-based requests.
@@ -95,7 +95,7 @@ export const createReverseImageSearchContextStepExecutor = ({
             typeof input.request.input?.latestUserInput === 'string'
                 ? input.request.input.latestUserInput.trim()
                 : '';
-        const contextMessages: string[] = [];
+        const evidenceContent: string[] = [];
         const sources: Citation[] = [];
 
         for (const [index, attachment] of imageAttachments.entries()) {
@@ -119,7 +119,7 @@ export const createReverseImageSearchContextStepExecutor = ({
                     Math.max(1, maxMatchesPerImage)
                 );
                 if (topMatches.length === 0) {
-                    contextMessages.push(
+                    evidenceContent.push(
                         `[${label}] reverse image search returned no matches for this image.`
                     );
                     sources.push(
@@ -137,7 +137,7 @@ export const createReverseImageSearchContextStepExecutor = ({
                     trimmedSummary !== undefined && trimmedSummary.length > 0
                         ? trimmedSummary
                         : 'Reverse image search found related references.';
-                contextMessages.push(`[${label}] ${summaryText}`);
+                evidenceContent.push(`[${label}] ${summaryText}`);
 
                 for (const match of topMatches) {
                     sources.push({
@@ -157,7 +157,7 @@ export const createReverseImageSearchContextStepExecutor = ({
                     });
                 }
             } else {
-                contextMessages.push(
+                evidenceContent.push(
                     `[${label}] reverse image search failed; continuing without reverse-image grounding.`
                 );
                 sources.push(
@@ -173,7 +173,11 @@ export const createReverseImageSearchContextStepExecutor = ({
 
         return buildExecutedContextStepResult({
             toolName: REVERSE_IMAGE_SEARCH_NAME,
-            contextMessages,
+            evidence: {
+                content: evidenceContent,
+                visibility: 'model_visible',
+                authority: 'advisory',
+            },
             sources,
         });
     };

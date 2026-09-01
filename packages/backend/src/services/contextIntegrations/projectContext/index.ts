@@ -10,7 +10,6 @@
 import { PROJECT_CONTEXT_CANONICAL_REPOSITORY } from '@footnote/contracts/policy';
 import type {
     Citation,
-    ContextPromptMessage,
     ProjectContextCategory,
     ProjectContextMatch,
     ProjectContextMetadata,
@@ -101,20 +100,18 @@ const projectContextGuidance = renderPromptBundle(promptRegistry, [
 ]);
 
 /**
- * @description: Formats retrieved project documents as user-level source text.
- * Registered project guidance remains separate system text.
+ * @description: Formats retrieved project documents as bounded evidence text.
+ * Registered project guidance remains a separate trusted instruction.
  * @footnote-scope: core
- * @footnote-module: ProjectContextPromptBoundary
+ * @footnote-module: ProjectContextEvidence
  * @footnote-risk: high - Role mistakes can promote untrusted evidence into trusted instructions.
  * @footnote-ethics: high - Document text must stay separate from governing policy.
  */
-export const formatProjectContextMessages = (input: {
+export const formatProjectContextEvidence = (input: {
     repository: string;
     matches: ProjectContextMatch[];
     commitSha: string | null;
-}): ContextPromptMessage[] => [
-    { role: 'user', content: formatProjectContext(input)[0] ?? '' },
-];
+}): string[] => [formatProjectContext(input)[0] ?? ''];
 
 /**
  * @description: Creates commit-pinned citations for retrieved project documents when revision data exists.
@@ -316,13 +313,16 @@ export const createProjectContextStepExecutor = (
                 toolName: PROJECT_CONTEXT_NAME,
                 durationMs: now() - startedAt,
                 ...(hasEvidence && {
-                    contextMessages: formatProjectContextMessages({
-                        repository: PROJECT_CONTEXT_CANONICAL_REPOSITORY,
-                        matches,
-                        commitSha,
-                    }),
-                    trustedSystemMessages: [projectContextGuidance],
-                    contextMessageRole: 'user',
+                    evidence: {
+                        content: formatProjectContextEvidence({
+                            repository: PROJECT_CONTEXT_CANONICAL_REPOSITORY,
+                            matches,
+                            commitSha,
+                        }),
+                        visibility: 'model_visible',
+                        authority: 'advisory',
+                    },
+                    trustedInstructions: [projectContextGuidance],
                     sources: citationsFromProjectContext({
                         repository: PROJECT_CONTEXT_CANONICAL_REPOSITORY,
                         matches,

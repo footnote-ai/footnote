@@ -20,6 +20,15 @@ export {
     type WorkflowRunPolicy,
 } from './reviewedChatWorkflow.js';
 export {
+    buildModelInput,
+    type BuildModelInputParams,
+    type ModelInput,
+    type ModelInputContext,
+    type ModelInputEvidence,
+    type ModelInputEvidenceFailure,
+    type ModelInputPlan,
+} from '../workflowEngine/modelInput.js';
+export {
     type Attempt,
     type AttemptResult,
     type AttemptUsage,

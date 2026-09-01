@@ -791,6 +791,9 @@ export const createChatOrchestrator = ({
             executionPlan: ChatPlan;
         }): AppliedPlanState => ({
             executionPlan: input.executionPlan,
+            ...(input.plannerApplication.surfacePolicy !== undefined && {
+                surfacePolicy: input.plannerApplication.surfacePolicy,
+            }),
             generationForExecution:
                 input.plannerApplication.generationForExecution,
             selectedResponseProfile: {
@@ -997,12 +1000,9 @@ export const createChatOrchestrator = ({
                     policyVersion: resolvedExecutionContract.policyVersion,
                 },
             });
-            const plannerPayloadMessage =
-                postPlanAssembly.conversationMessages.at(-1);
             const mergedMessagesWithHints =
-                plannerPayloadMessage !== undefined &&
                 input.baseMessagesWithHints.length > 0
-                    ? [...input.baseMessagesWithHints, plannerPayloadMessage]
+                    ? input.baseMessagesWithHints
                     : postPlanAssembly.conversationMessages;
             const configuredTrustGraphTargetIds = new Set(
                 (executionContractTrustGraph?.targets ?? []).map(

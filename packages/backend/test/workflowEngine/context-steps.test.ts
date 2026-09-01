@@ -11,6 +11,10 @@ import type {
     GenerationRuntime,
     RuntimeMessage,
 } from '@footnote/agent-runtime';
+import type {
+    ContextStepResult,
+    ToolInvocationName,
+} from '@footnote/contracts/policy';
 import { runBoundedReviewWorkflowForTest } from './helpers.js';
 import type { ConversationContextEnvelope } from '../../src/services/conversationContextService.js';
 
@@ -172,7 +176,11 @@ test('runBoundedReviewWorkflow executes injected context step and records contex
                 status: 'executed',
                 durationMs: 4,
             },
-            contextMessages: ['weather_context: clear skies'],
+            evidence: {
+                content: ['weather_context: clear skies'],
+                visibility: 'model_visible',
+                authority: 'advisory',
+            },
         }),
         captureUsage: (generationResult) => ({
             model: generationResult.model ?? 'gpt-5-mini',
@@ -295,7 +303,11 @@ test('runBoundedReviewWorkflow preserves backend-injected context steps after pl
                         toolName: request.integrationName,
                         status: 'executed',
                     },
-                    contextMessages: ['trustgraph_context: found'],
+                    evidence: {
+                        content: ['trustgraph_context: found'],
+                        visibility: 'model_visible',
+                        authority: 'advisory',
+                    },
                 };
             },
             weather_forecast: async ({ request }) => {
@@ -306,7 +318,11 @@ test('runBoundedReviewWorkflow preserves backend-injected context steps after pl
                         toolName: request.integrationName,
                         status: 'executed',
                     },
-                    contextMessages: ['weather_context: clear skies'],
+                    evidence: {
+                        content: ['weather_context: clear skies'],
+                        visibility: 'model_visible',
+                        authority: 'advisory',
+                    },
                 };
             },
         },
@@ -400,7 +416,7 @@ test('runBoundedReviewWorkflow preserves backend-injected context steps after pl
     assert.deepEqual(executedIntegrations, ['trustgraph', 'weather_forecast']);
 });
 
-test('runBoundedReviewWorkflow executes eligible context steps in parallel and merges emitted context messages', async () => {
+test('runBoundedReviewWorkflow executes eligible context steps in parallel and merges evidence', async () => {
     const observedMessages: RuntimeMessage[][] = [];
     const generationRuntime: GenerationRuntime = {
         kind: 'test-runtime',
@@ -475,7 +491,11 @@ test('runBoundedReviewWorkflow executes eligible context steps in parallel and m
                         toolName: 'weather_forecast',
                         status: 'executed',
                     },
-                    contextMessages: ['weather_context: clear skies'],
+                    evidence: {
+                        content: ['weather_context: clear skies'],
+                        visibility: 'model_visible',
+                        authority: 'advisory',
+                    },
                 };
             },
             web_search: async () => {
@@ -488,7 +508,11 @@ test('runBoundedReviewWorkflow executes eligible context steps in parallel and m
                         toolName: 'web_search',
                         status: 'executed',
                     },
-                    contextMessages: ['web_context: top result'],
+                    evidence: {
+                        content: ['web_context: top result'],
+                        visibility: 'model_visible',
+                        authority: 'advisory',
+                    },
                 };
             },
         },
@@ -512,12 +536,12 @@ test('runBoundedReviewWorkflow executes eligible context steps in parallel and m
     const firstMessageBatch = observedMessages[0] ?? [];
     const weatherContextMessageIndex = firstMessageBatch.findIndex(
         (message) =>
-            message.role === 'system' &&
+            message.role === 'user' &&
             message.content === 'weather_context: clear skies'
     );
     const webContextMessageIndex = firstMessageBatch.findIndex(
         (message) =>
-            message.role === 'system' &&
+            message.role === 'user' &&
             message.content === 'web_context: top result'
     );
     assert.ok(weatherContextMessageIndex >= 0);
@@ -547,14 +571,18 @@ test('runBoundedReviewWorkflow prioritizes exact GitHub context before broad and
             };
         },
     };
-    const contextResult = (name: string) => ({
+    const contextResult = (name: ToolInvocationName): ContextStepResult => ({
         outcome: 'executed' as const,
         executionContext: {
             toolName: name,
             status: 'executed' as const,
             durationMs: 1,
         },
-        contextMessages: [`${name}: context`],
+        evidence: {
+            content: [`${name}: context`],
+            visibility: 'model_visible',
+            authority: 'advisory',
+        },
     });
     const resultPromise = runBoundedReviewWorkflowForTest({
         generationRuntime,
@@ -646,7 +674,7 @@ test('runBoundedReviewWorkflow prioritizes exact GitHub context before broad and
     ]);
 });
 
-test('runBoundedReviewWorkflow preserves project-context authority roles', async () => {
+test('runBoundedReviewWorkflow keeps project evidence separate from trusted instructions', async () => {
     const observedMessages: RuntimeMessage[][] = [];
     const generationRuntime: GenerationRuntime = {
         kind: 'test-runtime',
@@ -700,14 +728,12 @@ test('runBoundedReviewWorkflow preserves project-context authority roles', async
                 toolName: 'project_context' as const,
                 status: 'executed' as const,
             },
-            trustedSystemMessages: ['Trusted project-context guidance.'],
-            contextMessages: [
-                {
-                    role: 'user' as const,
-                    content: 'UNTRUSTED PROJECT CONTEXT: repository evidence.',
-                },
-            ],
-            contextMessageRole: 'user' as const,
+            trustedInstructions: ['Trusted project-context guidance.'],
+            evidence: {
+                content: ['UNTRUSTED PROJECT CONTEXT: repository evidence.'],
+                visibility: 'model_visible',
+                authority: 'advisory',
+            },
         }),
         captureUsage: (generationResult) => ({
             model: generationResult.model ?? 'gpt-5-mini',

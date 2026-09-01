@@ -199,6 +199,8 @@ export type PostPlannerDiagnosticsSummary = Pick<
 
 export type AppliedPlanState = {
     executionPlan: ChatPlan;
+    /** Surface coercion is part of the semantic Plan Result used by generation. */
+    surfacePolicy?: ChatSurfacePolicyCoercion;
     generationForExecution: ChatGenerationPlan;
     selectedResponseProfile: Pick<
         ModelProfile,

@@ -20,9 +20,9 @@ import {
     parseWebSearchInput,
 } from './webSearchNormalization.js';
 import {
-    formatContextMessages,
+    formatWebSearchEvidence,
     buildSearchHints,
-} from './webSearchPromptFormatting.js';
+} from './webSearchEvidenceFormatting.js';
 import { classifyWebSearchRecordScope } from './webSearchScope.js';
 import { buildWebSearchProviderRegistry } from './webSearchProviders.js';
 import type {
@@ -312,7 +312,11 @@ export const createWebSearchContextStepExecutor = ({
         return buildExecutedContextStepResult({
             toolName: request.integrationName,
             durationMs,
-            contextMessages: formatContextMessages(input.query, discovered),
+            evidence: {
+                content: formatWebSearchEvidence(input.query, discovered),
+                visibility: 'model_visible',
+                authority: 'advisory',
+            },
             sources: discovered.map(normalizeCitation),
             integrationContext: {
                 kind: 'web_search',
