@@ -12,6 +12,7 @@ import {
     envConfigSourceByKey,
     envDefaultValues,
     envSpecByKey,
+    settingsSpecEntries,
 } from '../src/index.js';
 
 test('OpenAI defaults use the balanced GPT-5.6 Terra profile', () => {
@@ -37,6 +38,13 @@ test('presentation defaults stay disabled but select the tested profile and time
     assert.equal(
         envSpecByKey.CHAT_WORKFLOW_MAX_TOKENS_TOTAL_OVERRIDE?.kind,
         'integer'
+    );
+    assert.deepEqual(
+        settingsSpecEntries.find(
+            (entry) =>
+                entry.envKey === 'CHAT_WORKFLOW_MAX_TOKENS_TOTAL_OVERRIDE'
+        )?.path,
+        ['chat-workflow', 'max-tokens-total-override']
     );
 });
 
