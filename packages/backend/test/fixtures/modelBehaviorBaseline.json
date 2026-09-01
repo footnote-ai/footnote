@@ -105,6 +105,34 @@
             }
         },
         {
+            "id": "planner_difficult_routing",
+            "kind": "planner",
+            "description": "A current-state request that needs bounded retrieval while preserving ordinary message routing.",
+            "messages": [
+                {
+                    "role": "system",
+                    "content": "Use the smallest capable route. Retrieve only when current repository facts are needed, and do not request tools for a general explanation."
+                },
+                {
+                    "role": "user",
+                    "content": "Compare the current planner fallback behavior with the strict provenance work, and identify which repository issue is still open."
+                }
+            ],
+            "request": {
+                "maxOutputTokens": 200,
+                "reasoningEffort": "low",
+                "verbosity": "low"
+            },
+            "checks": {
+                "deterministic": ["planner_schema_valid", "trace_complete"],
+                "objective": ["retrieval_requested", "current_state_intent"],
+                "qualitative": [
+                    "retrieval_scope_is_bounded",
+                    "request_intent_preserved"
+                ]
+            }
+        },
+        {
             "id": "review_finalize_good_draft",
             "kind": "review",
             "description": "A clearly complete draft that should not trigger another revision.",

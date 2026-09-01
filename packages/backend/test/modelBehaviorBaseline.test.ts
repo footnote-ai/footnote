@@ -210,8 +210,8 @@ const readCorpus = (value: unknown): BaselineCase[] => {
 
 const corpus = readCorpus(rawCorpus);
 
-test('model behavior baseline contains six isolated workload cases', () => {
-    assert.equal(corpus.length, 6);
+test('model behavior baseline contains seven isolated workload cases', () => {
+    assert.equal(corpus.length, 7);
     assert.deepEqual(
         corpus.map((evaluationCase) => evaluationCase.id),
         [
@@ -219,6 +219,7 @@ test('model behavior baseline contains six isolated workload cases', () => {
             'planner_ordinary_message',
             'planner_retrieval_request',
             'structured_planner_schema',
+            'planner_difficult_routing',
             'review_finalize_good_draft',
             'review_revise_defective_draft',
         ]
@@ -247,8 +248,9 @@ test('model behavior baseline isolates the intended first-pass failure modes', (
     const ordinaryPlanner = corpus[1];
     const retrievalPlanner = corpus[2];
     const structuredPlanner = corpus[3];
-    const finalizeReview = corpus[4];
-    const reviseReview = corpus[5];
+    const difficultPlanner = corpus[4];
+    const finalizeReview = corpus[5];
+    const reviseReview = corpus[6];
 
     assert.ok(direct?.checks.objective.includes('retrieval_forbidden'));
     assert.ok(ordinaryPlanner?.checks.objective.includes('action_message'));
@@ -259,6 +261,9 @@ test('model behavior baseline isolates the intended first-pass failure modes', (
         structuredPlanner?.checks.deterministic.includes(
             'structured_output_valid'
         )
+    );
+    assert.ok(
+        difficultPlanner?.checks.objective.includes('current_state_intent')
     );
     assert.ok(
         finalizeReview?.checks.objective.includes('review_decision_finalize')
