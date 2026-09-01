@@ -714,14 +714,26 @@ export const runBoundedReviewWorkflow = async (
                 contextStepExecutorRegistry
             ) !== undefined
     );
-    const hasToolStep =
-        initialContextRequests.some(
-            (request) => request.requested && request.eligible
-        ) && hasContextExecutor;
     const hasPlannerStep =
         workflowPolicy.enablePlanning &&
         plannerStepRequest !== undefined &&
         plannerStepExecutor !== undefined;
+    // Planner continuations can add context requests after the static topology
+    // is built, so reserve the declared tool step when that late path is wired.
+    const hasPlannerContextExecutor =
+        workflowPolicy.enableToolUse &&
+        hasPlannerStep &&
+        planContinuationBuilder !== undefined &&
+        (contextStepExecutor !== undefined ||
+            Object.values(contextStepExecutorRegistry ?? {}).some(
+                (executor) => executor !== undefined
+            ));
+    const hasToolStep =
+        (initialContextRequests.some(
+            (request) => request.requested && request.eligible
+        ) &&
+            hasContextExecutor) ||
+        hasPlannerContextExecutor;
     const hasPresentationStep =
         presentation?.config.enabled === true &&
         workflowPolicy.enableGeneration !== false;

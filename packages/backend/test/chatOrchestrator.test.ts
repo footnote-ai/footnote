@@ -13,6 +13,7 @@ import type { PostChatRequest } from '@footnote/contracts/web';
 import { createMetadata } from './fixtures/responseMetadataFixture.js';
 import type { BotProfileConfig } from '../src/config/profile.js';
 import { runtimeConfig } from '../src/config.js';
+import { DEFAULT_CHAT_PLANNER_MAX_OUTPUT_TOKENS } from '../src/services/chatPlanner.js';
 import { createChatOrchestrator } from '../src/services/chatOrchestrator.js';
 import { selectModelProfileForWorkflowStep } from '../src/services/modelCapabilityPolicy.js';
 import { resolveExecutionContract } from '../src/services/executionContractResolver.js';
@@ -25,7 +26,7 @@ import { buildPersonaExpressionGuidance } from '../src/services/prompts/personaE
 import type { WeatherForecastTool } from '../src/services/contextIntegrations/weather/index.js';
 import { logger } from '../src/utils/logger.js';
 
-const PLANNER_TOKEN_SENTINEL = 1200;
+const PLANNER_TOKEN_SENTINEL = DEFAULT_CHAT_PLANNER_MAX_OUTPUT_TOKENS;
 const originalLoggerInfo = logger.info;
 const originalLoggerWarn = logger.warn;
 const originalLoggerDebug = logger.debug;

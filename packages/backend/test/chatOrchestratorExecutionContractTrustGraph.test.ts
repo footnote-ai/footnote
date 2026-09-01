@@ -12,6 +12,7 @@ import type { GenerationRuntime } from '@footnote/agent-runtime';
 import type { ResponseMetadata } from '@footnote/contracts/policy';
 import type { PostChatRequest } from '@footnote/contracts/web';
 import { createMetadata } from './fixtures/responseMetadataFixture.js';
+import { DEFAULT_CHAT_PLANNER_MAX_OUTPUT_TOKENS } from '../src/services/chatPlanner.js';
 import { createChatOrchestrator } from '../src/services/chatOrchestrator.js';
 import {
     createScopeOwnershipValidatorFromTenancyService,
@@ -24,7 +25,7 @@ import type {
     TrustGraphEvidenceAdapter,
 } from '../src/services/executionContractTrustGraph/index.js';
 
-const PLANNER_TOKEN_SENTINEL = 1200;
+const PLANNER_TOKEN_SENTINEL = DEFAULT_CHAT_PLANNER_MAX_OUTPUT_TOKENS;
 const TEST_TIMESTAMP = new Date('2026-04-04T00:00:00.000Z').toISOString();
 const TEST_TARGETS = [
     {
