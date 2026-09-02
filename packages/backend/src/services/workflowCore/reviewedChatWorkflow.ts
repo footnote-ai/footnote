@@ -10,6 +10,7 @@ import type {
     GenerationRequest,
     GenerationResult,
     GenerationRuntime,
+    GenerationUsage,
     RuntimeMessage,
 } from '@footnote/agent-runtime';
 import type { ModelProfile, TraceAxisScore } from '@footnote/contracts';
@@ -560,8 +561,79 @@ const makePlanDefault = (): PlannerStepResult => ({
     },
 });
 
+// A provider result with no complete visible answer must not satisfy the
+// generation Step. Routing may fail open to another profile, but the result
+// remains rejected if every bounded Attempt is incomplete.
 const isGenerationIncomplete = (result: GenerationResult): boolean =>
-    result.text.trim().length === 0;
+    result.text.trim().length === 0 ||
+    result.completion?.status === 'incomplete' ||
+    result.completion?.status === 'failed';
+
+/** Combines every provider Attempt used while routing one logical generation. */
+const combineGenerationUsage = (
+    summaries: readonly ReviewWorkflowUsageSummary[]
+): ReviewWorkflowUsageSummary => {
+    const last = summaries.at(-1);
+    return {
+        model: last?.model ?? 'unknown',
+        promptTokens: summaries.reduce(
+            (total, summary) => total + summary.promptTokens,
+            0
+        ),
+        completionTokens: summaries.reduce(
+            (total, summary) => total + summary.completionTokens,
+            0
+        ),
+        totalTokens: summaries.reduce(
+            (total, summary) => total + summary.totalTokens,
+            0
+        ),
+        estimatedCost: {
+            inputCostUsd: summaries.reduce(
+                (total, summary) => total + summary.estimatedCost.inputCostUsd,
+                0
+            ),
+            outputCostUsd: summaries.reduce(
+                (total, summary) => total + summary.estimatedCost.outputCostUsd,
+                0
+            ),
+            totalCostUsd: summaries.reduce(
+                (total, summary) => total + summary.estimatedCost.totalCostUsd,
+                0
+            ),
+        },
+    };
+};
+
+const combineGenerationResultUsage = (
+    results: readonly GenerationResult[]
+): GenerationUsage | undefined => {
+    if (!results.some((result) => result.usage !== undefined)) {
+        return undefined;
+    }
+
+    const sum = (
+        selector: (usage: GenerationUsage) => number | undefined
+    ): number | undefined => {
+        const values = results
+            .map((result) =>
+                result.usage === undefined ? undefined : selector(result.usage)
+            )
+            .filter((value): value is number => value !== undefined);
+        return values.length === 0
+            ? undefined
+            : values.reduce((total, value) => total + value, 0);
+    };
+
+    return {
+        promptTokens: sum((value) => value.promptTokens),
+        cachedInputTokens: sum((value) => value.cachedInputTokens),
+        cacheWriteTokens: sum((value) => value.cacheWriteTokens),
+        completionTokens: sum((value) => value.completionTokens),
+        reasoningTokens: sum((value) => value.reasoningTokens),
+        totalTokens: sum((value) => value.totalTokens),
+    };
+};
 
 const readPlanEnvelope = (
     value: Result | undefined
@@ -1620,6 +1692,7 @@ export const runBoundedReviewWorkflow = async (
             };
         }
         let generationResult: GenerationResult;
+        const generationAttempts: GenerationResult[] = [];
         let routingAttempts: RoutingChainAttemptLog[] | undefined;
         let selectedProfile: ModelProfile | undefined;
         try {
@@ -1639,8 +1712,8 @@ export const runBoundedReviewWorkflow = async (
                       enabledProfilesById:
                           stepRoutingChainSet.enabledProfilesById,
                       requiresSearch: boundedRequest.search !== undefined,
-                      runWithProfile: async (profile) =>
-                          generationRuntime.generate({
+                      runWithProfile: async (profile) => {
+                          const result = await generationRuntime.generate({
                               ...capGenerationRequestToProfileMax({
                                   request: boundedRequest,
                                   profile,
@@ -1654,7 +1727,11 @@ export const runBoundedReviewWorkflow = async (
                                   boundedRequest.reasoningEffort,
                                   logger
                               ),
-                          }),
+                          });
+                          generationAttempts.push(result);
+                          return result;
+                      },
+                      shouldRetry: isGenerationIncomplete,
                   })
                 : undefined;
             const routed =
@@ -1662,38 +1739,43 @@ export const runBoundedReviewWorkflow = async (
                     ? undefined
                     : toRoutingChainResult(chainResult);
             if (routed?.isErr()) {
-                return {
-                    status: 'failed',
-                    errorCode: routed.error.reasonCode,
-                    retryable: false,
-                    metadata: encodeMetadata({
+                const lastAttempt = generationAttempts.at(-1);
+                if (lastAttempt === undefined) {
+                    return {
                         status: 'failed',
-                        summary:
-                            'Generation routing failed; workflow returned the latest valid draft when available.',
-                        reasonCode: routed.error.reasonCode,
-                        terminationReason: 'executor_error_fail_open',
-                        signals: {
-                            ...refinementStepSignals(),
-                            ...buildRoutingChainSignals({
-                                attempts: routed.error.attempts,
-                                selectedProfileId: null,
-                                signalKeys: {
-                                    profileId: 'routedProfileId',
-                                    provider: 'routedProvider',
-                                    model: 'routedModel',
-                                },
-                            }),
-                        },
-                    }),
-                };
-            }
-            if (routed?.isOk()) {
+                        errorCode: routed.error.reasonCode,
+                        retryable: false,
+                        metadata: encodeMetadata({
+                            status: 'failed',
+                            summary:
+                                'Generation routing failed; workflow returned the latest valid draft when available.',
+                            reasonCode: routed.error.reasonCode,
+                            terminationReason: 'executor_error_fail_open',
+                            signals: {
+                                ...refinementStepSignals(),
+                                ...buildRoutingChainSignals({
+                                    attempts: routed.error.attempts,
+                                    selectedProfileId: null,
+                                    signalKeys: {
+                                        profileId: 'routedProfileId',
+                                        provider: 'routedProvider',
+                                        model: 'routedModel',
+                                    },
+                                }),
+                            },
+                        }),
+                    };
+                }
+                generationResult = lastAttempt;
+                routingAttempts = routed.error.attempts;
+            } else if (routed?.isOk()) {
                 generationResult = routed.value.value;
                 routingAttempts = routed.value.attempts;
                 selectedProfile = routed.value.selected.profile;
             } else {
                 generationResult =
                     await generationRuntime.generate(boundedRequest);
+                generationAttempts.push(generationResult);
             }
         } catch (error) {
             return {
@@ -1723,7 +1805,11 @@ export const runBoundedReviewWorkflow = async (
                 }),
             };
         }
-        const usage = captureUsage(generationResult, boundedRequest.model);
+        const usage = combineGenerationUsage(
+            generationAttempts.map((attempt) =>
+                captureUsage(attempt, boundedRequest.model)
+            )
+        );
         const incomplete = isGenerationIncomplete(generationResult);
         const parentCandidateId = candidates.latestCandidateId();
         const candidateId = incomplete
@@ -1738,45 +1824,55 @@ export const runBoundedReviewWorkflow = async (
                       ? {}
                       : { parentCandidateId }),
               });
+        const metadata = encodeMetadata({
+            status: incomplete ? 'failed' : 'executed',
+            summary: incomplete
+                ? 'Generation exhausted its output allowance before producing visible text.'
+                : previousDraft === undefined
+                  ? 'Generated initial draft response.'
+                  : 'Generated refinement draft from assessment guidance.',
+            reasonCode: incomplete
+                ? 'generation_incomplete_before_output'
+                : undefined,
+            model: usage.model,
+            usage: combineGenerationResultUsage(generationAttempts),
+            estimatedCost: usage.estimatedCost,
+            candidateId,
+            terminationReason: incomplete
+                ? 'executor_error_fail_open'
+                : undefined,
+            signals: {
+                ...refinementStepSignals(),
+                ...(routingAttempts === undefined
+                    ? {}
+                    : buildRoutingChainSignals({
+                          attempts: routingAttempts,
+                          selectedProfileId: selectedProfile?.id ?? null,
+                          selectedProvider: selectedProfile?.provider,
+                          selectedModel: selectedProfile?.providerModel,
+                          signalKeys: {
+                              profileId: 'routedProfileId',
+                              provider: 'routedProvider',
+                              model: 'routedModel',
+                          },
+                      })),
+            },
+        });
+        if (incomplete) {
+            return {
+                status: 'failed',
+                errorCode: 'generation_incomplete',
+                retryable: false,
+                usage: { totalTokens: usage.totalTokens },
+                metadata,
+            };
+        }
         return {
             status: 'succeeded',
-            outcome: incomplete ? 'incomplete' : 'generated',
+            outcome: 'generated',
             result: toSerializable(generationResult),
             usage: { totalTokens: usage.totalTokens },
-            metadata: encodeMetadata({
-                status: incomplete ? 'failed' : 'executed',
-                summary: incomplete
-                    ? 'Generation exhausted its output allowance before producing visible text.'
-                    : previousDraft === undefined
-                      ? 'Generated initial draft response.'
-                      : 'Generated refinement draft from assessment guidance.',
-                reasonCode: incomplete
-                    ? 'generation_incomplete_before_output'
-                    : undefined,
-                model: usage.model,
-                usage: generationResult.usage,
-                estimatedCost: usage.estimatedCost,
-                candidateId,
-                terminationReason: incomplete
-                    ? 'executor_error_fail_open'
-                    : undefined,
-                signals: {
-                    ...refinementStepSignals(),
-                    ...(routingAttempts === undefined
-                        ? {}
-                        : buildRoutingChainSignals({
-                              attempts: routingAttempts,
-                              selectedProfileId: selectedProfile?.id ?? null,
-                              selectedProvider: selectedProfile?.provider,
-                              selectedModel: selectedProfile?.providerModel,
-                              signalKeys: {
-                                  profileId: 'routedProfileId',
-                                  provider: 'routedProvider',
-                                  model: 'routedModel',
-                              },
-                          })),
-                },
-            }),
+            metadata,
         };
     };
 

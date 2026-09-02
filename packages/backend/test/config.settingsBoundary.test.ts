@@ -118,6 +118,19 @@ test('workflow token override is loaded from canonical settings YAML', () => {
     assert.equal(config.chatWorkflow.maxTokensTotalOverride, 512_000);
 });
 
+test('repository canonical settings keep pre-production workflow admission permissive', () => {
+    const config = buildRuntimeConfig(
+        {
+            NODE_ENV: 'test',
+            FOOTNOTE_SETTINGS_PATH: path.resolve('footnote.yaml'),
+        },
+        () => undefined
+    );
+
+    assert.equal(config.chatWorkflow.maxTokensTotalOverride, 512_000);
+    assert.equal(config.chatWorkflow.presentation.enabled, false);
+});
+
 test('integer settings reject non-integer numbers', () => {
     const settingsPath = withSettingsFile(
         ['version: 1', 'rate-limits:', '  web-api-rate-limit-ip: 3.5', ''].join(

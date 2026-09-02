@@ -116,3 +116,44 @@ test('executeStepRoutingChain stops on non-transient errors', async () => {
         );
     }
 });
+
+test('executeStepRoutingChain advances when a provider returns a retryable result', async () => {
+    const first = makeProfile({
+        id: 'openai-text-medium',
+        provider: 'openai',
+        providerModel: 'gpt-5.4-mini',
+        canUseSearch: true,
+    });
+    const second = makeProfile({
+        id: 'ollama-text-gptoss',
+        provider: 'ollama',
+        providerModel: 'gpt-oss:20b-cloud',
+        canUseSearch: true,
+    });
+    const enabledProfilesById = new Map([
+        [first.id, first],
+        [second.id, second],
+    ]);
+
+    const result = await executeStepRoutingChain({
+        step: 'generate',
+        candidates: [
+            { profileId: first.id, chooseOneUsed: false },
+            { profileId: second.id, chooseOneUsed: false },
+        ],
+        enabledProfilesById,
+        requiresSearch: false,
+        runWithProfile: async (profile) => ({
+            profileId: profile.id,
+            complete: profile.id === second.id,
+        }),
+        shouldRetry: (value) => !value.complete,
+    });
+
+    assert.equal(result.status, 'executed');
+    if (result.status === 'executed') {
+        assert.equal(result.selected.profile.id, second.id);
+        assert.equal(result.attempts[0]?.status, 'failed_transient_advanced');
+        assert.equal(result.attempts[1]?.status, 'executed');
+    }
+});
