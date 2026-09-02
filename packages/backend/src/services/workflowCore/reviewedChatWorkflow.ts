@@ -1824,45 +1824,55 @@ export const runBoundedReviewWorkflow = async (
                       ? {}
                       : { parentCandidateId }),
               });
+        const metadata = encodeMetadata({
+            status: incomplete ? 'failed' : 'executed',
+            summary: incomplete
+                ? 'Generation exhausted its output allowance before producing visible text.'
+                : previousDraft === undefined
+                  ? 'Generated initial draft response.'
+                  : 'Generated refinement draft from assessment guidance.',
+            reasonCode: incomplete
+                ? 'generation_incomplete_before_output'
+                : undefined,
+            model: usage.model,
+            usage: combineGenerationResultUsage(generationAttempts),
+            estimatedCost: usage.estimatedCost,
+            candidateId,
+            terminationReason: incomplete
+                ? 'executor_error_fail_open'
+                : undefined,
+            signals: {
+                ...refinementStepSignals(),
+                ...(routingAttempts === undefined
+                    ? {}
+                    : buildRoutingChainSignals({
+                          attempts: routingAttempts,
+                          selectedProfileId: selectedProfile?.id ?? null,
+                          selectedProvider: selectedProfile?.provider,
+                          selectedModel: selectedProfile?.providerModel,
+                          signalKeys: {
+                              profileId: 'routedProfileId',
+                              provider: 'routedProvider',
+                              model: 'routedModel',
+                          },
+                      })),
+            },
+        });
+        if (incomplete) {
+            return {
+                status: 'failed',
+                errorCode: 'generation_incomplete',
+                retryable: false,
+                usage: { totalTokens: usage.totalTokens },
+                metadata,
+            };
+        }
         return {
             status: 'succeeded',
-            outcome: incomplete ? 'incomplete' : 'generated',
+            outcome: 'generated',
             result: toSerializable(generationResult),
             usage: { totalTokens: usage.totalTokens },
-            metadata: encodeMetadata({
-                status: incomplete ? 'failed' : 'executed',
-                summary: incomplete
-                    ? 'Generation exhausted its output allowance before producing visible text.'
-                    : previousDraft === undefined
-                      ? 'Generated initial draft response.'
-                      : 'Generated refinement draft from assessment guidance.',
-                reasonCode: incomplete
-                    ? 'generation_incomplete_before_output'
-                    : undefined,
-                model: usage.model,
-                usage: combineGenerationResultUsage(generationAttempts),
-                estimatedCost: usage.estimatedCost,
-                candidateId,
-                terminationReason: incomplete
-                    ? 'executor_error_fail_open'
-                    : undefined,
-                signals: {
-                    ...refinementStepSignals(),
-                    ...(routingAttempts === undefined
-                        ? {}
-                        : buildRoutingChainSignals({
-                              attempts: routingAttempts,
-                              selectedProfileId: selectedProfile?.id ?? null,
-                              selectedProvider: selectedProfile?.provider,
-                              selectedModel: selectedProfile?.providerModel,
-                              signalKeys: {
-                                  profileId: 'routedProfileId',
-                                  provider: 'routedProvider',
-                                  model: 'routedModel',
-                              },
-                          })),
-                },
-            }),
+            metadata,
         };
     };
 

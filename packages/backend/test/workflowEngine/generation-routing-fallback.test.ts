@@ -220,7 +220,7 @@ test('keeps an all-incomplete routed generation rejected and retains its usage',
         candidates: [first, second],
     });
 
-    assert.equal(result.outcome, 'generated');
+    assert.equal(result.outcome, 'no_generation');
     assert.equal(calls, 2);
     const generateStep = result.workflowLineage.steps.find(
         (step) => step.stepKind === 'generate'
