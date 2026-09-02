@@ -2043,15 +2043,20 @@ components:
         ChatAddressingEvidence:
             type: object
             description: Semantic addressing facts supplied by a trusted surface adapter. Discord account IDs and mention markup are not included.
+            x-codeRefs:
+                - packages/contracts/src/web/types.ts#ChatAddressingEvidence
+                - packages/contracts/src/web/schemas.ts#ChatAddressingEvidenceSchema
             properties:
                 participants:
                     type: array
                     maxItems: 64
+                    default: []
                     items:
                         $ref: '#/components/schemas/ChatAddressingParticipant'
                 resolution:
                     type: string
                     enum: [complete, degraded]
+                    default: degraded
                 assistantMentioned:
                     type: boolean
                 replyToAssistant:
@@ -2061,8 +2066,6 @@ components:
                 replyToOtherParticipant:
                     type: boolean
             required:
-                - participants
-                - resolution
                 - assistantMentioned
                 - replyToAssistant
                 - otherParticipantMentioned

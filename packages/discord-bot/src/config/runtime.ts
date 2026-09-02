@@ -517,15 +517,24 @@ const isRecord = (value: unknown): value is Record<string, unknown> =>
 const isPersonaId = (value: string): boolean =>
     /^[a-z0-9][a-z0-9-]{0,31}$/.test(value);
 
+const localDiscordUserId = process.env.DISCORD_USER_ID?.trim() ?? '';
+
 const fallbackPersonaRoster = (): DiscordPersonaRosterEntry[] => [
     {
         personaId: profileConfig.id,
         displayName: profileConfig.displayName,
-        discordUserId: process.env.DISCORD_USER_ID?.trim() ?? '',
+        discordUserId: localDiscordUserId,
         mentionAliases: [...profileConfig.mentionAliases],
     },
 ];
 
+/**
+ * @description: Reads and validates the supervisor-provided non-secret persona roster, using the local profile fallback when it is absent or invalid. Uncertain or conflicting identity data is retained only with degraded resolution.
+ * @footnote-scope: core
+ * @footnote-module: DiscordPersonaRoster
+ * @footnote-risk: high - Invalid roster data can make different Discord processes resolve the same mention to different personas.
+ * @footnote-ethics: high - Incorrect participant identity can misrepresent who a user invited to respond.
+ */
 const readPersonaRoster = (): {
     entries: DiscordPersonaRosterEntry[];
     resolution: 'complete' | 'degraded';
@@ -590,12 +599,37 @@ const readPersonaRoster = (): {
             });
         }
 
-        if (!entries.some((entry) => entry.personaId === profileConfig.id)) {
-            entries.unshift(fallback[0]);
+        const entriesWithLocalIdentity = entries.filter(
+            (entry) =>
+                !(
+                    entry.personaId === profileConfig.id &&
+                    entry.discordUserId !== localDiscordUserId
+                ) &&
+                !(
+                    localDiscordUserId.length > 0 &&
+                    entry.discordUserId === localDiscordUserId &&
+                    entry.personaId !== profileConfig.id
+                )
+        );
+        if (entriesWithLocalIdentity.length !== entries.length) {
+            degraded = true;
+        }
+        if (
+            !entriesWithLocalIdentity.some(
+                (entry) =>
+                    entry.personaId === profileConfig.id &&
+                    localDiscordUserId.length > 0 &&
+                    entry.discordUserId === localDiscordUserId
+            )
+        ) {
+            entriesWithLocalIdentity.unshift(fallback[0]);
             degraded = true;
         }
         return {
-            entries: entries.length > 0 ? entries : fallback,
+            entries:
+                entriesWithLocalIdentity.length > 0
+                    ? entriesWithLocalIdentity
+                    : fallback,
             resolution: degraded ? 'degraded' : 'complete',
         };
     } catch (error) {

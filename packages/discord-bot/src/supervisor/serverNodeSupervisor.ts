@@ -212,6 +212,13 @@ const stopChildProcess = async (
     });
 };
 
+/**
+ * @description: Serializes the supervisor-owned non-secret persona roster across the child-process boundary. Child startup remains fail-open because each child validates the roster and marks uncertainty as degraded instead of blocking unrelated runtime work.
+ * @footnote-scope: core
+ * @footnote-module: DiscordPersonaRosterPropagation
+ * @footnote-risk: high - Incorrect propagation can make separate persona processes disagree about the same Discord event.
+ * @footnote-ethics: high - Misrouted identity facts can cause a persona to answer when another participant was invited.
+ */
 const buildNodeEnvironment = (
     parentEnv: NodeJS.ProcessEnv,
     nodeConfig: LocalNodeRuntimeConfig,

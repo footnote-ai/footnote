@@ -480,6 +480,32 @@ test('PostChatRequestSchema enforces strict request payload rules', () => {
         false
     );
 
+    const legacyAddressingRequest = PostChatRequestSchema.safeParse({
+        surface: 'discord',
+        trigger: {
+            kind: 'direct',
+            addressing: {
+                assistantMentioned: true,
+                replyToAssistant: false,
+                otherParticipantMentioned: false,
+                replyToOtherParticipant: false,
+            },
+        },
+        latestUserInput: 'What is Footnote?',
+        conversation: [{ role: 'user', content: 'What is Footnote?' }],
+    });
+    assert.equal(legacyAddressingRequest.success, true);
+    if (legacyAddressingRequest.success) {
+        assert.deepEqual(legacyAddressingRequest.data.trigger.addressing, {
+            participants: [],
+            resolution: 'degraded',
+            assistantMentioned: true,
+            replyToAssistant: false,
+            otherParticipantMentioned: false,
+            replyToOtherParticipant: false,
+        });
+    }
+
     assert.equal(
         PostChatRequestSchema.safeParse({
             surface: 'web',

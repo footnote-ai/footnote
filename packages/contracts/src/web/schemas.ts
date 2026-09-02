@@ -36,6 +36,7 @@ import type { ApiResponseValidationResult } from './client-core.js';
 import type {
     AuthenticatedPrincipal,
     ChatAssistantIdentity,
+    ChatAddressingEvidence,
     ChatAddressingParticipant,
     GetAuthSessionResponse,
     GetTraceResponse,
@@ -115,14 +116,25 @@ const ChatAddressingParticipantSchema: z.ZodType<ChatAddressingParticipant> =
     ]);
 const ChatAddressingEvidenceSchema = z
     .object({
-        participants: z.array(ChatAddressingParticipantSchema).max(64),
-        resolution: z.enum(['complete', 'degraded']),
+        participants: z
+            .array(ChatAddressingParticipantSchema)
+            .max(64)
+            .optional(),
+        resolution: z.enum(['complete', 'degraded']).optional(),
         assistantMentioned: z.boolean(),
         replyToAssistant: z.boolean(),
         otherParticipantMentioned: z.boolean(),
         replyToOtherParticipant: z.boolean(),
     })
-    .strict();
+    .strict()
+    .transform((addressing): ChatAddressingEvidence => ({
+        participants: addressing.participants ?? [],
+        resolution: addressing.resolution ?? 'degraded',
+        assistantMentioned: addressing.assistantMentioned,
+        replyToAssistant: addressing.replyToAssistant,
+        otherParticipantMentioned: addressing.otherParticipantMentioned,
+        replyToOtherParticipant: addressing.replyToOtherParticipant,
+    }));
 const ChatPersonaIdSchema = z.string().regex(/^[a-z0-9][a-z0-9-]{0,31}$/);
 /** Identity facts supplied by a trusted surface adapter for formatting only. */
 export const ChatAssistantIdentitySchema: z.ZodType<ChatAssistantIdentity> = z
