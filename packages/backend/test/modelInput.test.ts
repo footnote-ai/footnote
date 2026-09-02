@@ -109,12 +109,15 @@ test('buildModelInput keeps evidence in the user channel and plan in a separate 
         ),
         false
     );
+    const manifestIndex = input.messages.findIndex((message) =>
+        message.content.includes('FOOTNOTE CONTEXT MANIFEST')
+    );
+    const evidenceIndex = input.messages.findIndex((message) =>
+        message.content.includes('UNTRUSTED EVIDENCE')
+    );
     assert.ok(
-        input.messages.findIndex((message) =>
-            message.content.includes('FOOTNOTE CONTEXT MANIFEST')
-        ) <
-            (evidenceMessage === undefined
-                ? 0
-                : input.messages.indexOf(evidenceMessage))
+        manifestIndex >= 0 &&
+            evidenceIndex >= 0 &&
+            manifestIndex < evidenceIndex
     );
 });
