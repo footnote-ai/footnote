@@ -68,13 +68,15 @@ const participantFromUser = (
         : { kind: 'unknown', relation };
 };
 
-const participantKey = (participant: ChatAddressingParticipant): string =>
-    [
-        participant.kind,
-        participant.relation,
-        participant.personaId ?? '',
-        participant.displayName ?? '',
-    ].join(':');
+const participantKey = (participant: ChatAddressingParticipant): string => {
+    const identity =
+        participant.kind === 'persona'
+            ? participant.personaId
+            : participant.kind === 'external_participant'
+              ? participant.displayName
+              : '';
+    return [participant.kind, participant.relation, identity].join(':');
+};
 
 const addParticipant = (
     participants: ChatAddressingParticipant[],
@@ -160,12 +162,14 @@ export const normalizeDiscordAddressing = (
     const otherParticipantMentioned = participants.some(
         (participant) =>
             participant.relation === 'explicit_mention' &&
-            participant.personaId !== input.currentPersonaId
+            (participant.kind !== 'persona' ||
+                participant.personaId !== input.currentPersonaId)
     );
     const replyToOtherParticipant = participants.some(
         (participant) =>
             participant.relation === 'reply' &&
-            participant.personaId !== input.currentPersonaId
+            (participant.kind !== 'persona' ||
+                participant.personaId !== input.currentPersonaId)
     );
 
     return {

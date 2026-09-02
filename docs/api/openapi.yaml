@@ -1988,6 +1988,58 @@ components:
                 - mentionAliases
             additionalProperties: false
 
+        ChatAddressingParticipant:
+            oneOf:
+                - type: object
+                  properties:
+                      kind:
+                          const: persona
+                      relation:
+                          type: string
+                          enum: [explicit_mention, reply, plaintext_reference]
+                      personaId:
+                          type: string
+                          pattern: '^[a-z0-9][a-z0-9-]{0,31}$'
+                      displayName:
+                          type: string
+                          minLength: 1
+                          maxLength: 64
+                          pattern: '.*\\S.*'
+                  required:
+                      - kind
+                      - relation
+                      - personaId
+                      - displayName
+                  additionalProperties: false
+                - type: object
+                  properties:
+                      kind:
+                          const: external_participant
+                      relation:
+                          type: string
+                          enum: [explicit_mention, reply, plaintext_reference]
+                      displayName:
+                          type: string
+                          minLength: 1
+                          maxLength: 64
+                          pattern: '.*\\S.*'
+                  required:
+                      - kind
+                      - relation
+                      - displayName
+                  additionalProperties: false
+                - type: object
+                  properties:
+                      kind:
+                          const: unknown
+                      relation:
+                          type: string
+                          enum: [explicit_mention, reply, plaintext_reference]
+                  required:
+                      - kind
+                      - relation
+                  additionalProperties: false
+
         ChatAddressingEvidence:
             type: object
             description: Semantic addressing facts supplied by a trusted surface adapter. Discord account IDs and mention markup are not included.
@@ -1996,31 +2048,7 @@ components:
                     type: array
                     maxItems: 64
                     items:
-                        type: object
-                        properties:
-                            kind:
-                                type: string
-                                enum: [persona, external_participant, unknown]
-                            relation:
-                                type: string
-                                enum:
-                                    [
-                                        explicit_mention,
-                                        reply,
-                                        plaintext_reference,
-                                    ]
-                            personaId:
-                                type: string
-                                pattern: '^[a-z0-9][a-z0-9-]{0,31}$'
-                            displayName:
-                                type: string
-                                minLength: 1
-                                maxLength: 64
-                                pattern: '.*\\S.*'
-                        required:
-                            - kind
-                            - relation
-                        additionalProperties: false
+                        $ref: '#/components/schemas/ChatAddressingParticipant'
                 resolution:
                     type: string
                     enum: [complete, degraded]

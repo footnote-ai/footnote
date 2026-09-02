@@ -322,12 +322,22 @@ export type ChatAddressingRelation =
  * @api.operationId: postChat
  * @api.path: POST /api/chat
  */
-export type ChatAddressingParticipant = {
-    kind: ChatAddressingParticipantKind;
-    relation: ChatAddressingRelation;
-    personaId?: string;
-    displayName?: string;
-};
+export type ChatAddressingParticipant =
+    | {
+          kind: 'persona';
+          relation: ChatAddressingRelation;
+          personaId: string;
+          displayName: string;
+      }
+    | {
+          kind: 'external_participant';
+          relation: ChatAddressingRelation;
+          displayName: string;
+      }
+    | {
+          kind: 'unknown';
+          relation: ChatAddressingRelation;
+      };
 
 /**
  * Provider-neutral facts about who a message addresses or discusses.
