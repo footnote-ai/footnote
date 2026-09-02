@@ -83,8 +83,31 @@ const ChatTriggerKindSchema = z.enum([
     'alias_candidate',
     'catchup',
 ]);
+const ChatAddressingParticipantKindSchema = z.enum([
+    'persona',
+    'external_participant',
+    'unknown',
+]);
+const ChatAddressingRelationSchema = z.enum([
+    'explicit_mention',
+    'reply',
+    'plaintext_reference',
+]);
+const ChatAddressingParticipantSchema = z
+    .object({
+        kind: ChatAddressingParticipantKindSchema,
+        relation: ChatAddressingRelationSchema,
+        personaId: z
+            .string()
+            .regex(/^[a-z0-9][a-z0-9-]{0,31}$/)
+            .optional(),
+        displayName: z.string().trim().min(1).max(64).optional(),
+    })
+    .strict();
 const ChatAddressingEvidenceSchema = z
     .object({
+        participants: z.array(ChatAddressingParticipantSchema).max(64),
+        resolution: z.enum(['complete', 'degraded']),
         assistantMentioned: z.boolean(),
         replyToAssistant: z.boolean(),
         otherParticipantMentioned: z.boolean(),

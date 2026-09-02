@@ -27,6 +27,7 @@ import {
     LOCAL_NODE_FAILURE_WINDOW_MS,
     LocalNodeRestartPolicy,
 } from './restartPolicy.js';
+import type { DiscordPersonaRosterEntry } from '../utils/discordAddressing.js';
 
 const DISCORD_BOT_WORKDIR = '/app/packages/discord-bot';
 const BACKEND_WORKDIR = '/app/packages/backend';
@@ -214,7 +215,8 @@ const stopChildProcess = async (
 const buildNodeEnvironment = (
     parentEnv: NodeJS.ProcessEnv,
     nodeConfig: LocalNodeRuntimeConfig,
-    backendBaseUrl: string
+    backendBaseUrl: string,
+    personaRoster: readonly DiscordPersonaRosterEntry[]
 ): NodeJS.ProcessEnv => {
     const env: NodeJS.ProcessEnv = {
         ...parentEnv,
@@ -231,6 +233,7 @@ const buildNodeEnvironment = (
                 nodeConfig.profile.personaExpressionStrength,
         }),
         LOCAL_DISCORD_NODE_ID: nodeConfig.id,
+        FOOTNOTE_DISCORD_PERSONA_ROSTER: JSON.stringify(personaRoster),
     };
 
     if (nodeConfig.profile.personaExpressionStrength === undefined) {
@@ -270,6 +273,13 @@ class ServerNodeSupervisor {
                 ? { activeNodes: [], disabledNodes: [] }
                 : resolveLocalNodeDefinitions(localNodeDefinitions, this.env);
         const backendBaseUrl = resolveBackendBaseUrl(this.env);
+        const personaRoster: DiscordPersonaRosterEntry[] =
+            resolvedNodes.activeNodes.map((node) => ({
+                personaId: node.profile.id,
+                displayName: node.profile.displayName,
+                discordUserId: node.credentials.discordUserId,
+                mentionAliases: [...node.profile.mentionAliases],
+            }));
 
         logger.info('discord_bots_config_status', {
             status: localNodeDefinitions === null ? 'missing' : 'configured',
@@ -312,7 +322,7 @@ class ServerNodeSupervisor {
                 restartTimer: null,
             };
             this.nodeStates.set(nodeConfig.id, state);
-            this.startNodeProcess(state, backendBaseUrl);
+            this.startNodeProcess(state, backendBaseUrl, personaRoster);
         }
 
         // This means supervision is active, not that every child has finished
@@ -348,7 +358,8 @@ class ServerNodeSupervisor {
 
     private startNodeProcess(
         state: NodeProcessState,
-        backendBaseUrl: string
+        backendBaseUrl: string,
+        personaRoster: readonly DiscordPersonaRosterEntry[]
     ): void {
         if (this.shuttingDown || state.unhealthy) {
             return;
@@ -357,7 +368,8 @@ class ServerNodeSupervisor {
         const nodeEnv = buildNodeEnvironment(
             this.env,
             state.config,
-            backendBaseUrl
+            backendBaseUrl,
+            personaRoster
         );
         const child = spawn('node', ['dist/index.js'], {
             cwd: DISCORD_BOT_WORKDIR,
@@ -400,7 +412,7 @@ class ServerNodeSupervisor {
 
             state.restartTimer = setTimeout(() => {
                 state.restartTimer = null;
-                this.startNodeProcess(state, backendBaseUrl);
+                this.startNodeProcess(state, backendBaseUrl, personaRoster);
             }, NODE_RESTART_DELAY_MS);
         });
     }

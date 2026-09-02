@@ -298,10 +298,47 @@ export type ChatTriggerKind =
     'submit' | 'direct' | 'invoked' | 'alias_candidate' | 'catchup';
 
 /**
- * Provider-neutral facts about who a message explicitly addresses.
+ * The semantic kind of participant resolved by a trusted surface adapter.
+ *
+ * @api.operationId: postChat
+ * @api.path: POST /api/chat
+ */
+export type ChatAddressingParticipantKind =
+    'persona' | 'external_participant' | 'unknown';
+
+/**
+ * How a participant was referenced by the incoming message.
+ *
+ * @api.operationId: postChat
+ * @api.path: POST /api/chat
+ */
+export type ChatAddressingRelation =
+    'explicit_mention' | 'reply' | 'plaintext_reference';
+
+/**
+ * A provider-neutral participant reference resolved by a trusted surface
+ * adapter. Discord account IDs and mention markup are intentionally absent.
+ *
+ * @api.operationId: postChat
+ * @api.path: POST /api/chat
+ */
+export type ChatAddressingParticipant = {
+    kind: ChatAddressingParticipantKind;
+    relation: ChatAddressingRelation;
+    personaId?: string;
+    displayName?: string;
+};
+
+/**
+ * Provider-neutral facts about who a message addresses or discusses.
  * These facts are evidence for planning, not a final response decision.
+ *
+ * @api.operationId: postChat
+ * @api.path: POST /api/chat
  */
 export type ChatAddressingEvidence = {
+    participants: ChatAddressingParticipant[];
+    resolution: 'complete' | 'degraded';
     assistantMentioned: boolean;
     replyToAssistant: boolean;
     otherParticipantMentioned: boolean;

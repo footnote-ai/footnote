@@ -22,6 +22,7 @@ import type {
 import { supportedLogLevels } from '@footnote/contracts/providers';
 import { bootstrapLogger } from '../utils/logger.js';
 import { readBotProfileConfig } from './profile.js';
+import type { DiscordPersonaRosterEntry } from '../utils/discordAddressing.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -510,6 +511,103 @@ if (!rawWebBaseUrl && flyAppName) {
     );
 }
 
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+    value !== null && typeof value === 'object' && !Array.isArray(value);
+
+const isPersonaId = (value: string): boolean =>
+    /^[a-z0-9][a-z0-9-]{0,31}$/.test(value);
+
+const fallbackPersonaRoster = (): DiscordPersonaRosterEntry[] => [
+    {
+        personaId: profileConfig.id,
+        displayName: profileConfig.displayName,
+        discordUserId: process.env.DISCORD_USER_ID?.trim() ?? '',
+        mentionAliases: [...profileConfig.mentionAliases],
+    },
+];
+
+const readPersonaRoster = (): {
+    entries: DiscordPersonaRosterEntry[];
+    resolution: 'complete' | 'degraded';
+} => {
+    const fallback = fallbackPersonaRoster();
+    const raw = process.env.FOOTNOTE_DISCORD_PERSONA_ROSTER?.trim();
+    if (!raw) {
+        return { entries: fallback, resolution: 'complete' };
+    }
+
+    try {
+        const parsed: unknown = JSON.parse(raw);
+        if (!Array.isArray(parsed)) {
+            throw new Error('roster must be an array');
+        }
+
+        const entries: DiscordPersonaRosterEntry[] = [];
+        let degraded = false;
+        for (const value of parsed) {
+            if (!isRecord(value)) {
+                degraded = true;
+                continue;
+            }
+            const personaId =
+                typeof value.personaId === 'string'
+                    ? value.personaId.trim()
+                    : '';
+            const displayName =
+                typeof value.displayName === 'string'
+                    ? value.displayName.trim()
+                    : '';
+            const discordUserId =
+                typeof value.discordUserId === 'string'
+                    ? value.discordUserId.trim()
+                    : '';
+            const mentionAliases = Array.isArray(value.mentionAliases)
+                ? value.mentionAliases.filter(
+                      (alias): alias is string =>
+                          typeof alias === 'string' && alias.trim().length > 0
+                  )
+                : [];
+            if (
+                !isPersonaId(personaId) ||
+                !displayName ||
+                !discordUserId ||
+                entries.some(
+                    (entry) =>
+                        entry.personaId === personaId ||
+                        entry.discordUserId === discordUserId
+                )
+            ) {
+                degraded = true;
+                continue;
+            }
+            entries.push({
+                personaId,
+                displayName,
+                discordUserId,
+                mentionAliases: [
+                    ...new Set(mentionAliases.map((a) => a.trim())),
+                ],
+            });
+        }
+
+        if (!entries.some((entry) => entry.personaId === profileConfig.id)) {
+            entries.unshift(fallback[0]);
+            degraded = true;
+        }
+        return {
+            entries: entries.length > 0 ? entries : fallback,
+            resolution: degraded ? 'degraded' : 'complete',
+        };
+    } catch (error) {
+        bootstrapLogger.warn('Ignoring invalid Discord persona roster.', {
+            error: error instanceof Error ? error.message : String(error),
+        });
+        return { entries: fallback, resolution: 'degraded' };
+    }
+};
+
+const personaRoster = readPersonaRoster();
+
 const rawBackendBaseUrl = process.env.BACKEND_BASE_URL?.trim();
 const sharedBackendPortFromEnv = process.env.PORT?.trim();
 const isValidNetworkPort = (value: number): boolean =>
@@ -592,6 +690,8 @@ export const runtimeConfig = {
         process.env.INCIDENT_PSEUDONYMIZATION_SECRET!,
     promptConfigPath,
     profile: profileConfig,
+    personaRoster: personaRoster.entries,
+    personaRosterResolution: personaRoster.resolution,
     webBaseUrl,
     backendBaseUrl,
     traceApiToken,

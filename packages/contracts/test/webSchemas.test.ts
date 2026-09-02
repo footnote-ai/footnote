@@ -400,6 +400,8 @@ test('PostChatRequestSchema enforces strict request payload rules', () => {
             trigger: {
                 kind: 'alias_candidate',
                 addressing: {
+                    participants: [],
+                    resolution: 'complete',
                     assistantMentioned: false,
                     replyToAssistant: false,
                     otherParticipantMentioned: true,
