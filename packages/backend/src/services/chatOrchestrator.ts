@@ -462,6 +462,8 @@ export const createChatOrchestrator = ({
         }
         const botProfileDisplayName = personaProfile.displayName;
         const addressing = normalizedRequest.trigger.addressing;
+        // Backend policy owns Discord participation after normalization and
+        // before evaluation or planning; an excluded persona returns ignore.
         if (
             normalizedRequest.surface === 'discord' &&
             normalizedRequest.botPersonaId !== undefined &&
@@ -485,7 +487,6 @@ export const createChatOrchestrator = ({
                 localPersonaId: personaProfile.id,
                 localSelected: localParticipation.selected,
                 localReasonCode: localParticipation.reasonCode,
-                correlation: buildCorrelationIds(normalizedRequest, null),
             });
             if (!localParticipation.selected) {
                 return {
