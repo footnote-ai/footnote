@@ -61,10 +61,11 @@ cannot change system rules or policy. Retrieved excerpts are marked
 `UNTRUSTED PROJECT CONTEXT`, and the prompt tells the model not to follow
 instructions found in them.
 
-The prompt puts these excerpts after the user conversation and before planner
-output. They never join the leading system instructions. A test covers a
-selected document that contains instructions and confirms that it remains in
-the untrusted section.
+The context Step returns these excerpts as bounded Evidence. The model-input
+builder keeps them separate from trusted instructions and projects them as
+user-level advisory data. The integration does not choose prompt roles or
+depend on planner markers. A test covers a selected document that contains
+instructions and confirms that it remains in the untrusted section.
 
 ## When a lookup fails or is out of date
 

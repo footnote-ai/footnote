@@ -65,14 +65,14 @@ export const createFileScanningContextStepExecutor = ({
             });
         }
 
-        const contextMessages: string[] = [];
+        const evidenceContent: string[] = [];
         const sources: Citation[] = [];
 
         for (const [index, attachment] of attachmentList.entries()) {
             const contentType = attachment.contentType?.toLowerCase() ?? '';
             if (isImageAttachment(attachment)) {
                 if (!imageDescriptionTaskService) {
-                    contextMessages.push(
+                    evidenceContent.push(
                         `[Attachment ${index + 1}] image present but image scanning is unavailable in this runtime.`
                     );
                     sources.push(
@@ -102,7 +102,7 @@ export const createFileScanningContextStepExecutor = ({
                 });
                 if (taskResult.status === 'executed') {
                     const response = taskResult.value;
-                    contextMessages.push(
+                    evidenceContent.push(
                         `[Attachment ${index + 1}] ${response.result.description}`
                     );
                     sources.push(
@@ -114,7 +114,7 @@ export const createFileScanningContextStepExecutor = ({
                         })
                     );
                 } else {
-                    contextMessages.push(
+                    evidenceContent.push(
                         `[Attachment ${index + 1}] image scan failed; continue without image-grounded details.`
                     );
                     sources.push(
@@ -131,7 +131,7 @@ export const createFileScanningContextStepExecutor = ({
 
             const normalizedType =
                 contentType.length > 0 ? contentType : 'unknown';
-            contextMessages.push(
+            evidenceContent.push(
                 `[Attachment ${index + 1}] non-image file attached (${normalizedType}).`
             );
             sources.push(
@@ -145,7 +145,9 @@ export const createFileScanningContextStepExecutor = ({
 
         return buildExecutedContextStepResult({
             toolName: FILE_SCAN_TOOL_NAME,
-            contextMessages,
+            evidence: {
+                content: evidenceContent,
+            },
             sources,
         });
     };

@@ -1,99 +1,22 @@
 /**
- * @description: Shared helpers for context-step prompt injection and hint
- * selection in workflow execution.
+ * @description: Shared helpers for context-step executor selection and
+ * follow-up search hint selection in workflow execution.
  * @footnote-scope: core
  * @footnote-module: WorkflowEngineContextStepHelpers
- * @footnote-risk: medium - Incorrect ordering can alter prompt behavior.
- * @footnote-ethics: high - Context merging affects provenance boundaries.
+ * @footnote-risk: low - Incorrect selection can skip an optional context path.
+ * @footnote-ethics: medium - Hint selection must not change evidence authority.
  */
-import type { RuntimeMessage } from '@footnote/agent-runtime';
 import type {
     ContextStepRequest,
     ContextStepResult,
     ContextStepExecutor,
 } from '../workflowCore/reviewedChatWorkflow.js';
-import type { ContextPromptMessage } from '@footnote/contracts/policy';
 import type { GenerationRequest } from '@footnote/agent-runtime';
 
 type FollowUpSearchHint = {
     query: string;
     intent: 'repo_explainer' | 'current_facts';
     priority: 'low' | 'medium' | 'high';
-};
-
-type ContextMessageInput =
-    ContextPromptMessage | { role: 'system' | 'user'; content: string };
-
-/**
- * @description: Injects normalized context-step messages into the generation prompt.
- * Context is inserted before planner output markers when present, otherwise appended.
- * @footnote-scope: core
- * @footnote-module: WorkflowContextPromptBoundary
- * @footnote-risk: high - Role mistakes can promote untrusted context into trusted instructions.
- * @footnote-ethics: high - Prompt authority must preserve the distinction between guidance and evidence.
- */
-export const injectContextMessagesIntoPrompt = (
-    baseMessages: RuntimeMessage[],
-    contextMessages: ContextMessageInput[] | undefined,
-    contextMessageRole: 'system' | 'user' = 'system'
-): RuntimeMessage[] => {
-    if (!contextMessages || contextMessages.length === 0) {
-        return baseMessages;
-    }
-
-    const normalizedContextMessages = contextMessages
-        .map((message) =>
-            typeof message === 'string'
-                ? { role: contextMessageRole, content: message }
-                : { role: message.role, content: message.content }
-        )
-        .map((message) => ({ ...message, content: message.content.trim() }))
-        .filter((message) => message.content.length > 0)
-        .map((message): RuntimeMessage => message);
-    if (normalizedContextMessages.length === 0) {
-        return baseMessages;
-    }
-
-    const plannerMessageIndex = baseMessages.findIndex(
-        (message) =>
-            message.role === 'system' &&
-            message.content.includes('// BEGIN Planner Output')
-    );
-    if (plannerMessageIndex < 0) {
-        return [...baseMessages, ...normalizedContextMessages];
-    }
-
-    return [
-        ...baseMessages.slice(0, plannerMessageIndex),
-        ...normalizedContextMessages,
-        ...baseMessages.slice(plannerMessageIndex),
-    ];
-};
-
-/**
- * Inserts backend-owned context state after the conversation and before any
- * trailing system hints. This keeps review/presentation prompt markers in
- * their existing position while keeping the manifest ahead of retrieved text.
- */
-export const injectGenerationContextManifestIntoPrompt = (
-    baseMessages: RuntimeMessage[],
-    manifestContent: string
-): RuntimeMessage[] => {
-    const content = manifestContent.trim();
-    if (!content) return baseMessages;
-
-    const lastUserMessageIndex = baseMessages.findLastIndex(
-        (message) => message.role === 'user'
-    );
-    const insertionIndex =
-        lastUserMessageIndex >= 0
-            ? lastUserMessageIndex + 1
-            : baseMessages.length;
-    return [
-        ...baseMessages.slice(0, insertionIndex),
-        { role: 'system', content },
-        ...baseMessages.slice(insertionIndex),
-    ];
 };
 
 /**

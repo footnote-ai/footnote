@@ -27,7 +27,7 @@ export type {
     ToolExecutionContext,
     ContextIntegrationName,
     ContextStepRequest,
-    ContextPromptMessage,
+    ContextStepEvidence,
     ContextStepIntegrationContext,
     ContextStepExecutedResult,
     ContextStepFailedResult,

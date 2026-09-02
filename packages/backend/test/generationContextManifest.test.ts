@@ -46,9 +46,9 @@ const projectContextResult = (
         status: 'executed',
     },
     ...(hasEvidence && {
-        contextMessages: [
-            { role: 'user', content: 'UNTRUSTED PROJECT CONTEXT: excerpt' },
-        ],
+        evidence: {
+            content: ['UNTRUSTED PROJECT CONTEXT: excerpt'],
+        },
     }),
     integrationContext: {
         kind: 'project_context',
@@ -177,12 +177,9 @@ test('buildGenerationContextManifest distinguishes retrieved, empty, failed, ski
                     toolName: 'github_context',
                     status: 'executed',
                 },
-                contextMessages: [
-                    {
-                        role: 'user',
-                        content: 'UNTRUSTED GITHUB CONTEXT: record',
-                    },
-                ],
+                evidence: {
+                    content: ['UNTRUSTED GITHUB CONTEXT: record'],
+                },
                 integrationContext: {
                     kind: 'github_context',
                     version: 'v1',

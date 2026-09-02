@@ -756,7 +756,9 @@ export const createGitHubContextStepExecutor = (input: {
             return buildExecutedContextStepResult({
                 toolName: GITHUB_CONTEXT_NAME,
                 durationMs: now() - startedAt,
-                contextMessages: formatGitHubContext(cached.payload),
+                evidence: {
+                    content: formatGitHubContext(cached.payload),
+                },
                 sources: citationsFromGitHubContext(cached.payload),
                 integrationContext: {
                     kind: GITHUB_CONTEXT_NAME,
@@ -798,7 +800,9 @@ export const createGitHubContextStepExecutor = (input: {
             return buildExecutedContextStepResult({
                 toolName: GITHUB_CONTEXT_NAME,
                 durationMs: now() - startedAt,
-                contextMessages: formatGitHubContext(stale),
+                evidence: {
+                    content: formatGitHubContext(stale),
+                },
                 sources: citationsFromGitHubContext(stale),
                 integrationContext: {
                     kind: GITHUB_CONTEXT_NAME,
@@ -822,7 +826,9 @@ export const createGitHubContextStepExecutor = (input: {
         return buildExecutedContextStepResult({
             toolName: GITHUB_CONTEXT_NAME,
             durationMs: now() - startedAt,
-            contextMessages: formatGitHubContext(payload),
+            evidence: {
+                content: formatGitHubContext(payload),
+            },
             sources: citationsFromGitHubContext(payload),
             integrationContext: {
                 kind: GITHUB_CONTEXT_NAME,

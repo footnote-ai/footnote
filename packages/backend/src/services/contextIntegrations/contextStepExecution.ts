@@ -17,7 +17,7 @@ import type {
     ToolClarification,
     ToolInvocationName,
     ToolInvocationReasonCode,
-    ContextPromptMessage,
+    ContextStepEvidence,
 } from '@footnote/contracts/policy';
 
 type NonBlockingExecutionLogger = {
@@ -53,9 +53,8 @@ export const buildSkippedContextStepResult = (input: {
 export const buildExecutedContextStepResult = (input: {
     toolName: ToolInvocationName;
     durationMs?: number;
-    contextMessages?: ContextPromptMessage[];
-    trustedSystemMessages?: string[];
-    contextMessageRole?: 'system' | 'user';
+    evidence?: ContextStepEvidence;
+    trustedInstructions?: string[];
     sources?: Citation[];
     integrationContext?: ContextStepIntegrationContext;
 }): ContextStepResult => ({
@@ -65,17 +64,14 @@ export const buildExecutedContextStepResult = (input: {
         status: 'executed',
         ...(input.durationMs !== undefined && { durationMs: input.durationMs }),
     },
-    ...(input.contextMessages !== undefined &&
-        input.contextMessages.length > 0 && {
-            contextMessages: input.contextMessages,
+    ...(input.evidence !== undefined &&
+        input.evidence.content.length > 0 && {
+            evidence: input.evidence,
         }),
-    ...(input.trustedSystemMessages !== undefined &&
-        input.trustedSystemMessages.length > 0 && {
-            trustedSystemMessages: input.trustedSystemMessages,
+    ...(input.trustedInstructions !== undefined &&
+        input.trustedInstructions.length > 0 && {
+            trustedInstructions: input.trustedInstructions,
         }),
-    ...(input.contextMessageRole !== undefined && {
-        contextMessageRole: input.contextMessageRole,
-    }),
     ...(input.sources !== undefined &&
         input.sources.length > 0 && {
             sources: input.sources,
@@ -117,7 +113,7 @@ export const buildFailedContextStepResult = (input: {
     reasonCode: ToolInvocationReasonCode;
     durationMs?: number;
     sources?: Citation[];
-    trustedSystemMessages?: string[];
+    trustedInstructions?: string[];
     integrationContext?: ContextStepIntegrationContext;
 }): ContextStepResult => ({
     outcome: 'failed',
@@ -131,9 +127,9 @@ export const buildFailedContextStepResult = (input: {
         input.sources.length > 0 && {
             sources: input.sources,
         }),
-    ...(input.trustedSystemMessages !== undefined &&
-        input.trustedSystemMessages.length > 0 && {
-            trustedSystemMessages: input.trustedSystemMessages,
+    ...(input.trustedInstructions !== undefined &&
+        input.trustedInstructions.length > 0 && {
+            trustedInstructions: input.trustedInstructions,
         }),
     ...(input.integrationContext !== undefined && {
         integrationContext: input.integrationContext,

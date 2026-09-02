@@ -58,7 +58,7 @@ const readMetadataStatus = (
 const hasEvidence = (result: ContextStepResult): boolean => {
     if (result.outcome !== 'executed') return false;
     return (
-        (result.contextMessages?.length ?? 0) > 0 ||
+        (result.evidence?.content.length ?? 0) > 0 ||
         (result.sources?.length ?? 0) > 0
     );
 };
@@ -67,7 +67,7 @@ const evidenceCount = (result: ContextStepResult): number | undefined => {
     if (result.outcome !== 'executed' || !hasEvidence(result)) return undefined;
     return (result.sources?.length ?? 0) > 0
         ? result.sources?.length
-        : result.contextMessages?.length;
+        : result.evidence?.content.length;
 };
 
 const resolveStepStatus = (

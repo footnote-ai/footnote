@@ -62,16 +62,11 @@ import {
     extractRoutingHintsFromAssess,
     reorderRevisionCandidatesByHintLane,
 } from '../workflowEngine/revisionRoutingHints.js';
+import { selectContextStepExecutor } from '../workflowEngine/contextStepHelpers.js';
 import {
-    buildGenerationContextManifest,
-    renderGenerationContextManifest,
-} from '../workflowEngine/contextManifest.js';
-import {
-    injectContextMessagesIntoPrompt,
-    injectGenerationContextManifestIntoPrompt,
-    selectContextStepExecutor,
-    selectFollowUpSearchHint,
-} from '../workflowEngine/contextStepHelpers.js';
+    buildModelInput,
+    type ModelInputEvidence,
+} from '../workflowEngine/modelInput.js';
 import {
     boundGenerationRequestToWorkflowBudget,
     capGenerationRequestToProfileMax,
@@ -229,11 +224,7 @@ type ContinuePlanContinuation = Extract<
     PlanContinuation,
     { continuation: 'continue_message' }
 >;
-type ContextStepManifestFailure = {
-    integrationName: string;
-    requested: boolean;
-    status: 'unavailable' | 'failed' | 'skipped';
-};
+type ContextStepManifestFailure = ModelInputEvidence['failures'][number];
 
 const isPlainRecord = (value: unknown): value is Record<string, unknown> => {
     if (typeof value !== 'object' || value === null || Array.isArray(value)) {
@@ -348,7 +339,7 @@ const workflowStepKind = (stepId: string): WorkflowStepKind => {
     if (stepId === 'plan' || stepId === 'defaultPlan' || stepId === 'replan') {
         return 'plan';
     }
-    if (stepId === 'tool') return 'tool';
+    if (stepId === 'retrieve' || stepId === 'tool') return 'tool';
     if (stepId === 'presentation') return 'presentation';
     if (stepId === 'generate') return 'generate';
     if (stepId === 'assess') return 'assess';
@@ -600,12 +591,9 @@ const readGenerationResult = (
     value: Result | undefined
 ): GenerationResult | undefined => readAs<GenerationResult>(value);
 
-const readContextEnvelope = (
+const readEvidenceEnvelope = (
     value: Result | undefined
-): {
-    results: ContextStepResult[];
-    failures: ContextStepManifestFailure[];
-} => {
+): ModelInputEvidence => {
     const record = resultRecord(value);
     return {
         results: readAs<ContextStepResult[]>(record?.results) ?? [],
@@ -740,7 +728,7 @@ export const runBoundedReviewWorkflow = async (
     const hasAssessmentStep =
         workflowPolicy.enableAssessment && effectiveMaxIterations > 0;
     const afterPlan = hasToolStep
-        ? 'tool'
+        ? 'retrieve'
         : hasPresentationStep
           ? 'presentation'
           : workflowPolicy.enableGeneration === false
@@ -772,10 +760,10 @@ export const runBoundedReviewWorkflow = async (
                 },
             }),
             ...(hasToolStep && {
-                tool: {
+                retrieve: {
                     input: hasPlannerStep ? [{ name: 'plan' }] : undefined,
                     output: {
-                        name: 'context',
+                        name: 'evidence',
                         on: ['available', 'clarification'],
                     },
                     activity: { tool: 'one-or-more' },
@@ -799,7 +787,7 @@ export const runBoundedReviewWorkflow = async (
                     input: [
                         ...(hasPlannerStep ? [{ name: 'plan' }] : []),
                         ...(hasToolStep
-                            ? [{ name: 'context', optional: true }]
+                            ? [{ name: 'evidence', optional: true }]
                             : []),
                     ],
                     output: { name: 'presentation', on: ['admitted'] },
@@ -818,7 +806,7 @@ export const runBoundedReviewWorkflow = async (
                         ? [{ name: 'plan', optional: true }]
                         : []),
                     ...(hasToolStep
-                        ? [{ name: 'context', optional: true }]
+                        ? [{ name: 'evidence', optional: true }]
                         : []),
                     ...(hasPresentationStep
                         ? [{ name: 'presentation', optional: true }]
@@ -845,7 +833,7 @@ export const runBoundedReviewWorkflow = async (
                     input: [
                         { name: 'draft' },
                         ...(hasToolStep
-                            ? [{ name: 'context', optional: true }]
+                            ? [{ name: 'evidence', optional: true }]
                             : []),
                     ],
                     output: { name: 'review', on: ['done', 'revise', 'limit'] },
@@ -888,7 +876,7 @@ export const runBoundedReviewWorkflow = async (
                         ? [{ name: 'plan', optional: true }]
                         : []),
                     ...(hasToolStep
-                        ? [{ name: 'context', optional: true }]
+                        ? [{ name: 'evidence', optional: true }]
                         : []),
                 ],
                 // Finish is also the fail-open route for clarification and
@@ -921,75 +909,42 @@ export const runBoundedReviewWorkflow = async (
         const request = continuation?.generationRequest ?? generationRequest;
         const messages = continuation?.messagesWithHints ?? messagesWithHints;
         const envelope = continuation?.contextEnvelope ?? contextEnvelope;
-        const context = readContextEnvelope(resultValues.context);
-        const selectedFollowUpSearchHint = selectFollowUpSearchHint({
-            results: context.results,
-            openAiNativeSearchFromHintsEnabled:
-                input.openAiNativeSearchFromHintsEnabled ?? false,
-            effectiveGenerationRequest: request,
-        });
-        const manifest = buildGenerationContextManifest({
-            contextEnvelope: envelope,
+        const evidence = readEvidenceEnvelope(resultValues.evidence);
+        const plan =
+            readPlanEnvelope(resultValues.revisionPlan) ??
+            readPlanEnvelope(resultValues.plan);
+        const projected = buildModelInput({
+            baseRequest: request,
+            context: { messages, envelope },
+            results: {
+                ...(plan?.continuation?.continuation === 'continue_message'
+                    ? {
+                          plan: {
+                              plan: plan.continuation.plannerSummary
+                                  .executionPlan,
+                              ...(plan.continuation.plannerSummary
+                                  .surfacePolicy === undefined
+                                  ? {}
+                                  : {
+                                        surfacePolicy:
+                                            plan.continuation.plannerSummary
+                                                .surfacePolicy,
+                                    }),
+                          },
+                      }
+                    : {}),
+                evidence,
+            },
             contextStepRequests: mergeContextRequests(
                 initialContextRequests,
                 continuation?.contextStepRequests
             ),
-            contextStepResults: context.results,
-            contextStepFailures: context.failures,
-            webSearchRequested:
-                request.search !== undefined ||
-                selectedFollowUpSearchHint !== undefined,
-            webSearchAvailable: request.capabilities?.canUseSearch,
+            openAiNativeSearchFromHintsEnabled:
+                input.openAiNativeSearchFromHintsEnabled,
         });
-        let projected = injectGenerationContextManifestIntoPrompt(
-            messages,
-            renderGenerationContextManifest(manifest)
-        );
-        projected = injectContextMessagesIntoPrompt(
-            projected,
-            context.results.flatMap((contextResult) =>
-                contextResult.outcome === 'executed' ||
-                contextResult.outcome === 'failed'
-                    ? [
-                          ...(contextResult.trustedSystemMessages ?? []).map(
-                              (content) => ({
-                                  role: 'system' as const,
-                                  content,
-                              })
-                          ),
-                          ...(contextResult.outcome === 'executed'
-                              ? (contextResult.contextMessages ?? []).map(
-                                    (message) => ({
-                                        role:
-                                            contextResult.contextMessageRole ??
-                                            'system',
-                                        content:
-                                            typeof message === 'string'
-                                                ? message
-                                                : message.content,
-                                    })
-                                )
-                              : []),
-                      ]
-                    : []
-            )
-        );
         return {
-            request: {
-                ...request,
-                messages: projected,
-                ...(selectedFollowUpSearchHint !== undefined &&
-                request.search === undefined
-                    ? {
-                          search: {
-                              query: selectedFollowUpSearchHint.query,
-                              intent: selectedFollowUpSearchHint.intent,
-                              contextSize: 'low',
-                          },
-                      }
-                    : {}),
-            },
-            messages: projected,
+            request: projected,
+            messages: projected.messages,
             envelope,
         };
     };
@@ -1297,10 +1252,10 @@ export const runBoundedReviewWorkflow = async (
         for (const batch of contextStepBatches) {
             if (batch.length > 0) outcomes.push(...(await runBatch(batch)));
         }
-        const contextResults: ContextStepResult[] = [];
+        const evidenceResults: ContextStepResult[] = [];
         for (const outcome of outcomes) {
             if (outcome.result !== undefined)
-                contextResults.push(outcome.result);
+                evidenceResults.push(outcome.result);
             if (outcome.error !== undefined) {
                 failures.push({
                     integrationName: outcome.request.integrationName,
@@ -1321,27 +1276,28 @@ export const runBoundedReviewWorkflow = async (
                 );
             }
         }
-        const clarification = contextResults.some(
+        const clarification = evidenceResults.some(
             (result) => result.outcome === 'needs_clarification'
         );
-        const clarificationResult = contextResults.find(
+        const clarificationResult = evidenceResults.find(
             (result) => result.outcome === 'needs_clarification'
         );
-        const failedResult = contextResults.find(
+        const failedResult = evidenceResults.find(
             (result) => result.outcome === 'failed'
         );
-        const contextArtifacts = contextResults.flatMap((result) =>
+        const evidenceArtifacts = evidenceResults.flatMap((result) =>
             result.outcome === 'executed'
-                ? (result.contextMessages ?? []).map((message) =>
-                      typeof message === 'string' ? message : message.content
-                  )
+                ? (result.evidence?.content ?? [])
                 : []
         );
         const toolCalls = executable.length;
         return {
             status: 'succeeded',
             outcome: clarification ? 'clarification' : 'available',
-            result: toSerializable({ results: contextResults, failures }),
+            result: toSerializable({
+                results: evidenceResults,
+                failures,
+            }),
             usage: { toolCalls },
             metadata: encodeMetadata({
                 status:
@@ -1359,9 +1315,9 @@ export const runBoundedReviewWorkflow = async (
                     : failures.length > 0
                       ? { reasonCode: 'tool_execution_error' as const }
                       : {}),
-                ...(contextArtifacts.length === 0
+                ...(evidenceArtifacts.length === 0
                     ? {}
-                    : { artifacts: contextArtifacts }),
+                    : { artifacts: evidenceArtifacts }),
                 signals: clarification
                     ? {
                           clarification: true,
@@ -1371,7 +1327,7 @@ export const runBoundedReviewWorkflow = async (
                                   ? clarificationResult.clarification.reasonCode
                                   : 'ambiguous_location',
                       }
-                    : { contextStepCount: contextResults.length },
+                    : { contextStepCount: evidenceResults.length },
             }),
         };
     };
@@ -2241,7 +2197,7 @@ export const runBoundedReviewWorkflow = async (
         ...(hasPlannerStep
             ? { plan: planHandler, defaultPlan: defaultPlanHandler }
             : {}),
-        ...(hasToolStep ? { tool: toolHandler } : {}),
+        ...(hasToolStep ? { retrieve: toolHandler } : {}),
         ...(hasPresentationStep ? { presentation: presentationHandler } : {}),
         generate: generationHandler,
         ...(hasAssessmentStep
@@ -2254,7 +2210,7 @@ export const runBoundedReviewWorkflow = async (
     ): { tokens?: number; toolCalls?: number } | undefined => {
         const step = handlerInput.stepId;
         if (step === 'finish') return { tokens: 0 };
-        if (step === 'tool') {
+        if (step === 'retrieve') {
             const requests = mergeContextRequests(
                 initialContextRequests,
                 readContinuePlanContinuation(
@@ -2485,7 +2441,7 @@ export const runBoundedReviewWorkflow = async (
     const plan = readPlanEnvelope(execution.run.results.plan);
     const revisionPlan = readPlanEnvelope(execution.run.results.revisionPlan);
     const continuation = revisionPlan?.continuation ?? plan?.continuation;
-    const context = readContextEnvelope(execution.run.results.context);
+    const evidence = readEvidenceEnvelope(execution.run.results.evidence);
     const presentationMetadata = [...execution.run.steps]
         .reverse()
         .flatMap((step) => step.attempts)
@@ -2505,7 +2461,7 @@ export const runBoundedReviewWorkflow = async (
         readGenerationResult(execution.run.results.answer) ??
         readGenerationResult(execution.run.results.draft);
     const plannerStepResult = plan?.plannerStepResult;
-    const contextStepResult = context.results.at(0);
+    const contextStepResult = evidence.results.at(0);
     if (terminalAction !== undefined) {
         return {
             outcome: 'terminal_action',
@@ -2516,9 +2472,9 @@ export const runBoundedReviewWorkflow = async (
                 ? {}
                 : { planContinuation: continuation }),
             ...(contextStepResult === undefined ? {} : { contextStepResult }),
-            ...(context.results.length === 0
+            ...(evidence.results.length === 0
                 ? {}
-                : { contextStepResults: context.results }),
+                : { contextStepResults: [...evidence.results] }),
         };
     }
     if (generationResult === undefined) {
@@ -2533,9 +2489,9 @@ export const runBoundedReviewWorkflow = async (
                 ? {}
                 : { planContinuation: continuation }),
             ...(contextStepResult === undefined ? {} : { contextStepResult }),
-            ...(context.results.length === 0
+            ...(evidence.results.length === 0
                 ? {}
-                : { contextStepResults: context.results }),
+                : { contextStepResults: [...evidence.results] }),
         };
     }
     const selectedCandidateId = semanticExecutionSteps
@@ -2562,9 +2518,9 @@ export const runBoundedReviewWorkflow = async (
             ? {}
             : { planContinuation: continuation }),
         ...(contextStepResult === undefined ? {} : { contextStepResult }),
-        ...(context.results.length === 0
+        ...(evidence.results.length === 0
             ? {}
-            : { contextStepResults: context.results }),
+            : { contextStepResults: [...evidence.results] }),
     };
 };
 

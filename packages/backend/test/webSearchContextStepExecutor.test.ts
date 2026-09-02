@@ -64,11 +64,7 @@ test('web search executor returns executed with normalized citations from searxn
         assert.equal(result.executionContext.status, 'executed');
         assert.equal(result.sources?.[0]?.url, 'https://example.com/policy');
         assert.ok(
-            result.contextMessages?.some((line) =>
-                (typeof line === 'string' ? line : line.content).includes(
-                    'OpenAI'
-                )
-            )
+            result.evidence?.content.some((line) => line.includes('OpenAI'))
         );
         assert.ok(observedUrl.includes('/custom/base/search'));
     } finally {
@@ -143,11 +139,7 @@ test('repo_explainer admits only structurally scoped repository results', async 
                 'https://deepwiki.com/footnote-ai/footnote',
             ]
         );
-        const contextText = result.contextMessages
-            ?.map((message) =>
-                typeof message === 'string' ? message : message.content
-            )
-            .join('\n');
+        const contextText = result.evidence?.content.join('\n');
         assert.equal(contextText?.includes('Stack Overflow'), false);
         const payload = result.integrationContext?.payload as {
             repositoryScope?: {

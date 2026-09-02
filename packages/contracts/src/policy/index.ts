@@ -39,7 +39,7 @@ export type {
     ToolInvocationRequest,
     ToolExecutionContext,
     ContextStepRequest,
-    ContextPromptMessage,
+    ContextStepEvidence,
     ContextStepIntegrationContext,
     ContextStepExecutedResult,
     ContextStepFailedResult,

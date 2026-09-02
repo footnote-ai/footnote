@@ -51,13 +51,13 @@ const createContextEnvelope = (): ConversationContextEnvelope => ({
     },
 });
 
-test('assemblePlanGenerationInput appends planner payload and preserves message ordering', () => {
+test('assemblePlanGenerationInput preserves conversation ordering without prompt-embedded planner output', () => {
     const result = assemblePlanGenerationInput({
         systemPrompt: 'system prompt',
         personaPrompt: 'persona prompt',
         normalizedConversation: [{ role: 'user', content: 'hello' }],
         contextEnvelope: createContextEnvelope(),
-        executionPlanForPrompt: {
+        executionPlan: {
             action: 'message',
             modality: 'text',
             safetyTier: 'Low',
@@ -82,17 +82,15 @@ test('assemblePlanGenerationInput appends planner payload and preserves message 
         },
     });
 
-    assert.equal(result.conversationMessages.length, 4);
+    assert.equal(result.conversationMessages.length, 3);
     assert.equal(result.conversationMessages[0]?.content, 'system prompt');
     assert.equal(result.conversationMessages[1]?.content, 'persona prompt');
     assert.equal(result.conversationMessages[2]?.content, 'hello');
-    assert.match(
-        result.conversationMessages[3]?.content ?? '',
-        /BEGIN Planner Output/
-    );
-    assert.match(
-        result.conversationMessages[3]?.content ?? '',
-        /END Planner Output/
+    assert.equal(
+        result.conversationMessages.some((message) =>
+            message.content.includes('Planner Output')
+        ),
+        false
     );
 });
 
@@ -102,7 +100,7 @@ test('assemblePlanGenerationInput includes planner snapshot payload fields', () 
         personaPrompt: 'persona prompt',
         normalizedConversation: [{ role: 'user', content: 'hello' }],
         contextEnvelope: createContextEnvelope(),
-        executionPlanForPrompt: {
+        executionPlan: {
             action: 'message',
             modality: 'text',
             safetyTier: 'Low',
@@ -152,7 +150,7 @@ test('assemblePlanGenerationInput snapshot minimizes context envelope payload', 
         personaPrompt: 'persona prompt',
         normalizedConversation: [{ role: 'user', content: 'hello' }],
         contextEnvelope: createContextEnvelope(),
-        executionPlanForPrompt: {
+        executionPlan: {
             action: 'message',
             modality: 'text',
             safetyTier: 'Low',

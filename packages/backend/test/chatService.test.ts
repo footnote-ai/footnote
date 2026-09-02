@@ -1140,9 +1140,11 @@ test('runChatMessages reports context-step evidence as retrieval used', async ()
                             toolName: 'github_context',
                             status: 'executed',
                         },
-                        contextMessages: [
-                            'UNTRUSTED GITHUB CONTEXT: merged pull request',
-                        ],
+                        evidence: {
+                            content: [
+                                'UNTRUSTED GITHUB CONTEXT: merged pull request',
+                            ],
+                        },
                         sources: [
                             {
                                 title: 'Pull request',

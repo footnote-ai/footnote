@@ -140,11 +140,13 @@ test('weather success flows through workflow context-step: tool step recorded in
                     status: 'executed',
                     durationMs: 10,
                 },
-                contextMessages: [
-                    execution.status === 'ok' && execution.location?.name
-                        ? `Weather in ${execution.location.name}: clear skies`
-                        : 'Weather context: clear skies',
-                ],
+                evidence: {
+                    content: [
+                        execution.status === 'ok' && execution.location?.name
+                            ? `Weather in ${execution.location.name}: clear skies`
+                            : 'Weather context: clear skies',
+                    ],
+                },
             };
         },
         captureUsage: (generationResult) => ({

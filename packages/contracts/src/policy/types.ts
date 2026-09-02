@@ -1243,8 +1243,15 @@ type ContextStepBaseResult = {
     integrationContext?: ContextStepIntegrationContext;
 };
 
-/** Retrieved context is lower-authority user data; trusted guidance is separate. */
-export type ContextPromptMessage = string | { role: 'user'; content: string };
+/**
+ * Bounded retrieval output for a context Step.
+ *
+ * Context integrations return data only. Model-input construction owns the
+ * advisory, user-level projection and the runtime message role.
+ */
+export type ContextStepEvidence = {
+    content: string[];
+};
 
 export type ContextStepExecutedResult = ContextStepBaseResult & {
     outcome: 'executed';
@@ -1253,11 +1260,9 @@ export type ContextStepExecutedResult = ContextStepBaseResult & {
         clarification?: never;
         reasonCode?: never;
     };
-    contextMessages?: ContextPromptMessage[];
-    /** Explicit trusted system guidance, never document-derived context. */
-    trustedSystemMessages?: string[];
-    /** Prompt channel for legacy string context; object entries cannot override it. */
-    contextMessageRole?: 'system' | 'user';
+    evidence?: ContextStepEvidence;
+    /** Explicit backend guidance, kept separate from retrieved evidence. */
+    trustedInstructions?: string[];
     sources?: Citation[];
 };
 
@@ -1270,7 +1275,7 @@ export type ContextStepFailedResult = ContextStepBaseResult & {
     };
     sources?: Citation[];
     /** Backend guidance explaining the failure without blocking generation. */
-    trustedSystemMessages?: string[];
+    trustedInstructions?: string[];
 };
 
 export type ContextStepSkippedResult = ContextStepBaseResult & {

@@ -1886,8 +1886,8 @@ export const createChatService = ({
         const contextStepEvidenceUsed = effectiveContextStepResults.some(
             (contextStepResult) =>
                 contextStepResult.outcome === 'executed' &&
-                ((contextStepResult.contextMessages?.length ?? 0) > 0 ||
-                    (contextStepResult.trustedSystemMessages?.length ?? 0) > 0)
+                ((contextStepResult.evidence?.content.length ?? 0) > 0 ||
+                    (contextStepResult.trustedInstructions?.length ?? 0) > 0)
         );
         const retrievalUsed =
             generationResult.retrieval?.used === true ||
