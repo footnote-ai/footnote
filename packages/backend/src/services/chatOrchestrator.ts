@@ -468,12 +468,13 @@ export const createChatOrchestrator = ({
             normalizedRequest.surface === 'discord' &&
             normalizedRequest.botPersonaId !== undefined &&
             addressing !== undefined &&
-            addressing.participants.length > 0
+            (addressing.participants.length > 0 ||
+                addressing.resolution === 'degraded')
         ) {
             const participationDecision = resolveChatParticipation(addressing);
             const localParticipation = resolveLocalChatParticipation({
                 decision: participationDecision,
-                personaId: personaProfile.id,
+                personaId: normalizedRequest.botPersonaId,
             });
             chatOrchestratorLogger.info('chat.participation.arbitration', {
                 event: 'chat.participation.arbitration',
@@ -484,7 +485,7 @@ export const createChatOrchestrator = ({
                 excludedPersonaIds: participationDecision.excluded.map(
                     (entry) => entry.personaId
                 ),
-                localPersonaId: personaProfile.id,
+                localPersonaId: normalizedRequest.botPersonaId,
                 localSelected: localParticipation.selected,
                 localReasonCode: localParticipation.reasonCode,
             });

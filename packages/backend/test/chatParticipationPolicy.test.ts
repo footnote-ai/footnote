@@ -13,6 +13,7 @@ import type { GenerationRuntime } from '@footnote/agent-runtime';
 import { createChatOrchestrator } from '../src/services/chatOrchestrator.js';
 import { createMetadata } from './fixtures/responseMetadataFixture.js';
 import { runtimeConfig } from '../src/config.js';
+import { DEFAULT_CHAT_PLANNER_MAX_OUTPUT_TOKENS } from '../src/services/chatPlanner.js';
 import {
     resolveChatParticipation,
     resolveLocalChatParticipation,
@@ -260,6 +261,105 @@ test('does not invoke the planner or generation for an excluded persona', async 
                 content: '@Winter What do you think about Myuri?',
             },
         ],
+    });
+
+    assert.deepEqual(response, {
+        action: 'ignore',
+        metadata: null,
+    });
+    assert.equal(generationCalls, 0);
+});
+
+test('checks membership with a custom Discord persona ID, not its presentation fallback', async () => {
+    const generationRuntime: GenerationRuntime = {
+        kind: 'test-runtime',
+        generate: async (request) => {
+            if (
+                request.maxOutputTokens ===
+                DEFAULT_CHAT_PLANNER_MAX_OUTPUT_TOKENS
+            ) {
+                return {
+                    text: JSON.stringify({
+                        action: 'message',
+                        modality: 'text',
+                        safetyTier: 'Low',
+                        reasoning:
+                            'The custom persona was explicitly addressed.',
+                        generation: {
+                            reasoningEffort: 'low',
+                            verbosity: 'low',
+                        },
+                    }),
+                    model: 'gpt-5-mini',
+                };
+            }
+
+            return {
+                text: 'alice reply',
+                model: 'gpt-5-mini',
+                provenance: 'Inferred',
+                citations: [],
+            };
+        },
+    };
+    const orchestrator = createChatOrchestrator({
+        generationRuntime,
+        storeTrace: async () => undefined,
+        buildResponseMetadata: () => createMetadata(),
+        defaultModel: runtimeConfig.modelProfiles.defaultProfileId,
+        recordUsage: () => undefined,
+    });
+
+    const response = await orchestrator.runChat({
+        surface: 'discord',
+        botPersonaId: 'alice',
+        trigger: {
+            kind: 'invoked',
+            addressing: createAddressing([
+                persona('alice', 'explicit_mention'),
+            ]),
+        },
+        latestUserInput: '@Alice What do you think?',
+        conversation: [{ role: 'user', content: '@Alice What do you think?' }],
+    });
+
+    assert.equal(response.action, 'message');
+    if (response.action === 'message') {
+        assert.equal(response.message, 'alice reply');
+    }
+});
+
+test('arbitrates degraded compatibility addressing even when no participants were resolved', async () => {
+    let generationCalls = 0;
+    const generationRuntime: GenerationRuntime = {
+        kind: 'test-runtime',
+        generate: async () => {
+            generationCalls += 1;
+            throw new Error(
+                'degraded excluded persona should not reach the runtime'
+            );
+        },
+    };
+    const orchestrator = createChatOrchestrator({
+        generationRuntime,
+        storeTrace: async () => undefined,
+        buildResponseMetadata: () => createMetadata(),
+        defaultModel: runtimeConfig.modelProfiles.defaultProfileId,
+        recordUsage: () => undefined,
+    });
+
+    const response = await orchestrator.runChat({
+        surface: 'discord',
+        botPersonaId: 'myuri',
+        trigger: {
+            kind: 'alias_candidate',
+            addressing: {
+                ...createAddressing([], 'degraded'),
+                assistantMentioned: true,
+            },
+        },
+        latestUserInput: 'Myuri, what do you think?',
+        conversation: [{ role: 'user', content: 'Myuri, what do you think?' }],
     });
 
     assert.deepEqual(response, {
