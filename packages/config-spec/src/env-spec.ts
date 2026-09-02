@@ -806,6 +806,20 @@ export const envEntries = [
     }),
 
     defineEnv({
+        key: 'FOOTNOTE_DISCORD_PERSONA_ROSTER',
+        owner: 'discord-bot',
+        stage: 'bootstrap',
+        section: 'routing',
+        required: false,
+        secret: false,
+        kind: 'string',
+        description:
+            'Supervisor-provided JSON roster mapping Discord bot accounts to stable Footnote persona identities.',
+        defaultValue: noDefault(),
+        usedBy: ['packages/discord-bot/src/config/runtime.ts'],
+    }),
+
+    defineEnv({
         key: 'WEB_BASE_URL',
         owner: 'discord-bot',
         stage: 'runtime',

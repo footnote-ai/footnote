@@ -25,6 +25,9 @@ export type {
 export type {
     ChatSurface,
     ChatTriggerKind,
+    ChatAddressingParticipantKind,
+    ChatAddressingRelation,
+    ChatAddressingParticipant,
     ChatAddressingEvidence,
     ChatAssistantIdentity,
     ChatProfileOption,

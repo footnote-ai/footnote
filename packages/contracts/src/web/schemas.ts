@@ -36,6 +36,8 @@ import type { ApiResponseValidationResult } from './client-core.js';
 import type {
     AuthenticatedPrincipal,
     ChatAssistantIdentity,
+    ChatAddressingEvidence,
+    ChatAddressingParticipant,
     GetAuthSessionResponse,
     GetTraceResponse,
     GetTraceStaleResponse,
@@ -83,14 +85,56 @@ const ChatTriggerKindSchema = z.enum([
     'alias_candidate',
     'catchup',
 ]);
+const ChatAddressingRelationSchema = z.enum([
+    'explicit_mention',
+    'reply',
+    'plaintext_reference',
+]);
+const ChatAddressingParticipantSchema: z.ZodType<ChatAddressingParticipant> =
+    z.union([
+        z
+            .object({
+                kind: z.literal('persona'),
+                relation: ChatAddressingRelationSchema,
+                personaId: z.string().regex(/^[a-z0-9][a-z0-9-]{0,31}$/),
+                displayName: z.string().trim().min(1).max(64),
+            })
+            .strict(),
+        z
+            .object({
+                kind: z.literal('external_participant'),
+                relation: ChatAddressingRelationSchema,
+                displayName: z.string().trim().min(1).max(64),
+            })
+            .strict(),
+        z
+            .object({
+                kind: z.literal('unknown'),
+                relation: ChatAddressingRelationSchema,
+            })
+            .strict(),
+    ]);
 const ChatAddressingEvidenceSchema = z
     .object({
+        participants: z
+            .array(ChatAddressingParticipantSchema)
+            .max(64)
+            .optional(),
+        resolution: z.enum(['complete', 'degraded']).optional(),
         assistantMentioned: z.boolean(),
         replyToAssistant: z.boolean(),
         otherParticipantMentioned: z.boolean(),
         replyToOtherParticipant: z.boolean(),
     })
-    .strict();
+    .strict()
+    .transform((addressing): ChatAddressingEvidence => ({
+        participants: addressing.participants ?? [],
+        resolution: addressing.resolution ?? 'degraded',
+        assistantMentioned: addressing.assistantMentioned,
+        replyToAssistant: addressing.replyToAssistant,
+        otherParticipantMentioned: addressing.otherParticipantMentioned,
+        replyToOtherParticipant: addressing.replyToOtherParticipant,
+    }));
 const ChatPersonaIdSchema = z.string().regex(/^[a-z0-9][a-z0-9-]{0,31}$/);
 /** Identity facts supplied by a trusted surface adapter for formatting only. */
 export const ChatAssistantIdentitySchema: z.ZodType<ChatAssistantIdentity> = z

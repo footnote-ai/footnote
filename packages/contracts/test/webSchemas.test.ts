@@ -400,6 +400,8 @@ test('PostChatRequestSchema enforces strict request payload rules', () => {
             trigger: {
                 kind: 'alias_candidate',
                 addressing: {
+                    participants: [],
+                    resolution: 'complete',
                     assistantMentioned: false,
                     replyToAssistant: false,
                     otherParticipantMentioned: true,
@@ -416,6 +418,93 @@ test('PostChatRequestSchema enforces strict request payload rules', () => {
         }).success,
         true
     );
+
+    const addressingRequest = (participant: unknown): unknown => ({
+        surface: 'discord',
+        trigger: {
+            kind: 'direct',
+            addressing: {
+                participants: [participant],
+                resolution: 'complete',
+                assistantMentioned: false,
+                replyToAssistant: false,
+                otherParticipantMentioned: false,
+                replyToOtherParticipant: false,
+            },
+        },
+        latestUserInput: 'What is Footnote?',
+        conversation: [{ role: 'user', content: 'What is Footnote?' }],
+    });
+
+    assert.equal(
+        PostChatRequestSchema.safeParse(
+            addressingRequest({
+                kind: 'persona',
+                relation: 'explicit_mention',
+                personaId: 'myuri',
+                displayName: 'Myuri',
+            })
+        ).success,
+        true
+    );
+
+    assert.equal(
+        PostChatRequestSchema.safeParse(
+            addressingRequest({
+                kind: 'persona',
+                relation: 'explicit_mention',
+                displayName: 'Myuri',
+            })
+        ).success,
+        false
+    );
+    assert.equal(
+        PostChatRequestSchema.safeParse(
+            addressingRequest({
+                kind: 'external_participant',
+                relation: 'reply',
+                personaId: 'myuri',
+                displayName: 'Jordan',
+            })
+        ).success,
+        false
+    );
+    assert.equal(
+        PostChatRequestSchema.safeParse(
+            addressingRequest({
+                kind: 'unknown',
+                relation: 'explicit_mention',
+                displayName: 'Unresolved user',
+            })
+        ).success,
+        false
+    );
+
+    const legacyAddressingRequest = PostChatRequestSchema.safeParse({
+        surface: 'discord',
+        trigger: {
+            kind: 'direct',
+            addressing: {
+                assistantMentioned: true,
+                replyToAssistant: false,
+                otherParticipantMentioned: false,
+                replyToOtherParticipant: false,
+            },
+        },
+        latestUserInput: 'What is Footnote?',
+        conversation: [{ role: 'user', content: 'What is Footnote?' }],
+    });
+    assert.equal(legacyAddressingRequest.success, true);
+    if (legacyAddressingRequest.success) {
+        assert.deepEqual(legacyAddressingRequest.data.trigger.addressing, {
+            participants: [],
+            resolution: 'degraded',
+            assistantMentioned: true,
+            replyToAssistant: false,
+            otherParticipantMentioned: false,
+            replyToOtherParticipant: false,
+        });
+    }
 
     assert.equal(
         PostChatRequestSchema.safeParse({

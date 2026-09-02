@@ -1917,23 +1917,7 @@ components:
                             type: string
                             minLength: 1
                         addressing:
-                            type: object
-                            description: Provider-neutral addressing facts used by the planner to resolve ambiguous routing evidence.
-                            properties:
-                                assistantMentioned:
-                                    type: boolean
-                                replyToAssistant:
-                                    type: boolean
-                                otherParticipantMentioned:
-                                    type: boolean
-                                replyToOtherParticipant:
-                                    type: boolean
-                            required:
-                                - assistantMentioned
-                                - replyToAssistant
-                                - otherParticipantMentioned
-                                - replyToOtherParticipant
-                            additionalProperties: false
+                            $ref: '#/components/schemas/ChatAddressingEvidence'
                     required:
                         - kind
                     additionalProperties: false
@@ -2002,6 +1986,90 @@ components:
             required:
                 - displayName
                 - mentionAliases
+            additionalProperties: false
+
+        ChatAddressingParticipant:
+            oneOf:
+                - type: object
+                  properties:
+                      kind:
+                          const: persona
+                      relation:
+                          type: string
+                          enum: [explicit_mention, reply, plaintext_reference]
+                      personaId:
+                          type: string
+                          pattern: '^[a-z0-9][a-z0-9-]{0,31}$'
+                      displayName:
+                          type: string
+                          minLength: 1
+                          maxLength: 64
+                          pattern: '.*\\S.*'
+                  required:
+                      - kind
+                      - relation
+                      - personaId
+                      - displayName
+                  additionalProperties: false
+                - type: object
+                  properties:
+                      kind:
+                          const: external_participant
+                      relation:
+                          type: string
+                          enum: [explicit_mention, reply, plaintext_reference]
+                      displayName:
+                          type: string
+                          minLength: 1
+                          maxLength: 64
+                          pattern: '.*\\S.*'
+                  required:
+                      - kind
+                      - relation
+                      - displayName
+                  additionalProperties: false
+                - type: object
+                  properties:
+                      kind:
+                          const: unknown
+                      relation:
+                          type: string
+                          enum: [explicit_mention, reply, plaintext_reference]
+                  required:
+                      - kind
+                      - relation
+                  additionalProperties: false
+
+        ChatAddressingEvidence:
+            type: object
+            description: Semantic addressing facts supplied by a trusted surface adapter. Discord account IDs and mention markup are not included.
+            x-codeRefs:
+                - packages/contracts/src/web/types.ts#ChatAddressingEvidence
+                - packages/contracts/src/web/schemas.ts#ChatAddressingEvidenceSchema
+            properties:
+                participants:
+                    type: array
+                    maxItems: 64
+                    default: []
+                    items:
+                        $ref: '#/components/schemas/ChatAddressingParticipant'
+                resolution:
+                    type: string
+                    enum: [complete, degraded]
+                    default: degraded
+                assistantMentioned:
+                    type: boolean
+                replyToAssistant:
+                    type: boolean
+                otherParticipantMentioned:
+                    type: boolean
+                replyToOtherParticipant:
+                    type: boolean
+            required:
+                - assistantMentioned
+                - replyToAssistant
+                - otherParticipantMentioned
+                - replyToOtherParticipant
             additionalProperties: false
 
         ChatProfileOption:

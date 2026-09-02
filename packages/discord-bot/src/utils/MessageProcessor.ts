@@ -62,6 +62,11 @@ import type {
     ImageTextModel,
     ImageOutputFormat,
 } from '../commands/image/types.js';
+import {
+    normalizeDiscordAddressing,
+    normalizeDiscordMessageContent,
+    type DiscordMentionUser,
+} from './discordAddressing.js';
 
 type MessageProcessorOptions = {
     systemPrompt?: string;
@@ -615,7 +620,11 @@ export class MessageProcessor {
                     messageId: message.id,
                     addressing: this.getAddressingEvidence(message),
                 },
-                latestUserInput: message.content.trim(),
+                latestUserInput: normalizeDiscordMessageContent(
+                    message.content.trim(),
+                    this.getMentionUsers(message),
+                    runtimeConfig.personaRoster
+                ),
                 conversation,
                 attachments: message.attachments.map((attachment) => ({
                     kind: attachment.contentType?.startsWith('image/')
@@ -700,7 +709,11 @@ export class MessageProcessor {
 
             return {
                 role: isBotMessage ? ('assistant' as const) : ('user' as const),
-                content,
+                content: normalizeDiscordMessageContent(
+                    content,
+                    this.getMentionUsers(contextMessage),
+                    runtimeConfig.personaRoster
+                ),
                 authorName:
                     contextMessage.member?.displayName ??
                     contextMessage.author.username,
@@ -720,7 +733,11 @@ export class MessageProcessor {
                 : 'User sent a non-text message.');
         historyConversation.push({
             role: 'user',
-            content: currentMessageContent,
+            content: normalizeDiscordMessageContent(
+                currentMessageContent,
+                this.getMentionUsers(message),
+                runtimeConfig.personaRoster
+            ),
             authorName: message.member?.displayName ?? message.author.username,
             authorId: message.author.id,
             messageId: message.id,
@@ -757,35 +774,41 @@ export class MessageProcessor {
      */
     private getAddressingEvidence(message: Message): ChatAddressingEvidence {
         const assistantId = message.client.user?.id;
-        const assistantMentioned = Boolean(
-            assistantId && message.mentions.users.has(assistantId)
-        );
-        const repliedUserId = message.mentions.repliedUser?.id;
         const isSameChannelReply = Boolean(
             message.reference?.messageId &&
             message.reference.guildId === message.guildId &&
             message.reference.channelId === message.channelId
         );
-        const replyToAssistant = Boolean(
-            assistantId && isSameChannelReply && repliedUserId === assistantId
-        );
-        const mentionedUsers =
-            typeof message.mentions.users.values === 'function'
-                ? Array.from(message.mentions.users.values())
-                : [];
-        const otherParticipantMentioned = mentionedUsers.some(
-            (user) => user.id !== assistantId
-        );
-        const replyToOtherParticipant = Boolean(
-            isSameChannelReply && repliedUserId && repliedUserId !== assistantId
-        );
+        const repliedUser = message.mentions.repliedUser;
 
-        return {
-            assistantMentioned,
-            replyToAssistant,
-            otherParticipantMentioned,
-            replyToOtherParticipant,
-        };
+        return normalizeDiscordAddressing({
+            currentPersonaId: runtimeConfig.profile.id,
+            currentDiscordUserId: assistantId,
+            mentionedUsers: this.getMentionUsers(message),
+            repliedUser: repliedUser
+                ? {
+                      id: repliedUser.id,
+                      displayName: repliedUser.globalName ?? undefined,
+                      username: repliedUser.username,
+                  }
+                : null,
+            isSameChannelReply,
+            content: message.content ?? '',
+            roster: runtimeConfig.personaRoster,
+            resolution: runtimeConfig.personaRosterResolution,
+        });
+    }
+
+    private getMentionUsers(message: Message): DiscordMentionUser[] {
+        const mentionUsers = message.mentions?.users;
+        if (!mentionUsers || typeof mentionUsers.values !== 'function') {
+            return [];
+        }
+        return Array.from(mentionUsers.values()).map((user) => ({
+            id: user.id,
+            displayName: user.globalName ?? undefined,
+            username: user.username,
+        }));
     }
 
     /**

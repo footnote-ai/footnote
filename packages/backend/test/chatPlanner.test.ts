@@ -832,6 +832,8 @@ test('chatPlanner fails closed to ignore when an alias candidate targets another
             trigger: {
                 kind: 'alias_candidate',
                 addressing: {
+                    participants: [],
+                    resolution: 'complete',
                     assistantMentioned: false,
                     replyToAssistant: false,
                     otherParticipantMentioned: false,
@@ -853,6 +855,8 @@ test('chatPlanner preserves message fallback for an unaddressed alias candidate'
             trigger: {
                 kind: 'alias_candidate',
                 addressing: {
+                    participants: [],
+                    resolution: 'complete',
                     assistantMentioned: false,
                     replyToAssistant: false,
                     otherParticipantMentioned: false,
@@ -874,6 +878,8 @@ test('chatPlanner preserves message fallback for an explicitly addressed assista
             trigger: {
                 kind: 'alias_candidate',
                 addressing: {
+                    participants: [],
+                    resolution: 'complete',
                     assistantMentioned: true,
                     replyToAssistant: false,
                     otherParticipantMentioned: true,

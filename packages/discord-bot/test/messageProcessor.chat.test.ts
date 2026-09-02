@@ -1046,6 +1046,71 @@ test('buildChatRequestFromMessage sends raw conversation without bot-side identi
     }
 });
 
+test('buildChatRequestFromMessage sanitizes Discord mentions before backend input', async () => {
+    const processor = createProcessor();
+    const processorAccess = processor as unknown as ProcessorPrivateAccess;
+    const originalRoster = runtimeConfig.personaRoster;
+    const originalResolution = runtimeConfig.personaRosterResolution;
+    const runtimeConfigMutable = runtimeConfig as unknown as {
+        personaRoster: typeof runtimeConfig.personaRoster;
+        personaRosterResolution: typeof runtimeConfig.personaRosterResolution;
+    };
+    runtimeConfigMutable.personaRoster = [
+        {
+            personaId: 'footnote',
+            displayName: 'Footnote',
+            discordUserId: 'bot-1',
+            mentionAliases: ['footnote'],
+        },
+        {
+            personaId: 'myuri',
+            displayName: 'Myuri',
+            discordUserId: '111',
+            mentionAliases: ['myuri'],
+        },
+    ];
+    runtimeConfigMutable.personaRosterResolution = 'complete';
+    processorAccess.buildRawConversationHistory = async () => [
+        { role: 'user', content: 'Previous message.' },
+    ];
+
+    try {
+        const message = createChatBuildMessage() as unknown as {
+            content: string;
+            mentions: {
+                users: {
+                    values: () => Array<{
+                        id: string;
+                        username: string;
+                    }>;
+                };
+            };
+        };
+        message.content = '<@111> please review this.';
+        message.mentions.users.values = () => [
+            { id: '111', username: 'myuri-bot' },
+        ];
+
+        const built = await processorAccess.buildChatRequestFromMessage(
+            message,
+            'Mentioned with a direct ping'
+        );
+
+        if (!built) {
+            throw new Error('Expected chat request to be built');
+        }
+
+        assert.equal(
+            built.request.latestUserInput,
+            '@Myuri please review this.'
+        );
+        assert.doesNotMatch(built.request.latestUserInput, /<@!?111>/);
+    } finally {
+        runtimeConfigMutable.personaRoster = originalRoster;
+        runtimeConfigMutable.personaRosterResolution = originalResolution;
+    }
+});
+
 test('buildChatRequestFromMessage marks plaintext alias triggers as candidates', async () => {
     const processor = createProcessor();
     const processorAccess = processor as unknown as ProcessorPrivateAccess;
@@ -1064,6 +1129,8 @@ test('buildChatRequestFromMessage marks plaintext alias triggers as candidates',
 
     assert.equal(built.request.trigger.kind, 'alias_candidate');
     assert.deepEqual(built.request.trigger.addressing, {
+        participants: [],
+        resolution: 'complete',
         assistantMentioned: false,
         replyToAssistant: false,
         otherParticipantMentioned: false,
@@ -1087,7 +1154,7 @@ test('buildChatRequestFromMessage preserves explicit assistant precedence over o
             repliedUser: null;
         };
     };
-    message.mentions.users.values = () => [{ id: 'human-2' }];
+    message.mentions.users.values = () => [{ id: 'bot-1' }, { id: 'human-2' }];
     message.mentions.users.has = (id) => id === 'bot-1';
 
     const built = await processorAccess.buildChatRequestFromMessage(
@@ -1101,6 +1168,19 @@ test('buildChatRequestFromMessage preserves explicit assistant precedence over o
 
     assert.equal(built.request.trigger.kind, 'invoked');
     assert.deepEqual(built.request.trigger.addressing, {
+        participants: [
+            {
+                kind: 'persona',
+                relation: 'explicit_mention',
+                personaId: 'footnote',
+                displayName: 'Footnote',
+            },
+            {
+                kind: 'unknown',
+                relation: 'explicit_mention',
+            },
+        ],
+        resolution: 'complete',
         assistantMentioned: true,
         replyToAssistant: false,
         otherParticipantMentioned: true,
@@ -1149,6 +1229,13 @@ test('buildChatRequestFromMessage marks a reply to another participant as an ali
 
     assert.equal(built.request.trigger.kind, 'alias_candidate');
     assert.deepEqual(built.request.trigger.addressing, {
+        participants: [
+            {
+                kind: 'unknown',
+                relation: 'reply',
+            },
+        ],
+        resolution: 'complete',
         assistantMentioned: false,
         replyToAssistant: false,
         otherParticipantMentioned: false,
@@ -1198,6 +1285,19 @@ test('buildChatRequestFromMessage preserves an explicit assistant reply over oth
 
     assert.equal(built.request.trigger.kind, 'invoked');
     assert.deepEqual(built.request.trigger.addressing, {
+        participants: [
+            {
+                kind: 'unknown',
+                relation: 'explicit_mention',
+            },
+            {
+                kind: 'persona',
+                relation: 'reply',
+                personaId: 'footnote',
+                displayName: 'Footnote',
+            },
+        ],
+        resolution: 'complete',
         assistantMentioned: false,
         replyToAssistant: true,
         otherParticipantMentioned: true,
