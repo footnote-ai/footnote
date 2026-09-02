@@ -267,8 +267,6 @@ export const createWeatherForecastContextStepExecutor = ({
             durationMs: weatherToolDurationMs,
             evidence: {
                 content: [formatWeatherToolResultMessage(weatherToolResult)],
-                visibility: 'model_visible',
-                authority: 'advisory',
             },
             ...(sources !== undefined && { sources }),
         });

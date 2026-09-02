@@ -147,8 +147,6 @@ export const createFileScanningContextStepExecutor = ({
             toolName: FILE_SCAN_TOOL_NAME,
             evidence: {
                 content: evidenceContent,
-                visibility: 'model_visible',
-                authority: 'advisory',
             },
             sources,
         });

@@ -23,30 +23,31 @@ import {
 import { selectFollowUpSearchHint } from './contextStepHelpers.js';
 import { buildPlannerPayload } from '../chatOrchestrator/plannerPayload.js';
 
-export type ModelInput = GenerationRequest;
+type ModelInput = GenerationRequest;
 
-export type ModelInputPlan = {
+type ModelInputPlan = {
     plan: ChatPlan;
     surfacePolicy?: { coercedFrom: ChatPlan['action'] };
 };
 
-export type ModelInputEvidenceFailure = {
+type ModelInputEvidenceFailure = {
     integrationName: string;
     requested: boolean;
     status: 'unavailable' | 'failed' | 'skipped';
 };
 
+/** Internal result envelope consumed by the model-input seam. */
 export type ModelInputEvidence = {
     results: readonly ContextStepResult[];
     failures: readonly ModelInputEvidenceFailure[];
 };
 
-export type ModelInputContext = {
+type ModelInputContext = {
     messages: readonly RuntimeMessage[];
     envelope: ConversationContextEnvelope;
 };
 
-export type BuildModelInputParams = {
+type BuildModelInputParams = {
     baseRequest: GenerationRequest;
     context: ModelInputContext;
     results: {
@@ -93,10 +94,8 @@ const buildResultMessages = (
                 content,
             }));
         const evidence =
-            result.outcome === 'executed' &&
-            result.evidence?.authority === 'advisory' &&
-            result.evidence.visibility === 'model_visible'
-                ? stringValues(result.evidence.content)
+            result.outcome === 'executed'
+                ? stringValues(result.evidence?.content)
                       .map((content) => content.trim())
                       .filter((content) => content.length > 0)
                       .map((content): RuntimeMessage => ({
@@ -116,7 +115,7 @@ const buildPlanMessage = (
         : {
               role: 'system',
               content: [
-                  'FOOTNOTE PLAN: backend-selected execution input for this response. It is not execution-contract authority.',
+                  "FOOTNOTE PLAN: The backend selected this plan for the response. It does not override Footnote's rules or limits.",
                   buildPlannerPayload(plan.plan, plan.surfacePolicy),
               ].join('\n'),
           };

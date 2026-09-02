@@ -314,8 +314,6 @@ export const createWebSearchContextStepExecutor = ({
             durationMs,
             evidence: {
                 content: formatWebSearchEvidence(input.query, discovered),
-                visibility: 'model_visible',
-                authority: 'advisory',
             },
             sources: discovered.map(normalizeCitation),
             integrationContext: {

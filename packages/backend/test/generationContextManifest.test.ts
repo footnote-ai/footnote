@@ -48,8 +48,6 @@ const projectContextResult = (
     ...(hasEvidence && {
         evidence: {
             content: ['UNTRUSTED PROJECT CONTEXT: excerpt'],
-            visibility: 'model_visible',
-            authority: 'advisory',
         },
     }),
     integrationContext: {
@@ -181,8 +179,6 @@ test('buildGenerationContextManifest distinguishes retrieved, empty, failed, ski
                 },
                 evidence: {
                     content: ['UNTRUSTED GITHUB CONTEXT: record'],
-                    visibility: 'model_visible',
-                    authority: 'advisory',
                 },
                 integrationContext: {
                     kind: 'github_context',

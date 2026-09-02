@@ -175,8 +175,6 @@ export const createReverseImageSearchContextStepExecutor = ({
             toolName: REVERSE_IMAGE_SEARCH_NAME,
             evidence: {
                 content: evidenceContent,
-                visibility: 'model_visible',
-                authority: 'advisory',
             },
             sources,
         });

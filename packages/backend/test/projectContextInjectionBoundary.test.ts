@@ -53,8 +53,6 @@ const buildInput = (content: string) =>
                         ],
                         evidence: {
                             content: [content],
-                            visibility: 'model_visible',
-                            authority: 'advisory',
                         },
                     },
                 ],

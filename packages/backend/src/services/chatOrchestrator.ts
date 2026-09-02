@@ -986,7 +986,7 @@ export const createChatOrchestrator = ({
                 personaPrompt,
                 normalizedConversation,
                 contextEnvelope,
-                executionPlanForPrompt: executionPlan,
+                executionPlan,
                 ...(plannerApplication.surfacePolicy !== undefined && {
                     surfacePolicy: plannerApplication.surfacePolicy,
                 }),

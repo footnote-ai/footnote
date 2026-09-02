@@ -293,8 +293,6 @@ export const createTrustGraphContextStepExecutor = ({
                 toolName: request.integrationName,
                 evidence: {
                     content: formatAdvisoryEvidence(trustGraphResult),
-                    visibility: 'model_visible',
-                    authority: 'advisory',
                 },
                 sources: buildCitations(trustGraphResult),
                 integrationContext: {

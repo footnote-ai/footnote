@@ -57,7 +57,7 @@ test('assemblePlanGenerationInput preserves conversation ordering without prompt
         personaPrompt: 'persona prompt',
         normalizedConversation: [{ role: 'user', content: 'hello' }],
         contextEnvelope: createContextEnvelope(),
-        executionPlanForPrompt: {
+        executionPlan: {
             action: 'message',
             modality: 'text',
             safetyTier: 'Low',
@@ -100,7 +100,7 @@ test('assemblePlanGenerationInput includes planner snapshot payload fields', () 
         personaPrompt: 'persona prompt',
         normalizedConversation: [{ role: 'user', content: 'hello' }],
         contextEnvelope: createContextEnvelope(),
-        executionPlanForPrompt: {
+        executionPlan: {
             action: 'message',
             modality: 'text',
             safetyTier: 'Low',
@@ -150,7 +150,7 @@ test('assemblePlanGenerationInput snapshot minimizes context envelope payload', 
         personaPrompt: 'persona prompt',
         normalizedConversation: [{ role: 'user', content: 'hello' }],
         contextEnvelope: createContextEnvelope(),
-        executionPlanForPrompt: {
+        executionPlan: {
             action: 'message',
             modality: 'text',
             safetyTier: 'Low',

@@ -1,9 +1,9 @@
 /**
- * @description: Builds generation messages and snapshot data from
- * policy-applied planner output.
+ * @description: Builds the base conversation and execution snapshot after
+ * planning.
  * @footnote-scope: core
  * @footnote-module: ChatServicePlanGenerationInput
- * @footnote-risk: medium - Incorrect assembly can desync planner payload context from generation.
+ * @footnote-risk: medium - Incorrect assembly can desync the execution snapshot from generation.
  * @footnote-ethics: high - Stable assembly keeps planner advice separate from backend policy authority.
  */
 import type {
@@ -28,7 +28,7 @@ export type PlanGenerationInputParams = {
         Pick<ChatConversationMessage, 'role' | 'content'>
     >;
     contextEnvelope: ConversationContextEnvelope;
-    executionPlanForPrompt: PlannerPayloadChatPlan;
+    executionPlan: PlannerPayloadChatPlan;
     surfacePolicy?: { coercedFrom: 'message' | 'react' | 'ignore' | 'image' };
     normalizedRequest: PostChatRequest;
     orchestrationSafetyTier: SafetyTier;
@@ -67,11 +67,11 @@ export const assemblePlanGenerationInput = (
     const conversationSnapshot = JSON.stringify({
         request: input.normalizedRequest,
         planner: {
-            action: input.executionPlanForPrompt.action,
-            modality: input.executionPlanForPrompt.modality,
-            profileId: input.executionPlanForPrompt.profileId,
+            action: input.executionPlan.action,
+            modality: input.executionPlan.modality,
+            profileId: input.executionPlan.profileId,
             safetyTier: input.orchestrationSafetyTier,
-            generation: input.executionPlanForPrompt.generation,
+            generation: input.executionPlan.generation,
             toolIntent: input.toolIntent,
             toolRequest: input.toolRequestContext,
             ...(input.surfacePolicy && { surfacePolicy: input.surfacePolicy }),

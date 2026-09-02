@@ -1246,13 +1246,11 @@ type ContextStepBaseResult = {
 /**
  * Bounded retrieval output for a context Step.
  *
- * Evidence is always advisory model-visible data. It cannot choose a runtime
- * message role; model-input construction owns that projection.
+ * Context integrations return data only. Model-input construction owns the
+ * advisory, user-level projection and the runtime message role.
  */
 export type ContextStepEvidence = {
     content: string[];
-    visibility: 'model_visible';
-    authority: 'advisory';
 };
 
 export type ContextStepExecutedResult = ContextStepBaseResult & {

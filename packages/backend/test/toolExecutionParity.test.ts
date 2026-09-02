@@ -146,8 +146,6 @@ test('weather success flows through workflow context-step: tool step recorded in
                             ? `Weather in ${execution.location.name}: clear skies`
                             : 'Weather context: clear skies',
                     ],
-                    visibility: 'model_visible',
-                    authority: 'advisory',
                 },
             };
         },

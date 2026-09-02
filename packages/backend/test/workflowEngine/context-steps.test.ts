@@ -178,8 +178,6 @@ test('runBoundedReviewWorkflow executes injected context step and records contex
             },
             evidence: {
                 content: ['weather_context: clear skies'],
-                visibility: 'model_visible',
-                authority: 'advisory',
             },
         }),
         captureUsage: (generationResult) => ({
@@ -305,8 +303,6 @@ test('runBoundedReviewWorkflow preserves backend-injected context steps after pl
                     },
                     evidence: {
                         content: ['trustgraph_context: found'],
-                        visibility: 'model_visible',
-                        authority: 'advisory',
                     },
                 };
             },
@@ -320,8 +316,6 @@ test('runBoundedReviewWorkflow preserves backend-injected context steps after pl
                     },
                     evidence: {
                         content: ['weather_context: clear skies'],
-                        visibility: 'model_visible',
-                        authority: 'advisory',
                     },
                 };
             },
@@ -493,8 +487,6 @@ test('runBoundedReviewWorkflow executes eligible context steps in parallel and m
                     },
                     evidence: {
                         content: ['weather_context: clear skies'],
-                        visibility: 'model_visible',
-                        authority: 'advisory',
                     },
                 };
             },
@@ -510,8 +502,6 @@ test('runBoundedReviewWorkflow executes eligible context steps in parallel and m
                     },
                     evidence: {
                         content: ['web_context: top result'],
-                        visibility: 'model_visible',
-                        authority: 'advisory',
                     },
                 };
             },
@@ -580,8 +570,6 @@ test('runBoundedReviewWorkflow prioritizes exact GitHub context before broad and
         },
         evidence: {
             content: [`${name}: context`],
-            visibility: 'model_visible',
-            authority: 'advisory',
         },
     });
     const resultPromise = runBoundedReviewWorkflowForTest({
@@ -731,8 +719,6 @@ test('runBoundedReviewWorkflow keeps project evidence separate from trusted inst
             trustedInstructions: ['Trusted project-context guidance.'],
             evidence: {
                 content: ['UNTRUSTED PROJECT CONTEXT: repository evidence.'],
-                visibility: 'model_visible',
-                authority: 'advisory',
             },
         }),
         captureUsage: (generationResult) => ({

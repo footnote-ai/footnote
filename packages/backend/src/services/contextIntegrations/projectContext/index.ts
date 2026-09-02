@@ -319,8 +319,6 @@ export const createProjectContextStepExecutor = (
                             matches,
                             commitSha,
                         }),
-                        visibility: 'model_visible',
-                        authority: 'advisory',
                     },
                     trustedInstructions: [projectContextGuidance],
                     sources: citationsFromProjectContext({
