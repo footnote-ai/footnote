@@ -76,6 +76,10 @@ import {
 import { assemblePlanGenerationInput } from './chatService/planGenerationInput.js';
 import { classifyPlanContinuation } from './chatService/planContinuation.js';
 import {
+    resolveChatParticipation,
+    resolveLocalChatParticipation,
+} from './chatParticipationPolicy.js';
+import {
     buildControlObservabilityEnvelope,
     emitControlObservabilityEnvelope,
 } from './steerabilityControlObservability.js';
@@ -457,6 +461,39 @@ export const createChatOrchestrator = ({
             throw error;
         }
         const botProfileDisplayName = personaProfile.displayName;
+        const addressing = normalizedRequest.trigger.addressing;
+        if (
+            normalizedRequest.surface === 'discord' &&
+            normalizedRequest.botPersonaId !== undefined &&
+            addressing !== undefined &&
+            addressing.participants.length > 0
+        ) {
+            const participationDecision = resolveChatParticipation(addressing);
+            const localParticipation = resolveLocalChatParticipation({
+                decision: participationDecision,
+                personaId: personaProfile.id,
+            });
+            chatOrchestratorLogger.info('chat.participation.arbitration', {
+                event: 'chat.participation.arbitration',
+                surface: normalizedRequest.surface,
+                triggerKind: normalizedRequest.trigger.kind,
+                resolution: addressing.resolution,
+                selectedPersonaIds: participationDecision.selectedPersonaIds,
+                excludedPersonaIds: participationDecision.excluded.map(
+                    (entry) => entry.personaId
+                ),
+                localPersonaId: personaProfile.id,
+                localSelected: localParticipation.selected,
+                localReasonCode: localParticipation.reasonCode,
+                correlation: buildCorrelationIds(normalizedRequest, null),
+            });
+            if (!localParticipation.selected) {
+                return {
+                    action: 'ignore',
+                    metadata: null,
+                };
+            }
+        }
         const clarificationContinuation =
             resolveWeatherClarificationContinuation(normalizedRequest);
         let evaluatorExecutionContext: EvaluatorExecutionContext | undefined;
