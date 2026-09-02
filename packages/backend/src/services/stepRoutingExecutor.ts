@@ -121,6 +121,12 @@ export const executeStepRoutingChain = async <TSuccess>(input: {
         profile: ModelProfile,
         attemptIndex: number
     ) => Promise<TSuccess>;
+    /**
+     * Lets a step classify a provider result as retryable without converting
+     * it into an exception. This is used for empty/incomplete model output so
+     * routing can advance while the caller retains the reported usage.
+     */
+    shouldRetry?: (value: TSuccess) => boolean;
 }): Promise<RoutingChainExecutionResult<TSuccess>> => {
     const attempts: RoutingChainAttemptLog[] = [];
 
@@ -168,6 +174,24 @@ export const executeStepRoutingChain = async <TSuccess>(input: {
 
         try {
             const value = await input.runWithProfile(profile, index);
+            if (input.shouldRetry?.(value) === true) {
+                attempts.push({
+                    index,
+                    step: input.step,
+                    profileId: profile.id,
+                    provider: profile.provider,
+                    model: profile.providerModel,
+                    status: 'failed_transient_advanced',
+                    reasonCode: 'routing_chain_transient_error',
+                    errorMessage:
+                        'Provider returned a retryable result; routing advanced to the next profile.',
+                    chooseOneUsed: candidate.chooseOneUsed,
+                    chooseOneCandidates: candidate.chooseOneCandidates,
+                    chooseOneSelectedIndex: candidate.chooseOneSelectedIndex,
+                    seedKeyType: candidate.seedKeyType,
+                });
+                continue;
+            }
             attempts.push({
                 index,
                 step: input.step,

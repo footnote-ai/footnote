@@ -289,6 +289,58 @@ test('runChat surfaces a controlled message when a provider reports empty comple
     );
 });
 
+test('runChat rejects partial text when the provider reports incomplete generation', async () => {
+    let capturedGeneration:
+        | NonNullable<
+              ResponseMetadataRuntimeContext['executionContext']
+          >['generation']
+        | undefined;
+    const chatService = createChatService({
+        generationRuntime: createRuntime({
+            text: 'unfinished answer',
+            completion: {
+                status: 'incomplete',
+                reason: 'max_output_tokens',
+                visibleTextLength: 17,
+            },
+            finishReason: 'length',
+            usage: {
+                promptTokens: 2400,
+                completionTokens: 1200,
+                reasoningTokens: 1200,
+                totalTokens: 3600,
+            },
+        }),
+        storeTrace: async () => undefined,
+        buildResponseMetadata: (_generationMetadata, runtimeContext) => {
+            capturedGeneration = runtimeContext.executionContext?.generation;
+            return createMetadata();
+        },
+        defaultModel: 'gpt-5.6-terra',
+        recordUsage: () => undefined,
+        chatWorkflowConfig: {
+            modeId: 'express',
+            reviewLoopEnabled: false,
+            maxIterations: 0,
+            maxDurationMs: 15000,
+        },
+    });
+
+    const response = await chatService.runChat({
+        question: 'Explain this briefly.',
+    });
+
+    assert.equal(
+        response.action === 'message' ? response.message : undefined,
+        'I could not complete a response within the model generation budget. Please try again.'
+    );
+    assert.equal(capturedGeneration?.status, 'failed');
+    assert.equal(
+        capturedGeneration?.reasonCode,
+        'generation_incomplete_before_output'
+    );
+});
+
 test('runChat preserves balanced persona guidance for direct generation', async () => {
     let capturedMessages: string[] = [];
     const chatService = createChatService({

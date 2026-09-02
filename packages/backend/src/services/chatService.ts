@@ -38,7 +38,7 @@ import type {
     ResponseCandidate,
 } from '@footnote/contracts/web';
 import { ProjectContextMetadataSchema } from '@footnote/contracts/web';
-import type { Result } from 'neverthrow';
+import { ok, type Result } from 'neverthrow';
 import type {
     GenerationMetadataUsage,
     ResponseMetadataGenerationInput,
@@ -161,10 +161,12 @@ const SURFACED_INCOMPLETE_GENERATION_MESSAGE =
     'I could not complete a response within the model generation budget. Please try again.';
 
 // Some providers report a successful stop while returning only hidden
-// reasoning or an empty content field. Never pass that empty result to a
-// surface adapter; keep the fail-open response explicit instead.
+// reasoning, empty content, or an explicitly incomplete result. Never pass
+// those results to a surface adapter; keep the fail-open response explicit.
 const hasNoVisibleGenerationOutput = (result: GenerationResult): boolean =>
-    result.text.trim().length === 0;
+    result.text.trim().length === 0 ||
+    result.completion?.status === 'incomplete' ||
+    result.completion?.status === 'failed';
 
 type GenerateWithChainSuccess = {
     generationResult: GenerationResult;
@@ -1242,13 +1244,17 @@ export const createChatService = ({
             ): Promise<
                 Result<GenerateWithChainSuccess, RoutingChainFailure>
             > => {
+                const generationAttempts: Array<{
+                    profile: ModelProfile;
+                    result: GenerationResult;
+                }> = [];
                 const chainResult = await executeStepRoutingChain({
                     step: 'generate',
                     candidates: generateProfileCandidates,
                     enabledProfilesById,
                     requiresSearch: request.search !== undefined,
-                    runWithProfile: async (profile) =>
-                        generationRuntime.generate({
+                    runWithProfile: async (profile) => {
+                        const result = await generationRuntime.generate({
                             ...capGenerationRequestToProfileMax({
                                 request,
                                 profile,
@@ -1262,9 +1268,29 @@ export const createChatService = ({
                                 request.reasoningEffort,
                                 logger
                             ),
-                        }),
+                        });
+                        // Record every routed provider Attempt, including an
+                        // incomplete result that causes fail-open progression.
+                        recordUsageForStep(result, request.model);
+                        generationAttempts.push({ profile, result });
+                        return result;
+                    },
+                    shouldRetry: hasNoVisibleGenerationOutput,
                 });
                 const routingResult = toRoutingChainResult(chainResult);
+                if (routingResult.isErr()) {
+                    const lastAttempt = generationAttempts.at(-1);
+                    if (
+                        lastAttempt !== undefined &&
+                        hasNoVisibleGenerationOutput(lastAttempt.result)
+                    ) {
+                        return ok({
+                            generationResult: lastAttempt.result,
+                            selectedProfile: lastAttempt.profile,
+                            attempts: routingResult.error.attempts,
+                        });
+                    }
+                }
                 return routingResult.map((executedResult) => ({
                     generationResult: executedResult.value,
                     selectedProfile: executedResult.selected.profile,
@@ -1666,10 +1692,6 @@ export const createChatService = ({
                                     routedGenerationSelectedProfile =
                                         chainGenerationResult.value
                                             .selectedProfile;
-                                    recordUsageForStep(
-                                        generationResult,
-                                        effectiveGenerationRequest.model
-                                    );
                                 }
                             } catch (error) {
                                 logger.warn(
@@ -1755,10 +1777,6 @@ export const createChatService = ({
                         chainGenerationResult.value.generationResult;
                     routedGenerationSelectedProfile =
                         chainGenerationResult.value.selectedProfile;
-                    recordUsageForStep(
-                        generationResult,
-                        effectiveGenerationRequest.model
-                    );
                 }
             }
 
