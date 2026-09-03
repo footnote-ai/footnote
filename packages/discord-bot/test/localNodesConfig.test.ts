@@ -9,6 +9,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
+    inspectDiscordNodeIdentityConflicts,
     parseLocalNodeDefinitions,
     resolveLocalNodeDefinitions,
 } from '../src/supervisor/localNodesConfig.js';
@@ -178,6 +179,54 @@ test('duplicate node id fails with clear schema error', () => {
                 },
             ]),
         /Duplicate node id "footnote"/
+    );
+});
+
+test('reports duplicate Discord identities without exposing their values', () => {
+    const parsed = parseLocalNodeDefinitions([
+        {
+            id: 'myuri-node',
+            credentials: {
+                discordTokenEnv: 'MYURI_DISCORD_TOKEN',
+                discordClientIdEnv: 'MYURI_DISCORD_CLIENT_ID',
+                discordGuildIdsEnv: 'MYURI_DISCORD_GUILD_IDS',
+                discordUserIdEnv: 'MYURI_DISCORD_USER_ID',
+                incidentSecretEnv: 'INCIDENT_PSEUDONYMIZATION_SECRET',
+            },
+            profile: { id: 'myuri', displayName: 'Myuri' },
+        },
+        {
+            id: 'winter-node',
+            credentials: {
+                discordTokenEnv: 'WINTER_DISCORD_TOKEN',
+                discordClientIdEnv: 'WINTER_DISCORD_CLIENT_ID',
+                discordGuildIdsEnv: 'WINTER_DISCORD_GUILD_IDS',
+                discordUserIdEnv: 'WINTER_DISCORD_USER_ID',
+                incidentSecretEnv: 'INCIDENT_PSEUDONYMIZATION_SECRET',
+            },
+            profile: { id: 'winter', displayName: 'Winter' },
+        },
+    ]);
+    const resolved = resolveLocalNodeDefinitions(parsed, {
+        MYURI_DISCORD_TOKEN: 'token-myuri',
+        MYURI_DISCORD_CLIENT_ID: 'client-myuri',
+        MYURI_DISCORD_GUILD_IDS: 'guild-myuri',
+        MYURI_DISCORD_USER_ID: 'shared-discord-user',
+        WINTER_DISCORD_TOKEN: 'token-winter',
+        WINTER_DISCORD_CLIENT_ID: 'client-winter',
+        WINTER_DISCORD_GUILD_IDS: 'guild-winter',
+        WINTER_DISCORD_USER_ID: 'shared-discord-user',
+        INCIDENT_PSEUDONYMIZATION_SECRET: 'incident-secret',
+    });
+
+    assert.deepEqual(
+        inspectDiscordNodeIdentityConflicts(resolved.activeNodes),
+        {
+            duplicateProfileIds: [],
+            duplicateDiscordUserIdCount: 1,
+            affectedNodeIds: ['myuri-node', 'winter-node'],
+            affectedPersonaIds: ['myuri', 'winter'],
+        }
     );
 });
 
