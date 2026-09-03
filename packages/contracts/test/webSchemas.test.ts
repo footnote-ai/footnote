@@ -785,12 +785,39 @@ test('ResponseMetadataSchema accepts execution timeline events', () => {
                 effectiveProfileId: 'openai-text-medium',
                 provider: 'openai',
                 model: 'gpt-5-mini',
+                usage: {
+                    promptTokens: 10,
+                    cachedInputTokens: 4,
+                    cacheWriteTokens: 2,
+                    completionTokens: 20,
+                    reasoningTokens: 6,
+                    totalTokens: 30,
+                },
                 durationMs: 20,
             },
         ],
     });
 
     assert.equal(parsed.success, true);
+});
+
+test('ResponseMetadataSchema rejects unknown generation usage fields', () => {
+    const parsed = ResponseMetadataSchema.safeParse({
+        ...baseMetadata,
+        execution: [
+            {
+                kind: 'generation',
+                status: 'executed',
+                model: 'gpt-5-mini',
+                usage: {
+                    cachedInputTokens: 4,
+                    unknownUsageField: 1,
+                },
+            },
+        ],
+    });
+
+    assert.equal(parsed.success, false);
 });
 
 test('ResponseMetadataSchema accepts one payload with distinct mode, TRACE, planner, controls, and provenance categories', () => {
@@ -918,7 +945,10 @@ const createValidWorkflowMetadataPayload = (
                 model: 'gpt-5-mini',
                 usage: {
                     promptTokens: 10,
+                    cachedInputTokens: 4,
+                    cacheWriteTokens: 2,
                     completionTokens: 20,
+                    reasoningTokens: 6,
                     totalTokens: 30,
                 },
                 cost: {

@@ -162,6 +162,7 @@ export class SqliteTraceStore {
     private readonly db: Database.Database;
     private readonly upsertStatement: Database.Statement;
     private readonly retrieveStatement: Database.Statement;
+    private readonly traceExistsStatement: Database.Statement;
     private readonly deleteStatement: Database.Statement;
     private readonly upsertTraceCardStatement: Database.Statement;
     private readonly retrieveTraceCardStatement: Database.Statement;
@@ -217,6 +218,9 @@ export class SqliteTraceStore {
     `);
         this.retrieveStatement = this.db.prepare(
             `SELECT metadata_json FROM provenance_traces WHERE response_id = ? LIMIT 1`
+        );
+        this.traceExistsStatement = this.db.prepare(
+            `SELECT 1 AS present FROM provenance_traces WHERE response_id = ? LIMIT 1`
         );
         this.deleteStatement = this.db.prepare(
             `DELETE FROM provenance_traces WHERE response_id = ?`
@@ -505,6 +509,20 @@ export class SqliteTraceStore {
         }
 
         return this.parseTraceMetadataJson(row.metadata_json, responseId);
+    }
+
+    /**
+     * Reports whether a trace row exists, even when its metadata is not
+     * currently readable. Callers use this to distinguish corruption from an
+     * absent parent row without exposing invalid metadata.
+     */
+    async has(responseId: string): Promise<boolean> {
+        const row = await this.withRetry(
+            () =>
+                this.traceExistsStatement.get(responseId) as
+                    { present: number } | undefined
+        );
+        return row !== undefined;
     }
 
     /**

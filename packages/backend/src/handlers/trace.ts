@@ -689,7 +689,10 @@ const createTraceHandlers = ({
             });
 
             const existingTrace = await writeAccess.store.retrieve(responseId);
-            if (!existingTrace) {
+            const traceExists =
+                existingTrace !== null ||
+                (await writeAccess.store.has(responseId));
+            if (!traceExists) {
                 const now = Date.now();
                 const ninetyDaysMs = 90 * 24 * 60 * 60 * 1000;
                 const syntheticChainHash = createHash('sha256')

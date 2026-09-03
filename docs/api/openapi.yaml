@@ -3500,10 +3500,19 @@ components:
                         promptTokens:
                             type: integer
                             minimum: 0
+                        cachedInputTokens:
+                            type: integer
+                            minimum: 0
+                        cacheWriteTokens:
+                            type: integer
+                            minimum: 0
                         completionTokens:
                             type: integer
                             minimum: 0
                         totalTokens:
+                            type: integer
+                            minimum: 0
+                        reasoningTokens:
                             type: integer
                             minimum: 0
                     additionalProperties: false
@@ -3974,6 +3983,28 @@ components:
                                 type: string
                             model:
                                 type: string
+                            usage:
+                                type: object
+                                properties:
+                                    promptTokens:
+                                        type: integer
+                                        minimum: 0
+                                    cachedInputTokens:
+                                        type: integer
+                                        minimum: 0
+                                    cacheWriteTokens:
+                                        type: integer
+                                        minimum: 0
+                                    completionTokens:
+                                        type: integer
+                                        minimum: 0
+                                    totalTokens:
+                                        type: integer
+                                        minimum: 0
+                                    reasoningTokens:
+                                        type: integer
+                                        minimum: 0
+                                additionalProperties: false
                             toolName:
                                 type: string
                             evaluator:

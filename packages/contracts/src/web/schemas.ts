@@ -590,6 +590,8 @@ const GenerationExecutionEventSchema = z
         usage: z
             .object({
                 promptTokens: z.number().int().nonnegative().optional(),
+                cachedInputTokens: z.number().int().nonnegative().optional(),
+                cacheWriteTokens: z.number().int().nonnegative().optional(),
                 completionTokens: z.number().int().nonnegative().optional(),
                 totalTokens: z.number().int().nonnegative().optional(),
                 reasoningTokens: z.number().int().nonnegative().optional(),
@@ -1023,6 +1025,8 @@ const StepRecordSchema = z
         usage: z
             .object({
                 promptTokens: z.number().int().nonnegative().optional(),
+                cachedInputTokens: z.number().int().nonnegative().optional(),
+                cacheWriteTokens: z.number().int().nonnegative().optional(),
                 completionTokens: z.number().int().nonnegative().optional(),
                 totalTokens: z.number().int().nonnegative().optional(),
                 reasoningTokens: z.number().int().nonnegative().optional(),

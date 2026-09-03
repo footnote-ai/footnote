@@ -456,11 +456,15 @@ test('runChatMessages preserves runtime-reported model in workflow generation ex
     let capturedGenerationExecutionProfileId: string | undefined;
     let capturedGenerationExecutionProvider: string | undefined;
     let capturedWorkflowGenerationProfileId: string | undefined;
+    let capturedGenerationMetadataUsage:
+        | import('@footnote/contracts/policy').GenerationExecutionUsage
+        | undefined;
 
     const chatService = createChatService({
         generationRuntime: createRuntime(),
         storeTrace: async () => undefined,
-        buildResponseMetadata: (_generationMetadata, runtimeContext) => {
+        buildResponseMetadata: (generationMetadata, runtimeContext) => {
+            capturedGenerationMetadataUsage = generationMetadata.usage;
             capturedRuntimeContextModelVersion = runtimeContext.modelVersion;
             capturedGenerationExecutionModel =
                 runtimeContext.executionContext?.generation?.model;
@@ -492,6 +496,8 @@ test('runChatMessages preserves runtime-reported model in workflow generation ex
                     model: 'openai/gpt-5-mini-2026-05-01',
                     usage: {
                         promptTokens: 10,
+                        cachedInputTokens: 4,
+                        cacheWriteTokens: 2,
                         completionTokens: 5,
                         totalTokens: 15,
                     },
@@ -606,6 +612,14 @@ test('runChatMessages preserves runtime-reported model in workflow generation ex
         'openrouter-text-profile'
     );
     assert.equal(capturedGenerationExecutionProvider, 'openrouter');
+    assert.deepEqual(capturedGenerationMetadataUsage, {
+        promptTokens: 10,
+        cachedInputTokens: 4,
+        cacheWriteTokens: 2,
+        completionTokens: 5,
+        totalTokens: 15,
+        reasoningTokens: undefined,
+    });
 });
 
 test('runChatMessages passes planner temperament into response metadata runtime context', async () => {
