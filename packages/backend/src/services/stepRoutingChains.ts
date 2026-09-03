@@ -15,6 +15,8 @@ export type WorkflowModelStep = 'planner' | 'generate' | 'assess';
 
 export type ResolvedStepRoutingCandidate = {
     profileId: string;
+    /** A caller override is attempted even while automatic state is active. */
+    selectionSource?: 'explicit' | 'configured';
     chooseOneUsed: boolean;
     chooseOneCandidates?: string[];
     chooseOneSelectedIndex?: number;
@@ -136,6 +138,10 @@ export const resolveStepRoutingChain = (
                 }
                 resolved.push({
                     profileId: expandedId,
+                    ...(index === 0 &&
+                    input.stepOverrideProfileId?.trim().length
+                        ? { selectionSource: 'explicit' as const }
+                        : {}),
                     chooseOneUsed: false,
                 });
                 seenProfileIds.add(expandedId);
@@ -161,6 +167,9 @@ export const resolveStepRoutingChain = (
         }
         resolved.push({
             profileId: selectedProfileId,
+            ...(index === 0 && input.stepOverrideProfileId?.trim().length
+                ? { selectionSource: 'explicit' as const }
+                : {}),
             chooseOneUsed: true,
             chooseOneCandidates: enabledCandidates,
             chooseOneSelectedIndex: selectedIndex,

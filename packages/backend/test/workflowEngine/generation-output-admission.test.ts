@@ -116,6 +116,7 @@ test('retains valid evidence and omits malformed provider facts', () => {
                 profileId: 'first-profile',
                 status: 'failed_transient_advanced',
                 reasonCode: 'generation_empty_output',
+                temporaryUnavailableReason: 'billing_or_quota',
                 chooseOneUsed: false,
             },
         ],
@@ -148,6 +149,7 @@ test('retains valid evidence and omits malformed provider facts', () => {
             reasonCode: 'generation_empty_output',
             usage: { completionTokens: 3 },
             chooseOneUsed: false,
+            temporaryUnavailableReason: 'billing_or_quota',
         },
     ]);
 });

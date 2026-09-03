@@ -213,7 +213,11 @@ const getLastGenerationRoutingAttempt = (
     const attempt = attempts
         .slice()
         .reverse()
-        .find((candidate) => candidate.status !== 'skipped_ineligible');
+        .find(
+            (candidate) =>
+                candidate.status !== 'skipped_ineligible' &&
+                candidate.status !== 'skipped_temporary_unavailable'
+        );
     return attempt === undefined
         ? undefined
         : {

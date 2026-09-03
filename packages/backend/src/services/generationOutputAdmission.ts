@@ -218,4 +218,10 @@ export const toGenerationRoutingAttemptSignals = (
         ...(attempt.seedKeyType === undefined
             ? {}
             : { seedKeyType: attempt.seedKeyType }),
+        ...(attempt.temporaryUnavailableReason === undefined
+            ? {}
+            : {
+                  temporaryUnavailableReason:
+                      attempt.temporaryUnavailableReason,
+              }),
     }));

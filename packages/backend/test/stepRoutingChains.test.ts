@@ -148,6 +148,7 @@ test('resolveStepRoutingChain supports advisory step overrides', () => {
     );
 
     assert.equal(resolved[0]?.profileId, 'openai-text-medium');
+    assert.equal(resolved[0]?.selectionSource, 'explicit');
 });
 
 test('resolveStepRoutingChain uses deterministic chooseOne selection with seed variation', () => {

@@ -197,6 +197,39 @@ export interface GenerationRequest {
     signal?: AbortSignal;
 }
 
+/** Provider/account failure reasons that can safely suppress later automatic routes. */
+export type ProviderTemporaryUnavailableReason =
+    'billing_or_quota' | 'account_unavailable';
+
+/** Narrow normalized runtime failure facts used by backend routing policy. */
+export type GenerationRuntimeErrorDetails =
+    | {
+          classification: 'transient';
+      }
+    | {
+          classification: 'provider_temporary_unavailable';
+          availabilityReason: ProviderTemporaryUnavailableReason;
+      };
+
+/**
+ * Error raised by a runtime adapter when its upstream error has a safe,
+ * provider-neutral classification. Unknown adapter errors remain unchanged so
+ * backend routing can preserve fail-open behavior without guessing.
+ */
+export class GenerationRuntimeError extends Error {
+    readonly details: GenerationRuntimeErrorDetails;
+
+    constructor(message: string, details: GenerationRuntimeErrorDetails) {
+        super(message);
+        this.name = 'GenerationRuntimeError';
+        this.details = details;
+    }
+}
+
+export const isGenerationRuntimeError = (
+    error: unknown
+): error is GenerationRuntimeError => error instanceof GenerationRuntimeError;
+
 /**
  * One normalized citation surfaced by a runtime adapter.
  *
