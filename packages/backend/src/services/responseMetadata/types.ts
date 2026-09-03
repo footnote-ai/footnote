@@ -115,6 +115,23 @@ export type ResponseMetadataRuntimeContext = {
             effectiveProfileId?: string;
             provider: string;
             model: string;
+            /**
+             * Safe, upstream-reported attribution signals. These facts come
+             * from the provider path and are not independently verified by
+             * Footnote's canonical execution record.
+             */
+            upstreamAttribution?: {
+                /** Model identifier reported by the upstream provider. */
+                resolvedModel?: string;
+                /** Provider that performed upstream inference. */
+                inferenceProvider?: string;
+                /** One-based position of this attempt in upstream routing. */
+                routingAttempt?: number;
+                /** Total upstream routing attempts observed for this call. */
+                routingAttemptCount?: number;
+                /** Cost reported by the upstream provider, in USD. */
+                upstreamReportedCostUsd?: number;
+            };
             durationMs?: number;
         };
         tool?: {

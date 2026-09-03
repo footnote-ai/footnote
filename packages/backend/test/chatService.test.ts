@@ -455,6 +455,13 @@ test('runChatMessages preserves runtime-reported model in workflow generation ex
     let capturedGenerationExecutionModel: string | undefined;
     let capturedGenerationExecutionProfileId: string | undefined;
     let capturedGenerationExecutionProvider: string | undefined;
+    let capturedGenerationExecutionUpstreamAttribution:
+        | NonNullable<
+              NonNullable<
+                  ResponseMetadataRuntimeContext['executionContext']
+              >['generation']
+          >['upstreamAttribution']
+        | undefined;
     let capturedWorkflowGenerationProfileId: string | undefined;
     let capturedGenerationMetadataUsage:
         | import('@footnote/contracts/policy').GenerationExecutionUsage
@@ -477,6 +484,9 @@ test('runChatMessages preserves runtime-reported model in workflow generation ex
                 runtimeContext.executionContext?.generation?.profileId;
             capturedGenerationExecutionProvider =
                 runtimeContext.executionContext?.generation?.provider;
+            capturedGenerationExecutionUpstreamAttribution =
+                runtimeContext.executionContext?.generation
+                    ?.upstreamAttribution;
             capturedWorkflowGenerationProfileId =
                 typeof runtimeContext.workflow?.steps[0]?.outcome.signals
                     ?.routedProfileId === 'string'
@@ -499,6 +509,12 @@ test('runChatMessages preserves runtime-reported model in workflow generation ex
                 generationResult: {
                     text: 'workflow response',
                     model: 'openai/gpt-5-mini-2026-05-01',
+                    upstreamAttribution: {
+                        inferenceProvider: 'openrouter',
+                        resolvedModel: 'openai/gpt-5-mini-2026-05-01',
+                        routingAttempt: 1,
+                        routingAttemptCount: 1,
+                    },
                     usage: {
                         promptTokens: 10,
                         cachedInputTokens: 4,
@@ -617,6 +633,12 @@ test('runChatMessages preserves runtime-reported model in workflow generation ex
         'openrouter-text-profile'
     );
     assert.equal(capturedGenerationExecutionProvider, 'openrouter');
+    assert.deepEqual(capturedGenerationExecutionUpstreamAttribution, {
+        inferenceProvider: 'openrouter',
+        resolvedModel: 'openai/gpt-5-mini-2026-05-01',
+        routingAttempt: 1,
+        routingAttemptCount: 1,
+    });
     assert.equal(capturedGenerationExecutionUsage?.cachedInputTokens, 4);
     assert.equal(capturedGenerationExecutionUsage?.cacheWriteTokens, 2);
     assert.deepEqual(capturedGenerationMetadataUsage, {
@@ -2924,6 +2946,228 @@ test('runChatMessages preserves no-generation lineage when fallback routing chai
             event.profileId === 'workflow_internal_fallback'
     );
     assert.equal(fallbackExecution, undefined);
+});
+
+test('runChatMessages attributes a failed workflow route to the actual Terra attempt', async () => {
+    const response = await createChatService({
+        generationRuntime: {
+            kind: 'test-runtime',
+            async generate() {
+                throw new Error(
+                    'generation should be blocked by the test limit'
+                );
+            },
+        },
+        storeTrace: async () => undefined,
+        buildResponseMetadata,
+        defaultModel: 'gpt-5.6-luna',
+        defaultProvider: 'openai',
+        recordUsage: () => undefined,
+        chatWorkflowConfig: {
+            modeId: 'grounded',
+            reviewLoopEnabled: true,
+            maxIterations: 1,
+            maxDurationMs: 15_000,
+        },
+        runReviewWorkflow: async () =>
+            ({
+                outcome: 'no_generation',
+                workflowLineage: {
+                    workflowId: 'wf_terra_failure',
+                    workflowName: 'message_reviewed',
+                    status: 'degraded',
+                    terminationReason: 'budget_exhausted_tokens',
+                    stepCount: 1,
+                    maxSteps: 3,
+                    maxDurationMs: 15_000,
+                    effectiveLimits: [
+                        {
+                            key: 'maxTokensTotal',
+                            state: 'enforced',
+                            value: 100,
+                            stoppedRun: true,
+                        },
+                    ],
+                    limitStop: {
+                        stoppedByLimit: true,
+                        terminationReason: 'budget_exhausted_tokens',
+                        exhaustedLimitKey: 'maxTokensTotal',
+                    },
+                    steps: [
+                        {
+                            stepId: 'step_generate',
+                            stepKind: 'generate',
+                            attempt: 1,
+                            reasonCode: 'routing_chain_non_transient_error',
+                            startedAt: TEST_TIMESTAMP,
+                            finishedAt: TEST_TIMESTAMP,
+                            durationMs: 1,
+                            outcome: {
+                                status: 'failed',
+                                summary:
+                                    'Terra failed before producing output.',
+                                signals: {
+                                    routedProfileId: null,
+                                    routedProvider: null,
+                                    routedModel: null,
+                                    routingChainAttemptCount: 2,
+                                    routingChainAttemptsJson: JSON.stringify([
+                                        {
+                                            index: 0,
+                                            profileId: 'deepseek-route',
+                                            provider: 'openrouter',
+                                            model: 'deepseek-v4-flash',
+                                            status: 'skipped_ineligible',
+                                            chooseOneUsed: false,
+                                        },
+                                        {
+                                            index: 1,
+                                            profileId: 'openai-text-medium',
+                                            provider: 'openai',
+                                            model: 'gpt-5.6-terra',
+                                            status: 'failed_non_transient_stopped',
+                                            reasonCode:
+                                                'routing_chain_non_transient_error',
+                                            chooseOneUsed: false,
+                                        },
+                                    ]),
+                                },
+                            },
+                        },
+                    ],
+                },
+            }) satisfies RunBoundedReviewWorkflowResult,
+    }).runChatMessages({
+        messages: [{ role: 'user', content: 'Explain the failure.' }],
+        conversationSnapshot: 'Explain the failure.',
+        model: 'gpt-5.6-luna',
+    });
+
+    const generation = response.metadata.execution?.find(
+        (event) => event.kind === 'generation'
+    );
+    assert.deepEqual(
+        generation && {
+            profileId: generation.profileId,
+            effectiveProfileId: generation.effectiveProfileId,
+            provider: generation.provider,
+            model: generation.model,
+        },
+        {
+            profileId: 'openai-text-medium',
+            effectiveProfileId: 'openai-text-medium',
+            provider: 'openai',
+            model: 'gpt-5.6-terra',
+        }
+    );
+    assert.equal(generation?.status, 'failed');
+    assert.equal(response.metadata.modelVersion, 'gpt-5.6-terra');
+    assert.doesNotMatch(
+        JSON.stringify(generation),
+        /openai-json-optimized|gpt-5\.6-luna/u
+    );
+});
+
+test('runChatMessages keeps original profile distinct from the successful fallback route', async () => {
+    const response = await createChatService({
+        generationRuntime: {
+            kind: 'test-runtime',
+            async generate() {
+                throw new Error('workflow result should provide the response');
+            },
+        },
+        storeTrace: async () => undefined,
+        buildResponseMetadata,
+        defaultModel: 'gpt-5.6-luna',
+        defaultProvider: 'openrouter',
+        recordUsage: () => undefined,
+        chatWorkflowConfig: {
+            modeId: 'grounded',
+            reviewLoopEnabled: true,
+            maxIterations: 1,
+            maxDurationMs: 15_000,
+        },
+        runReviewWorkflow: async () =>
+            ({
+                outcome: 'generated',
+                generationResult: {
+                    text: 'fallback response',
+                    model: 'gpt-5.6-terra',
+                    provenance: 'Inferred',
+                    citations: [],
+                },
+                workflowLineage: {
+                    workflowId: 'wf_fallback_success',
+                    workflowName: 'message_reviewed',
+                    status: 'completed',
+                    terminationReason: 'goal_satisfied',
+                    stepCount: 1,
+                    maxSteps: 3,
+                    maxDurationMs: 15_000,
+                    steps: [
+                        {
+                            stepId: 'step_generate',
+                            stepKind: 'generate',
+                            attempt: 1,
+                            startedAt: TEST_TIMESTAMP,
+                            finishedAt: TEST_TIMESTAMP,
+                            durationMs: 1,
+                            outcome: {
+                                status: 'executed',
+                                summary: 'Fallback route generated a response.',
+                                signals: {
+                                    routedProfileId: 'openai-text-medium',
+                                    routedProvider: 'openai',
+                                    routedModel: 'gpt-5.6-terra',
+                                    routingChainAttemptCount: 2,
+                                    routingChainAttemptsJson: JSON.stringify([
+                                        {
+                                            index: 0,
+                                            profileId: 'openrouter-deepseek',
+                                            provider: 'openrouter',
+                                            model: 'deepseek-v4-flash',
+                                            status: 'failed_transient_advanced',
+                                            chooseOneUsed: false,
+                                        },
+                                        {
+                                            index: 1,
+                                            profileId: 'openai-text-medium',
+                                            provider: 'openai',
+                                            model: 'gpt-5.6-terra',
+                                            status: 'executed',
+                                            chooseOneUsed: false,
+                                        },
+                                    ]),
+                                },
+                            },
+                        },
+                    ],
+                },
+            }) satisfies RunBoundedReviewWorkflowResult,
+    }).runChatMessages({
+        messages: [{ role: 'user', content: 'Answer with fallback.' }],
+        conversationSnapshot: 'Answer with fallback.',
+        executionContext: {
+            generation: {
+                status: 'executed',
+                profileId: 'openai-text-medium',
+                originalProfileId: 'openrouter-deepseek',
+                effectiveProfileId: 'openai-text-medium',
+                provider: 'openai',
+                model: 'gpt-5.6-terra',
+            },
+        },
+    });
+
+    const generation = response.metadata.execution?.find(
+        (event) => event.kind === 'generation'
+    );
+    assert.ok(generation);
+    assert.equal(generation.originalProfileId, 'openrouter-deepseek');
+    assert.equal(generation.profileId, 'openai-text-medium');
+    assert.equal(generation.effectiveProfileId, 'openai-text-medium');
+    assert.equal(generation.provider, 'openai');
+    assert.equal(generation.model, 'gpt-5.6-terra');
 });
 
 test('runChatMessages keeps no-generation surfaced when execution policy disables fallback generation', async () => {
