@@ -29,13 +29,35 @@ type TestServer = {
 
 const TRACE_TOKEN = 'trace-card-test-token';
 
-const createTestServer = async (): Promise<TestServer> => {
+type TraceStoreFactory = (dbPath: string) => SqliteTraceStore;
+
+class DeletesTraceDuringCardWriteStore extends SqliteTraceStore {
+    public deletionObserved = false;
+
+    override async upsertTraceCardSvgWithPlaceholder(
+        responseId: string,
+        svg: string,
+        placeholder: ResponseMetadata
+    ): Promise<boolean> {
+        this.deletionObserved = true;
+        await this.delete(responseId);
+        return super.upsertTraceCardSvgWithPlaceholder(
+            responseId,
+            svg,
+            placeholder
+        );
+    }
+}
+
+const createTestServer = async (
+    createStore: TraceStoreFactory = (dbPath) =>
+        new SqliteTraceStore({ dbPath })
+): Promise<TestServer> => {
     const tempRoot = await fs.mkdtemp(
         path.join(os.tmpdir(), 'trace-card-api-')
     );
-    const store = new SqliteTraceStore({
-        dbPath: path.join(tempRoot, 'provenance.db'),
-    });
+    const dbPath = path.join(tempRoot, 'provenance.db');
+    const store = createStore(dbPath);
     const handlers = createTraceHandlers({
         traceStore: store,
         logRequest: () => undefined,
@@ -182,6 +204,74 @@ test('POST /api/trace-cards does not replace an unreadable trace with a placehol
             metadata.licenseContext,
             'trace-card preview must not overwrite an existing invalid trace'
         );
+    } finally {
+        await server.close();
+        await server.cleanup();
+    }
+});
+
+test('POST /api/trace-cards survives deletion of an unreadable trace during the write', async () => {
+    const server = await createTestServer(
+        (dbPath) => new DeletesTraceDuringCardWriteStore({ dbPath })
+    );
+    const responseId = 'trace_card_deleted_during_write_123';
+    const metadata: ResponseMetadata = {
+        responseId,
+        provenance: 'Retrieved',
+        safetyTier: 'Low',
+        tradeoffCount: 1,
+        chainHash: 'existing_trace_hash',
+        licenseContext: 'Existing trace must be deleted during the test.',
+        modelVersion: 'gpt-5-mini',
+        staleAfter: new Date(Date.now() + 60000).toISOString(),
+        citations: [],
+        trace_target: {},
+        trace_final: {},
+    };
+
+    try {
+        await server.store.upsert(metadata);
+        const database = new Database(server.dbPath);
+        database
+            .prepare(
+                `UPDATE provenance_traces
+                 SET metadata_json = @metadata_json
+                 WHERE response_id = @response_id`
+            )
+            .run({
+                response_id: responseId,
+                metadata_json: JSON.stringify({
+                    ...metadata,
+                    execution: [
+                        {
+                            kind: 'generation',
+                            status: 'executed',
+                            usage: { unknownUsageField: 1 },
+                        },
+                    ],
+                }),
+            });
+        database.close();
+
+        const response = await fetch(`${server.url}/api/trace-cards`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-Trace-Token': TRACE_TOKEN,
+            },
+            body: JSON.stringify({
+                responseId,
+                temperament: { tightness: 3 },
+            }),
+        });
+
+        assert.equal(response.status, 200);
+        assert.equal(
+            (server.store as DeletesTraceDuringCardWriteStore).deletionObserved,
+            true
+        );
+        assert.ok(await server.store.getTraceCardSvg(responseId));
+        assert.ok(await server.store.retrieve(responseId));
     } finally {
         await server.close();
         await server.cleanup();

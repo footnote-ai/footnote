@@ -459,6 +459,9 @@ test('runChatMessages preserves runtime-reported model in workflow generation ex
     let capturedGenerationMetadataUsage:
         | import('@footnote/contracts/policy').GenerationExecutionUsage
         | undefined;
+    let capturedGenerationExecutionUsage:
+        | import('@footnote/contracts/policy').GenerationExecutionUsage
+        | undefined;
 
     const chatService = createChatService({
         generationRuntime: createRuntime(),
@@ -468,6 +471,8 @@ test('runChatMessages preserves runtime-reported model in workflow generation ex
             capturedRuntimeContextModelVersion = runtimeContext.modelVersion;
             capturedGenerationExecutionModel =
                 runtimeContext.executionContext?.generation?.model;
+            capturedGenerationExecutionUsage =
+                runtimeContext.executionContext?.generation?.usage;
             capturedGenerationExecutionProfileId =
                 runtimeContext.executionContext?.generation?.profileId;
             capturedGenerationExecutionProvider =
@@ -612,6 +617,8 @@ test('runChatMessages preserves runtime-reported model in workflow generation ex
         'openrouter-text-profile'
     );
     assert.equal(capturedGenerationExecutionProvider, 'openrouter');
+    assert.equal(capturedGenerationExecutionUsage?.cachedInputTokens, 4);
+    assert.equal(capturedGenerationExecutionUsage?.cacheWriteTokens, 2);
     assert.deepEqual(capturedGenerationMetadataUsage, {
         promptTokens: 10,
         cachedInputTokens: 4,

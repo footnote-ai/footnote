@@ -584,6 +584,41 @@ export class SqliteTraceStore {
     }
 
     /**
+     * Stores a trace-card SVG while atomically ensuring its parent trace row.
+     * Existing unreadable rows are preserved because existence is checked by
+     * response id rather than by parsing metadata.
+     */
+    async upsertTraceCardSvgWithPlaceholder(
+        responseId: string,
+        svg: string,
+        placeholder: ResponseMetadata
+    ): Promise<boolean> {
+        return this.withRetry(() => {
+            const writeTraceCard = this.db.transaction(
+                (
+                    id: string,
+                    traceCardSvg: string,
+                    placeholderMetadata: ResponseMetadata
+                ): boolean => {
+                    const existingTrace = this.traceExistsStatement.get(id) as
+                        { present: number } | undefined;
+                    const createdPlaceholder = existingTrace === undefined;
+                    if (createdPlaceholder) {
+                        this.upsertMetadataSync(placeholderMetadata);
+                    }
+                    this.upsertTraceCardStatement.run({
+                        response_id: id,
+                        trace_card_svg: traceCardSvg,
+                    });
+                    return createdPlaceholder;
+                }
+            );
+
+            return writeTraceCard(responseId, svg, placeholder);
+        });
+    }
+
+    /**
      * Loads a trace-card SVG by response id.
      * Returns null when no card is stored yet.
      */
