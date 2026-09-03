@@ -411,7 +411,11 @@ const readStructuredErrorCode = (
     payload: Record<string, unknown> | undefined
 ): string | undefined => {
     const nestedError = asRecord(payload?.error);
-    const code = nestedError?.code ?? payload?.code ?? nestedError?.type;
+    const code =
+        nestedError?.code ??
+        payload?.code ??
+        payload?.type ??
+        nestedError?.type;
     return typeof code === 'string' || typeof code === 'number'
         ? String(code).trim().toLowerCase()
         : undefined;
