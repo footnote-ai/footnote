@@ -18,6 +18,7 @@ import type {
     ProjectContextMetadata,
     ContextStepRequest,
     ContextStepResult,
+    ExecutionReasonCode,
     PartialResponseTemperament,
     ResponseMetadata,
     SafetyTier,
@@ -112,28 +113,120 @@ const buildBalancedPresentationPersona = (id: string): PresentationPersona => ({
 const DEFAULT_PRESENTATION_PERSONA =
     buildBalancedPresentationPersona('footnote');
 
+type GenerationRoutingAttribution = {
+    profileId?: string;
+    provider?: string;
+    model?: string;
+    status?: 'failed';
+    reasonCode?: ExecutionReasonCode;
+};
+
+type WorkflowRoutingAttempt = {
+    profileId: string;
+    provider?: string;
+    model?: string;
+    status: string;
+};
+
+const readNonEmptySignalString = (value: unknown): string | undefined =>
+    typeof value === 'string' && value.length > 0 ? value : undefined;
+
+const parseWorkflowRoutingAttempts = (
+    value: unknown
+): WorkflowRoutingAttempt[] => {
+    if (typeof value !== 'string' || value.trim().length === 0) {
+        return [];
+    }
+    try {
+        const parsed: unknown = JSON.parse(value);
+        if (!Array.isArray(parsed)) {
+            return [];
+        }
+        return parsed.filter((attempt): attempt is WorkflowRoutingAttempt => {
+            if (attempt === null || typeof attempt !== 'object') {
+                return false;
+            }
+            const record = attempt as Record<string, unknown>;
+            return (
+                typeof record.profileId === 'string' &&
+                record.profileId.length > 0 &&
+                typeof record.status === 'string' &&
+                (record.provider === undefined ||
+                    typeof record.provider === 'string') &&
+                (record.model === undefined || typeof record.model === 'string')
+            );
+        });
+    } catch {
+        // Historical traces may contain malformed diagnostic signals. They
+        // must not block response assembly or invent an attribution.
+        return [];
+    }
+};
+
+const isExecutedRoutingAttempt = (attempt: WorkflowRoutingAttempt): boolean =>
+    attempt.status === 'executed' ||
+    attempt.status === 'failed_transient_advanced' ||
+    attempt.status === 'failed_non_transient_stopped';
+
 /**
- * Reads the profile and provider selected by the workflow's routing chain from
- * its step receipt. These values are more authoritative than the initial
- * request profile when fail-open routing has selected a different provider.
+ * Reads effective generation attribution from the workflow routing receipt.
+ * Completed routes use the last actual attempt; exhausted routes use their
+ * last failed attempt, with legacy selected fields as a fallback.
  */
 const getWorkflowGenerationRouting = (
     workflowLineage: WorkflowRecord | undefined
-): { profileId?: string; provider?: string } => {
+): GenerationRoutingAttribution => {
     const generationStep = workflowLineage?.steps
         .slice()
         .reverse()
         .find((step) => step.stepKind === 'generate');
-    const routedProfileId = generationStep?.outcome.signals?.routedProfileId;
-    const routedProvider = generationStep?.outcome.signals?.routedProvider;
+    const signals = generationStep?.outcome.signals;
+    const lastExecutedAttempt = parseWorkflowRoutingAttempts(
+        signals?.routingChainAttemptsJson
+    )
+        .slice()
+        .reverse()
+        .find(isExecutedRoutingAttempt);
+    const profileId =
+        lastExecutedAttempt?.profileId ??
+        readNonEmptySignalString(signals?.routedProfileId) ??
+        readNonEmptySignalString(signals?.selectedProfileId);
+    const provider =
+        lastExecutedAttempt?.provider ??
+        readNonEmptySignalString(signals?.routedProvider) ??
+        readNonEmptySignalString(signals?.selectedProvider);
+    const model =
+        lastExecutedAttempt?.model ??
+        readNonEmptySignalString(signals?.routedModel) ??
+        readNonEmptySignalString(signals?.selectedModel);
+
     return {
-        ...(typeof routedProfileId === 'string' && routedProfileId.length > 0
-            ? { profileId: routedProfileId }
-            : {}),
-        ...(typeof routedProvider === 'string' && routedProvider.length > 0
-            ? { provider: routedProvider }
-            : {}),
+        ...(profileId !== undefined && { profileId }),
+        ...(provider !== undefined && { provider }),
+        ...(model !== undefined && { model }),
     };
+};
+
+const getLastGenerationRoutingAttempt = (
+    attempts: RoutingChainAttemptLog[]
+): GenerationRoutingAttribution | undefined => {
+    const attempt = attempts
+        .slice()
+        .reverse()
+        .find((candidate) => candidate.status !== 'skipped_ineligible');
+    return attempt === undefined
+        ? undefined
+        : {
+              profileId: attempt.profileId,
+              ...(attempt.provider !== undefined && {
+                  provider: attempt.provider,
+              }),
+              ...(attempt.model !== undefined && { model: attempt.model }),
+              status: 'failed',
+              ...(attempt.reasonCode !== undefined && {
+                  reasonCode: attempt.reasonCode,
+              }),
+          };
 };
 import { resolveProfileReasoningEffort } from './runtimeRequestControls.js';
 import { runtimeConfig } from '../config.js';
@@ -159,6 +252,7 @@ const SURFACED_NO_GENERATION_MESSAGE =
     'I could not generate a response for this request.';
 const SURFACED_INCOMPLETE_GENERATION_MESSAGE =
     'I could not complete a response within the model generation budget. Please try again.';
+const UNREPORTED_GENERATION_MODEL = 'generation_model_unreported';
 
 // Some providers report a successful stop while returning only hidden
 // reasoning, empty content, or an explicitly incomplete result. Never pass
@@ -1348,6 +1442,7 @@ export const createChatService = ({
                   kind: 'continue';
                   generationResult: GenerationResult;
                   routedGenerationSelectedProfile?: ModelProfile;
+                  generationRoutingAttribution?: GenerationRoutingAttribution;
                   workflowLineage?: WorkflowRecord;
                   workflowContextStepResult?: ContextStepResult;
                   workflowContextStepResults?: ContextStepResult[];
@@ -1361,6 +1456,8 @@ export const createChatService = ({
         > => {
             let generationResult: GenerationResult;
             let routedGenerationSelectedProfile: ModelProfile | undefined;
+            let generationRoutingAttribution:
+                GenerationRoutingAttribution | undefined;
             let workflowLineage: WorkflowRecord | undefined;
             let workflowContextStepResult: ContextStepResult | undefined;
             let workflowContextStepResults: ContextStepResult[] | undefined;
@@ -1683,10 +1780,13 @@ export const createChatService = ({
                                     );
                                     generationResult = {
                                         text: SURFACED_NO_GENERATION_MESSAGE,
-                                        model: effectiveGenerationRequest.model,
                                         provenance: 'Inferred',
                                         citations: [],
                                     };
+                                    generationRoutingAttribution =
+                                        getLastGenerationRoutingAttempt(
+                                            chainGenerationResult.error.attempts
+                                        );
                                 } else {
                                     generationResult =
                                         chainGenerationResult.value
@@ -1695,6 +1795,13 @@ export const createChatService = ({
                                     routedGenerationSelectedProfile =
                                         chainGenerationResult.value
                                             .selectedProfile;
+                                    generationRoutingAttribution = {
+                                        profileId:
+                                            routedGenerationSelectedProfile.id,
+                                        provider:
+                                            routedGenerationSelectedProfile.provider,
+                                        model: routedGenerationSelectedProfile.providerModel,
+                                    };
                                 }
                             } catch (error) {
                                 logger.warn(
@@ -1714,7 +1821,6 @@ export const createChatService = ({
                                 );
                                 generationResult = {
                                     text: SURFACED_NO_GENERATION_MESSAGE,
-                                    model: effectiveGenerationRequest.model,
                                     provenance: 'Inferred',
                                     citations: [],
                                 };
@@ -1743,7 +1849,6 @@ export const createChatService = ({
 
                         generationResult = {
                             text: SURFACED_NO_GENERATION_MESSAGE,
-                            model: effectiveGenerationRequest.model,
                             provenance: 'Inferred',
                             citations: [],
                         };
@@ -1771,15 +1876,23 @@ export const createChatService = ({
                     );
                     generationResult = {
                         text: SURFACED_NO_GENERATION_MESSAGE,
-                        model: effectiveGenerationRequest.model,
                         provenance: 'Inferred',
                         citations: [],
                     };
+                    generationRoutingAttribution =
+                        getLastGenerationRoutingAttempt(
+                            chainGenerationResult.error.attempts
+                        );
                 } else {
                     generationResult =
                         chainGenerationResult.value.generationResult;
                     routedGenerationSelectedProfile =
                         chainGenerationResult.value.selectedProfile;
+                    generationRoutingAttribution = {
+                        profileId: routedGenerationSelectedProfile.id,
+                        provider: routedGenerationSelectedProfile.provider,
+                        model: routedGenerationSelectedProfile.providerModel,
+                    };
                 }
             }
 
@@ -1787,6 +1900,7 @@ export const createChatService = ({
                 kind: 'continue',
                 generationResult,
                 routedGenerationSelectedProfile,
+                generationRoutingAttribution,
                 workflowLineage,
                 workflowContextStepResult,
                 workflowContextStepResults,
@@ -1805,6 +1919,8 @@ export const createChatService = ({
         const generationResult = generationPhase.generationResult;
         const routedGenerationSelectedProfile =
             generationPhase.routedGenerationSelectedProfile;
+        const generationRoutingAttribution =
+            generationPhase.generationRoutingAttribution;
         const workflowLineage = generationPhase.workflowLineage;
         const workflowContextStepResult =
             generationPhase.workflowContextStepResult;
@@ -1963,17 +2079,33 @@ export const createChatService = ({
                       } satisfies ToolExecutionContext)
                     : undefined;
 
-        const usageModel =
-            generationMetadata.model ??
-            generationResult.model ??
-            effectiveGenerationRequest.model ??
-            defaultModel;
         type GenerationExecutionContext = NonNullable<
             NonNullable<
                 ResponseMetadataRuntimeContext['executionContext']
             >['generation']
         >;
         const upstreamGenerationExecutionContext = executionContext?.generation;
+        const workflowGenerationRouting =
+            getWorkflowGenerationRouting(workflowLineage);
+        const routingGenerationAttribution =
+            generationRoutingAttribution ?? workflowGenerationRouting;
+        const generationUpstreamAttribution =
+            generationResult.upstreamAttribution ??
+            upstreamGenerationExecutionContext?.upstreamAttribution;
+        const isSurfacedNoGenerationResult =
+            generationResult.text === SURFACED_NO_GENERATION_MESSAGE &&
+            generationResult.completion === undefined &&
+            generationResult.usage === undefined;
+        const usageModel =
+            (isSurfacedNoGenerationResult
+                ? (routingGenerationAttribution.model ??
+                  generationUpstreamAttribution?.resolvedModel ??
+                  upstreamGenerationExecutionContext?.model)
+                : (generationResult.model ??
+                  generationUpstreamAttribution?.resolvedModel)) ??
+            (isSurfacedNoGenerationResult
+                ? UNREPORTED_GENERATION_MODEL
+                : generationMetadata.model);
         const generationCompletionOverlay =
             generationResult.completion !== undefined
                 ? { completion: generationResult.completion }
@@ -2005,33 +2137,57 @@ export const createChatService = ({
                   reasonCode: 'generation_incomplete_before_output' as const,
               }
             : {};
+        const generationWorkflowStep = workflowLineage?.steps
+            .slice()
+            .reverse()
+            .find((step) => step.stepKind === 'generate');
+        const generationFailureOverlay = generationIncompleteBeforeOutput
+            ? generationIncompleteOverlay
+            : generationRoutingAttribution?.status === 'failed'
+              ? {
+                    status: 'failed' as const,
+                    ...(generationRoutingAttribution.reasonCode !==
+                        undefined && {
+                        reasonCode: generationRoutingAttribution.reasonCode,
+                    }),
+                }
+              : generationWorkflowStep?.outcome.status === 'failed'
+                ? {
+                      status: 'failed' as const,
+                      ...(generationWorkflowStep.reasonCode !== undefined && {
+                          reasonCode: generationWorkflowStep.reasonCode,
+                      }),
+                  }
+                : {};
         const workflowSelectedGenerationProfile =
             workflowPlannerSummary?.selectedResponseProfile;
         const workflowGenerationProfileId =
             workflowPlannerSummary?.effectiveSelectedProfileId ??
             workflowPlannerSummary?.selectedResponseProfile.id;
-        const workflowGenerationRouting =
-            getWorkflowGenerationRouting(workflowLineage);
         const effectiveGenerationProvider =
+            generationUpstreamAttribution?.inferenceProvider ??
+            routingGenerationAttribution.provider ??
             routedGenerationSelectedProfile?.provider ??
-            workflowGenerationRouting.provider ??
             workflowSelectedGenerationProfile?.provider ??
             effectiveGenerationRequest.provider ??
             upstreamGenerationExecutionContext?.provider ??
             defaultProvider ??
             'internal';
-        const effectiveGenerationProfileId = fallbackAfterInternalNoGeneration
-            ? 'workflow_internal_fallback'
-            : (upstreamGenerationExecutionContext?.effectiveProfileId ??
-              upstreamGenerationExecutionContext?.profileId ??
-              workflowGenerationRouting.profileId ??
-              workflowGenerationProfileId);
+        const effectiveGenerationProfileId =
+            generationRoutingAttribution?.profileId ??
+            (fallbackAfterInternalNoGeneration
+                ? 'workflow_internal_fallback'
+                : undefined) ??
+            upstreamGenerationExecutionContext?.effectiveProfileId ??
+            upstreamGenerationExecutionContext?.profileId ??
+            workflowGenerationRouting.profileId ??
+            workflowGenerationProfileId;
         const effectiveGenerationExecutionContext:
             GenerationExecutionContext | undefined =
             upstreamGenerationExecutionContext
                 ? {
                       ...upstreamGenerationExecutionContext,
-                      ...generationIncompleteOverlay,
+                      ...generationFailureOverlay,
                       ...generationCompletionOverlay,
                       ...generationFinishReasonOverlay,
                       ...generationUsageOverlay,
@@ -2046,12 +2202,15 @@ export const createChatService = ({
                       }),
                       provider: effectiveGenerationProvider,
                       model: usageModel,
+                      ...(generationUpstreamAttribution !== undefined && {
+                          upstreamAttribution: generationUpstreamAttribution,
+                      }),
                       durationMs: generationDurationMs,
                   }
                 : fallbackAfterInternalNoGeneration
                   ? ({
                         status: 'executed',
-                        ...generationIncompleteOverlay,
+                        ...generationFailureOverlay,
                         ...generationCompletionOverlay,
                         ...generationFinishReasonOverlay,
                         ...generationUsageOverlay,
@@ -2063,12 +2222,15 @@ export const createChatService = ({
                             'workflow_internal_fallback',
                         provider: effectiveGenerationProvider,
                         model: usageModel,
+                        ...(generationUpstreamAttribution !== undefined && {
+                            upstreamAttribution: generationUpstreamAttribution,
+                        }),
                         durationMs: generationDurationMs,
                     } satisfies GenerationExecutionContext)
                   : effectiveGenerationProfileId !== undefined
                     ? ({
                           status: 'executed',
-                          ...generationIncompleteOverlay,
+                          ...generationFailureOverlay,
                           ...generationCompletionOverlay,
                           ...generationFinishReasonOverlay,
                           ...generationUsageOverlay,
@@ -2081,12 +2243,16 @@ export const createChatService = ({
                           effectiveProfileId: effectiveGenerationProfileId,
                           provider: effectiveGenerationProvider,
                           model: usageModel,
+                          ...(generationUpstreamAttribution !== undefined && {
+                              upstreamAttribution:
+                                  generationUpstreamAttribution,
+                          }),
                           durationMs: generationDurationMs,
                       } satisfies GenerationExecutionContext)
                     : routedGenerationSelectedProfile !== undefined
                       ? ({
                             status: 'executed',
-                            ...generationIncompleteOverlay,
+                            ...generationFailureOverlay,
                             ...generationCompletionOverlay,
                             ...generationFinishReasonOverlay,
                             ...generationUsageOverlay,
@@ -2095,6 +2261,10 @@ export const createChatService = ({
                                 routedGenerationSelectedProfile.id,
                             provider: routedGenerationSelectedProfile.provider,
                             model: usageModel,
+                            ...(generationUpstreamAttribution !== undefined && {
+                                upstreamAttribution:
+                                    generationUpstreamAttribution,
+                            }),
                             durationMs: generationDurationMs,
                         } satisfies GenerationExecutionContext)
                       : undefined;

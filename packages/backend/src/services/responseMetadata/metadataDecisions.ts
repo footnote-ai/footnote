@@ -306,6 +306,9 @@ export const buildExecutionEvents = (
             }),
             provider: generationExecution.provider,
             model: generationExecution.model,
+            ...(generationExecution.upstreamAttribution !== undefined && {
+                upstreamAttribution: generationExecution.upstreamAttribution,
+            }),
             ...(generationExecution.finishReason !== undefined && {
                 finishReason: generationExecution.finishReason,
             }),

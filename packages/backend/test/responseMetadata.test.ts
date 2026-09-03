@@ -502,6 +502,12 @@ test('buildResponseMetadata writes execution timeline from runtime context', () 
                     profileId: 'openai-text-medium',
                     provider: 'openai',
                     model: 'gpt-5-mini',
+                    upstreamAttribution: {
+                        inferenceProvider: 'openrouter',
+                        resolvedModel: 'openai/gpt-5-mini-2026-05-01',
+                        routingAttempt: 2,
+                        routingAttemptCount: 3,
+                    },
                     durationMs: 34,
                 },
             },
@@ -536,6 +542,12 @@ test('buildResponseMetadata writes execution timeline from runtime context', () 
             profileId: 'openai-text-medium',
             provider: 'openai',
             model: 'gpt-5-mini',
+            upstreamAttribution: {
+                inferenceProvider: 'openrouter',
+                resolvedModel: 'openai/gpt-5-mini-2026-05-01',
+                routingAttempt: 2,
+                routingAttemptCount: 3,
+            },
             durationMs: 34,
         },
     ]);
