@@ -7,6 +7,10 @@
  */
 
 import type { ModelProfile } from '@footnote/contracts';
+import {
+    isGenerationRuntimeError,
+    type ProviderTemporaryUnavailableReason,
+} from '@footnote/agent-runtime';
 import type {
     ExecutionReasonCode,
     GenerationCompletion,
@@ -16,12 +20,17 @@ import type {
     ResolvedStepRoutingCandidate,
     WorkflowModelStep,
 } from './stepRoutingChains.js';
+import {
+    defaultProviderAvailabilityStore,
+    type ProviderAvailabilityStore,
+} from './providerAvailability.js';
 
 export type RoutingChainAttemptStatus =
     | 'executed'
     | 'failed_transient_advanced'
     | 'failed_non_transient_stopped'
-    | 'skipped_ineligible';
+    | 'skipped_ineligible'
+    | 'skipped_temporary_unavailable';
 
 export type RoutingChainAttemptLog = {
     index: number;
@@ -32,6 +41,7 @@ export type RoutingChainAttemptLog = {
     status: RoutingChainAttemptStatus;
     reasonCode?: ExecutionReasonCode;
     errorMessage?: string;
+    temporaryUnavailableReason?: ProviderTemporaryUnavailableReason;
     finishReason?: string;
     completion?: GenerationCompletion;
     usage?: GenerationExecutionUsage;
@@ -60,6 +70,12 @@ export type RoutingChainExecutionResult<TSuccess> =
 
 const isTransientError = (error: unknown): boolean => {
     if (
+        isGenerationRuntimeError(error) &&
+        error.details.classification === 'transient'
+    ) {
+        return true;
+    }
+    if (
         error !== null &&
         typeof error === 'object' &&
         'retryable' in error &&
@@ -72,6 +88,9 @@ const isTransientError = (error: unknown): boolean => {
             ? error.message.toLowerCase()
             : String(error).toLowerCase();
 
+    // Preserve the pre-existing fallback heuristic for generic transient
+    // failures. Only the normalized runtime classification can write bounded
+    // provider availability state, so these hints never poison later routes.
     return (
         message.includes('timeout') ||
         message.includes('timed out') ||
@@ -89,6 +108,14 @@ const isTransientError = (error: unknown): boolean => {
         message.includes('connection reset')
     );
 };
+
+const getTemporaryUnavailableReason = (
+    error: unknown
+): ProviderTemporaryUnavailableReason | undefined =>
+    isGenerationRuntimeError(error) &&
+    error.details.classification === 'provider_temporary_unavailable'
+        ? error.details.availabilityReason
+        : undefined;
 
 const isCandidateEligible = (
     candidate: ResolvedStepRoutingCandidate,
@@ -128,6 +155,7 @@ export const executeStepRoutingChain = async <TSuccess>(input: {
         profile: ModelProfile,
         attemptIndex: number
     ) => Promise<TSuccess>;
+    providerAvailability?: ProviderAvailabilityStore;
     /**
      * Lets a step classify a provider result as retryable without converting
      * it into an exception. The returned reason is retained on the route
@@ -136,6 +164,9 @@ export const executeStepRoutingChain = async <TSuccess>(input: {
     retryReasonCode?: (value: TSuccess) => ExecutionReasonCode | undefined;
 }): Promise<RoutingChainExecutionResult<TSuccess>> => {
     const attempts: RoutingChainAttemptLog[] = [];
+    const providerAvailability =
+        input.providerAvailability ?? defaultProviderAvailabilityStore;
+    const availabilityEnabled = input.step === 'generate';
 
     for (let index = 0; index < input.candidates.length; index += 1) {
         const candidate = input.candidates[index];
@@ -179,6 +210,30 @@ export const executeStepRoutingChain = async <TSuccess>(input: {
             continue;
         }
 
+        const temporaryUnavailable =
+            !availabilityEnabled || candidate.selectionSource === 'explicit'
+                ? undefined
+                : providerAvailability.get(profile.provider);
+        if (temporaryUnavailable !== undefined) {
+            attempts.push({
+                index,
+                step: input.step,
+                profileId: profile.id,
+                provider: profile.provider,
+                model: profile.providerModel,
+                status: 'skipped_temporary_unavailable',
+                reasonCode: 'routing_chain_temporary_unavailable',
+                temporaryUnavailableReason: temporaryUnavailable.reason,
+                errorMessage:
+                    'Provider route skipped while its confirmed temporary unavailability is active.',
+                chooseOneUsed: candidate.chooseOneUsed,
+                chooseOneCandidates: candidate.chooseOneCandidates,
+                chooseOneSelectedIndex: candidate.chooseOneSelectedIndex,
+                seedKeyType: candidate.seedKeyType,
+            });
+            continue;
+        }
+
         try {
             const value = await input.runWithProfile(profile, index);
             const retryReasonCode = input.retryReasonCode?.(value);
@@ -212,6 +267,9 @@ export const executeStepRoutingChain = async <TSuccess>(input: {
                 chooseOneSelectedIndex: candidate.chooseOneSelectedIndex,
                 seedKeyType: candidate.seedKeyType,
             });
+            if (availabilityEnabled) {
+                providerAvailability.clear(profile.provider);
+            }
             return {
                 status: 'executed',
                 selected: {
@@ -223,10 +281,25 @@ export const executeStepRoutingChain = async <TSuccess>(input: {
                 attempts,
             };
         } catch (error) {
-            const transient = isTransientError(error);
+            const temporaryUnavailableReason =
+                getTemporaryUnavailableReason(error);
+            const transient =
+                temporaryUnavailableReason !== undefined ||
+                isTransientError(error);
             const reasonCode: ExecutionReasonCode = transient
-                ? 'routing_chain_transient_error'
+                ? temporaryUnavailableReason !== undefined
+                    ? 'routing_chain_temporary_unavailable'
+                    : 'routing_chain_transient_error'
                 : 'routing_chain_non_transient_error';
+            if (
+                availabilityEnabled &&
+                temporaryUnavailableReason !== undefined
+            ) {
+                providerAvailability.mark(
+                    profile.provider,
+                    temporaryUnavailableReason
+                );
+            }
             attempts.push({
                 index,
                 step: input.step,
@@ -239,6 +312,9 @@ export const executeStepRoutingChain = async <TSuccess>(input: {
                 reasonCode,
                 errorMessage:
                     error instanceof Error ? error.message : String(error),
+                ...(temporaryUnavailableReason !== undefined && {
+                    temporaryUnavailableReason,
+                }),
                 chooseOneUsed: candidate.chooseOneUsed,
                 chooseOneCandidates: candidate.chooseOneCandidates,
                 chooseOneSelectedIndex: candidate.chooseOneSelectedIndex,

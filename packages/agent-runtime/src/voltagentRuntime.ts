@@ -13,9 +13,11 @@ import {
     type ProviderTool,
 } from '@voltagent/core';
 import { createOpenAICompatible } from '@ai-sdk/openai-compatible';
-import { jsonSchema, Output } from 'ai';
+import { APICallError, jsonSchema, Output } from 'ai';
 import type {
     GenerationCitation,
+    GenerationRuntimeError,
+    GenerationRuntimeErrorDetails,
     GenerationRequest,
     GenerationResult,
     GenerationRuntime,
@@ -23,6 +25,10 @@ import type {
     GenerationStructuredOutput,
     GenerationUsage,
     RuntimeMessage,
+} from './index.js';
+import {
+    GenerationRuntimeError as GenerationRuntimeErrorClass,
+    isGenerationRuntimeError,
 } from './index.js';
 import { extractMarkdownLinkCitations } from './citationRecovery.js';
 import type { ModelProfileProviderRouting } from '@footnote/contracts';
@@ -385,6 +391,87 @@ const readString = (value: unknown): string | undefined =>
 const readBoundedString = (value: unknown): string | undefined => {
     const stringValue = readString(value);
     return stringValue === undefined ? undefined : stringValue.slice(0, 100);
+};
+
+const parseStructuredErrorPayload = (
+    value: string | undefined
+): Record<string, unknown> | undefined => {
+    if (value === undefined) {
+        return undefined;
+    }
+    try {
+        const parsed: unknown = JSON.parse(value);
+        return asRecord(parsed);
+    } catch {
+        return undefined;
+    }
+};
+
+const readStructuredErrorCode = (
+    payload: Record<string, unknown> | undefined
+): string | undefined => {
+    const nestedError = asRecord(payload?.error);
+    const code = nestedError?.code ?? payload?.code ?? nestedError?.type;
+    return typeof code === 'string' || typeof code === 'number'
+        ? String(code).trim().toLowerCase()
+        : undefined;
+};
+
+const BILLING_OR_QUOTA_ERROR_CODES = new Set([
+    'account_quota_exceeded',
+    'billing_hard_limit_reached',
+    'credits_exhausted',
+    'insufficient_quota',
+    'payment_required',
+    'quota_exceeded',
+]);
+
+const ACCOUNT_UNAVAILABLE_ERROR_CODES = new Set([
+    'account_blocked',
+    'account_deactivated',
+    'account_disabled',
+    'account_suspended',
+    'account_unavailable',
+    'provider_account_unavailable',
+]);
+
+/**
+ * Normalizes only structured AI SDK API failures with known semantics.
+ * Arbitrary messages, malformed payloads, invalid requests, bad credentials,
+ * model errors, and generic provider errors intentionally remain unknown.
+ */
+export const normalizeGenerationRuntimeError = (
+    error: unknown
+): GenerationRuntimeError | undefined => {
+    if (isGenerationRuntimeError(error)) {
+        return error;
+    }
+    if (!APICallError.isInstance(error)) {
+        return undefined;
+    }
+
+    const payload =
+        asRecord(error.data) ?? parseStructuredErrorPayload(error.responseBody);
+    const code = readStructuredErrorCode(payload);
+    const details: GenerationRuntimeErrorDetails | undefined =
+        error.statusCode === 402 ||
+        (code !== undefined && BILLING_OR_QUOTA_ERROR_CODES.has(code))
+            ? {
+                  classification: 'provider_temporary_unavailable',
+                  availabilityReason: 'billing_or_quota',
+              }
+            : code !== undefined && ACCOUNT_UNAVAILABLE_ERROR_CODES.has(code)
+              ? {
+                    classification: 'provider_temporary_unavailable',
+                    availabilityReason: 'account_unavailable',
+                }
+              : error.isRetryable
+                ? { classification: 'transient' }
+                : undefined;
+
+    return details === undefined
+        ? undefined
+        : new GenerationRuntimeErrorClass(error.message, details);
 };
 
 const readNonNegativeInteger = (value: unknown): number | undefined =>
@@ -1449,25 +1536,32 @@ const createVoltAgentRuntime = ({
                 request,
                 provider
             );
-            const result = await executor.generateText(request.messages, {
-                ...(request.maxOutputTokens !== undefined && {
-                    maxOutputTokens: request.maxOutputTokens,
-                }),
-                ...(request.temperature !== undefined && {
-                    temperature: request.temperature,
-                }),
-                ...(request.topP !== undefined && {
-                    topP: request.topP,
-                }),
-                ...(shouldForwardSearch && {
-                    search: request.search,
-                }),
-                ...(request.structuredOutput !== undefined && {
-                    structuredOutput: request.structuredOutput,
-                }),
-                ...(request.signal !== undefined && { signal: request.signal }),
-                ...(providerOptions !== undefined && { providerOptions }),
-            });
+            let result: VoltAgentTextResult;
+            try {
+                result = await executor.generateText(request.messages, {
+                    ...(request.maxOutputTokens !== undefined && {
+                        maxOutputTokens: request.maxOutputTokens,
+                    }),
+                    ...(request.temperature !== undefined && {
+                        temperature: request.temperature,
+                    }),
+                    ...(request.topP !== undefined && {
+                        topP: request.topP,
+                    }),
+                    ...(shouldForwardSearch && {
+                        search: request.search,
+                    }),
+                    ...(request.structuredOutput !== undefined && {
+                        structuredOutput: request.structuredOutput,
+                    }),
+                    ...(request.signal !== undefined && {
+                        signal: request.signal,
+                    }),
+                    ...(providerOptions !== undefined && { providerOptions }),
+                });
+            } catch (error) {
+                throw normalizeGenerationRuntimeError(error) ?? error;
+            }
 
             return normalizeVoltAgentResult(
                 executedModel,
