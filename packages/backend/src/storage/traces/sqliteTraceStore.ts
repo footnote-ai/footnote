@@ -162,6 +162,7 @@ export class SqliteTraceStore {
     private readonly db: Database.Database;
     private readonly upsertStatement: Database.Statement;
     private readonly retrieveStatement: Database.Statement;
+    private readonly traceExistsStatement: Database.Statement;
     private readonly deleteStatement: Database.Statement;
     private readonly upsertTraceCardStatement: Database.Statement;
     private readonly retrieveTraceCardStatement: Database.Statement;
@@ -217,6 +218,9 @@ export class SqliteTraceStore {
     `);
         this.retrieveStatement = this.db.prepare(
             `SELECT metadata_json FROM provenance_traces WHERE response_id = ? LIMIT 1`
+        );
+        this.traceExistsStatement = this.db.prepare(
+            `SELECT 1 AS present FROM provenance_traces WHERE response_id = ? LIMIT 1`
         );
         this.deleteStatement = this.db.prepare(
             `DELETE FROM provenance_traces WHERE response_id = ?`
@@ -508,6 +512,20 @@ export class SqliteTraceStore {
     }
 
     /**
+     * Reports whether a trace row exists, even when its metadata is not
+     * currently readable. Callers use this to distinguish corruption from an
+     * absent parent row without exposing invalid metadata.
+     */
+    async has(responseId: string): Promise<boolean> {
+        const row = await this.withRetry(
+            () =>
+                this.traceExistsStatement.get(responseId) as
+                    { present: number } | undefined
+        );
+        return row !== undefined;
+    }
+
+    /**
      * Reads a trace through the backend-owned display projection. Strict trace
      * writes and canonical internal reads remain unchanged.
      */
@@ -563,6 +581,41 @@ export class SqliteTraceStore {
                 trace_card_svg: svg,
             })
         );
+    }
+
+    /**
+     * Stores a trace-card SVG while atomically ensuring its parent trace row.
+     * Existing unreadable rows are preserved because existence is checked by
+     * response id rather than by parsing metadata.
+     */
+    async upsertTraceCardSvgWithPlaceholder(
+        responseId: string,
+        svg: string,
+        placeholder: ResponseMetadata
+    ): Promise<boolean> {
+        return this.withRetry(() => {
+            const writeTraceCard = this.db.transaction(
+                (
+                    id: string,
+                    traceCardSvg: string,
+                    placeholderMetadata: ResponseMetadata
+                ): boolean => {
+                    const existingTrace = this.traceExistsStatement.get(id) as
+                        { present: number } | undefined;
+                    const createdPlaceholder = existingTrace === undefined;
+                    if (createdPlaceholder) {
+                        this.upsertMetadataSync(placeholderMetadata);
+                    }
+                    this.upsertTraceCardStatement.run({
+                        response_id: id,
+                        trace_card_svg: traceCardSvg,
+                    });
+                    return createdPlaceholder;
+                }
+            );
+
+            return writeTraceCard(responseId, svg, placeholder);
+        });
     }
 
     /**

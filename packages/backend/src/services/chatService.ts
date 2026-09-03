@@ -983,6 +983,9 @@ export const createChatService = ({
             generationResult.usage
                 ? {
                       promptTokens: generationResult.usage.promptTokens,
+                      cachedInputTokens:
+                          generationResult.usage.cachedInputTokens,
+                      cacheWriteTokens: generationResult.usage.cacheWriteTokens,
                       completionTokens: generationResult.usage.completionTokens,
                       totalTokens: generationResult.usage.totalTokens,
                       reasoningTokens: generationResult.usage.reasoningTokens,
@@ -1984,6 +1987,10 @@ export const createChatService = ({
                 ? {
                       usage: {
                           promptTokens: generationResult.usage.promptTokens,
+                          cachedInputTokens:
+                              generationResult.usage.cachedInputTokens,
+                          cacheWriteTokens:
+                              generationResult.usage.cacheWriteTokens,
                           completionTokens:
                               generationResult.usage.completionTokens,
                           totalTokens: generationResult.usage.totalTokens,

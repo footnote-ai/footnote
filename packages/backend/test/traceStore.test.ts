@@ -73,6 +73,122 @@ test('TraceStore round trips metadata with citation URLs', async () => {
     }
 });
 
+test('TraceStore preserves cached usage in execution, workflow, and display traces', async () => {
+    const tempRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'trace-cache-'));
+    const responseId = 'cached_usage_trace_123';
+    const store = new SqliteTraceStore({
+        dbPath: path.join(tempRoot, 'provenance.db'),
+    });
+    const now = new Date().toISOString();
+    const metadata: ResponseMetadata = {
+        responseId,
+        provenance: 'Inferred',
+        safetyTier: 'Low',
+        tradeoffCount: 0,
+        chainHash: 'cached_usage_hash',
+        licenseContext: 'MIT',
+        modelVersion: 'gpt-5-mini',
+        staleAfter: new Date(Date.now() + 60000).toISOString(),
+        citations: [],
+        execution: [
+            {
+                kind: 'generation',
+                status: 'executed',
+                model: 'gpt-5-mini',
+                usage: {
+                    promptTokens: 100,
+                    cachedInputTokens: 80,
+                    cacheWriteTokens: 10,
+                    completionTokens: 20,
+                    reasoningTokens: 5,
+                    totalTokens: 120,
+                },
+            },
+        ],
+        workflow: {
+            workflowId: 'workflow_cached_usage_123',
+            workflowName: 'message_reviewed',
+            status: 'completed',
+            terminationReason: 'goal_satisfied',
+            stepCount: 1,
+            maxSteps: 4,
+            maxDurationMs: 15000,
+            steps: [
+                {
+                    stepId: 'step_1',
+                    attempt: 1,
+                    stepKind: 'generate',
+                    startedAt: now,
+                    finishedAt: now,
+                    durationMs: 1,
+                    model: 'gpt-5-mini',
+                    usage: {
+                        promptTokens: 100,
+                        cachedInputTokens: 80,
+                        cacheWriteTokens: 10,
+                        completionTokens: 20,
+                        reasoningTokens: 5,
+                        totalTokens: 120,
+                    },
+                    outcome: {
+                        status: 'executed',
+                        summary: 'Generated a response.',
+                    },
+                },
+            ],
+        },
+        trace_target: {},
+        trace_final: {},
+    };
+
+    try {
+        await store.upsert(metadata);
+
+        const retrieved = await store.retrieve(responseId);
+        assert.ok(retrieved);
+        const retrievedGeneration = retrieved.execution?.[0];
+        if (retrievedGeneration?.kind !== 'generation') {
+            assert.fail('expected a generation execution event');
+        }
+        assert.deepEqual(retrievedGeneration.usage, {
+            promptTokens: 100,
+            cachedInputTokens: 80,
+            cacheWriteTokens: 10,
+            completionTokens: 20,
+            reasoningTokens: 5,
+            totalTokens: 120,
+        });
+        assert.ok(metadata.workflow);
+        assert.deepEqual(
+            retrieved.workflow?.steps[0]?.usage,
+            metadata.workflow.steps[0]?.usage
+        );
+
+        const display = await store.retrieveForDisplay(responseId);
+        assert.ok(display);
+        assert.equal(display.displayIntegrity.status, 'complete');
+        const displayedGeneration = display.execution?.[0];
+        if (displayedGeneration?.kind !== 'generation') {
+            assert.fail('expected a displayed generation execution event');
+        }
+        assert.deepEqual(displayedGeneration.usage, {
+            promptTokens: 100,
+            cachedInputTokens: 80,
+            cacheWriteTokens: 10,
+            completionTokens: 20,
+            reasoningTokens: 5,
+            totalTokens: 120,
+        });
+        assert.deepEqual(
+            display.workflow?.steps[0]?.usage,
+            metadata.workflow.steps[0]?.usage
+        );
+    } finally {
+        store.close();
+        await fs.rm(tempRoot, { recursive: true, force: true });
+    }
+});
+
 test('TraceStore keeps source-backed TrustGraph metadata as a real trace', async () => {
     const tempRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'trace-store-'));
     const responseId = 'trustgraph_trace_123';

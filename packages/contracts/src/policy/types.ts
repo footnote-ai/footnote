@@ -482,6 +482,8 @@ export type GenerationCompletion = {
 /** Provider-reported token counts safe for trace persistence. */
 export type GenerationExecutionUsage = {
     promptTokens?: number;
+    cachedInputTokens?: number;
+    cacheWriteTokens?: number;
     completionTokens?: number;
     totalTokens?: number;
     reasoningTokens?: number;
@@ -947,6 +949,8 @@ export type StepRecord = {
     model?: string;
     usage?: {
         promptTokens?: number;
+        cachedInputTokens?: number;
+        cacheWriteTokens?: number;
         completionTokens?: number;
         totalTokens?: number;
         reasoningTokens?: number;

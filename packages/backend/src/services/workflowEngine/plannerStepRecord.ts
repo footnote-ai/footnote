@@ -174,19 +174,31 @@ export const buildPlannerStepRecord = ({
               promptTokens: toNonNegativeNumberOrUndefined(
                   summary.usage.promptTokens
               ),
+              cachedInputTokens: toNonNegativeNumberOrUndefined(
+                  summary.usage.cachedInputTokens
+              ),
+              cacheWriteTokens: toNonNegativeNumberOrUndefined(
+                  summary.usage.cacheWriteTokens
+              ),
               completionTokens: toNonNegativeNumberOrUndefined(
                   summary.usage.completionTokens
               ),
               totalTokens: toNonNegativeNumberOrUndefined(
                   summary.usage.totalTokens
               ),
+              reasoningTokens: toNonNegativeNumberOrUndefined(
+                  summary.usage.reasoningTokens
+              ),
           }
         : undefined;
     const hasUsage =
         usage !== undefined &&
         (usage.promptTokens !== undefined ||
+            usage.cachedInputTokens !== undefined ||
+            usage.cacheWriteTokens !== undefined ||
             usage.completionTokens !== undefined ||
-            usage.totalTokens !== undefined);
+            usage.totalTokens !== undefined ||
+            usage.reasoningTokens !== undefined);
     const validatedCostInput =
         summary.cost !== undefined
             ? toNonNegativeNumberOrUndefined(summary.cost.inputCostUsd)

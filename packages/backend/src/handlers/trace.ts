@@ -688,40 +688,43 @@ const createTraceHandlers = ({
                 chips: parsedPayload.data.chips,
             });
 
-            const existingTrace = await writeAccess.store.retrieve(responseId);
-            if (!existingTrace) {
-                const now = Date.now();
-                const ninetyDaysMs = 90 * 24 * 60 * 60 * 1000;
-                const syntheticChainHash = createHash('sha256')
-                    .update(`trace-card:${responseId}`)
-                    .digest('hex')
-                    .slice(0, 16);
-                const syntheticTrace: ResponseMetadata = {
-                    responseId,
-                    provenance: 'Speculative',
-                    safetyTier: 'Low',
-                    tradeoffCount: 0,
-                    chainHash: syntheticChainHash,
-                    licenseContext: 'Trace card preview placeholder',
-                    modelVersion: 'trace-card-preview',
-                    staleAfter: new Date(now + ninetyDaysMs).toISOString(),
-                    citations: [],
-                    trace_target: parsedPayload.data.temperament ?? {},
-                    trace_final: parsedPayload.data.temperament ?? {},
-                    ...(parsedPayload.data.chips?.evidenceScore && {
-                        evidenceScore: parsedPayload.data.chips.evidenceScore,
-                    }),
-                    ...(parsedPayload.data.chips?.freshnessScore && {
-                        freshnessScore: parsedPayload.data.chips.freshnessScore,
-                    }),
-                };
+            const now = Date.now();
+            const ninetyDaysMs = 90 * 24 * 60 * 60 * 1000;
+            const syntheticChainHash = createHash('sha256')
+                .update(`trace-card:${responseId}`)
+                .digest('hex')
+                .slice(0, 16);
+            const syntheticTrace: ResponseMetadata = {
+                responseId,
+                provenance: 'Speculative',
+                safetyTier: 'Low',
+                tradeoffCount: 0,
+                chainHash: syntheticChainHash,
+                licenseContext: 'Trace card preview placeholder',
+                modelVersion: 'trace-card-preview',
+                staleAfter: new Date(now + ninetyDaysMs).toISOString(),
+                citations: [],
+                trace_target: parsedPayload.data.temperament ?? {},
+                trace_final: parsedPayload.data.temperament ?? {},
+                ...(parsedPayload.data.chips?.evidenceScore && {
+                    evidenceScore: parsedPayload.data.chips.evidenceScore,
+                }),
+                ...(parsedPayload.data.chips?.freshnessScore && {
+                    freshnessScore: parsedPayload.data.chips.freshnessScore,
+                }),
+            };
 
-                await writeAccess.store.upsert(syntheticTrace);
+            const createdPlaceholder =
+                await writeAccess.store.upsertTraceCardSvgWithPlaceholder(
+                    responseId,
+                    svg,
+                    syntheticTrace
+                );
+            if (createdPlaceholder) {
                 logger.warn(
                     `Created placeholder provenance_traces row for "${responseId}" before upsertTraceCardSvg to satisfy foreign key constraints.`
                 );
             }
-            await writeAccess.store.upsertTraceCardSvg(responseId, svg);
 
             sendJson(res, 200, {
                 responseId,
