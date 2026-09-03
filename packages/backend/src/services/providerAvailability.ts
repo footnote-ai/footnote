@@ -100,6 +100,11 @@ export const createProviderAvailabilityStore = (input?: {
     };
 };
 
-/** Shared per-process state; no persistence or cross-instance claim is made. */
+/**
+ * Shared per-process state. The current runtime exposes one configured
+ * credential per supported provider, so provider is the narrowest safe key;
+ * account-level isolation must be added before the runtime exposes multiple
+ * credentials for one provider. No persistence or cross-instance claim is made.
+ */
 export const defaultProviderAvailabilityStore =
     createProviderAvailabilityStore();
