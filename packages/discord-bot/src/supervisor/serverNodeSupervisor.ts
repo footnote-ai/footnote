@@ -37,6 +37,7 @@ const DEFAULT_BACKEND_PORT = '3000';
 const NODE_RESTART_DELAY_MS = 1000;
 const PROCESS_STOP_TIMEOUT_MS = 10_000;
 const DEFAULT_SERVER_SETTINGS_PATH = '/data/config/footnote.yaml';
+const MAX_IDENTITY_CONFLICT_LOG_ITEMS = 16;
 
 const supervisorLogger =
     typeof logger.child === 'function'
@@ -292,6 +293,8 @@ class ServerNodeSupervisor {
             resolvedNodes.activeNodes
         );
 
+        // Continue starting every active node intentionally: the backend owns
+        // degraded-addressing behavior while operators correct the roster.
         if (
             identityConflicts.duplicateProfileIds.length > 0 ||
             identityConflicts.duplicateDiscordUserIdCount > 0
@@ -299,11 +302,26 @@ class ServerNodeSupervisor {
             supervisorLogger.warn('discord_persona_roster_degraded', {
                 reasonCode: 'duplicate_persona_identity',
                 addressingResolution: 'degraded',
-                duplicateProfileIds: identityConflicts.duplicateProfileIds,
+                duplicateProfileIds:
+                    identityConflicts.duplicateProfileIds.slice(
+                        0,
+                        MAX_IDENTITY_CONFLICT_LOG_ITEMS
+                    ),
+                duplicateProfileIdCount:
+                    identityConflicts.duplicateProfileIds.length,
                 duplicateDiscordUserIdCount:
                     identityConflicts.duplicateDiscordUserIdCount,
-                affectedNodeIds: identityConflicts.affectedNodeIds,
-                affectedPersonaIds: identityConflicts.affectedPersonaIds,
+                affectedNodeIds: identityConflicts.affectedNodeIds.slice(
+                    0,
+                    MAX_IDENTITY_CONFLICT_LOG_ITEMS
+                ),
+                affectedNodeIdCount: identityConflicts.affectedNodeIds.length,
+                affectedPersonaIds: identityConflicts.affectedPersonaIds.slice(
+                    0,
+                    MAX_IDENTITY_CONFLICT_LOG_ITEMS
+                ),
+                affectedPersonaIdCount:
+                    identityConflicts.affectedPersonaIds.length,
             });
         }
 

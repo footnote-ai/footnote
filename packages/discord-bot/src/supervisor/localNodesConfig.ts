@@ -102,6 +102,10 @@ const collectDuplicateNodeGroups = (
  * Summarizes conflicting runtime identities without returning Discord user IDs.
  * Supervisors use this to make degraded semantic addressing visible while
  * keeping credential values out of structured logs.
+ * @footnote-scope: core
+ * @footnote-module: DiscordNodeIdentityConflictInspection
+ * @footnote-risk: medium - Incomplete conflict summaries can hide degraded addressing at startup.
+ * @footnote-ethics: high - Identity diagnostics help operators avoid silently misrouting persona responses.
  */
 export const inspectDiscordNodeIdentityConflicts = (
     nodes: readonly LocalNodeRuntimeConfig[]
