@@ -26,6 +26,7 @@ import type {
 } from '@footnote/contracts/web';
 import type {
     GenerationRequest,
+    GenerationUsage,
     RuntimeMessage,
 } from '@footnote/agent-runtime';
 import type {
@@ -65,11 +66,7 @@ export type PlannerStepResult = {
         profileId?: string;
         provider?: string;
         model?: string;
-        usage?: {
-            promptTokens: number;
-            completionTokens: number;
-            totalTokens: number;
-        };
+        usage?: GenerationUsage;
         cost?: {
             inputCostUsd: number;
             outputCostUsd: number;

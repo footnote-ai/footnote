@@ -383,6 +383,52 @@ test('chatPlanner accepts structured planner decisions without text JSON parsing
     assert.ok((execution.cost?.totalCostUsd ?? 0) > 0);
 });
 
+test('chatPlanner preserves complete planner usage through accounting', async () => {
+    const planner = createChatPlanner({
+        executePlannerStructured: async () => ({
+            decision: {
+                action: 'message',
+                modality: 'text',
+                requestedCapabilityProfile: 'structured-cheap',
+                safetyTier: 'Low',
+                reasoning: 'Reply should be a normal message.',
+                generation: {
+                    reasoningEffort: 'low',
+                    verbosity: 'medium',
+                    temperament: {
+                        tightness: 4,
+                        rationale: 3,
+                        attribution: 4,
+                        caution: 3,
+                        extent: 4,
+                    },
+                },
+            },
+            model: 'gpt-5-mini',
+            usage: {
+                promptTokens: 2_400,
+                cachedInputTokens: 1_792,
+                cacheWriteTokens: 128,
+                completionTokens: 200,
+                totalTokens: 2_664,
+                reasoningTokens: 64,
+            },
+            rawArguments: '{}',
+        }),
+    });
+
+    const { execution } = await planFromWorkflow(planner, createChatRequest());
+
+    assert.deepEqual(execution.usage, {
+        promptTokens: 2_400,
+        cachedInputTokens: 1_792,
+        cacheWriteTokens: 128,
+        completionTokens: 200,
+        totalTokens: 2_664,
+        reasoningTokens: 64,
+    });
+});
+
 test('chatPlanner switches output instructions for text JSON compatibility fallback', async () => {
     let structuredSystemPrompt = '';
     let textJsonSystemPrompt = '';
