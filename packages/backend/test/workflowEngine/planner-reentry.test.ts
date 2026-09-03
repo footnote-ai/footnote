@@ -672,9 +672,12 @@ test('buildPlannerStepRecord creates schema-safe plan step with bounded planner 
             provider: 'openai',
             model: 'gpt-5-nano',
             usage: {
-                promptTokens: 11,
+                promptTokens: 2000,
+                cachedInputTokens: 1792,
+                cacheWriteTokens: 8,
                 completionTokens: 7,
-                totalTokens: 18,
+                totalTokens: 2007,
+                reasoningTokens: 6,
             },
             cost: {
                 inputCostUsd: 0.000001,
@@ -705,7 +708,14 @@ test('buildPlannerStepRecord creates schema-safe plan step with bounded planner 
     assert.equal(step.outcome.signals?.mattered, true);
     assert.equal(step.outcome.signals?.matteredControlCount, 1);
     assert.equal(step.model, 'gpt-5-nano');
-    assert.equal(step.usage?.totalTokens, 18);
+    assert.deepEqual(step.usage, {
+        promptTokens: 2000,
+        cachedInputTokens: 1792,
+        cacheWriteTokens: 8,
+        completionTokens: 7,
+        totalTokens: 2007,
+        reasoningTokens: 6,
+    });
     assert.equal(step.cost?.totalCostUsd, 0.000003);
     assert.ok(step.durationMs >= 0);
 });
