@@ -363,6 +363,8 @@ const ExecutionReasonCodeSchema = z.enum([
     'planner_invalid_output',
     'evaluator_runtime_error',
     'generation_runtime_error',
+    'generation_empty_output',
+    'generation_failed_output',
     'generation_incomplete_before_output',
     'presentation_finalized',
     'presentation_fallback',
@@ -430,6 +432,8 @@ const PlannerMatteredControlIdSchema = SteerabilityControlIdSchema;
 const EvaluatorExecutionReasonCodeSchema = z.enum(['evaluator_runtime_error']);
 const GenerationExecutionReasonCodeSchema = z.enum([
     'generation_runtime_error',
+    'generation_empty_output',
+    'generation_failed_output',
     'generation_incomplete_before_output',
     'routing_chain_exhausted',
     'routing_chain_non_transient_error',
@@ -567,6 +571,42 @@ const ToolExecutionEventSchema = z
     .superRefine(requireReasonCodeWhenNotExecuted)
     .strict();
 
+const GenerationCompletionSchema = z
+    .object({
+        status: z.enum(['completed', 'incomplete', 'failed', 'unknown']),
+        reason: z.string().max(100).optional(),
+        visibleTextLength: z.number().int().nonnegative(),
+    })
+    .strict();
+
+const GenerationUsageSchema = z
+    .object({
+        promptTokens: z.number().int().nonnegative().optional(),
+        cachedInputTokens: z.number().int().nonnegative().optional(),
+        cacheWriteTokens: z.number().int().nonnegative().optional(),
+        completionTokens: z.number().int().nonnegative().optional(),
+        totalTokens: z.number().int().nonnegative().optional(),
+        reasoningTokens: z.number().int().nonnegative().optional(),
+    })
+    .strict();
+
+const GenerationRoutingChainAttemptSchema = z
+    .object({
+        index: z.number().int().nonnegative(),
+        profileId: z.string().min(1),
+        provider: z.string().min(1).optional(),
+        model: z.string().min(1).optional(),
+        status: z.string().min(1).max(100),
+        reasonCode: z.string().min(1).max(100).optional(),
+        finishReason: z.string().max(100).optional(),
+        completion: GenerationCompletionSchema.optional(),
+        usage: GenerationUsageSchema.optional(),
+        chooseOneUsed: z.boolean(),
+        chooseOneSelectedIndex: z.number().int().nonnegative().optional(),
+        seedKeyType: z.string().max(100).optional(),
+    })
+    .strict();
+
 const GenerationExecutionEventSchema = z
     .object({
         kind: z.literal('generation'),
@@ -574,29 +614,10 @@ const GenerationExecutionEventSchema = z
         ...ProfileExecutionShape,
         reasonCode: GenerationExecutionReasonCodeSchema.optional(),
         finishReason: z.string().max(100).optional(),
-        completion: z
-            .object({
-                status: z.enum([
-                    'completed',
-                    'incomplete',
-                    'failed',
-                    'unknown',
-                ]),
-                reason: z.string().max(100).optional(),
-                visibleTextLength: z.number().int().nonnegative(),
-            })
-            .strict()
-            .optional(),
-        usage: z
-            .object({
-                promptTokens: z.number().int().nonnegative().optional(),
-                cachedInputTokens: z.number().int().nonnegative().optional(),
-                cacheWriteTokens: z.number().int().nonnegative().optional(),
-                completionTokens: z.number().int().nonnegative().optional(),
-                totalTokens: z.number().int().nonnegative().optional(),
-                reasoningTokens: z.number().int().nonnegative().optional(),
-            })
-            .strict()
+        completion: GenerationCompletionSchema.optional(),
+        usage: GenerationUsageSchema.optional(),
+        routingChainAttempts: z
+            .array(GenerationRoutingChainAttemptSchema)
             .optional(),
         durationMs: z.number().int().nonnegative().optional(),
     })

@@ -289,6 +289,87 @@ test('runChat surfaces a controlled message when a provider reports empty comple
     );
 });
 
+test('runChat preserves rejected direct routing attempts in response metadata', async () => {
+    let calls = 0;
+    let traceMetadata: ResponseMetadata | undefined;
+    const chatService = createChatService({
+        generationRuntime: {
+            kind: 'test-runtime',
+            async generate(request) {
+                calls += 1;
+                return calls === 1
+                    ? {
+                          text: '\u200B\u2060\u00AD',
+                          model: request.model,
+                          finishReason: 'stop',
+                          completion: {
+                              status: 'completed' as const,
+                              visibleTextLength: 3,
+                          },
+                          usage: {
+                              promptTokens: 10,
+                              completionTokens: 2,
+                              totalTokens: 12,
+                          },
+                          provenance: 'Inferred' as const,
+                          citations: [],
+                      }
+                    : {
+                          text: 'direct fallback response',
+                          model: request.model,
+                          finishReason: 'stop',
+                          completion: {
+                              status: 'completed' as const,
+                              visibleTextLength: 24,
+                          },
+                          usage: {
+                              promptTokens: 10,
+                              completionTokens: 4,
+                              totalTokens: 14,
+                          },
+                          provenance: 'Inferred' as const,
+                          citations: [],
+                      };
+            },
+        },
+        storeTrace: async (metadata) => {
+            traceMetadata = metadata;
+        },
+        buildResponseMetadata,
+        defaultModel: 'gpt-5-mini',
+        recordUsage: () => undefined,
+        chatWorkflowConfig: {
+            modeId: 'express',
+            reviewLoopEnabled: false,
+            maxIterations: 0,
+            maxDurationMs: 15000,
+        },
+    });
+
+    const response = await chatService.runChat({
+        question: 'Reply briefly.',
+    });
+
+    assert.equal(response.action, 'message');
+    assert.equal(response.message, 'direct fallback response');
+    assert.equal(calls, 2);
+    const generation = response.metadata.execution?.find(
+        (event) => event.kind === 'generation'
+    );
+    assert.ok(generation?.kind === 'generation');
+    assert.equal(generation.routingChainAttempts?.length, 2);
+    assert.equal(
+        generation.routingChainAttempts?.[0]?.reasonCode,
+        'generation_empty_output'
+    );
+    assert.equal(generation.routingChainAttempts?.[1]?.status, 'executed');
+    assert.doesNotThrow(() => ResponseMetadataSchema.parse(response.metadata));
+    assert.deepEqual(
+        traceMetadata?.execution?.find((event) => event.kind === 'generation'),
+        generation
+    );
+});
+
 test('runChat rejects partial text when the provider reports incomplete generation', async () => {
     let capturedGeneration:
         | NonNullable<

@@ -32,6 +32,7 @@ import type {
     WorkflowRecord,
     PresentationMetadata,
     GitHubContextMetadata,
+    WorkflowRoutingChainAttemptSignal,
 } from '@footnote/contracts/policy';
 
 // Owns: provider-neutral metadata assembly input contracts.
@@ -110,6 +111,7 @@ export type ResponseMetadataRuntimeContext = {
             finishReason?: string;
             completion?: GenerationCompletion;
             usage?: GenerationExecutionUsage;
+            routingChainAttempts?: WorkflowRoutingChainAttemptSignal[];
             profileId: string;
             originalProfileId?: string;
             effectiveProfileId?: string;

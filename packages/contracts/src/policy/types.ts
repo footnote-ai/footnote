@@ -199,6 +199,8 @@ export type ExecutionReasonCode =
     | 'planner_invalid_output'
     | 'evaluator_runtime_error'
     | 'generation_runtime_error'
+    | 'generation_empty_output'
+    | 'generation_failed_output'
     | 'generation_incomplete_before_output'
     | 'presentation_finalized'
     | 'presentation_fallback'
@@ -274,6 +276,8 @@ export type EvaluatorExecutionReasonCode = Extract<
 export type GenerationExecutionReasonCode = Extract<
     ExecutionReasonCode,
     | 'generation_runtime_error'
+    | 'generation_empty_output'
+    | 'generation_failed_output'
     | 'generation_incomplete_before_output'
     | 'routing_chain_exhausted'
     | 'routing_chain_non_transient_error'
@@ -470,6 +474,7 @@ export type GenerationExecutionEvent = ProfileExecutionEvent & {
     finishReason?: string;
     completion?: GenerationCompletion;
     usage?: GenerationExecutionUsage;
+    routingChainAttempts?: WorkflowRoutingChainAttemptSignal[];
 };
 
 /** Safe provider-neutral completion facts; never contains hidden reasoning text. */
@@ -776,6 +781,9 @@ export type WorkflowRoutingChainAttemptSignal = {
     model?: string;
     status: string;
     reasonCode?: string;
+    finishReason?: string;
+    completion?: GenerationCompletion;
+    usage?: GenerationExecutionUsage;
     chooseOneUsed: boolean;
     chooseOneSelectedIndex?: number;
     seedKeyType?: string;

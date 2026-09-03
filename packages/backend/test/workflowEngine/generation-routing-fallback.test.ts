@@ -123,6 +123,7 @@ test('gives a large-prompt generation useful output room and advances after inco
                 return {
                     text: '',
                     model: first.providerModel,
+                    finishReason: 'length',
                     completion: {
                         status: 'incomplete',
                         reason: 'max_output_tokens',
@@ -179,10 +180,100 @@ test('gives a large-prompt generation useful output room and advances after inco
     );
     assert.ok(generateStep);
     assert.equal(generateStep.usage?.totalTokens, 26_040);
-    assert.match(
-        String(generateStep.outcome.signals?.routingChainAttemptsJson),
-        /failed_transient_advanced.*executed/u
+    const attempts = JSON.parse(
+        String(generateStep.outcome.signals?.routingChainAttemptsJson)
+    ) as Array<{
+        profileId: string;
+        status: string;
+        reasonCode?: string;
+        finishReason?: string;
+        completion?: { status: string; visibleTextLength: number };
+        usage?: { totalTokens?: number };
+    }>;
+    assert.deepEqual(
+        attempts.map((attempt) => [attempt.profileId, attempt.status]),
+        [
+            ['first-profile', 'failed_transient_advanced'],
+            ['second-profile', 'executed'],
+        ]
     );
+    assert.equal(
+        attempts[0]?.reasonCode,
+        'generation_incomplete_before_output'
+    );
+    assert.equal(attempts[0]?.finishReason, 'length');
+    assert.deepEqual(attempts[0]?.completion, {
+        status: 'incomplete',
+        reason: 'max_output_tokens',
+        visibleTextLength: 0,
+    });
+    assert.equal(attempts[0]?.usage?.totalTokens, 14_000);
+});
+
+test('rejects empty completed output before selecting a fallback candidate', async () => {
+    const first = makeProfile('first-profile');
+    const second = makeProfile('second-profile');
+    let calls = 0;
+    const runtime: GenerationRuntime = {
+        kind: 'test-runtime',
+        async generate(request) {
+            calls += 1;
+            return calls === 1
+                ? {
+                      text: '   ',
+                      model: request.model,
+                      finishReason: 'stop',
+                      completion: {
+                          status: 'completed',
+                          visibleTextLength: 0,
+                      },
+                      usage: {
+                          promptTokens: 10,
+                          completionTokens: 2,
+                          totalTokens: 12,
+                      },
+                      provenance: 'Inferred' as const,
+                      citations: [],
+                  }
+                : {
+                      text: 'Fallback answer.',
+                      model: request.model,
+                      completion: {
+                          status: 'completed',
+                          visibleTextLength: 16,
+                      },
+                      usage: {
+                          promptTokens: 10,
+                          completionTokens: 4,
+                          totalTokens: 14,
+                      },
+                      provenance: 'Inferred' as const,
+                      citations: [],
+                  };
+        },
+    };
+
+    const result = await runGeneration({
+        runtime,
+        request: { messages: [{ role: 'user', content: 'Reply.' }] },
+        candidates: [first, second],
+    });
+
+    assert.equal(result.outcome, 'generated');
+    if (result.outcome !== 'generated') {
+        throw new Error('Expected fallback generation to be selected.');
+    }
+    assert.equal(result.generationResult.text, 'Fallback answer.');
+    const generateStep = result.workflowLineage.steps.find(
+        (step) => step.stepKind === 'generate'
+    );
+    assert.ok(generateStep);
+    const attempts = JSON.parse(
+        String(generateStep.outcome.signals?.routingChainAttemptsJson)
+    ) as Array<{ profileId: string; reasonCode?: string }>;
+    assert.equal(attempts[0]?.profileId, first.id);
+    assert.equal(attempts[0]?.reasonCode, 'generation_empty_output');
+    assert.equal(attempts[1]?.profileId, second.id);
 });
 
 test('keeps an all-incomplete routed generation rejected and retains its usage', async () => {
