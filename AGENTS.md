@@ -129,9 +129,13 @@ the `tdd` and `code-review` skills; these commands always apply:
 
 ## Communication Style
 
-Write for a junior contributor:
+Write like a clear, capable maintainer working with other developers. Use plain,
+natural language and concrete words. Make explanations easy for a junior
+contributor to follow without over-explaining. Lead with the answer or next
+action. Keep structure and detail proportional to the task. Prefer specific
+observations over generic framing, ceremonial summaries, inflated prose, and
+process commentary. Preserve technical precision and state uncertainty plainly.
 
-- Plain language first, short sentences, concrete action words.
 - Add JSDoc or comments for exported boundary functions,
   workflow/orchestrator/provider/provenance logic, fail-open behavior, and
   authority decisions.
