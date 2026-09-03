@@ -61,6 +61,18 @@ test('normalizes only structured billing and account availability failures', () 
         availabilityReason: 'billing_or_quota',
     });
 
+    const topLevelType = normalizeGenerationRuntimeError(
+        apiError({
+            statusCode: 429,
+            responseBody: JSON.stringify({ type: 'insufficient_quota' }),
+        })
+    );
+    assert.ok(topLevelType instanceof GenerationRuntimeError);
+    assert.deepEqual(topLevelType.details, {
+        classification: 'provider_temporary_unavailable',
+        availabilityReason: 'billing_or_quota',
+    });
+
     const suspended = normalizeGenerationRuntimeError(
         apiError({
             statusCode: 403,

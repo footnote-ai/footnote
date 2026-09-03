@@ -592,6 +592,11 @@ const GenerationUsageSchema = z
     })
     .strict();
 
+const TemporaryProviderUnavailableReasonSchema = z.enum([
+    'billing_or_quota',
+    'account_unavailable',
+]);
+
 const GenerationRoutingChainAttemptSchema = z
     .object({
         index: z.number().int().nonnegative(),
@@ -606,7 +611,8 @@ const GenerationRoutingChainAttemptSchema = z
         chooseOneUsed: z.boolean(),
         chooseOneSelectedIndex: z.number().int().nonnegative().optional(),
         seedKeyType: z.string().max(100).optional(),
-        temporaryUnavailableReason: z.string().max(100).optional(),
+        temporaryUnavailableReason:
+            TemporaryProviderUnavailableReasonSchema.optional(),
     })
     .strict();
 
