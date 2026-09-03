@@ -77,6 +77,70 @@ export type LocalNodeDisabledConfig = {
     reason: string;
 };
 
+export type DiscordNodeIdentityConflictSummary = {
+    duplicateProfileIds: string[];
+    duplicateDiscordUserIdCount: number;
+    affectedNodeIds: string[];
+    affectedPersonaIds: string[];
+};
+
+const collectDuplicateNodeGroups = (
+    nodes: readonly LocalNodeRuntimeConfig[],
+    key: (node: LocalNodeRuntimeConfig) => string
+): LocalNodeRuntimeConfig[][] => {
+    const nodesByValue = new Map<string, LocalNodeRuntimeConfig[]>();
+    for (const node of nodes) {
+        const value = key(node);
+        const group = nodesByValue.get(value) ?? [];
+        group.push(node);
+        nodesByValue.set(value, group);
+    }
+    return [...nodesByValue.values()].filter((group) => group.length > 1);
+};
+
+/**
+ * Summarizes conflicting runtime identities without returning Discord user IDs.
+ * Supervisors use this to make degraded semantic addressing visible while
+ * keeping credential values out of structured logs.
+ */
+export const inspectDiscordNodeIdentityConflicts = (
+    nodes: readonly LocalNodeRuntimeConfig[]
+): DiscordNodeIdentityConflictSummary => {
+    const duplicateProfileGroups = collectDuplicateNodeGroups(
+        nodes,
+        (node) => node.profile.id
+    );
+    const duplicateDiscordUserGroups = collectDuplicateNodeGroups(
+        nodes,
+        (node) => node.credentials.discordUserId
+    );
+    const affectedGroups = [
+        ...duplicateProfileGroups,
+        ...duplicateDiscordUserGroups,
+    ];
+    const affectedNodeIds: string[] = [];
+    const affectedPersonaIds: string[] = [];
+    for (const group of affectedGroups) {
+        for (const node of group) {
+            if (!affectedNodeIds.includes(node.id)) {
+                affectedNodeIds.push(node.id);
+            }
+            if (!affectedPersonaIds.includes(node.profile.id)) {
+                affectedPersonaIds.push(node.profile.id);
+            }
+        }
+    }
+
+    return {
+        duplicateProfileIds: duplicateProfileGroups.map(
+            (group) => group[0].profile.id
+        ),
+        duplicateDiscordUserIdCount: duplicateDiscordUserGroups.length,
+        affectedNodeIds,
+        affectedPersonaIds,
+    };
+};
+
 const normalizeOptionalString = (value: unknown): string | undefined => {
     if (typeof value !== 'string') {
         return undefined;

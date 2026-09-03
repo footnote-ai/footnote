@@ -18,6 +18,7 @@ import { logger } from '../utils/logger.js';
 import { isRecord } from './valueGuards.js';
 import {
     parseLocalNodeDefinitions,
+    inspectDiscordNodeIdentityConflicts,
     resolveLocalNodeDefinitions,
     type LocalNodeDefinition,
     type LocalNodeRuntimeConfig,
@@ -287,6 +288,24 @@ class ServerNodeSupervisor {
                 discordUserId: node.credentials.discordUserId,
                 mentionAliases: [...node.profile.mentionAliases],
             }));
+        const identityConflicts = inspectDiscordNodeIdentityConflicts(
+            resolvedNodes.activeNodes
+        );
+
+        if (
+            identityConflicts.duplicateProfileIds.length > 0 ||
+            identityConflicts.duplicateDiscordUserIdCount > 0
+        ) {
+            supervisorLogger.warn('discord_persona_roster_degraded', {
+                reasonCode: 'duplicate_persona_identity',
+                addressingResolution: 'degraded',
+                duplicateProfileIds: identityConflicts.duplicateProfileIds,
+                duplicateDiscordUserIdCount:
+                    identityConflicts.duplicateDiscordUserIdCount,
+                affectedNodeIds: identityConflicts.affectedNodeIds,
+                affectedPersonaIds: identityConflicts.affectedPersonaIds,
+            });
+        }
 
         logger.info('discord_bots_config_status', {
             status: localNodeDefinitions === null ? 'missing' : 'configured',
