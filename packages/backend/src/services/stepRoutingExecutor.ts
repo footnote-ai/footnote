@@ -7,7 +7,11 @@
  */
 
 import type { ModelProfile } from '@footnote/contracts';
-import type { ExecutionReasonCode } from '@footnote/contracts/policy';
+import type {
+    ExecutionReasonCode,
+    GenerationCompletion,
+    GenerationExecutionUsage,
+} from '@footnote/contracts/policy';
 import type {
     ResolvedStepRoutingCandidate,
     WorkflowModelStep,
@@ -28,6 +32,9 @@ export type RoutingChainAttemptLog = {
     status: RoutingChainAttemptStatus;
     reasonCode?: ExecutionReasonCode;
     errorMessage?: string;
+    finishReason?: string;
+    completion?: GenerationCompletion;
+    usage?: GenerationExecutionUsage;
     chooseOneUsed: boolean;
     chooseOneCandidates?: string[];
     chooseOneSelectedIndex?: number;
@@ -123,10 +130,10 @@ export const executeStepRoutingChain = async <TSuccess>(input: {
     ) => Promise<TSuccess>;
     /**
      * Lets a step classify a provider result as retryable without converting
-     * it into an exception. This is used for empty/incomplete model output so
-     * routing can advance while the caller retains the reported usage.
+     * it into an exception. The returned reason is retained on the route
+     * receipt so callers can distinguish output admission from transport error.
      */
-    shouldRetry?: (value: TSuccess) => boolean;
+    retryReasonCode?: (value: TSuccess) => ExecutionReasonCode | undefined;
 }): Promise<RoutingChainExecutionResult<TSuccess>> => {
     const attempts: RoutingChainAttemptLog[] = [];
 
@@ -174,7 +181,8 @@ export const executeStepRoutingChain = async <TSuccess>(input: {
 
         try {
             const value = await input.runWithProfile(profile, index);
-            if (input.shouldRetry?.(value) === true) {
+            const retryReasonCode = input.retryReasonCode?.(value);
+            if (retryReasonCode !== undefined) {
                 attempts.push({
                     index,
                     step: input.step,
@@ -182,9 +190,9 @@ export const executeStepRoutingChain = async <TSuccess>(input: {
                     provider: profile.provider,
                     model: profile.providerModel,
                     status: 'failed_transient_advanced',
-                    reasonCode: 'routing_chain_transient_error',
+                    reasonCode: retryReasonCode,
                     errorMessage:
-                        'Provider returned a retryable result; routing advanced to the next profile.',
+                        'Provider returned an inadmissible result; routing advanced to the next profile.',
                     chooseOneUsed: candidate.chooseOneUsed,
                     chooseOneCandidates: candidate.chooseOneCandidates,
                     chooseOneSelectedIndex: candidate.chooseOneSelectedIndex,

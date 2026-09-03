@@ -147,7 +147,8 @@ test('executeStepRoutingChain advances when a provider returns a retryable resul
             profileId: profile.id,
             complete: profile.id === second.id,
         }),
-        shouldRetry: (value) => !value.complete,
+        retryReasonCode: (value) =>
+            value.complete ? undefined : 'routing_chain_transient_error',
     });
 
     assert.equal(result.status, 'executed');

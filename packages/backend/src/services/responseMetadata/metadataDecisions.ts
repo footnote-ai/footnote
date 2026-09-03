@@ -105,6 +105,8 @@ export const normalizeGenerationReasonCode = (
 
     if (
         reasonCode === 'generation_runtime_error' ||
+        reasonCode === 'generation_empty_output' ||
+        reasonCode === 'generation_failed_output' ||
         reasonCode === 'generation_incomplete_before_output' ||
         reasonCode === 'routing_chain_exhausted' ||
         reasonCode === 'routing_chain_non_transient_error'
@@ -320,6 +322,9 @@ export const buildExecutionEvents = (
             }),
             ...(generationExecution.usage !== undefined && {
                 usage: generationExecution.usage,
+            }),
+            ...(generationExecution.routingChainAttempts !== undefined && {
+                routingChainAttempts: generationExecution.routingChainAttempts,
             }),
             ...(generationExecution.durationMs !== undefined && {
                 durationMs: generationExecution.durationMs,

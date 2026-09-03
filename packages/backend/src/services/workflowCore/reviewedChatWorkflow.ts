@@ -95,6 +95,11 @@ import {
     composeRefinementPrompt,
 } from '../prompts/reviewPromptComposer.js';
 import type { WorkflowProfilePolicyContract } from '../workflowProfileContract.js';
+import {
+    admitGenerationResult,
+    attachGenerationAttemptEvidence,
+    normalizeGenerationResultEvidence,
+} from '../generationOutputAdmission.js';
 import type {
     AttemptResult,
     ExecuteInput,
@@ -560,14 +565,6 @@ const makePlanDefault = (): PlannerStepResult => ({
         toolIntentRejectionReasons: [],
     },
 });
-
-// A provider result with no complete visible answer must not satisfy the
-// generation Step. Routing may fail open to another profile, but the result
-// remains rejected if every bounded Attempt is incomplete.
-const isGenerationIncomplete = (result: GenerationResult): boolean =>
-    result.text.trim().length === 0 ||
-    result.completion?.status === 'incomplete' ||
-    result.completion?.status === 'failed';
 
 /** Combines every provider Attempt used while routing one logical generation. */
 const combineGenerationUsage = (
@@ -1693,6 +1690,7 @@ export const runBoundedReviewWorkflow = async (
         }
         let generationResult: GenerationResult;
         const generationAttempts: GenerationResult[] = [];
+        const generationAttemptsByIndex = new Map<number, GenerationResult>();
         let routingAttempts: RoutingChainAttemptLog[] | undefined;
         let selectedProfile: ModelProfile | undefined;
         try {
@@ -1712,26 +1710,35 @@ export const runBoundedReviewWorkflow = async (
                       enabledProfilesById:
                           stepRoutingChainSet.enabledProfilesById,
                       requiresSearch: boundedRequest.search !== undefined,
-                      runWithProfile: async (profile) => {
-                          const result = await generationRuntime.generate({
-                              ...capGenerationRequestToProfileMax({
-                                  request: boundedRequest,
-                                  profile,
-                              }),
-                              model: profile.providerModel,
-                              provider: profile.provider,
-                              capabilities: profile.capabilities,
-                              providerRouting: profile.providerRouting,
-                              reasoningEffort: resolveProfileReasoningEffort(
-                                  profile,
-                                  boundedRequest.reasoningEffort,
-                                  logger
-                              ),
-                          });
+                      runWithProfile: async (profile, attemptIndex) => {
+                          const result = normalizeGenerationResultEvidence(
+                              await generationRuntime.generate({
+                                  ...capGenerationRequestToProfileMax({
+                                      request: boundedRequest,
+                                      profile,
+                                  }),
+                                  model: profile.providerModel,
+                                  provider: profile.provider,
+                                  capabilities: profile.capabilities,
+                                  providerRouting: profile.providerRouting,
+                                  reasoningEffort:
+                                      resolveProfileReasoningEffort(
+                                          profile,
+                                          boundedRequest.reasoningEffort,
+                                          logger
+                                      ),
+                              })
+                          );
                           generationAttempts.push(result);
+                          generationAttemptsByIndex.set(attemptIndex, result);
                           return result;
                       },
-                      shouldRetry: isGenerationIncomplete,
+                      retryReasonCode: (result) => {
+                          const admission = admitGenerationResult(result);
+                          return admission.admitted
+                              ? undefined
+                              : admission.reasonCode;
+                      },
                   })
                 : undefined;
             const routed =
@@ -1767,14 +1774,21 @@ export const runBoundedReviewWorkflow = async (
                     };
                 }
                 generationResult = lastAttempt;
-                routingAttempts = routed.error.attempts;
+                routingAttempts = attachGenerationAttemptEvidence(
+                    routed.error.attempts,
+                    generationAttemptsByIndex
+                );
             } else if (routed?.isOk()) {
                 generationResult = routed.value.value;
-                routingAttempts = routed.value.attempts;
+                routingAttempts = attachGenerationAttemptEvidence(
+                    routed.value.attempts,
+                    generationAttemptsByIndex
+                );
                 selectedProfile = routed.value.selected.profile;
             } else {
-                generationResult =
-                    await generationRuntime.generate(boundedRequest);
+                generationResult = normalizeGenerationResultEvidence(
+                    await generationRuntime.generate(boundedRequest)
+                );
                 generationAttempts.push(generationResult);
             }
         } catch (error) {
@@ -1810,9 +1824,10 @@ export const runBoundedReviewWorkflow = async (
                 captureUsage(attempt, boundedRequest.model)
             )
         );
-        const incomplete = isGenerationIncomplete(generationResult);
+        const generationAdmission = admitGenerationResult(generationResult);
+        const admitted = generationAdmission.admitted;
         const parentCandidateId = candidates.latestCandidateId();
-        const candidateId = incomplete
+        const candidateId = !admitted
             ? undefined
             : candidates.record({
                   stage:
@@ -1825,20 +1840,18 @@ export const runBoundedReviewWorkflow = async (
                       : { parentCandidateId }),
               });
         const metadata = encodeMetadata({
-            status: incomplete ? 'failed' : 'executed',
-            summary: incomplete
-                ? 'Generation exhausted its output allowance before producing visible text.'
+            status: admitted ? 'executed' : 'failed',
+            summary: !admitted
+                ? 'Generation result was rejected before candidate admission.'
                 : previousDraft === undefined
                   ? 'Generated initial draft response.'
                   : 'Generated refinement draft from assessment guidance.',
-            reasonCode: incomplete
-                ? 'generation_incomplete_before_output'
-                : undefined,
+            reasonCode: admitted ? undefined : generationAdmission.reasonCode,
             model: usage.model,
             usage: combineGenerationResultUsage(generationAttempts),
             estimatedCost: usage.estimatedCost,
             candidateId,
-            terminationReason: incomplete
+            terminationReason: !admitted
                 ? 'executor_error_fail_open'
                 : undefined,
             signals: {
@@ -1858,10 +1871,10 @@ export const runBoundedReviewWorkflow = async (
                       })),
             },
         });
-        if (incomplete) {
+        if (!admitted) {
             return {
                 status: 'failed',
-                errorCode: 'generation_incomplete',
+                errorCode: generationAdmission.reasonCode,
                 retryable: false,
                 usage: { totalTokens: usage.totalTokens },
                 metadata,

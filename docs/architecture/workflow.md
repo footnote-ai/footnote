@@ -291,6 +291,16 @@ This prose-usability check is called candidate admission in code and contracts.
 Old traces remain readable, but the current runtime does not emit or execute
 the old validator/audit stages and new runs do not create records for them.
 
+Authoritative generation uses the same narrow mechanical admission boundary:
+blank visible text and runtime-reported incomplete or failed completion facts
+cannot become Results or response candidates. The observed `imhIL1Ia`
+corruption was visible text made from code-like fragments, repeated punctuation,
+and mixed Unicode, but it exposed no stable provider/runtime artifact marker.
+Footnote therefore does not reject prose based on appearance; code, JSON,
+Markdown, multilingual text, and unusual formatting remain valid output. A
+future artifact detector must be based on a proven transport/runtime signature,
+not a text-quality heuristic.
+
 Review decision parsing uses explicit expected-failure results. If assess
 output is empty, not a JSON object, invalid JSON, or schema-invalid, the engine
 records a failed `assess` step and fails open to the latest successful draft.

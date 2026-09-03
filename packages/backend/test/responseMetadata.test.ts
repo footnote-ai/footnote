@@ -619,6 +619,45 @@ test('buildResponseMetadata persists safe incomplete-generation facts', () => {
     assert.doesNotThrow(() => ResponseMetadataSchema.parse(metadata));
 });
 
+test('buildResponseMetadata preserves mechanical generation admission reasons', () => {
+    const metadata = buildResponseMetadata(
+        baseGenerationMetadata({
+            provenance: 'Inferred',
+            citations: [],
+        }),
+        baseRuntimeContext({
+            executionContext: {
+                generation: {
+                    status: 'failed',
+                    reasonCode: 'generation_empty_output',
+                    profileId: 'openrouter-deepseek',
+                    provider: 'openrouter',
+                    model: 'deepseek-v4-flash',
+                    finishReason: 'stop',
+                    completion: {
+                        status: 'completed',
+                        visibleTextLength: 0,
+                    },
+                    usage: {
+                        promptTokens: 10,
+                        completionTokens: 2,
+                        totalTokens: 12,
+                    },
+                },
+            },
+        })
+    );
+
+    assert.equal(metadata.execution?.[0]?.kind, 'generation');
+    assert.equal(
+        metadata.execution?.[0]?.kind === 'generation'
+            ? metadata.execution[0].reasonCode
+            : undefined,
+        'generation_empty_output'
+    );
+    assert.doesNotThrow(() => ResponseMetadataSchema.parse(metadata));
+});
+
 test('buildResponseMetadata ignores planner execution bridge fields and keeps execution timeline non-planner only', () => {
     const metadata = buildResponseMetadata(
         baseGenerationMetadata(),

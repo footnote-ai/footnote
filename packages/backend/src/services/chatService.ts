@@ -247,20 +247,18 @@ import {
     toRoutingChainResult,
     type RoutingChainFailure,
 } from './routingChainResult.js';
+import {
+    admitGenerationResult,
+    attachGenerationAttemptEvidence,
+    normalizeGenerationResultEvidence,
+    toGenerationRoutingAttemptSignals,
+} from './generationOutputAdmission.js';
 
 const SURFACED_NO_GENERATION_MESSAGE =
     'I could not generate a response for this request.';
 const SURFACED_INCOMPLETE_GENERATION_MESSAGE =
     'I could not complete a response within the model generation budget. Please try again.';
 const UNREPORTED_GENERATION_MODEL = 'generation_model_unreported';
-
-// Some providers report a successful stop while returning only hidden
-// reasoning, empty content, or an explicitly incomplete result. Never pass
-// those results to a surface adapter; keep the fail-open response explicit.
-const hasNoVisibleGenerationOutput = (result: GenerationResult): boolean =>
-    result.text.trim().length === 0 ||
-    result.completion?.status === 'incomplete' ||
-    result.completion?.status === 'failed';
 
 type GenerateWithChainSuccess = {
     generationResult: GenerationResult;
@@ -1345,53 +1343,71 @@ export const createChatService = ({
                     profile: ModelProfile;
                     result: GenerationResult;
                 }> = [];
+                const generationAttemptsByIndex = new Map<
+                    number,
+                    GenerationResult
+                >();
                 const chainResult = await executeStepRoutingChain({
                     step: 'generate',
                     candidates: generateProfileCandidates,
                     enabledProfilesById,
                     requiresSearch: request.search !== undefined,
-                    runWithProfile: async (profile) => {
-                        const result = await generationRuntime.generate({
-                            ...capGenerationRequestToProfileMax({
-                                request,
-                                profile,
-                            }),
-                            model: profile.providerModel,
-                            provider: profile.provider,
-                            capabilities: profile.capabilities,
-                            providerRouting: profile.providerRouting,
-                            reasoningEffort: resolveProfileReasoningEffort(
-                                profile,
-                                request.reasoningEffort,
-                                logger
-                            ),
-                        });
+                    runWithProfile: async (profile, attemptIndex) => {
+                        const result = normalizeGenerationResultEvidence(
+                            await generationRuntime.generate({
+                                ...capGenerationRequestToProfileMax({
+                                    request,
+                                    profile,
+                                }),
+                                model: profile.providerModel,
+                                provider: profile.provider,
+                                capabilities: profile.capabilities,
+                                providerRouting: profile.providerRouting,
+                                reasoningEffort: resolveProfileReasoningEffort(
+                                    profile,
+                                    request.reasoningEffort,
+                                    logger
+                                ),
+                            })
+                        );
                         // Record every routed provider Attempt, including an
-                        // incomplete result that causes fail-open progression.
+                        // inadmissible result that causes fail-open progression.
                         recordUsageForStep(result, request.model);
                         generationAttempts.push({ profile, result });
+                        generationAttemptsByIndex.set(attemptIndex, result);
                         return result;
                     },
-                    shouldRetry: hasNoVisibleGenerationOutput,
+                    retryReasonCode: (result) => {
+                        const admission = admitGenerationResult(result);
+                        return admission.admitted
+                            ? undefined
+                            : admission.reasonCode;
+                    },
                 });
                 const routingResult = toRoutingChainResult(chainResult);
                 if (routingResult.isErr()) {
                     const lastAttempt = generationAttempts.at(-1);
                     if (
                         lastAttempt !== undefined &&
-                        hasNoVisibleGenerationOutput(lastAttempt.result)
+                        !admitGenerationResult(lastAttempt.result).admitted
                     ) {
                         return ok({
                             generationResult: lastAttempt.result,
                             selectedProfile: lastAttempt.profile,
-                            attempts: routingResult.error.attempts,
+                            attempts: attachGenerationAttemptEvidence(
+                                routingResult.error.attempts,
+                                generationAttemptsByIndex
+                            ),
                         });
                     }
                 }
                 return routingResult.map((executedResult) => ({
                     generationResult: executedResult.value,
                     selectedProfile: executedResult.selected.profile,
-                    attempts: executedResult.attempts,
+                    attempts: attachGenerationAttemptEvidence(
+                        executedResult.attempts,
+                        generationAttemptsByIndex
+                    ),
                 }));
             };
 
@@ -1443,6 +1459,7 @@ export const createChatService = ({
                   generationResult: GenerationResult;
                   routedGenerationSelectedProfile?: ModelProfile;
                   generationRoutingAttribution?: GenerationRoutingAttribution;
+                  generationRoutingAttempts?: RoutingChainAttemptLog[];
                   workflowLineage?: WorkflowRecord;
                   workflowContextStepResult?: ContextStepResult;
                   workflowContextStepResults?: ContextStepResult[];
@@ -1458,6 +1475,7 @@ export const createChatService = ({
             let routedGenerationSelectedProfile: ModelProfile | undefined;
             let generationRoutingAttribution:
                 GenerationRoutingAttribution | undefined;
+            let generationRoutingAttempts: RoutingChainAttemptLog[] | undefined;
             let workflowLineage: WorkflowRecord | undefined;
             let workflowContextStepResult: ContextStepResult | undefined;
             let workflowContextStepResults: ContextStepResult[] | undefined;
@@ -1787,6 +1805,8 @@ export const createChatService = ({
                                         getLastGenerationRoutingAttempt(
                                             chainGenerationResult.error.attempts
                                         );
+                                    generationRoutingAttempts =
+                                        chainGenerationResult.error.attempts;
                                 } else {
                                     generationResult =
                                         chainGenerationResult.value
@@ -1802,6 +1822,8 @@ export const createChatService = ({
                                             routedGenerationSelectedProfile.provider,
                                         model: routedGenerationSelectedProfile.providerModel,
                                     };
+                                    generationRoutingAttempts =
+                                        chainGenerationResult.value.attempts;
                                 }
                             } catch (error) {
                                 logger.warn(
@@ -1883,6 +1905,8 @@ export const createChatService = ({
                         getLastGenerationRoutingAttempt(
                             chainGenerationResult.error.attempts
                         );
+                    generationRoutingAttempts =
+                        chainGenerationResult.error.attempts;
                 } else {
                     generationResult =
                         chainGenerationResult.value.generationResult;
@@ -1893,6 +1917,8 @@ export const createChatService = ({
                         provider: routedGenerationSelectedProfile.provider,
                         model: routedGenerationSelectedProfile.providerModel,
                     };
+                    generationRoutingAttempts =
+                        chainGenerationResult.value.attempts;
                 }
             }
 
@@ -1901,6 +1927,7 @@ export const createChatService = ({
                 generationResult,
                 routedGenerationSelectedProfile,
                 generationRoutingAttribution,
+                generationRoutingAttempts,
                 workflowLineage,
                 workflowContextStepResult,
                 workflowContextStepResults,
@@ -1916,11 +1943,15 @@ export const createChatService = ({
         if (generationPhase.kind === 'result') {
             return generationPhase.result;
         }
-        const generationResult = generationPhase.generationResult;
+        const generationResult = normalizeGenerationResultEvidence(
+            generationPhase.generationResult
+        );
         const routedGenerationSelectedProfile =
             generationPhase.routedGenerationSelectedProfile;
         const generationRoutingAttribution =
             generationPhase.generationRoutingAttribution;
+        const generationRoutingAttempts =
+            generationPhase.generationRoutingAttempts;
         const workflowLineage = generationPhase.workflowLineage;
         const workflowContextStepResult =
             generationPhase.workflowContextStepResult;
@@ -1969,8 +2000,8 @@ export const createChatService = ({
                 : workflowContextStepResult !== undefined
                   ? getContextStepSources(workflowContextStepResult)
                   : undefined;
-        const generationIncompleteBeforeOutput =
-            hasNoVisibleGenerationOutput(generationResult);
+        const generationAdmission = admitGenerationResult(generationResult);
+        const generationIncompleteBeforeOutput = !generationAdmission.admitted;
         const deliveredMessage = generationIncompleteBeforeOutput
             ? SURFACED_INCOMPLETE_GENERATION_MESSAGE
             : generationResult.text;
@@ -2134,7 +2165,7 @@ export const createChatService = ({
         const generationIncompleteOverlay = generationIncompleteBeforeOutput
             ? {
                   status: 'failed' as const,
-                  reasonCode: 'generation_incomplete_before_output' as const,
+                  reasonCode: generationAdmission.reasonCode,
               }
             : {};
         const generationWorkflowStep = workflowLineage?.steps
@@ -2182,6 +2213,14 @@ export const createChatService = ({
             upstreamGenerationExecutionContext?.profileId ??
             workflowGenerationRouting.profileId ??
             workflowGenerationProfileId;
+        const generationRoutingAttemptsOverlay =
+            generationRoutingAttempts === undefined
+                ? {}
+                : {
+                      routingChainAttempts: toGenerationRoutingAttemptSignals(
+                          generationRoutingAttempts
+                      ),
+                  };
         const effectiveGenerationExecutionContext:
             GenerationExecutionContext | undefined =
             upstreamGenerationExecutionContext
@@ -2191,6 +2230,7 @@ export const createChatService = ({
                       ...generationCompletionOverlay,
                       ...generationFinishReasonOverlay,
                       ...generationUsageOverlay,
+                      ...generationRoutingAttemptsOverlay,
                       ...(upstreamGenerationExecutionContext.originalProfileId !==
                           undefined && {
                           originalProfileId:
@@ -2214,6 +2254,7 @@ export const createChatService = ({
                         ...generationCompletionOverlay,
                         ...generationFinishReasonOverlay,
                         ...generationUsageOverlay,
+                        ...generationRoutingAttemptsOverlay,
                         profileId:
                             routedGenerationSelectedProfile?.id ??
                             'workflow_internal_fallback',
@@ -2234,6 +2275,7 @@ export const createChatService = ({
                           ...generationCompletionOverlay,
                           ...generationFinishReasonOverlay,
                           ...generationUsageOverlay,
+                          ...generationRoutingAttemptsOverlay,
                           profileId: effectiveGenerationProfileId,
                           ...(workflowPlannerSummary?.originalSelectedProfileId !==
                               undefined && {
@@ -2256,6 +2298,7 @@ export const createChatService = ({
                             ...generationCompletionOverlay,
                             ...generationFinishReasonOverlay,
                             ...generationUsageOverlay,
+                            ...generationRoutingAttemptsOverlay,
                             profileId: routedGenerationSelectedProfile.id,
                             effectiveProfileId:
                                 routedGenerationSelectedProfile.id,
