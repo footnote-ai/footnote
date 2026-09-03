@@ -97,11 +97,7 @@ export type ChatPlannerExecution = {
     contextReasonCode?: PlannerContextReasonCode;
     purpose: PlannerExecutionPurpose;
     contractType: PlannerExecutionContractType;
-    usage?: {
-        promptTokens: number;
-        completionTokens: number;
-        totalTokens: number;
-    };
+    usage?: GenerationUsage;
     cost?: {
         inputCostUsd: number;
         outputCostUsd: number;
@@ -1715,7 +1711,17 @@ export const createChatPlanner = ({
             'current_window'
         );
         let plannerUsageRecorded = false;
-        const plannerUsageTotals = {
+        const plannerUsageTotals: {
+            promptTokens: number;
+            cachedInputTokens?: number;
+            cacheWriteTokens?: number;
+            completionTokens: number;
+            totalTokens: number;
+            reasoningTokens?: number;
+            inputCostUsd: number;
+            outputCostUsd: number;
+            totalCostUsd: number;
+        } = {
             promptTokens: 0,
             completionTokens: 0,
             totalTokens: 0,
@@ -1739,8 +1745,17 @@ export const createChatPlanner = ({
             ...(plannerUsageRecorded && {
                 usage: {
                     promptTokens: plannerUsageTotals.promptTokens,
+                    ...(plannerUsageTotals.cachedInputTokens !== undefined && {
+                        cachedInputTokens: plannerUsageTotals.cachedInputTokens,
+                    }),
+                    ...(plannerUsageTotals.cacheWriteTokens !== undefined && {
+                        cacheWriteTokens: plannerUsageTotals.cacheWriteTokens,
+                    }),
                     completionTokens: plannerUsageTotals.completionTokens,
                     totalTokens: plannerUsageTotals.totalTokens,
+                    ...(plannerUsageTotals.reasoningTokens !== undefined && {
+                        reasoningTokens: plannerUsageTotals.reasoningTokens,
+                    }),
                 },
                 cost: {
                     inputCostUsd: plannerUsageTotals.inputCostUsd,
@@ -1774,8 +1789,23 @@ export const createChatPlanner = ({
             if (usage !== undefined) {
                 plannerUsageRecorded = true;
                 plannerUsageTotals.promptTokens += promptTokens;
+                if (usage.cachedInputTokens !== undefined) {
+                    plannerUsageTotals.cachedInputTokens =
+                        (plannerUsageTotals.cachedInputTokens ?? 0) +
+                        usage.cachedInputTokens;
+                }
+                if (usage.cacheWriteTokens !== undefined) {
+                    plannerUsageTotals.cacheWriteTokens =
+                        (plannerUsageTotals.cacheWriteTokens ?? 0) +
+                        usage.cacheWriteTokens;
+                }
                 plannerUsageTotals.completionTokens += completionTokens;
                 plannerUsageTotals.totalTokens += totalTokens;
+                if (usage.reasoningTokens !== undefined) {
+                    plannerUsageTotals.reasoningTokens =
+                        (plannerUsageTotals.reasoningTokens ?? 0) +
+                        usage.reasoningTokens;
+                }
                 plannerUsageTotals.inputCostUsd += estimatedCost.inputCostUsd;
                 plannerUsageTotals.outputCostUsd += estimatedCost.outputCostUsd;
                 plannerUsageTotals.totalCostUsd += estimatedCost.totalCostUsd;
