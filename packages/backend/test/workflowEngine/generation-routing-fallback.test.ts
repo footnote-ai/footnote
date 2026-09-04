@@ -13,12 +13,15 @@ import type {
     GenerationResult,
     GenerationRuntime,
 } from '@footnote/agent-runtime';
+import { GenerationRuntimeError } from '@footnote/agent-runtime';
 import type { ModelProfile } from '@footnote/contracts';
 import {
     runBoundedReviewWorkflow,
     type ReviewWorkflowUsageSummary,
 } from '../../src/services/workflowCore/reviewedChatWorkflow.js';
 import type { ConversationContextEnvelope } from '../../src/services/conversationContextService.js';
+import { createProviderAvailabilityStore } from '../../src/services/providerAvailability.js';
+import type { ProviderAvailabilityStore } from '../../src/services/providerAvailability.js';
 
 const contextEnvelope: ConversationContextEnvelope = {
     participants: [],
@@ -69,6 +72,7 @@ const runGeneration = async (input: {
     runtime: GenerationRuntime;
     request: GenerationRequest;
     candidates: ModelProfile[];
+    providerAvailability?: ProviderAvailabilityStore;
 }) =>
     runBoundedReviewWorkflow({
         generationRuntime: input.runtime,
@@ -108,6 +112,7 @@ const runGeneration = async (input: {
                 chooseOneUsed: false,
             })),
             assessCandidates: [],
+            providerAvailability: input.providerAvailability,
         },
     });
 
@@ -322,4 +327,109 @@ test('keeps an all-incomplete routed generation rejected and retains its usage',
         'generation_incomplete_before_output'
     );
     assert.equal(generateStep.usage?.totalTokens, 360);
+});
+
+test('preserves temporary-unavailable and fallback provenance across later automatic requests', async () => {
+    const first = makeProfile('first-profile');
+    const second = {
+        ...makeProfile('second-profile'),
+        provider: 'ollama' as const,
+    };
+    let now = 50_000;
+    const providerAvailability = createProviderAvailabilityStore({
+        now: () => now,
+        ttlMs: 1_000,
+    });
+    let firstProfileCalls = 0;
+    const runtime: GenerationRuntime = {
+        kind: 'test-runtime',
+        async generate(request) {
+            if (request.model === first.providerModel) {
+                firstProfileCalls += 1;
+                throw new GenerationRuntimeError('account has no credits', {
+                    classification: 'provider_temporary_unavailable',
+                    availabilityReason: 'billing_or_quota',
+                });
+            }
+            return {
+                text: 'fallback answer',
+                model: request.model,
+                completion: { status: 'completed', visibleTextLength: 15 },
+                usage: { promptTokens: 1, completionTokens: 1, totalTokens: 2 },
+                provenance: 'Inferred',
+                citations: [],
+            };
+        },
+    };
+
+    const firstResult = await runGeneration({
+        runtime,
+        request: { messages: [{ role: 'user', content: 'Reply.' }] },
+        candidates: [first, second],
+        providerAvailability,
+    });
+    const secondResult = await runGeneration({
+        runtime,
+        request: { messages: [{ role: 'user', content: 'Reply again.' }] },
+        candidates: [first, second],
+        providerAvailability,
+    });
+
+    assert.equal(firstResult.outcome, 'generated');
+    assert.equal(secondResult.outcome, 'generated');
+    assert.equal(firstProfileCalls, 1);
+    for (const result of [firstResult, secondResult]) {
+        const generateStep = result.workflowLineage.steps.find(
+            (step) => step.stepKind === 'generate'
+        );
+        assert.ok(generateStep);
+        const attempts = JSON.parse(
+            String(generateStep.outcome.signals?.routingChainAttemptsJson)
+        ) as Array<{
+            profileId: string;
+            status: string;
+            reasonCode?: string;
+        }>;
+        assert.deepEqual(
+            attempts.map((attempt) => [attempt.profileId, attempt.status]),
+            [
+                [
+                    first.id,
+                    result === firstResult
+                        ? 'failed_transient_advanced'
+                        : 'skipped_temporary_unavailable',
+                ],
+                [second.id, 'executed'],
+            ]
+        );
+        assert.equal(
+            attempts[0]?.reasonCode,
+            'routing_chain_temporary_unavailable'
+        );
+        assert.equal(generateStep.outcome.signals?.routedProfileId, second.id);
+    }
+
+    now += 1_001;
+    const recovered = await runGeneration({
+        runtime: {
+            kind: 'test-runtime',
+            async generate(request) {
+                return {
+                    text: 'recovered answer',
+                    model: request.model,
+                    completion: {
+                        status: 'completed',
+                        visibleTextLength: 16,
+                    },
+                    provenance: 'Inferred',
+                    citations: [],
+                };
+            },
+        },
+        request: { messages: [{ role: 'user', content: 'Recovered.' }] },
+        candidates: [first, second],
+        providerAvailability,
+    });
+    assert.equal(recovered.outcome, 'generated');
+    assert.equal(providerAvailability.size(), 0);
 });

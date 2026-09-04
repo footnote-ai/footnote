@@ -87,6 +87,7 @@ import {
     type RoutingChainAttemptLog,
 } from '../stepRoutingExecutor.js';
 import type { ResolvedStepRoutingCandidate } from '../stepRoutingChains.js';
+import type { ProviderAvailabilityStore } from '../providerAvailability.js';
 import { toRoutingChainResult } from '../routingChainResult.js';
 import { resolveProfileReasoningEffort } from '../runtimeRequestControls.js';
 import { createResponseCandidateCollector } from '../responseCandidates.js';
@@ -180,6 +181,7 @@ export type RunBoundedReviewWorkflowInput = {
         enabledProfilesById: Map<string, ModelProfile>;
         generateCandidates: ResolvedStepRoutingCandidate[];
         assessCandidates: ResolvedStepRoutingCandidate[];
+        providerAvailability?: ProviderAvailabilityStore;
     };
     presentation?: {
         config: PresentationConfig;
@@ -1710,6 +1712,8 @@ export const runBoundedReviewWorkflow = async (
                       enabledProfilesById:
                           stepRoutingChainSet.enabledProfilesById,
                       requiresSearch: boundedRequest.search !== undefined,
+                      providerAvailability:
+                          stepRoutingChainSet.providerAvailability,
                       runWithProfile: async (profile, attemptIndex) => {
                           const result = normalizeGenerationResultEvidence(
                               await generationRuntime.generate({
@@ -1954,6 +1958,8 @@ export const runBoundedReviewWorkflow = async (
                       enabledProfilesById:
                           stepRoutingChainSet.enabledProfilesById,
                       requiresSearch: false,
+                      providerAvailability:
+                          stepRoutingChainSet.providerAvailability,
                       runWithProfile: async (profile) =>
                           generationRuntime.generate({
                               ...capGenerationRequestToProfileMax({

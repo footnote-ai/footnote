@@ -389,6 +389,7 @@ const ExecutionReasonCodeSchema = z.enum([
     'routing_chain_entry_ineligible',
     'routing_chain_transient_error',
     'routing_chain_non_transient_error',
+    'routing_chain_temporary_unavailable',
 ]);
 const PlannerExecutionReasonCodeSchema = z.enum([
     'planner_runtime_error',
@@ -437,6 +438,7 @@ const GenerationExecutionReasonCodeSchema = z.enum([
     'generation_incomplete_before_output',
     'routing_chain_exhausted',
     'routing_chain_non_transient_error',
+    'routing_chain_temporary_unavailable',
 ]);
 const ToolExecutionReasonCodeSchema = z.enum([
     'tool_not_requested',
@@ -590,6 +592,11 @@ const GenerationUsageSchema = z
     })
     .strict();
 
+const TemporaryProviderUnavailableReasonSchema = z.enum([
+    'billing_or_quota',
+    'account_unavailable',
+]);
+
 const GenerationRoutingChainAttemptSchema = z
     .object({
         index: z.number().int().nonnegative(),
@@ -604,6 +611,8 @@ const GenerationRoutingChainAttemptSchema = z
         chooseOneUsed: z.boolean(),
         chooseOneSelectedIndex: z.number().int().nonnegative().optional(),
         seedKeyType: z.string().max(100).optional(),
+        temporaryUnavailableReason:
+            TemporaryProviderUnavailableReasonSchema.optional(),
     })
     .strict();
 

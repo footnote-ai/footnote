@@ -9,6 +9,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 
 import { Agent } from '@voltagent/core';
+import { APICallError } from 'ai';
 import type { GenerationRequest, RuntimeMessage } from '../src/index.js';
 import {
     createDefaultVoltAgentExecutor,
@@ -17,12 +18,14 @@ import {
     getToolForProvider,
     hasToolForProvider,
     normalizeVoltAgentResult,
+    normalizeGenerationRuntimeError,
     openRouterMetadataExtractor,
     mergeOpenRouterRequestBody,
     resolveToolForProvider,
     type VoltAgentGenerateTextOptions,
     type VoltAgentLogger,
 } from '../src/voltagentRuntime.js';
+import { GenerationRuntimeError } from '../src/index.js';
 
 type AgentGenerateTextResult = Awaited<ReturnType<Agent['generateText']>>;
 
@@ -35,6 +38,122 @@ const structuredOutput = {
         additionalProperties: false,
     },
 };
+
+const apiError = (input: {
+    statusCode?: number;
+    responseBody?: string;
+    isRetryable?: boolean;
+}) =>
+    new APICallError({
+        message: 'provider request failed',
+        url: 'https://provider.example.test/v1/generate',
+        requestBodyValues: {},
+        ...input,
+    });
+
+test('normalizes only structured billing and account availability failures', () => {
+    const billing = normalizeGenerationRuntimeError(
+        apiError({ statusCode: 402 })
+    );
+    assert.ok(billing instanceof GenerationRuntimeError);
+    assert.deepEqual(billing.details, {
+        classification: 'provider_temporary_unavailable',
+        availabilityReason: 'billing_or_quota',
+    });
+
+    const topLevelType = normalizeGenerationRuntimeError(
+        apiError({
+            statusCode: 429,
+            responseBody: JSON.stringify({ type: 'insufficient_quota' }),
+        })
+    );
+    assert.ok(topLevelType instanceof GenerationRuntimeError);
+    assert.deepEqual(topLevelType.details, {
+        classification: 'provider_temporary_unavailable',
+        availabilityReason: 'billing_or_quota',
+    });
+
+    const suspended = normalizeGenerationRuntimeError(
+        apiError({
+            statusCode: 403,
+            responseBody: JSON.stringify({
+                error: { code: 'account_suspended' },
+            }),
+        })
+    );
+    assert.ok(suspended instanceof GenerationRuntimeError);
+    assert.deepEqual(suspended.details, {
+        classification: 'provider_temporary_unavailable',
+        availabilityReason: 'account_unavailable',
+    });
+
+    assert.equal(
+        normalizeGenerationRuntimeError(
+            apiError({
+                statusCode: 400,
+                responseBody: JSON.stringify({
+                    error: { code: 'invalid_request' },
+                }),
+            })
+        ),
+        undefined
+    );
+});
+
+test('normalizes retryable transport failures without turning them into availability claims', () => {
+    const normalized = normalizeGenerationRuntimeError(
+        apiError({ statusCode: 503, isRetryable: true })
+    );
+
+    assert.ok(normalized instanceof GenerationRuntimeError);
+    assert.deepEqual(normalized.details, { classification: 'transient' });
+});
+
+test('voltAgent runtime carries normalized provider availability failures to routing', async () => {
+    const runtime = createVoltAgentRuntime({
+        defaultModel: 'gpt-5-mini',
+        createExecutor: () => ({
+            async generateText() {
+                throw apiError({ statusCode: 402 });
+            },
+        }),
+    });
+
+    await assert.rejects(
+        runtime.generate({
+            messages: [{ role: 'user', content: 'Reply.' }],
+        }),
+        (error: unknown) => {
+            assert.ok(error instanceof GenerationRuntimeError);
+            assert.deepEqual(error.details, {
+                classification: 'provider_temporary_unavailable',
+                availabilityReason: 'billing_or_quota',
+            });
+            return true;
+        }
+    );
+});
+
+test('leaves credential, model, request, and unstructured provider failures unclassified', () => {
+    for (const error of [
+        apiError({ statusCode: 401 }),
+        apiError({ statusCode: 404 }),
+        apiError({ statusCode: 413 }),
+        apiError({ statusCode: 429, responseBody: 'rate limited' }),
+        new Error('provider account has no credits'),
+    ]) {
+        const normalized = normalizeGenerationRuntimeError(error);
+        assert.equal(
+            normalized === undefined ||
+                normalized.details.classification === 'transient',
+            true
+        );
+        assert.notEqual(
+            normalized?.details.classification,
+            'provider_temporary_unavailable'
+        );
+    }
+});
 
 test('voltagent runtime maps transcript and generation settings into executor options', async () => {
     let seenModel: string | undefined;

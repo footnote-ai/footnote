@@ -224,7 +224,8 @@ export type ExecutionReasonCode =
     | 'routing_chain_exhausted'
     | 'routing_chain_entry_ineligible'
     | 'routing_chain_transient_error'
-    | 'routing_chain_non_transient_error';
+    | 'routing_chain_non_transient_error'
+    | 'routing_chain_temporary_unavailable';
 
 export type PlannerExecutionReasonCode = Extract<
     ExecutionReasonCode,
@@ -281,6 +282,7 @@ export type GenerationExecutionReasonCode = Extract<
     | 'generation_incomplete_before_output'
     | 'routing_chain_exhausted'
     | 'routing_chain_non_transient_error'
+    | 'routing_chain_temporary_unavailable'
 >;
 
 export type EvaluatorAuthorityLevel = 'observe' | 'influence' | 'enforce';
@@ -787,6 +789,7 @@ export type WorkflowRoutingChainAttemptSignal = {
     chooseOneUsed: boolean;
     chooseOneSelectedIndex?: number;
     seedKeyType?: string;
+    temporaryUnavailableReason?: string;
 };
 
 /**
