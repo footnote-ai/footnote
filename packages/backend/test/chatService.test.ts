@@ -12,7 +12,11 @@ import type {
     GenerationResult,
     GenerationRuntime,
 } from '@footnote/agent-runtime';
-import { createVoltAgentRuntime } from '@footnote/agent-runtime';
+import {
+    createVoltAgentRuntime,
+    GenerationRuntimeError,
+} from '@footnote/agent-runtime';
+import type { ModelProfile } from '@footnote/contracts';
 import type { ResponseMetadata } from '@footnote/contracts/policy';
 import { ResponseMetadataSchema } from '@footnote/contracts/web';
 import { createMetadata } from './fixtures/responseMetadataFixture.js';
@@ -34,7 +38,9 @@ import {
 } from '../src/services/executionContractTrustGraph/index.js';
 import type { BackendLLMCostRecord } from '../src/services/llmCostRecorder.js';
 import type { RunBoundedReviewWorkflowResult } from '../src/services/workflowCore/reviewedChatWorkflow.js';
+import { runBoundedReviewWorkflow } from '../src/services/workflowCore/reviewedChatWorkflow.js';
 import type { ConversationContextEnvelope } from '../src/services/conversationContextService.js';
+import { createProviderAvailabilityStore } from '../src/services/providerAvailability.js';
 
 const createRuntime = (
     overrides: Partial<GenerationResult> = {}
@@ -3249,6 +3255,277 @@ test('runChatMessages keeps original profile distinct from the successful fallba
     assert.equal(generation.effectiveProfileId, 'openai-text-medium');
     assert.equal(generation.provider, 'openai');
     assert.equal(generation.model, 'gpt-5.6-terra');
+});
+
+test('runChatMessages keeps temporary route receipts while attributing automatic fallback only to the fallback provider', async () => {
+    const openAiProfile = {
+        id: 'openai-billing-route',
+        description: 'OpenAI route used to exercise temporary availability.',
+        provider: 'openai',
+        providerModel: 'gpt-5.6-terra',
+        enabled: true,
+        tierBindings: [],
+        capabilities: {
+            canUseSearch: false,
+            supportedReasoningEfforts: ['none'],
+        },
+        maxOutputTokens: 128_000,
+    } satisfies ModelProfile;
+    const fallbackProfile = {
+        id: 'fallback-ollama-route',
+        description: 'Fallback route used to preserve an answer.',
+        provider: 'ollama',
+        providerModel: 'qwen3.5:cloud',
+        enabled: true,
+        tierBindings: [],
+        capabilities: {
+            canUseSearch: false,
+            supportedReasoningEfforts: ['none'],
+        },
+        maxOutputTokens: 128_000,
+    } satisfies ModelProfile;
+    const providerAvailability = createProviderAvailabilityStore({
+        now: () => 50_000,
+        ttlMs: 1_000,
+    });
+    const calls: Array<{ provider: string | undefined; model: string }> = [];
+    let openAiAttempts = 0;
+    const generationRuntime: GenerationRuntime = {
+        kind: 'test-runtime',
+        async generate(request) {
+            if (request.model === undefined) {
+                throw new Error(
+                    'Expected routed generation to select a model.'
+                );
+            }
+            calls.push({ provider: request.provider, model: request.model });
+            if (request.provider === 'openai') {
+                openAiAttempts += 1;
+                if (openAiAttempts === 1) {
+                    throw new GenerationRuntimeError(
+                        'OpenAI billing quota is unavailable.',
+                        {
+                            classification: 'provider_temporary_unavailable',
+                            availabilityReason: 'billing_or_quota',
+                        }
+                    );
+                }
+                return {
+                    text: 'explicit OpenAI answer',
+                    model: request.model,
+                    completion: {
+                        status: 'completed',
+                        visibleTextLength: 22,
+                    },
+                    usage: {
+                        promptTokens: 10,
+                        completionTokens: 3,
+                        totalTokens: 13,
+                    },
+                    provenance: 'Inferred',
+                    citations: [],
+                };
+            }
+            return {
+                text: 'automatic fallback answer',
+                model: request.model,
+                completion: {
+                    status: 'completed',
+                    visibleTextLength: 25,
+                },
+                usage: {
+                    promptTokens: 10,
+                    completionTokens: 3,
+                    totalTokens: 13,
+                },
+                provenance: 'Inferred',
+                citations: [],
+            };
+        },
+    };
+    const routeThroughTestProfiles = async (
+        input: Parameters<typeof runBoundedReviewWorkflow>[0]
+    ): Promise<RunBoundedReviewWorkflowResult> => {
+        const explicitSelection =
+            input.stepRoutingChainSet?.generateCandidates[0]
+                ?.selectionSource === 'explicit';
+        return await runBoundedReviewWorkflow({
+            ...input,
+            workflowConfig: {
+                ...input.workflowConfig,
+                maxIterations: 0,
+                executionLimits: {
+                    maxWorkflowSteps: 2,
+                    maxToolCalls: 0,
+                    maxDeliberationCalls: 0,
+                    maxTokensTotal:
+                        input.workflowConfig.executionLimits?.maxTokensTotal ??
+                        128_000,
+                    maxDurationMs: input.workflowConfig.maxDurationMs,
+                },
+            },
+            workflowPolicy: {
+                enablePlanning: false,
+                enableToolUse: false,
+                enableReplanning: false,
+                enableGeneration: true,
+                enableAssessment: false,
+                enableRevision: false,
+            },
+            stepRoutingChainSet: {
+                enabledProfilesById: new Map<string, ModelProfile>([
+                    [openAiProfile.id, openAiProfile],
+                    [fallbackProfile.id, fallbackProfile],
+                ]),
+                generateCandidates: [
+                    {
+                        profileId: openAiProfile.id,
+                        ...(explicitSelection && {
+                            selectionSource: 'explicit' as const,
+                        }),
+                        chooseOneUsed: false,
+                    },
+                    {
+                        profileId: fallbackProfile.id,
+                        chooseOneUsed: false,
+                    },
+                ],
+                assessCandidates: [],
+                providerAvailability,
+            },
+        });
+    };
+    const chatService = createChatService({
+        generationRuntime,
+        storeTrace: async () => undefined,
+        buildResponseMetadata,
+        defaultModel: openAiProfile.providerModel,
+        defaultProvider: openAiProfile.provider,
+        recordUsage: () => undefined,
+        chatWorkflowConfig: {
+            modeId: 'grounded',
+            reviewLoopEnabled: true,
+            maxIterations: 1,
+            maxDurationMs: 15_000,
+        },
+        runReviewWorkflow: routeThroughTestProfiles,
+    });
+
+    const firstAutomatic = await chatService.runChatMessages({
+        messages: [{ role: 'user', content: 'Answer automatically.' }],
+        conversationSnapshot: 'Answer automatically.',
+    });
+    const secondAutomatic = await chatService.runChatMessages({
+        messages: [{ role: 'user', content: 'Answer automatically again.' }],
+        conversationSnapshot: 'Answer automatically again.',
+    });
+    const explicitlySelected = await chatService.runChatMessages({
+        messages: [{ role: 'user', content: 'Use OpenAI explicitly.' }],
+        conversationSnapshot: 'Use OpenAI explicitly.',
+        routingRequest: {
+            generateProfileId: openAiProfile.id,
+            trigger: { kind: 'submit', messageId: 'explicit-openai' },
+        },
+    });
+
+    assert.equal(firstAutomatic.message, 'automatic fallback answer');
+    assert.equal(secondAutomatic.message, 'automatic fallback answer');
+    assert.equal(explicitlySelected.message, 'explicit OpenAI answer');
+    assert.deepEqual(calls, [
+        { provider: 'openai', model: openAiProfile.providerModel },
+        { provider: 'ollama', model: fallbackProfile.providerModel },
+        { provider: 'ollama', model: fallbackProfile.providerModel },
+        { provider: 'openai', model: openAiProfile.providerModel },
+    ]);
+
+    const routingAttemptsFor = (response: typeof secondAutomatic) => {
+        const generateStep = response.metadata.workflow?.steps.find(
+            (step) => step.stepKind === 'generate'
+        );
+        const serializedAttempts =
+            generateStep?.outcome.signals?.routingChainAttemptsJson;
+        if (typeof serializedAttempts !== 'string') {
+            throw new Error(
+                'Expected a serializable generation route receipt.'
+            );
+        }
+        return JSON.parse(serializedAttempts) as Array<{
+            profileId: string;
+            status: string;
+            reasonCode?: string;
+            temporaryUnavailableReason?: string;
+        }>;
+    };
+
+    assert.deepEqual(
+        routingAttemptsFor(firstAutomatic).map((attempt) => ({
+            profileId: attempt.profileId,
+            status: attempt.status,
+            reasonCode: attempt.reasonCode,
+            temporaryUnavailableReason: attempt.temporaryUnavailableReason,
+        })),
+        [
+            {
+                profileId: openAiProfile.id,
+                status: 'failed_transient_advanced',
+                reasonCode: 'routing_chain_temporary_unavailable',
+                temporaryUnavailableReason: 'billing_or_quota',
+            },
+            {
+                profileId: fallbackProfile.id,
+                status: 'executed',
+                reasonCode: undefined,
+                temporaryUnavailableReason: undefined,
+            },
+        ]
+    );
+
+    const secondGeneration = secondAutomatic.metadata.execution?.find(
+        (event) => event.kind === 'generation'
+    );
+    assert.ok(secondGeneration?.kind === 'generation');
+    assert.deepEqual(
+        secondGeneration && {
+            profileId: secondGeneration.profileId,
+            effectiveProfileId: secondGeneration.effectiveProfileId,
+            provider: secondGeneration.provider,
+            model: secondGeneration.model,
+        },
+        {
+            profileId: fallbackProfile.id,
+            effectiveProfileId: fallbackProfile.id,
+            provider: fallbackProfile.provider,
+            model: fallbackProfile.providerModel,
+        }
+    );
+    assert.deepEqual(
+        routingAttemptsFor(secondAutomatic).map((attempt) => ({
+            profileId: attempt.profileId,
+            status: attempt.status,
+            reasonCode: attempt.reasonCode,
+            temporaryUnavailableReason: attempt.temporaryUnavailableReason,
+        })),
+        [
+            {
+                profileId: openAiProfile.id,
+                status: 'skipped_temporary_unavailable',
+                reasonCode: 'routing_chain_temporary_unavailable',
+                temporaryUnavailableReason: 'billing_or_quota',
+            },
+            {
+                profileId: fallbackProfile.id,
+                status: 'executed',
+                reasonCode: undefined,
+                temporaryUnavailableReason: undefined,
+            },
+        ]
+    );
+    assert.equal(
+        explicitlySelected.metadata.execution?.find(
+            (event) => event.kind === 'generation'
+        )?.provider,
+        'openai'
+    );
 });
 
 test('runChatMessages keeps no-generation surfaced when execution policy disables fallback generation', async () => {
