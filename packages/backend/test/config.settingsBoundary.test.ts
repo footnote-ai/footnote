@@ -119,7 +119,7 @@ test('workflow token override is loaded from canonical settings YAML', () => {
     assert.equal(config.chatWorkflow.maxTokensTotalOverride, 512_000);
 });
 
-test('canonical Fly pre-production opt-in enables presentation and backend context search independently', () => {
+test('canonical Fly configuration enables presentation and backend context search independently', () => {
     const config = buildRuntimeConfig(
         {
             NODE_ENV: 'test',

@@ -328,15 +328,15 @@ Deploy normally without TrustGraph:
 ./deploy/fly/deploy.ps1
 ```
 
-### High-budget pre-production Fly configuration
+### High-budget Fly configuration
 
 The canonical Fly `footnote.yaml` is an explicit operator-scoped
-pre-production opt-in: it enables the optional presentation candidate and
+configuration: it enables the optional presentation candidate and
 sets a finite 512,000-token workflow budget. This is not the fresh-install
 default. A missing settings file or a newly generated settings template keeps
 presentation disabled unless an operator explicitly enables it.
 
-To apply the same pre-production configuration to an existing Machine before
+To apply this configuration to an existing Machine before
 the next canonical deploy, edit the persisted `/data/config/footnote.yaml` and
 restart the app with:
 

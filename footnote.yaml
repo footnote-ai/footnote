@@ -104,7 +104,7 @@ openai:
 # until you enable it; chat continues if the lookup fails.
 chat-workflow:
     chat-workflow-mode-id: 'grounded'
-    # Explicit operator-scoped pre-production opt-in. Fresh installs remain
+    # Explicit operator-scoped configuration. Fresh installs remain
     # disabled because the runtime default for this optional presentation flow
     # is false. Presentation exercises persona/style behavior without becoming
     # factual authority.
