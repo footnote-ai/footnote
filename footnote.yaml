@@ -104,10 +104,10 @@ openai:
 # until you enable it; chat continues if the lookup fails.
 chat-workflow:
     chat-workflow-mode-id: 'grounded'
-    # Canonical Fly opt-in. Fresh installs remain disabled because the runtime
-    # default for this optional presentation flow is false.
-    # Presentation is disabled to reserve the workflow allowance for the delivered answer.
-    chat-presentation-enabled: false
+    # Canonical Fly preprod opt-in. Fresh installs remain disabled because the
+    # runtime default for this optional presentation flow is false.
+    # Presentation exercises persona/style behavior without becoming factual authority.
+    chat-presentation-enabled: true
     chat-presentation-profile-id: 'openrouter-deepseek-v4-flash-0731'
     max-tokens-total-override: 512000
     chat-presentation-timeout-ms: 90000

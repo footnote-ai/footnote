@@ -118,7 +118,7 @@ test('workflow token override is loaded from canonical settings YAML', () => {
     assert.equal(config.chatWorkflow.maxTokensTotalOverride, 512_000);
 });
 
-test('repository canonical settings keep pre-production workflow admission permissive', () => {
+test('repository canonical Fly pre-production settings keep workflow admission permissive', () => {
     const config = buildRuntimeConfig(
         {
             NODE_ENV: 'test',
@@ -138,7 +138,7 @@ test('repository canonical settings keep pre-production workflow admission permi
         config.chatWorkflow.contextIntegrations.webSearch.maxResults,
         10
     );
-    assert.equal(config.chatWorkflow.presentation.enabled, false);
+    assert.equal(config.chatWorkflow.presentation.enabled, true);
 });
 
 test('integer settings reject non-integer numbers', () => {
