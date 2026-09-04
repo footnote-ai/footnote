@@ -11,7 +11,6 @@ import type { ModelProfile } from '@footnote/contracts';
 import {
     deriveOpenAiSafetyIdentifier,
     resolvePresentationGenerationSettings,
-    resolveProfileReasoningEffort,
 } from '../src/services/runtimeRequestControls.js';
 import { hmacId } from '../src/utils/pseudonymization.js';
 
@@ -43,43 +42,6 @@ const profile: ModelProfile = {
     },
     defaultReasoningEffort: 'medium',
 };
-
-test('requested effort takes precedence over the profile fallback', () => {
-    logs.length = 0;
-    assert.equal(resolveProfileReasoningEffort(profile, 'low', logger), 'low');
-    assert.equal(logs.length, 0);
-});
-
-test('profile reasoning effort applies when no effort is requested', () => {
-    logs.length = 0;
-    assert.equal(
-        resolveProfileReasoningEffort(profile, undefined, logger),
-        'medium'
-    );
-    assert.equal(
-        logs[0]?.meta?.reasonCode,
-        'reasoning_effort_profile_default_applied'
-    );
-});
-
-test('unsupported effort is omitted fail-open with structured diagnostics', () => {
-    logs.length = 0;
-    const unsupportedProfile: ModelProfile = {
-        ...profile,
-        id: 'limited',
-        defaultReasoningEffort: undefined,
-        capabilities: {
-            canUseSearch: false,
-            supportedReasoningEfforts: ['low'],
-        },
-    };
-
-    assert.equal(
-        resolveProfileReasoningEffort(unsupportedProfile, 'max', logger),
-        undefined
-    );
-    assert.equal(logs[0]?.meta?.reasonCode, 'reasoning_effort_not_supported');
-});
 
 test('safety identifier is namespaced HMAC and never logged', () => {
     logs.length = 0;

@@ -5,7 +5,10 @@
  * @footnote-risk: high - Invalid task parsing here can break trusted helper flows or return malformed structured results to callers.
  * @footnote-ethics: medium - Backend-owned prompt assembly and normalization affect what users see and how clearly helper results are explained.
  */
-import type { GenerationRuntime } from '@footnote/agent-runtime';
+import type {
+    GenerationRequest,
+    GenerationRuntime,
+} from '@footnote/agent-runtime';
 import type { ModelProfile } from '@footnote/contracts';
 import type {
     PostInternalImageDescriptionTaskRequest,
@@ -26,8 +29,9 @@ import {
 import type { InternalImageDescriptionAdapter } from './internalImageDescription.js';
 import { logger } from '../utils/logger.js';
 import {
+    applyModelSettings,
     deriveOpenAiSafetyIdentifier,
-    resolveProfileReasoningEffort,
+    resolveModelSettings,
 } from './runtimeRequestControls.js';
 
 /**
@@ -330,13 +334,7 @@ export const createInternalNewsTaskService = ({
             },
             textTaskLogger
         );
-        const effectiveReasoningEffort = resolveProfileReasoningEffort(
-            defaultProfile,
-            request.reasoningEffort ?? 'medium',
-            textTaskLogger
-        );
-
-        const generationResult = await generationRuntime.generate({
+        const generationRequest: GenerationRequest = {
             model: defaultProfile.providerModel,
             provider: defaultProfile.provider,
             capabilities: defaultProfile.capabilities,
@@ -355,9 +353,7 @@ export const createInternalNewsTaskService = ({
                     })}`,
                 },
             ],
-            ...(effectiveReasoningEffort !== undefined && {
-                reasoningEffort: effectiveReasoningEffort,
-            }),
+            reasoningEffort: request.reasoningEffort ?? 'medium',
             verbosity: request.verbosity ?? 'medium',
             ...(safetyIdentifier !== undefined && { safetyIdentifier }),
             search: {
@@ -365,7 +361,15 @@ export const createInternalNewsTaskService = ({
                 contextSize: 'medium',
                 intent: 'current_facts',
             },
+        };
+        const settingsResolution = resolveModelSettings({
+            profile: defaultProfile,
+            request: generationRequest,
+            applyProfileDefaults: false,
         });
+        const generationResult = await generationRuntime.generate(
+            applyModelSettings(generationRequest, settingsResolution.applied)
+        );
 
         const usageModel =
             generationResult.model ?? defaultProfile.providerModel;

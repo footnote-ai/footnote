@@ -70,7 +70,6 @@ import {
 } from '../workflowEngine/modelInput.js';
 import {
     boundGenerationRequestToWorkflowBudget,
-    capGenerationRequestToProfileMax,
     calculatePresentationOutputBudget,
     calculateReviewedGenerationOutputBudget,
     DEFAULT_WORKFLOW_ASSESSMENT_MAX_OUTPUT_TOKENS,
@@ -89,7 +88,10 @@ import {
 import type { ResolvedStepRoutingCandidate } from '../stepRoutingChains.js';
 import type { ProviderAvailabilityStore } from '../providerAvailability.js';
 import { toRoutingChainResult } from '../routingChainResult.js';
-import { resolveProfileReasoningEffort } from '../runtimeRequestControls.js';
+import {
+    applyModelSettings,
+    resolveModelSettings,
+} from '../runtimeRequestControls.js';
 import { createResponseCandidateCollector } from '../responseCandidates.js';
 import {
     composeAssessPrompt,
@@ -1715,22 +1717,20 @@ export const runBoundedReviewWorkflow = async (
                       providerAvailability:
                           stepRoutingChainSet.providerAvailability,
                       runWithProfile: async (profile, attemptIndex) => {
+                          const settingsResolution = resolveModelSettings({
+                              profile,
+                              request: boundedRequest,
+                          });
                           const result = normalizeGenerationResultEvidence(
                               await generationRuntime.generate({
-                                  ...capGenerationRequestToProfileMax({
-                                      request: boundedRequest,
-                                      profile,
-                                  }),
+                                  ...applyModelSettings(
+                                      boundedRequest,
+                                      settingsResolution.applied
+                                  ),
                                   model: profile.providerModel,
                                   provider: profile.provider,
                                   capabilities: profile.capabilities,
                                   providerRouting: profile.providerRouting,
-                                  reasoningEffort:
-                                      resolveProfileReasoningEffort(
-                                          profile,
-                                          boundedRequest.reasoningEffort,
-                                          logger
-                                      ),
                               })
                           );
                           generationAttempts.push(result);
@@ -1960,22 +1960,22 @@ export const runBoundedReviewWorkflow = async (
                       requiresSearch: false,
                       providerAvailability:
                           stepRoutingChainSet.providerAvailability,
-                      runWithProfile: async (profile) =>
-                          generationRuntime.generate({
-                              ...capGenerationRequestToProfileMax({
-                                  request: bounded,
-                                  profile,
-                              }),
+                      runWithProfile: async (profile) => {
+                          const settingsResolution = resolveModelSettings({
+                              profile,
+                              request: bounded,
+                          });
+                          return generationRuntime.generate({
+                              ...applyModelSettings(
+                                  bounded,
+                                  settingsResolution.applied
+                              ),
                               model: profile.providerModel,
                               provider: profile.provider,
                               capabilities: profile.capabilities,
                               providerRouting: profile.providerRouting,
-                              reasoningEffort: resolveProfileReasoningEffort(
-                                  profile,
-                                  request.reasoningEffort,
-                                  logger
-                              ),
-                          }),
+                          });
+                      },
                   })
                 : undefined;
             const routed =
