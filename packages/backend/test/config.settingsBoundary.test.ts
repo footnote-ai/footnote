@@ -127,7 +127,17 @@ test('repository canonical settings keep pre-production workflow admission permi
         () => undefined
     );
 
+    assert.equal(config.chatWorkflow.modeId, 'grounded');
     assert.equal(config.chatWorkflow.maxTokensTotalOverride, 512_000);
+    assert.equal(config.openai.requestTimeoutMs, 180_000);
+    assert.equal(
+        config.chatWorkflow.contextIntegrations.webSearch.providerTimeoutMs,
+        30_000
+    );
+    assert.equal(
+        config.chatWorkflow.contextIntegrations.webSearch.maxResults,
+        10
+    );
     assert.equal(config.chatWorkflow.presentation.enabled, false);
 });
 
