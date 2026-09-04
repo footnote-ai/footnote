@@ -328,19 +328,28 @@ Deploy normally without TrustGraph:
 ./deploy/fly/deploy.ps1
 ```
 
-### High-budget Fly configuration
+### High-budget pre-production Fly configuration
 
-The canonical `footnote.yaml` keeps the presentation candidate disabled and
-allows a finite 512,000-token workflow budget. To apply the same configuration
-to an existing Machine before the next canonical deploy, edit the persisted
-`/data/config/footnote.yaml` and restart the app with:
+The canonical Fly `footnote.yaml` is an explicit operator-scoped
+pre-production opt-in: it enables the optional presentation candidate and
+sets a finite 512,000-token workflow budget. This is not the fresh-install
+default. A missing settings file or a newly generated settings template keeps
+presentation disabled unless an operator explicitly enables it.
+
+To apply the same pre-production configuration to an existing Machine before
+the next canonical deploy, edit the persisted `/data/config/footnote.yaml` and
+restart the app with:
 
 ```yaml
 chat-workflow:
-    chat-presentation-enabled: false
+    chat-presentation-enabled: true
     max-tokens-total-override: 512000
     chat-presentation-timeout-ms: 90000
 ```
+
+Backend web-search Context Integration remains separately enabled. It retrieves
+advisory context in the backend and is not disabled merely because the selected
+model profile cannot use provider-native search (`canUseSearch: false`).
 
 `max-tokens-total-override` is optional. When set, it replaces only the
 selected workflow's cumulative token limit and must be a positive safe integer.
