@@ -23,6 +23,7 @@ import {
     DEFAULT_REASONING_GENERATION_MAX_OUTPUT_TOKENS,
     DEFAULT_WORKFLOW_GENERATION_MAX_OUTPUT_TOKENS,
     estimateGenerationTokenBudget,
+    resolvePresentationOutputMaxTokens,
     resolveDefaultGenerationMaxOutputTokens,
 } from '../../src/services/workflowEngine/tokenBudget.js';
 
@@ -341,6 +342,30 @@ test('presentation admission reserves assessment and candidate text copied into 
             assessmentOutputTokens: 50,
         }),
         undefined
+    );
+});
+
+test('presentation output allowance stays bounded by the source prompt and profile ceiling', () => {
+    assert.equal(
+        resolvePresentationOutputMaxTokens({
+            sourcePromptTokens: 1129,
+            profileMaxOutputTokens: 384_000,
+        }),
+        5_540
+    );
+    assert.equal(
+        resolvePresentationOutputMaxTokens({
+            sourcePromptTokens: 10_000,
+            profileMaxOutputTokens: 50_000,
+        }),
+        16_384
+    );
+    assert.equal(
+        resolvePresentationOutputMaxTokens({
+            sourcePromptTokens: 10_000,
+            profileMaxOutputTokens: 4_000,
+        }),
+        4_000
     );
 });
 

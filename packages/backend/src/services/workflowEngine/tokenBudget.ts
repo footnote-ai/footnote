@@ -20,6 +20,15 @@ export const DEFAULT_REASONING_GENERATION_MAX_OUTPUT_TOKENS = 256_000;
 export const DEFAULT_WORKFLOW_PLANNER_MAX_OUTPUT_TOKENS = 2_000;
 export const DEFAULT_WORKFLOW_ASSESSMENT_MAX_OUTPUT_TOKENS = 512;
 
+/*
+ * A rewrite should track the source window rather than the provider's largest
+ * general-purpose response ceiling. Four times the source plus 1k supports
+ * expansion for short prose, while 16k keeps the optional call bounded.
+ */
+const PRESENTATION_OUTPUT_MAX_TOKENS = 16_384;
+const PRESENTATION_OUTPUT_EXPANSION_FACTOR = 4;
+const PRESENTATION_OUTPUT_MARGIN_TOKENS = 1_024;
+
 export const resolveDefaultGenerationMaxOutputTokens = (
     request: Pick<GenerationRequest, 'reasoningEffort' | 'capabilities'>
 ): number =>
@@ -30,6 +39,33 @@ export const resolveDefaultGenerationMaxOutputTokens = (
     ) === true
         ? DEFAULT_REASONING_GENERATION_MAX_OUTPUT_TOKENS
         : DEFAULT_WORKFLOW_GENERATION_MAX_OUTPUT_TOKENS;
+
+/**
+ * Resolves a finite presentation allowance from the source prompt and profile ceiling.
+ * The source prompt is the provider-neutral proxy available before an authoritative
+ * draft exists; the hard cap prevents presentation from inheriting huge model limits.
+ */
+export const resolvePresentationOutputMaxTokens = (input: {
+    sourcePromptTokens: number;
+    profileMaxOutputTokens?: number;
+}): number => {
+    const sourcePromptTokens = Math.max(
+        1,
+        Math.floor(input.sourcePromptTokens)
+    );
+    const profileCeiling =
+        input.profileMaxOutputTokens === undefined ||
+        !Number.isFinite(input.profileMaxOutputTokens)
+            ? PRESENTATION_OUTPUT_MAX_TOKENS
+            : Math.max(1, Math.floor(input.profileMaxOutputTokens));
+    const sourceBound =
+        sourcePromptTokens * PRESENTATION_OUTPUT_EXPANSION_FACTOR +
+        PRESENTATION_OUTPUT_MARGIN_TOKENS;
+    return Math.max(
+        1,
+        Math.min(profileCeiling, PRESENTATION_OUTPUT_MAX_TOKENS, sourceBound)
+    );
+};
 
 const ESTIMATED_CHARS_PER_TOKEN = 4;
 const PLANNER_PROMPT_OVERHEAD_TOKENS = 1_200;

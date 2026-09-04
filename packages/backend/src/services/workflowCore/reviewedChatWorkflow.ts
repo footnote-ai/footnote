@@ -80,7 +80,7 @@ import {
     estimatePlannerInputTokens,
     estimatePlannerTokenBudget,
     estimateRuntimeMessageTokens,
-    resolveDefaultGenerationMaxOutputTokens,
+    resolvePresentationOutputMaxTokens,
 } from '../workflowEngine/tokenBudget.js';
 import {
     executeStepRoutingChain,
@@ -661,6 +661,11 @@ const readContinuePlanContinuation = (
 const readGenerationResult = (
     value: Result | undefined
 ): GenerationResult | undefined => readAs<GenerationResult>(value);
+
+type PresentationWorkflowResult = {
+    draftResult?: GenerationResult;
+    authoritativeOutputTokens?: number;
+};
 
 const readEvidenceEnvelope = (
     value: Result | undefined
@@ -1416,9 +1421,16 @@ export const runBoundedReviewWorkflow = async (
                 totalTokens: handlerInput.execution.totalTokens,
                 maxTokensTotal: executionLimits.maxTokensTotal,
             });
-        const requestedAuthorityOutputTokens =
+        // Presentation adds a second generation and copies its text into the
+        // authoritative prompt. Use the ordinary bounded generation ceiling
+        // for that handoff so a reasoning-aware 256k default cannot consume
+        // the entire finite workflow allowance before the candidate runs.
+        const requestedAuthorityOutputTokens = Math.min(
             authorityAdmissionRequest?.maxOutputTokens ??
-            DEFAULT_WORKFLOW_GENERATION_MAX_OUTPUT_TOKENS;
+                DEFAULT_WORKFLOW_GENERATION_MAX_OUTPUT_TOKENS,
+            DEFAULT_WORKFLOW_GENERATION_MAX_OUTPUT_TOKENS
+        );
+        let effectiveAuthorityOutputTokens: number | undefined;
         const presentationRequest =
             executionLimits.maxTokensTotal >= UNBOUNDED_EXECUTION_LIMIT
                 ? projected.request
@@ -1446,24 +1458,29 @@ export const runBoundedReviewWorkflow = async (
                                 assessmentOutputTokens:
                                     DEFAULT_WORKFLOW_ASSESSMENT_MAX_OUTPUT_TOKENS,
                             });
-                        const effectiveAuthorityOutputTokens =
+                        const resolvedAuthorityOutputTokens =
                             authorityOutputTokens ??
                             requestedAuthorityOutputTokens;
+                        effectiveAuthorityOutputTokens =
+                            resolvedAuthorityOutputTokens;
                         const budget = calculatePresentationOutputBudget({
                             totalTokens: handlerInput.execution.totalTokens,
                             maxTokensTotal: executionLimits.maxTokensTotal,
                             requestedCandidateOutputTokens:
-                                presentation.config.profile?.maxOutputTokens ??
-                                resolveDefaultGenerationMaxOutputTokens(
-                                    projected.request
-                                ),
+                                resolvePresentationOutputMaxTokens({
+                                    sourcePromptTokens:
+                                        presentationPromptTokens,
+                                    profileMaxOutputTokens:
+                                        presentation.config.profile
+                                            ?.maxOutputTokens,
+                                }),
                             candidatePromptTokens: presentationPromptTokens,
                             authoritativePromptTokens: authorityPromptTokens,
                             authoritativeOutputTokens:
-                                effectiveAuthorityOutputTokens,
+                                resolvedAuthorityOutputTokens,
                             assessmentPromptTokens:
                                 presentationPromptTokens +
-                                effectiveAuthorityOutputTokens,
+                                resolvedAuthorityOutputTokens,
                             assessmentOutputTokens:
                                 DEFAULT_WORKFLOW_ASSESSMENT_MAX_OUTPUT_TOKENS,
                         });
@@ -1489,6 +1506,13 @@ export const runBoundedReviewWorkflow = async (
                       persona: presentation.persona,
                       caution: presentation.caution,
                   });
+        const workflowResult: PresentationWorkflowResult = {
+            ...result,
+            ...(result.outcome === 'candidate_generated' &&
+            effectiveAuthorityOutputTokens !== undefined
+                ? { authoritativeOutputTokens: effectiveAuthorityOutputTokens }
+                : {}),
+        };
         let candidateId: string | undefined;
         let usage: GenerationResult['usage'] | undefined;
         let estimatedCost:
@@ -1558,7 +1582,7 @@ export const runBoundedReviewWorkflow = async (
             outcome: 'admitted',
             ...(result.draftResult === undefined
                 ? {}
-                : { result: toSerializable(result) }),
+                : { result: toSerializable(workflowResult) }),
             ...(usage === undefined
                 ? {}
                 : {
@@ -1654,21 +1678,29 @@ export const runBoundedReviewWorkflow = async (
                 ],
             };
         }
-        const presentationResult = readAs<{
-            draftResult?: GenerationResult;
-        }>(handlerInput.results.presentation);
+        const presentationResult = readAs<PresentationWorkflowResult>(
+            handlerInput.results.presentation
+        );
         if (
             previousDraft === undefined &&
             presentationResult?.draftResult !== undefined
         ) {
-            request = buildAuthoritativeGenerationRequest(
-                request,
-                presentationResult.draftResult.text,
-                presentation?.persona.expressionGuidance ??
-                    input.personaExpressionGuidance ??
-                    '',
-                presentation?.config.handoffVariant
-            );
+            request = {
+                ...buildAuthoritativeGenerationRequest(
+                    request,
+                    presentationResult.draftResult.text,
+                    presentation?.persona.expressionGuidance ??
+                        input.personaExpressionGuidance ??
+                        '',
+                    presentation?.config.handoffVariant
+                ),
+                ...(presentationResult.authoritativeOutputTokens === undefined
+                    ? {}
+                    : {
+                          maxOutputTokens:
+                              presentationResult.authoritativeOutputTokens,
+                      }),
+            };
         }
         const boundedRequest = boundGenerationRequestToWorkflowBudget({
             request,
@@ -2392,22 +2424,31 @@ export const runBoundedReviewWorkflow = async (
                       }
                     : projected.request;
             if (step === 'generate') {
-                const presentationResult = readAs<{
-                    draftResult?: GenerationResult;
-                }>(handlerInput.results.presentation);
+                const presentationResult = readAs<PresentationWorkflowResult>(
+                    handlerInput.results.presentation
+                );
                 if (
                     readGenerationResult(handlerInput.results.draft) ===
                         undefined &&
                     presentationResult?.draftResult !== undefined
                 ) {
-                    request.messages = buildAuthoritativeGenerationRequest(
-                        request,
-                        presentationResult.draftResult.text,
-                        presentation?.persona.expressionGuidance ??
-                            input.personaExpressionGuidance ??
-                            '',
-                        presentation?.config.handoffVariant
-                    ).messages;
+                    const authoritativeRequest =
+                        buildAuthoritativeGenerationRequest(
+                            request,
+                            presentationResult.draftResult.text,
+                            presentation?.persona.expressionGuidance ??
+                                input.personaExpressionGuidance ??
+                                '',
+                            presentation?.config.handoffVariant
+                        );
+                    request.messages = authoritativeRequest.messages;
+                    if (
+                        presentationResult.authoritativeOutputTokens !==
+                        undefined
+                    ) {
+                        request.maxOutputTokens =
+                            presentationResult.authoritativeOutputTokens;
+                    }
                 }
             }
             const bounded = boundGenerationRequestToWorkflowBudget({
