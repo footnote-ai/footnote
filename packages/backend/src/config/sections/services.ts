@@ -141,6 +141,7 @@ export const buildServiceSections = (
 ): Pick<
     RuntimeConfig,
     | 'reflect'
+    | 'agent'
     | 'adminSettings'
     | 'trace'
     | 'langfuseMetadataMirror'
@@ -154,6 +155,9 @@ export const buildServiceSections = (
             'REFLECT_API_MAX_BODY_BYTES',
             warn
         ),
+    },
+    agent: {
+        apiToken: parseOptionalTrimmedString(env.AGENT_API_TOKEN),
     },
     adminSettings: {
         token: parseOptionalTrimmedString(env.SETTINGS_ADMIN_TOKEN),

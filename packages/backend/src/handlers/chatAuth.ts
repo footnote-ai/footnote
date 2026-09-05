@@ -15,7 +15,7 @@ import type { ChatFailureResponse } from './chatResponses.js';
  */
 export type ServiceAuth = {
     isTrustedService: boolean;
-    authSource: 'x-trace-token' | 'x-service-token' | null;
+    authSource: 'x-agent-token' | 'x-trace-token' | 'x-service-token' | null;
     rateLimitKey: string | null;
 };
 
@@ -48,6 +48,18 @@ const readHeaderValue = (
  * a chat-specific service token. Public browser traffic never uses this path.
  */
 export const getServiceAuth = (req: IncomingMessage): ServiceAuth => {
+    const agentHeaderValue = readHeaderValue(req.headers['x-agent-token']);
+    if (
+        runtimeConfig.agent.apiToken &&
+        agentHeaderValue === runtimeConfig.agent.apiToken
+    ) {
+        return {
+            isTrustedService: true,
+            authSource: 'x-agent-token',
+            rateLimitKey: 'agent-token',
+        };
+    }
+
     const traceHeaderValue = readHeaderValue(req.headers['x-trace-token']);
     if (
         runtimeConfig.trace.apiToken &&

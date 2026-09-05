@@ -54,6 +54,7 @@ export const buildRuntimeConfig = (
     const web = buildWebSection(effectiveEnv, warn);
     const {
         reflect,
+        agent,
         adminSettings,
         trace,
         langfuseMetadataMirror,
@@ -87,6 +88,7 @@ export const buildRuntimeConfig = (
         cors: web.cors,
         csp: web.csp,
         reflect,
+        agent,
         adminSettings,
         trace,
         langfuseMetadataMirror,

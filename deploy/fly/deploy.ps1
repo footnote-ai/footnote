@@ -204,7 +204,7 @@ function Ensure-FlySecrets {
       if ($value) {
         Write-Host "Using $secret from $EnvPath."
       } else {
-        $value = Read-Host "Enter value for $secret (optional for $AppName, leave blank to skip)"
+        $value = Read-OptionalSecretValue -Secret $secret -AppName $AppName
       }
       if ($value -and $value.Trim().Length -gt 0) {
         & fly secrets set "$secret=$value" -a $AppName | Out-Null
@@ -213,6 +213,20 @@ function Ensure-FlySecrets {
         Write-Host "Skipped $secret for $AppName."
       }
     }
+  }
+}
+
+function Read-OptionalSecretValue {
+  param(
+    [string]$Secret,
+    [string]$AppName
+  )
+  $secureValue = Read-Host "Enter value for $Secret (optional for $AppName, leave blank to skip)" -AsSecureString
+  $pointer = [Runtime.InteropServices.Marshal]::SecureStringToBSTR($secureValue)
+  try {
+    return [Runtime.InteropServices.Marshal]::PtrToStringBSTR($pointer)
+  } finally {
+    [Runtime.InteropServices.Marshal]::ZeroFreeBSTR($pointer)
   }
 }
 
@@ -347,7 +361,7 @@ if ($EnableTrustGraph) {
     'EXECUTION_CONTRACT_TRUSTGRAPH_WORKSPACE_REF'
   )
 }
-$optionalSecrets = @('OPENAI_API_KEY', 'OLLAMA_API_KEY', 'OPENROUTER_API_KEY', 'TRACE_API_TOKEN', 'REFLECT_SERVICE_TOKEN', 'TURNSTILE_SECRET_KEY', 'DISCORD_TOKEN', 'CLOUDINARY_API_KEY', 'CLOUDINARY_API_SECRET', 'GITHUB_WEBHOOK_SECRET')
+$optionalSecrets = @('OPENAI_API_KEY', 'OLLAMA_API_KEY', 'OPENROUTER_API_KEY', 'TRACE_API_TOKEN', 'REFLECT_SERVICE_TOKEN', 'AGENT_API_TOKEN', 'TURNSTILE_SECRET_KEY', 'DISCORD_TOKEN', 'CLOUDINARY_API_KEY', 'CLOUDINARY_API_SECRET', 'GITHUB_WEBHOOK_SECRET')
 Ensure-FlySecrets -AppName $serverAppName `
   -RequiredSecrets $requiredSecrets `
   -OptionalSecrets $optionalSecrets `

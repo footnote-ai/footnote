@@ -41,7 +41,7 @@ openapi: 3.1.0
 info:
     title: Footnote Backend API
     # Versioning: bump when request/response shapes, status codes, or auth requirements change; docs-only edits can skip.
-    version: 1.3.0
+    version: 1.4.0
     license:
         name: MIT + Hippocratic License v3 (HL3-CORE)
         url: docs/LICENSE_STRATEGY.md
@@ -110,6 +110,7 @@ paths:
             description: |
                 Submit a transport-neutral chat request and receive the backend-selected action.
                 Public web callers use Turnstile when enabled; trusted internal callers may authenticate with service headers.
+                Trusted agent callers may use `x-agent-token` with the configured `AGENT_API_TOKEN` secret.
                 Send X-Session-Id / X-Turnstile-Token headers when needed for browser traffic.
                 Optionally provide `botPersonaId` to select the backend-owned bot persona overlay (discord).
                 Trusted Discord adapters may provide `assistantIdentity` for formatting-only cleanup of accidental self-labels. The backend does not use it for persona, policy, or provenance authority.
@@ -127,6 +128,11 @@ paths:
                     application/json:
                         schema:
                             $ref: '#/components/schemas/ChatRequest'
+            security:
+                - {}
+                - AgentToken: []
+                - TrustedServiceToken: []
+                - TraceToken: []
             responses:
                 '200':
                     $ref: '#/components/responses/ChatOk'
@@ -1392,6 +1398,11 @@ components:
             in: header
             name: x-service-token
             description: Shared secret for trusted internal service callers.
+        AgentToken:
+            type: apiKey
+            in: header
+            name: x-agent-token
+            description: Dedicated trusted credential for agent chat callers.
         AdminSettingsToken:
             type: apiKey
             in: header

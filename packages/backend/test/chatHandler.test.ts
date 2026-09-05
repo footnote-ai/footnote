@@ -34,6 +34,7 @@ type MutableEnv = NodeJS.ProcessEnv & {
     TURNSTILE_SECRET_KEY?: string;
     TURNSTILE_SITE_KEY?: string;
     TURNSTILE_ALLOWED_HOSTNAMES?: string;
+    AGENT_API_TOKEN?: string;
     TRACE_API_TOKEN?: string;
     REFLECT_SERVICE_TOKEN?: string;
     REFLECT_SERVICE_RATE_LIMIT?: string;
@@ -148,6 +149,8 @@ const createTestServer = (
         const mutableRuntimeConfig = runtimeConfig as typeof runtimeConfig;
         mutableRuntimeConfig.trace.apiToken =
             process.env.TRACE_API_TOKEN?.trim() || null;
+        mutableRuntimeConfig.agent.apiToken =
+            process.env.AGENT_API_TOKEN?.trim() || null;
         mutableRuntimeConfig.reflect.serviceToken =
             process.env.REFLECT_SERVICE_TOKEN?.trim() || null;
         mutableRuntimeConfig.turnstile.secretKey =
@@ -331,6 +334,53 @@ test('chat accepts trusted service calls with x-trace-token and no turnstile tok
     } finally {
         await server.close();
         env.TRACE_API_TOKEN = previousTraceToken;
+        env.TURNSTILE_SECRET_KEY = previousTurnstileSecret;
+        env.TURNSTILE_SITE_KEY = previousTurnstileSite;
+    }
+});
+
+test('chat accepts trusted agent calls through the shared endpoint', async () => {
+    const env = process.env as MutableEnv;
+    const previousAgentToken = env.AGENT_API_TOKEN;
+    const previousTurnstileSecret = env.TURNSTILE_SECRET_KEY;
+    const previousTurnstileSite = env.TURNSTILE_SITE_KEY;
+
+    env.AGENT_API_TOKEN = 'agent-secret';
+    env.TURNSTILE_SECRET_KEY = 'turnstile-secret';
+    env.TURNSTILE_SITE_KEY = 'turnstile-site';
+
+    try {
+        const server = await createTestServer({
+            responseText: 'agent response',
+        });
+
+        try {
+            const response = await fetch(`${server.url}/api/chat`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-Agent-Token': 'agent-secret',
+                },
+                body: JSON.stringify(
+                    createChatRequest({
+                        surface: 'web',
+                        trigger: { kind: 'submit' },
+                    })
+                ),
+            });
+
+            assert.equal(response.status, 200);
+            const payload = (await response.json()) as {
+                action: string;
+                message: string;
+            };
+            assert.equal(payload.action, 'message');
+            assert.equal(payload.message, 'agent response');
+        } finally {
+            await server.close();
+        }
+    } finally {
+        env.AGENT_API_TOKEN = previousAgentToken;
         env.TURNSTILE_SECRET_KEY = previousTurnstileSecret;
         env.TURNSTILE_SITE_KEY = previousTurnstileSite;
     }
