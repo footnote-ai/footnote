@@ -341,10 +341,17 @@ the next canonical deploy, edit the persisted `/data/config/footnote.yaml` and
 restart the app with:
 
 ```yaml
+openai:
+    openai-request-timeout-ms: 180000
 chat-workflow:
+    chat-workflow-mode-id: 'grounded'
     chat-presentation-enabled: true
+    chat-presentation-profile-id: 'openrouter-deepseek-v4-flash-0731'
     max-tokens-total-override: 512000
     chat-presentation-timeout-ms: 90000
+    chat-context-web-search-enabled: true
+    chat-context-web-search-provider-timeout-ms: 30000
+    chat-context-web-search-max-results: 10
 ```
 
 Backend web-search Context Integration remains separately enabled. It retrieves
