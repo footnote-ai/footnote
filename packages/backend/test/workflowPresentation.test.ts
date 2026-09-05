@@ -247,6 +247,7 @@ test('runs presentation with a finite reasoning-aware authority budget at 512k',
                     canUseSearch: false,
                     supportedReasoningEfforts: ['none', 'low'],
                 },
+                maxOutputTokens: undefined,
             },
         }
     );
@@ -256,7 +257,7 @@ test('runs presentation with a finite reasoning-aware authority budget at 512k',
     assert.equal(calls.length, 3);
     assert.ok((calls[0]?.maxOutputTokens ?? 0) > 0);
     assert.ok((calls[0]?.maxOutputTokens ?? 0) <= 500);
-    assert.ok((calls[1]?.maxOutputTokens ?? 0) <= 128_000);
+    assert.equal(calls[1]?.maxOutputTokens, 240_000);
 });
 
 test('presentation failure keeps authoritative generation fail-open at 512k', async () => {

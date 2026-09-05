@@ -74,6 +74,7 @@ import {
     calculatePresentationOutputBudget,
     calculateReviewedGenerationOutputBudget,
     DEFAULT_WORKFLOW_ASSESSMENT_MAX_OUTPUT_TOKENS,
+    DEFAULT_PRESENTATION_AUTHORITY_MAX_OUTPUT_TOKENS,
     DEFAULT_WORKFLOW_GENERATION_MAX_OUTPUT_TOKENS,
     DEFAULT_WORKFLOW_PLANNER_MAX_OUTPUT_TOKENS,
     estimateGenerationTokenBudget,
@@ -1422,13 +1423,12 @@ export const runBoundedReviewWorkflow = async (
                 maxTokensTotal: executionLimits.maxTokensTotal,
             });
         // Presentation adds a second generation and copies its text into the
-        // authoritative prompt. Use the ordinary bounded generation ceiling
-        // for that handoff so a reasoning-aware 256k default cannot consume
-        // the entire finite workflow allowance before the candidate runs.
+        // authoritative prompt. Keep a near-reasoning-sized authority ceiling
+        // while retaining enough room for a bounded candidate and assessment.
         const requestedAuthorityOutputTokens = Math.min(
             authorityAdmissionRequest?.maxOutputTokens ??
                 DEFAULT_WORKFLOW_GENERATION_MAX_OUTPUT_TOKENS,
-            DEFAULT_WORKFLOW_GENERATION_MAX_OUTPUT_TOKENS
+            DEFAULT_PRESENTATION_AUTHORITY_MAX_OUTPUT_TOKENS
         );
         let effectiveAuthorityOutputTokens: number | undefined;
         const presentationRequest =

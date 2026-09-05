@@ -17,6 +17,8 @@ import { UNBOUNDED_EXECUTION_LIMIT } from './limits.js';
 export const DEFAULT_WORKFLOW_GENERATION_MAX_OUTPUT_TOKENS = 128_000;
 /** Reasoning tokens share the provider output cap, so reserve more room when reasoning is requested. */
 export const DEFAULT_REASONING_GENERATION_MAX_OUTPUT_TOKENS = 256_000;
+/** Presentation still reserves the full workflow, but allows a near-reasoning-sized authority response. */
+export const DEFAULT_PRESENTATION_AUTHORITY_MAX_OUTPUT_TOKENS = 240_000;
 export const DEFAULT_WORKFLOW_PLANNER_MAX_OUTPUT_TOKENS = 2_000;
 export const DEFAULT_WORKFLOW_ASSESSMENT_MAX_OUTPUT_TOKENS = 512;
 

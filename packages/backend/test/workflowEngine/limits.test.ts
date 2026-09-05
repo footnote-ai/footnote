@@ -20,6 +20,7 @@ import {
     capGenerationRequestToProfileMax,
     calculatePresentationOutputBudget,
     calculateReviewedGenerationOutputBudget,
+    DEFAULT_PRESENTATION_AUTHORITY_MAX_OUTPUT_TOKENS,
     DEFAULT_REASONING_GENERATION_MAX_OUTPUT_TOKENS,
     DEFAULT_WORKFLOW_GENERATION_MAX_OUTPUT_TOKENS,
     estimateGenerationTokenBudget,
@@ -246,6 +247,10 @@ test('reasoning generation receives an expanded provider output reserve', () => 
         maxTokensTotal: 300_000,
     });
     assert.equal(bounded?.maxOutputTokens, 256_000);
+});
+
+test('presentation keeps a near-reasoning-sized authority ceiling', () => {
+    assert.equal(DEFAULT_PRESENTATION_AUTHORITY_MAX_OUTPUT_TOKENS, 240_000);
 });
 
 test('profile output ceilings cap resolved generation defaults', () => {
