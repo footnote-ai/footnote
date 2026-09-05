@@ -85,6 +85,10 @@ const presentationPersona = {
 };
 const baseRequest: GenerationRequest = {
     messages: [{ role: 'user', content: 'status' }],
+    // The direct workflow seam does not pass through selected-profile routing.
+    // Declare the realistic authoritative ceiling explicitly so these scenarios
+    // do not accidentally reserve the runtime's 128k fallback default.
+    maxOutputTokens: 500,
     search: {
         query: 'current status',
         contextSize: 'low',
@@ -102,6 +106,7 @@ const runScenario = async (
         maxWorkflowSteps?: number;
         maxTokensTotal?: number;
         handoffVariant?: 'preserve-candidate' | 'style-reference';
+        generationRequest?: GenerationRequest;
     }
 ) => {
     const calls: GenerationRequest[] = [];
@@ -117,8 +122,8 @@ const runScenario = async (
     };
     const result = await runBoundedReviewWorkflow({
         generationRuntime: runtime,
-        generationRequest: baseRequest,
-        messagesWithHints: baseRequest.messages,
+        generationRequest: options?.generationRequest ?? baseRequest,
+        messagesWithHints: (options?.generationRequest ?? baseRequest).messages,
         contextEnvelope,
         generationStartedAtMs: Date.now(),
         workflowConfig: {
@@ -227,6 +232,59 @@ test('runs candidate, authoritative generation, and ordinary assessment in order
     );
 });
 
+test('runs presentation with a finite reasoning-aware authority budget at 512k', async () => {
+    const { calls, result } = await runScenario(
+        async (_request, call) =>
+            call === 1
+                ? generated('A concise presentation candidate.')
+                : generated('Authoritative answer.'),
+        {
+            maxTokensTotal: 512_000,
+            generationRequest: {
+                ...baseRequest,
+                reasoningEffort: 'low',
+                capabilities: {
+                    canUseSearch: false,
+                    supportedReasoningEfforts: ['none', 'low'],
+                },
+                maxOutputTokens: undefined,
+            },
+        }
+    );
+
+    assert.equal(result.outcome, 'generated');
+    assert.equal(result.presentation?.outcome, 'candidate_generated');
+    assert.equal(calls.length, 3);
+    assert.ok((calls[0]?.maxOutputTokens ?? 0) > 0);
+    assert.ok((calls[0]?.maxOutputTokens ?? 0) <= 500);
+    assert.equal(calls[1]?.maxOutputTokens, 240_000);
+});
+
+test('presentation failure keeps authoritative generation fail-open at 512k', async () => {
+    const { calls, result } = await runScenario(
+        async (_request, call) => {
+            if (call === 1)
+                throw new Error('presentation provider unavailable');
+            return generated('Authoritative answer.');
+        },
+        {
+            maxTokensTotal: 512_000,
+            generationRequest: {
+                ...baseRequest,
+                reasoningEffort: 'low',
+                capabilities: {
+                    canUseSearch: false,
+                    supportedReasoningEfforts: ['none', 'low'],
+                },
+            },
+        }
+    );
+
+    assert.equal(result.outcome, 'generated');
+    assert.equal(result.presentation?.outcome, 'candidate_unavailable');
+    assert.equal(calls.length, 3);
+});
+
 test('skips presentation when only authoritative generation fits the budget', async () => {
     const { calls, result, presentationFeatures } = await runScenario(
         async () => generated('Authoritative answer.'),
@@ -247,7 +305,7 @@ test('bounds authoritative generation so assessment can follow a skipped candida
             call === 1
                 ? generated('Authoritative answer.')
                 : generated(reviewFinalize),
-        { maxTokensTotal: 3000 }
+        { maxTokensTotal: 1700 }
     );
 
     assert.equal(result.outcome, 'generated');
@@ -408,7 +466,7 @@ test('presentation does not run when authoritative generation is disabled', asyn
     assert.equal(calls.length, 0);
 });
 
-test('stops review after an incomplete generation with no visible text', async () => {
+test('rejects an incomplete generation with no visible text', async () => {
     const incomplete = generated('');
     incomplete.finishReason = 'length';
     incomplete.completion = {
@@ -429,11 +487,7 @@ test('stops review after an incomplete generation with no visible text', async (
     });
 
     assert.equal(calls.length, 2);
-    assert.equal(result.outcome, 'generated');
-    if (result.outcome !== 'generated')
-        throw new Error('Expected generated result.');
-    assert.equal(result.generationResult.text, '');
-    assert.deepEqual(result.responseCandidates, []);
+    assert.equal(result.outcome, 'no_generation');
     assert.equal(result.workflowLineage.status, 'degraded');
     assert.equal(
         result.workflowLineage.steps.at(-1)?.reasonCode,
