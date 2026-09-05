@@ -22,6 +22,11 @@ import {
 const DEFAULT_BASE_URL = 'http://localhost:3000';
 const DEFAULT_TIMEOUT_MS = 180_000;
 const CHAT_PATH = '/api/chat';
+const LOOPBACK_HOSTNAMES: ReadonlySet<string> = new Set([
+    'localhost',
+    '127.0.0.1',
+    '[::1]',
+]);
 const REPO_ENV_PATH = path.resolve(
     path.dirname(fileURLToPath(import.meta.url)),
     '..',
@@ -89,6 +94,30 @@ const loadAgentChatEnvironment = (): void => {
     // Keep explicit process variables authoritative, while making the normal
     // `pnpm agent:chat` invocation self-contained for local and pre-production use.
     dotenv.config({ path: REPO_ENV_PATH, quiet: true });
+};
+
+export const resolveAgentChatUrl = (baseUrl: string): URL => {
+    let parsedBaseUrl: URL;
+    try {
+        parsedBaseUrl = new URL(baseUrl);
+    } catch {
+        throw new Error('--base-url must be a valid URL.');
+    }
+
+    const isSecureUrl = parsedBaseUrl.protocol === 'https:';
+    const isAllowedLocalUrl =
+        parsedBaseUrl.protocol === 'http:' &&
+        LOOPBACK_HOSTNAMES.has(parsedBaseUrl.hostname);
+    if (!isSecureUrl && !isAllowedLocalUrl) {
+        throw new Error(
+            '--base-url must use HTTPS; HTTP is allowed only for localhost, 127.0.0.1, or ::1.'
+        );
+    }
+    if (parsedBaseUrl.username || parsedBaseUrl.password) {
+        throw new Error('--base-url must not contain URL credentials.');
+    }
+
+    return new URL(CHAT_PATH, parsedBaseUrl);
 };
 
 const readOptionValue = (
@@ -272,14 +301,16 @@ export const sendAgentChatRequest = async ({
     timeoutMs = DEFAULT_TIMEOUT_MS,
     fetchImpl = fetch,
 }: AgentChatRequestOptions): Promise<AgentChatResult> => {
+    const chatUrl = resolveAgentChatUrl(baseUrl);
     const controller = new AbortController();
     const timeoutHandle = setTimeout(() => controller.abort(), timeoutMs);
     timeoutHandle.unref?.();
     const startedAt = Date.now();
 
     try {
-        const response = await fetchImpl(new URL(CHAT_PATH, baseUrl), {
+        const response = await fetchImpl(chatUrl, {
             method: 'POST',
+            redirect: 'error',
             headers: {
                 Accept: 'application/json',
                 'Content-Type': 'application/json',

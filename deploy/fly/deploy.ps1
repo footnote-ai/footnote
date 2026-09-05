@@ -204,7 +204,7 @@ function Ensure-FlySecrets {
       if ($value) {
         Write-Host "Using $secret from $EnvPath."
       } else {
-        $value = Read-Host "Enter value for $secret (optional for $AppName, leave blank to skip)"
+        $value = Read-OptionalSecretValue -Secret $secret -AppName $AppName
       }
       if ($value -and $value.Trim().Length -gt 0) {
         & fly secrets set "$secret=$value" -a $AppName | Out-Null
@@ -213,6 +213,20 @@ function Ensure-FlySecrets {
         Write-Host "Skipped $secret for $AppName."
       }
     }
+  }
+}
+
+function Read-OptionalSecretValue {
+  param(
+    [string]$Secret,
+    [string]$AppName
+  )
+  $secureValue = Read-Host "Enter value for $Secret (optional for $AppName, leave blank to skip)" -AsSecureString
+  $pointer = [Runtime.InteropServices.Marshal]::SecureStringToBSTR($secureValue)
+  try {
+    return [Runtime.InteropServices.Marshal]::PtrToStringBSTR($pointer)
+  } finally {
+    [Runtime.InteropServices.Marshal]::ZeroFreeBSTR($pointer)
   }
 }
 

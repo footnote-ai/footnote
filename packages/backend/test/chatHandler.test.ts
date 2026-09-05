@@ -349,34 +349,37 @@ test('chat accepts trusted agent calls through the shared endpoint', async () =>
     env.TURNSTILE_SECRET_KEY = 'turnstile-secret';
     env.TURNSTILE_SITE_KEY = 'turnstile-site';
 
-    const server = await createTestServer({
-        responseText: 'agent response',
-    });
-
     try {
-        const response = await fetch(`${server.url}/api/chat`, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'X-Agent-Token': 'agent-secret',
-            },
-            body: JSON.stringify(
-                createChatRequest({
-                    surface: 'web',
-                    trigger: { kind: 'submit' },
-                })
-            ),
+        const server = await createTestServer({
+            responseText: 'agent response',
         });
 
-        assert.equal(response.status, 200);
-        const payload = (await response.json()) as {
-            action: string;
-            message: string;
-        };
-        assert.equal(payload.action, 'message');
-        assert.equal(payload.message, 'agent response');
+        try {
+            const response = await fetch(`${server.url}/api/chat`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-Agent-Token': 'agent-secret',
+                },
+                body: JSON.stringify(
+                    createChatRequest({
+                        surface: 'web',
+                        trigger: { kind: 'submit' },
+                    })
+                ),
+            });
+
+            assert.equal(response.status, 200);
+            const payload = (await response.json()) as {
+                action: string;
+                message: string;
+            };
+            assert.equal(payload.action, 'message');
+            assert.equal(payload.message, 'agent response');
+        } finally {
+            await server.close();
+        }
     } finally {
-        await server.close();
         env.AGENT_API_TOKEN = previousAgentToken;
         env.TURNSTILE_SECRET_KEY = previousTurnstileSecret;
         env.TURNSTILE_SITE_KEY = previousTurnstileSite;

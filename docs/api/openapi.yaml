@@ -41,7 +41,7 @@ openapi: 3.1.0
 info:
     title: Footnote Backend API
     # Versioning: bump when request/response shapes, status codes, or auth requirements change; docs-only edits can skip.
-    version: 1.3.0
+    version: 1.4.0
     license:
         name: MIT + Hippocratic License v3 (HL3-CORE)
         url: docs/LICENSE_STRATEGY.md

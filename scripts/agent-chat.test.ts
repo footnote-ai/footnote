@@ -14,6 +14,7 @@ import {
     buildPromptRequest,
     formatAgentChatStartMessage,
     parseAgentChatArguments,
+    resolveAgentChatUrl,
     sendAgentChatRequest,
 } from './agent-chat.js';
 
@@ -154,6 +155,30 @@ test('request-file mode and transport preserve every request option', async () =
     assert.equal(result.status, 200);
     assert.equal(result.ok, true);
     assert.deepEqual(result.body, responseBody);
+    assert.equal(captured.init.redirect, 'error');
+});
+
+test('agent chat URL requires HTTPS except for exact loopback hosts', () => {
+    assert.equal(
+        resolveAgentChatUrl('http://localhost:3000').toString(),
+        'http://localhost:3000/api/chat'
+    );
+    assert.equal(
+        resolveAgentChatUrl('http://127.0.0.1:3000').toString(),
+        'http://127.0.0.1:3000/api/chat'
+    );
+    assert.equal(
+        resolveAgentChatUrl('https://backend.example').toString(),
+        'https://backend.example/api/chat'
+    );
+    assert.throws(
+        () => resolveAgentChatUrl('http://backend.example'),
+        /must use HTTPS/
+    );
+    assert.throws(
+        () => resolveAgentChatUrl('http://localhost.example'),
+        /must use HTTPS/
+    );
 });
 
 test('argument parser requires exactly one request source', () => {
