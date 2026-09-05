@@ -41,6 +41,7 @@ test('missing footnote.yaml warns and continues with defaults', () => {
     );
 
     assert.equal(config.rateLimits.web.ip.limit, 3);
+    assert.equal(config.chatWorkflow.presentation.enabled, false);
     assert.match(
         warnings.join('\n'),
         /Server settings YAML not found at .*footnote\.yaml/i
@@ -118,7 +119,7 @@ test('workflow token override is loaded from canonical settings YAML', () => {
     assert.equal(config.chatWorkflow.maxTokensTotalOverride, 512_000);
 });
 
-test('repository canonical settings keep pre-production workflow admission permissive', () => {
+test('canonical Fly configuration enables presentation and backend context search independently', () => {
     const config = buildRuntimeConfig(
         {
             NODE_ENV: 'test',
@@ -127,8 +128,27 @@ test('repository canonical settings keep pre-production workflow admission permi
         () => undefined
     );
 
+    assert.equal(config.chatWorkflow.modeId, 'grounded');
     assert.equal(config.chatWorkflow.maxTokensTotalOverride, 512_000);
-    assert.equal(config.chatWorkflow.presentation.enabled, false);
+    assert.equal(config.openai.requestTimeoutMs, 180_000);
+    assert.equal(
+        config.chatWorkflow.contextIntegrations.webSearch.providerTimeoutMs,
+        30_000
+    );
+    assert.equal(
+        config.chatWorkflow.contextIntegrations.webSearch.maxResults,
+        10
+    );
+    assert.equal(config.chatWorkflow.presentation.enabled, true);
+    assert.equal(
+        config.chatWorkflow.contextIntegrations.webSearch.enabled,
+        true
+    );
+    const configuredDefaultProfile = config.modelProfiles.catalog.find(
+        (profile) => profile.id === config.modelProfiles.defaultProfileId
+    );
+    assert.ok(configuredDefaultProfile);
+    assert.equal(configuredDefaultProfile.capabilities.canUseSearch, false);
 });
 
 test('integer settings reject non-integer numbers', () => {

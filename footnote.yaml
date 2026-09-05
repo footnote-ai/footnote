@@ -98,17 +98,25 @@ discord-bots:
 openai:
     default-profile-id: 'openrouter-deepseek-v4-flash-0731'
     planner-profile-id: 'openrouter-deepseek-v4-flash-0731'
+    openai-request-timeout-ms: 180000
 
 # Context integrations run in the backend. Project-document lookup stays off
 # until you enable it; chat continues if the lookup fails.
 chat-workflow:
-    # Canonical Fly opt-in. Fresh installs remain disabled because the runtime
-    # default for this optional presentation flow is false.
-    # Presentation is disabled to reserve the workflow allowance for the delivered answer.
-    chat-presentation-enabled: false
+    chat-workflow-mode-id: 'grounded'
+    # Explicit operator-scoped configuration. Fresh installs remain
+    # disabled because the runtime default for this optional presentation flow
+    # is false. Presentation exercises persona/style behavior without becoming
+    # factual authority.
+    chat-presentation-enabled: true
     chat-presentation-profile-id: 'openrouter-deepseek-v4-flash-0731'
     max-tokens-total-override: 512000
     chat-presentation-timeout-ms: 90000
+    # Backend-owned context retrieval is independent from a selected model
+    # profile's provider-native canUseSearch capability.
+    chat-context-web-search-enabled: true
+    chat-context-web-search-provider-timeout-ms: 30000
+    chat-context-web-search-max-results: 10
     chat-context-project-docs-enabled: false
     chat-context-project-docs-embedding-provider: 'openai'
     chat-context-project-docs-embedding-model: 'text-embedding-3-small'

@@ -330,17 +330,33 @@ Deploy normally without TrustGraph:
 
 ### High-budget Fly configuration
 
-The canonical `footnote.yaml` keeps the presentation candidate disabled and
-allows a finite 512,000-token workflow budget. To apply the same configuration
-to an existing Machine before the next canonical deploy, edit the persisted
-`/data/config/footnote.yaml` and restart the app with:
+The canonical Fly `footnote.yaml` is an explicit operator-scoped
+configuration: it enables the optional presentation candidate and
+sets a finite 512,000-token workflow budget. This is not the fresh-install
+default. A missing settings file or a newly generated settings template keeps
+presentation disabled unless an operator explicitly enables it.
+
+To apply this configuration to an existing Machine before
+the next canonical deploy, edit the persisted `/data/config/footnote.yaml` and
+restart the app with:
 
 ```yaml
+openai:
+    openai-request-timeout-ms: 180000
 chat-workflow:
-    chat-presentation-enabled: false
+    chat-workflow-mode-id: 'grounded'
+    chat-presentation-enabled: true
+    chat-presentation-profile-id: 'openrouter-deepseek-v4-flash-0731'
     max-tokens-total-override: 512000
     chat-presentation-timeout-ms: 90000
+    chat-context-web-search-enabled: true
+    chat-context-web-search-provider-timeout-ms: 30000
+    chat-context-web-search-max-results: 10
 ```
+
+Backend web-search Context Integration remains separately enabled. It retrieves
+advisory context in the backend and is not disabled merely because the selected
+model profile cannot use provider-native search (`canUseSearch: false`).
 
 `max-tokens-total-override` is optional. When set, it replaces only the
 selected workflow's cumulative token limit and must be a positive safe integer.
