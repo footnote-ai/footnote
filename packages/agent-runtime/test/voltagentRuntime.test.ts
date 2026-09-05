@@ -40,15 +40,18 @@ const structuredOutput = {
 };
 
 const apiError = (input: {
+    message?: string;
     statusCode?: number;
     responseBody?: string;
     isRetryable?: boolean;
 }) =>
     new APICallError({
-        message: 'provider request failed',
+        message: input.message ?? 'provider request failed',
         url: 'https://provider.example.test/v1/generate',
         requestBodyValues: {},
-        ...input,
+        statusCode: input.statusCode,
+        responseBody: input.responseBody,
+        isRetryable: input.isRetryable,
     });
 
 test('normalizes only structured billing and account availability failures', () => {
@@ -107,6 +110,24 @@ test('normalizes retryable transport failures without turning them into availabi
 
     assert.ok(normalized instanceof GenerationRuntimeError);
     assert.deepEqual(normalized.details, { classification: 'transient' });
+});
+
+test('normalizes the observed no-credit provider message without a structured error code', () => {
+    const normalized = normalizeGenerationRuntimeError(
+        apiError({
+            message:
+                'You have no credits remaining. Add credits to continue using the API at https://platform.openai.com/settings/organization/billing/.',
+            statusCode: 429,
+            responseBody:
+                'You have no credits remaining. Add credits to continue using the API.',
+        })
+    );
+
+    assert.ok(normalized instanceof GenerationRuntimeError);
+    assert.deepEqual(normalized.details, {
+        classification: 'provider_temporary_unavailable',
+        availabilityReason: 'billing_or_quota',
+    });
 });
 
 test('voltAgent runtime carries normalized provider availability failures to routing', async () => {

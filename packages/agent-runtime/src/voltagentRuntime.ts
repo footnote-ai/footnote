@@ -430,6 +430,13 @@ const BILLING_OR_QUOTA_ERROR_CODES = new Set([
     'quota_exceeded',
 ]);
 
+const hasObservedBillingMessage = (error: APICallError): boolean =>
+    [error.message, error.responseBody].some(
+        (value) =>
+            typeof value === 'string' &&
+            value.toLowerCase().includes('no credits remaining')
+    );
+
 const ACCOUNT_UNAVAILABLE_ERROR_CODES = new Set([
     'account_blocked',
     'account_deactivated',
@@ -440,9 +447,10 @@ const ACCOUNT_UNAVAILABLE_ERROR_CODES = new Set([
 ]);
 
 /**
- * Normalizes only structured AI SDK API failures with known semantics.
- * Arbitrary messages, malformed payloads, invalid requests, bad credentials,
- * model errors, and generic provider errors intentionally remain unknown.
+ * Normalizes AI SDK API failures with structured semantics or the observed
+ * provider billing message. Arbitrary messages, malformed payloads, invalid
+ * requests, bad credentials, model errors, and generic provider errors remain
+ * unknown.
  */
 export const normalizeGenerationRuntimeError = (
     error: unknown
@@ -459,7 +467,8 @@ export const normalizeGenerationRuntimeError = (
     const code = readStructuredErrorCode(payload);
     const details: GenerationRuntimeErrorDetails | undefined =
         error.statusCode === 402 ||
-        (code !== undefined && BILLING_OR_QUOTA_ERROR_CODES.has(code))
+        (code !== undefined && BILLING_OR_QUOTA_ERROR_CODES.has(code)) ||
+        hasObservedBillingMessage(error)
             ? {
                   classification: 'provider_temporary_unavailable',
                   availabilityReason: 'billing_or_quota',
