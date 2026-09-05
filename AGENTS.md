@@ -117,6 +117,32 @@ the `tdd` and `code-review` skills; these commands always apply:
 
 ## Working Style
 
+### Direct chat endpoint testing
+
+When the backend is reachable, test chat yourself through the canonical
+`POST /api/chat` endpoint. Run the command directly:
+
+```powershell
+pnpm agent:chat -- --prompt "<prompt>" --surface discord --trigger-kind direct
+```
+
+The command loads `AGENT_API_TOKEN` and `BACKEND_BASE_URL` from the repo's
+`.env` file; existing process values take precedence. It sends the trusted
+auth header, waits for the complete response, prints JSON to stdout, and
+prints status, duration, and `responseId` to stderr. Each invocation makes one
+request with no automatic retry.
+
+Use `--surface web` and `--trigger-kind submit` for web-shaped behavior. Use
+`--request-file <path>` to replay an exact `PostChatRequest`.
+
+If the shell reports that the command is still running, poll that same process
+until it exits; do not start a second invocation. For a deployed target, set
+`BACKEND_BASE_URL` in `.env` to the target URL. Use browser or Discord testing
+only for behavior specific to those adapters. See
+`docs/agents/chat-endpoint-testing.md` for request examples and Fly details.
+
+Keep related requests on the same target when testing process-local state.
+
 - Prefer small, focused diffs.
 - If the task starts touching multiple concepts, packages, or behavior surfaces,
   stop, report the scope expansion, and wait for confirmation.

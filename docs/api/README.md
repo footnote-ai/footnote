@@ -36,5 +36,10 @@ Public browser traffic is protected by Turnstile + configured rate limits. When 
 send `X-Session-Id` and `X-Turnstile-Token` headers. `X-Session-Id` is a client-generated
 session identifier that scopes rate limits; if you omit it, the server falls back to IP-based limits.
 
+Trusted agent callers send `X-Agent-Token`, backed by the `AGENT_API_TOKEN` secret.
+They submit the same `PostChatRequest` and receive the same complete action response
+as web or Discord. The token identifies the caller; `surface: web` or
+`surface: discord` identifies the behavior being tested.
+
 This endpoint is served at `POST /api/chat` and is now the canonical backend decision point
 for chat behavior across packages.

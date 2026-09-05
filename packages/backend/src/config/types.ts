@@ -110,6 +110,9 @@ export type RuntimeConfig = {
         serviceToken: string | null;
         maxBodyBytes: number;
     };
+    agent: {
+        apiToken: string | null;
+    };
     adminSettings: {
         token: string | null;
         maxBodyBytes: number;

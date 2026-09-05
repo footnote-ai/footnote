@@ -99,7 +99,7 @@ const setCorsHeaders = (res: ServerResponse, req: IncomingMessage): void => {
     res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
     res.setHeader(
         'Access-Control-Allow-Headers',
-        'Content-Type, X-Turnstile-Token, X-Session-Id, X-Trace-Token, X-Service-Token'
+        'Content-Type, X-Turnstile-Token, X-Session-Id, X-Trace-Token, X-Service-Token, X-Agent-Token'
     );
     res.setHeader('Access-Control-Allow-Credentials', 'true');
 };

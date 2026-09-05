@@ -9,6 +9,15 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { buildServiceSections } from '../src/config/sections/services.js';
 
+test('trusted agent token is read from AGENT_API_TOKEN', () => {
+    const { agent } = buildServiceSections(
+        { AGENT_API_TOKEN: '  agent-secret  ' },
+        () => undefined
+    );
+
+    assert.equal(agent.apiToken, 'agent-secret');
+});
+
 test('presentation stays disabled but has the tested DeepSeek profile and timeout defaults', () => {
     const { chatWorkflow } = buildServiceSections({}, () => undefined);
 

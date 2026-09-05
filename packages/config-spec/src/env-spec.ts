@@ -1909,6 +1909,19 @@ export const envEntries = [
     }),
 
     defineEnv({
+        key: 'AGENT_API_TOKEN',
+        owner: 'backend',
+        stage: 'runtime',
+        section: 'agent',
+        required: false,
+        secret: true,
+        kind: 'string',
+        description: 'Shared secret for trusted agent chat callers.',
+        defaultValue: noDefault(),
+        usedBy: ['packages/backend/src/config.ts'],
+    }),
+
+    defineEnv({
         key: 'REFLECT_API_MAX_BODY_BYTES',
         owner: 'backend',
         stage: 'runtime',
