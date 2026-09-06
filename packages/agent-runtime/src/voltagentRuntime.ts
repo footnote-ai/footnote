@@ -31,7 +31,13 @@ import {
     isGenerationRuntimeError,
 } from './index.js';
 import { extractMarkdownLinkCitations } from './citationRecovery.js';
-import type { ModelProfileProviderRouting } from '@footnote/contracts';
+import {
+    intersectModelCapabilityFacts,
+    resolveModelProfileCapabilityFacts,
+    type ModelCapabilityFacts,
+    type ModelProfileCapabilities,
+    type ModelProfileProviderRouting,
+} from '@footnote/contracts';
 import type {
     GenerationCompletion,
     ToolExecutionContext,
@@ -732,6 +738,69 @@ export const mergeOpenRouterRequestBody = (
 export const supportsStructuredOutputsForProvider = (
     provider: string
 ): boolean => provider === 'openai' || provider === 'openrouter';
+
+const allCapabilityStates = (
+    state: ModelCapabilityFacts['reasoningEfforts'][keyof ModelCapabilityFacts['reasoningEfforts']]
+): ModelCapabilityFacts['reasoningEfforts'] => ({
+    none: state,
+    low: state,
+    medium: state,
+    high: state,
+    xhigh: state,
+    max: state,
+});
+
+const allVerbosityStates = (
+    state: ModelCapabilityFacts['verbosity'][keyof ModelCapabilityFacts['verbosity']]
+): ModelCapabilityFacts['verbosity'] => ({
+    low: state,
+    medium: state,
+    high: state,
+});
+
+/**
+ * Describes controls the active VoltAgent adapter can request for one provider.
+ * This intentionally reports adapter ability, not whether a concrete model will
+ * accept a control; callers intersect it with selected-profile facts first.
+ */
+export const resolveVoltAgentRuntimeCapabilityFacts = (
+    provider: string
+): ModelCapabilityFacts => {
+    const canRequestReasoning =
+        provider === 'openai' || provider === 'openrouter';
+    const canRequestVerbosity = provider === 'openai';
+    const nativeSearch = resolveToolForProvider('web_search', provider)
+        .supported
+        ? 'supported'
+        : 'unsupported';
+    return {
+        reasoningEfforts: allCapabilityStates(
+            canRequestReasoning ? 'supported' : 'unsupported'
+        ),
+        verbosity: allVerbosityStates(
+            canRequestVerbosity ? 'supported' : 'unsupported'
+        ),
+        // VoltAgent forwards these generic request fields for every configured
+        // provider. A model-specific rejection belongs to the profile layer.
+        temperature: 'supported',
+        topP: 'supported',
+        outputLimit: 'supported',
+        structuredOutput: supportsStructuredOutputsForProvider(provider)
+            ? 'supported'
+            : 'unsupported',
+        nativeSearch,
+    };
+};
+
+/** Intersects selected profile facts with the provider adapter facts for one attempt. */
+export const resolveEffectiveVoltAgentCapabilities = (input: {
+    provider: string;
+    capabilities: ModelProfileCapabilities;
+}): ModelCapabilityFacts =>
+    intersectModelCapabilityFacts({
+        model: resolveModelProfileCapabilityFacts(input.capabilities),
+        runtime: resolveVoltAgentRuntimeCapabilityFacts(input.provider),
+    });
 
 const buildVoltAgentProviderOptions = (
     request: GenerationRequest,
@@ -1489,10 +1558,17 @@ const createVoltAgentRuntime = ({
                 provider
             );
             const canProviderUseSearchTools = searchToolMapping.supported;
+            const effectiveCapabilities =
+                request.capabilities === undefined
+                    ? undefined
+                    : resolveEffectiveVoltAgentCapabilities({
+                          provider,
+                          capabilities: request.capabilities,
+                      });
             const shouldForwardSearch =
                 canUseSearch &&
                 request.search !== undefined &&
-                canProviderUseSearchTools;
+                effectiveCapabilities?.nativeSearch === 'supported';
             const fallbackToolExecution: ToolExecutionContext | undefined =
                 request.search === undefined
                     ? undefined

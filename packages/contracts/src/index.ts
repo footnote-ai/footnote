@@ -217,6 +217,15 @@ export type {
     SupportedVerbosity,
 } from './providers.js';
 export { supportedReasoningEfforts } from './providers.js';
+export {
+    intersectModelCapabilityFacts,
+    modelCapabilitySupportStates,
+    resolveModelProfileCapabilityFacts,
+} from './model-capabilities.js';
+export type {
+    ModelCapabilityFacts,
+    ModelCapabilitySupport,
+} from './model-capabilities.js';
 export type {
     ModelCostClass,
     ModelLatencyClass,
