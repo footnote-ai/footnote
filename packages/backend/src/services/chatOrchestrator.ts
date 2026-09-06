@@ -40,7 +40,6 @@ import {
     type PlannerSelectionSource,
 } from './plannerFallbackTelemetryRollup.js';
 import { resolveExecutionContract } from './executionContractResolver.js';
-import { capGenerationRequestToProfileMax } from './workflowEngine/tokenBudget.js';
 import { resolveWorkflowModeDecision } from './workflowProfileRegistry.js';
 import { buildSteerabilityControls } from './steerabilityControls.js';
 import type { WeatherForecastTool } from './contextIntegrations/weather/index.js';
@@ -91,7 +90,8 @@ import type {
 } from './plannerWorkflowSeams.js';
 import {
     deriveOpenAiSafetyIdentifier,
-    resolveProfileReasoningEffort,
+    applyModelSettings,
+    resolveModelSettings,
 } from './runtimeRequestControls.js';
 import {
     buildChatOutputBoundaryOptions,
@@ -227,23 +227,29 @@ export const createChatOrchestrator = ({
                 useRuntimeStructuredExecutor) && {
                 executePlannerStructured: async (request) => {
                     const activePlannerProfile = getActivePlannerProfile();
-                    const cappedRequest = capGenerationRequestToProfileMax({
-                        request,
+                    const settingsResolution = resolveModelSettings({
                         profile: activePlannerProfile,
+                        request,
                     });
-                    const reasoningEffort = resolveProfileReasoningEffort(
-                        activePlannerProfile,
-                        request.reasoningEffort,
-                        chatOrchestratorLogger
+                    const resolvedRequest = applyModelSettings(
+                        request,
+                        settingsResolution.applied
                     );
+                    const resolvedMaxOutputTokens =
+                        settingsResolution.applied.maxOutputTokens;
+                    if (resolvedMaxOutputTokens === undefined) {
+                        throw new Error(
+                            'Planner settings resolution omitted its required output limit.'
+                        );
+                    }
                     if (
                         activePlannerProfile.provider === 'openai' &&
                         directOpenAiStructuredExecutor !== undefined
                     ) {
                         return directOpenAiStructuredExecutor({
-                            ...cappedRequest,
+                            ...resolvedRequest,
                             model: activePlannerProfile.providerModel,
-                            reasoningEffort,
+                            maxOutputTokens: resolvedMaxOutputTokens,
                             ...(safetyIdentifier !== undefined && {
                                 safetyIdentifier,
                             }),
@@ -252,13 +258,12 @@ export const createChatOrchestrator = ({
 
                     try {
                         const result = await generationRuntime.generate({
-                            ...cappedRequest,
+                            ...resolvedRequest,
                             model: activePlannerProfile.providerModel,
                             provider: activePlannerProfile.provider,
                             capabilities: activePlannerProfile.capabilities,
                             providerRouting:
                                 activePlannerProfile.providerRouting,
-                            reasoningEffort,
                             structuredOutput:
                                 chatPlannerDecisionStructuredOutput,
                             ...(safetyIdentifier !== undefined && {
@@ -342,27 +347,30 @@ export const createChatOrchestrator = ({
                 verbosity,
             }) => {
                 const activePlannerProfile = getActivePlannerProfile();
+                const settingsResolution = resolveModelSettings({
+                    profile: activePlannerProfile,
+                    request: {
+                        maxOutputTokens,
+                        reasoningEffort,
+                        verbosity,
+                    },
+                });
                 // Planner calls go through the same runtime seam so model usage
                 // and behavior stay aligned with normal generation calls.
                 const plannerResult = await generationRuntime.generate({
-                    ...capGenerationRequestToProfileMax({
-                        request: {
+                    ...applyModelSettings(
+                        {
                             messages,
                             maxOutputTokens,
                             reasoningEffort,
                             verbosity,
                         },
-                        profile: activePlannerProfile,
-                    }),
+                        settingsResolution.applied
+                    ),
                     model: activePlannerProfile.providerModel,
                     provider: activePlannerProfile.provider,
                     capabilities: activePlannerProfile.capabilities,
                     providerRouting: activePlannerProfile.providerRouting,
-                    reasoningEffort: resolveProfileReasoningEffort(
-                        activePlannerProfile,
-                        reasoningEffort,
-                        chatOrchestratorLogger
-                    ),
                     ...(safetyIdentifier !== undefined && {
                         safetyIdentifier,
                     }),

@@ -60,7 +60,6 @@ import type { ChatGenerationPlan } from './chatGenerationTypes.js';
 import type { ExecutionContract } from './executionContract.js';
 import { renderConversationPromptLayers } from './prompts/conversationPromptLayers.js';
 import { buildPersonaExpressionGuidance } from './prompts/personaExpression.js';
-import { capGenerationRequestToProfileMax } from './workflowEngine/tokenBudget.js';
 import { resolveNoGenerationHandlingFromTermination } from './workflowProfileContract.js';
 import {
     resolveWorkflowRuntimeConfig,
@@ -232,7 +231,10 @@ const getLastGenerationRoutingAttempt = (
               }),
           };
 };
-import { resolveProfileReasoningEffort } from './runtimeRequestControls.js';
+import {
+    applyModelSettings,
+    resolveModelSettings,
+} from './runtimeRequestControls.js';
 import { runtimeConfig } from '../config.js';
 import { buildToolClarificationResponse } from './tools/toolClarificationResponse.js';
 import { buildWeatherToolFailureResponse } from './tools/weatherToolFailureResponse.js';
@@ -1357,21 +1359,20 @@ export const createChatService = ({
                     enabledProfilesById,
                     requiresSearch: request.search !== undefined,
                     runWithProfile: async (profile, attemptIndex) => {
+                        const settingsResolution = resolveModelSettings({
+                            profile,
+                            request,
+                        });
                         const result = normalizeGenerationResultEvidence(
                             await generationRuntime.generate({
-                                ...capGenerationRequestToProfileMax({
+                                ...applyModelSettings(
                                     request,
-                                    profile,
-                                }),
+                                    settingsResolution.applied
+                                ),
                                 model: profile.providerModel,
                                 provider: profile.provider,
                                 capabilities: profile.capabilities,
                                 providerRouting: profile.providerRouting,
-                                reasoningEffort: resolveProfileReasoningEffort(
-                                    profile,
-                                    request.reasoningEffort,
-                                    logger
-                                ),
                             })
                         );
                         // Record every routed provider Attempt, including an

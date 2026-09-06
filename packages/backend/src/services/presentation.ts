@@ -25,6 +25,7 @@ import type {
 import { hmacId } from '../utils/pseudonymization.js';
 import { logger } from '../utils/logger.js';
 import {
+    applyModelSettings,
     resolvePresentationGenerationSettings,
     type PresentationSettingsResolution,
 } from './runtimeRequestControls.js';
@@ -132,34 +133,6 @@ const candidateSystemPrompt = (input: {
 const toPresentationSettingsMetadata = (
     resolution: PresentationSettingsResolution
 ): PresentationSettingsMetadata => ({ ...resolution });
-
-const applyPresentationSettings = (
-    request: GenerationRequest,
-    settings: PresentationSettingsResolution['forwarded']
-): GenerationRequest => {
-    const candidateRequest: GenerationRequest = { ...request };
-    delete candidateRequest.temperature;
-    delete candidateRequest.topP;
-    delete candidateRequest.reasoningEffort;
-    delete candidateRequest.verbosity;
-    delete candidateRequest.maxOutputTokens;
-    return {
-        ...candidateRequest,
-        ...(settings.maxOutputTokens !== undefined && {
-            maxOutputTokens: settings.maxOutputTokens,
-        }),
-        ...(settings.reasoningEffort !== undefined && {
-            reasoningEffort: settings.reasoningEffort,
-        }),
-        ...(settings.verbosity !== undefined && {
-            verbosity: settings.verbosity,
-        }),
-        ...(settings.temperature !== undefined && {
-            temperature: settings.temperature,
-        }),
-        ...(settings.topP !== undefined && { topP: settings.topP }),
-    };
-};
 
 const buildCandidateRequest = (
     request: GenerationRequest,
@@ -333,7 +306,7 @@ export const runPresentationCandidate = async (input: {
             model: input.config.profile.providerModel,
         });
     }
-    const candidateRequest = applyPresentationSettings(
+    const candidateRequest = applyModelSettings(
         input.generationRequest,
         settingsResolution.forwarded
     );

@@ -433,3 +433,78 @@ test('preserves temporary-unavailable and fallback provenance across later autom
     assert.equal(recovered.outcome, 'generated');
     assert.equal(providerAvailability.size(), 0);
 });
+
+test('re-resolves settings for the fallback profile of each generation attempt', async () => {
+    const first: ModelProfile = {
+        ...makeProfile('first-profile'),
+        maxOutputTokens: 320,
+        capabilities: {
+            canUseSearch: false,
+            supportedReasoningEfforts: ['none'],
+        },
+        defaultReasoningEffort: 'none',
+    };
+    const second: ModelProfile = {
+        ...makeProfile('second-profile'),
+        maxOutputTokens: 640,
+        capabilities: {
+            canUseSearch: false,
+            supportedReasoningEfforts: ['low'],
+        },
+        defaultReasoningEffort: 'low',
+    };
+    const requests: GenerationRequest[] = [];
+    const runtime: GenerationRuntime = {
+        kind: 'test-runtime',
+        async generate(request) {
+            requests.push(request);
+            if (request.model === first.providerModel) {
+                return {
+                    text: '',
+                    model: request.model,
+                    completion: {
+                        status: 'incomplete',
+                        reason: 'max_output_tokens',
+                        visibleTextLength: 0,
+                    },
+                    provenance: 'Inferred',
+                    citations: [],
+                };
+            }
+            return {
+                text: 'Fallback answer.',
+                model: request.model,
+                completion: { status: 'completed', visibleTextLength: 16 },
+                provenance: 'Inferred',
+                citations: [],
+            };
+        },
+    };
+
+    const result = await runGeneration({
+        runtime,
+        request: { messages: [{ role: 'user', content: 'Reply.' }] },
+        candidates: [first, second],
+    });
+
+    assert.equal(result.outcome, 'generated');
+    assert.deepEqual(
+        requests.map((request) => ({
+            model: request.model,
+            maxOutputTokens: request.maxOutputTokens,
+            reasoningEffort: request.reasoningEffort,
+        })),
+        [
+            {
+                model: first.providerModel,
+                maxOutputTokens: 320,
+                reasoningEffort: 'none',
+            },
+            {
+                model: second.providerModel,
+                maxOutputTokens: 640,
+                reasoningEffort: 'low',
+            },
+        ]
+    );
+});
