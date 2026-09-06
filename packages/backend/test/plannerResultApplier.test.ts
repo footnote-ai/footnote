@@ -81,7 +81,7 @@ const createPlannerStepResult = (
     ...overrides,
 });
 
-const createApplier = () => {
+const createApplier = (options: { nativeSearchRequired?: boolean } = {}) => {
     const enabledProfiles = runtimeConfig.modelProfiles.catalog.filter(
         (profile) => profile.enabled
     );
@@ -103,12 +103,50 @@ const createApplier = () => {
         searchCapableProfiles,
         enabledProfilesById,
         defaultResponseProfile,
+        nativeSearchRequired: options.nativeSearchRequired ?? true,
         logger: {
             debug: () => undefined,
             warn: () => undefined,
         },
     });
 };
+
+test('PlannerResultApplier keeps native search capability separate from optional context search', () => {
+    const applier = createApplier({ nativeSearchRequired: false });
+    const output = applier({
+        normalizedRequest: createChatRequest(),
+        plannerStepResult: createPlannerStepResult({
+            plan: {
+                ...createPlannerStepResult().plan,
+                generation: {
+                    ...createPlannerStepResult().plan.generation,
+                    toolIntent: undefined,
+                },
+            },
+            diagnostics: {
+                rawToolIntentPresent: false,
+                normalizedToolIntentPresent: false,
+                toolIntentRejected: false,
+                toolIntentRejectionReasons: [],
+            },
+        }),
+        clarificationContinuation: { kind: 'none' },
+        resolvedExecutionPolicy: resolveExecutionContract({
+            presetId: 'quality-grounded',
+        }).policyContract,
+    });
+
+    assert.equal(output.rerouteApplied, false);
+    assert.equal(
+        output.originalSelectedProfileId,
+        output.effectiveSelectedProfileId
+    );
+    assert.ok(
+        output.contextStepRequests?.some(
+            (request) => request.integrationName === 'web_search'
+        )
+    );
+});
 
 test('PlannerResultApplier applies surface coercion for web requests', () => {
     const applier = createApplier();

@@ -73,6 +73,8 @@ export type CreatePlannerResultApplierInput = {
     searchCapableProfiles: ModelProfile[];
     enabledProfilesById: Map<string, ModelProfile>;
     defaultResponseProfile: ModelProfile;
+    /** Whether this chat flow requires provider-native search capability. */
+    nativeSearchRequired: boolean;
     weatherForecastTool?: WeatherForecastTool;
     logger: {
         debug: (message: string, meta?: Record<string, unknown>) => void;
@@ -184,6 +186,7 @@ export const createPlannerResultApplier = (
                 enabledProfilesById: input.enabledProfilesById,
                 defaultResponseProfile: input.defaultResponseProfile,
                 generationForExecution,
+                nativeSearchRequired: input.nativeSearchRequired,
                 resolvedExecutionPolicy: plannerInput.resolvedExecutionPolicy,
                 generateProfileOverrideId:
                     plannerInput.normalizedRequest.generateProfileId,

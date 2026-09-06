@@ -734,6 +734,9 @@ export const createChatOrchestrator = ({
             searchCapableProfiles,
             enabledProfilesById,
             defaultResponseProfile,
+            // The optional web-search context step is separate from
+            // provider-native search capability and may fail open.
+            nativeSearchRequired: false,
             weatherForecastTool,
             logger: chatOrchestratorLogger,
         });

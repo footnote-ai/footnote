@@ -1,10 +1,10 @@
 # Web Search Context Integration
 
-This document describes the backend-owned `web_search` context integration.
+This document describes the optional `web_search` context integration.
 
-`web_search` runs as a workflow context step. It provides bounded, advisory
-search context before generation and keeps provider behavior visible in
-provenance-friendly metadata.
+`web_search` is an optional workflow context step. When enabled and configured,
+it provides bounded, advisory search context before generation. If unavailable,
+generation continues fail-open without retrieved context.
 
 ## Purpose and boundary
 

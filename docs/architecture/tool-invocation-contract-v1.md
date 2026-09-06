@@ -45,9 +45,13 @@ Orchestrator to runtime:
 
 1. Start with `ToolInvocationRequest`:
    `requested=true` + `eligible=true` when planner requested search.
-2. If selected profile cannot search and reroute is not allowed/available:
-   set `eligible=false` + `reasonCode="search_not_supported_by_selected_profile"` and do not send `search` to runtime.
-3. If provider lacks mapped search tool support at runtime adapter:
+2. Backend `web_search` context eligibility is independent of the selected
+   profile's provider-native `canUseSearch` capability. Disabled or
+   unconfigured context search returns `tool_unavailable` and generation
+   continues fail-open.
+3. A caller that explicitly requires provider-native search may apply the
+   capability floor and use `search_not_supported_by_selected_profile`.
+4. If the provider lacks mapped search tool support at the runtime adapter:
    set outcome to `skipped` + `reasonCode="tool_unavailable"` (fail-open generation continues).
 
 Runtime to metadata:
@@ -73,7 +77,7 @@ Success path (`executed`):
 }
 ```
 
-Fail-open path (`skipped` due eligibility):
+Fail-open path (`skipped` because native search was explicitly required):
 
 ```json
 {

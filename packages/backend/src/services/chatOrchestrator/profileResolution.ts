@@ -40,6 +40,8 @@ type ResolveExecutionProfileInput = {
     enabledProfilesById: Map<string, ModelProfile>;
     defaultResponseProfile: ModelProfile;
     generationForExecution: ChatGenerationPlan;
+    /** Whether this resolution requires provider-native search capability. */
+    nativeSearchRequired: boolean;
     resolvedExecutionPolicy: ExecutionContract;
     generateProfileOverrideId?: string;
 };
@@ -79,7 +81,9 @@ export const resolveExecutionProfile = (
         step: 'generation',
         requestedCapabilityProfile: input.plan.requestedCapabilityProfile,
         profiles: input.enabledProfiles,
-        requiresSearch: input.generationForExecution.search !== undefined,
+        requiresSearch:
+            input.nativeSearchRequired &&
+            input.generationForExecution.search !== undefined,
         routingIntent: input.resolvedExecutionPolicy.routing,
     });
     const plannerSelectedModelProfileId =
@@ -177,6 +181,7 @@ export const resolveExecutionProfile = (
     let toolExecutionContext: ToolExecutionContext | undefined;
     let generationForExecution = input.generationForExecution;
     if (
+        input.nativeSearchRequired &&
         generationForExecution.search &&
         !selectedResponseProfile.capabilities.canUseSearch
     ) {

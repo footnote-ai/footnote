@@ -1275,7 +1275,7 @@ test('planner capability selection chooses search-capable profile without rerout
     );
 });
 
-test('planner-selected non-search profile reports no tool-capable fallback when search floor cannot be met', async () => {
+test('planner-selected non-search profile still uses backend search integration', async () => {
     let observedSearch: unknown;
     let capturedExecutionContext:
         ResponseMetadataRuntimeContext['executionContext'] | undefined;
@@ -1358,7 +1358,7 @@ test('planner-selected non-search profile reports no tool-capable fallback when 
     assert.equal(capturedExecutionContext?.tool?.status, 'skipped');
     assert.equal(
         capturedExecutionContext?.tool?.reasonCode,
-        'search_reroute_no_tool_capable_fallback_available'
+        'tool_unavailable'
     );
 });
 
@@ -1508,7 +1508,7 @@ test('normal message flow returns summary-equivalent response metadata fields', 
     assert.equal(response.metadata?.safetyTier, 'Low');
 });
 
-test('search drop path exposes reason codes in response execution metadata', async () => {
+test('backend search integration remains separate from provider capability metadata', async () => {
     let capturedExecutionContext:
         ResponseMetadataRuntimeContext['executionContext'] | undefined;
     const originalModelProfiles = runtimeConfig.modelProfiles;
@@ -1581,7 +1581,7 @@ test('search drop path exposes reason codes in response execution metadata', asy
         assert.equal(capturedExecutionContext?.tool?.status, 'skipped');
         assert.equal(
             capturedExecutionContext?.tool?.reasonCode,
-            'search_reroute_no_tool_capable_fallback_available'
+            'tool_unavailable'
         );
         assert.equal(response.metadata?.provenance, 'Inferred');
     } finally {
