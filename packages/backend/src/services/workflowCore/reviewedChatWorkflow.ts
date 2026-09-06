@@ -184,6 +184,8 @@ export type RunBoundedReviewWorkflowInput = {
         enabledProfilesById: Map<string, ModelProfile>;
         generateCandidates: ResolvedStepRoutingCandidate[];
         assessCandidates: ResolvedStepRoutingCandidate[];
+        /** Whether generation must use provider-native search tooling. */
+        nativeSearchRequired?: boolean;
         providerAvailability?: ProviderAvailabilityStore;
     };
     presentation?: {
@@ -1745,7 +1747,9 @@ export const runBoundedReviewWorkflow = async (
                                 }),
                       enabledProfilesById:
                           stepRoutingChainSet.enabledProfilesById,
-                      requiresSearch: boundedRequest.search !== undefined,
+                      requiresSearch:
+                          stepRoutingChainSet.nativeSearchRequired === true &&
+                          boundedRequest.search !== undefined,
                       providerAvailability:
                           stepRoutingChainSet.providerAvailability,
                       runWithProfile: async (profile, attemptIndex) => {

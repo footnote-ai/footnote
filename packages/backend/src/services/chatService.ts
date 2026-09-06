@@ -1042,6 +1042,9 @@ export const createChatService = ({
     executionContractTrustGraph,
     presentationConfig,
 }: CreateChatServiceOptions) => {
+    // The current chat path uses backend Context Integration retrieval. Keep
+    // this explicit so provider-native search can be enabled independently.
+    const nativeSearchRequired = false;
     const configuredPresentationProfileId =
         presentationConfig?.profileId ??
         runtimeConfig.chatWorkflow.presentation.profileId;
@@ -1357,7 +1360,8 @@ export const createChatService = ({
                     step: 'generate',
                     candidates: generateProfileCandidates,
                     enabledProfilesById,
-                    requiresSearch: request.search !== undefined,
+                    requiresSearch:
+                        nativeSearchRequired && request.search !== undefined,
                     runWithProfile: async (profile, attemptIndex) => {
                         const settingsResolution = resolveModelSettings({
                             profile,
@@ -1581,6 +1585,7 @@ export const createChatService = ({
                         enabledProfilesById,
                         generateCandidates: generateProfileCandidates,
                         assessCandidates: assessProfileCandidates,
+                        nativeSearchRequired,
                     },
                     presentation: {
                         config: effectivePresentationConfig,

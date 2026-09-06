@@ -72,6 +72,7 @@ const runGeneration = async (input: {
     runtime: GenerationRuntime;
     request: GenerationRequest;
     candidates: ModelProfile[];
+    nativeSearchRequired?: boolean;
     providerAvailability?: ProviderAvailabilityStore;
 }) =>
     runBoundedReviewWorkflow({
@@ -112,6 +113,7 @@ const runGeneration = async (input: {
                 chooseOneUsed: false,
             })),
             assessCandidates: [],
+            nativeSearchRequired: input.nativeSearchRequired,
             providerAvailability: input.providerAvailability,
         },
     });
@@ -213,6 +215,54 @@ test('gives a large-prompt generation useful output room and advances after inco
         visibleTextLength: 0,
     });
     assert.equal(attempts[0]?.usage?.totalTokens, 14_000);
+});
+
+test('does not treat context search as a provider-native search requirement', async () => {
+    const profile = makeProfile('context-capable-generation');
+    let generationCalls = 0;
+    const runtime: GenerationRuntime = {
+        kind: 'test-runtime',
+        async generate(request) {
+            generationCalls += 1;
+            assert.deepEqual(request.search, {
+                query: 'latest policy change',
+                contextSize: 'low',
+                intent: 'current_facts',
+            });
+            return {
+                text: 'A complete answer using retrieved context.',
+                model: profile.providerModel,
+                completion: {
+                    status: 'completed',
+                    visibleTextLength: 39,
+                },
+                usage: {
+                    promptTokens: 10,
+                    completionTokens: 8,
+                    totalTokens: 18,
+                },
+                provenance: 'Retrieved',
+                citations: [],
+            };
+        },
+    };
+
+    const result = await runGeneration({
+        runtime,
+        request: {
+            messages: [{ role: 'user', content: 'Need current context.' }],
+            search: {
+                query: 'latest policy change',
+                contextSize: 'low',
+                intent: 'current_facts',
+            },
+        },
+        candidates: [profile],
+        nativeSearchRequired: false,
+    });
+
+    assert.equal(result.outcome, 'generated');
+    assert.equal(generationCalls, 1);
 });
 
 test('rejects empty completed output before selecting a fallback candidate', async () => {
