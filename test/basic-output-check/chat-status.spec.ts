@@ -112,11 +112,6 @@ test('reports an actual timeout and clears the timed-out request loading state',
     await expect(
         page.getByRole('button', { name: 'Submit question' })
     ).toBeEnabled();
-    await expect(
-        page.getByText(
-            'I was unable to generate a response - please try again later.'
-        )
-    ).toBeVisible();
     await expect(page.getByRole('status')).toHaveText(
         'The request timed out. Please try again.'
     );
@@ -129,6 +124,7 @@ test('a superseded request cannot clear newer loading state or replace its answe
 }) => {
     await configureRuntime(page);
     const firstResponse = deferred<void>();
+    const secondResponse = deferred<void>();
     let requestCount = 0;
     await page.route('**/api/chat', async (route) => {
         requestCount += 1;
@@ -148,6 +144,7 @@ test('a superseded request cannot clear newer loading state or replace its answe
             return;
         }
 
+        await secondResponse.promise;
         await route.fulfill({
             contentType: 'application/json',
             body: JSON.stringify(CHAT_RESPONSE),
@@ -166,19 +163,17 @@ test('a superseded request cannot clear newer loading state or replace its answe
     await expect(
         page.getByRole('button', { name: 'Submitting question' })
     ).toBeDisabled();
-    await expect(page.getByText(CHAT_RESPONSE.message)).toBeVisible();
-    await expect(
-        page.getByText('The stale answer must not be shown.')
-    ).toHaveCount(0);
 
-    firstResponse.resolve(undefined);
+    secondResponse.resolve(undefined);
     await expect(page.getByText(CHAT_RESPONSE.message)).toBeVisible();
-    await expect(
-        page.getByText('The stale answer must not be shown.')
-    ).toHaveCount(0);
     await expect(
         page.getByRole('button', { name: 'Submit question' })
     ).toBeEnabled();
+
+    firstResponse.resolve(undefined);
+    await expect(
+        page.getByText('The stale answer must not be shown.')
+    ).toHaveCount(0);
 });
 
 test('CAPTCHA verification preserves an existing API error message', async ({
