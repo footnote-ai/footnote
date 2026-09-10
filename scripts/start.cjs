@@ -46,6 +46,10 @@ const apiClientIndexDistPath = path.join(
 );
 const devSettingsDirPath = path.join(repoRoot, '.footnote-dev');
 const devSettingsPath = path.join(devSettingsDirPath, 'footnote.runtime.yaml');
+const devSettingsLocalOverridePath = path.join(
+    devSettingsDirPath,
+    'footnote.local.yaml'
+);
 
 const pnpmBin = process.platform === 'win32' ? 'pnpm.cmd' : 'pnpm';
 const nodeBin = process.execPath;
@@ -200,13 +204,19 @@ const renderRuntimeSettings = (source, port) => {
 };
 
 const createRuntimeSettingsSnapshot = (port) => {
-    if (!fs.existsSync(settingsPath)) {
+    // Prefer a gitignored local override so `pnpm start` does not silently
+    // discard machine-specific settings (for example local Ollama model tests).
+    // The tracked footnote.yaml remains the fallback for fresh installs.
+    const sourcePath = fs.existsSync(devSettingsLocalOverridePath)
+        ? devSettingsLocalOverridePath
+        : settingsPath;
+    if (!fs.existsSync(sourcePath)) {
         throw new Error(
-            `[start] Missing base settings file at ${settingsPath}. Run setup again to regenerate footnote.yaml.`
+            `[start] Missing base settings file at ${sourcePath}. Run setup again to regenerate footnote.yaml.`
         );
     }
 
-    const source = fs.readFileSync(settingsPath, 'utf8');
+    const source = fs.readFileSync(sourcePath, 'utf8');
     const rendered = renderRuntimeSettings(source, port);
     fs.mkdirSync(devSettingsDirPath, { recursive: true });
     fs.writeFileSync(devSettingsPath, rendered, 'utf8');
