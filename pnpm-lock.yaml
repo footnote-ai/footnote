@@ -291,6 +291,9 @@ importers:
       globby:
         specifier: 'catalog:'
         version: 16.2.3
+      js-yaml:
+        specifier: 'catalog:'
+        version: 3.15.1
       prettier:
         specifier: 'catalog:'
         version: 3.9.6
