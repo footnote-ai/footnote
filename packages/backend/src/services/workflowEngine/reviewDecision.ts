@@ -10,6 +10,7 @@ import type {
     PartialResponseTemperament,
     TraceAxisScore,
 } from '@footnote/contracts/policy';
+import type { GenerationStructuredOutput } from '@footnote/agent-runtime';
 import { err, ok, type Result } from 'neverthrow';
 import { z } from 'zod';
 import { sanitizeReviewModuleIds } from '../reviewModules.js';
@@ -31,10 +32,7 @@ export type ReviewDecision = {
 };
 
 export type ReviewDecisionParseFailureReason =
-    | 'empty_output'
-    | 'non_json_object'
-    | 'invalid_json'
-    | 'schema_invalid';
+    'empty_output' | 'non_json_object' | 'invalid_json' | 'schema_invalid';
 
 export type ReviewDecisionParseFailure = {
     reason: ReviewDecisionParseFailureReason;
@@ -165,6 +163,50 @@ const ReviewDecisionSchema = z
             }
         }
     });
+
+/** Native schema request for reviewers; the parser remains the final authority. */
+export const REVIEW_DECISION_STRUCTURED_OUTPUT: GenerationStructuredOutput = {
+    name: 'review_decision',
+    description:
+        'A bounded decision about whether a draft is final or needs revision.',
+    schema: {
+        type: 'object',
+        properties: {
+            reviewDecision: { type: 'string', enum: ['finalize', 'revise'] },
+            reviewReason: { type: 'string' },
+            revisionInstruction: { type: 'string' },
+            traceAlignment: { type: 'string', enum: ['aligned', 'misaligned'] },
+            traceAlignmentReason: { type: 'string' },
+            finalTemperament: {
+                type: 'object',
+                properties: {
+                    tightness: { type: 'integer', minimum: 1, maximum: 5 },
+                    rationale: { type: 'integer', minimum: 1, maximum: 5 },
+                    attribution: { type: 'integer', minimum: 1, maximum: 5 },
+                    caution: { type: 'integer', minimum: 1, maximum: 5 },
+                    extent: { type: 'integer', minimum: 1, maximum: 5 },
+                },
+                additionalProperties: false,
+            },
+            moduleHints: { type: 'array', items: { type: 'string' } },
+            concerns: {
+                type: 'object',
+                properties: {
+                    length: { type: 'string', enum: ['too_long', 'ok'] },
+                    style: { type: 'string', enum: ['too_stiff', 'ok'] },
+                    evidence: {
+                        type: 'string',
+                        enum: ['needs_caution', 'ok'],
+                    },
+                },
+                additionalProperties: false,
+            },
+            routingHints: { type: 'array', items: { type: 'string' } },
+        },
+        required: ['reviewDecision', 'reviewReason'],
+        additionalProperties: true,
+    },
+};
 
 const normalizeReviewDecision = (
     parsedDecision: z.infer<typeof ReviewDecisionSchema>

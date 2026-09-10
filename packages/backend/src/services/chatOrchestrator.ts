@@ -10,7 +10,10 @@ import type {
     PostChatRequest,
     PostChatResponse,
 } from '@footnote/contracts/web';
-import type { ModelProfile } from '@footnote/contracts';
+import {
+    resolveModelProfileCapabilityFacts,
+    type ModelProfile,
+} from '@footnote/contracts';
 import type { SafetyTier } from '@footnote/contracts/policy';
 import { renderConversationPromptLayers } from './prompts/conversationPromptLayers.js';
 import {
@@ -198,16 +201,21 @@ export const createChatOrchestrator = ({
         getActivePlannerProfile: () => ModelProfile,
         safetyIdentifier: string | undefined
     ) => {
+        const plannerCapabilityFacts = resolveModelProfileCapabilityFacts(
+            getActivePlannerProfile().capabilities
+        );
         const directOpenAiStructuredExecutor =
             runtimeConfig.openai.plannerStructuredOutputEnabled &&
             runtimeConfig.openai.apiKey &&
-            generationRuntime.kind !== 'test-runtime'
+            generationRuntime.kind !== 'test-runtime' &&
+            plannerCapabilityFacts.structuredOutput !== 'unsupported'
                 ? createOpenAiChatPlannerStructuredExecutor({
                       apiKey: runtimeConfig.openai.apiKey,
                   })
                 : undefined;
         const useRuntimeStructuredExecutor =
             runtimeConfig.openai.plannerStructuredOutputEnabled &&
+            plannerCapabilityFacts.structuredOutput !== 'unsupported' &&
             (getActivePlannerProfile().provider === 'openrouter' ||
                 getActivePlannerProfile().provider === 'openai') &&
             generationRuntime.kind !== 'test-runtime';
@@ -242,6 +250,93 @@ export const createChatOrchestrator = ({
                             'Planner settings resolution omitted its required output limit.'
                         );
                     }
+                    const activePlannerCapabilityFacts =
+                        resolveModelProfileCapabilityFacts(
+                            activePlannerProfile.capabilities
+                        );
+                    const nativeStructuredProvider =
+                        activePlannerProfile.provider === 'openai' ||
+                        activePlannerProfile.provider === 'openrouter';
+                    // Unknown model metadata remains fail-open for known native
+                    // providers. Providers without a native structured seam use
+                    // the existing bounded text-JSON compatibility path.
+                    if (
+                        !nativeStructuredProvider ||
+                        activePlannerCapabilityFacts.structuredOutput ===
+                            'unsupported'
+                    ) {
+                        const compatibilityResult =
+                            await generationRuntime.generate({
+                                ...resolvedRequest,
+                                model: activePlannerProfile.providerModel,
+                                provider: activePlannerProfile.provider,
+                                capabilities: activePlannerProfile.capabilities,
+                                providerRouting:
+                                    activePlannerProfile.providerRouting,
+                                maxOutputTokens: resolvedMaxOutputTokens,
+                                ...(safetyIdentifier !== undefined && {
+                                    safetyIdentifier,
+                                }),
+                            });
+                        if (
+                            compatibilityResult.completion?.status ===
+                                'incomplete' ||
+                            compatibilityResult.finishReason === 'length' ||
+                            compatibilityResult.finishReason === 'max_tokens'
+                        ) {
+                            throw new ChatPlannerStructuredOutputError(
+                                'incomplete',
+                                'Planner compatibility output was incomplete.'
+                            );
+                        }
+                        if (
+                            compatibilityResult.completion?.status ===
+                                'failed' ||
+                            compatibilityResult.finishReason === 'refusal' ||
+                            compatibilityResult.finishReason === 'refused' ||
+                            compatibilityResult.finishReason ===
+                                'content-filter' ||
+                            compatibilityResult.finishReason ===
+                                'content_filter'
+                        ) {
+                            throw new ChatPlannerStructuredOutputError(
+                                'runtime_failure',
+                                'Planner compatibility output was unavailable.'
+                            );
+                        }
+                        if (compatibilityResult.text.trim().length === 0) {
+                            throw new ChatPlannerStructuredOutputError(
+                                'no_output',
+                                'Planner compatibility output was empty.'
+                            );
+                        }
+                        let compatibilityDecision: unknown;
+                        try {
+                            compatibilityDecision = JSON.parse(
+                                compatibilityResult.text
+                            ) as unknown;
+                        } catch (error) {
+                            throw new ChatPlannerStructuredOutputError(
+                                'parse_failure',
+                                'Planner compatibility output was not valid JSON.',
+                                { cause: error }
+                            );
+                        }
+                        return {
+                            decision: removePlannerTransportNulls(
+                                compatibilityDecision
+                            ),
+                            provider: activePlannerProfile.provider,
+                            model: compatibilityResult.model,
+                            usage: compatibilityResult.usage,
+                            upstreamAttribution:
+                                compatibilityResult.upstreamAttribution,
+                            rawArguments: compatibilityResult.text.slice(
+                                0,
+                                2_000
+                            ),
+                        };
+                    }
                     if (
                         activePlannerProfile.provider === 'openai' &&
                         directOpenAiStructuredExecutor !== undefined
@@ -270,7 +365,11 @@ export const createChatOrchestrator = ({
                                 safetyIdentifier,
                             }),
                         });
-                        if (result.completion?.status === 'incomplete') {
+                        if (
+                            result.completion?.status === 'incomplete' ||
+                            result.finishReason === 'length' ||
+                            result.finishReason === 'max_tokens'
+                        ) {
                             throw new ChatPlannerStructuredOutputError(
                                 'incomplete',
                                 'Structured planner output was incomplete.'
@@ -284,7 +383,9 @@ export const createChatOrchestrator = ({
                         }
                         if (
                             result.finishReason === 'refusal' ||
-                            result.finishReason === 'content-filter'
+                            result.finishReason === 'refused' ||
+                            result.finishReason === 'content-filter' ||
+                            result.finishReason === 'content_filter'
                         ) {
                             throw new ChatPlannerStructuredOutputError(
                                 'refusal',
@@ -665,6 +766,11 @@ export const createChatOrchestrator = ({
                     }
                     return plannerResult;
                 },
+                retryReasonCode: (plannerResult) =>
+                    plannerResult.execution.status === 'failed'
+                        ? (plannerResult.execution.reasonCode ??
+                          'planner_runtime_error')
+                        : undefined,
             });
 
             if (chainResult.status === 'executed') {

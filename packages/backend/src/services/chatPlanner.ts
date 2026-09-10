@@ -2138,6 +2138,9 @@ export const createChatPlanner = ({
                 executePlanner &&
                 (allowTextJsonCompatibilityFallback ||
                     error instanceof SyntaxError ||
+                    (error instanceof ChatPlannerStructuredOutputError &&
+                        (error.outcome === 'unsupported_route' ||
+                            error.outcome === 'schema_rejected')) ||
                     (error instanceof Error &&
                         /Failed structured planner argument parsing/i.test(
                             error.message

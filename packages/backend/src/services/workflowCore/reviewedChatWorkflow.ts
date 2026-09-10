@@ -51,6 +51,7 @@ import {
     DEFAULT_REVIEW_DECISION_PROMPT,
     DEFAULT_REVISION_PROMPT_PREFIX,
     parseReviewDecisionOutputResult,
+    REVIEW_DECISION_STRUCTURED_OUTPUT,
 } from '../workflowEngine/reviewDecision.js';
 import { buildAssessSignals } from '../workflowEngine/reviewLoopSignals.js';
 import { buildWorkflowReviewParseFailureSignals } from '@footnote/contracts/policy';
@@ -104,6 +105,12 @@ import {
     attachGenerationAttemptEvidence,
     normalizeGenerationResultEvidence,
 } from '../generationOutputAdmission.js';
+import {
+    isTypedOutputTransportUnavailable,
+    resolveTypedModelOutputPath,
+    validateTypedModelOutput,
+    type TypedModelOutputFailure,
+} from '../typedModelOutput.js';
 import type {
     AttemptResult,
     ExecuteInput,
@@ -238,6 +245,23 @@ type ContinuePlanContinuation = Extract<
     { continuation: 'continue_message' }
 >;
 type ContextStepManifestFailure = ModelInputEvidence['failures'][number];
+
+const typedReviewFailureToReasonCode = (
+    failure: TypedModelOutputFailure
+): ExecutionReasonCode => {
+    switch (failure) {
+        case 'empty':
+            return 'generation_empty_output';
+        case 'incomplete':
+            return 'generation_incomplete_before_output';
+        case 'refusal':
+        case 'runtime_failed':
+            return 'generation_failed_output';
+        case 'malformed':
+        case 'schema_invalid':
+            return 'generation_runtime_error';
+    }
+};
 
 const isPlainRecord = (value: unknown): value is Record<string, unknown> => {
     if (typeof value !== 'object' || value === null || Array.isArray(value)) {
@@ -1984,6 +2008,7 @@ export const runBoundedReviewWorkflow = async (
             };
         }
         let reviewResult: GenerationResult;
+        const reviewAttemptsByIndex = new Map<number, GenerationResult>();
         let routingAttempts: RoutingChainAttemptLog[] | undefined;
         let selectedProfile: ModelProfile | undefined;
         try {
@@ -1996,12 +2021,16 @@ export const runBoundedReviewWorkflow = async (
                       requiresSearch: false,
                       providerAvailability:
                           stepRoutingChainSet.providerAvailability,
-                      runWithProfile: async (profile) => {
+                      runWithProfile: async (profile, attemptIndex) => {
                           const settingsResolution = resolveModelSettings({
                               profile,
                               request: bounded,
                           });
-                          return generationRuntime.generate({
+                          const outputPath = resolveTypedModelOutputPath({
+                              provider: profile.provider,
+                              capabilities: profile.capabilities,
+                          });
+                          const requestForProfile = {
                               ...applyModelSettings(
                                   bounded,
                                   settingsResolution.applied
@@ -2010,13 +2039,74 @@ export const runBoundedReviewWorkflow = async (
                               provider: profile.provider,
                               capabilities: profile.capabilities,
                               providerRouting: profile.providerRouting,
+                          };
+                          let result: GenerationResult;
+                          try {
+                              result = normalizeGenerationResultEvidence(
+                                  await generationRuntime.generate({
+                                      ...requestForProfile,
+                                      ...(outputPath === 'native_schema' && {
+                                          structuredOutput:
+                                              REVIEW_DECISION_STRUCTURED_OUTPUT,
+                                      }),
+                                  })
+                              );
+                          } catch (error) {
+                              if (
+                                  outputPath !== 'native_schema' ||
+                                  !isTypedOutputTransportUnavailable(error)
+                              ) {
+                                  throw error;
+                              }
+                              // Native schema rejection is a transport fact,
+                              // not a policy failure: retry this profile using
+                              // the bounded parser compatibility path.
+                              result = normalizeGenerationResultEvidence(
+                                  await generationRuntime.generate(
+                                      requestForProfile
+                                  )
+                              );
+                          }
+                          reviewAttemptsByIndex.set(attemptIndex, result);
+                          return result;
+                      },
+                      retryReasonCode: (result) => {
+                          const validation = validateTypedModelOutput({
+                              result,
+                              parse: (text) => {
+                                  const parsed = (
+                                      input.parseReviewDecision ??
+                                      parseReviewDecisionOutputResult
+                                  )(text);
+                                  return parsed.isOk()
+                                      ? { valid: true, value: parsed.value }
+                                      : {
+                                            valid: false,
+                                            failure:
+                                                parsed.error.reason ===
+                                                'schema_invalid'
+                                                    ? ('schema_invalid' as const)
+                                                    : ('malformed' as const),
+                                        };
+                              },
                           });
+                          return validation.valid
+                              ? undefined
+                              : typedReviewFailureToReasonCode(
+                                    validation.failure
+                                );
                       },
                   })
                 : undefined;
             const routed =
                 chain === undefined ? undefined : toRoutingChainResult(chain);
             if (routed?.isErr()) {
+                if (routed.error.attempts.length > 0) {
+                    routingAttempts = attachGenerationAttemptEvidence(
+                        routed.error.attempts,
+                        reviewAttemptsByIndex
+                    );
+                }
                 return {
                     status: 'failed',
                     errorCode: routed.error.reasonCode,
@@ -2036,10 +2126,37 @@ export const runBoundedReviewWorkflow = async (
             }
             if (routed?.isOk()) {
                 reviewResult = routed.value.value;
-                routingAttempts = routed.value.attempts;
+                routingAttempts = attachGenerationAttemptEvidence(
+                    routed.value.attempts,
+                    reviewAttemptsByIndex
+                );
                 selectedProfile = routed.value.selected.profile;
             } else {
-                reviewResult = await generationRuntime.generate(bounded);
+                const outputPath = resolveTypedModelOutputPath({
+                    provider: bounded.provider,
+                    capabilities: bounded.capabilities,
+                });
+                const requestForOutput = {
+                    ...bounded,
+                    ...(outputPath === 'native_schema' && {
+                        structuredOutput: REVIEW_DECISION_STRUCTURED_OUTPUT,
+                    }),
+                };
+                try {
+                    reviewResult = normalizeGenerationResultEvidence(
+                        await generationRuntime.generate(requestForOutput)
+                    );
+                } catch (error) {
+                    if (
+                        outputPath !== 'native_schema' ||
+                        !isTypedOutputTransportUnavailable(error)
+                    ) {
+                        throw error;
+                    }
+                    reviewResult = normalizeGenerationResultEvidence(
+                        await generationRuntime.generate(bounded)
+                    );
+                }
             }
         } catch (error) {
             return {
@@ -2058,40 +2175,90 @@ export const runBoundedReviewWorkflow = async (
             };
         }
         const usage = captureUsage(reviewResult, bounded.model);
-        const parsed = (
-            input.parseReviewDecision ?? parseReviewDecisionOutputResult
-        )(reviewResult.text);
-        if (parsed.isErr()) {
+        const typedValidation = validateTypedModelOutput({
+            result: reviewResult,
+            parse: (text) => {
+                const parsed = (
+                    input.parseReviewDecision ?? parseReviewDecisionOutputResult
+                )(text);
+                return parsed.isOk()
+                    ? { valid: true, value: parsed.value }
+                    : {
+                          valid: false,
+                          failure:
+                              parsed.error.reason === 'schema_invalid'
+                                  ? ('schema_invalid' as const)
+                                  : ('malformed' as const),
+                      };
+            },
+        });
+        if (!typedValidation.valid) {
+            const parseFailure =
+                typedValidation.failure === 'malformed' ||
+                typedValidation.failure === 'schema_invalid'
+                    ? (
+                          input.parseReviewDecision ??
+                          parseReviewDecisionOutputResult
+                      )(reviewResult.text)
+                    : undefined;
             return {
                 status: 'failed',
-                errorCode: 'review_parse_error',
+                errorCode:
+                    typedValidation.failure === 'empty'
+                        ? 'review_empty_output'
+                        : typedValidation.failure === 'incomplete'
+                          ? 'review_incomplete_output'
+                          : typedValidation.failure === 'refusal'
+                            ? 'review_refusal_output'
+                            : 'review_parse_error',
                 retryable: false,
                 usage: { totalTokens: usage.totalTokens },
                 metadata: encodeMetadata({
                     status: 'failed',
                     summary:
-                        'Assessment returned invalid decision output; the latest valid draft was preserved.',
-                    reasonCode: 'generation_runtime_error',
+                        'Assessment returned no acceptable typed result; the latest valid draft was preserved.',
+                    reasonCode: typedReviewFailureToReasonCode(
+                        typedValidation.failure
+                    ),
                     model: usage.model,
                     usage: reviewResult.usage,
                     estimatedCost: usage.estimatedCost,
                     terminationReason: 'executor_error_fail_open',
-                    signals: {
-                        ...buildWorkflowReviewParseFailureSignals(parsed.error),
-                        ...(routingAttempts === undefined
-                            ? {}
-                            : buildRoutingChainSignals({
-                                  attempts: routingAttempts,
-                                  selectedProfileId:
-                                      selectedProfile?.id ?? null,
-                                  selectedProvider: selectedProfile?.provider,
-                                  selectedModel: selectedProfile?.providerModel,
-                              })),
-                    },
+                    ...(parseFailure?.isErr() === true
+                        ? {
+                              signals: {
+                                  ...buildWorkflowReviewParseFailureSignals(
+                                      parseFailure.error
+                                  ),
+                                  ...(routingAttempts === undefined
+                                      ? {}
+                                      : buildRoutingChainSignals({
+                                            attempts: routingAttempts,
+                                            selectedProfileId:
+                                                selectedProfile?.id ?? null,
+                                            selectedProvider:
+                                                selectedProfile?.provider,
+                                            selectedModel:
+                                                selectedProfile?.providerModel,
+                                        })),
+                              },
+                          }
+                        : routingAttempts === undefined
+                          ? {}
+                          : {
+                                signals: buildRoutingChainSignals({
+                                    attempts: routingAttempts,
+                                    selectedProfileId:
+                                        selectedProfile?.id ?? null,
+                                    selectedProvider: selectedProfile?.provider,
+                                    selectedModel:
+                                        selectedProfile?.providerModel,
+                                }),
+                            }),
                 }),
             };
         }
-        const decision = parsed.value;
+        const decision = typedValidation.value;
         const hints = extractRoutingHintsFromAssess({
             assessRawText: reviewResult.text,
             reviewDecision: decision,
