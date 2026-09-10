@@ -8,12 +8,66 @@
 
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
 
 import {
     parseOpenApiDocument,
     parseOperationMap,
+    validateOpenApiLinks,
     validateOperationMap,
 } from './validate-openapi-links';
+
+const completeOpenApi = `
+openapi: 3.1.0
+paths:
+  /example:
+    get:
+      operationId: getExample
+      x-codeRefs:
+        - packages/example.ts#getExample
+      responses:
+        '200':
+          description: ok
+`;
+
+const completeOperationMap = `
+# Operation Map
+
+| operationId | path | code refs |
+| --- | --- | --- |
+| \`getExample\` | \`GET /example\` | packages/example.ts#getExample |
+`;
+
+function withTempRepo<T>(
+    files: Record<string, string>,
+    callback: (repoRoot: string) => T
+): T {
+    const repoRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'openapi-links-'));
+    for (const [relativePath, content] of Object.entries(files)) {
+        const filePath = path.join(repoRoot, relativePath);
+        fs.mkdirSync(path.dirname(filePath), { recursive: true });
+        fs.writeFileSync(filePath, content);
+    }
+    try {
+        return callback(repoRoot);
+    } finally {
+        fs.rmSync(repoRoot, { force: true, recursive: true });
+    }
+}
+
+function completeFixtureFiles(): Record<string, string> {
+    return {
+        'docs/api/openapi.yaml': completeOpenApi,
+        'docs/api/operation-map.md': completeOperationMap,
+        'packages/example.ts': `/** @api.operationId: getExample @api.path: GET /example */
+export function getExample(): string {
+    return 'ok';
+}
+`,
+    };
+}
 
 test('keeps component x-codeRefs out of the adjacent operation', () => {
     const parsed = parseOpenApiDocument(`
@@ -167,4 +221,68 @@ paths:
     assert.deepEqual(errors, [
         'operation-map.md entry "getExample" code refs differ from OpenAPI (missing packages/example.ts#getExample; extra packages/example.ts#OldName)',
     ]);
+});
+
+test('passes a complete public validator fixture', () => {
+    const errors = withTempRepo(
+        completeFixtureFiles(),
+        (repoRoot) => validateOpenApiLinks({ repoRoot }).errors
+    );
+
+    assert.deepEqual(errors, []);
+});
+
+test('rejects path traversal and missing-file x-codeRefs', () => {
+    const files = completeFixtureFiles();
+    files['docs/api/openapi.yaml'] = completeOpenApi.replace(
+        '        - packages/example.ts#getExample',
+        '        - ../outside.ts#outside\n        - packages/missing.ts#missing'
+    );
+    files['docs/api/operation-map.md'] = completeOperationMap.replace(
+        'packages/example.ts#getExample',
+        '../outside.ts#outside, packages/missing.ts#missing'
+    );
+
+    const errors = withTempRepo(
+        files,
+        (repoRoot) => validateOpenApiLinks({ repoRoot }).errors
+    );
+
+    assert.ok(errors.some((error) => error.includes('out-of-repo x-codeRef')));
+    assert.ok(
+        errors.some((error) => error.includes('references missing file'))
+    );
+});
+
+test('rejects an annotated operation that is absent from OpenAPI', () => {
+    const files = completeFixtureFiles();
+    files['packages/example.ts'] = files['packages/example.ts'].replace(
+        '@api.operationId: getExample',
+        '@api.operationId: missingOperation'
+    );
+
+    const errors = withTempRepo(
+        files,
+        (repoRoot) => validateOpenApiLinks({ repoRoot }).errors
+    );
+
+    assert.ok(
+        errors.some((error) =>
+            error.includes(
+                'Code annotations reference unknown operationId "missingOperation"'
+            )
+        )
+    );
+});
+
+test('reports malformed YAML through the public validator entrypoint', () => {
+    const files = completeFixtureFiles();
+    files['docs/api/openapi.yaml'] = 'openapi: [\n';
+
+    const errors = withTempRepo(
+        files,
+        (repoRoot) => validateOpenApiLinks({ repoRoot }).errors
+    );
+
+    assert.ok(errors.some((error) => error.includes('not valid YAML')));
 });
