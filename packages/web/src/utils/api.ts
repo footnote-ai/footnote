@@ -57,7 +57,10 @@ export type WebApiClient = {
 export const createWebApiClient = (
     options: CreateWebApiClientOptions = {}
 ): WebApiClient => {
-    const shared = createSharedWebApiClient(options);
+    const shared = createSharedWebApiClient({
+        ...options,
+        clientErrorName: options.clientErrorName ?? 'ApiClientError',
+    });
 
     const chatQuestion = shared.chatQuestion;
     const getRuntimeConfig = shared.getRuntimeConfig;

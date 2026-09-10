@@ -83,10 +83,6 @@ test('reports an actual timeout and clears the timed-out request loading state',
     page,
 }) => {
     await page.clock.install();
-    test.fail(
-        true,
-        'Known separate bug: the web API client wraps the timeout before Chat can render its timeout status.'
-    );
     await configureRuntime(page);
     const pendingResponse = deferred<void>();
     await page.route('**/api/chat', async (route) => {
@@ -179,10 +175,6 @@ test('a superseded request cannot clear newer loading state or replace its answe
 test('CAPTCHA verification preserves an existing API error message', async ({
     page,
 }) => {
-    test.fail(
-        true,
-        'Known separate bug: the web API client error name does not match Chat CAPTCHA handling.'
-    );
     await installTurnstileStub(page);
     await configureRuntime(page, '1x00000000000000000000AA');
     await page.route('**/api/chat', async (route) => {
