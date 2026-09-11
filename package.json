@@ -46,6 +46,7 @@
         "validate-footnote-tags": "pnpm exec tsx scripts/validate-footnote-tags.ts",
         "validate-env": "pnpm exec tsx scripts/validate-env.ts",
         "validate-env-example-parity": "pnpm exec tsx scripts/validate-env-example-parity.ts",
+        "validate-deepwiki": "pnpm exec tsx scripts/validate-deepwiki.ts",
         "validate-openapi-links": "pnpm exec tsx scripts/validate-openapi-links.ts",
         "test:build": "pnpm exec node scripts/test-build.cjs",
         "test:authelia": "pnpm exec tsx scripts/test-authelia-profile.ts",

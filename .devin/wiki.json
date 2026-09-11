@@ -25,11 +25,11 @@
             "author": "Maintainer"
         },
         {
-            "content": "Treat docs freshness as part of the contract. If a PR changes route shapes, runtime schemas, provenance fields, trace behavior, or user-visible feature flows, the matching wiki page should be updated in the same PR.",
+            "content": "Treat docs freshness as part of the contract. If a PR changes route shapes, runtime schemas, provenance fields, trace behavior, or user-visible feature flows, update the matching canonical Markdown page in the same PR. Edit this DeepWiki configuration only when its structure, material source entrypoints, or durable generation guidance changes.",
             "author": "Maintainer"
         },
         {
-            "content": "Keep this file within the public/free DeepWiki validation limits: no more than 30 pages and 100 total notes across repo_notes and every page_notes array. Consolidate duplicate guidance and leave note-count headroom for future updates.",
+            "content": "Keep this file within Footnote's operating target of no more than 28 pages and 90 total notes. The hard validation limits remain 30 pages and 100 notes across repo_notes and every page_notes array; headroom warnings should leave room for future durable updates.",
             "author": "Maintainer"
         },
         {
@@ -95,39 +95,36 @@
         },
         {
             "title": "Architecture",
-            "purpose": "Explain the monorepo at a high level: what the backend, web app, Discord bot, and contracts package each do, and how they connect through the backend API.",
+            "purpose": "Explain Footnote's durable system shape: backend-owned execution and public APIs, replaceable runtime adapters, shared contracts, and client boundaries.",
             "parent": "Foundations",
             "entrypoints": [
                 "packages/backend/src",
+                "packages/backend/src/services/workflowCore",
                 "packages/web/src",
                 "packages/discord-bot/src",
                 "packages/api-client/src",
                 "packages/contracts/src",
                 "docs/api/openapi.yaml",
+                "docs/architecture/README.md",
                 "docs/architecture/prompt-resolution.md",
                 "docs/architecture/workflow.md",
-                "docs/architecture/langfuse-metadata-mirror.md",
                 "docs/architecture/context-integrations/README.md",
-                "docs/proposals/execution_adapters_workflow_authority.md",
                 "docs/architecture/canonical-response-footnote.md",
-                "docs/architecture/public-web-surfaces.md"
+                "docs/architecture/public-web-surfaces.md",
+                "docs/auth/README.md"
             ],
             "page_notes": [
                 {
-                    "content": "Use this as the system map. Make the package boundary obvious: contracts define shared shapes, backend owns execution and validation, and web and Discord are backend API clients.",
-                    "author": "Maintainer"
+                    "author": "Maintainer",
+                    "content": "Use this as the system map. Contracts define shared serializable shapes, backend owns execution and validation, and web and Discord integrate through backend HTTP APIs."
                 },
                 {
-                    "content": "Call out the runtime seam explicitly: backend composes `@footnote/agent-runtime`, rather than letting framework code leak into handlers. Mention that VoltAgent is the active chat text runtime.",
-                    "author": "Maintainer"
+                    "author": "Maintainer",
+                    "content": "The backend composes runtime adapters behind provider-agnostic interfaces. Runtime adapters do not own public response acceptance, review, termination, provenance, auth, or cost authority."
                 },
                 {
-                    "content": "Include prompt resolution order in the architecture page: start with shared prompts, apply optional `PROMPT_CONFIG_PATH` overrides, then choose one active persona from `BOT_PROFILE_*` settings.",
-                    "author": "Maintainer"
-                },
-                {
-                    "content": "The backend workflow remains Footnote's execution authority. VoltAgent and future runtimes are bounded execution adapters; they do not own public response acceptance, review, termination, provenance, or cost authority. This is current direction, not a second shipped overseer.",
-                    "author": "Maintainer"
+                    "author": "Maintainer",
+                    "content": "Prompt resolution starts with shared defaults, applies optional configuration overrides, then selects one active persona overlay."
                 }
             ]
         },
@@ -226,7 +223,6 @@
             "entrypoints": [
                 "docs/architecture/workflow.md",
                 "docs/architecture/footnote-and-common-agentic-patterns.md",
-                "packages/backend/src/services/workflowEngine.ts",
                 "packages/backend/src/services/plannerWorkflowSeams.ts",
                 "packages/backend/src/services/chatService/planContinuation.ts",
                 "packages/backend/src/services/chatService/planGenerationInput.ts",
@@ -239,16 +235,14 @@
                 "packages/web/src/utils/traceOutcome.ts",
                 "packages/backend/test/workflowProfileRegistry.test.ts",
                 "packages/backend/test/chatService.test.ts",
-                "packages/backend/test/chatOrchestrator.test.ts"
+                "packages/backend/test/chatOrchestrator.test.ts",
+                "packages/backend/src/services/workflowCore/reviewedChatWorkflow.ts",
+                "packages/backend/src/services/workflowCore/types.ts"
             ],
             "page_notes": [
                 {
                     "author": "Maintainer",
                     "content": "balanced and grounded presets use the shared reviewed workflow shape (generate -> assess -> planner re-entry -> generate)."
-                },
-                {
-                    "author": "Maintainer",
-                    "content": "Document stepRoutingChains: planner/generate/assess resolve independently per mode; balanced generation prefers Ollama then OpenAI, grounded generation prefers OpenAI then Ollama; chooseOne pools are deterministic and fail-open."
                 },
                 {
                     "author": "Maintainer",
@@ -370,8 +364,7 @@
                 "docs/decisions/2026-03-voltagent-runtime-adoption.md",
                 "docs/decisions/2026-03-legacy-openai-removal-and-runtime-branching.md",
                 "docs/decisions/2026-03-model-profile-catalog-and-staged-planner-selection.md",
-                "docs/proposals/execution_adapters_workflow_authority.md",
-                "docs/status/gpt-5-6-default-rollout-status.md"
+                "docs/decisions/2026-03-provider-agnostic-chat-planner-execution-and-fallbacks.md"
             ],
             "page_notes": [
                 {
@@ -383,7 +376,7 @@
                     "author": "Maintainer"
                 },
                 {
-                    "content": "Current behavior is VoltAgent-backed text generation plus dedicated image and voice adapters. The default OpenAI text profiles use the GPT-5.6 family, while profile selection and request controls remain backend-owned. Broader delegated-runtime behavior remains planning direction only, and model-native search is distinct from provider-neutral context integrations such as weather_forecast.",
+                    "content": "The package contains replaceable text, image, and voice adapters. Backend profile selection, request controls, provenance, traces, and cost authority remain outside this package.",
                     "author": "Maintainer"
                 }
             ]
@@ -436,12 +429,20 @@
         },
         {
             "title": "Backend",
-            "purpose": "Explain the backend package as the execution core of Footnote: request handling, validation, storage, tracing, and policy-aware server behavior.",
+            "purpose": "Explain the backend package as Footnote's public runtime boundary: request handling, workflow execution, validation, persistence, tracing, auth, and policy-aware server behavior.",
             "parent": "Packages",
             "entrypoints": [
                 "packages/backend/src",
                 "server.js",
                 "docs/api/openapi.yaml",
+                "packages/backend/src/handlers/internalText.ts",
+                "packages/backend/src/handlers/internalImage.ts",
+                "packages/backend/src/handlers/internalVoiceTts.ts",
+                "packages/backend/src/handlers/internalVoiceRealtime.ts",
+                "packages/backend/src/services/internalText.ts",
+                "packages/backend/src/services/internalImage.ts",
+                "packages/backend/src/services/internalVoiceTts.ts",
+                "packages/contracts/src/voice/types.ts",
                 "packages/backend/src/storage/incidents/sqliteIncidentStore.ts",
                 "packages/backend/src/utils/pseudonymization.ts",
                 "packages/backend/test/incidentStore.test.ts",
@@ -449,16 +450,16 @@
             ],
             "page_notes": [
                 {
-                    "content": "Make it clear that the backend owns execution, persistence, and validation. Web and Discord should be described as clients of backend HTTP APIs.",
-                    "author": "Maintainer"
+                    "author": "Maintainer",
+                    "content": "The backend owns execution, persistence, validation, and public response semantics. Web and Discord are clients of backend HTTP APIs, while trusted internal task routes remain separate from public chat."
                 },
                 {
-                    "content": "Describe runtime composition as a backend responsibility. The backend builds and selects the generation runtime, but it still owns the public chat contract and all user-facing provenance semantics.",
-                    "author": "Maintainer"
+                    "author": "Maintainer",
+                    "content": "Runtime composition is a backend responsibility, and the backend remains the authority for provenance, traces, auth, incidents, review semantics, and LLM cost recording."
                 },
                 {
-                    "content": "Incident storage and pseudonymization are backend support areas. See the handlers and storage modules for these features.",
-                    "author": "Maintainer"
+                    "author": "Maintainer",
+                    "content": "Incident storage and pseudonymization are backend support areas; inspect their handlers, stores, and focused tests when changing operational reporting."
                 }
             ]
         },
@@ -471,7 +472,7 @@
                 "packages/backend/src/services/chatOrchestrator.ts",
                 "packages/backend/src/services/chatService.ts",
                 "packages/backend/src/services/chatPlanner.ts",
-                "packages/backend/src/services/workflowEngine.ts",
+                "packages/backend/src/services/workflowCore/reviewedChatWorkflow.ts",
                 "packages/backend/src/services/workflowProfileRegistry.ts",
                 "packages/backend/src/services/workflowProfileContract.ts",
                 "packages/backend/src/services/chatOrchestrator/plannerResultApplier.ts",
@@ -536,38 +537,14 @@
             ]
         },
         {
-            "title": "Internal Tasks",
-            "purpose": "Document trusted internal backend routes for text, image, and voice tasks, including auth headers, rate limits, and fail-open behavior when providers are unavailable.",
-            "parent": "Backend",
-            "entrypoints": [
-                "packages/backend/src/handlers/internalText.ts",
-                "packages/backend/src/handlers/internalImage.ts",
-                "packages/backend/src/handlers/internalVoiceTts.ts",
-                "packages/backend/src/handlers/internalVoiceRealtime.ts",
-                "packages/backend/src/services/internalText.ts",
-                "packages/backend/src/services/internalImage.ts",
-                "packages/backend/src/services/internalVoiceTts.ts",
-                "packages/contracts/src/voice/types.ts",
-                "docs/api/openapi.yaml"
-            ],
-            "page_notes": [
-                {
-                    "content": "Make trusted auth requirements explicit. These routes require x-service-token or x-trace-token and are not public chat endpoints.",
-                    "author": "Maintainer"
-                },
-                {
-                    "content": "Include failure modes for provider-offline states and how callers should handle 429/503 responses.",
-                    "author": "Maintainer"
-                }
-            ]
-        },
-        {
             "title": "Config",
             "purpose": "Document backend configuration loading, environment bootstrap, public config exposure, and failure behavior when config is incomplete.",
             "parent": "Backend",
             "entrypoints": [
                 "packages/backend/src/bootstrapEnv.ts",
                 "packages/backend/src/config.ts",
+                "packages/backend/src/config/sections/accountAuth.ts",
+                "packages/backend/src/config/sections/services.ts",
                 "packages/backend/src/handlers/config.ts",
                 "packages/backend/src/handlers/setupSession.ts",
                 "packages/backend/src/handlers/adminSettings.ts",
@@ -575,18 +552,16 @@
                 "packages/backend/src/config/model-profiles.defaults.yaml",
                 "packages/backend/src/services/runtimeRequestControls.ts",
                 "packages/config-spec/src/settings-template.ts",
-                "packages/config-spec/src/env-spec.ts",
-                "docs/auth/README.md",
-                "docs/status/account-identity-and-access.md"
+                "packages/config-spec/src/env-spec.ts"
             ],
             "page_notes": [
                 {
-                    "content": "Explain which config is private, which config is exposed to clients, and where fail-open behavior is intentional.",
-                    "author": "Maintainer"
+                    "author": "Maintainer",
+                    "content": "Explain which configuration is private, which public config is exposed to clients, and where incomplete optional configuration degrades safely."
                 },
                 {
-                    "content": "Cover the operator settings/setup-link and reset flow: local setup creates a bounded operator session, settings remain backend-owned, and reset is an explicit local command rather than a public client capability. Keep planned account identity and sign-in work clearly separate from this shipped operator flow.",
-                    "author": "Maintainer"
+                    "author": "Maintainer",
+                    "content": "Cover the operator settings/setup-link and reset flow: local setup creates a bounded operator session, settings remain backend-owned, and reset is an explicit local command rather than a public client capability."
                 }
             ]
         },
@@ -645,36 +620,8 @@
             ],
             "page_notes": [
                 {
-                    "content": "Keep this page practical. Describe what the bot can do for users before branching into specific features such as images, voice, responses, and provenance.",
-                    "author": "Maintainer"
-                }
-            ]
-        },
-        {
-            "title": "Responses",
-            "purpose": "Document the core Discord response flow, from message intake and planner gating to response formatting and send behavior.",
-            "parent": "Discord",
-            "entrypoints": [
-                "packages/discord-bot/src/events/MessageCreate.ts",
-                "packages/discord-bot/src/utils/MessageProcessor.ts",
-                "packages/discord-bot/src/utils/response/ResponseHandler.ts",
-                "packages/discord-bot/src/api/botApi.ts",
-                "packages/backend/src/services/chatOrchestrator.ts",
-                "packages/backend/src/services/chatPlanner.ts",
-                "packages/backend/src/services/chatService.ts",
-                "packages/backend/src/services/responseMetadataHeuristics.ts",
-                "packages/agent-runtime/src",
-                "packages/contracts/src/web/types.ts",
-                "packages/contracts/src/web/schemas.ts"
-            ],
-            "page_notes": [
-                {
-                    "content": "Focus on the user-facing response path: when the bot chooses to respond, how catchup heuristics limit noise, and where formatting and provenance are attached.",
-                    "author": "Maintainer"
-                },
-                {
-                    "content": "Describe prompt/profile composition as a backend-owned concern. Discord should gather context and call backend APIs, while backend orchestration plus `@footnote/agent-runtime` own planning and model execution.",
-                    "author": "Maintainer"
+                    "author": "Maintainer",
+                    "content": "Keep this page practical: describe message intake, response formatting, provenance, images, voice, and the bot's backend API boundary before branching into feature details."
                 }
             ]
         },
@@ -748,36 +695,8 @@
             ],
             "page_notes": [
                 {
-                    "content": "Keep this page user-facing. Describe what users can do in the web app before diving into individual pages and components.",
-                    "author": "Maintainer"
-                },
-                {
-                    "content": "Embed is a secondary web surface covering iframe sizing and external integrations.",
-                    "author": "Maintainer"
-                }
-            ]
-        },
-        {
-            "title": "Web Chat",
-            "purpose": "Document the web ask flow: how the UI sends chat requests, displays answers, and exposes provenance cues in the browser.",
-            "parent": "Web",
-            "entrypoints": [
-                "packages/web/src/components/Chat.tsx",
-                "packages/web/src/components/MarkdownResponse.tsx",
-                "packages/web/src/components/ProvenanceFooter.tsx",
-                "packages/web/src/pages/ChatPage.tsx",
-                "packages/web/src/pages/EmbedPage.tsx",
-                "packages/web/src/App.tsx",
-                "packages/web/src/utils/api.ts"
-            ],
-            "page_notes": [
-                {
-                    "content": "Include one screenshot of the ask-and-answer flow so readers can connect the components to the real user experience.",
-                    "author": "Maintainer"
-                },
-                {
-                    "content": "Document `Chat` as the shared live flow for `/chat` and `/embed`: it owns request cancellation, local status, Markdown rendering, backend-returned provenance, and Turnstile state. If the invisible challenge fails or times out, it switches to a visible managed challenge instead of leaving submission stuck.",
-                    "author": "Maintainer"
+                    "author": "Maintainer",
+                    "content": "Keep this page user-facing. The shared Chat flow serves /chat and /embed, owns cancellation and local status, renders Markdown, shows backend-returned provenance, and handles Turnstile fallback; embed sizing is a secondary surface."
                 }
             ]
         },
@@ -922,6 +841,29 @@
                 {
                     "content": "Include the deployment path. `pnpm context:bundle` packages approved documents from a commit for the server image; Docker receives that commit as a build argument. Project context is disabled by default, and its embedding provider is configured separately from chat.",
                     "author": "Maintainer"
+                }
+            ]
+        },
+        {
+            "title": "Account Access",
+            "purpose": "Explain provider-neutral account sign-in and the separate backend authorization boundary for administrator settings.",
+            "parent": "Foundations",
+            "entrypoints": [
+                "docs/auth/README.md",
+                "docs/status/account-sign-in.md",
+                "docs/status/account-identity-and-access.md",
+                "packages/backend/src/handlers/accountAuth.ts",
+                "packages/backend/src/services/accountAuth.ts",
+                "packages/backend/src/services/adminAuthorization.ts",
+                "packages/backend/src/handlers/adminSettings.ts",
+                "packages/api-client/src/accountAuth.ts",
+                "packages/web/src/pages/AccountPage.tsx",
+                "packages/web/src/pages/AdminPage.tsx"
+            ],
+            "page_notes": [
+                {
+                    "author": "Maintainer",
+                    "content": "OIDC proves provider identity; backend policy separately authorizes administrator settings. Sessions use opaque local state, provider tokens are not retained, and disabling sign-in leaves public Footnote running."
                 }
             ]
         }
