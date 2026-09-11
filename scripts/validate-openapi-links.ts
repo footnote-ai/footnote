@@ -73,7 +73,7 @@ const HTTP_METHODS = new Set([
     'head',
     'trace',
 ]);
-const API_OPERATION_TAG_PATTERN = /@api\.operationId:\s*([A-Za-z0-9_]+)/g;
+const API_OPERATION_TAG_PATTERN = /@api\.operationId:\s*([^\s*]+)/g;
 const OPERATION_MAP_ROW_PATTERN =
     /^\|\s*`([^`]+)`\s*\|\s*`([^`]+)`\s*\|\s*(.*?)\s*\|\s*$/u;
 const IGNORED_DIRS = new Set([

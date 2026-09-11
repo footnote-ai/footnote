@@ -275,6 +275,27 @@ test('rejects an annotated operation that is absent from OpenAPI', () => {
     );
 });
 
+test('rejects an annotated operation with an unknown suffix', () => {
+    const files = completeFixtureFiles();
+    files['packages/example.ts'] = files['packages/example.ts'].replace(
+        '@api.operationId: getExample',
+        '@api.operationId: getExample-typo'
+    );
+
+    const errors = withTempRepo(
+        files,
+        (repoRoot) => validateOpenApiLinks({ repoRoot }).errors
+    );
+
+    assert.ok(
+        errors.some((error) =>
+            error.includes(
+                'Code annotations reference unknown operationId "getExample-typo"'
+            )
+        )
+    );
+});
+
 test('reports malformed YAML through the public validator entrypoint', () => {
     const files = completeFixtureFiles();
     files['docs/api/openapi.yaml'] = 'openapi: [\n';

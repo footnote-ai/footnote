@@ -681,6 +681,10 @@ function main() {
     const shouldRunOpenApiInChangedMode = changedFiles.some(
         (filePath) =>
             filePath === 'docs/api/openapi.yaml' ||
+            filePath === 'docs/api/openapi-code-linking.md' ||
+            filePath === 'docs/api/operation-map.md' ||
+            filePath === 'scripts/validate-openapi-links.test.ts' ||
+            filePath === 'scripts/validate-openapi-links.ts' ||
             /^packages\/.+\.(ts|tsx)$/.test(filePath)
     );
 
