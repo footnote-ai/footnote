@@ -102,7 +102,6 @@ test('records a skipped evaluator without treating it as a failure', () => {
         workflow,
         evaluator: {
             status: 'skipped',
-            reasonCode: 'evaluator_runtime_error',
             startedAtMs: 100,
             finishedAtMs: 100,
         },

@@ -192,6 +192,11 @@ export type RunBoundedReviewWorkflowInput = {
         result: GenerationResult,
         requestedModel: string | undefined
     ) => ReviewWorkflowUsageSummary;
+    /** Side-effect-free cost projection for nested routing attempts. */
+    estimateCost?: (
+        result: GenerationResult,
+        requestedModel: string | undefined
+    ) => ReviewWorkflowUsageSummary['estimatedCost'];
     plannerStepRecord?: StepRecord;
     plannerStepRequest?: PlannerStepRequest;
     plannerStepExecutor?: PlannerStepExecutor;
@@ -1135,6 +1140,14 @@ export const runBoundedReviewWorkflow = async (
         stepRoutingChainSet,
         presentation,
     } = input;
+    // Production supplies a pure estimator; the capture fallback preserves the
+    // existing test seam without changing the workflow's usage-recording pass.
+    const estimateAttemptCost = (
+        result: GenerationResult,
+        requestedModel: string | undefined
+    ): ReviewWorkflowUsageSummary['estimatedCost'] =>
+        input.estimateCost?.(result, requestedModel) ??
+        captureUsage(result, requestedModel).estimatedCost;
     const resolveAttemptCapabilityFacts = (
         provider: string | undefined,
         capabilities: ModelProfile['capabilities'] | undefined
@@ -2287,8 +2300,7 @@ export const runBoundedReviewWorkflow = async (
                     routed.error.attempts,
                     generationAttemptsByIndex,
                     {
-                        captureCost: (result, requestedModel) =>
-                            captureUsage(result, requestedModel).estimatedCost,
+                        captureCost: estimateAttemptCost,
                     }
                 );
             } else if (routed?.isOk()) {
@@ -2297,8 +2309,7 @@ export const runBoundedReviewWorkflow = async (
                     routed.value.attempts,
                     generationAttemptsByIndex,
                     {
-                        captureCost: (result, requestedModel) =>
-                            captureUsage(result, requestedModel).estimatedCost,
+                        captureCost: estimateAttemptCost,
                     }
                 );
                 selectedProfile = routed.value.selected.profile;
@@ -2352,6 +2363,10 @@ export const runBoundedReviewWorkflow = async (
                       ? {}
                       : { parentCandidateId }),
               });
+        const attemptSettings = toWorkflowAttemptSettings(
+            selectedSettings,
+            generationResult.providerObservedSettings
+        );
         const metadata = encodeMetadata({
             status: admitted ? 'executed' : 'failed',
             summary: !admitted
@@ -2381,17 +2396,9 @@ export const runBoundedReviewWorkflow = async (
             ...(generationResult.completion === undefined
                 ? {}
                 : { completion: generationResult.completion }),
-            ...(toWorkflowAttemptSettings(
-                selectedSettings,
-                generationResult.providerObservedSettings
-            ) === undefined
+            ...(attemptSettings === undefined
                 ? {}
-                : {
-                      settings: toWorkflowAttemptSettings(
-                          selectedSettings,
-                          generationResult.providerObservedSettings
-                      ),
-                  }),
+                : { settings: attemptSettings }),
             ...(selectedCapabilityFacts === undefined
                 ? {}
                 : { capabilities: selectedCapabilityFacts }),
@@ -2692,8 +2699,7 @@ export const runBoundedReviewWorkflow = async (
                     routed.error.attempts,
                     reviewAttemptsByIndex,
                     {
-                        captureCost: (result, requestedModel) =>
-                            captureUsage(result, requestedModel).estimatedCost,
+                        captureCost: estimateAttemptCost,
                     }
                 );
                 const usage = reviewUsage();
@@ -2721,8 +2727,7 @@ export const runBoundedReviewWorkflow = async (
                     routed.value.attempts,
                     reviewAttemptsByIndex,
                     {
-                        captureCost: (result, requestedModel) =>
-                            captureUsage(result, requestedModel).estimatedCost,
+                        captureCost: estimateAttemptCost,
                     }
                 );
                 selectedProfile = routed.value.selected.profile;
@@ -2785,6 +2790,10 @@ export const runBoundedReviewWorkflow = async (
                           parseReviewDecisionOutputResult
                       )(reviewResult.text)
                     : undefined;
+            const attemptSettings = toWorkflowAttemptSettings(
+                selectedSettings,
+                reviewResult.providerObservedSettings
+            );
             return {
                 status: 'failed',
                 errorCode:
@@ -2818,17 +2827,9 @@ export const runBoundedReviewWorkflow = async (
                     ...(reviewResult.completion === undefined
                         ? {}
                         : { completion: reviewResult.completion }),
-                    ...(toWorkflowAttemptSettings(
-                        selectedSettings,
-                        reviewResult.providerObservedSettings
-                    ) === undefined
+                    ...(attemptSettings === undefined
                         ? {}
-                        : {
-                              settings: toWorkflowAttemptSettings(
-                                  selectedSettings,
-                                  reviewResult.providerObservedSettings
-                              ),
-                          }),
+                        : { settings: attemptSettings }),
                     ...(selectedCapabilityFacts === undefined
                         ? {}
                         : { capabilities: selectedCapabilityFacts }),
@@ -2849,6 +2850,10 @@ export const runBoundedReviewWorkflow = async (
             };
         }
         const decision = typedValidation.value;
+        const attemptSettings = toWorkflowAttemptSettings(
+            selectedSettings,
+            reviewResult.providerObservedSettings
+        );
         const hints = extractRoutingHintsFromAssess({
             assessRawText: reviewResult.text,
             reviewDecision: decision,
@@ -2892,17 +2897,9 @@ export const runBoundedReviewWorkflow = async (
                 ...(reviewResult.completion === undefined
                     ? {}
                     : { completion: reviewResult.completion }),
-                ...(toWorkflowAttemptSettings(
-                    selectedSettings,
-                    reviewResult.providerObservedSettings
-                ) === undefined
+                ...(attemptSettings === undefined
                     ? {}
-                    : {
-                          settings: toWorkflowAttemptSettings(
-                              selectedSettings,
-                              reviewResult.providerObservedSettings
-                          ),
-                      }),
+                    : { settings: attemptSettings }),
                 ...(selectedCapabilityFacts === undefined
                     ? {}
                     : { capabilities: selectedCapabilityFacts }),

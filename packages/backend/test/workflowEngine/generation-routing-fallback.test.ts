@@ -50,7 +50,10 @@ const makeProfile = (id: string): ModelProfile => ({
     maxOutputTokens: 128_000,
 });
 
-const usage = (result: GenerationResult): ReviewWorkflowUsageSummary => {
+const usage = (
+    result: GenerationResult,
+    _requestedModel?: string
+): ReviewWorkflowUsageSummary => {
     const promptTokens = result.usage?.promptTokens ?? 0;
     const completionTokens = result.usage?.completionTokens ?? 0;
     const totalTokens =
@@ -75,6 +78,7 @@ const runGeneration = async (input: {
     assessCandidates?: ModelProfile[];
     nativeSearchRequired?: boolean;
     providerAvailability?: ProviderAvailabilityStore;
+    onUsage?: () => void;
 }) =>
     runBoundedReviewWorkflow({
         generationRuntime: input.runtime,
@@ -106,7 +110,15 @@ const runGeneration = async (input: {
             enableAssessment: input.assessCandidates !== undefined,
             enableRevision: false,
         },
-        captureUsage: usage,
+        captureUsage: (result, requestedModel) => {
+            input.onUsage?.();
+            return usage(result, requestedModel);
+        },
+        estimateCost: () => ({
+            inputCostUsd: 0,
+            outputCostUsd: 0,
+            totalCostUsd: 0,
+        }),
         stepRoutingChainSet: {
             enabledProfilesById: new Map(
                 [...input.candidates, ...(input.assessCandidates ?? [])].map(
@@ -130,6 +142,7 @@ test('gives a large-prompt generation useful output room and advances after inco
     const first = makeProfile('first-profile');
     const second = makeProfile('second-profile');
     const requests: GenerationRequest[] = [];
+    let usageCalls = 0;
     const runtime: GenerationRuntime = {
         kind: 'test-runtime',
         async generate(request) {
@@ -192,9 +205,13 @@ test('gives a large-prompt generation useful output room and advances after inco
             ],
         },
         candidates: [first, second],
+        onUsage: () => {
+            usageCalls += 1;
+        },
     });
 
     assert.equal(result.outcome, 'generated');
+    assert.equal(usageCalls, 2);
     assert.equal(requests.length, 2);
     assert.ok((requests[0]?.maxOutputTokens ?? 0) > 1_000);
     assert.ok((requests[1]?.maxOutputTokens ?? 0) > 1_000);

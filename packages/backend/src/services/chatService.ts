@@ -169,9 +169,10 @@ const isExecutedRoutingAttempt = (attempt: WorkflowRoutingAttempt): boolean =>
     attempt.status === 'failed_non_transient_stopped';
 
 /**
- * Reads effective generation attribution from the workflow routing receipt.
+ * Reads effective generation attribution from canonical workflow Attempts.
  * Completed routes use the last actual attempt; exhausted routes use their
- * last failed attempt, with legacy selected fields as a fallback.
+ * last failed attempt. Legacy signal JSON is parsed only for historical
+ * metadata without a canonical Run id and is never part of a new Run.
  */
 const getWorkflowGenerationRouting = (
     workflowLineage: WorkflowRecord | undefined
@@ -1140,6 +1141,26 @@ export const createChatService = ({
         };
     };
 
+    const estimateCostForStep = (
+        result: GenerationResult,
+        requestedModel: string | undefined
+    ): ReturnType<typeof estimateBackendTextCost> => {
+        const usageModel = result.model ?? requestedModel ?? defaultModel;
+        return estimateBackendTextCost(
+            usageModel,
+            result.usage?.promptTokens ?? 0,
+            result.usage?.completionTokens ?? 0,
+            {
+                ...(result.usage?.cachedInputTokens !== undefined && {
+                    cachedInputTokens: result.usage.cachedInputTokens,
+                }),
+                ...(result.usage?.cacheWriteTokens !== undefined && {
+                    cacheWriteTokens: result.usage.cacheWriteTokens,
+                }),
+            }
+        );
+    };
+
     const recordUsageForStep = (
         result: GenerationResult,
         requestedModel: string | undefined,
@@ -1156,19 +1177,7 @@ export const createChatService = ({
         const completionTokens = result.usage?.completionTokens ?? 0;
         const totalTokens =
             result.usage?.totalTokens ?? promptTokens + completionTokens;
-        const estimatedCost = estimateBackendTextCost(
-            usageModel,
-            promptTokens,
-            completionTokens,
-            {
-                ...(result.usage?.cachedInputTokens !== undefined && {
-                    cachedInputTokens: result.usage.cachedInputTokens,
-                }),
-                ...(result.usage?.cacheWriteTokens !== undefined && {
-                    cacheWriteTokens: result.usage.cacheWriteTokens,
-                }),
-            }
-        );
+        const estimatedCost = estimateCostForStep(result, requestedModel);
 
         if (recordUsage) {
             try {
@@ -1593,6 +1602,7 @@ export const createChatService = ({
                     }),
                     captureUsage: (result, requestedModel) =>
                         recordUsageForStep(result, requestedModel),
+                    estimateCost: estimateCostForStep,
                     plannerStepRequest,
                     plannerStepExecutor,
                     planContinuationBuilder,
