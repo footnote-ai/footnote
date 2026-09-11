@@ -31,6 +31,7 @@ declare global {
 // Provide a stable fallback response in case the backend is unavailable so the space stays welcoming.
 const FALLBACK_REFLECTION =
     'I was unable to generate a response - please try again later.';
+const EMPTY_RESPONSE_MESSAGE = 'No answer was returned. Please try again.';
 type ChatStatusKind = 'error' | 'info';
 type ChatStatus = { kind: ChatStatusKind; message: string };
 
@@ -217,16 +218,21 @@ const Chat = (): JSX.Element => {
             // Clear timeout once we have a response
             clearTimeout(timeoutId);
 
-            const chat = payload.message as string | undefined;
+            const chat = payload.message.trim();
             // Trust the API contract: metadata is already normalized by the backend.
             const backendMetadata = payload.metadata as
                 ResponseMetadata | null | undefined;
 
+            if (chat.length === 0) {
+                showStatus(EMPTY_RESPONSE_MESSAGE);
+                setAnswer('');
+                setMetadata(null);
+                captcha.resetAfterSubmission();
+                return;
+            }
+
             setStatus(null);
-            setAnswer(
-                chat?.trim() ||
-                    'I would begin by examining the ethical principles involved, then consider what transparency and care require.'
-            );
+            setAnswer(chat);
 
             // Normalize backend metadata to ResponseMetadata format
             setMetadata(backendMetadata ?? null);
