@@ -31,11 +31,13 @@ declare global {
 const FALLBACK_REFLECTION =
     'I was unable to generate a response - please try again later.';
 const INVISIBLE_CHALLENGE_TIMEOUT_MS = 8000;
+type ChatStatusKind = 'error' | 'info';
+type ChatStatus = { kind: ChatStatusKind; message: string };
 
 const Chat = (): JSX.Element => {
     const { theme } = useTheme();
     const [question, setQuestion] = useState('');
-    const [status, setStatus] = useState('');
+    const [status, setStatus] = useState<ChatStatus | null>(null);
     const [answer, setAnswer] = useState('');
     const [metadata, setMetadata] = useState<ResponseMetadata | null>(null);
     const [isLoading, setIsLoading] = useState(false);
@@ -73,12 +75,18 @@ const Chat = (): JSX.Element => {
         }
     };
 
-    // Check if Turnstile site key is valid (not empty or missing)
     const hasValidSiteKey =
         turnstileSiteKey && turnstileSiteKey.trim().length > 0;
 
     // Skip CAPTCHA when the site key is missing or invalid.
     const isCaptchaDisabled = !hasValidSiteKey;
+
+    const showStatus = (
+        message: string,
+        kind: ChatStatusKind = 'error'
+    ): void => {
+        setStatus({ kind, message });
+    };
 
     // Turnstile tokens are short-lived and single-use. Do not log token values or previews.
     const onTurnstileVerify = (token: string) => {
@@ -105,20 +113,11 @@ const Chat = (): JSX.Element => {
 
         setTurnstileToken(token);
         setTurnstileError(null);
-        // Only clear status if it's not an error message (errors should persist until next submission)
-        // Check if current status is an error by looking for common error keywords
         setStatus((prev) => {
-            if (
-                prev &&
-                (prev.includes('failed') ||
-                    prev.includes('unavailable') ||
-                    prev.includes('Unable to connect'))
-            ) {
-                // Keep error messages - don't clear them on CAPTCHA verify
+            if (prev?.kind === 'error') {
                 return prev;
             }
-            // Clear non-error status messages
-            return '';
+            return null;
         });
     };
 
@@ -246,7 +245,7 @@ const Chat = (): JSX.Element => {
         const trimmedQuestion = question.trim();
 
         if (!trimmedQuestion) {
-            setStatus('Please share a question, even a small one.');
+            showStatus('Please share a question, even a small one.', 'info');
             return;
         }
 
@@ -266,7 +265,10 @@ const Chat = (): JSX.Element => {
             if (!isManagedChallengeVisible) {
                 showManagedChallenge();
             }
-            setStatus('Please complete the visible CAPTCHA verification.');
+            showStatus(
+                'Please complete the visible CAPTCHA verification.',
+                'info'
+            );
             return;
         }
 
@@ -283,7 +285,7 @@ const Chat = (): JSX.Element => {
         }, 60000);
 
         // Clear previous status and answer when starting a new submission
-        setStatus('');
+        setStatus(null);
         setIsLoading(true);
         setAnswer('');
         setMetadata(null);
@@ -337,7 +339,7 @@ const Chat = (): JSX.Element => {
             const backendMetadata = payload.metadata as
                 ResponseMetadata | null | undefined;
 
-            setStatus('');
+            setStatus(null);
             setAnswer(
                 chat?.trim() ||
                     'I would begin by examining the ethical principles involved, then consider what transparency and care require.'
@@ -373,7 +375,7 @@ const Chat = (): JSX.Element => {
                             error.code === 'timeout_error')) &&
                     abortRef.current === controller
                 ) {
-                    setStatus('The request timed out. Please try again.');
+                    showStatus('The request timed out. Please try again.');
                 }
                 return;
             }
@@ -386,7 +388,7 @@ const Chat = (): JSX.Element => {
                         : 'CAPTCHA verification failed. Please refresh and try again.';
 
                     setIsLoading(false);
-                    setStatus(errorMessage);
+                    showStatus(errorMessage);
                     isTurnstileExecutingRef.current = false;
                     setTurnstileToken(null);
                     setIsTurnstileMounted(false);
@@ -409,7 +411,7 @@ const Chat = (): JSX.Element => {
                         ))
                 ) {
                     setIsLoading(false);
-                    setStatus(
+                    showStatus(
                         'CAPTCHA service is unavailable. Please try again shortly.'
                     );
                     isTurnstileExecutingRef.current = false;
@@ -425,7 +427,7 @@ const Chat = (): JSX.Element => {
 
                 // Check for network errors
                 if (error.code === 'network_error') {
-                    setStatus(
+                    showStatus(
                         'Unable to connect to the server. Please check your connection and try again.'
                     );
                     setIsLoading(false);
@@ -437,7 +439,7 @@ const Chat = (): JSX.Element => {
                     error.message.includes('CAPTCHA') ||
                     error.message.includes('403')
                 ) {
-                    setStatus(
+                    showStatus(
                         'CAPTCHA verification failed. Please refresh and try again.'
                     );
                     isTurnstileExecutingRef.current = false;
@@ -453,7 +455,7 @@ const Chat = (): JSX.Element => {
                 }
             }
 
-            setStatus('');
+            setStatus(null);
             setAnswer(FALLBACK_REFLECTION);
             setMetadata(null);
         } finally {
@@ -572,19 +574,14 @@ const Chat = (): JSX.Element => {
                 </div>
             </form>
 
-            {/* Only show status when there's actual content (error messages, etc.) - spinner is in button during loading */}
-            {/* Conditionally render only when we have actual content to avoid empty div taking space */}
-            {/* IMPORTANT: Do not render at all if there's no content to avoid layout spacing */}
-            {/* Only render after user has interacted to prevent initial flash */}
-            {hasInteractedRef.current && status && status.trim().length > 0 && (
+            {hasInteractedRef.current && status && (
                 <div
                     className="interaction-status interaction-status-visible"
                     role="status"
                 >
-                    <span>{status}</span>
+                    <span>{status.message}</span>
                 </div>
             )}
-            {/* Only show output when there's actual content, not just when loading */}
             {answer && (
                 <div className="interaction-output" aria-live="polite">
                     <MarkdownResponse markdown={answer} />

@@ -229,6 +229,80 @@ test('CAPTCHA verification preserves an existing API error message', async ({
     await expect(page.getByRole('status')).toHaveText(expectedError);
 });
 
+test('CAPTCHA verification clears an informational status', async ({
+    page,
+}) => {
+    await installTurnstileStub(page);
+    await configureRuntime(page, '1x00000000000000000000AA');
+
+    await page.goto('/chat');
+    await submitQuestion(page, '');
+    await expect(page.getByRole('status')).toHaveText(
+        'Please share a question, even a small one.'
+    );
+
+    await expect
+        .poll(() =>
+            page.evaluate(
+                () => window.__footnoteTurnstileCallbacks?.length ?? 0
+            )
+        )
+        .toBeGreaterThan(0);
+    await page.evaluate(() => {
+        const callback = window.__footnoteTurnstileCallbacks?.at(-1);
+        callback?.('XXXX.DUMMY.TOKEN.XXXX');
+    });
+
+    await expect(page.getByRole('status')).toHaveCount(0);
+});
+
+test('CAPTCHA verification preserves an error status with different wording', async ({
+    page,
+}) => {
+    await installTurnstileStub(page);
+    await configureRuntime(page, '1x00000000000000000000AA');
+    const pendingResponse = deferred<void>();
+    await page.route('**/api/chat', async (route) => {
+        await pendingResponse.promise;
+        try {
+            await route.fulfill({
+                contentType: 'application/json',
+                body: JSON.stringify(CHAT_RESPONSE),
+            });
+        } catch {
+            // The browser has already aborted this controlled response.
+        }
+    });
+
+    await page.goto('/chat');
+    await page.getByLabel('Ask a question').focus();
+    await expect
+        .poll(() =>
+            page.evaluate(
+                () => window.__footnoteTurnstileCallbacks?.length ?? 0
+            )
+        )
+        .toBeGreaterThan(0);
+    await page.evaluate(() => {
+        const callback = window.__footnoteTurnstileCallbacks?.[0];
+        callback?.('XXXX.DUMMY.TOKEN.XXXX');
+    });
+
+    await page.clock.install();
+    await submitQuestion(page, 'Will this time out?');
+    await page.clock.runFor(60_000);
+
+    const expectedError = 'The request timed out. Please try again.';
+    await expect(page.getByRole('status')).toHaveText(expectedError);
+    await page.evaluate(() => {
+        const callback = window.__footnoteTurnstileCallbacks?.[0];
+        callback?.('XXXX.DUMMY.TOKEN.XXXX');
+    });
+
+    await expect(page.getByRole('status')).toHaveText(expectedError);
+    pendingResponse.resolve(undefined);
+});
+
 declare global {
     interface Window {
         __footnoteTurnstileCallbacks?: Array<(token: string) => void>;
