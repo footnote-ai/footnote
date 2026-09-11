@@ -7,8 +7,12 @@
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import type { GenerationResult } from '@footnote/agent-runtime';
 import {
+    GenerationRuntimeError,
+    type GenerationResult,
+} from '@footnote/agent-runtime';
+import {
+    isTypedOutputTransportUnavailable,
     resolveTypedModelOutputPath,
     validateTypedModelOutput,
 } from '../src/services/typedModelOutput.js';
@@ -44,7 +48,10 @@ test('selects JSON compatibility before parser compatibility when declared', () 
             provider: 'openai',
             capabilities: {
                 canUseSearch: false,
-                toolCapabilities: { 'generation.structured_output': false },
+                toolCapabilities: {
+                    'generation.structured_output': false,
+                    'generation.json_mode': true,
+                },
             },
         }),
         'json_compatibility'
@@ -54,18 +61,77 @@ test('selects JSON compatibility before parser compatibility when declared', () 
             provider: 'ollama',
             capabilities: {
                 canUseSearch: false,
-                toolCapabilities: { 'generation.structured_output': false },
+                toolCapabilities: {
+                    'generation.structured_output': false,
+                    'generation.json_mode': true,
+                },
             },
-            jsonModeSupport: 'supported',
         }),
         'json_compatibility'
     );
     assert.equal(
         resolveTypedModelOutputPath({
             provider: 'ollama',
-            capabilities: { canUseSearch: false },
+            capabilities: {
+                canUseSearch: false,
+                toolCapabilities: {
+                    'generation.structured_output': false,
+                    'generation.json_mode': false,
+                },
+            },
         }),
         'parser_compatibility'
+    );
+});
+
+test('honors the effective JSON-mode selector instead of profile metadata', () => {
+    assert.equal(
+        resolveTypedModelOutputPath({
+            provider: 'ollama',
+            capabilities: {
+                canUseSearch: false,
+                toolCapabilities: {
+                    'generation.structured_output': false,
+                    'generation.json_mode': true,
+                },
+            },
+            jsonModeSupport: 'unknown',
+        }),
+        'parser_compatibility'
+    );
+    assert.equal(
+        resolveTypedModelOutputPath({
+            provider: 'ollama',
+            capabilities: {
+                canUseSearch: false,
+                toolCapabilities: {
+                    'generation.structured_output': false,
+                    'generation.json_mode': false,
+                },
+            },
+            jsonModeSupport: 'supported',
+        }),
+        'json_compatibility'
+    );
+});
+
+test('honors effective structured and JSON capability facts together', () => {
+    assert.equal(
+        resolveTypedModelOutputPath({
+            provider: 'openai',
+            capabilities: {
+                canUseSearch: false,
+                toolCapabilities: {
+                    'generation.structured_output': true,
+                    'generation.json_mode': true,
+                },
+            },
+            capabilityFacts: {
+                structuredOutput: 'unsupported',
+                jsonMode: 'supported',
+            },
+        }),
+        'json_compatibility'
     );
 });
 
@@ -98,4 +164,27 @@ test('accepts only a parser-validated typed result', () => {
         parse,
     });
     assert.deepEqual(validation, { valid: true, value: { ok: true } });
+});
+
+test('only retries native transport when runtime marks it unavailable', () => {
+    assert.equal(
+        isTypedOutputTransportUnavailable(
+            new GenerationRuntimeError('schema rejected', {
+                classification: 'structured_output_unavailable',
+            })
+        ),
+        true
+    );
+    assert.equal(
+        isTypedOutputTransportUnavailable(new Error('schema rejected')),
+        false
+    );
+    assert.equal(
+        isTypedOutputTransportUnavailable(
+            new GenerationRuntimeError('upstream timeout', {
+                classification: 'transient',
+            })
+        ),
+        false
+    );
 });

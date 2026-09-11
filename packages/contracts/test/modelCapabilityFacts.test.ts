@@ -20,6 +20,7 @@ test('profile capability facts retain unknown when profile metadata is absent', 
 
     assert.equal(facts.nativeSearch, 'unsupported');
     assert.equal(facts.structuredOutput, 'unknown');
+    assert.equal(facts.jsonMode, 'unknown');
     assert.equal(facts.reasoningEfforts.low, 'unknown');
     assert.equal(facts.verbosity.medium, 'unknown');
     assert.equal(facts.temperature, 'unknown');
@@ -32,7 +33,10 @@ test('profile capability facts distinguish declared supported and unsupported co
         supportedReasoningEfforts: ['none', 'low'],
         supportedVerbosity: ['low'],
         supportedSamplingControls: ['temperature'],
-        toolCapabilities: { 'generation.structured_output': true },
+        toolCapabilities: {
+            'generation.structured_output': true,
+            'generation.json_mode': true,
+        },
     });
 
     assert.equal(facts.nativeSearch, 'supported');
@@ -43,6 +47,7 @@ test('profile capability facts distinguish declared supported and unsupported co
     assert.equal(facts.temperature, 'supported');
     assert.equal(facts.topP, 'unsupported');
     assert.equal(facts.structuredOutput, 'supported');
+    assert.equal(facts.jsonMode, 'supported');
 });
 
 test('effective capability facts preserve provider and runtime disagreement', () => {
@@ -60,6 +65,7 @@ test('effective capability facts preserve provider and runtime disagreement', ()
         topP: 'unknown',
         outputLimit: 'supported',
         structuredOutput: 'supported',
+        jsonMode: 'supported',
         nativeSearch: 'supported',
     };
     const runtime: ModelCapabilityFacts = {
@@ -80,6 +86,7 @@ test('effective capability facts preserve provider and runtime disagreement', ()
         topP: 'supported',
         outputLimit: 'supported',
         structuredOutput: 'unsupported',
+        jsonMode: 'supported',
         nativeSearch: 'supported',
     };
 
@@ -91,5 +98,6 @@ test('effective capability facts preserve provider and runtime disagreement', ()
     assert.equal(effective.temperature, 'supported');
     assert.equal(effective.topP, 'unknown');
     assert.equal(effective.structuredOutput, 'unsupported');
+    assert.equal(effective.jsonMode, 'supported');
     assert.equal(effective.nativeSearch, 'supported');
 });

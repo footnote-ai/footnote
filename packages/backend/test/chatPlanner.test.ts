@@ -12,6 +12,7 @@ import type { PostChatRequest } from '@footnote/contracts/web';
 import {
     createChatPlanner,
     DEFAULT_CHAT_PLANNER_MAX_OUTPUT_TOKENS,
+    ChatPlannerStructuredOutputError,
     type ChatPlannerCapabilityProfileOption,
     type ChatPlannerInvocationContext,
 } from '../src/services/chatPlanner.js';
@@ -429,6 +430,108 @@ test('chatPlanner preserves complete planner usage through accounting', async ()
     });
 });
 
+test('chatPlanner preserves usage from a failed structured attempt before fallback', async () => {
+    const decision = {
+        action: 'message',
+        modality: 'text',
+        requestedCapabilityProfile: 'balanced-general',
+        safetyTier: 'Low',
+        reasoning: 'Reply should be a normal message.',
+        generation: {
+            reasoningEffort: 'low',
+            verbosity: 'low',
+            temperament: {
+                tightness: 4,
+                rationale: 3,
+                attribution: 4,
+                caution: 3,
+                extent: 4,
+            },
+        },
+    };
+    const planner = createChatPlanner({
+        executePlannerStructured: async () => {
+            throw Object.assign(new SyntaxError('malformed planner payload'), {
+                plannerModel: 'gpt-5-nano',
+                plannerUsage: {
+                    promptTokens: 10,
+                    completionTokens: 4,
+                    totalTokens: 14,
+                },
+            });
+        },
+        executePlanner: async () => ({
+            text: JSON.stringify(decision),
+            model: 'gpt-5-mini',
+            usage: {
+                promptTokens: 3,
+                completionTokens: 2,
+                totalTokens: 5,
+            },
+        }),
+    });
+
+    const { execution } = await planFromWorkflow(planner, createChatRequest());
+
+    assert.equal(execution.status, 'executed');
+    assert.equal(execution.contractType, 'text_json');
+    assert.deepEqual(execution.usage, {
+        promptTokens: 13,
+        completionTokens: 6,
+        totalTokens: 19,
+    });
+});
+
+test('chatPlanner omits invalid usage from a failed structured attempt', async () => {
+    const decision = {
+        action: 'message',
+        modality: 'text',
+        requestedCapabilityProfile: 'balanced-general',
+        safetyTier: 'Low',
+        reasoning: 'Reply should be a normal message.',
+        generation: {
+            reasoningEffort: 'low',
+            verbosity: 'low',
+            temperament: {
+                tightness: 4,
+                rationale: 3,
+                attribution: 4,
+                caution: 3,
+                extent: 4,
+            },
+        },
+    };
+    const planner = createChatPlanner({
+        executePlannerStructured: async () => {
+            throw Object.assign(new SyntaxError('malformed planner payload'), {
+                plannerModel: 'gpt-5-nano',
+                plannerUsage: {
+                    promptTokens: Number.NaN,
+                    completionTokens: -1,
+                    totalTokens: Number.POSITIVE_INFINITY,
+                },
+            });
+        },
+        executePlanner: async () => ({
+            text: JSON.stringify(decision),
+            model: 'gpt-5-mini',
+            usage: {
+                promptTokens: 3,
+                completionTokens: 2,
+                totalTokens: 5,
+            },
+        }),
+    });
+
+    const { execution } = await planFromWorkflow(planner, createChatRequest());
+
+    assert.deepEqual(execution.usage, {
+        promptTokens: 3,
+        completionTokens: 2,
+        totalTokens: 5,
+    });
+});
+
 test('chatPlanner switches output instructions for text JSON compatibility fallback', async () => {
     let structuredSystemPrompt = '';
     let textJsonSystemPrompt = '';
@@ -483,6 +586,28 @@ test('chatPlanner switches output instructions for text JSON compatibility fallb
     assert.match(textJsonSystemPrompt, /Retrieval guidance:/);
     assert.match(structuredSystemPrompt, /Safety guidance:/);
     assert.match(textJsonSystemPrompt, /Safety guidance:/);
+});
+
+test('chatPlanner preserves refusal from text JSON compatibility output', async () => {
+    const planner = createChatPlanner({
+        executePlannerStructured: async () => {
+            throw new ChatPlannerStructuredOutputError(
+                'unsupported_route',
+                'Native structured output is unavailable.'
+            );
+        },
+        executePlanner: async () => ({
+            text: '{"action":"message"}',
+            model: 'gpt-5-mini',
+            finishReason: 'refusal',
+        }),
+    });
+
+    const { execution } = await planFromWorkflow(planner, createChatRequest());
+
+    assert.equal(execution.status, 'failed');
+    assert.equal(execution.reasonCode, 'planner_runtime_error');
+    assert.equal(execution.structuredOutputOutcome, 'refusal');
 });
 
 test('chatPlanner ingestion marks clean structured outputs as accepted', async () => {

@@ -34,6 +34,8 @@ export interface ModelCapabilityFacts {
     topP: ModelCapabilitySupport;
     outputLimit: ModelCapabilitySupport;
     structuredOutput: ModelCapabilitySupport;
+    /** Explicit support for schema-free provider JSON response mode. */
+    jsonMode: ModelCapabilitySupport;
     nativeSearch: ModelCapabilitySupport;
 }
 
@@ -74,6 +76,7 @@ export const resolveModelProfileCapabilityFacts = (
 ): ModelCapabilityFacts => {
     const structuredOutput =
         capabilities.toolCapabilities?.['generation.structured_output'];
+    const jsonMode = capabilities.toolCapabilities?.['generation.json_mode'];
     return {
         reasoningEfforts: Object.fromEntries(
             supportedReasoningEfforts.map((effort) => [
@@ -103,6 +106,12 @@ export const resolveModelProfileCapabilityFacts = (
             structuredOutput === undefined
                 ? 'unknown'
                 : structuredOutput
+                  ? 'supported'
+                  : 'unsupported',
+        jsonMode:
+            jsonMode === undefined
+                ? 'unknown'
+                : jsonMode
                   ? 'supported'
                   : 'unsupported',
         nativeSearch: capabilities.canUseSearch ? 'supported' : 'unsupported',
@@ -148,6 +157,7 @@ export const intersectModelCapabilityFacts = (input: {
         input.model.structuredOutput,
         input.runtime.structuredOutput
     ),
+    jsonMode: intersectSupport(input.model.jsonMode, input.runtime.jsonMode),
     nativeSearch: intersectSupport(
         input.model.nativeSearch,
         input.runtime.nativeSearch

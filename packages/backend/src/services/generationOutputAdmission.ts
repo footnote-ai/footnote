@@ -170,6 +170,9 @@ export const attachGenerationAttemptEvidence = (
     resultsByAttemptIndex: ReadonlyMap<number, GenerationResult>
 ): RoutingChainAttemptLog[] =>
     attempts.map((attempt) => {
+        if (attempt.status === 'failed_transport_fallback') {
+            return attempt;
+        }
         const result = resultsByAttemptIndex.get(attempt.index);
         if (result === undefined) {
             return attempt;

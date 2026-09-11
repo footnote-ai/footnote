@@ -18,7 +18,15 @@ test('VoltAgent runtime facts distinguish unsupported adapter controls', () => {
     assert.equal(facts.reasoningEfforts.low, 'unsupported');
     assert.equal(facts.verbosity.medium, 'unsupported');
     assert.equal(facts.structuredOutput, 'unsupported');
+    assert.equal(facts.jsonMode, 'unsupported');
     assert.equal(facts.outputLimit, 'supported');
+});
+
+test('VoltAgent runtime facts keep JSON mode distinct from native schema support', () => {
+    const facts = resolveVoltAgentRuntimeCapabilityFacts('openai');
+
+    assert.equal(facts.structuredOutput, 'supported');
+    assert.equal(facts.jsonMode, 'supported');
 });
 
 test('effective VoltAgent capabilities retain model/runtime disagreement', () => {
@@ -33,5 +41,6 @@ test('effective VoltAgent capabilities retain model/runtime disagreement', () =>
 
     assert.equal(facts.reasoningEfforts.low, 'unsupported');
     assert.equal(facts.structuredOutput, 'unsupported');
+    assert.equal(facts.jsonMode, 'unsupported');
     assert.equal(facts.nativeSearch, 'unsupported');
 });

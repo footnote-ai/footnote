@@ -10,6 +10,7 @@ import type { JSONSchema7 } from 'ai';
 import type {
     ImageGenerationQuality as ContractImageGenerationQuality,
     ImageGenerationSize as ContractImageGenerationSize,
+    ModelCapabilityFacts,
     ModelProfileCapabilities,
     ModelProfileProviderRouting,
     PresentationGenerationSettings,
@@ -183,6 +184,8 @@ export interface GenerationRequest {
      * Optional provider-enforced schema constraint for structured output.
      */
     structuredOutput?: GenerationStructuredOutput;
+    /** Request schema-free provider JSON mode when the selected runtime supports it. */
+    jsonMode?: boolean;
     /**
      * Retrieval settings. Omit this field when search should stay disabled.
      */
@@ -207,6 +210,10 @@ export type GenerationRuntimeErrorDetails =
           classification: 'transient';
       }
     | {
+          /** The requested native structured-output transport is unavailable. */
+          classification: 'structured_output_unavailable';
+      }
+    | {
           classification: 'provider_temporary_unavailable';
           availabilityReason: ProviderTemporaryUnavailableReason;
       };
@@ -218,11 +225,19 @@ export type GenerationRuntimeErrorDetails =
  */
 export class GenerationRuntimeError extends Error {
     readonly details: GenerationRuntimeErrorDetails;
+    readonly model?: string;
+    readonly usage?: GenerationUsage;
 
-    constructor(message: string, details: GenerationRuntimeErrorDetails) {
+    constructor(
+        message: string,
+        details: GenerationRuntimeErrorDetails,
+        evidence?: { model?: string; usage?: GenerationUsage }
+    ) {
         super(message);
         this.name = 'GenerationRuntimeError';
         this.details = details;
+        this.model = evidence?.model;
+        this.usage = evidence?.usage;
     }
 }
 
@@ -370,6 +385,14 @@ export interface GenerationRuntime {
      * Stable runtime identifier used for wiring and diagnostics.
      */
     readonly kind: string;
+    /**
+     * Optional adapter-owned capability intersection for one selected profile.
+     * Backend policy remains the authority for how these facts are used.
+     */
+    readonly resolveCapabilityFacts?: (input: {
+        provider: string;
+        capabilities: ModelProfileCapabilities;
+    }) => ModelCapabilityFacts;
     /**
      * Run one text-only generation request.
      */
@@ -693,4 +716,8 @@ export {
     getToolForProvider,
     hasToolForProvider,
     providerToolRegistry,
+    resolveEffectiveVoltAgentCapabilities,
+    resolveVoltAgentRuntimeCapabilityFacts,
+    supportsJsonModeForProvider,
+    supportsStructuredOutputsForProvider,
 } from './voltagentRuntime.js';

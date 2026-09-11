@@ -11,6 +11,11 @@ import type {
     PostChatResponse,
 } from '@footnote/contracts/web';
 import {
+    isGenerationRuntimeError,
+    type GenerationResult,
+    type GenerationUsage,
+} from '@footnote/agent-runtime';
+import {
     resolveModelProfileCapabilityFacts,
     type ModelProfile,
 } from '@footnote/contracts';
@@ -100,6 +105,10 @@ import {
     buildChatOutputBoundaryOptions,
     type ChatOutputBoundaryOptions,
 } from './chatOutputBoundary.js';
+import {
+    isTypedOutputTransportUnavailable,
+    resolveTypedModelOutputPath,
+} from './typedModelOutput.js';
 
 type CreateChatOrchestratorOptions = CreateChatServiceOptions & {
     weatherForecastTool?: WeatherForecastTool;
@@ -110,6 +119,46 @@ type CreateChatOrchestratorOptions = CreateChatServiceOptions & {
 const plannerFallbackTelemetryRollup = createPlannerFallbackTelemetryRollup({
     logger,
 });
+
+const addPlannerUsageField = (
+    left: number | undefined,
+    right: number | undefined
+): number | undefined => {
+    const values = [left, right].filter(
+        (value): value is number =>
+            typeof value === 'number' &&
+            Number.isSafeInteger(value) &&
+            value >= 0
+    );
+    if (values.length === 0) {
+        return undefined;
+    }
+    const total = values.reduce((sum, value) => sum + value, 0);
+    return Number.isSafeInteger(total) ? total : undefined;
+};
+
+/** Combines bounded usage from JSON and parser compatibility attempts. */
+const combinePlannerUsage = (
+    first: GenerationUsage | undefined,
+    second: GenerationUsage | undefined
+): GenerationUsage | undefined => {
+    const combined: GenerationUsage = {};
+    const fields: Array<keyof GenerationUsage> = [
+        'promptTokens',
+        'cachedInputTokens',
+        'cacheWriteTokens',
+        'completionTokens',
+        'reasoningTokens',
+        'totalTokens',
+    ];
+    for (const field of fields) {
+        const value = addPlannerUsageField(first?.[field], second?.[field]);
+        if (value !== undefined) {
+            combined[field] = value;
+        }
+    }
+    return Object.keys(combined).length > 0 ? combined : undefined;
+};
 
 /**
  * Entry point for chat requests from web and Discord.
@@ -164,6 +213,11 @@ export const createChatOrchestrator = ({
 
     const plannerCapabilityOptions =
         listCapabilityProfileOptionsForStep('generation');
+    const resolvePlannerCapabilityFacts = (profile: ModelProfile) =>
+        generationRuntime.resolveCapabilityFacts?.({
+            provider: profile.provider,
+            capabilities: profile.capabilities,
+        }) ?? resolveModelProfileCapabilityFacts(profile.capabilities);
     // TODO(phase-5-provider-tool-registry): Add deterministic fallback ranking
     // metadata for planner/executor handoff (for example, preferred
     // search-capable backup profile ids by policy).
@@ -201,23 +255,16 @@ export const createChatOrchestrator = ({
         getActivePlannerProfile: () => ModelProfile,
         safetyIdentifier: string | undefined
     ) => {
-        const plannerCapabilityFacts = resolveModelProfileCapabilityFacts(
-            getActivePlannerProfile().capabilities
+        const hasStructuredPlannerProfile = catalogProfiles.some(
+            (profile) =>
+                (profile.provider === 'openrouter' ||
+                    profile.provider === 'openai') &&
+                resolvePlannerCapabilityFacts(profile).structuredOutput !==
+                    'unsupported'
         );
-        const directOpenAiStructuredExecutor =
+        const useStructuredPlannerExecutor =
             runtimeConfig.openai.plannerStructuredOutputEnabled &&
-            runtimeConfig.openai.apiKey &&
-            generationRuntime.kind !== 'test-runtime' &&
-            plannerCapabilityFacts.structuredOutput !== 'unsupported'
-                ? createOpenAiChatPlannerStructuredExecutor({
-                      apiKey: runtimeConfig.openai.apiKey,
-                  })
-                : undefined;
-        const useRuntimeStructuredExecutor =
-            runtimeConfig.openai.plannerStructuredOutputEnabled &&
-            plannerCapabilityFacts.structuredOutput !== 'unsupported' &&
-            (getActivePlannerProfile().provider === 'openrouter' ||
-                getActivePlannerProfile().provider === 'openai') &&
+            hasStructuredPlannerProfile &&
             generationRuntime.kind !== 'test-runtime';
 
         return createChatPlanner({
@@ -231,16 +278,17 @@ export const createChatOrchestrator = ({
             // low-effort default for other planner providers.
             plannerReasoningEffort:
                 plannerProfile.provider === 'openrouter' ? 'none' : 'low',
-            ...((directOpenAiStructuredExecutor !== undefined ||
-                useRuntimeStructuredExecutor) && {
+            ...(useStructuredPlannerExecutor && {
                 executePlannerStructured: async (request) => {
+                    const { compatibilityMessages, ...generationRequest } =
+                        request;
                     const activePlannerProfile = getActivePlannerProfile();
                     const settingsResolution = resolveModelSettings({
                         profile: activePlannerProfile,
-                        request,
+                        request: generationRequest,
                     });
                     const resolvedRequest = applyModelSettings(
-                        request,
+                        generationRequest,
                         settingsResolution.applied
                     );
                     const resolvedMaxOutputTokens =
@@ -251,40 +299,101 @@ export const createChatOrchestrator = ({
                         );
                     }
                     const activePlannerCapabilityFacts =
-                        resolveModelProfileCapabilityFacts(
-                            activePlannerProfile.capabilities
-                        );
-                    const nativeStructuredProvider =
-                        activePlannerProfile.provider === 'openai' ||
-                        activePlannerProfile.provider === 'openrouter';
+                        resolvePlannerCapabilityFacts(activePlannerProfile);
+                    const outputPath = resolveTypedModelOutputPath({
+                        provider: activePlannerProfile.provider,
+                        capabilities: activePlannerProfile.capabilities,
+                        capabilityFacts: activePlannerCapabilityFacts,
+                    });
                     // Unknown model metadata remains fail-open for known native
-                    // providers. Providers without a native structured seam use
-                    // the existing bounded text-JSON compatibility path.
-                    if (
-                        !nativeStructuredProvider ||
-                        activePlannerCapabilityFacts.structuredOutput ===
-                            'unsupported'
-                    ) {
-                        const compatibilityResult =
-                            await generationRuntime.generate({
-                                ...resolvedRequest,
-                                model: activePlannerProfile.providerModel,
-                                provider: activePlannerProfile.provider,
-                                capabilities: activePlannerProfile.capabilities,
-                                providerRouting:
-                                    activePlannerProfile.providerRouting,
-                                maxOutputTokens: resolvedMaxOutputTokens,
-                                ...(safetyIdentifier !== undefined && {
-                                    safetyIdentifier,
+                    // providers. JSON mode is used only when the selected
+                    // profile explicitly advertises that adapter control;
+                    // otherwise use the bounded parser compatibility path.
+                    if (outputPath !== 'native_schema') {
+                        let compatibilityResult: GenerationResult;
+                        try {
+                            compatibilityResult =
+                                await generationRuntime.generate({
+                                    ...resolvedRequest,
+                                    messages:
+                                        compatibilityMessages ??
+                                        resolvedRequest.messages,
+                                    model: activePlannerProfile.providerModel,
+                                    provider: activePlannerProfile.provider,
+                                    capabilities:
+                                        activePlannerProfile.capabilities,
+                                    providerRouting:
+                                        activePlannerProfile.providerRouting,
+                                    maxOutputTokens: resolvedMaxOutputTokens,
+                                    ...(activePlannerCapabilityFacts.jsonMode ===
+                                        'supported' && { jsonMode: true }),
+                                    ...(safetyIdentifier !== undefined && {
+                                        safetyIdentifier,
+                                    }),
+                                });
+                        } catch (error) {
+                            const outcome = isTypedOutputTransportUnavailable(
+                                error
+                            )
+                                ? 'unsupported_route'
+                                : 'runtime_failure';
+                            const runtimeEvidence = isGenerationRuntimeError(
+                                error
+                            )
+                                ? error
+                                : undefined;
+                            const failure =
+                                new ChatPlannerStructuredOutputError(
+                                    outcome,
+                                    'Planner compatibility runtime failed.',
+                                    { cause: error },
+                                    true,
+                                    outputPath === 'json_compatibility'
+                                        ? 'parser_compatibility'
+                                        : undefined
+                                );
+                            throw Object.assign(failure, {
+                                plannerModel:
+                                    runtimeEvidence?.model ??
+                                    activePlannerProfile.providerModel,
+                                ...(runtimeEvidence?.usage !== undefined && {
+                                    plannerUsage: runtimeEvidence.usage,
                                 }),
                             });
+                        }
+                        const throwCompatibilityFailure = (
+                            outcome: ConstructorParameters<
+                                typeof ChatPlannerStructuredOutputError
+                            >[0],
+                            message: string,
+                            cause?: unknown
+                        ): never => {
+                            const failure =
+                                new ChatPlannerStructuredOutputError(
+                                    outcome,
+                                    message,
+                                    cause === undefined ? undefined : { cause },
+                                    true,
+                                    outputPath === 'json_compatibility'
+                                        ? 'parser_compatibility'
+                                        : undefined
+                                );
+                            throw Object.assign(failure, {
+                                plannerModel:
+                                    compatibilityResult.model ??
+                                    activePlannerProfile.providerModel,
+                                plannerUsage: compatibilityResult.usage,
+                            });
+                        };
                         if (
                             compatibilityResult.completion?.status ===
                                 'incomplete' ||
                             compatibilityResult.finishReason === 'length' ||
-                            compatibilityResult.finishReason === 'max_tokens'
+                            compatibilityResult.finishReason === 'max_tokens' ||
+                            compatibilityResult.finishReason ===
+                                'max_output_tokens'
                         ) {
-                            throw new ChatPlannerStructuredOutputError(
+                            throwCompatibilityFailure(
                                 'incomplete',
                                 'Planner compatibility output was incomplete.'
                             );
@@ -299,13 +408,13 @@ export const createChatOrchestrator = ({
                             compatibilityResult.finishReason ===
                                 'content_filter'
                         ) {
-                            throw new ChatPlannerStructuredOutputError(
-                                'runtime_failure',
-                                'Planner compatibility output was unavailable.'
+                            throwCompatibilityFailure(
+                                'refusal',
+                                'Planner compatibility output was refused.'
                             );
                         }
                         if (compatibilityResult.text.trim().length === 0) {
-                            throw new ChatPlannerStructuredOutputError(
+                            throwCompatibilityFailure(
                                 'no_output',
                                 'Planner compatibility output was empty.'
                             );
@@ -316,10 +425,10 @@ export const createChatOrchestrator = ({
                                 compatibilityResult.text
                             ) as unknown;
                         } catch (error) {
-                            throw new ChatPlannerStructuredOutputError(
+                            throwCompatibilityFailure(
                                 'parse_failure',
                                 'Planner compatibility output was not valid JSON.',
-                                { cause: error }
+                                error
                             );
                         }
                         return {
@@ -337,18 +446,55 @@ export const createChatOrchestrator = ({
                             ),
                         };
                     }
+                    const directOpenAiStructuredExecutor =
+                        activePlannerProfile.provider === 'openai' &&
+                        runtimeConfig.openai.apiKey !== null
+                            ? createOpenAiChatPlannerStructuredExecutor({
+                                  apiKey: runtimeConfig.openai.apiKey,
+                              })
+                            : undefined;
                     if (
                         activePlannerProfile.provider === 'openai' &&
                         directOpenAiStructuredExecutor !== undefined
                     ) {
-                        return directOpenAiStructuredExecutor({
-                            ...resolvedRequest,
-                            model: activePlannerProfile.providerModel,
-                            maxOutputTokens: resolvedMaxOutputTokens,
-                            ...(safetyIdentifier !== undefined && {
-                                safetyIdentifier,
-                            }),
-                        });
+                        try {
+                            return await directOpenAiStructuredExecutor({
+                                ...resolvedRequest,
+                                model: activePlannerProfile.providerModel,
+                                maxOutputTokens: resolvedMaxOutputTokens,
+                                ...(safetyIdentifier !== undefined && {
+                                    safetyIdentifier,
+                                }),
+                            });
+                        } catch (error) {
+                            if (error instanceof SyntaxError) {
+                                throw error;
+                            }
+                            const outcome = isTypedOutputTransportUnavailable(
+                                error
+                            )
+                                ? 'unsupported_route'
+                                : 'runtime_failure';
+                            const failure =
+                                new ChatPlannerStructuredOutputError(
+                                    outcome,
+                                    'Structured planner runtime failed.',
+                                    { cause: error }
+                                );
+                            const runtimeEvidence = isGenerationRuntimeError(
+                                error
+                            )
+                                ? error
+                                : undefined;
+                            throw Object.assign(failure, {
+                                plannerModel:
+                                    runtimeEvidence?.model ??
+                                    activePlannerProfile.providerModel,
+                                ...(runtimeEvidence?.usage !== undefined && {
+                                    plannerUsage: runtimeEvidence.usage,
+                                }),
+                            });
+                        }
                     }
 
                     try {
@@ -365,18 +511,39 @@ export const createChatOrchestrator = ({
                                 safetyIdentifier,
                             }),
                         });
+                        const throwStructuredResultFailure = (
+                            outcome: ConstructorParameters<
+                                typeof ChatPlannerStructuredOutputError
+                            >[0],
+                            message: string,
+                            cause?: unknown
+                        ): never => {
+                            const failure =
+                                new ChatPlannerStructuredOutputError(
+                                    outcome,
+                                    message,
+                                    cause === undefined ? undefined : { cause }
+                                );
+                            throw Object.assign(failure, {
+                                plannerModel:
+                                    result.model ??
+                                    activePlannerProfile.providerModel,
+                                plannerUsage: result.usage,
+                            });
+                        };
                         if (
                             result.completion?.status === 'incomplete' ||
                             result.finishReason === 'length' ||
-                            result.finishReason === 'max_tokens'
+                            result.finishReason === 'max_tokens' ||
+                            result.finishReason === 'max_output_tokens'
                         ) {
-                            throw new ChatPlannerStructuredOutputError(
+                            throwStructuredResultFailure(
                                 'incomplete',
                                 'Structured planner output was incomplete.'
                             );
                         }
                         if (result.completion?.status === 'failed') {
-                            throw new ChatPlannerStructuredOutputError(
+                            throwStructuredResultFailure(
                                 'runtime_failure',
                                 'Structured planner runtime failed.'
                             );
@@ -387,13 +554,13 @@ export const createChatOrchestrator = ({
                             result.finishReason === 'content-filter' ||
                             result.finishReason === 'content_filter'
                         ) {
-                            throw new ChatPlannerStructuredOutputError(
+                            throwStructuredResultFailure(
                                 'refusal',
                                 'Structured planner output was refused.'
                             );
                         }
                         if (result.text.trim().length === 0) {
-                            throw new ChatPlannerStructuredOutputError(
+                            throwStructuredResultFailure(
                                 'no_output',
                                 'Structured planner returned no output.'
                             );
@@ -402,10 +569,10 @@ export const createChatOrchestrator = ({
                         try {
                             decision = JSON.parse(result.text) as unknown;
                         } catch (error) {
-                            throw new ChatPlannerStructuredOutputError(
+                            throwStructuredResultFailure(
                                 'parse_failure',
                                 'Structured planner output was not valid JSON.',
-                                { cause: error }
+                                error
                             );
                         }
                         return {
@@ -420,23 +587,25 @@ export const createChatOrchestrator = ({
                         if (error instanceof ChatPlannerStructuredOutputError) {
                             throw error;
                         }
-                        const message =
-                            error instanceof Error
-                                ? error.message
-                                : String(error);
-                        const outcome =
-                            /unsupported|not support|require_parameters/i.test(
-                                message
-                            )
-                                ? 'unsupported_route'
-                                : /schema|validated output|400/i.test(message)
-                                  ? 'schema_rejected'
-                                  : 'runtime_failure';
-                        throw new ChatPlannerStructuredOutputError(
+                        const outcome = isTypedOutputTransportUnavailable(error)
+                            ? 'unsupported_route'
+                            : 'runtime_failure';
+                        const failure = new ChatPlannerStructuredOutputError(
                             outcome,
                             'Structured planner runtime failed.',
                             { cause: error }
                         );
+                        const runtimeEvidence = isGenerationRuntimeError(error)
+                            ? error
+                            : undefined;
+                        throw Object.assign(failure, {
+                            plannerModel:
+                                runtimeEvidence?.model ??
+                                activePlannerProfile.providerModel,
+                            ...(runtimeEvidence?.usage !== undefined && {
+                                plannerUsage: runtimeEvidence.usage,
+                            }),
+                        });
                     }
                 },
             }),
@@ -446,8 +615,11 @@ export const createChatOrchestrator = ({
                 maxOutputTokens,
                 reasoningEffort,
                 verbosity,
+                forceParserCompatibility = false,
             }) => {
                 const activePlannerProfile = getActivePlannerProfile();
+                const activePlannerCapabilityFacts =
+                    resolvePlannerCapabilityFacts(activePlannerProfile);
                 const settingsResolution = resolveModelSettings({
                     profile: activePlannerProfile,
                     request: {
@@ -458,30 +630,99 @@ export const createChatOrchestrator = ({
                 });
                 // Planner calls go through the same runtime seam so model usage
                 // and behavior stay aligned with normal generation calls.
-                const plannerResult = await generationRuntime.generate({
-                    ...applyModelSettings(
-                        {
-                            messages,
-                            maxOutputTokens,
-                            reasoningEffort,
-                            verbosity,
-                        },
-                        settingsResolution.applied
-                    ),
-                    model: activePlannerProfile.providerModel,
-                    provider: activePlannerProfile.provider,
-                    capabilities: activePlannerProfile.capabilities,
-                    providerRouting: activePlannerProfile.providerRouting,
-                    ...(safetyIdentifier !== undefined && {
-                        safetyIdentifier,
-                    }),
-                });
+                const resolvedGenerationRequest = applyModelSettings(
+                    {
+                        messages,
+                        maxOutputTokens,
+                        reasoningEffort,
+                        verbosity,
+                    },
+                    settingsResolution.applied
+                );
+                const executePlannerGeneration = (
+                    useJsonMode: boolean
+                ): Promise<GenerationResult> =>
+                    generationRuntime.generate({
+                        ...resolvedGenerationRequest,
+                        model: activePlannerProfile.providerModel,
+                        provider: activePlannerProfile.provider,
+                        capabilities: activePlannerProfile.capabilities,
+                        providerRouting: activePlannerProfile.providerRouting,
+                        ...(useJsonMode && { jsonMode: true }),
+                        ...(safetyIdentifier !== undefined && {
+                            safetyIdentifier,
+                        }),
+                    });
+                const useJsonMode =
+                    !forceParserCompatibility &&
+                    activePlannerCapabilityFacts.jsonMode === 'supported';
+                let plannerResult: GenerationResult;
+                try {
+                    plannerResult = await executePlannerGeneration(useJsonMode);
+                } catch (error) {
+                    if (
+                        !useJsonMode ||
+                        !isTypedOutputTransportUnavailable(error)
+                    ) {
+                        throw error;
+                    }
+                    const failedJsonUsage = isGenerationRuntimeError(error)
+                        ? error.usage
+                        : undefined;
+                    try {
+                        const parserResult =
+                            await executePlannerGeneration(false);
+                        plannerResult = {
+                            ...parserResult,
+                            usage: combinePlannerUsage(
+                                failedJsonUsage,
+                                parserResult.usage
+                            ),
+                        };
+                    } catch (parserError) {
+                        const parserRuntimeError = isGenerationRuntimeError(
+                            parserError
+                        )
+                            ? parserError
+                            : undefined;
+                        const combinedUsage = combinePlannerUsage(
+                            failedJsonUsage,
+                            parserRuntimeError?.usage
+                        );
+                        if (combinedUsage === undefined) {
+                            throw parserError;
+                        }
+                        const plannerModel =
+                            parserRuntimeError?.model ??
+                            activePlannerProfile.providerModel;
+                        if (
+                            typeof parserError === 'object' &&
+                            parserError !== null
+                        ) {
+                            throw Object.assign(parserError, {
+                                plannerModel,
+                                plannerUsage: combinedUsage,
+                            });
+                        }
+                        const failure = new ChatPlannerStructuredOutputError(
+                            'runtime_failure',
+                            'Planner parser compatibility call failed.',
+                            { cause: parserError }
+                        );
+                        throw Object.assign(failure, {
+                            plannerModel,
+                            plannerUsage: combinedUsage,
+                        });
+                    }
+                }
 
                 return {
                     text: plannerResult.text,
                     provider: activePlannerProfile.provider,
                     model: plannerResult.model,
                     usage: plannerResult.usage,
+                    finishReason: plannerResult.finishReason,
+                    completion: plannerResult.completion,
                     upstreamAttribution: plannerResult.upstreamAttribution,
                 };
             },

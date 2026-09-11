@@ -8,6 +8,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
+import { isGenerationRuntimeError } from '@footnote/agent-runtime';
 import { createOpenAiChatPlannerStructuredExecutor } from '../src/services/chatPlannerStructuredOpenAi.js';
 
 test('structured planner executor parses function_call arguments', async () => {
@@ -106,8 +107,7 @@ test('structured planner executor parses function_call arguments', async () => {
             capturedRequestBody?.tools as Array<Record<string, unknown>>
         )?.[0];
         const parameterSchema = structuredTool?.parameters as
-            | Record<string, unknown>
-            | undefined;
+            Record<string, unknown> | undefined;
         assert.equal(parameterSchema?.type, 'object');
         assert.ok(
             typeof parameterSchema?.properties === 'object' &&
@@ -116,8 +116,7 @@ test('structured planner executor parses function_call arguments', async () => {
         assert.ok(Array.isArray(parameterSchema?.required));
         assert.equal('allOf' in (parameterSchema ?? {}), false);
         const inputMessages = capturedRequestBody?.input as
-            | Array<{ role?: string; content?: unknown }>
-            | undefined;
+            Array<{ role?: string; content?: unknown }> | undefined;
         const assistantInput = inputMessages?.find(
             (message) => message.role === 'assistant'
         );
@@ -141,6 +140,11 @@ test('structured planner executor returns actionable errors for malformed functi
         new Response(
             JSON.stringify({
                 model: 'gpt-5-nano',
+                usage: {
+                    input_tokens: 10,
+                    output_tokens: 9,
+                    total_tokens: 19,
+                },
                 output: [
                     {
                         type: 'function_call',
@@ -175,7 +179,108 @@ test('structured planner executor returns actionable errors for malformed functi
                     reasoningEffort: 'low',
                     verbosity: 'low',
                 }),
-            /structured planner argument parsing/i
+            (error: unknown) =>
+                error instanceof SyntaxError &&
+                /structured planner argument parsing/i.test(error.message) &&
+                (error as { plannerUsage?: { totalTokens?: number } })
+                    .plannerUsage?.totalTokens === 19
+        );
+    } finally {
+        globalThis.fetch = originalFetch;
+    }
+});
+
+test('structured planner executor rejects incomplete function calls with usage', async () => {
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = (async () =>
+        new Response(
+            JSON.stringify({
+                model: 'gpt-5-nano',
+                usage: {
+                    input_tokens: 10,
+                    output_tokens: 9,
+                    total_tokens: 19,
+                },
+                output: [
+                    {
+                        type: 'function_call',
+                        name: 'submit_planner_decision',
+                        status: 'incomplete',
+                        arguments: '{}',
+                    },
+                ],
+            }),
+            {
+                status: 200,
+                headers: { 'Content-Type': 'application/json' },
+            }
+        )) as typeof fetch;
+
+    try {
+        const executeStructuredPlanner =
+            createOpenAiChatPlannerStructuredExecutor({
+                apiKey: 'test-key',
+            });
+
+        await assert.rejects(
+            () =>
+                executeStructuredPlanner({
+                    messages: [
+                        {
+                            role: 'system',
+                            content: 'Planner instructions',
+                        },
+                    ],
+                    model: 'gpt-5-nano',
+                    maxOutputTokens: 700,
+                }),
+            (error: unknown) =>
+                error instanceof SyntaxError &&
+                (error as { plannerFailureOutcome?: string })
+                    .plannerFailureOutcome === 'incomplete' &&
+                (error as { plannerUsage?: { totalTokens?: number } })
+                    .plannerUsage?.totalTokens === 19
+        );
+    } finally {
+        globalThis.fetch = originalFetch;
+    }
+});
+
+test('structured planner executor classifies explicit native transport rejection', async () => {
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = (async () =>
+        new Response(
+            JSON.stringify({
+                error: { code: 'response_format_not_supported' },
+            }),
+            {
+                status: 400,
+                statusText: 'Bad Request',
+                headers: { 'Content-Type': 'application/json' },
+            }
+        )) as typeof fetch;
+
+    try {
+        const executeStructuredPlanner =
+            createOpenAiChatPlannerStructuredExecutor({
+                apiKey: 'test-key',
+            });
+
+        await assert.rejects(
+            () =>
+                executeStructuredPlanner({
+                    messages: [
+                        {
+                            role: 'system',
+                            content: 'Planner instructions',
+                        },
+                    ],
+                    model: 'gpt-5-nano',
+                    maxOutputTokens: 700,
+                }),
+            (error: unknown) =>
+                isGenerationRuntimeError(error) &&
+                error.details.classification === 'structured_output_unavailable'
         );
     } finally {
         globalThis.fetch = originalFetch;

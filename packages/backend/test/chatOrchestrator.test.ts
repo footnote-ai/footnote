@@ -8,7 +8,11 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import type { GenerationRuntime } from '@footnote/agent-runtime';
+import {
+    GenerationRuntimeError,
+    type GenerationRuntime,
+    type GenerationRequest,
+} from '@footnote/agent-runtime';
 import type { PostChatRequest } from '@footnote/contracts/web';
 import { createMetadata } from './fixtures/responseMetadataFixture.js';
 import type { BotProfileConfig } from '../src/config/profile.js';
@@ -63,9 +67,10 @@ const createChatRequest = (
 const createGenerationRuntime = (
     implementation: (
         request: import('@footnote/agent-runtime').GenerationRequest
-    ) => Promise<import('@footnote/agent-runtime').GenerationResult>
+    ) => Promise<import('@footnote/agent-runtime').GenerationResult>,
+    kind = 'test-runtime'
 ): GenerationRuntime => ({
-    kind: 'test-runtime',
+    kind,
     generate: implementation,
 });
 
@@ -2280,6 +2285,238 @@ test('planner runtime failures emit failed planner execution metadata and still 
     );
     assert.equal(capturedExecutionContext?.generation?.status, 'executed');
     assert.ok((capturedExecutionContext?.generation?.durationMs ?? -1) >= 0);
+});
+
+test('planner native transport rejection falls back through JSON mode and parser', async () => {
+    const originalModelProfiles = runtimeConfig.modelProfiles;
+    const originalOpenAi = runtimeConfig.openai;
+    const runtimeConfigMutable = runtimeConfig as unknown as {
+        modelProfiles: typeof runtimeConfig.modelProfiles;
+        openai: typeof runtimeConfig.openai;
+    };
+    const plannerProfile = runtimeConfig.modelProfiles.catalog.find(
+        (profile) => profile.id === 'openai-text-fast'
+    );
+    assert.ok(plannerProfile);
+    runtimeConfigMutable.modelProfiles = {
+        ...runtimeConfig.modelProfiles,
+        plannerProfileId: plannerProfile.id,
+        defaultProfileId: plannerProfile.id,
+        catalog: runtimeConfig.modelProfiles.catalog.map((profile) =>
+            profile.id === plannerProfile.id
+                ? {
+                      ...profile,
+                      provider: 'openai',
+                      capabilities: {
+                          ...profile.capabilities,
+                          toolCapabilities: {
+                              ...profile.capabilities.toolCapabilities,
+                              'generation.structured_output': true,
+                              'generation.json_mode': true,
+                          },
+                      },
+                  }
+                : profile
+        ),
+    };
+    runtimeConfigMutable.openai = {
+        ...runtimeConfig.openai,
+        apiKey: null,
+        plannerStructuredOutputEnabled: true,
+    };
+
+    let nativePlannerAttemptCount = 0;
+    let jsonModePlannerAttemptCount = 0;
+    let parserPlannerAttemptCount = 0;
+    try {
+        const orchestrator = createChatOrchestrator({
+            generationRuntime: createGenerationRuntime(async (request) => {
+                if (request.structuredOutput !== undefined) {
+                    if (request.maxOutputTokens === PLANNER_TOKEN_SENTINEL) {
+                        nativePlannerAttemptCount += 1;
+                    }
+                    throw new GenerationRuntimeError(
+                        'Native planner transport unavailable.',
+                        { classification: 'structured_output_unavailable' }
+                    );
+                }
+                if (
+                    request.maxOutputTokens === PLANNER_TOKEN_SENTINEL &&
+                    request.jsonMode === true
+                ) {
+                    jsonModePlannerAttemptCount += 1;
+                    throw new GenerationRuntimeError(
+                        'JSON planner transport unavailable.',
+                        { classification: 'structured_output_unavailable' },
+                        {
+                            model: request.model,
+                            usage: {
+                                promptTokens: 3,
+                                completionTokens: 2,
+                                totalTokens: 5,
+                            },
+                        }
+                    );
+                }
+                if (request.maxOutputTokens === PLANNER_TOKEN_SENTINEL) {
+                    parserPlannerAttemptCount += 1;
+                    return {
+                        text: JSON.stringify({
+                            action: 'message',
+                            modality: 'text',
+                            safetyTier: 'Low',
+                            reasoning: 'Use the parser planner path.',
+                            generation: {
+                                reasoningEffort: 'low',
+                                verbosity: 'low',
+                            },
+                        }),
+                        model: request.model,
+                        usage: {
+                            promptTokens: 4,
+                            completionTokens: 3,
+                            totalTokens: 7,
+                        },
+                    };
+                }
+                return {
+                    text: 'runtime JSON planner fallback reply',
+                    model: request.model,
+                    provenance: 'Inferred',
+                    citations: [],
+                };
+            }, 'voltagent'),
+            storeTrace: async () => undefined,
+            buildResponseMetadata: () => createMetadata(),
+            defaultModel: plannerProfile.id,
+            recordUsage: () => undefined,
+        });
+
+        const response = await orchestrator.runChat(createChatRequest());
+        assert.equal(response.action, 'message');
+        assert.ok(nativePlannerAttemptCount >= 1);
+        assert.ok(jsonModePlannerAttemptCount >= 1);
+        assert.ok(parserPlannerAttemptCount >= 1);
+    } finally {
+        runtimeConfigMutable.modelProfiles = originalModelProfiles;
+        runtimeConfigMutable.openai = originalOpenAi;
+    }
+});
+
+test('planner compatibility uses text JSON instructions and rejects incomplete output', async () => {
+    const originalModelProfiles = runtimeConfig.modelProfiles;
+    const originalOpenAi = runtimeConfig.openai;
+    const runtimeConfigMutable = runtimeConfig as unknown as {
+        modelProfiles: typeof runtimeConfig.modelProfiles;
+        openai: typeof runtimeConfig.openai;
+    };
+    const plannerProfile = runtimeConfig.modelProfiles.catalog.find(
+        (profile) => profile.id === 'openai-text-fast'
+    );
+    assert.ok(plannerProfile);
+    const nativeProfile = runtimeConfig.modelProfiles.catalog.find(
+        (profile) =>
+            profile.id !== plannerProfile.id &&
+            (profile.provider === 'openai' ||
+                profile.provider === 'openrouter') &&
+            profile.capabilities.toolCapabilities?.[
+                'generation.structured_output'
+            ] !== false
+    );
+    assert.ok(nativeProfile);
+    runtimeConfigMutable.modelProfiles = {
+        ...runtimeConfig.modelProfiles,
+        plannerProfileId: plannerProfile.id,
+        defaultProfileId: plannerProfile.id,
+        catalog: runtimeConfig.modelProfiles.catalog.map((profile) =>
+            profile.id === plannerProfile.id
+                ? {
+                      ...profile,
+                      provider: 'openai',
+                      capabilities: {
+                          ...profile.capabilities,
+                          toolCapabilities: {
+                              ...profile.capabilities.toolCapabilities,
+                              'generation.structured_output': false,
+                              'generation.json_mode': true,
+                          },
+                      },
+                  }
+                : profile
+        ),
+    };
+    runtimeConfigMutable.openai = {
+        ...runtimeConfig.openai,
+        apiKey: null,
+        plannerStructuredOutputEnabled: true,
+    };
+
+    let plannerPrompt = '';
+    let plannerRequest: GenerationRequest | undefined;
+    const plannerUsageRecords: Array<{ totalTokens: number }> = [];
+    try {
+        const orchestrator = createChatOrchestrator({
+            generationRuntime: createGenerationRuntime(async (request) => {
+                if (request.maxOutputTokens === PLANNER_TOKEN_SENTINEL) {
+                    plannerPrompt = request.messages[0]?.content ?? '';
+                    plannerRequest = request;
+                    return {
+                        text: JSON.stringify({
+                            action: 'message',
+                            modality: 'text',
+                            safetyTier: 'Low',
+                            reasoning:
+                                'This result must be rejected as incomplete.',
+                            generation: {
+                                reasoningEffort: 'low',
+                                verbosity: 'low',
+                            },
+                        }),
+                        model: request.model,
+                        usage: {
+                            promptTokens: 4,
+                            completionTokens: 2,
+                            totalTokens: 6,
+                        },
+                        finishReason: 'length',
+                        completion: {
+                            status: 'incomplete',
+                            reason: 'max_output_tokens',
+                            visibleTextLength: 100,
+                        },
+                    };
+                }
+                return {
+                    text: 'compatibility fallback reply',
+                    model: request.model,
+                    provenance: 'Inferred',
+                    citations: [],
+                };
+            }, 'voltagent'),
+            storeTrace: async () => undefined,
+            buildResponseMetadata: () => createMetadata(),
+            defaultModel: plannerProfile.id,
+            recordUsage: (record) => {
+                if (record.feature === 'chat_planner') {
+                    plannerUsageRecords.push({
+                        totalTokens: record.totalTokens,
+                    });
+                }
+            },
+        });
+
+        await orchestrator.runChat(createChatRequest());
+        assert.match(plannerPrompt, /Return plain JSON only/i);
+        assert.doesNotMatch(
+            plannerPrompt,
+            /Submit exactly one decision through the provided planner decision tool/i
+        );
+        assert.equal(plannerRequest?.jsonMode, true);
+        assert.equal(plannerUsageRecords[0]?.totalTokens, 6);
+    } finally {
+        runtimeConfigMutable.modelProfiles = originalModelProfiles;
+        runtimeConfigMutable.openai = originalOpenAi;
+    }
 });
 
 test('planner invocation emits distinct metadata categories for mode TRACE planner controls and provenance', async () => {

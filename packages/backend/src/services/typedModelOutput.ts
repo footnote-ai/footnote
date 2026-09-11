@@ -6,8 +6,12 @@
  * @footnote-risk: high - Admitting an invalid typed result can trigger an unauthorized workflow transition.
  * @footnote-ethics: high - Explicit failures prevent opaque model output from becoming a policy decision.
  */
-import type { GenerationResult } from '@footnote/agent-runtime';
+import {
+    isGenerationRuntimeError,
+    type GenerationResult,
+} from '@footnote/agent-runtime';
 import type {
+    ModelCapabilityFacts,
     ModelProfileCapabilities,
     ModelCapabilitySupport,
 } from '@footnote/contracts';
@@ -38,6 +42,12 @@ export type TypedModelOutputValidation<T> =
 export const resolveTypedModelOutputPath = (input: {
     provider?: string;
     capabilities?: ModelProfileCapabilities;
+    /** Effective adapter/model facts selected by the integration seam. */
+    capabilityFacts?: Pick<
+        ModelCapabilityFacts,
+        'structuredOutput' | 'jsonMode'
+    >;
+    /** Legacy JSON-only override; callers should prefer capabilityFacts. */
     jsonModeSupport?: ModelCapabilitySupport;
 }): TypedModelOutputPath => {
     const profileFacts = resolveModelProfileCapabilityFacts(
@@ -45,13 +55,17 @@ export const resolveTypedModelOutputPath = (input: {
     );
     const nativeProvider =
         input.provider === 'openai' || input.provider === 'openrouter';
-    if (nativeProvider && profileFacts.structuredOutput !== 'unsupported') {
+    const structuredOutputSupport =
+        input.capabilityFacts?.structuredOutput ??
+        profileFacts.structuredOutput;
+    const jsonModeSupport =
+        input.capabilityFacts?.jsonMode ??
+        input.jsonModeSupport ??
+        profileFacts.jsonMode;
+    if (nativeProvider && structuredOutputSupport !== 'unsupported') {
         return 'native_schema';
     }
-    if (nativeProvider && profileFacts.structuredOutput === 'unsupported') {
-        return 'json_compatibility';
-    }
-    if (input.jsonModeSupport === 'supported') {
+    if (jsonModeSupport === 'supported') {
         return 'json_compatibility';
     }
     return 'parser_compatibility';
@@ -73,7 +87,8 @@ export const validateTypedModelOutput = <T>(input: {
     }
     if (
         input.result.finishReason === 'length' ||
-        input.result.finishReason === 'max_tokens'
+        input.result.finishReason === 'max_tokens' ||
+        input.result.finishReason === 'max_output_tokens'
     ) {
         return { valid: false, failure: 'incomplete' };
     }
@@ -97,15 +112,8 @@ export const validateTypedModelOutput = <T>(input: {
 
 /** Identifies adapter errors that mean native schema transport is unavailable. */
 export const isTypedOutputTransportUnavailable = (error: unknown): boolean => {
-    const message =
-        error instanceof Error
-            ? error.message.toLowerCase()
-            : String(error).toLowerCase();
     return (
-        message.includes('unsupported') ||
-        message.includes('not support') ||
-        message.includes('response_format') ||
-        message.includes('structured output') ||
-        message.includes('schema')
+        isGenerationRuntimeError(error) &&
+        error.details.classification === 'structured_output_unavailable'
     );
 };

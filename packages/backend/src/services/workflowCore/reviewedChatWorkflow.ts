@@ -6,14 +6,19 @@
  * @footnote-risk: high - This owns the live chat path, routing, fallback, and resource admission.
  * @footnote-ethics: high - Backend-owned topology and fail-open recovery determine what users are told and what evidence is retained.
  */
-import type {
-    GenerationRequest,
-    GenerationResult,
-    GenerationRuntime,
-    GenerationUsage,
-    RuntimeMessage,
+import {
+    isGenerationRuntimeError,
+    type GenerationRequest,
+    type GenerationResult,
+    type GenerationRuntime,
+    type GenerationUsage,
+    type RuntimeMessage,
 } from '@footnote/agent-runtime';
-import type { ModelProfile, TraceAxisScore } from '@footnote/contracts';
+import {
+    resolveModelProfileCapabilityFacts,
+    type ModelProfile,
+    type TraceAxisScore,
+} from '@footnote/contracts';
 import type {
     ContextStepRequest as ContractContextStepRequest,
     ContextStepResult as ContractContextStepResult,
@@ -86,6 +91,7 @@ import {
 import {
     executeStepRoutingChain,
     type RoutingChainAttemptLog,
+    type RoutingChainInternalAttempt,
 } from '../stepRoutingExecutor.js';
 import type { ResolvedStepRoutingCandidate } from '../stepRoutingChains.js';
 import type { ProviderAvailabilityStore } from '../providerAvailability.js';
@@ -109,6 +115,7 @@ import {
     isTypedOutputTransportUnavailable,
     resolveTypedModelOutputPath,
     validateTypedModelOutput,
+    type TypedModelOutputPath,
     type TypedModelOutputFailure,
 } from '../typedModelOutput.js';
 import type {
@@ -728,6 +735,17 @@ export const runBoundedReviewWorkflow = async (
         stepRoutingChainSet,
         presentation,
     } = input;
+    const resolveAttemptCapabilityFacts = (
+        provider: string | undefined,
+        capabilities: ModelProfile['capabilities'] | undefined
+    ) =>
+        generationRuntime.resolveCapabilityFacts?.({
+            provider: provider ?? '',
+            capabilities: capabilities ?? { canUseSearch: false },
+        }) ??
+        resolveModelProfileCapabilityFacts(
+            capabilities ?? { canUseSearch: false }
+        );
     const normalizedMaxIterations = normalizeNonNegativeInteger(
         workflowConfig.maxIterations,
         0
@@ -2008,7 +2026,99 @@ export const runBoundedReviewWorkflow = async (
             };
         }
         let reviewResult: GenerationResult;
+        const reviewAttempts: GenerationResult[] = [];
         const reviewAttemptsByIndex = new Map<number, GenerationResult>();
+        const recordStructuredOutputTransportFailure = (
+            attempt: {
+                providerModel: string;
+                model?: string;
+                usage?: GenerationUsage;
+            },
+            recordAttempt?: (attempt: RoutingChainInternalAttempt) => void
+        ): void => {
+            // Keep the consumed native transport visible in the bounded
+            // Attempt collection even when the adapter cannot report usage.
+            // The follow-up JSON/parser result is recorded separately below.
+            const failureResult: GenerationResult = {
+                text: '',
+                model: attempt.model ?? attempt.providerModel,
+                finishReason: 'structured_output_unavailable',
+                completion: {
+                    status: 'failed',
+                    reason: 'structured_output_unavailable',
+                    visibleTextLength: 0,
+                },
+                ...(attempt.usage !== undefined && { usage: attempt.usage }),
+            };
+            reviewAttempts.push(failureResult);
+            recordAttempt?.({
+                status: 'failed_transport_fallback',
+                finishReason: failureResult.finishReason,
+                completion: failureResult.completion,
+                ...(failureResult.usage !== undefined && {
+                    usage: failureResult.usage,
+                }),
+            });
+        };
+        const runReviewGeneration = async (input: {
+            request: GenerationRequest;
+            initialOutputPath: TypedModelOutputPath;
+            capabilityFacts: ReturnType<typeof resolveAttemptCapabilityFacts>;
+            providerModel: string;
+            recordAttempt?: (attempt: RoutingChainInternalAttempt) => void;
+        }): Promise<GenerationResult> => {
+            let outputPath: TypedModelOutputPath = input.initialOutputPath;
+            while (true) {
+                const requestForOutput: GenerationRequest = {
+                    ...input.request,
+                    ...(outputPath === 'native_schema'
+                        ? {
+                              structuredOutput:
+                                  REVIEW_DECISION_STRUCTURED_OUTPUT,
+                          }
+                        : outputPath === 'json_compatibility'
+                          ? { jsonMode: true }
+                          : {}),
+                };
+                try {
+                    return normalizeGenerationResultEvidence(
+                        await generationRuntime.generate(requestForOutput)
+                    );
+                } catch (error) {
+                    const nextOutputPath: TypedModelOutputPath | undefined =
+                        outputPath === 'native_schema'
+                            ? input.capabilityFacts.jsonMode === 'supported'
+                                ? 'json_compatibility'
+                                : 'parser_compatibility'
+                            : outputPath === 'json_compatibility'
+                              ? 'parser_compatibility'
+                              : undefined;
+                    if (
+                        nextOutputPath === undefined ||
+                        !isTypedOutputTransportUnavailable(error)
+                    ) {
+                        throw error;
+                    }
+                    recordStructuredOutputTransportFailure(
+                        {
+                            providerModel: input.providerModel,
+                            ...(isGenerationRuntimeError(error) && {
+                                model: error.model,
+                                usage: error.usage,
+                            }),
+                        },
+                        input.recordAttempt
+                    );
+                    outputPath = nextOutputPath;
+                }
+            }
+        };
+        const reviewUsage = (): ReviewWorkflowUsageSummary =>
+            combineGenerationUsage(
+                reviewAttempts.map((attempt) =>
+                    captureUsage(attempt, bounded.model)
+                )
+            );
         let routingAttempts: RoutingChainAttemptLog[] | undefined;
         let selectedProfile: ModelProfile | undefined;
         try {
@@ -2021,14 +2131,23 @@ export const runBoundedReviewWorkflow = async (
                       requiresSearch: false,
                       providerAvailability:
                           stepRoutingChainSet.providerAvailability,
-                      runWithProfile: async (profile, attemptIndex) => {
+                      runWithProfile: async (
+                          profile,
+                          attemptIndex,
+                          recordAttempt
+                      ) => {
                           const settingsResolution = resolveModelSettings({
                               profile,
                               request: bounded,
                           });
+                          const capabilityFacts = resolveAttemptCapabilityFacts(
+                              profile.provider,
+                              profile.capabilities
+                          );
                           const outputPath = resolveTypedModelOutputPath({
                               provider: profile.provider,
                               capabilities: profile.capabilities,
+                              capabilityFacts,
                           });
                           const requestForProfile = {
                               ...applyModelSettings(
@@ -2040,33 +2159,14 @@ export const runBoundedReviewWorkflow = async (
                               capabilities: profile.capabilities,
                               providerRouting: profile.providerRouting,
                           };
-                          let result: GenerationResult;
-                          try {
-                              result = normalizeGenerationResultEvidence(
-                                  await generationRuntime.generate({
-                                      ...requestForProfile,
-                                      ...(outputPath === 'native_schema' && {
-                                          structuredOutput:
-                                              REVIEW_DECISION_STRUCTURED_OUTPUT,
-                                      }),
-                                  })
-                              );
-                          } catch (error) {
-                              if (
-                                  outputPath !== 'native_schema' ||
-                                  !isTypedOutputTransportUnavailable(error)
-                              ) {
-                                  throw error;
-                              }
-                              // Native schema rejection is a transport fact,
-                              // not a policy failure: retry this profile using
-                              // the bounded parser compatibility path.
-                              result = normalizeGenerationResultEvidence(
-                                  await generationRuntime.generate(
-                                      requestForProfile
-                                  )
-                              );
-                          }
+                          const result = await runReviewGeneration({
+                              request: requestForProfile,
+                              initialOutputPath: outputPath,
+                              capabilityFacts,
+                              providerModel: profile.providerModel,
+                              recordAttempt,
+                          });
+                          reviewAttempts.push(result);
                           reviewAttemptsByIndex.set(attemptIndex, result);
                           return result;
                       },
@@ -2101,24 +2201,27 @@ export const runBoundedReviewWorkflow = async (
             const routed =
                 chain === undefined ? undefined : toRoutingChainResult(chain);
             if (routed?.isErr()) {
-                if (routed.error.attempts.length > 0) {
-                    routingAttempts = attachGenerationAttemptEvidence(
-                        routed.error.attempts,
-                        reviewAttemptsByIndex
-                    );
-                }
+                routingAttempts = attachGenerationAttemptEvidence(
+                    routed.error.attempts,
+                    reviewAttemptsByIndex
+                );
+                const usage = reviewUsage();
                 return {
                     status: 'failed',
                     errorCode: routed.error.reasonCode,
                     retryable: false,
+                    usage: { totalTokens: usage.totalTokens },
                     metadata: encodeMetadata({
                         status: 'failed',
                         summary:
                             'Assessment routing failed; the latest valid draft was preserved.',
                         reasonCode: routed.error.reasonCode,
                         terminationReason: 'executor_error_fail_open',
+                        model: usage.model,
+                        usage: combineGenerationResultUsage(reviewAttempts),
+                        estimatedCost: usage.estimatedCost,
                         signals: buildRoutingChainSignals({
-                            attempts: routed.error.attempts,
+                            attempts: routingAttempts,
                             selectedProfileId: null,
                         }),
                     }),
@@ -2132,33 +2235,25 @@ export const runBoundedReviewWorkflow = async (
                 );
                 selectedProfile = routed.value.selected.profile;
             } else {
+                const capabilityFacts = resolveAttemptCapabilityFacts(
+                    bounded.provider,
+                    bounded.capabilities
+                );
                 const outputPath = resolveTypedModelOutputPath({
                     provider: bounded.provider,
                     capabilities: bounded.capabilities,
+                    capabilityFacts,
                 });
-                const requestForOutput = {
-                    ...bounded,
-                    ...(outputPath === 'native_schema' && {
-                        structuredOutput: REVIEW_DECISION_STRUCTURED_OUTPUT,
-                    }),
-                };
-                try {
-                    reviewResult = normalizeGenerationResultEvidence(
-                        await generationRuntime.generate(requestForOutput)
-                    );
-                } catch (error) {
-                    if (
-                        outputPath !== 'native_schema' ||
-                        !isTypedOutputTransportUnavailable(error)
-                    ) {
-                        throw error;
-                    }
-                    reviewResult = normalizeGenerationResultEvidence(
-                        await generationRuntime.generate(bounded)
-                    );
-                }
+                reviewResult = await runReviewGeneration({
+                    request: bounded,
+                    initialOutputPath: outputPath,
+                    capabilityFacts,
+                    providerModel: bounded.model ?? 'unknown',
+                });
+                reviewAttempts.push(reviewResult);
             }
         } catch (error) {
+            const usage = reviewUsage();
             return {
                 status: 'failed',
                 errorCode: 'assessment_runtime_error',
@@ -2170,11 +2265,16 @@ export const runBoundedReviewWorkflow = async (
                     summary:
                         'Assessment failed; the latest valid draft was preserved.',
                     reasonCode: 'generation_runtime_error',
+                    model: usage.model,
+                    usage: combineGenerationResultUsage(reviewAttempts),
+                    estimatedCost: usage.estimatedCost,
                     terminationReason: 'executor_error_fail_open',
                 }),
             };
         }
-        const usage = captureUsage(reviewResult, bounded.model);
+        const usage = reviewUsage();
+        const combinedResultUsage =
+            combineGenerationResultUsage(reviewAttempts);
         const typedValidation = validateTypedModelOutput({
             result: reviewResult,
             parse: (text) => {
@@ -2221,7 +2321,7 @@ export const runBoundedReviewWorkflow = async (
                         typedValidation.failure
                     ),
                     model: usage.model,
-                    usage: reviewResult.usage,
+                    usage: combinedResultUsage,
                     estimatedCost: usage.estimatedCost,
                     terminationReason: 'executor_error_fail_open',
                     ...(parseFailure?.isErr() === true
@@ -2297,7 +2397,7 @@ export const runBoundedReviewWorkflow = async (
                 summary:
                     'Assessment evaluated draft quality and emitted a declared workflow outcome.',
                 model: usage.model,
-                usage: reviewResult.usage,
+                usage: combinedResultUsage,
                 estimatedCost: usage.estimatedCost,
                 signals,
                 ...(decision.reviewDecision === 'revise' &&

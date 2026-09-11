@@ -83,6 +83,7 @@ export interface VoltAgentGenerateTextOptions {
     providerOptions?: VoltAgentProviderOptions;
     search?: GenerationSearchRequest;
     structuredOutput?: GenerationStructuredOutput;
+    jsonMode?: boolean;
     signal?: AbortSignal;
 }
 
@@ -452,6 +453,14 @@ const ACCOUNT_UNAVAILABLE_ERROR_CODES = new Set([
     'provider_account_unavailable',
 ]);
 
+const STRUCTURED_OUTPUT_UNAVAILABLE_ERROR_CODES = new Set([
+    'json_schema_not_supported',
+    'response_format_not_supported',
+    'schema_not_supported',
+    'structured_output_not_supported',
+    'unsupported_response_format',
+]);
+
 /**
  * Normalizes AI SDK API failures with structured semantics or the observed
  * provider billing message. Arbitrary messages, malformed payloads, invalid
@@ -484,9 +493,12 @@ export const normalizeGenerationRuntimeError = (
                     classification: 'provider_temporary_unavailable',
                     availabilityReason: 'account_unavailable',
                 }
-              : error.isRetryable
-                ? { classification: 'transient' }
-                : undefined;
+              : code !== undefined &&
+                  STRUCTURED_OUTPUT_UNAVAILABLE_ERROR_CODES.has(code)
+                ? { classification: 'structured_output_unavailable' }
+                : error.isRetryable
+                  ? { classification: 'transient' }
+                  : undefined;
 
     return details === undefined
         ? undefined
@@ -494,9 +506,39 @@ export const normalizeGenerationRuntimeError = (
 };
 
 const readNonNegativeInteger = (value: unknown): number | undefined =>
-    typeof value === 'number' && Number.isInteger(value) && value >= 0
+    typeof value === 'number' && Number.isSafeInteger(value) && value >= 0
         ? value
         : undefined;
+
+const normalizeVoltAgentUsage = (
+    usage: VoltAgentUsage | undefined
+): GenerationUsage | undefined => {
+    if (usage === undefined) {
+        return undefined;
+    }
+    const normalized: GenerationUsage = {};
+    const promptTokens = readNonNegativeInteger(usage.promptTokens);
+    const cachedInputTokens = readNonNegativeInteger(usage.cachedInputTokens);
+    const cacheWriteTokens = readNonNegativeInteger(usage.cacheWriteTokens);
+    const completionTokens = readNonNegativeInteger(usage.completionTokens);
+    const reasoningTokens = readNonNegativeInteger(usage.reasoningTokens);
+    const totalTokens = readNonNegativeInteger(usage.totalTokens);
+    if (promptTokens !== undefined) normalized.promptTokens = promptTokens;
+    if (cachedInputTokens !== undefined) {
+        normalized.cachedInputTokens = cachedInputTokens;
+    }
+    if (cacheWriteTokens !== undefined) {
+        normalized.cacheWriteTokens = cacheWriteTokens;
+    }
+    if (completionTokens !== undefined) {
+        normalized.completionTokens = completionTokens;
+    }
+    if (reasoningTokens !== undefined) {
+        normalized.reasoningTokens = reasoningTokens;
+    }
+    if (totalTokens !== undefined) normalized.totalTokens = totalTokens;
+    return Object.keys(normalized).length > 0 ? normalized : undefined;
+};
 
 const normalizeCompletionStatus = (input: {
     responseStatus?: string;
@@ -739,6 +781,14 @@ export const supportsStructuredOutputsForProvider = (
     provider: string
 ): boolean => provider === 'openai' || provider === 'openrouter';
 
+/**
+ * Reports whether the VoltAgent adapter can request schema-free JSON mode for
+ * a provider. This remains a separate fact from native schema support even
+ * when the currently verified provider set is the same.
+ */
+export const supportsJsonModeForProvider = (provider: string): boolean =>
+    provider === 'openai' || provider === 'openrouter';
+
 const allCapabilityStates = (
     state: ModelCapabilityFacts['reasoningEfforts'][keyof ModelCapabilityFacts['reasoningEfforts']]
 ): ModelCapabilityFacts['reasoningEfforts'] => ({
@@ -786,6 +836,9 @@ export const resolveVoltAgentRuntimeCapabilityFacts = (
         topP: 'supported',
         outputLimit: 'supported',
         structuredOutput: supportsStructuredOutputsForProvider(provider)
+            ? 'supported'
+            : 'unsupported',
+        jsonMode: supportsJsonModeForProvider(provider)
             ? 'supported'
             : 'unsupported',
         nativeSearch,
@@ -1184,17 +1237,18 @@ const normalizeVoltAgentResult = (
     const incompleteReason = readBoundedString(incompleteDetails?.reason);
     const responseUsage = asRecord(responseBody?.usage);
     const outputTokenDetails = asRecord(responseUsage?.output_tokens_details);
+    const runtimeUsage = normalizeVoltAgentUsage(result.usage);
     const reasoningTokens =
-        result.usage?.reasoningTokens ??
+        runtimeUsage?.reasoningTokens ??
         readNonNegativeInteger(outputTokenDetails?.reasoning_tokens);
     const promptTokens =
-        result.usage?.promptTokens ??
+        runtimeUsage?.promptTokens ??
         readNonNegativeInteger(responseUsage?.input_tokens);
     const completionTokens =
-        result.usage?.completionTokens ??
+        runtimeUsage?.completionTokens ??
         readNonNegativeInteger(responseUsage?.output_tokens);
     const totalTokens =
-        result.usage?.totalTokens ??
+        runtimeUsage?.totalTokens ??
         readNonNegativeInteger(responseUsage?.total_tokens);
     const completionStatus = normalizeCompletionStatus({
         responseStatus,
@@ -1206,19 +1260,14 @@ const normalizeVoltAgentResult = (
         result.providerMetadata
     );
     const usage: GenerationUsage | undefined =
-        result.usage !== undefined ||
+        runtimeUsage !== undefined ||
         promptTokens !== undefined ||
         completionTokens !== undefined ||
         totalTokens !== undefined ||
         reasoningTokens !== undefined
             ? {
+                  ...(runtimeUsage ?? {}),
                   ...(promptTokens !== undefined && { promptTokens }),
-                  ...(result.usage?.cachedInputTokens !== undefined && {
-                      cachedInputTokens: result.usage.cachedInputTokens,
-                  }),
-                  ...(result.usage?.cacheWriteTokens !== undefined && {
-                      cacheWriteTokens: result.usage.cacheWriteTokens,
-                  }),
                   ...(completionTokens !== undefined && { completionTokens }),
                   ...(reasoningTokens !== undefined && { reasoningTokens }),
                   ...(totalTokens !== undefined && { totalTokens }),
@@ -1400,6 +1449,10 @@ const createDefaultVoltAgentExecutor = ({
                         }),
                     }),
                 }),
+                ...(options.structuredOutput === undefined &&
+                    options.jsonMode === true && {
+                        output: Output.json(),
+                    }),
                 ...(options.signal !== undefined && {
                     signal: options.signal,
                 }),
@@ -1424,17 +1477,24 @@ const createDefaultVoltAgentExecutor = ({
             );
 
             if (
-                options.structuredOutput !== undefined &&
+                (options.structuredOutput !== undefined ||
+                    options.jsonMode === true) &&
                 result.output === undefined
             ) {
-                throw new Error(
-                    'VoltAgent structured generation completed without a validated output.'
+                throw new GenerationRuntimeErrorClass(
+                    'VoltAgent structured generation completed without a validated output.',
+                    { classification: 'structured_output_unavailable' },
+                    {
+                        model: result.response.modelId,
+                        usage: normalizeVoltAgentUsage(result.usage),
+                    }
                 );
             }
 
             return {
                 text:
-                    options.structuredOutput === undefined
+                    options.structuredOutput === undefined &&
+                    options.jsonMode !== true
                         ? result.text
                         : JSON.stringify(result.output),
                 finishReason: result.finishReason,
@@ -1500,6 +1560,7 @@ const createVoltAgentRuntime = ({
 
     return {
         kind,
+        resolveCapabilityFacts: resolveEffectiveVoltAgentCapabilities,
         async generate(request: GenerationRequest): Promise<GenerationResult> {
             const modelResolution = resolveVoltAgentModelId({
                 requestedModel: request.model,
@@ -1643,6 +1704,8 @@ const createVoltAgentRuntime = ({
                     ...(request.structuredOutput !== undefined && {
                         structuredOutput: request.structuredOutput,
                     }),
+                    ...(request.structuredOutput === undefined &&
+                        request.jsonMode === true && { jsonMode: true }),
                     ...(request.signal !== undefined && {
                         signal: request.signal,
                     }),
