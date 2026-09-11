@@ -25,7 +25,6 @@ import type {
     ExecutionReasonCode,
     EvaluatorOutcome,
     GenerationCompletion,
-    GenerationExecutionUsage,
     PresentationMetadata,
     StepSignals,
     StepRecord,
@@ -69,10 +68,7 @@ import {
 } from '../workflowEngine/reviewDecision.js';
 import { buildAssessSignals } from '../workflowEngine/reviewLoopSignals.js';
 import { buildWorkflowReviewParseFailureSignals } from '@footnote/contracts/policy';
-import {
-    buildAssessRoutingHintSignals,
-    buildRoutingChainSignals,
-} from '../workflowEngine/routingSignals.js';
+import { buildAssessRoutingHintSignals } from '../workflowEngine/routingSignals.js';
 import {
     decideRevisionRoutingHintLane,
     extractRoutingHintsFromAssess,
@@ -334,9 +330,14 @@ type ChatStepMetadata = {
     model?: string;
     provider?: string;
     profileId?: string;
+    requestedProvider?: string;
+    requestedModel?: string;
+    actualProvider?: string;
+    actualModel?: string;
     completion?: GenerationCompletion;
     settings?: WorkflowAttemptSettings;
     capabilities?: WorkflowAttemptCapabilities;
+    routingAttempts?: WorkflowAttemptRoutingRecord[];
     usage?: GenerationResult['usage'];
     estimatedCost?: ReviewWorkflowUsageSummary['estimatedCost'];
     signals?: StepSignals;
@@ -348,9 +349,10 @@ type ChatStepMetadata = {
 };
 
 const toWorkflowSettingRecord = (
-    value: object
+    value: object | undefined
 ): Record<string, string | number> => {
     const result: Record<string, string | number> = {};
+    if (value === undefined) return result;
     for (const [key, setting] of Object.entries(value)) {
         if (typeof setting === 'string' || typeof setting === 'number') {
             result[key] = setting;
@@ -360,19 +362,131 @@ const toWorkflowSettingRecord = (
 };
 
 const toWorkflowAttemptSettings = (
-    resolution: ReturnType<typeof resolveModelSettings>
-): WorkflowAttemptSettings => ({
-    requested: toWorkflowSettingRecord(resolution.requested),
-    applied: toWorkflowSettingRecord(resolution.applied),
-    ...(resolution.ignored.length === 0
-        ? {}
-        : {
-              ignored: resolution.ignored.map(({ setting, reasonCode }) => ({
-                  setting,
-                  reasonCode,
-              })),
-          }),
-});
+    resolution: ReturnType<typeof resolveModelSettings> | undefined,
+    observed: object | undefined
+): WorkflowAttemptSettings | undefined => {
+    const observedSettings = toWorkflowSettingRecord(observed);
+    if (
+        resolution === undefined &&
+        Object.keys(observedSettings).length === 0
+    ) {
+        return undefined;
+    }
+    return {
+        ...(resolution === undefined
+            ? {}
+            : {
+                  requested: toWorkflowSettingRecord(resolution.requested),
+                  applied: toWorkflowSettingRecord(resolution.applied),
+                  ...(resolution.ignored.length === 0
+                      ? {}
+                      : {
+                            ignored: resolution.ignored.map(
+                                ({ setting, reasonCode }) => ({
+                                    setting,
+                                    reasonCode,
+                                })
+                            ),
+                        }),
+              }),
+        ...(Object.keys(observedSettings).length === 0
+            ? {}
+            : { observed: observedSettings }),
+    };
+};
+
+const toWorkflowRoutingAttempts = (
+    attempts: readonly RoutingChainAttemptLog[] | undefined
+): WorkflowAttemptRoutingRecord[] | undefined => {
+    if (attempts === undefined || attempts.length === 0) return undefined;
+    return attempts.map((attempt) => ({
+        index: attempt.index,
+        profileId: attempt.profileId,
+        ...(attempt.provider === undefined
+            ? {}
+            : { requestedProvider: attempt.provider }),
+        ...(attempt.model === undefined
+            ? {}
+            : { requestedModel: attempt.model }),
+        ...(attempt.actualProvider === undefined
+            ? {}
+            : { actualProvider: attempt.actualProvider }),
+        ...(attempt.actualModel === undefined
+            ? {}
+            : { actualModel: attempt.actualModel }),
+        status: attempt.status,
+        ...(attempt.reasonCode === undefined
+            ? {}
+            : { reasonCode: attempt.reasonCode }),
+        ...(attempt.finishReason === undefined
+            ? {}
+            : { finishReason: attempt.finishReason }),
+        ...(attempt.completion === undefined
+            ? {}
+            : { completion: attempt.completion }),
+        ...(attempt.usage === undefined ? {} : { usage: attempt.usage }),
+        ...(attempt.cost === undefined ? {} : { cost: attempt.cost }),
+        ...(attempt.startedAtMs === undefined
+            ? {}
+            : { startedAt: new Date(attempt.startedAtMs).toISOString() }),
+        ...(attempt.finishedAtMs === undefined
+            ? {}
+            : { finishedAt: new Date(attempt.finishedAtMs).toISOString() }),
+        ...(attempt.startedAtMs === undefined ||
+        attempt.finishedAtMs === undefined
+            ? {}
+            : {
+                  durationMs: Math.max(
+                      0,
+                      attempt.finishedAtMs - attempt.startedAtMs
+                  ),
+              }),
+        chooseOneUsed: attempt.chooseOneUsed,
+        ...(attempt.chooseOneSelectedIndex === undefined
+            ? {}
+            : { chooseOneSelectedIndex: attempt.chooseOneSelectedIndex }),
+        ...(attempt.temporaryUnavailableReason === undefined
+            ? {}
+            : {
+                  temporaryUnavailableReason:
+                      attempt.temporaryUnavailableReason,
+              }),
+    }));
+};
+
+const withWorkflowRoutingAttempts = (
+    attempts: readonly RoutingChainAttemptLog[] | undefined
+): Pick<ChatStepMetadata, 'routingAttempts'> | Record<string, never> => {
+    const routingAttempts = toWorkflowRoutingAttempts(attempts);
+    return routingAttempts === undefined ? {} : { routingAttempts };
+};
+
+const toWorkflowAttemptIdentity = (input: {
+    requestedProvider?: string;
+    requestedModel?: string;
+    result?: GenerationResult;
+}): Pick<
+    ChatStepMetadata,
+    'requestedProvider' | 'requestedModel' | 'actualProvider' | 'actualModel'
+> => {
+    const actualModel =
+        input.result?.upstreamAttribution?.resolvedModel ?? input.result?.model;
+    return {
+        ...(input.requestedProvider === undefined
+            ? {}
+            : { requestedProvider: input.requestedProvider }),
+        ...(input.requestedModel === undefined
+            ? {}
+            : { requestedModel: input.requestedModel }),
+        ...(input.result?.upstreamAttribution?.inferenceProvider === undefined
+            ? {}
+            : {
+                  actualProvider:
+                      input.result.upstreamAttribution.inferenceProvider,
+              }),
+        ...(actualModel === undefined ? {} : { actualModel }),
+    };
+};
 
 const encodeMetadata = (metadata: ChatStepMetadata): Result | undefined =>
     toSerializable(metadata);
@@ -450,130 +564,6 @@ const metadataFromAttempt = (
         if (metadata !== undefined) return metadata;
     }
     return fallback;
-};
-
-const readCanonicalRoutingAttempts = (
-    signals: StepSignals | undefined
-): WorkflowAttemptRoutingRecord[] | undefined => {
-    const readUsage = (
-        value: unknown
-    ): GenerationExecutionUsage | undefined => {
-        if (
-            typeof value !== 'object' ||
-            value === null ||
-            Array.isArray(value)
-        ) {
-            return undefined;
-        }
-        const candidate = value as Record<string, unknown>;
-        const usage: GenerationExecutionUsage = {};
-        for (const field of [
-            'promptTokens',
-            'cachedInputTokens',
-            'cacheWriteTokens',
-            'completionTokens',
-            'totalTokens',
-            'reasoningTokens',
-        ] as const) {
-            if (
-                Number.isSafeInteger(candidate[field]) &&
-                (candidate[field] as number) >= 0
-            ) {
-                usage[field] = candidate[field] as number;
-            }
-        }
-        return Object.keys(usage).length > 0 ? usage : undefined;
-    };
-    const readCompletion = (
-        value: unknown
-    ): GenerationCompletion | undefined => {
-        if (
-            typeof value !== 'object' ||
-            value === null ||
-            Array.isArray(value)
-        ) {
-            return undefined;
-        }
-        const candidate = value as Record<string, unknown>;
-        if (
-            (candidate.status !== 'completed' &&
-                candidate.status !== 'incomplete' &&
-                candidate.status !== 'failed' &&
-                candidate.status !== 'unknown') ||
-            !Number.isSafeInteger(candidate.visibleTextLength) ||
-            (candidate.visibleTextLength as number) < 0
-        ) {
-            return undefined;
-        }
-        return {
-            status: candidate.status,
-            visibleTextLength: candidate.visibleTextLength as number,
-            ...(typeof candidate.reason === 'string' && {
-                reason: candidate.reason.slice(0, 100),
-            }),
-        };
-    };
-    const encoded = signals?.routingChainAttemptsJson;
-    if (typeof encoded !== 'string') return undefined;
-    try {
-        const parsed: unknown = JSON.parse(encoded);
-        if (!Array.isArray(parsed)) return undefined;
-        const attempts: WorkflowAttemptRoutingRecord[] = [];
-        for (const value of parsed) {
-            if (typeof value !== 'object' || value === null) continue;
-            const candidate = value as Record<string, unknown>;
-            if (
-                !Number.isSafeInteger(candidate.index) ||
-                (candidate.index as number) < 0 ||
-                typeof candidate.profileId !== 'string' ||
-                candidate.profileId.length === 0 ||
-                typeof candidate.status !== 'string' ||
-                typeof candidate.chooseOneUsed !== 'boolean'
-            ) {
-                continue;
-            }
-            const attempt: WorkflowAttemptRoutingRecord = {
-                index: candidate.index as number,
-                profileId: candidate.profileId,
-                status: candidate.status,
-                chooseOneUsed: candidate.chooseOneUsed,
-                ...(typeof candidate.provider === 'string' && {
-                    provider: candidate.provider,
-                }),
-                ...(typeof candidate.model === 'string' && {
-                    model: candidate.model,
-                }),
-                ...(typeof candidate.reasonCode === 'string' && {
-                    reasonCode: candidate.reasonCode,
-                }),
-                ...(typeof candidate.finishReason === 'string' && {
-                    finishReason: candidate.finishReason,
-                }),
-                ...(readCompletion(candidate.completion) === undefined
-                    ? {}
-                    : { completion: readCompletion(candidate.completion) }),
-                ...(readUsage(candidate.usage) === undefined
-                    ? {}
-                    : { usage: readUsage(candidate.usage) }),
-                ...(Number.isSafeInteger(candidate.chooseOneSelectedIndex) &&
-                (candidate.chooseOneSelectedIndex as number) >= 0
-                    ? {
-                          chooseOneSelectedIndex:
-                              candidate.chooseOneSelectedIndex as number,
-                      }
-                    : {}),
-                ...(typeof candidate.temporaryUnavailableReason ===
-                    'string' && {
-                    temporaryUnavailableReason:
-                        candidate.temporaryUnavailableReason,
-                }),
-            };
-            attempts.push(attempt);
-        }
-        return attempts.length > 0 ? attempts : undefined;
-    } catch {
-        return undefined;
-    }
 };
 
 const toWorkflowCost = (
@@ -661,10 +651,6 @@ const buildWorkflowLineage = (input: {
                 const attemptMetadata = readAs<ChatStepMetadata>(
                     attempt.metadata
                 );
-                const routingAttempts =
-                    attemptMetadata?.signals === undefined
-                        ? undefined
-                        : readCanonicalRoutingAttempts(attemptMetadata.signals);
                 return {
                     attempt: attempt.attempt,
                     status: attempt.status,
@@ -674,12 +660,21 @@ const buildWorkflowLineage = (input: {
                         0,
                         attempt.finishedAtMs - attempt.startedAtMs
                     ),
-                    ...(attemptMetadata?.model === undefined
+                    ...(attemptMetadata?.requestedProvider === undefined
                         ? {}
-                        : { model: attemptMetadata.model }),
-                    ...(attemptMetadata?.provider === undefined
+                        : {
+                              requestedProvider:
+                                  attemptMetadata.requestedProvider,
+                          }),
+                    ...(attemptMetadata?.requestedModel === undefined
                         ? {}
-                        : { provider: attemptMetadata.provider }),
+                        : { requestedModel: attemptMetadata.requestedModel }),
+                    ...(attemptMetadata?.actualProvider === undefined
+                        ? {}
+                        : { actualProvider: attemptMetadata.actualProvider }),
+                    ...(attemptMetadata?.actualModel === undefined
+                        ? {}
+                        : { actualModel: attemptMetadata.actualModel }),
                     ...(attemptMetadata?.profileId === undefined
                         ? {}
                         : { profileId: attemptMetadata.profileId }),
@@ -713,9 +708,9 @@ const buildWorkflowLineage = (input: {
                               terminationReason:
                                   attemptMetadata.terminationReason,
                           }),
-                    ...(routingAttempts === undefined
+                    ...(attemptMetadata?.routingAttempts === undefined
                         ? {}
-                        : { routingAttempts }),
+                        : { routingAttempts: attemptMetadata.routingAttempts }),
                 };
             }
         );
@@ -915,7 +910,12 @@ export const addEvaluatorStepToWorkflowLineage = (input: {
     };
     const attempt: WorkflowAttemptRecord = {
         attempt: 1,
-        status: input.evaluator.status === 'executed' ? 'succeeded' : 'failed',
+        status:
+            input.evaluator.status === 'executed'
+                ? 'succeeded'
+                : input.evaluator.status === 'skipped'
+                  ? 'rejected'
+                  : 'failed',
         startedAt: new Date(startedAtMs).toISOString(),
         finishedAt: new Date(finishedAtMs).toISOString(),
         durationMs: Math.max(0, durationMs),
@@ -933,12 +933,13 @@ export const addEvaluatorStepToWorkflowLineage = (input: {
         resultRefs: [{ resultId, name: result.name }],
         attempts: [attempt],
         outcome: {
-            status:
-                input.evaluator.status === 'executed' ? 'executed' : 'failed',
+            status: input.evaluator.status,
             summary:
                 input.evaluator.status === 'executed'
                     ? 'Deterministic evaluator produced a bounded finding.'
-                    : 'Deterministic evaluator failed open without a finding.',
+                    : input.evaluator.status === 'skipped'
+                      ? 'Deterministic evaluator was skipped without a finding.'
+                      : 'Deterministic evaluator failed open without a finding.',
             ...(input.evaluator.reasonCode === undefined
                 ? {}
                 : {
@@ -953,11 +954,22 @@ export const addEvaluatorStepToWorkflowLineage = (input: {
                 : {}),
         },
     };
+    const steps = [...input.workflow.steps, step]
+        .map((candidate, index) => ({ candidate, index }))
+        .sort((left, right) => {
+            const startedAtDelta =
+                Date.parse(left.candidate.startedAt) -
+                Date.parse(right.candidate.startedAt);
+            return startedAtDelta === 0
+                ? left.index - right.index
+                : startedAtDelta;
+        })
+        .map(({ candidate }) => candidate);
     return {
         ...input.workflow,
         stepCount: input.workflow.stepCount + 1,
         results: [...(input.workflow.results ?? []), result],
-        steps: [step, ...input.workflow.steps],
+        steps,
     };
 };
 
@@ -1982,6 +1994,29 @@ export const runBoundedReviewWorkflow = async (
                     ? 'Generated a presentation candidate for authoritative wording.'
                     : 'Presentation candidate was unavailable; authoritative generation continued.',
             model: result.draftResult?.model,
+            ...(presentation.config.profile === undefined
+                ? {}
+                : {
+                      ...toWorkflowAttemptIdentity({
+                          requestedProvider:
+                              presentation.config.profile.provider,
+                          requestedModel:
+                              presentation.config.profile.providerModel,
+                          result: result.draftResult,
+                      }),
+                      capabilities: resolveAttemptCapabilityFacts(
+                          presentation.config.profile.provider,
+                          presentation.config.profile.capabilities
+                      ),
+                  }),
+            ...(result.draftResult?.providerObservedSettings === undefined
+                ? {}
+                : {
+                      settings: toWorkflowAttemptSettings(
+                          undefined,
+                          result.draftResult.providerObservedSettings
+                      ),
+                  }),
             usage,
             estimatedCost,
             candidateId,
@@ -2238,17 +2273,11 @@ export const runBoundedReviewWorkflow = async (
                                 'Generation routing failed; workflow returned the latest valid draft when available.',
                             reasonCode: routed.error.reasonCode,
                             terminationReason: 'executor_error_fail_open',
+                            ...withWorkflowRoutingAttempts(
+                                routed.error.attempts
+                            ),
                             signals: {
                                 ...refinementStepSignals(),
-                                ...buildRoutingChainSignals({
-                                    attempts: routed.error.attempts,
-                                    selectedProfileId: null,
-                                    signalKeys: {
-                                        profileId: 'routedProfileId',
-                                        provider: 'routedProvider',
-                                        model: 'routedModel',
-                                    },
-                                }),
                             },
                         }),
                     };
@@ -2256,13 +2285,21 @@ export const runBoundedReviewWorkflow = async (
                 generationResult = lastAttempt;
                 routingAttempts = attachGenerationAttemptEvidence(
                     routed.error.attempts,
-                    generationAttemptsByIndex
+                    generationAttemptsByIndex,
+                    {
+                        captureCost: (result, requestedModel) =>
+                            captureUsage(result, requestedModel).estimatedCost,
+                    }
                 );
             } else if (routed?.isOk()) {
                 generationResult = routed.value.value;
                 routingAttempts = attachGenerationAttemptEvidence(
                     routed.value.attempts,
-                    generationAttemptsByIndex
+                    generationAttemptsByIndex,
+                    {
+                        captureCost: (result, requestedModel) =>
+                            captureUsage(result, requestedModel).estimatedCost,
+                    }
                 );
                 selectedProfile = routed.value.selected.profile;
             } else {
@@ -2288,17 +2325,9 @@ export const runBoundedReviewWorkflow = async (
                         'Generation failed; workflow returned the latest valid draft when available.',
                     reasonCode: 'generation_runtime_error',
                     terminationReason: 'executor_error_fail_open',
+                    ...withWorkflowRoutingAttempts(routingAttempts),
                     signals: {
                         ...refinementStepSignals(),
-                        ...(routingAttempts === undefined
-                            ? {}
-                            : buildRoutingChainSignals({
-                                  attempts: routingAttempts,
-                                  selectedProfileId:
-                                      selectedProfile?.id ?? null,
-                                  selectedProvider: selectedProfile?.provider,
-                                  selectedModel: selectedProfile?.providerModel,
-                              })),
                     },
                 }),
             };
@@ -2332,6 +2361,13 @@ export const runBoundedReviewWorkflow = async (
                   : 'Generated refinement draft from assessment guidance.',
             reasonCode: admitted ? undefined : generationAdmission.reasonCode,
             model: usage.model,
+            ...toWorkflowAttemptIdentity({
+                requestedProvider:
+                    selectedProfile?.provider ?? boundedRequest.provider,
+                requestedModel:
+                    selectedProfile?.providerModel ?? boundedRequest.model,
+                result: generationResult,
+            }),
             ...(selectedProfile?.provider === undefined &&
             boundedRequest.provider === undefined
                 ? {}
@@ -2345,33 +2381,29 @@ export const runBoundedReviewWorkflow = async (
             ...(generationResult.completion === undefined
                 ? {}
                 : { completion: generationResult.completion }),
-            ...(selectedSettings === undefined
+            ...(toWorkflowAttemptSettings(
+                selectedSettings,
+                generationResult.providerObservedSettings
+            ) === undefined
                 ? {}
-                : { settings: toWorkflowAttemptSettings(selectedSettings) }),
+                : {
+                      settings: toWorkflowAttemptSettings(
+                          selectedSettings,
+                          generationResult.providerObservedSettings
+                      ),
+                  }),
             ...(selectedCapabilityFacts === undefined
                 ? {}
                 : { capabilities: selectedCapabilityFacts }),
             usage: combineGenerationResultUsage(generationAttempts),
             estimatedCost: usage.estimatedCost,
             candidateId,
+            ...withWorkflowRoutingAttempts(routingAttempts),
             terminationReason: !admitted
                 ? 'executor_error_fail_open'
                 : undefined,
             signals: {
                 ...refinementStepSignals(),
-                ...(routingAttempts === undefined
-                    ? {}
-                    : buildRoutingChainSignals({
-                          attempts: routingAttempts,
-                          selectedProfileId: selectedProfile?.id ?? null,
-                          selectedProvider: selectedProfile?.provider,
-                          selectedModel: selectedProfile?.providerModel,
-                          signalKeys: {
-                              profileId: 'routedProfileId',
-                              provider: 'routedProvider',
-                              model: 'routedModel',
-                          },
-                      })),
             },
         });
         if (!admitted) {
@@ -2521,11 +2553,13 @@ export const runBoundedReviewWorkflow = async (
                           ? { jsonMode: true }
                           : {}),
                 };
+                const startedAtMs = Date.now();
                 try {
                     return normalizeGenerationResultEvidence(
                         await generationRuntime.generate(requestForOutput)
                     );
                 } catch (error) {
+                    const finishedAtMs = Date.now();
                     const nextOutputPath: TypedModelOutputPath | undefined =
                         outputPath === 'native_schema'
                             ? generationInput.capabilityFacts.jsonMode ===
@@ -2549,7 +2583,27 @@ export const runBoundedReviewWorkflow = async (
                                 usage: error.usage,
                             }),
                         },
-                        generationInput.recordAttempt
+                        (attempt) =>
+                            generationInput.recordAttempt?.({
+                                ...attempt,
+                                startedAtMs,
+                                finishedAtMs,
+                                cost: captureUsage(
+                                    {
+                                        text: '',
+                                        model:
+                                            isGenerationRuntimeError(error) &&
+                                            error.model !== undefined
+                                                ? error.model
+                                                : generationInput.providerModel,
+                                        ...(isGenerationRuntimeError(error) &&
+                                        error.usage !== undefined
+                                            ? { usage: error.usage }
+                                            : {}),
+                                    },
+                                    generationInput.providerModel
+                                ).estimatedCost,
+                            })
                     );
                     outputPath = nextOutputPath;
                 }
@@ -2636,7 +2690,11 @@ export const runBoundedReviewWorkflow = async (
             if (routed?.isErr()) {
                 routingAttempts = attachGenerationAttemptEvidence(
                     routed.error.attempts,
-                    reviewAttemptsByIndex
+                    reviewAttemptsByIndex,
+                    {
+                        captureCost: (result, requestedModel) =>
+                            captureUsage(result, requestedModel).estimatedCost,
+                    }
                 );
                 const usage = reviewUsage();
                 return {
@@ -2653,10 +2711,7 @@ export const runBoundedReviewWorkflow = async (
                         model: usage.model,
                         usage: combineGenerationResultUsage(reviewAttempts),
                         estimatedCost: usage.estimatedCost,
-                        signals: buildRoutingChainSignals({
-                            attempts: routingAttempts,
-                            selectedProfileId: null,
-                        }),
+                        ...withWorkflowRoutingAttempts(routingAttempts),
                     }),
                 };
             }
@@ -2664,7 +2719,11 @@ export const runBoundedReviewWorkflow = async (
                 reviewResult = routed.value.value;
                 routingAttempts = attachGenerationAttemptEvidence(
                     routed.value.attempts,
-                    reviewAttemptsByIndex
+                    reviewAttemptsByIndex,
+                    {
+                        captureCost: (result, requestedModel) =>
+                            captureUsage(result, requestedModel).estimatedCost,
+                    }
                 );
                 selectedProfile = routed.value.selected.profile;
             } else {
@@ -2706,6 +2765,7 @@ export const runBoundedReviewWorkflow = async (
                     usage: combineGenerationResultUsage(reviewAttempts),
                     estimatedCost: usage.estimatedCost,
                     terminationReason: 'executor_error_fail_open',
+                    ...withWorkflowRoutingAttempts(routingAttempts),
                 }),
             };
         }
@@ -2745,20 +2805,29 @@ export const runBoundedReviewWorkflow = async (
                         typedValidation.failure
                     ),
                     model: usage.model,
-                    ...(selectedProfile?.provider === undefined
-                        ? {}
-                        : { provider: selectedProfile.provider }),
+                    ...toWorkflowAttemptIdentity({
+                        requestedProvider:
+                            selectedProfile?.provider ?? bounded.provider,
+                        requestedModel:
+                            selectedProfile?.providerModel ?? bounded.model,
+                        result: reviewResult,
+                    }),
                     ...(selectedProfile?.id === undefined
                         ? {}
                         : { profileId: selectedProfile.id }),
                     ...(reviewResult.completion === undefined
                         ? {}
                         : { completion: reviewResult.completion }),
-                    ...(selectedSettings === undefined
+                    ...(toWorkflowAttemptSettings(
+                        selectedSettings,
+                        reviewResult.providerObservedSettings
+                    ) === undefined
                         ? {}
                         : {
-                              settings:
-                                  toWorkflowAttemptSettings(selectedSettings),
+                              settings: toWorkflowAttemptSettings(
+                                  selectedSettings,
+                                  reviewResult.providerObservedSettings
+                              ),
                           }),
                     ...(selectedCapabilityFacts === undefined
                         ? {}
@@ -2766,37 +2835,16 @@ export const runBoundedReviewWorkflow = async (
                     usage: combinedResultUsage,
                     estimatedCost: usage.estimatedCost,
                     terminationReason: 'executor_error_fail_open',
+                    ...withWorkflowRoutingAttempts(routingAttempts),
                     ...(parseFailure?.isErr() === true
                         ? {
                               signals: {
                                   ...buildWorkflowReviewParseFailureSignals(
                                       parseFailure.error
                                   ),
-                                  ...(routingAttempts === undefined
-                                      ? {}
-                                      : buildRoutingChainSignals({
-                                            attempts: routingAttempts,
-                                            selectedProfileId:
-                                                selectedProfile?.id ?? null,
-                                            selectedProvider:
-                                                selectedProfile?.provider,
-                                            selectedModel:
-                                                selectedProfile?.providerModel,
-                                        })),
                               },
                           }
-                        : routingAttempts === undefined
-                          ? {}
-                          : {
-                                signals: buildRoutingChainSignals({
-                                    attempts: routingAttempts,
-                                    selectedProfileId:
-                                        selectedProfile?.id ?? null,
-                                    selectedProvider: selectedProfile?.provider,
-                                    selectedModel:
-                                        selectedProfile?.providerModel,
-                                }),
-                            }),
+                        : {}),
                 }),
             };
         }
@@ -2814,14 +2862,6 @@ export const runBoundedReviewWorkflow = async (
                 routingHintApplied: hintDecision.lane,
                 routingHintConflictResolved: hintDecision.conflictResolved,
             }),
-            ...(routingAttempts === undefined
-                ? {}
-                : buildRoutingChainSignals({
-                      attempts: routingAttempts,
-                      selectedProfileId: selectedProfile?.id ?? null,
-                      selectedProvider: selectedProfile?.provider,
-                      selectedModel: selectedProfile?.providerModel,
-                  })),
         };
         const outcome =
             decision.reviewDecision === 'finalize'
@@ -2839,25 +2879,36 @@ export const runBoundedReviewWorkflow = async (
                 summary:
                     'Assessment evaluated draft quality and emitted a declared workflow outcome.',
                 model: usage.model,
-                ...(selectedProfile?.provider === undefined
-                    ? {}
-                    : { provider: selectedProfile.provider }),
+                ...toWorkflowAttemptIdentity({
+                    requestedProvider:
+                        selectedProfile?.provider ?? bounded.provider,
+                    requestedModel:
+                        selectedProfile?.providerModel ?? bounded.model,
+                    result: reviewResult,
+                }),
                 ...(selectedProfile?.id === undefined
                     ? {}
                     : { profileId: selectedProfile.id }),
                 ...(reviewResult.completion === undefined
                     ? {}
                     : { completion: reviewResult.completion }),
-                ...(selectedSettings === undefined
+                ...(toWorkflowAttemptSettings(
+                    selectedSettings,
+                    reviewResult.providerObservedSettings
+                ) === undefined
                     ? {}
                     : {
-                          settings: toWorkflowAttemptSettings(selectedSettings),
+                          settings: toWorkflowAttemptSettings(
+                              selectedSettings,
+                              reviewResult.providerObservedSettings
+                          ),
                       }),
                 ...(selectedCapabilityFacts === undefined
                     ? {}
                     : { capabilities: selectedCapabilityFacts }),
                 usage: combinedResultUsage,
                 estimatedCost: usage.estimatedCost,
+                ...withWorkflowRoutingAttempts(routingAttempts),
                 signals,
                 ...(decision.reviewDecision === 'revise' &&
                 !workflowPolicy.enableRevision

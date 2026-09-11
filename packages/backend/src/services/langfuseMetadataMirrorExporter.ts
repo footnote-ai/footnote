@@ -8,22 +8,6 @@
 import type { ResponseMetadata } from '@footnote/contracts/policy';
 import type { RuntimeConfig } from '../config/types.js';
 
-type WorkflowLike = {
-    modeDecision?: {
-        modeId?: string;
-        selectedBy?: string;
-    };
-    terminationReason?: string;
-    planner?: {
-        status?: string;
-        contractType?: string;
-    };
-    fallback?: {
-        tier?: string;
-        reasons?: string[];
-    };
-};
-
 type ExecutionEventLike = {
     kind?: string;
     status?: string;
@@ -50,15 +34,21 @@ const toWorkflowSummary = (
         return undefined;
     }
 
-    const workflowLike = workflow as unknown as WorkflowLike;
+    const attempts = workflow.steps.flatMap((step) => step.attempts ?? []);
+    const routingAttempts = attempts.flatMap(
+        (attempt) => attempt.routingAttempts ?? []
+    );
     return {
-        modeId: workflowLike.modeDecision?.modeId,
-        modeSelectedBy: workflowLike.modeDecision?.selectedBy,
-        terminationReason: workflowLike.terminationReason,
-        plannerStatus: workflowLike.planner?.status,
-        plannerContractType: workflowLike.planner?.contractType,
-        fallbackTier: workflowLike.fallback?.tier,
-        fallbackReasonCount: workflowLike.fallback?.reasons?.length ?? 0,
+        workflowId: workflow.workflowId,
+        runId: workflow.runId,
+        runStatus: workflow.runStatus,
+        workflowName: workflow.workflowName,
+        status: workflow.status,
+        terminationReason: workflow.terminationReason,
+        stepCount: workflow.stepCount,
+        resultCount: workflow.results?.length ?? 0,
+        attemptCount: attempts.length,
+        fallbackAttemptCount: routingAttempts.length,
     };
 };
 
@@ -101,7 +91,9 @@ const toSafeMirrorMetadata = (
             totalCostUsd: metadataLike.cost?.totalCostUsd,
         },
         workflow: toWorkflowSummary(metadata.workflow),
-        execution: toExecutionSummary(metadata.execution),
+        ...(metadata.workflow?.runId === undefined
+            ? { execution: toExecutionSummary(metadata.execution) }
+            : {}),
     };
 };
 

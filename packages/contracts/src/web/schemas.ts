@@ -50,6 +50,7 @@ import {
     supportedImageOutputFormats,
     supportedReasoningEfforts,
 } from '../providers.js';
+import { modelCapabilitySupportStates } from '../model-capabilities.js';
 import {
     presentationPromptVariants,
     PresentationGenerationSettingsSchema,
@@ -1063,13 +1064,26 @@ const WorkflowAttemptRoutingRecordSchema = z
     .object({
         index: z.number().int().nonnegative(),
         profileId: z.string().min(1),
-        provider: z.string().min(1).optional(),
-        model: z.string().min(1).optional(),
+        requestedProvider: z.string().min(1).optional(),
+        requestedModel: z.string().min(1).optional(),
+        actualProvider: z.string().min(1).optional(),
+        actualModel: z.string().min(1).optional(),
         status: z.string().min(1),
         reasonCode: z.string().min(1).optional(),
         finishReason: z.string().min(1).optional(),
         completion: GenerationCompletionSchema.optional(),
         usage: GenerationUsageSchema.optional(),
+        cost: z
+            .object({
+                inputCostUsd: z.number().nonnegative(),
+                outputCostUsd: z.number().nonnegative(),
+                totalCostUsd: z.number().nonnegative(),
+            })
+            .strict()
+            .optional(),
+        startedAt: z.string().datetime().optional(),
+        finishedAt: z.string().datetime().optional(),
+        durationMs: z.number().int().nonnegative().optional(),
         chooseOneUsed: z.boolean(),
         chooseOneSelectedIndex: z.number().int().nonnegative().optional(),
         temporaryUnavailableReason: z.string().min(1).optional(),
@@ -1100,7 +1114,7 @@ const WorkflowAttemptSettingsSchema = z
     })
     .strict();
 
-const CapabilitySupportSchema = z.enum(['supported', 'unsupported', 'unknown']);
+const CapabilitySupportSchema = z.enum(modelCapabilitySupportStates);
 const WorkflowAttemptCapabilitiesSchema = z
     .object({
         reasoningEfforts: z.record(z.string(), CapabilitySupportSchema),
@@ -1122,8 +1136,10 @@ const WorkflowAttemptRecordSchema = z
         finishedAt: z.string().datetime(),
         durationMs: z.number().int().nonnegative(),
         profileId: z.string().min(1).optional(),
-        provider: z.string().min(1).optional(),
-        model: z.string().min(1).optional(),
+        requestedProvider: z.string().min(1).optional(),
+        requestedModel: z.string().min(1).optional(),
+        actualProvider: z.string().min(1).optional(),
+        actualModel: z.string().min(1).optional(),
         settings: WorkflowAttemptSettingsSchema.optional(),
         capabilities: WorkflowAttemptCapabilitiesSchema.optional(),
         completion: GenerationCompletionSchema.optional(),

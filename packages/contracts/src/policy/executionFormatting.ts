@@ -118,6 +118,8 @@ const isIncludedWorkflowStep = (step: StepRecord): boolean =>
     step.stepKind === 'plan' ||
     step.stepKind === 'assess' ||
     step.stepKind === 'presentation' ||
+    step.stepKind === 'tool' ||
+    step.stepKind === 'evaluator' ||
     isRefinementGenerateStep(step);
 
 const normalizeWorkflowStepEntry = (
@@ -132,6 +134,14 @@ const normalizeWorkflowStepEntry = (
         return {
             segment: formatWorkflowStep('planner', step, 'workflow'),
             phaseOrder: 0,
+            index,
+        };
+    }
+
+    if (step.stepKind === 'evaluator') {
+        return {
+            segment: formatWorkflowStep('evaluator', step, 'workflow'),
+            phaseOrder: 2,
             index,
         };
     }
@@ -170,9 +180,13 @@ export const formatExecutionTimelineSummary = (
             .map((step, index) => normalizeWorkflowStepEntry(step, index))
             .filter((entry): entry is TimelineEntry => entry !== null) ?? [];
     const executionEntries =
-        (execution ?? [])
-            .map((event, index) => normalizeExecutionEventEntry(event, index))
-            .filter((entry): entry is TimelineEntry => entry !== null) ?? [];
+        workflow?.runId === undefined
+            ? (execution ?? [])
+                  .map((event, index) =>
+                      normalizeExecutionEventEntry(event, index)
+                  )
+                  .filter((entry): entry is TimelineEntry => entry !== null)
+            : [];
     const timelineSegments = [...workflowEntries, ...executionEntries]
         .sort((left, right) =>
             left.phaseOrder === right.phaseOrder

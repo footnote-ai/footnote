@@ -772,11 +772,13 @@ export type WorkflowReviewParseFailureReason =
     'empty_output' | 'non_json_object' | 'invalid_json' | 'schema_invalid';
 
 /**
- * Bounded routing-chain attempt telemetry stored as JSON in step signals.
+ * Legacy bounded routing-chain attempt telemetry stored as JSON in step
+ * signals.
  *
  * The public signal bag only carries `routingChainAttemptsJson`, so this type
- * documents the array shape encoded there. It is diagnostic metadata, not a
- * routing API for clients.
+ * documents the array shape encoded there. New canonical workflow records use
+ * `WorkflowAttemptRoutingRecord` instead; this type remains for compatibility
+ * with older metadata readers.
  */
 export type WorkflowRoutingChainAttemptSignal = {
     index: number;
@@ -967,13 +969,23 @@ export type WorkflowResultRecord = {
 export type WorkflowAttemptRoutingRecord = {
     index: number;
     profileId: string;
-    provider?: string;
-    model?: string;
+    requestedProvider?: string;
+    requestedModel?: string;
+    actualProvider?: string;
+    actualModel?: string;
     status: string;
     reasonCode?: string;
     finishReason?: string;
     completion?: GenerationCompletion;
     usage?: GenerationExecutionUsage;
+    cost?: {
+        inputCostUsd: number;
+        outputCostUsd: number;
+        totalCostUsd: number;
+    };
+    startedAt?: string;
+    finishedAt?: string;
+    durationMs?: number;
     chooseOneUsed: boolean;
     chooseOneSelectedIndex?: number;
     temporaryUnavailableReason?: string;
@@ -1004,8 +1016,10 @@ export type WorkflowAttemptRecord = {
     finishedAt: string;
     durationMs: number;
     profileId?: string;
-    provider?: string;
-    model?: string;
+    requestedProvider?: string;
+    requestedModel?: string;
+    actualProvider?: string;
+    actualModel?: string;
     settings?: WorkflowAttemptSettings;
     capabilities?: WorkflowAttemptCapabilities;
     completion?: GenerationCompletion;

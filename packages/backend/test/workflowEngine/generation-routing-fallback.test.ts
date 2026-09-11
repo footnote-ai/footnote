@@ -161,6 +161,14 @@ test('gives a large-prompt generation useful output room and advances after inco
                     status: 'completed',
                     visibleTextLength: 18,
                 },
+                upstreamAttribution: {
+                    inferenceProvider: 'observed-provider',
+                    resolvedModel: 'observed-model',
+                },
+                providerObservedSettings: {
+                    reasoningEffort: 'low',
+                    temperature: 0.2,
+                },
                 usage: {
                     promptTokens: 12_000,
                     completionTokens: 40,
@@ -195,16 +203,7 @@ test('gives a large-prompt generation useful output room and advances after inco
     );
     assert.ok(generateStep);
     assert.equal(generateStep.usage?.totalTokens, 26_040);
-    const attempts = JSON.parse(
-        String(generateStep.outcome.signals?.routingChainAttemptsJson)
-    ) as Array<{
-        profileId: string;
-        status: string;
-        reasonCode?: string;
-        finishReason?: string;
-        completion?: { status: string; visibleTextLength: number };
-        usage?: { totalTokens?: number };
-    }>;
+    const attempts = generateStep.attempts?.[0]?.routingAttempts ?? [];
     assert.deepEqual(
         attempts.map((attempt) => [attempt.profileId, attempt.status]),
         [
@@ -223,6 +222,16 @@ test('gives a large-prompt generation useful output room and advances after inco
         visibleTextLength: 0,
     });
     assert.equal(attempts[0]?.usage?.totalTokens, 14_000);
+    assert.equal(attempts[0]?.requestedProvider, 'openai');
+    assert.equal(attempts[0]?.requestedModel, first.providerModel);
+    assert.equal(attempts[0]?.actualModel, first.providerModel);
+    assert.equal(attempts[0]?.actualProvider, undefined);
+    assert.equal(attempts[1]?.actualProvider, 'observed-provider');
+    assert.equal(attempts[1]?.actualModel, 'observed-model');
+    assert.ok(attempts[0]?.startedAt);
+    assert.ok(attempts[0]?.finishedAt);
+    assert.ok((attempts[0]?.durationMs ?? -1) >= 0);
+    assert.ok((attempts[0]?.cost?.totalCostUsd ?? -1) >= 0);
 
     assert.deepEqual(
         generateStep.attempts?.[0]?.routingAttempts?.map((attempt) => [
@@ -238,13 +247,17 @@ test('gives a large-prompt generation useful output room and advances after inco
         generateStep.attempts?.[0]?.routingAttempts?.[0]?.usage?.totalTokens,
         14_000
     );
-    assert.equal(generateStep.attempts?.[0]?.provider, 'openai');
+    assert.equal(generateStep.attempts?.[0]?.requestedProvider, 'openai');
     assert.equal(generateStep.attempts?.[0]?.profileId, 'second-profile');
     assert.equal(
         generateStep.attempts?.[0]?.capabilities?.nativeSearch,
         'unsupported'
     );
     assert.ok(generateStep.attempts?.[0]?.settings?.applied);
+    assert.equal(
+        generateStep.attempts?.[0]?.settings?.observed?.temperature,
+        0.2
+    );
     assert.equal(generateStep.resultRefs?.[0]?.name, 'draft');
     assert.equal(result.workflowLineage.results?.length, 1);
     assert.equal(result.workflowLineage.results?.[0]?.status, 'produced');
@@ -255,6 +268,7 @@ test('gives a large-prompt generation useful output room and advances after inco
     const canonicalJson = JSON.stringify(result.workflowLineage);
     assert.equal(canonicalJson.includes('A complete answer.'), false);
     assert.equal(canonicalJson.includes('Explain this context.'), false);
+    assert.equal(canonicalJson.includes('routingChainAttemptsJson'), false);
 });
 
 test('does not treat context search as a provider-native search requirement', async () => {
@@ -363,9 +377,7 @@ test('rejects empty completed output before selecting a fallback candidate', asy
         (step) => step.stepKind === 'generate'
     );
     assert.ok(generateStep);
-    const attempts = JSON.parse(
-        String(generateStep.outcome.signals?.routingChainAttemptsJson)
-    ) as Array<{ profileId: string; reasonCode?: string }>;
+    const attempts = generateStep.attempts?.[0]?.routingAttempts ?? [];
     assert.equal(attempts[0]?.profileId, first.id);
     assert.equal(attempts[0]?.reasonCode, 'generation_empty_output');
     assert.equal(attempts[1]?.profileId, second.id);
@@ -461,9 +473,7 @@ test('validates every routed review Attempt before accepting a decision', async 
     );
     assert.ok(assessStep);
     assert.equal(assessStep.usage?.totalTokens, 51);
-    const attempts = JSON.parse(
-        String(assessStep.outcome.signals?.routingChainAttemptsJson)
-    ) as Array<{ profileId: string; status: string; reasonCode?: string }>;
+    const attempts = assessStep.attempts?.[0]?.routingAttempts ?? [];
     assert.deepEqual(
         attempts.map((attempt) => [attempt.profileId, attempt.status]),
         [
@@ -555,13 +565,7 @@ test('uses JSON mode after an explicit native schema transport rejection', async
     );
     assert.ok(assessStep);
     assert.equal(assessStep.usage?.totalTokens, 43);
-    const attempts = JSON.parse(
-        String(assessStep.outcome.signals?.routingChainAttemptsJson)
-    ) as Array<{
-        status: string;
-        finishReason?: string;
-        completion?: { status?: string };
-    }>;
+    const attempts = assessStep.attempts?.[0]?.routingAttempts ?? [];
     assert.deepEqual(
         attempts.map((attempt) => attempt.status),
         ['failed_transport_fallback', 'executed']
@@ -655,9 +659,7 @@ test('falls from JSON compatibility to parser compatibility with usage evidence'
     );
     assert.ok(assessStep);
     assert.equal(assessStep.usage?.totalTokens, 14);
-    const attempts = JSON.parse(
-        String(assessStep.outcome.signals?.routingChainAttemptsJson)
-    ) as Array<{ status: string; usage?: { totalTokens?: number } }>;
+    const attempts = assessStep.attempts?.[0]?.routingAttempts ?? [];
     assert.deepEqual(
         attempts.map((attempt) => attempt.status),
         ['failed_transport_fallback', 'executed']
@@ -828,13 +830,7 @@ test('preserves temporary-unavailable and fallback provenance across later autom
             (step) => step.stepKind === 'generate'
         );
         assert.ok(generateStep);
-        const attempts = JSON.parse(
-            String(generateStep.outcome.signals?.routingChainAttemptsJson)
-        ) as Array<{
-            profileId: string;
-            status: string;
-            reasonCode?: string;
-        }>;
+        const attempts = generateStep.attempts?.[0]?.routingAttempts ?? [];
         assert.deepEqual(
             attempts.map((attempt) => [attempt.profileId, attempt.status]),
             [
@@ -851,7 +847,10 @@ test('preserves temporary-unavailable and fallback provenance across later autom
             attempts[0]?.reasonCode,
             'routing_chain_temporary_unavailable'
         );
-        assert.equal(generateStep.outcome.signals?.routedProfileId, second.id);
+        assert.equal(
+            generateStep.attempts?.[0]?.routingAttempts?.[1]?.requestedProvider,
+            second.provider
+        );
     }
 
     now += 1_001;

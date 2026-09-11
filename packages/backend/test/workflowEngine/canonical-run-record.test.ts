@@ -83,3 +83,68 @@ test('keeps evaluator failure fail-open and marks its result unavailable', () =>
         'evaluator_runtime_error'
     );
 });
+
+test('records a skipped evaluator without treating it as a failure', () => {
+    const workflow: WorkflowRecord = {
+        runId: 'run_skipped_evaluator',
+        runStatus: 'completed',
+        workflowId: 'reviewed-chat',
+        workflowName: 'message_reviewed',
+        status: 'completed',
+        terminationReason: 'goal_satisfied',
+        stepCount: 0,
+        maxSteps: 4,
+        maxDurationMs: 10_000,
+        steps: [],
+    };
+
+    const projected = addEvaluatorStepToWorkflowLineage({
+        workflow,
+        evaluator: {
+            status: 'skipped',
+            reasonCode: 'evaluator_runtime_error',
+            startedAtMs: 100,
+            finishedAtMs: 100,
+        },
+    });
+
+    assert.equal(projected.steps[0]?.outcome.status, 'skipped');
+    assert.equal(projected.steps[0]?.attempts?.[0]?.status, 'rejected');
+    assert.equal(
+        projected.steps[0]?.outcome.summary,
+        'Deterministic evaluator was skipped without a finding.'
+    );
+});
+
+test('places evaluator evidence in execution order with workflow steps', () => {
+    const workflowWithStep = workflow();
+    workflowWithStep.steps = [
+        {
+            stepId: 'step_generate',
+            attempt: 1,
+            stepKind: 'generate',
+            startedAt: '1970-01-01T00:00:00.200Z',
+            finishedAt: '1970-01-01T00:00:00.250Z',
+            durationMs: 50,
+            outcome: {
+                status: 'executed',
+                summary: 'Generated a response.',
+            },
+        },
+    ];
+
+    const projected = addEvaluatorStepToWorkflowLineage({
+        workflow: workflowWithStep,
+        evaluator: {
+            status: 'executed',
+            startedAtMs: 300,
+            finishedAtMs: 325,
+            durationMs: 25,
+        },
+    });
+
+    assert.deepEqual(
+        projected.steps.map((step) => step.stepKind),
+        ['generate', 'evaluator']
+    );
+});

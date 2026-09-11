@@ -22,7 +22,6 @@ import type {
     WorkflowRoutingChainAttemptSignal,
     WorkflowRoutingChainSignals,
 } from '@footnote/contracts/policy';
-import { buildWorkflowRoutingChainSignals } from '@footnote/contracts/policy';
 
 type PlannerStepRecordSummary = {
     status: ExecutionStatus;
@@ -165,9 +164,6 @@ export const buildPlannerStepRecord = ({
         ...(Array.isArray(summary.matteredControlIds) && {
             matteredControlCount: summary.matteredControlIds.length,
         }),
-        ...buildWorkflowRoutingChainSignals({
-            attempts: summary.routingChainAttempts,
-        }),
     };
 
     const usage = summary.usage
@@ -237,8 +233,18 @@ export const buildPlannerStepRecord = ({
         ...(summary.profileId !== undefined && {
             profileId: summary.profileId,
         }),
-        ...(summary.provider !== undefined && { provider: summary.provider }),
-        ...(summary.model !== undefined && { model: summary.model }),
+        ...(summary.provider !== undefined && {
+            requestedProvider: summary.provider,
+        }),
+        ...(summary.model !== undefined && {
+            requestedModel: summary.model,
+        }),
+        ...(summary.upstreamAttribution?.inferenceProvider !== undefined && {
+            actualProvider: summary.upstreamAttribution.inferenceProvider,
+        }),
+        ...(summary.upstreamAttribution?.resolvedModel !== undefined && {
+            actualModel: summary.upstreamAttribution.resolvedModel,
+        }),
         ...(hasUsage &&
             usage !== undefined && {
                 usage,
@@ -253,10 +259,10 @@ export const buildPlannerStepRecord = ({
                 profileId: attempt.profileId,
                 ...(attempt.provider === undefined
                     ? {}
-                    : { provider: attempt.provider }),
+                    : { requestedProvider: attempt.provider }),
                 ...(attempt.model === undefined
                     ? {}
-                    : { model: attempt.model }),
+                    : { requestedModel: attempt.model }),
                 status: attempt.status,
                 ...(attempt.reasonCode === undefined
                     ? {}
