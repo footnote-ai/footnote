@@ -7,6 +7,9 @@ settings:
 
 catalogs:
   default:
+    '@ai-sdk/provider-utils':
+      specifier: ^4.0.38
+      version: 4.0.38
     '@discordjs/opus':
       specifier: ^0.10.0
       version: 0.10.0
@@ -201,7 +204,7 @@ overrides:
   csstype: 3.2.3
   '@hono/node-server': ^1.19.15
   '@opentelemetry/core': ^2.10.0
-  '@ai-sdk/provider-utils': ^4.0.38
+  ollama-ai-provider-v2>@ai-sdk/provider-utils: ^3.0.17
   '@babel/core': ^7.29.6
   '@discordjs/rest': ^2.6.3
   brace-expansion: ^5.0.9
@@ -307,7 +310,7 @@ importers:
         specifier: 2.0.59
         version: 2.0.59(zod@4.4.3)
       '@ai-sdk/provider-utils':
-        specifier: ^4.0.38
+        specifier: 'catalog:'
         version: 4.0.38(zod@4.4.3)
       '@footnote/contracts':
         specifier: workspace:*
@@ -748,6 +751,18 @@ packages:
     peerDependencies:
       zod: ^3.25.76 || ^4.1.8
 
+  '@ai-sdk/provider-utils@3.0.28':
+    resolution: {integrity: sha512-bXlX1WX7E50a2N+AJW+1a/x63m52aPhm+6xYe5THxWrx9vW9NR7E2Ay+1G1ndlCdMdYKo2Fnsd7kBhuyQPaphw==}
+    engines: {node: '>=18'}
+    peerDependencies:
+      zod: ^3.25.76 || ^4.1.8
+
+  '@ai-sdk/provider-utils@3.0.37':
+    resolution: {integrity: sha512-mLx1SgE20xKQ87xME+9uG6pFlYPTqGDrMFrZ6XcytDnmbWGwmCIh2Xb9zFrfXUrKycSFRDet4Zovj388L9b1dg==}
+    engines: {node: '>=18'}
+    peerDependencies:
+      zod: ^3.25.76 || ^4.1.8
+
   '@ai-sdk/provider-utils@4.0.38':
     resolution: {integrity: sha512-/HHGmtKllqjg1OLc023v9w9kK3laW7Z6TzfZukYQWCsGBbzB9p60zTvvpXFVcs44NZBVXL3viOa1HRKUbeee8g==}
     engines: {node: '>=18'}
@@ -756,6 +771,10 @@ packages:
 
   '@ai-sdk/provider@2.0.3':
     resolution: {integrity: sha512-h88OPkavHTiN9tMn2l5awAznGB0lXzjcLhgR1/rvjB2zlLprsNxbM2tt6OJsHUxduLC3klq0/eqaSf6fX5XVww==}
+    engines: {node: '>=18'}
+
+  '@ai-sdk/provider@2.0.4':
+    resolution: {integrity: sha512-B0M50w0W43jTzZGyZrNwwaK1M79aKPw6PD/dQhkBR7vkR68yCINWBo2CbBLJrbrqYc46TaiSfsTiT+S9EmVl0w==}
     engines: {node: '>=18'}
 
   '@ai-sdk/provider@3.0.14':
@@ -1166,7 +1185,7 @@ packages:
     deprecated: 'This package has moved to ''gitlab-ai-provider''. Please run: npm install gitlab-ai-provider'
     peerDependencies:
       '@ai-sdk/provider': '>=2.0.0'
-      '@ai-sdk/provider-utils': ^4.0.38
+      '@ai-sdk/provider-utils': '>=3.0.0'
 
   '@graphql-typed-document-node/core@3.2.0':
     resolution: {integrity: sha512-mB9oAsNCm9aM3/SOv4YtBMqZbYj10R7dkq8byBqxGY/ncFwhf2oQzMV+LCRlWoDSEBJ3COiR1yeDvMtsoOsuFQ==}
@@ -2085,7 +2104,7 @@ packages:
   '@voltagent/core@2.9.2':
     resolution: {integrity: sha512-D7CxQag3oqX5Ul2Zh7NdWgYlsWxL8wM4eAoZTDb3BYNf/uVrQPBX0COTwDU8tbDx8gQ+vkAbYKwFR+NbDbgY0Q==}
     peerDependencies:
-      '@ai-sdk/provider-utils': ^4.0.38
+      '@ai-sdk/provider-utils': 4.x
       '@voltagent/logger': 2.0.2
       ai: ^6.0.0
       zod: ^3.25.0 || ^4.0.0
@@ -3532,9 +3551,6 @@ packages:
     resolution: {integrity: sha512-AqZtDUWOMKs1G/8lwylVjrdYgqA4d9nu8hc+0gzRxlDb1I10+FHBGMXs6aiQHFdCUUlqH99MUMuLfzWDNDtfxw==}
     deprecated: This package is no longer supported.
 
-  oauth-sign@0.9.0:
-    resolution: {integrity: sha512-fexhUFFPTGV8ybAtSIGbV6gOkSv8UtRbDBnAyLQw4QPKkgNlsH2ByPGtMUqdWkos6YCRmAqViwgZrJc/mRDzZQ==}
-
   oauth4webapi@3.8.6:
     resolution: {integrity: sha512-iwemM91xz8nryHti2yTmg5fhyEMVOkOXwHNqbvcATjyajb5oQxCQzrNOA6uElRHuMhQQTKUyFKV9y/CNyg25BQ==}
 
@@ -4387,7 +4403,7 @@ snapshots:
     dependencies:
       '@ai-sdk/anthropic': 2.0.85(zod@4.4.3)
       '@ai-sdk/provider': 2.0.3
-      '@ai-sdk/provider-utils': 4.0.38(zod@4.4.3)
+      '@ai-sdk/provider-utils': 3.0.28(zod@4.4.3)
       '@smithy/eventstream-codec': 4.4.8
       '@smithy/util-utf8': 4.4.8
       aws4fetch: 1.0.20
@@ -4396,7 +4412,7 @@ snapshots:
   '@ai-sdk/anthropic@2.0.85(zod@4.4.3)':
     dependencies:
       '@ai-sdk/provider': 2.0.3
-      '@ai-sdk/provider-utils': 4.0.38(zod@4.4.3)
+      '@ai-sdk/provider-utils': 3.0.28(zod@4.4.3)
       zod: 4.4.3
 
   '@ai-sdk/anthropic@3.0.96(zod@4.4.3)':
@@ -4452,7 +4468,7 @@ snapshots:
       '@ai-sdk/google': 2.0.78(zod@4.4.3)
       '@ai-sdk/openai-compatible': 1.0.42(zod@4.4.3)
       '@ai-sdk/provider': 2.0.3
-      '@ai-sdk/provider-utils': 4.0.38(zod@4.4.3)
+      '@ai-sdk/provider-utils': 3.0.28(zod@4.4.3)
       google-auth-library: 10.9.0(supports-color@10.2.2)
       zod: 4.4.3
     transitivePeerDependencies:
@@ -4461,7 +4477,7 @@ snapshots:
   '@ai-sdk/google@2.0.78(zod@4.4.3)':
     dependencies:
       '@ai-sdk/provider': 2.0.3
-      '@ai-sdk/provider-utils': 4.0.38(zod@4.4.3)
+      '@ai-sdk/provider-utils': 3.0.28(zod@4.4.3)
       zod: 4.4.3
 
   '@ai-sdk/google@3.0.91(zod@4.4.3)':
@@ -4485,7 +4501,7 @@ snapshots:
   '@ai-sdk/openai-compatible@1.0.42(zod@4.4.3)':
     dependencies:
       '@ai-sdk/provider': 2.0.3
-      '@ai-sdk/provider-utils': 4.0.38(zod@4.4.3)
+      '@ai-sdk/provider-utils': 3.0.28(zod@4.4.3)
       zod: 4.4.3
 
   '@ai-sdk/openai-compatible@2.0.59(zod@4.4.3)':
@@ -4506,6 +4522,21 @@ snapshots:
       '@ai-sdk/provider-utils': 4.0.38(zod@4.4.3)
       zod: 4.4.3
 
+  '@ai-sdk/provider-utils@3.0.28(zod@4.4.3)':
+    dependencies:
+      '@ai-sdk/provider': 2.0.3
+      '@standard-schema/spec': 1.1.0
+      eventsource-parser: 3.1.0
+      zod: 4.4.3
+
+  '@ai-sdk/provider-utils@3.0.37(zod@4.4.3)':
+    dependencies:
+      '@ai-sdk/provider': 2.0.4
+      '@standard-schema/spec': 1.1.0
+      eventsource-parser: 3.1.0
+      undici: 6.28.0
+      zod: 4.4.3
+
   '@ai-sdk/provider-utils@4.0.38(zod@4.4.3)':
     dependencies:
       '@ai-sdk/provider': 3.0.14
@@ -4514,6 +4545,10 @@ snapshots:
       zod: 4.4.3
 
   '@ai-sdk/provider@2.0.3':
+    dependencies:
+      json-schema: 0.4.0
+
+  '@ai-sdk/provider@2.0.4':
     dependencies:
       json-schema: 0.4.0
 
@@ -7617,8 +7652,6 @@ snapshots:
       gauge: 3.0.2
       set-blocking: 2.0.0
 
-  oauth-sign@0.9.0: {}
-
   oauth4webapi@3.8.6: {}
 
   object-assign@4.1.1: {}
@@ -7630,7 +7663,7 @@ snapshots:
   ollama-ai-provider-v2@1.5.5(zod@4.4.3):
     dependencies:
       '@ai-sdk/provider': 2.0.3
-      '@ai-sdk/provider-utils': 4.0.38(zod@4.4.3)
+      '@ai-sdk/provider-utils': 3.0.37(zod@4.4.3)
       zod: 4.4.3
 
   on-finished@2.4.1:

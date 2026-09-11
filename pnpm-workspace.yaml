@@ -11,7 +11,7 @@ overrides:
     csstype: 3.2.3
     '@hono/node-server': ^1.19.15
     '@opentelemetry/core': ^2.10.0
-    '@ai-sdk/provider-utils': ^4.0.38
+    'ollama-ai-provider-v2>@ai-sdk/provider-utils': ^3.0.17
     '@babel/core': ^7.29.6
     '@discordjs/rest': ^2.6.3
     brace-expansion: ^5.0.9

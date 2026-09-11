@@ -1774,3 +1774,53 @@ test('default executor leaves non-leading system messages in the transcript', as
         { role: 'system', content: 'Late system note.' },
     ]);
 });
+
+test('default executor promotes late system messages for Ollama templates', async () => {
+    let seenInstructions: string | undefined;
+    let seenGenerateMessages: RuntimeMessage[] | undefined;
+    const fakeAgent = {
+        async generateText(
+            messages: RuntimeMessage[]
+        ): Promise<AgentGenerateTextResult> {
+            seenGenerateMessages = messages;
+            return {
+                text: 'ollama reply',
+                finishReason: 'stop',
+                usage: {
+                    inputTokens: 0,
+                    inputTokenDetails: {
+                        noCacheTokens: 0,
+                        cacheReadTokens: 0,
+                        cacheWriteTokens: 0,
+                    },
+                    outputTokens: 0,
+                    outputTokenDetails: { reasoningTokens: 0 },
+                    totalTokens: 0,
+                },
+                response: { modelId: 'ollama/test' },
+            } as unknown as AgentGenerateTextResult;
+        },
+    } satisfies Pick<Agent, 'generateText'>;
+    const executor = createDefaultVoltAgentExecutor({
+        model: 'ollama/test',
+        agentFactory: ({ instructions }) => {
+            seenInstructions = instructions;
+            return fakeAgent;
+        },
+    });
+
+    await executor.generateText(
+        [
+            { role: 'user', content: 'Hello' },
+            { role: 'assistant', content: 'Hi' },
+            { role: 'system', content: 'Late system note.' },
+        ],
+        {}
+    );
+
+    assert.equal(seenInstructions, 'Late system note.');
+    assert.deepEqual(seenGenerateMessages, [
+        { role: 'user', content: 'Hello' },
+        { role: 'assistant', content: 'Hi' },
+    ]);
+});
