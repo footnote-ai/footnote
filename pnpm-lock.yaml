@@ -113,8 +113,8 @@ catalogs:
       specifier: ^16.2.3
       version: 16.2.3
     js-yaml:
-      specifier: ^3.15.1
-      version: 3.15.1
+      specifier: ^3.15.2
+      version: 3.15.2
     jsonwebtoken:
       specifier: ^9.0.3
       version: 9.0.3
@@ -293,7 +293,7 @@ importers:
         version: 16.2.3
       js-yaml:
         specifier: 'catalog:'
-        version: 3.15.1
+        version: 3.15.2
       prettier:
         specifier: 'catalog:'
         version: 3.9.6
@@ -372,7 +372,7 @@ importers:
         version: 8.6.2(express@5.2.1(supports-color@10.2.2))(supports-color@10.2.2)
       js-yaml:
         specifier: 'catalog:'
-        version: 3.15.1
+        version: 3.15.2
       neverthrow:
         specifier: 'catalog:'
         version: 8.2.0
@@ -469,7 +469,7 @@ importers:
         version: 5.2.1(supports-color@10.2.2)
       js-yaml:
         specifier: 'catalog:'
-        version: 3.15.1
+        version: 3.15.2
       linkify-it:
         specifier: ^5.0.2
         version: 5.0.2
@@ -574,7 +574,7 @@ importers:
     dependencies:
       js-yaml:
         specifier: 'catalog:'
-        version: 3.15.1
+        version: 3.15.2
     devDependencies:
       '@types/js-yaml':
         specifier: 'catalog:'
@@ -3052,6 +3052,10 @@ packages:
 
   js-yaml@3.15.1:
     resolution: {integrity: sha512-S99WuO3HlhO3XN41EtYUNl9zzXjoJx7QvmipxsJVxtCBT0YHEFy+iOJhjSvrmV12nYhWpZaM8lPHkJm0yUMbag==}
+    hasBin: true
+
+  js-yaml@3.15.2:
+    resolution: {integrity: sha512-6EuL879VkRA+1Cz578mKMiKvjPNEuk6+r1JaFzoSWejZmtf7xWbIyw1e3KkxlkzTIt9Taw6JBhEppG7utc1P+w==}
     hasBin: true
 
   jsesc@3.1.0:
@@ -6991,6 +6995,11 @@ snapshots:
   js-tokens@4.0.0: {}
 
   js-yaml@3.15.1:
+    dependencies:
+      argparse: 1.0.10
+      esprima: 4.0.1
+
+  js-yaml@3.15.2:
     dependencies:
       argparse: 1.0.10
       esprima: 4.0.1
