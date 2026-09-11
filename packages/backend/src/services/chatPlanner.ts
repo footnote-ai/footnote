@@ -5,11 +5,12 @@
  * @footnote-risk: high - Planner mistakes can pick the wrong modality, skip retrieval, or suppress expected replies.
  * @footnote-ethics: high - Action selection directly affects responsiveness, grounding, and user trust.
  */
-import type {
-    GenerationSearchIntent,
-    GenerationResult,
-    GenerationUsage,
-    RuntimeMessage,
+import {
+    normalizeGenerationUsage,
+    type GenerationSearchIntent,
+    type GenerationResult,
+    type GenerationUsage,
+    type RuntimeMessage,
 } from '@footnote/agent-runtime';
 import type {
     PostChatRequest,
@@ -64,6 +65,7 @@ import {
     buildPlannerInvocationRejectionLogMeta,
     isWorkflowOwnedPlannerInvocation,
 } from './chatPlannerInvocation.js';
+import { classifyTypedModelOutputFailure } from './typedModelOutput.js';
 import type { ChatPlannerInvocationContext } from './chatPlannerInvocation.js';
 export type {
     ChatPlannerInvocationContext,
@@ -244,36 +246,6 @@ const readStructuredPlannerFailureOutcome = (
     return undefined;
 };
 
-const readNonNegativeInteger = (value: unknown): number | undefined =>
-    typeof value === 'number' && Number.isSafeInteger(value) && value >= 0
-        ? value
-        : undefined;
-
-const normalizeGenerationUsage = (
-    value: unknown
-): GenerationUsage | undefined => {
-    if (typeof value !== 'object' || value === null || Array.isArray(value)) {
-        return undefined;
-    }
-    const candidate = value as Record<string, unknown>;
-    const normalized: GenerationUsage = {};
-    const fields: Array<keyof GenerationUsage> = [
-        'promptTokens',
-        'cachedInputTokens',
-        'cacheWriteTokens',
-        'completionTokens',
-        'reasoningTokens',
-        'totalTokens',
-    ];
-    for (const field of fields) {
-        const tokenCount = readNonNegativeInteger(candidate[field]);
-        if (tokenCount !== undefined) {
-            normalized[field] = tokenCount;
-        }
-    }
-    return Object.keys(normalized).length > 0 ? normalized : undefined;
-};
-
 const readStructuredPlannerFailureUsage = (
     error: unknown
 ): StructuredPlannerFailureUsage | undefined => {
@@ -312,7 +284,7 @@ type ChatPlannerExecutionRequest = {
 
 type ChatPlannerRequestPayload = ChatPlannerExecutionRequest & {
     /** Prompt messages for a text-JSON fallback from a structured attempt. */
-    compatibilityMessages?: RuntimeMessage[];
+    compatibilityMessages?: () => RuntimeMessage[];
     /** Force the parser path after a provider JSON-mode attempt has failed. */
     forceParserCompatibility?: boolean;
 };
@@ -368,35 +340,31 @@ export class ChatPlannerStructuredOutputError extends Error {
 const rejectInvalidPlannerTextJsonResult = (
     result: ChatPlannerExecutionResult
 ): void => {
-    if (
-        result.completion?.status === 'incomplete' ||
-        result.finishReason === 'length' ||
-        result.finishReason === 'max_tokens' ||
-        result.finishReason === 'max_output_tokens'
-    ) {
-        throw new ChatPlannerStructuredOutputError(
-            'incomplete',
-            'Planner text JSON output was incomplete.'
-        );
+    const failure = classifyTypedModelOutputFailure(result);
+    if (failure === undefined) {
+        return;
     }
-    if (
-        result.completion?.status === 'failed' ||
-        result.finishReason === 'refusal' ||
-        result.finishReason === 'refused' ||
-        result.finishReason === 'content-filter' ||
-        result.finishReason === 'content_filter'
-    ) {
-        throw new ChatPlannerStructuredOutputError(
-            'refusal',
-            'Planner text JSON output was refused.'
-        );
-    }
-    if (result.text.trim().length === 0) {
-        throw new ChatPlannerStructuredOutputError(
-            'no_output',
-            'Planner text JSON output was empty.'
-        );
-    }
+    const outcome: PlannerStructuredOutputOutcome =
+        failure === 'incomplete'
+            ? 'incomplete'
+            : failure === 'empty'
+              ? 'no_output'
+              : failure === 'refusal'
+                ? 'refusal'
+                : failure === 'runtime_failed'
+                  ? 'runtime_failure'
+                  : 'parse_failure';
+    const message =
+        failure === 'incomplete'
+            ? 'Planner text JSON output was incomplete.'
+            : failure === 'empty'
+              ? 'Planner text JSON output was empty.'
+              : failure === 'refusal'
+                ? 'Planner text JSON output was refused.'
+                : failure === 'runtime_failed'
+                  ? 'Planner text JSON runtime failed.'
+                  : 'Planner text JSON output was invalid.';
+    throw new ChatPlannerStructuredOutputError(outcome, message);
 };
 
 type ChatPlannerStructuredExecutor = (
@@ -1833,14 +1801,15 @@ export const createChatPlanner = ({
                 reasoningEffort: plannerReasoningEffort,
                 ...(safetyIdentifier !== undefined && { safetyIdentifier }),
                 ...(mode === 'structured' && {
-                    compatibilityMessages: buildPlannerMessages({
-                        plannerPrompt: renderPlannerModePrompt('text_json'),
-                        plannerProfileContext: plannerCapabilityContext,
-                        plannerTrustGraphTargetContext,
-                        requestSummary,
-                        request,
-                        contextTier,
-                    }),
+                    compatibilityMessages: () =>
+                        buildPlannerMessages({
+                            plannerPrompt: renderPlannerModePrompt('text_json'),
+                            plannerProfileContext: plannerCapabilityContext,
+                            plannerTrustGraphTargetContext,
+                            requestSummary,
+                            request,
+                            contextTier,
+                        }),
                 }),
             };
         };

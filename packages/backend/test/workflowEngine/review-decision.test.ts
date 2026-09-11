@@ -12,7 +12,31 @@ import assert from 'node:assert/strict';
 import {
     parseReviewDecisionOutput,
     parseReviewDecisionOutputResult,
+    REVIEW_DECISION_STRUCTURED_OUTPUT,
 } from '../../src/services/workflowEngine/reviewDecision.js';
+
+test('native review schema is strict and requires nullable optional fields', () => {
+    const schema = REVIEW_DECISION_STRUCTURED_OUTPUT.schema;
+    assert.equal(schema.additionalProperties, false);
+    assert.deepEqual(schema.required, [
+        'reviewDecision',
+        'reviewReason',
+        'revisionInstruction',
+        'traceAlignment',
+        'traceAlignmentReason',
+        'finalTemperament',
+        'moduleHints',
+        'concerns',
+        'routingHints',
+    ]);
+
+    const properties = schema.properties;
+    assert.deepEqual(properties.revisionInstruction, {
+        type: ['string', 'null'],
+    });
+    assert.equal(properties.finalTemperament?.additionalProperties, false);
+    assert.equal(properties.concerns?.additionalProperties, false);
+});
 
 test('parseReviewDecisionOutputResult parses finalize decisions', () => {
     const result = parseReviewDecisionOutputResult(

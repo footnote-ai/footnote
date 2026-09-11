@@ -7,6 +7,7 @@
  */
 import {
     GenerationRuntimeError,
+    normalizeGenerationUsage,
     type GenerationUsage,
     type RuntimeMessage,
 } from '@footnote/agent-runtime';
@@ -63,6 +64,9 @@ type ResponsesUsage = {
         cache_write_tokens?: number;
     };
     output_tokens?: number;
+    output_tokens_details?: {
+        reasoning_tokens?: number;
+    };
     total_tokens?: number;
 };
 
@@ -95,38 +99,27 @@ const readProviderErrorCode = (value: unknown): string | undefined => {
         : undefined;
 };
 
-const readNonNegativeInteger = (value: unknown): number | undefined =>
-    typeof value === 'number' && Number.isSafeInteger(value) && value >= 0
-        ? value
-        : undefined;
-
 const normalizeResponsesUsage = (
     usage: ResponsesUsage | undefined
 ): GenerationUsage | undefined => {
-    const promptTokens = readNonNegativeInteger(usage?.input_tokens);
-    const cachedInputTokens = readNonNegativeInteger(
-        usage?.input_tokens_details?.cached_tokens
-    );
-    const cacheWriteTokens = readNonNegativeInteger(
-        usage?.input_tokens_details?.cache_write_tokens
-    );
-    const completionTokens = readNonNegativeInteger(usage?.output_tokens);
-    const reportedTotalTokens = readNonNegativeInteger(usage?.total_tokens);
+    const normalized = normalizeGenerationUsage({
+        promptTokens: usage?.input_tokens,
+        cachedInputTokens: usage?.input_tokens_details?.cached_tokens,
+        cacheWriteTokens: usage?.input_tokens_details?.cache_write_tokens,
+        completionTokens: usage?.output_tokens,
+        reasoningTokens: usage?.output_tokens_details?.reasoning_tokens,
+        totalTokens: usage?.total_tokens,
+    });
+    const promptTokens = normalized?.promptTokens;
+    const completionTokens = normalized?.completionTokens;
     const hasComponentTokens =
         promptTokens !== undefined || completionTokens !== undefined;
     const totalTokens =
-        reportedTotalTokens ??
+        normalized?.totalTokens ??
         (hasComponentTokens
             ? (promptTokens ?? 0) + (completionTokens ?? 0)
             : undefined);
-    const normalized: GenerationUsage = {
-        ...(promptTokens !== undefined && { promptTokens }),
-        ...(cachedInputTokens !== undefined && { cachedInputTokens }),
-        ...(cacheWriteTokens !== undefined && { cacheWriteTokens }),
-        ...(completionTokens !== undefined && { completionTokens }),
-        ...(totalTokens !== undefined && { totalTokens }),
-    };
-    return Object.keys(normalized).length > 0 ? normalized : undefined;
+    return normalizeGenerationUsage({ ...normalized, totalTokens });
 };
 
 const normalizeVerbosity = (

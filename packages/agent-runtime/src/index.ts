@@ -296,6 +296,39 @@ export interface GenerationUsage {
 }
 
 /**
+ * Checks one provider-reported token count before it crosses the runtime
+ * boundary. Invalid facts are omitted so backend accounting stays fail-open.
+ */
+export const isNonNegativeSafeInteger = (value: unknown): value is number =>
+    typeof value === 'number' && Number.isSafeInteger(value) && value >= 0;
+
+/** Normalizes the shared six-field token usage representation. */
+export const normalizeGenerationUsage = (
+    value: unknown
+): GenerationUsage | undefined => {
+    if (typeof value !== 'object' || value === null || Array.isArray(value)) {
+        return undefined;
+    }
+    const candidate = value as Record<string, unknown>;
+    const normalized: GenerationUsage = {};
+    const fields: Array<keyof GenerationUsage> = [
+        'promptTokens',
+        'cachedInputTokens',
+        'cacheWriteTokens',
+        'completionTokens',
+        'reasoningTokens',
+        'totalTokens',
+    ];
+    for (const field of fields) {
+        const tokenCount = candidate[field];
+        if (isNonNegativeSafeInteger(tokenCount)) {
+            normalized[field] = tokenCount;
+        }
+    }
+    return Object.keys(normalized).length > 0 ? normalized : undefined;
+};
+
+/**
  * Retrieval facts surfaced by a runtime adapter.
  */
 export interface GenerationRetrieval {

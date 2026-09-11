@@ -34,6 +34,35 @@ export type TypedModelOutputValidation<T> =
     | { valid: true; value: T }
     | { valid: false; failure: TypedModelOutputFailure };
 
+/** Classifies deterministic generation facts before a parser is invoked. */
+export const classifyTypedModelOutputFailure = (
+    result: GenerationResult
+): TypedModelOutputFailure | undefined => {
+    if (result.completion?.status === 'failed') {
+        return 'runtime_failed';
+    }
+    if (
+        result.completion?.status === 'incomplete' ||
+        result.finishReason === 'length' ||
+        result.finishReason === 'max_tokens' ||
+        result.finishReason === 'max_output_tokens'
+    ) {
+        return 'incomplete';
+    }
+    if (
+        result.finishReason === 'refusal' ||
+        result.finishReason === 'refused' ||
+        result.finishReason === 'content-filter' ||
+        result.finishReason === 'content_filter'
+    ) {
+        return 'refusal';
+    }
+    if (result.text.trim().length === 0) {
+        return 'empty';
+    }
+    return undefined;
+};
+
 /**
  * Chooses the strongest available typed-output transport without making absent
  * capability metadata a hard block. JSON mode is an explicit adapter fact;
@@ -79,29 +108,9 @@ export const validateTypedModelOutput = <T>(input: {
     result: GenerationResult;
     parse: (text: string) => TypedModelOutputValidation<T>;
 }): TypedModelOutputValidation<T> => {
-    if (input.result.completion?.status === 'failed') {
-        return { valid: false, failure: 'runtime_failed' };
-    }
-    if (input.result.completion?.status === 'incomplete') {
-        return { valid: false, failure: 'incomplete' };
-    }
-    if (
-        input.result.finishReason === 'length' ||
-        input.result.finishReason === 'max_tokens' ||
-        input.result.finishReason === 'max_output_tokens'
-    ) {
-        return { valid: false, failure: 'incomplete' };
-    }
-    if (
-        input.result.finishReason === 'refusal' ||
-        input.result.finishReason === 'refused' ||
-        input.result.finishReason === 'content-filter' ||
-        input.result.finishReason === 'content_filter'
-    ) {
-        return { valid: false, failure: 'refusal' };
-    }
-    if (input.result.text.trim().length === 0) {
-        return { valid: false, failure: 'empty' };
+    const deterministicFailure = classifyTypedModelOutputFailure(input.result);
+    if (deterministicFailure !== undefined) {
+        return { valid: false, failure: deterministicFailure };
     }
     try {
         return input.parse(input.result.text);

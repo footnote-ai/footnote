@@ -117,6 +117,7 @@ import {
     validateTypedModelOutput,
     type TypedModelOutputPath,
     type TypedModelOutputFailure,
+    type TypedModelOutputValidation,
 } from '../typedModelOutput.js';
 import type {
     AttemptResult,
@@ -2060,17 +2061,37 @@ export const runBoundedReviewWorkflow = async (
                 }),
             });
         };
-        const runReviewGeneration = async (input: {
+        const parseReviewDecisionForValidation = (
+            text: string
+        ): TypedModelOutputValidation<ReviewDecision> => {
+            const parsed = (
+                input.parseReviewDecision ?? parseReviewDecisionOutputResult
+            )(text);
+            return parsed.isOk()
+                ? { valid: true, value: parsed.value }
+                : {
+                      valid: false,
+                      failure:
+                          parsed.error.reason === 'schema_invalid'
+                              ? 'schema_invalid'
+                              : 'malformed',
+                  };
+        };
+
+        // Native schema is authoritative, then JSON mode, then parser fallback;
+        // each downgrade stays fail-open when transport metadata is unavailable.
+        const runReviewGeneration = async (generationInput: {
             request: GenerationRequest;
             initialOutputPath: TypedModelOutputPath;
             capabilityFacts: ReturnType<typeof resolveAttemptCapabilityFacts>;
             providerModel: string;
             recordAttempt?: (attempt: RoutingChainInternalAttempt) => void;
         }): Promise<GenerationResult> => {
-            let outputPath: TypedModelOutputPath = input.initialOutputPath;
+            let outputPath: TypedModelOutputPath =
+                generationInput.initialOutputPath;
             while (true) {
                 const requestForOutput: GenerationRequest = {
-                    ...input.request,
+                    ...generationInput.request,
                     ...(outputPath === 'native_schema'
                         ? {
                               structuredOutput:
@@ -2087,7 +2108,8 @@ export const runBoundedReviewWorkflow = async (
                 } catch (error) {
                     const nextOutputPath: TypedModelOutputPath | undefined =
                         outputPath === 'native_schema'
-                            ? input.capabilityFacts.jsonMode === 'supported'
+                            ? generationInput.capabilityFacts.jsonMode ===
+                              'supported'
                                 ? 'json_compatibility'
                                 : 'parser_compatibility'
                             : outputPath === 'json_compatibility'
@@ -2101,13 +2123,13 @@ export const runBoundedReviewWorkflow = async (
                     }
                     recordStructuredOutputTransportFailure(
                         {
-                            providerModel: input.providerModel,
+                            providerModel: generationInput.providerModel,
                             ...(isGenerationRuntimeError(error) && {
                                 model: error.model,
                                 usage: error.usage,
                             }),
                         },
-                        input.recordAttempt
+                        generationInput.recordAttempt
                     );
                     outputPath = nextOutputPath;
                 }
@@ -2173,22 +2195,7 @@ export const runBoundedReviewWorkflow = async (
                       retryReasonCode: (result) => {
                           const validation = validateTypedModelOutput({
                               result,
-                              parse: (text) => {
-                                  const parsed = (
-                                      input.parseReviewDecision ??
-                                      parseReviewDecisionOutputResult
-                                  )(text);
-                                  return parsed.isOk()
-                                      ? { valid: true, value: parsed.value }
-                                      : {
-                                            valid: false,
-                                            failure:
-                                                parsed.error.reason ===
-                                                'schema_invalid'
-                                                    ? ('schema_invalid' as const)
-                                                    : ('malformed' as const),
-                                        };
-                              },
+                              parse: parseReviewDecisionForValidation,
                           });
                           return validation.valid
                               ? undefined
@@ -2277,20 +2284,7 @@ export const runBoundedReviewWorkflow = async (
             combineGenerationResultUsage(reviewAttempts);
         const typedValidation = validateTypedModelOutput({
             result: reviewResult,
-            parse: (text) => {
-                const parsed = (
-                    input.parseReviewDecision ?? parseReviewDecisionOutputResult
-                )(text);
-                return parsed.isOk()
-                    ? { valid: true, value: parsed.value }
-                    : {
-                          valid: false,
-                          failure:
-                              parsed.error.reason === 'schema_invalid'
-                                  ? ('schema_invalid' as const)
-                                  : ('malformed' as const),
-                      };
-            },
+            parse: parseReviewDecisionForValidation,
         });
         if (!typedValidation.valid) {
             const parseFailure =

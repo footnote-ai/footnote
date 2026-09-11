@@ -31,6 +31,7 @@ test('structured planner executor parses function_call arguments', async () => {
                         cache_write_tokens: 2,
                     },
                     output_tokens: 9,
+                    output_tokens_details: { reasoning_tokens: 6 },
                     total_tokens: 19,
                 },
                 output: [
@@ -87,6 +88,8 @@ test('structured planner executor parses function_call arguments', async () => {
             verbosity: 'low',
             safetyIdentifier: 'derived-safety-id',
         });
+
+        assert.equal(result.usage?.reasoningTokens, 6);
 
         assert.equal(
             (capturedRequestBody?.tool_choice as { name?: string } | undefined)

@@ -158,6 +158,16 @@ test('rejects empty, malformed, refusal, and incomplete typed output', () => {
     }
 });
 
+test('classifies parser exceptions as malformed output', () => {
+    const validation = validateTypedModelOutput({
+        result: result(),
+        parse: () => {
+            throw new SyntaxError('invalid JSON');
+        },
+    });
+    assert.deepEqual(validation, { valid: false, failure: 'malformed' });
+});
+
 test('accepts only a parser-validated typed result', () => {
     const validation = validateTypedModelOutput({
         result: result(),

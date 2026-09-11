@@ -14,17 +14,19 @@ import {
 } from '@voltagent/core';
 import { createOpenAICompatible } from '@ai-sdk/openai-compatible';
 import { APICallError, jsonSchema, Output } from 'ai';
-import type {
-    GenerationCitation,
-    GenerationRuntimeError,
-    GenerationRuntimeErrorDetails,
-    GenerationRequest,
-    GenerationResult,
-    GenerationRuntime,
-    GenerationSearchRequest,
-    GenerationStructuredOutput,
-    GenerationUsage,
-    RuntimeMessage,
+import {
+    isNonNegativeSafeInteger,
+    normalizeGenerationUsage,
+    type GenerationCitation,
+    type GenerationRuntimeError,
+    type GenerationRuntimeErrorDetails,
+    type GenerationRequest,
+    type GenerationResult,
+    type GenerationRuntime,
+    type GenerationSearchRequest,
+    type GenerationStructuredOutput,
+    type GenerationUsage,
+    type RuntimeMessage,
 } from './index.js';
 import {
     GenerationRuntimeError as GenerationRuntimeErrorClass,
@@ -503,41 +505,6 @@ export const normalizeGenerationRuntimeError = (
     return details === undefined
         ? undefined
         : new GenerationRuntimeErrorClass(error.message, details);
-};
-
-const readNonNegativeInteger = (value: unknown): number | undefined =>
-    typeof value === 'number' && Number.isSafeInteger(value) && value >= 0
-        ? value
-        : undefined;
-
-const normalizeVoltAgentUsage = (
-    usage: VoltAgentUsage | undefined
-): GenerationUsage | undefined => {
-    if (usage === undefined) {
-        return undefined;
-    }
-    const normalized: GenerationUsage = {};
-    const promptTokens = readNonNegativeInteger(usage.promptTokens);
-    const cachedInputTokens = readNonNegativeInteger(usage.cachedInputTokens);
-    const cacheWriteTokens = readNonNegativeInteger(usage.cacheWriteTokens);
-    const completionTokens = readNonNegativeInteger(usage.completionTokens);
-    const reasoningTokens = readNonNegativeInteger(usage.reasoningTokens);
-    const totalTokens = readNonNegativeInteger(usage.totalTokens);
-    if (promptTokens !== undefined) normalized.promptTokens = promptTokens;
-    if (cachedInputTokens !== undefined) {
-        normalized.cachedInputTokens = cachedInputTokens;
-    }
-    if (cacheWriteTokens !== undefined) {
-        normalized.cacheWriteTokens = cacheWriteTokens;
-    }
-    if (completionTokens !== undefined) {
-        normalized.completionTokens = completionTokens;
-    }
-    if (reasoningTokens !== undefined) {
-        normalized.reasoningTokens = reasoningTokens;
-    }
-    if (totalTokens !== undefined) normalized.totalTokens = totalTokens;
-    return Object.keys(normalized).length > 0 ? normalized : undefined;
 };
 
 const normalizeCompletionStatus = (input: {
@@ -1237,19 +1204,27 @@ const normalizeVoltAgentResult = (
     const incompleteReason = readBoundedString(incompleteDetails?.reason);
     const responseUsage = asRecord(responseBody?.usage);
     const outputTokenDetails = asRecord(responseUsage?.output_tokens_details);
-    const runtimeUsage = normalizeVoltAgentUsage(result.usage);
+    const runtimeUsage = normalizeGenerationUsage(result.usage);
     const reasoningTokens =
         runtimeUsage?.reasoningTokens ??
-        readNonNegativeInteger(outputTokenDetails?.reasoning_tokens);
+        (isNonNegativeSafeInteger(outputTokenDetails?.reasoning_tokens)
+            ? outputTokenDetails.reasoning_tokens
+            : undefined);
     const promptTokens =
         runtimeUsage?.promptTokens ??
-        readNonNegativeInteger(responseUsage?.input_tokens);
+        (isNonNegativeSafeInteger(responseUsage?.input_tokens)
+            ? responseUsage.input_tokens
+            : undefined);
     const completionTokens =
         runtimeUsage?.completionTokens ??
-        readNonNegativeInteger(responseUsage?.output_tokens);
+        (isNonNegativeSafeInteger(responseUsage?.output_tokens)
+            ? responseUsage.output_tokens
+            : undefined);
     const totalTokens =
         runtimeUsage?.totalTokens ??
-        readNonNegativeInteger(responseUsage?.total_tokens);
+        (isNonNegativeSafeInteger(responseUsage?.total_tokens)
+            ? responseUsage.total_tokens
+            : undefined);
     const completionStatus = normalizeCompletionStatus({
         responseStatus,
         finishReason: result.finishReason,
@@ -1486,7 +1461,7 @@ const createDefaultVoltAgentExecutor = ({
                     { classification: 'structured_output_unavailable' },
                     {
                         model: result.response.modelId,
-                        usage: normalizeVoltAgentUsage(result.usage),
+                        usage: normalizeGenerationUsage(result.usage),
                     }
                 );
             }

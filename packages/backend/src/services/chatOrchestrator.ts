@@ -106,9 +106,24 @@ import {
     type ChatOutputBoundaryOptions,
 } from './chatOutputBoundary.js';
 import {
+    classifyTypedModelOutputFailure,
     isTypedOutputTransportUnavailable,
     resolveTypedModelOutputPath,
+    type TypedModelOutputFailure,
 } from './typedModelOutput.js';
+
+const mapTypedOutputFailureToPlannerOutcome = (
+    failure: TypedModelOutputFailure
+): ConstructorParameters<typeof ChatPlannerStructuredOutputError>[0] =>
+    failure === 'empty'
+        ? 'no_output'
+        : failure === 'incomplete'
+          ? 'incomplete'
+          : failure === 'refusal'
+            ? 'refusal'
+            : failure === 'runtime_failed'
+              ? 'runtime_failure'
+              : 'parse_failure';
 
 type CreateChatOrchestratorOptions = CreateChatServiceOptions & {
     weatherForecastTool?: WeatherForecastTool;
@@ -214,6 +229,8 @@ export const createChatOrchestrator = ({
     const plannerCapabilityOptions =
         listCapabilityProfileOptionsForStep('generation');
     const resolvePlannerCapabilityFacts = (profile: ModelProfile) =>
+        // Runtime-resolved facts take precedence; missing runtime metadata
+        // falls back to profile metadata and stays fail-open for typed output.
         generationRuntime.resolveCapabilityFacts?.({
             provider: profile.provider,
             capabilities: profile.capabilities,
@@ -316,7 +333,7 @@ export const createChatOrchestrator = ({
                                 await generationRuntime.generate({
                                     ...resolvedRequest,
                                     messages:
-                                        compatibilityMessages ??
+                                        compatibilityMessages?.() ??
                                         resolvedRequest.messages,
                                     model: activePlannerProfile.providerModel,
                                     provider: activePlannerProfile.provider,
@@ -385,39 +402,27 @@ export const createChatOrchestrator = ({
                                 plannerUsage: compatibilityResult.usage,
                             });
                         };
-                        if (
-                            compatibilityResult.completion?.status ===
-                                'incomplete' ||
-                            compatibilityResult.finishReason === 'length' ||
-                            compatibilityResult.finishReason === 'max_tokens' ||
-                            compatibilityResult.finishReason ===
-                                'max_output_tokens'
-                        ) {
-                            throwCompatibilityFailure(
-                                'incomplete',
-                                'Planner compatibility output was incomplete.'
+                        const compatibilityFailure =
+                            classifyTypedModelOutputFailure(
+                                compatibilityResult
                             );
-                        }
-                        if (
-                            compatibilityResult.completion?.status ===
-                                'failed' ||
-                            compatibilityResult.finishReason === 'refusal' ||
-                            compatibilityResult.finishReason === 'refused' ||
-                            compatibilityResult.finishReason ===
-                                'content-filter' ||
-                            compatibilityResult.finishReason ===
-                                'content_filter'
-                        ) {
-                            throwCompatibilityFailure(
-                                'refusal',
-                                'Planner compatibility output was refused.'
-                            );
-                        }
-                        if (compatibilityResult.text.trim().length === 0) {
-                            throwCompatibilityFailure(
-                                'no_output',
-                                'Planner compatibility output was empty.'
-                            );
+                        if (compatibilityFailure !== undefined) {
+                            const outcome =
+                                mapTypedOutputFailureToPlannerOutcome(
+                                    compatibilityFailure
+                                );
+                            const message =
+                                compatibilityFailure === 'incomplete'
+                                    ? 'Planner compatibility output was incomplete.'
+                                    : compatibilityFailure === 'empty'
+                                      ? 'Planner compatibility output was empty.'
+                                      : compatibilityFailure === 'refusal'
+                                        ? 'Planner compatibility output was refused.'
+                                        : compatibilityFailure ===
+                                            'runtime_failed'
+                                          ? 'Planner compatibility runtime failed.'
+                                          : 'Planner compatibility output was invalid.';
+                            throwCompatibilityFailure(outcome, message);
                         }
                         let compatibilityDecision: unknown;
                         try {
@@ -531,38 +536,24 @@ export const createChatOrchestrator = ({
                                 plannerUsage: result.usage,
                             });
                         };
-                        if (
-                            result.completion?.status === 'incomplete' ||
-                            result.finishReason === 'length' ||
-                            result.finishReason === 'max_tokens' ||
-                            result.finishReason === 'max_output_tokens'
-                        ) {
+                        const structuredFailure =
+                            classifyTypedModelOutputFailure(result);
+                        if (structuredFailure !== undefined) {
+                            const message =
+                                structuredFailure === 'incomplete'
+                                    ? 'Structured planner output was incomplete.'
+                                    : structuredFailure === 'empty'
+                                      ? 'Structured planner returned no output.'
+                                      : structuredFailure === 'refusal'
+                                        ? 'Structured planner output was refused.'
+                                        : structuredFailure === 'runtime_failed'
+                                          ? 'Structured planner runtime failed.'
+                                          : 'Structured planner output was invalid.';
                             throwStructuredResultFailure(
-                                'incomplete',
-                                'Structured planner output was incomplete.'
-                            );
-                        }
-                        if (result.completion?.status === 'failed') {
-                            throwStructuredResultFailure(
-                                'runtime_failure',
-                                'Structured planner runtime failed.'
-                            );
-                        }
-                        if (
-                            result.finishReason === 'refusal' ||
-                            result.finishReason === 'refused' ||
-                            result.finishReason === 'content-filter' ||
-                            result.finishReason === 'content_filter'
-                        ) {
-                            throwStructuredResultFailure(
-                                'refusal',
-                                'Structured planner output was refused.'
-                            );
-                        }
-                        if (result.text.trim().length === 0) {
-                            throwStructuredResultFailure(
-                                'no_output',
-                                'Structured planner returned no output.'
+                                mapTypedOutputFailureToPlannerOutcome(
+                                    structuredFailure
+                                ),
+                                message
                             );
                         }
                         let decision: unknown;
