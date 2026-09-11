@@ -386,9 +386,11 @@ test('a successful response mounts a fresh invisible CAPTCHA challenge', async (
     await page.evaluate(() => {
         const callback = window.__footnoteTurnstileCallbacks?.at(-1);
         callback?.('XXXX.DUMMY.TOKEN.2.XXXX');
+        window.__footnoteTurnstileCallbacks?.[0]?.('STALE.DUMMY.TOKEN.XXXX');
     });
     await submitQuestion(page, 'Use the fresh challenge');
     await expect.poll(() => submittedTokens.length).toBe(2);
+    expect(submittedTokens[1]).toBe('XXXX.DUMMY.TOKEN.2.XXXX');
     expect(submittedTokens[0]).not.toBe(submittedTokens[1]);
 });
 

@@ -69,8 +69,13 @@ const useChatCaptcha = ({
         []
     );
 
+    const callbackGeneration = challengeGenerationRef.current;
+
     const onVerify = useCallback(
         (candidate: string): void => {
+            if (challengeGenerationRef.current !== callbackGeneration) {
+                return;
+            }
             isExecutingRef.current = false;
             challengeGenerationRef.current += 1;
             const isTestKey =
@@ -88,28 +93,34 @@ const useChatCaptcha = ({
             setError(null);
             onVerified();
         },
-        [onVerified, siteKey]
+        [callbackGeneration, onVerified, siteKey]
     );
 
     const onManagedError = useCallback((): void => {
+        if (challengeGenerationRef.current !== callbackGeneration) {
+            return;
+        }
         isExecutingRef.current = false;
         challengeGenerationRef.current += 1;
         setError(
             'CAPTCHA verification failed. Check Brave Shields for this site, then try again.'
         );
         setToken(null);
-    }, []);
+    }, [callbackGeneration]);
 
     const onInvisibleError = useCallback((): void => {
         showManagedChallenge();
     }, [showManagedChallenge]);
 
     const onExpire = useCallback((): void => {
+        if (challengeGenerationRef.current !== callbackGeneration) {
+            return;
+        }
         isExecutingRef.current = false;
         challengeGenerationRef.current += 1;
         setToken(null);
         setError('CAPTCHA expired. Please complete it again.');
-    }, []);
+    }, [callbackGeneration]);
 
     const onInvisibleLoad = useCallback((): void => {
         setIsInvisibleMounted(true);
