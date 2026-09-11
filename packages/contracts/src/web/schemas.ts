@@ -50,6 +50,7 @@ import {
     supportedImageOutputFormats,
     supportedReasoningEfforts,
 } from '../providers.js';
+import { modelCapabilitySupportStates } from '../model-capabilities.js';
 import {
     presentationPromptVariants,
     PresentationGenerationSettingsSchema,
@@ -1041,6 +1042,122 @@ const validateRefinementSignals = (
     }
 };
 
+const WorkflowResultReferenceSchema = z
+    .object({
+        resultId: z.string().min(1).optional(),
+        name: z.string().min(1),
+        optional: z.boolean().optional(),
+    })
+    .strict();
+
+const WorkflowResultRecordSchema = z
+    .object({
+        resultId: z.string().min(1),
+        name: z.string().min(1),
+        status: z.enum(['produced', 'unavailable']),
+        producedByStepId: z.string().min(1),
+        producedByAttempt: z.number().int().positive(),
+    })
+    .strict();
+
+const WorkflowAttemptRoutingRecordSchema = z
+    .object({
+        index: z.number().int().nonnegative(),
+        profileId: z.string().min(1),
+        requestedProvider: z.string().min(1).optional(),
+        requestedModel: z.string().min(1).optional(),
+        actualProvider: z.string().min(1).optional(),
+        actualModel: z.string().min(1).optional(),
+        status: z.string().min(1),
+        reasonCode: z.string().min(1).optional(),
+        finishReason: z.string().min(1).optional(),
+        completion: GenerationCompletionSchema.optional(),
+        usage: GenerationUsageSchema.optional(),
+        cost: z
+            .object({
+                inputCostUsd: z.number().nonnegative(),
+                outputCostUsd: z.number().nonnegative(),
+                totalCostUsd: z.number().nonnegative(),
+            })
+            .strict()
+            .optional(),
+        startedAt: z.string().datetime().optional(),
+        finishedAt: z.string().datetime().optional(),
+        durationMs: z.number().int().nonnegative().optional(),
+        chooseOneUsed: z.boolean(),
+        chooseOneSelectedIndex: z.number().int().nonnegative().optional(),
+        temporaryUnavailableReason: z.string().min(1).optional(),
+    })
+    .strict();
+
+const WorkflowAttemptSettingsSchema = z
+    .object({
+        requested: z
+            .record(z.string(), z.union([z.string(), z.number()]))
+            .optional(),
+        applied: z
+            .record(z.string(), z.union([z.string(), z.number()]))
+            .optional(),
+        ignored: z
+            .array(
+                z
+                    .object({
+                        setting: z.string().min(1),
+                        reasonCode: z.string().min(1),
+                    })
+                    .strict()
+            )
+            .optional(),
+        observed: z
+            .record(z.string(), z.union([z.string(), z.number()]))
+            .optional(),
+    })
+    .strict();
+
+const CapabilitySupportSchema = z.enum(modelCapabilitySupportStates);
+const WorkflowAttemptCapabilitiesSchema = z
+    .object({
+        reasoningEfforts: z.record(z.string(), CapabilitySupportSchema),
+        verbosity: z.record(z.string(), CapabilitySupportSchema),
+        temperature: CapabilitySupportSchema,
+        topP: CapabilitySupportSchema,
+        outputLimit: CapabilitySupportSchema,
+        structuredOutput: CapabilitySupportSchema,
+        jsonMode: CapabilitySupportSchema,
+        nativeSearch: CapabilitySupportSchema,
+    })
+    .strict();
+
+const WorkflowAttemptRecordSchema = z
+    .object({
+        attempt: z.number().int().positive(),
+        status: z.enum(['succeeded', 'failed', 'rejected']),
+        startedAt: z.string().datetime(),
+        finishedAt: z.string().datetime(),
+        durationMs: z.number().int().nonnegative(),
+        profileId: z.string().min(1).optional(),
+        requestedProvider: z.string().min(1).optional(),
+        requestedModel: z.string().min(1).optional(),
+        actualProvider: z.string().min(1).optional(),
+        actualModel: z.string().min(1).optional(),
+        settings: WorkflowAttemptSettingsSchema.optional(),
+        capabilities: WorkflowAttemptCapabilitiesSchema.optional(),
+        completion: GenerationCompletionSchema.optional(),
+        usage: GenerationUsageSchema.optional(),
+        cost: z
+            .object({
+                inputCostUsd: z.number().nonnegative(),
+                outputCostUsd: z.number().nonnegative(),
+                totalCostUsd: z.number().nonnegative(),
+            })
+            .strict()
+            .optional(),
+        reasonCode: z.string().min(1).optional(),
+        terminationReason: z.string().min(1).optional(),
+        routingAttempts: z.array(WorkflowAttemptRoutingRecordSchema).optional(),
+    })
+    .strict();
+
 const StepRecordSchema = z
     .object({
         stepId: z.string().min(1),
@@ -1071,6 +1188,9 @@ const StepRecordSchema = z
             })
             .strict()
             .optional(),
+        inputRefs: z.array(WorkflowResultReferenceSchema).optional(),
+        resultRefs: z.array(WorkflowResultReferenceSchema).optional(),
+        attempts: z.array(WorkflowAttemptRecordSchema).optional(),
         outcome: StepOutcomeSchema,
     })
     .superRefine((value, context) => {
@@ -1240,6 +1360,10 @@ const validateAssessTraceSignals = (
 
 const WorkflowRecordSchema = z
     .object({
+        runId: z.string().min(1).optional(),
+        runStatus: z
+            .enum(['completed', 'degraded', 'limited', 'failed', 'rejected'])
+            .optional(),
         workflowId: z.string().min(1),
         workflowName: z.string().min(1),
         status: z.enum(['completed', 'degraded']),
@@ -1268,6 +1392,7 @@ const WorkflowRecordSchema = z
             .strict()
             .optional(),
         terminationReason: z.enum(WORKFLOW_TERMINATION_REASONS),
+        results: z.array(WorkflowResultRecordSchema).optional(),
         steps: z.array(StepRecordSchema),
     })
     .superRefine((value, context) => {

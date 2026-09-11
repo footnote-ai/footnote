@@ -750,13 +750,10 @@ test('runBoundedReviewWorkflow records initial generation routing exhaustion wit
     );
     assert.ok(failedGenerateStep);
     assert.equal(failedGenerateStep.reasonCode, 'routing_chain_exhausted');
+    assert.equal(failedGenerateStep.attempts?.[0]?.routingAttempts?.length, 1);
     assert.equal(
-        failedGenerateStep.outcome.signals?.routingChainAttemptCount,
-        1
-    );
-    assert.match(
-        String(failedGenerateStep.outcome.signals?.routingChainAttemptsJson),
-        /skipped_ineligible/
+        failedGenerateStep.attempts?.[0]?.routingAttempts?.[0]?.status,
+        'skipped_ineligible'
     );
 });
 
@@ -1442,10 +1439,10 @@ test('runBoundedReviewWorkflow records assess routing-chain exhaustion as data',
         failedAssessStep.reasonCode,
         'routing_chain_non_transient_error'
     );
-    assert.equal(failedAssessStep.outcome.signals?.routingChainAttemptCount, 1);
-    assert.match(
-        String(failedAssessStep.outcome.signals?.routingChainAttemptsJson),
-        /failed_non_transient_stopped/
+    assert.equal(failedAssessStep.attempts?.[0]?.routingAttempts?.length, 1);
+    assert.equal(
+        failedAssessStep.attempts?.[0]?.routingAttempts?.[0]?.status,
+        'failed_non_transient_stopped'
     );
 });
 
@@ -1558,10 +1555,7 @@ test('runBoundedReviewWorkflow records revision routing-chain exhaustion as data
         failedRevisionStep.outcome.signals?.routingHintApplied,
         'openai_first_logic'
     );
-    assert.equal(
-        failedRevisionStep.outcome.signals?.routingChainAttemptCount,
-        1
-    );
+    assert.equal(failedRevisionStep.attempts?.[0]?.routingAttempts?.length, 1);
 });
 
 test('runBoundedReviewWorkflow can use independent generate and assess model chains', async () => {

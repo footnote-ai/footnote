@@ -85,13 +85,23 @@ const ProvenanceFooter = ({
     // Shared helper keeps web/Discord copy and decision rules in sync.
     const workflowReceiptItems = buildWorkflowReceiptItems(metadata);
     const evaluatorOutcome = metadata.evaluator;
-    const searchUnavailableWarning = metadata.execution?.some(
-        (event) =>
-            event.kind === 'tool' &&
-            event.toolName === 'web_search' &&
-            event.status === 'skipped' &&
-            event.reasonCode === 'search_not_supported_by_selected_profile'
-    );
+    const searchUnavailableWarning =
+        metadata.workflow?.runId !== undefined
+            ? metadata.workflow.steps.some(
+                  (step) =>
+                      step.stepKind === 'tool' &&
+                      step.outcome.status === 'skipped' &&
+                      step.reasonCode ===
+                          'search_not_supported_by_selected_profile'
+              )
+            : metadata.execution?.some(
+                  (event) =>
+                      event.kind === 'tool' &&
+                      event.toolName === 'web_search' &&
+                      event.status === 'skipped' &&
+                      event.reasonCode ===
+                          'search_not_supported_by_selected_profile'
+              );
     const safetyDecision = evaluatorOutcome?.safetyDecision;
     const evaluatorAuthority =
         evaluatorOutcome?.authorityLevel ??

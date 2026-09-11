@@ -3442,19 +3442,14 @@ test('runChatMessages keeps temporary route receipts while attributing automatic
         const generateStep = response.metadata.workflow?.steps.find(
             (step) => step.stepKind === 'generate'
         );
-        const serializedAttempts =
-            generateStep?.outcome.signals?.routingChainAttemptsJson;
-        if (typeof serializedAttempts !== 'string') {
-            throw new Error(
-                'Expected a serializable generation route receipt.'
-            );
+        const routingAttempts =
+            generateStep?.attempts?.flatMap(
+                (attempt) => attempt.routingAttempts ?? []
+            ) ?? [];
+        if (routingAttempts.length === 0) {
+            throw new Error('Expected canonical generation route attempts.');
         }
-        return JSON.parse(serializedAttempts) as Array<{
-            profileId: string;
-            status: string;
-            reasonCode?: string;
-            temporaryUnavailableReason?: string;
-        }>;
+        return routingAttempts;
     };
 
     assert.deepEqual(
@@ -4260,10 +4255,16 @@ test('runChatMessages preserves local response authority when TrustGraph ownersh
 });
 
 test('runChatMessages surfaces workflow terminal react outcome as terminal action response', async () => {
+    let storedMetadata: ResponseMetadata | undefined;
     const chatService = createChatService({
         generationRuntime: createRuntime(),
-        storeTrace: async () => undefined,
-        buildResponseMetadata: () => createMetadata(),
+        storeTrace: async (metadata) => {
+            storedMetadata = metadata;
+        },
+        buildResponseMetadata: (_generation, runtimeContext) => ({
+            ...createMetadata(),
+            workflow: runtimeContext.workflow,
+        }),
         defaultModel: 'gpt-5-mini',
         recordUsage: () => undefined,
         chatWorkflowConfig: {
@@ -4303,6 +4304,7 @@ test('runChatMessages surfaces workflow terminal react outcome as terminal actio
         throw new Error('Expected terminal_action result');
     }
     assert.equal(result.response.action, 'react');
+    assert.equal(storedMetadata?.workflow?.workflowId, 'wf_terminal_react');
 });
 
 test('runChatMessages surfaces workflow terminal ignore outcome as terminal action response', async () => {

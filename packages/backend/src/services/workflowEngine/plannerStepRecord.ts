@@ -14,6 +14,7 @@ import type {
     PlannerExecutionPurpose,
     PlannerStructuredOutputOutcome,
     StepRecord,
+    WorkflowAttemptRecord,
     StepSignals,
     WorkflowPlannerAction,
     WorkflowPlannerModality,
@@ -21,7 +22,6 @@ import type {
     WorkflowRoutingChainAttemptSignal,
     WorkflowRoutingChainSignals,
 } from '@footnote/contracts/policy';
-import { buildWorkflowRoutingChainSignals } from '@footnote/contracts/policy';
 
 type PlannerStepRecordSummary = {
     status: ExecutionStatus;
@@ -164,9 +164,6 @@ export const buildPlannerStepRecord = ({
         ...(Array.isArray(summary.matteredControlIds) && {
             matteredControlCount: summary.matteredControlIds.length,
         }),
-        ...buildWorkflowRoutingChainSignals({
-            attempts: summary.routingChainAttempts,
-        }),
     };
 
     const usage = summary.usage
@@ -222,6 +219,80 @@ export const buildPlannerStepRecord = ({
               }
             : undefined;
 
+    const plannerAttempt: WorkflowAttemptRecord = {
+        attempt: normalizedAttempt,
+        status:
+            summary.status === 'executed'
+                ? 'succeeded'
+                : summary.status === 'failed'
+                  ? 'failed'
+                  : 'rejected',
+        startedAt: new Date(normalizedStartedAtMs).toISOString(),
+        finishedAt: new Date(normalizedFinishedAtMs).toISOString(),
+        durationMs: normalizedDurationMs,
+        ...(summary.profileId !== undefined && {
+            profileId: summary.profileId,
+        }),
+        ...(summary.provider !== undefined && {
+            requestedProvider: summary.provider,
+        }),
+        ...(summary.model !== undefined && {
+            requestedModel: summary.model,
+        }),
+        ...(summary.upstreamAttribution?.inferenceProvider !== undefined && {
+            actualProvider: summary.upstreamAttribution.inferenceProvider,
+        }),
+        ...(summary.upstreamAttribution?.resolvedModel !== undefined && {
+            actualModel: summary.upstreamAttribution.resolvedModel,
+        }),
+        ...(hasUsage &&
+            usage !== undefined && {
+                usage,
+            }),
+        ...(normalizedCost !== undefined && { cost: normalizedCost }),
+        ...(sanitizedReasonCode !== undefined && {
+            reasonCode: sanitizedReasonCode,
+        }),
+        ...(summary.routingChainAttempts !== undefined && {
+            routingAttempts: summary.routingChainAttempts.map((attempt) => ({
+                index: attempt.index,
+                profileId: attempt.profileId,
+                ...(attempt.provider === undefined
+                    ? {}
+                    : { requestedProvider: attempt.provider }),
+                ...(attempt.model === undefined
+                    ? {}
+                    : { requestedModel: attempt.model }),
+                status: attempt.status,
+                ...(attempt.reasonCode === undefined
+                    ? {}
+                    : { reasonCode: attempt.reasonCode }),
+                ...(attempt.finishReason === undefined
+                    ? {}
+                    : { finishReason: attempt.finishReason }),
+                ...(attempt.completion === undefined
+                    ? {}
+                    : { completion: attempt.completion }),
+                ...(attempt.usage === undefined
+                    ? {}
+                    : { usage: attempt.usage }),
+                chooseOneUsed: attempt.chooseOneUsed,
+                ...(attempt.chooseOneSelectedIndex === undefined
+                    ? {}
+                    : {
+                          chooseOneSelectedIndex:
+                              attempt.chooseOneSelectedIndex,
+                      }),
+                ...(attempt.temporaryUnavailableReason === undefined
+                    ? {}
+                    : {
+                          temporaryUnavailableReason:
+                              attempt.temporaryUnavailableReason,
+                      }),
+            })),
+        }),
+    };
+
     return {
         stepId,
         ...(parentStepId !== undefined && { parentStepId }),
@@ -236,6 +307,7 @@ export const buildPlannerStepRecord = ({
         ...(summary.model !== undefined && { model: summary.model }),
         ...(hasUsage && usage !== undefined && { usage }),
         ...(normalizedCost !== undefined && { cost: normalizedCost }),
+        attempts: [plannerAttempt],
         outcome: {
             status: summary.status,
             summary:

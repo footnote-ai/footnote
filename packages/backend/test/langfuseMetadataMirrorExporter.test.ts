@@ -105,6 +105,88 @@ test('langfuse metadata mirror exporter posts metadata-only payload to ingestion
     }
 });
 
+test('langfuse metadata mirror exporter uses canonical workflow lineage when present', async () => {
+    let capturedBody = '';
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = (async (
+        _input: Parameters<typeof fetch>[0],
+        init?: Parameters<typeof fetch>[1]
+    ) => {
+        capturedBody = String(init?.body ?? '');
+        return { ok: true, status: 200 } as Response;
+    }) as typeof fetch;
+
+    try {
+        const exporter = createLangfuseMetadataMirrorExporter({
+            enabled: true,
+            baseUrl: 'https://cloud.langfuse.com',
+            publicKey: 'pk-test',
+            secretKey: 'sk-test',
+            timeoutMs: 1500,
+        });
+        await exporter(
+            createMetadata({
+                execution: [
+                    {
+                        kind: 'generation',
+                        status: 'executed',
+                        model: 'legacy-model',
+                    },
+                ],
+                workflow: {
+                    workflowId: 'workflow_1',
+                    runId: 'run_1',
+                    runStatus: 'completed',
+                    workflowName: 'message_reviewed',
+                    status: 'completed',
+                    terminationReason: 'goal_satisfied',
+                    stepCount: 1,
+                    maxSteps: 4,
+                    maxDurationMs: 15000,
+                    steps: [
+                        {
+                            stepId: 'step_1',
+                            attempt: 1,
+                            stepKind: 'generate',
+                            startedAt: '2026-09-11T00:00:00.000Z',
+                            finishedAt: '2026-09-11T00:00:00.010Z',
+                            durationMs: 10,
+                            attempts: [
+                                {
+                                    attempt: 1,
+                                    status: 'succeeded',
+                                    startedAt: '2026-09-11T00:00:00.000Z',
+                                    finishedAt: '2026-09-11T00:00:00.010Z',
+                                    durationMs: 10,
+                                    routingAttempts: [
+                                        {
+                                            index: 0,
+                                            profileId: 'profile_1',
+                                            status: 'succeeded',
+                                            chooseOneUsed: false,
+                                        },
+                                    ],
+                                },
+                            ],
+                            outcome: {
+                                status: 'executed',
+                                summary: 'Generated a response.',
+                            },
+                        },
+                    ],
+                },
+            })
+        );
+
+        assert.match(capturedBody, /"runId":"run_1"/);
+        assert.match(capturedBody, /"fallbackAttemptCount":1/);
+        assert.equal(capturedBody.includes('"execution"'), false);
+        assert.equal(capturedBody.includes('legacy-model'), false);
+    } finally {
+        globalThis.fetch = originalFetch;
+    }
+});
+
 test('langfuse metadata mirror exporter throws on non-ok response so caller can fail-open', async () => {
     const originalFetch = globalThis.fetch;
     globalThis.fetch = (async () => {

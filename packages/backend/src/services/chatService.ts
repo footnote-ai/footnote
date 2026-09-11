@@ -67,6 +67,7 @@ import {
 } from './workflowProfileRegistry.js';
 import {
     runBoundedReviewWorkflow,
+    addEvaluatorStepToWorkflowLineage,
     type ContextStepExecutor,
     type RunBoundedReviewWorkflowResult,
     type WorkflowRunPolicy,
@@ -168,9 +169,10 @@ const isExecutedRoutingAttempt = (attempt: WorkflowRoutingAttempt): boolean =>
     attempt.status === 'failed_non_transient_stopped';
 
 /**
- * Reads effective generation attribution from the workflow routing receipt.
+ * Reads effective generation attribution from canonical workflow Attempts.
  * Completed routes use the last actual attempt; exhausted routes use their
- * last failed attempt, with legacy selected fields as a fallback.
+ * last failed attempt. Legacy signal JSON is parsed only for historical
+ * metadata without a canonical Run id and is never part of a new Run.
  */
 const getWorkflowGenerationRouting = (
     workflowLineage: WorkflowRecord | undefined
@@ -179,23 +181,46 @@ const getWorkflowGenerationRouting = (
         .slice()
         .reverse()
         .find((step) => step.stepKind === 'generate');
-    const signals = generationStep?.outcome.signals;
-    const lastExecutedAttempt = parseWorkflowRoutingAttempts(
-        signals?.routingChainAttemptsJson
-    )
+    const signals =
+        workflowLineage?.runId === undefined
+            ? generationStep?.outcome.signals
+            : undefined;
+    const canonicalRoutingAttempts =
+        generationStep?.attempts?.flatMap((attempt) =>
+            (attempt.routingAttempts ?? []).map((routingAttempt) => ({
+                ...routingAttempt,
+                provider:
+                    routingAttempt.actualProvider ??
+                    routingAttempt.requestedProvider,
+                model:
+                    routingAttempt.actualModel ?? routingAttempt.requestedModel,
+            }))
+        ) ?? [];
+    const routingAttempts =
+        canonicalRoutingAttempts.length > 0 ||
+        workflowLineage?.runId !== undefined
+            ? canonicalRoutingAttempts
+            : parseWorkflowRoutingAttempts(signals?.routingChainAttemptsJson);
+    const lastExecutedAttempt = routingAttempts
         .slice()
         .reverse()
         .find(isExecutedRoutingAttempt);
+    const canonicalGenerationAttempt = generationStep?.attempts?.at(-1);
     const profileId =
         lastExecutedAttempt?.profileId ??
+        canonicalGenerationAttempt?.profileId ??
         readNonEmptySignalString(signals?.routedProfileId) ??
         readNonEmptySignalString(signals?.selectedProfileId);
     const provider =
         lastExecutedAttempt?.provider ??
+        canonicalGenerationAttempt?.actualProvider ??
+        canonicalGenerationAttempt?.requestedProvider ??
         readNonEmptySignalString(signals?.routedProvider) ??
         readNonEmptySignalString(signals?.selectedProvider);
     const model =
         lastExecutedAttempt?.model ??
+        canonicalGenerationAttempt?.actualModel ??
+        canonicalGenerationAttempt?.requestedModel ??
         readNonEmptySignalString(signals?.routedModel) ??
         readNonEmptySignalString(signals?.selectedModel);
 
@@ -325,6 +350,7 @@ const buildContextStepShortCircuit = ({
     defaultModel,
     conversationSnapshot,
     latestUserInput,
+    workflowLineage,
     buildResponseMetadata,
 }: {
     workflowContextStepResult: ContextStepResult | undefined;
@@ -336,6 +362,7 @@ const buildContextStepShortCircuit = ({
     defaultModel: string;
     conversationSnapshot: string;
     latestUserInput: string | undefined;
+    workflowLineage?: WorkflowRecord;
     buildResponseMetadata: (
         generationMetadata: ResponseMetadataGenerationInput,
         runtimeContext: ResponseMetadataRuntimeContext
@@ -358,6 +385,7 @@ const buildContextStepShortCircuit = ({
         modelVersion: model ?? defaultModel,
         conversationSnapshot,
         plannerTemperament,
+        workflow: workflowLineage,
         executionContext: {
             ...executionContext,
             generation: {
@@ -1113,6 +1141,26 @@ export const createChatService = ({
         };
     };
 
+    const estimateCostForStep = (
+        result: GenerationResult,
+        requestedModel: string | undefined
+    ): ReturnType<typeof estimateBackendTextCost> => {
+        const usageModel = result.model ?? requestedModel ?? defaultModel;
+        return estimateBackendTextCost(
+            usageModel,
+            result.usage?.promptTokens ?? 0,
+            result.usage?.completionTokens ?? 0,
+            {
+                ...(result.usage?.cachedInputTokens !== undefined && {
+                    cachedInputTokens: result.usage.cachedInputTokens,
+                }),
+                ...(result.usage?.cacheWriteTokens !== undefined && {
+                    cacheWriteTokens: result.usage.cacheWriteTokens,
+                }),
+            }
+        );
+    };
+
     const recordUsageForStep = (
         result: GenerationResult,
         requestedModel: string | undefined,
@@ -1129,19 +1177,7 @@ export const createChatService = ({
         const completionTokens = result.usage?.completionTokens ?? 0;
         const totalTokens =
             result.usage?.totalTokens ?? promptTokens + completionTokens;
-        const estimatedCost = estimateBackendTextCost(
-            usageModel,
-            promptTokens,
-            completionTokens,
-            {
-                ...(result.usage?.cachedInputTokens !== undefined && {
-                    cachedInputTokens: result.usage.cachedInputTokens,
-                }),
-                ...(result.usage?.cacheWriteTokens !== undefined && {
-                    cacheWriteTokens: result.usage.cacheWriteTokens,
-                }),
-            }
-        );
+        const estimatedCost = estimateCostForStep(result, requestedModel);
 
         if (recordUsage) {
             try {
@@ -1477,10 +1513,16 @@ export const createChatService = ({
                   workflowConversationSnapshot?: string;
                   presentationMetadata?: PresentationMetadata;
                   responseCandidates?: ResponseCandidate[];
+                  terminalActionResponse?: Exclude<
+                      PostChatResponse,
+                      { action: 'message' }
+                  >;
                   fallbackAfterInternalNoGeneration: boolean;
               }
         > => {
             let generationResult: GenerationResult;
+            let terminalActionResponse:
+                Exclude<PostChatResponse, { action: 'message' }> | undefined;
             let routedGenerationSelectedProfile: ModelProfile | undefined;
             let generationRoutingAttribution:
                 GenerationRoutingAttribution | undefined;
@@ -1560,6 +1602,7 @@ export const createChatService = ({
                     }),
                     captureUsage: (result, requestedModel) =>
                         recordUsageForStep(result, requestedModel),
+                    estimateCost: estimateCostForStep,
                     plannerStepRequest,
                     plannerStepExecutor,
                     planContinuationBuilder,
@@ -1627,10 +1670,15 @@ export const createChatService = ({
                 }
                 workflowContextStepResult = workflowResult.contextStepResult;
                 workflowContextStepResults = workflowResult.contextStepResults;
+                const canonicalWorkflowLineage =
+                    addEvaluatorStepToWorkflowLineage({
+                        workflow: workflowResult.workflowLineage,
+                        evaluator: executionContext?.evaluator,
+                    });
                 switch (workflowResult.outcome) {
                     case 'generated': {
                         generationResult = workflowResult.generationResult;
-                        workflowLineage = workflowResult.workflowLineage;
+                        workflowLineage = canonicalWorkflowLineage;
                         presentationMetadata = workflowResult.presentation;
                         responseCandidates = workflowResult.responseCandidates;
                         const generatedShortCircuit =
@@ -1645,6 +1693,7 @@ export const createChatService = ({
                                 conversationSnapshot:
                                     workflowConversationSnapshot ??
                                     conversationSnapshot,
+                                workflowLineage: canonicalWorkflowLineage,
                                 latestUserInput,
                                 buildResponseMetadata,
                             });
@@ -1663,22 +1712,20 @@ export const createChatService = ({
                         break;
                     }
                     case 'terminal_action': {
-                        return {
-                            kind: 'result',
-                            result: {
-                                kind: 'terminal_action',
-                                response: planTerminalActionToResponse(
-                                    workflowResult.terminalAction
-                                ),
-                                generationDurationMs: Math.max(
-                                    0,
-                                    Date.now() - generationStartedAt
-                                ),
-                            },
+                        workflowLineage = canonicalWorkflowLineage;
+                        terminalActionResponse = planTerminalActionToResponse(
+                            workflowResult.terminalAction
+                        );
+                        generationResult = {
+                            text: '',
+                            model: model ?? defaultModel,
+                            provenance: 'Inferred',
+                            citations: [],
                         };
+                        break;
                     }
                     case 'no_generation': {
-                        workflowLineage = workflowResult.workflowLineage;
+                        workflowLineage = canonicalWorkflowLineage;
                         presentationMetadata = workflowResult.presentation;
                         const noGenShortCircuit = buildContextStepShortCircuit({
                             workflowContextStepResult,
@@ -1691,6 +1738,7 @@ export const createChatService = ({
                             conversationSnapshot:
                                 workflowConversationSnapshot ??
                                 conversationSnapshot,
+                            workflowLineage: canonicalWorkflowLineage,
                             latestUserInput,
                             buildResponseMetadata,
                         });
@@ -1946,6 +1994,7 @@ export const createChatService = ({
                 workflowConversationSnapshot,
                 presentationMetadata,
                 responseCandidates,
+                terminalActionResponse,
                 fallbackAfterInternalNoGeneration,
             };
         };
@@ -1976,6 +2025,7 @@ export const createChatService = ({
             generationPhase.fallbackAfterInternalNoGeneration;
         const presentationMetadata = generationPhase.presentationMetadata;
         const responseCandidates = generationPhase.responseCandidates;
+        const terminalActionResponse = generationPhase.terminalActionResponse;
 
         const effectiveContextStepResults = getEffectiveContextStepResults(
             workflowContextStepResults,
@@ -2488,6 +2538,14 @@ export const createChatService = ({
                 );
             }
         );
+
+        if (terminalActionResponse !== undefined) {
+            return {
+                kind: 'terminal_action',
+                response: terminalActionResponse,
+                generationDurationMs,
+            };
+        }
 
         return {
             kind: 'message',

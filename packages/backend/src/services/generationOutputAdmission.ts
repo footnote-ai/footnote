@@ -133,7 +133,17 @@ export const admitGenerationResult = (
  */
 export const attachGenerationAttemptEvidence = (
     attempts: readonly RoutingChainAttemptLog[],
-    resultsByAttemptIndex: ReadonlyMap<number, GenerationResult>
+    resultsByAttemptIndex: ReadonlyMap<number, GenerationResult>,
+    options?: {
+        captureCost?: (
+            result: GenerationResult,
+            requestedModel: string | undefined
+        ) => {
+            inputCostUsd: number;
+            outputCostUsd: number;
+            totalCostUsd: number;
+        };
+    }
 ): RoutingChainAttemptLog[] =>
     attempts.map((attempt) => {
         if (attempt.status === 'failed_transport_fallback') {
@@ -144,8 +154,21 @@ export const attachGenerationAttemptEvidence = (
             return attempt;
         }
         const normalizedResult = normalizeGenerationResultEvidence(result);
+        const cost = options?.captureCost?.(result, attempt.model);
+        const actualModel =
+            normalizedResult.upstreamAttribution?.resolvedModel ??
+            normalizedResult.model;
         return {
             ...attempt,
+            ...(normalizedResult.upstreamAttribution?.inferenceProvider !==
+            undefined
+                ? {
+                      actualProvider:
+                          normalizedResult.upstreamAttribution
+                              .inferenceProvider,
+                  }
+                : {}),
+            ...(actualModel === undefined ? {} : { actualModel }),
             ...(normalizedResult.finishReason === undefined
                 ? {}
                 : { finishReason: normalizedResult.finishReason }),
@@ -155,6 +178,7 @@ export const attachGenerationAttemptEvidence = (
             ...(normalizedResult.usage === undefined
                 ? {}
                 : { usage: normalizedResult.usage }),
+            ...(cost === undefined ? {} : { cost }),
         };
     });
 

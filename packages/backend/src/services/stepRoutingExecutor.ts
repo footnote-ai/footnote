@@ -46,6 +46,15 @@ export type RoutingChainAttemptLog = {
     finishReason?: string;
     completion?: GenerationCompletion;
     usage?: GenerationExecutionUsage;
+    cost?: {
+        inputCostUsd: number;
+        outputCostUsd: number;
+        totalCostUsd: number;
+    };
+    startedAtMs?: number;
+    finishedAtMs?: number;
+    actualProvider?: string;
+    actualModel?: string;
     chooseOneUsed: boolean;
     chooseOneCandidates?: string[];
     chooseOneSelectedIndex?: number;
@@ -62,6 +71,9 @@ export type RoutingChainInternalAttempt = Pick<
     | 'finishReason'
     | 'completion'
     | 'usage'
+    | 'cost'
+    | 'startedAtMs'
+    | 'finishedAtMs'
 >;
 
 export type RoutingChainExecutionResult<TSuccess> =
@@ -190,6 +202,7 @@ export const executeStepRoutingChain = async <TSuccess>(input: {
 
         const profile = input.enabledProfilesById.get(candidate.profileId);
         if (!profile) {
+            const timestampMs = Date.now();
             attempts.push({
                 index,
                 step: input.step,
@@ -200,6 +213,8 @@ export const executeStepRoutingChain = async <TSuccess>(input: {
                 chooseOneCandidates: candidate.chooseOneCandidates,
                 chooseOneSelectedIndex: candidate.chooseOneSelectedIndex,
                 seedKeyType: candidate.seedKeyType,
+                startedAtMs: timestampMs,
+                finishedAtMs: timestampMs,
             });
             continue;
         }
@@ -208,6 +223,7 @@ export const executeStepRoutingChain = async <TSuccess>(input: {
             requiresSearch: input.requiresSearch,
         });
         if (!eligibility.eligible) {
+            const timestampMs = Date.now();
             attempts.push({
                 index,
                 step: input.step,
@@ -220,6 +236,8 @@ export const executeStepRoutingChain = async <TSuccess>(input: {
                 chooseOneCandidates: candidate.chooseOneCandidates,
                 chooseOneSelectedIndex: candidate.chooseOneSelectedIndex,
                 seedKeyType: candidate.seedKeyType,
+                startedAtMs: timestampMs,
+                finishedAtMs: timestampMs,
             });
             continue;
         }
@@ -229,6 +247,7 @@ export const executeStepRoutingChain = async <TSuccess>(input: {
                 ? undefined
                 : providerAvailability.get(profile.provider);
         if (temporaryUnavailable !== undefined) {
+            const timestampMs = Date.now();
             attempts.push({
                 index,
                 step: input.step,
@@ -244,15 +263,20 @@ export const executeStepRoutingChain = async <TSuccess>(input: {
                 chooseOneCandidates: candidate.chooseOneCandidates,
                 chooseOneSelectedIndex: candidate.chooseOneSelectedIndex,
                 seedKeyType: candidate.seedKeyType,
+                startedAtMs: timestampMs,
+                finishedAtMs: timestampMs,
             });
             continue;
         }
 
+        const startedAtMs = Date.now();
         try {
             const value = await input.runWithProfile(
                 profile,
                 index,
                 (internalAttempt) => {
+                    const finishedAtMs =
+                        internalAttempt.finishedAtMs ?? Date.now();
                     attempts.push({
                         index,
                         step: input.step,
@@ -265,11 +289,15 @@ export const executeStepRoutingChain = async <TSuccess>(input: {
                         chooseOneSelectedIndex:
                             candidate.chooseOneSelectedIndex,
                         seedKeyType: candidate.seedKeyType,
+                        startedAtMs:
+                            internalAttempt.startedAtMs ?? finishedAtMs,
+                        finishedAtMs,
                     });
                 }
             );
             const retryReasonCode = input.retryReasonCode?.(value);
             if (retryReasonCode !== undefined) {
+                const finishedAtMs = Date.now();
                 attempts.push({
                     index,
                     step: input.step,
@@ -284,9 +312,12 @@ export const executeStepRoutingChain = async <TSuccess>(input: {
                     chooseOneCandidates: candidate.chooseOneCandidates,
                     chooseOneSelectedIndex: candidate.chooseOneSelectedIndex,
                     seedKeyType: candidate.seedKeyType,
+                    startedAtMs,
+                    finishedAtMs,
                 });
                 continue;
             }
+            const finishedAtMs = Date.now();
             attempts.push({
                 index,
                 step: input.step,
@@ -298,6 +329,8 @@ export const executeStepRoutingChain = async <TSuccess>(input: {
                 chooseOneCandidates: candidate.chooseOneCandidates,
                 chooseOneSelectedIndex: candidate.chooseOneSelectedIndex,
                 seedKeyType: candidate.seedKeyType,
+                startedAtMs,
+                finishedAtMs,
             });
             if (availabilityEnabled) {
                 providerAvailability.clear(profile.provider);
@@ -313,6 +346,7 @@ export const executeStepRoutingChain = async <TSuccess>(input: {
                 attempts,
             };
         } catch (error) {
+            const finishedAtMs = Date.now();
             const temporaryUnavailableReason =
                 getTemporaryUnavailableReason(error);
             const transient =
@@ -351,6 +385,8 @@ export const executeStepRoutingChain = async <TSuccess>(input: {
                 chooseOneCandidates: candidate.chooseOneCandidates,
                 chooseOneSelectedIndex: candidate.chooseOneSelectedIndex,
                 seedKeyType: candidate.seedKeyType,
+                startedAtMs,
+                finishedAtMs,
             });
 
             if (!transient) {

@@ -23,9 +23,17 @@ import type {
     ContextStepRequest as ContractContextStepRequest,
     ContextStepResult as ContractContextStepResult,
     ExecutionReasonCode,
+    EvaluatorOutcome,
+    GenerationCompletion,
     PresentationMetadata,
     StepSignals,
     StepRecord,
+    WorkflowAttemptRecord,
+    WorkflowAttemptRoutingRecord,
+    WorkflowAttemptCapabilities,
+    WorkflowAttemptSettings,
+    WorkflowResultRecord,
+    WorkflowResultReference,
     WorkflowRecord,
     WorkflowStepKind,
     WorkflowTerminationReason,
@@ -60,10 +68,7 @@ import {
 } from '../workflowEngine/reviewDecision.js';
 import { buildAssessSignals } from '../workflowEngine/reviewLoopSignals.js';
 import { buildWorkflowReviewParseFailureSignals } from '@footnote/contracts/policy';
-import {
-    buildAssessRoutingHintSignals,
-    buildRoutingChainSignals,
-} from '../workflowEngine/routingSignals.js';
+import { buildAssessRoutingHintSignals } from '../workflowEngine/routingSignals.js';
 import {
     decideRevisionRoutingHintLane,
     extractRoutingHintsFromAssess,
@@ -187,6 +192,11 @@ export type RunBoundedReviewWorkflowInput = {
         result: GenerationResult,
         requestedModel: string | undefined
     ) => ReviewWorkflowUsageSummary;
+    /** Side-effect-free cost projection for nested routing attempts. */
+    estimateCost?: (
+        result: GenerationResult,
+        requestedModel: string | undefined
+    ) => ReviewWorkflowUsageSummary['estimatedCost'];
     plannerStepRecord?: StepRecord;
     plannerStepRequest?: PlannerStepRequest;
     plannerStepExecutor?: PlannerStepExecutor;
@@ -323,6 +333,16 @@ type ChatStepMetadata = {
     summary: string;
     reasonCode?: ExecutionReasonCode;
     model?: string;
+    provider?: string;
+    profileId?: string;
+    requestedProvider?: string;
+    requestedModel?: string;
+    actualProvider?: string;
+    actualModel?: string;
+    completion?: GenerationCompletion;
+    settings?: WorkflowAttemptSettings;
+    capabilities?: WorkflowAttemptCapabilities;
+    routingAttempts?: WorkflowAttemptRoutingRecord[];
     usage?: GenerationResult['usage'];
     estimatedCost?: ReviewWorkflowUsageSummary['estimatedCost'];
     signals?: StepSignals;
@@ -331,6 +351,146 @@ type ChatStepMetadata = {
     terminationReason?: WorkflowTerminationReason;
     presentation?: PresentationMetadata;
     candidateId?: string;
+};
+
+const toWorkflowSettingRecord = (
+    value: object | undefined
+): Record<string, string | number> => {
+    const result: Record<string, string | number> = {};
+    if (value === undefined) return result;
+    for (const [key, setting] of Object.entries(value)) {
+        if (typeof setting === 'string' || typeof setting === 'number') {
+            result[key] = setting;
+        }
+    }
+    return result;
+};
+
+const toWorkflowAttemptSettings = (
+    resolution: ReturnType<typeof resolveModelSettings> | undefined,
+    observed: object | undefined
+): WorkflowAttemptSettings | undefined => {
+    const observedSettings = toWorkflowSettingRecord(observed);
+    if (
+        resolution === undefined &&
+        Object.keys(observedSettings).length === 0
+    ) {
+        return undefined;
+    }
+    return {
+        ...(resolution === undefined
+            ? {}
+            : {
+                  requested: toWorkflowSettingRecord(resolution.requested),
+                  applied: toWorkflowSettingRecord(resolution.applied),
+                  ...(resolution.ignored.length === 0
+                      ? {}
+                      : {
+                            ignored: resolution.ignored.map(
+                                ({ setting, reasonCode }) => ({
+                                    setting,
+                                    reasonCode,
+                                })
+                            ),
+                        }),
+              }),
+        ...(Object.keys(observedSettings).length === 0
+            ? {}
+            : { observed: observedSettings }),
+    };
+};
+
+const toWorkflowRoutingAttempts = (
+    attempts: readonly RoutingChainAttemptLog[] | undefined
+): WorkflowAttemptRoutingRecord[] | undefined => {
+    if (attempts === undefined || attempts.length === 0) return undefined;
+    return attempts.map((attempt) => ({
+        index: attempt.index,
+        profileId: attempt.profileId,
+        ...(attempt.provider === undefined
+            ? {}
+            : { requestedProvider: attempt.provider }),
+        ...(attempt.model === undefined
+            ? {}
+            : { requestedModel: attempt.model }),
+        ...(attempt.actualProvider === undefined
+            ? {}
+            : { actualProvider: attempt.actualProvider }),
+        ...(attempt.actualModel === undefined
+            ? {}
+            : { actualModel: attempt.actualModel }),
+        status: attempt.status,
+        ...(attempt.reasonCode === undefined
+            ? {}
+            : { reasonCode: attempt.reasonCode }),
+        ...(attempt.finishReason === undefined
+            ? {}
+            : { finishReason: attempt.finishReason }),
+        ...(attempt.completion === undefined
+            ? {}
+            : { completion: attempt.completion }),
+        ...(attempt.usage === undefined ? {} : { usage: attempt.usage }),
+        ...(attempt.cost === undefined ? {} : { cost: attempt.cost }),
+        ...(attempt.startedAtMs === undefined
+            ? {}
+            : { startedAt: new Date(attempt.startedAtMs).toISOString() }),
+        ...(attempt.finishedAtMs === undefined
+            ? {}
+            : { finishedAt: new Date(attempt.finishedAtMs).toISOString() }),
+        ...(attempt.startedAtMs === undefined ||
+        attempt.finishedAtMs === undefined
+            ? {}
+            : {
+                  durationMs: Math.max(
+                      0,
+                      attempt.finishedAtMs - attempt.startedAtMs
+                  ),
+              }),
+        chooseOneUsed: attempt.chooseOneUsed,
+        ...(attempt.chooseOneSelectedIndex === undefined
+            ? {}
+            : { chooseOneSelectedIndex: attempt.chooseOneSelectedIndex }),
+        ...(attempt.temporaryUnavailableReason === undefined
+            ? {}
+            : {
+                  temporaryUnavailableReason:
+                      attempt.temporaryUnavailableReason,
+              }),
+    }));
+};
+
+const withWorkflowRoutingAttempts = (
+    attempts: readonly RoutingChainAttemptLog[] | undefined
+): Pick<ChatStepMetadata, 'routingAttempts'> | Record<string, never> => {
+    const routingAttempts = toWorkflowRoutingAttempts(attempts);
+    return routingAttempts === undefined ? {} : { routingAttempts };
+};
+
+const toWorkflowAttemptIdentity = (input: {
+    requestedProvider?: string;
+    requestedModel?: string;
+    result?: GenerationResult;
+}): Pick<
+    ChatStepMetadata,
+    'requestedProvider' | 'requestedModel' | 'actualProvider' | 'actualModel'
+> => {
+    const actualModel =
+        input.result?.upstreamAttribution?.resolvedModel ?? input.result?.model;
+    return {
+        ...(input.requestedProvider === undefined
+            ? {}
+            : { requestedProvider: input.requestedProvider }),
+        ...(input.requestedModel === undefined
+            ? {}
+            : { requestedModel: input.requestedModel }),
+        ...(input.result?.upstreamAttribution?.inferenceProvider === undefined
+            ? {}
+            : {
+                  actualProvider:
+                      input.result.upstreamAttribution.inferenceProvider,
+              }),
+        ...(actualModel === undefined ? {} : { actualModel }),
+    };
 };
 
 const encodeMetadata = (metadata: ChatStepMetadata): Result | undefined =>
@@ -421,6 +581,7 @@ const toWorkflowCost = (
 
 const buildWorkflowLineage = (input: {
     execution: Awaited<ReturnType<typeof executeWorkflow>>;
+    workflow: Workflow;
     workflowName: string;
     maxDurationMs: number;
     executionLimits: ExecutionLimits;
@@ -432,6 +593,8 @@ const buildWorkflowLineage = (input: {
     preExistingPlannerStep?: StepRecord;
 }): WorkflowRecord => {
     const records: StepRecord[] = [];
+    const results: WorkflowResultRecord[] = [];
+    const latestResultByName = new Map<string, WorkflowResultRecord>();
     const semanticSteps = input.execution.run.steps.filter(
         (step) =>
             step.stepId !== 'finish' &&
@@ -475,8 +638,115 @@ const buildWorkflowLineage = (input: {
         if (exhaustedLimit === 'maxToolCalls') {
             fallback.reasonCode = 'max_tool_calls_reached';
         }
+        const stepId = `step_${index + 1}`;
+        const declaredStep = input.workflow.steps[step.stepId];
+        const inputRefs: WorkflowResultReference[] | undefined =
+            declaredStep?.input?.map((reference) => ({
+                name: reference.name,
+                ...(latestResultByName.get(reference.name) === undefined
+                    ? {}
+                    : {
+                          resultId: latestResultByName.get(reference.name)
+                              ?.resultId,
+                      }),
+                ...(reference.optional === true ? { optional: true } : {}),
+            }));
+        const attemptRecords: WorkflowAttemptRecord[] = step.attempts.map(
+            (attempt) => {
+                const attemptMetadata = readAs<ChatStepMetadata>(
+                    attempt.metadata
+                );
+                return {
+                    attempt: attempt.attempt,
+                    status: attempt.status,
+                    startedAt: new Date(attempt.startedAtMs).toISOString(),
+                    finishedAt: new Date(attempt.finishedAtMs).toISOString(),
+                    durationMs: Math.max(
+                        0,
+                        attempt.finishedAtMs - attempt.startedAtMs
+                    ),
+                    ...(attemptMetadata?.requestedProvider === undefined
+                        ? {}
+                        : {
+                              requestedProvider:
+                                  attemptMetadata.requestedProvider,
+                          }),
+                    ...(attemptMetadata?.requestedModel === undefined
+                        ? {}
+                        : { requestedModel: attemptMetadata.requestedModel }),
+                    ...(attemptMetadata?.actualProvider === undefined
+                        ? {}
+                        : { actualProvider: attemptMetadata.actualProvider }),
+                    ...(attemptMetadata?.actualModel === undefined
+                        ? {}
+                        : { actualModel: attemptMetadata.actualModel }),
+                    ...(attemptMetadata?.profileId === undefined
+                        ? {}
+                        : { profileId: attemptMetadata.profileId }),
+                    ...(attemptMetadata?.completion === undefined
+                        ? {}
+                        : { completion: attemptMetadata.completion }),
+                    ...(attemptMetadata?.settings === undefined
+                        ? {}
+                        : { settings: attemptMetadata.settings }),
+                    ...(attemptMetadata?.capabilities === undefined
+                        ? {}
+                        : { capabilities: attemptMetadata.capabilities }),
+                    ...(attemptMetadata?.usage === undefined
+                        ? {}
+                        : { usage: attemptMetadata.usage }),
+                    ...(attemptMetadata?.estimatedCost === undefined
+                        ? {}
+                        : {
+                              cost: toWorkflowCost(
+                                  attemptMetadata.estimatedCost
+                              ),
+                          }),
+                    ...(attemptMetadata?.reasonCode === undefined
+                        ? attempt.errorCode === undefined
+                            ? {}
+                            : { reasonCode: attempt.errorCode }
+                        : { reasonCode: attemptMetadata.reasonCode }),
+                    ...(attemptMetadata?.terminationReason === undefined
+                        ? {}
+                        : {
+                              terminationReason:
+                                  attemptMetadata.terminationReason,
+                          }),
+                    ...(attemptMetadata?.routingAttempts === undefined
+                        ? {}
+                        : { routingAttempts: attemptMetadata.routingAttempts }),
+                };
+            }
+        );
+        const outputName = declaredStep?.output?.name;
+        const resultId =
+            outputName === undefined
+                ? undefined
+                : `${input.execution.run.runId}:${stepId}:${outputName}`;
+        const resultRecord: WorkflowResultRecord | undefined =
+            resultId === undefined || outputName === undefined
+                ? undefined
+                : {
+                      resultId,
+                      name: outputName,
+                      status:
+                          successfulAttempt !== undefined &&
+                          step.result !== undefined
+                              ? 'produced'
+                              : 'unavailable',
+                      producedByStepId: stepId,
+                      producedByAttempt:
+                          executionAttempt?.attempt ?? step.attempts.length,
+                  };
+        if (resultRecord !== undefined) {
+            results.push(resultRecord);
+            if (resultRecord.status === 'produced') {
+                latestResultByName.set(resultRecord.name, resultRecord);
+            }
+        }
         records.push({
-            stepId: `step_${index + 1}`,
+            stepId,
             ...(parent === undefined ? {} : { parentStepId: parent.stepId }),
             attempt:
                 kind === 'generate'
@@ -505,6 +775,18 @@ const buildWorkflowLineage = (input: {
             ...(metadata.estimatedCost === undefined
                 ? {}
                 : { cost: toWorkflowCost(metadata.estimatedCost) }),
+            ...(inputRefs === undefined ? {} : { inputRefs }),
+            ...(resultRecord === undefined
+                ? {}
+                : {
+                      resultRefs: [
+                          {
+                              resultId: resultRecord.resultId,
+                              name: resultRecord.name,
+                          },
+                      ],
+                  }),
+            attempts: attemptRecords,
             outcome: {
                 status: metadata.status,
                 summary: metadata.summary,
@@ -549,6 +831,8 @@ const buildWorkflowLineage = (input: {
     }
     return {
         workflowId: input.execution.run.workflowId,
+        runId: input.execution.run.runId,
+        runStatus: input.execution.status,
         workflowName: input.workflowName,
         status:
             input.terminationReason === 'goal_satisfied' &&
@@ -570,7 +854,127 @@ const buildWorkflowLineage = (input: {
             exhaustedLimitKey: input.exhaustedLimitKey,
             stoppedBeforeStepKind: input.stoppedBeforeStepKind,
         }),
+        results,
         steps: records,
+    };
+};
+
+/** Projects the deterministic evaluator into the same bounded Run record.
+ * The finding is evidence only; workflow topology and breaker authority stay
+ * with their existing backend owners, and evaluator failure remains fail-open.
+ */
+export const addEvaluatorStepToWorkflowLineage = (input: {
+    workflow: WorkflowRecord;
+    evaluator?: {
+        status: 'executed' | 'failed' | 'skipped';
+        reasonCode?: string;
+        outcome?: EvaluatorOutcome;
+        startedAtMs?: number;
+        finishedAtMs?: number;
+        durationMs?: number;
+    };
+}): WorkflowRecord => {
+    if (input.evaluator === undefined || input.workflow.runId === undefined) {
+        return input.workflow;
+    }
+    const finishedAtMs = input.evaluator.finishedAtMs ?? Date.now();
+    const startedAtMs =
+        input.evaluator.startedAtMs ??
+        Math.max(0, finishedAtMs - (input.evaluator.durationMs ?? 0));
+    const durationMs =
+        input.evaluator.durationMs ?? Math.max(0, finishedAtMs - startedAtMs);
+    const resultId = `${input.workflow.runId}:evaluator_finding`;
+    const result: WorkflowResultRecord = {
+        resultId,
+        name: 'evaluator_finding',
+        status:
+            input.evaluator.outcome === undefined ? 'unavailable' : 'produced',
+        producedByStepId: 'step_evaluator',
+        producedByAttempt: 1,
+    };
+    const safetyDecision = input.evaluator.outcome?.safetyDecision;
+    const signals: StepSignals = {
+        ...(input.evaluator.outcome?.mode === undefined
+            ? {}
+            : { evaluatorMode: input.evaluator.outcome.mode }),
+        ...(input.evaluator.outcome?.authorityLevel === undefined
+            ? {}
+            : {
+                  evaluatorAuthorityLevel:
+                      input.evaluator.outcome.authorityLevel,
+              }),
+        ...(safetyDecision?.action === undefined
+            ? {}
+            : { evaluatorAction: safetyDecision.action }),
+        ...(safetyDecision?.ruleId === undefined
+            ? {}
+            : { evaluatorRuleId: safetyDecision.ruleId }),
+        ...(safetyDecision?.safetyTier === undefined
+            ? {}
+            : { evaluatorSafetyTier: safetyDecision.safetyTier }),
+    };
+    const attempt: WorkflowAttemptRecord = {
+        attempt: 1,
+        status:
+            input.evaluator.status === 'executed'
+                ? 'succeeded'
+                : input.evaluator.status === 'skipped'
+                  ? 'rejected'
+                  : 'failed',
+        startedAt: new Date(startedAtMs).toISOString(),
+        finishedAt: new Date(finishedAtMs).toISOString(),
+        durationMs: Math.max(0, durationMs),
+        ...(input.evaluator.reasonCode === undefined
+            ? {}
+            : { reasonCode: input.evaluator.reasonCode }),
+    };
+    const step: StepRecord = {
+        stepId: 'step_evaluator',
+        attempt: 1,
+        stepKind: 'evaluator',
+        startedAt: attempt.startedAt,
+        finishedAt: attempt.finishedAt,
+        durationMs: attempt.durationMs,
+        resultRefs: [{ resultId, name: result.name }],
+        attempts: [attempt],
+        outcome: {
+            status: input.evaluator.status,
+            summary:
+                input.evaluator.status === 'executed'
+                    ? 'Deterministic evaluator produced a bounded finding.'
+                    : input.evaluator.status === 'skipped'
+                      ? 'Deterministic evaluator was skipped without a finding.'
+                      : 'Deterministic evaluator failed open without a finding.',
+            ...(input.evaluator.reasonCode === undefined
+                ? {}
+                : {
+                      signals: {
+                          ...signals,
+                          evaluatorReasonCode: input.evaluator.reasonCode,
+                      },
+                  }),
+            ...(input.evaluator.reasonCode === undefined &&
+            Object.keys(signals).length > 0
+                ? { signals }
+                : {}),
+        },
+    };
+    const steps = [...input.workflow.steps, step]
+        .map((candidate, index) => ({ candidate, index }))
+        .sort((left, right) => {
+            const startedAtDelta =
+                Date.parse(left.candidate.startedAt) -
+                Date.parse(right.candidate.startedAt);
+            return startedAtDelta === 0
+                ? left.index - right.index
+                : startedAtDelta;
+        })
+        .map(({ candidate }) => candidate);
+    return {
+        ...input.workflow,
+        stepCount: input.workflow.stepCount + 1,
+        results: [...(input.workflow.results ?? []), result],
+        steps,
     };
 };
 
@@ -736,6 +1140,14 @@ export const runBoundedReviewWorkflow = async (
         stepRoutingChainSet,
         presentation,
     } = input;
+    // Production supplies a pure estimator; the capture fallback preserves the
+    // existing test seam without changing the workflow's usage-recording pass.
+    const estimateAttemptCost = (
+        result: GenerationResult,
+        requestedModel: string | undefined
+    ): ReviewWorkflowUsageSummary['estimatedCost'] =>
+        input.estimateCost?.(result, requestedModel) ??
+        captureUsage(result, requestedModel).estimatedCost;
     const resolveAttemptCapabilityFacts = (
         provider: string | undefined,
         capabilities: ModelProfile['capabilities'] | undefined
@@ -1595,6 +2007,29 @@ export const runBoundedReviewWorkflow = async (
                     ? 'Generated a presentation candidate for authoritative wording.'
                     : 'Presentation candidate was unavailable; authoritative generation continued.',
             model: result.draftResult?.model,
+            ...(presentation.config.profile === undefined
+                ? {}
+                : {
+                      ...toWorkflowAttemptIdentity({
+                          requestedProvider:
+                              presentation.config.profile.provider,
+                          requestedModel:
+                              presentation.config.profile.providerModel,
+                          result: result.draftResult,
+                      }),
+                      capabilities: resolveAttemptCapabilityFacts(
+                          presentation.config.profile.provider,
+                          presentation.config.profile.capabilities
+                      ),
+                  }),
+            ...(result.draftResult?.providerObservedSettings === undefined
+                ? {}
+                : {
+                      settings: toWorkflowAttemptSettings(
+                          undefined,
+                          result.draftResult.providerObservedSettings
+                      ),
+                  }),
             usage,
             estimatedCost,
             candidateId,
@@ -1774,6 +2209,10 @@ export const runBoundedReviewWorkflow = async (
         const generationAttemptsByIndex = new Map<number, GenerationResult>();
         let routingAttempts: RoutingChainAttemptLog[] | undefined;
         let selectedProfile: ModelProfile | undefined;
+        let selectedSettings:
+            ReturnType<typeof resolveModelSettings> | undefined;
+        let selectedCapabilityFacts:
+            ReturnType<typeof resolveAttemptCapabilityFacts> | undefined;
         try {
             const chainResult = stepRoutingChainSet?.generateCandidates.length
                 ? await executeStepRoutingChain({
@@ -1800,6 +2239,12 @@ export const runBoundedReviewWorkflow = async (
                               profile,
                               request: boundedRequest,
                           });
+                          selectedSettings = settingsResolution;
+                          selectedCapabilityFacts =
+                              resolveAttemptCapabilityFacts(
+                                  profile.provider,
+                                  profile.capabilities
+                              );
                           const result = normalizeGenerationResultEvidence(
                               await generationRuntime.generate({
                                   ...applyModelSettings(
@@ -1841,17 +2286,11 @@ export const runBoundedReviewWorkflow = async (
                                 'Generation routing failed; workflow returned the latest valid draft when available.',
                             reasonCode: routed.error.reasonCode,
                             terminationReason: 'executor_error_fail_open',
+                            ...withWorkflowRoutingAttempts(
+                                routed.error.attempts
+                            ),
                             signals: {
                                 ...refinementStepSignals(),
-                                ...buildRoutingChainSignals({
-                                    attempts: routed.error.attempts,
-                                    selectedProfileId: null,
-                                    signalKeys: {
-                                        profileId: 'routedProfileId',
-                                        provider: 'routedProvider',
-                                        model: 'routedModel',
-                                    },
-                                }),
                             },
                         }),
                     };
@@ -1859,13 +2298,19 @@ export const runBoundedReviewWorkflow = async (
                 generationResult = lastAttempt;
                 routingAttempts = attachGenerationAttemptEvidence(
                     routed.error.attempts,
-                    generationAttemptsByIndex
+                    generationAttemptsByIndex,
+                    {
+                        captureCost: estimateAttemptCost,
+                    }
                 );
             } else if (routed?.isOk()) {
                 generationResult = routed.value.value;
                 routingAttempts = attachGenerationAttemptEvidence(
                     routed.value.attempts,
-                    generationAttemptsByIndex
+                    generationAttemptsByIndex,
+                    {
+                        captureCost: estimateAttemptCost,
+                    }
                 );
                 selectedProfile = routed.value.selected.profile;
             } else {
@@ -1873,6 +2318,10 @@ export const runBoundedReviewWorkflow = async (
                     await generationRuntime.generate(boundedRequest)
                 );
                 generationAttempts.push(generationResult);
+                selectedCapabilityFacts = resolveAttemptCapabilityFacts(
+                    boundedRequest.provider,
+                    boundedRequest.capabilities
+                );
             }
         } catch (error) {
             return {
@@ -1887,17 +2336,9 @@ export const runBoundedReviewWorkflow = async (
                         'Generation failed; workflow returned the latest valid draft when available.',
                     reasonCode: 'generation_runtime_error',
                     terminationReason: 'executor_error_fail_open',
+                    ...withWorkflowRoutingAttempts(routingAttempts),
                     signals: {
                         ...refinementStepSignals(),
-                        ...(routingAttempts === undefined
-                            ? {}
-                            : buildRoutingChainSignals({
-                                  attempts: routingAttempts,
-                                  selectedProfileId:
-                                      selectedProfile?.id ?? null,
-                                  selectedProvider: selectedProfile?.provider,
-                                  selectedModel: selectedProfile?.providerModel,
-                              })),
                     },
                 }),
             };
@@ -1922,6 +2363,10 @@ export const runBoundedReviewWorkflow = async (
                       ? {}
                       : { parentCandidateId }),
               });
+        const attemptSettings = toWorkflowAttemptSettings(
+            selectedSettings,
+            generationResult.providerObservedSettings
+        );
         const metadata = encodeMetadata({
             status: admitted ? 'executed' : 'failed',
             summary: !admitted
@@ -1931,27 +2376,41 @@ export const runBoundedReviewWorkflow = async (
                   : 'Generated refinement draft from assessment guidance.',
             reasonCode: admitted ? undefined : generationAdmission.reasonCode,
             model: usage.model,
+            ...toWorkflowAttemptIdentity({
+                requestedProvider:
+                    selectedProfile?.provider ?? boundedRequest.provider,
+                requestedModel:
+                    selectedProfile?.providerModel ?? boundedRequest.model,
+                result: generationResult,
+            }),
+            ...(selectedProfile?.provider === undefined &&
+            boundedRequest.provider === undefined
+                ? {}
+                : {
+                      provider:
+                          selectedProfile?.provider ?? boundedRequest.provider,
+                  }),
+            ...(selectedProfile?.id === undefined
+                ? {}
+                : { profileId: selectedProfile.id }),
+            ...(generationResult.completion === undefined
+                ? {}
+                : { completion: generationResult.completion }),
+            ...(attemptSettings === undefined
+                ? {}
+                : { settings: attemptSettings }),
+            ...(selectedCapabilityFacts === undefined
+                ? {}
+                : { capabilities: selectedCapabilityFacts }),
             usage: combineGenerationResultUsage(generationAttempts),
             estimatedCost: usage.estimatedCost,
             candidateId,
+            ...withWorkflowRoutingAttempts(routingAttempts),
             terminationReason: !admitted
                 ? 'executor_error_fail_open'
                 : undefined,
             signals: {
                 ...refinementStepSignals(),
-                ...(routingAttempts === undefined
-                    ? {}
-                    : buildRoutingChainSignals({
-                          attempts: routingAttempts,
-                          selectedProfileId: selectedProfile?.id ?? null,
-                          selectedProvider: selectedProfile?.provider,
-                          selectedModel: selectedProfile?.providerModel,
-                          signalKeys: {
-                              profileId: 'routedProfileId',
-                              provider: 'routedProvider',
-                              model: 'routedModel',
-                          },
-                      })),
             },
         });
         if (!admitted) {
@@ -2101,11 +2560,13 @@ export const runBoundedReviewWorkflow = async (
                           ? { jsonMode: true }
                           : {}),
                 };
+                const startedAtMs = Date.now();
                 try {
                     return normalizeGenerationResultEvidence(
                         await generationRuntime.generate(requestForOutput)
                     );
                 } catch (error) {
+                    const finishedAtMs = Date.now();
                     const nextOutputPath: TypedModelOutputPath | undefined =
                         outputPath === 'native_schema'
                             ? generationInput.capabilityFacts.jsonMode ===
@@ -2129,7 +2590,27 @@ export const runBoundedReviewWorkflow = async (
                                 usage: error.usage,
                             }),
                         },
-                        generationInput.recordAttempt
+                        (attempt) =>
+                            generationInput.recordAttempt?.({
+                                ...attempt,
+                                startedAtMs,
+                                finishedAtMs,
+                                cost: captureUsage(
+                                    {
+                                        text: '',
+                                        model:
+                                            isGenerationRuntimeError(error) &&
+                                            error.model !== undefined
+                                                ? error.model
+                                                : generationInput.providerModel,
+                                        ...(isGenerationRuntimeError(error) &&
+                                        error.usage !== undefined
+                                            ? { usage: error.usage }
+                                            : {}),
+                                    },
+                                    generationInput.providerModel
+                                ).estimatedCost,
+                            })
                     );
                     outputPath = nextOutputPath;
                 }
@@ -2143,6 +2624,10 @@ export const runBoundedReviewWorkflow = async (
             );
         let routingAttempts: RoutingChainAttemptLog[] | undefined;
         let selectedProfile: ModelProfile | undefined;
+        let selectedSettings:
+            ReturnType<typeof resolveModelSettings> | undefined;
+        let selectedCapabilityFacts:
+            ReturnType<typeof resolveAttemptCapabilityFacts> | undefined;
         try {
             const chain = stepRoutingChainSet?.assessCandidates.length
                 ? await executeStepRoutingChain({
@@ -2162,10 +2647,12 @@ export const runBoundedReviewWorkflow = async (
                               profile,
                               request: bounded,
                           });
+                          selectedSettings = settingsResolution;
                           const capabilityFacts = resolveAttemptCapabilityFacts(
                               profile.provider,
                               profile.capabilities
                           );
+                          selectedCapabilityFacts = capabilityFacts;
                           const outputPath = resolveTypedModelOutputPath({
                               provider: profile.provider,
                               capabilities: profile.capabilities,
@@ -2210,7 +2697,10 @@ export const runBoundedReviewWorkflow = async (
             if (routed?.isErr()) {
                 routingAttempts = attachGenerationAttemptEvidence(
                     routed.error.attempts,
-                    reviewAttemptsByIndex
+                    reviewAttemptsByIndex,
+                    {
+                        captureCost: estimateAttemptCost,
+                    }
                 );
                 const usage = reviewUsage();
                 return {
@@ -2227,10 +2717,7 @@ export const runBoundedReviewWorkflow = async (
                         model: usage.model,
                         usage: combineGenerationResultUsage(reviewAttempts),
                         estimatedCost: usage.estimatedCost,
-                        signals: buildRoutingChainSignals({
-                            attempts: routingAttempts,
-                            selectedProfileId: null,
-                        }),
+                        ...withWorkflowRoutingAttempts(routingAttempts),
                     }),
                 };
             }
@@ -2238,7 +2725,10 @@ export const runBoundedReviewWorkflow = async (
                 reviewResult = routed.value.value;
                 routingAttempts = attachGenerationAttemptEvidence(
                     routed.value.attempts,
-                    reviewAttemptsByIndex
+                    reviewAttemptsByIndex,
+                    {
+                        captureCost: estimateAttemptCost,
+                    }
                 );
                 selectedProfile = routed.value.selected.profile;
             } else {
@@ -2258,6 +2748,10 @@ export const runBoundedReviewWorkflow = async (
                     providerModel: bounded.model ?? 'unknown',
                 });
                 reviewAttempts.push(reviewResult);
+                selectedCapabilityFacts = resolveAttemptCapabilityFacts(
+                    bounded.provider,
+                    bounded.capabilities
+                );
             }
         } catch (error) {
             const usage = reviewUsage();
@@ -2276,6 +2770,7 @@ export const runBoundedReviewWorkflow = async (
                     usage: combineGenerationResultUsage(reviewAttempts),
                     estimatedCost: usage.estimatedCost,
                     terminationReason: 'executor_error_fail_open',
+                    ...withWorkflowRoutingAttempts(routingAttempts),
                 }),
             };
         }
@@ -2295,6 +2790,10 @@ export const runBoundedReviewWorkflow = async (
                           parseReviewDecisionOutputResult
                       )(reviewResult.text)
                     : undefined;
+            const attemptSettings = toWorkflowAttemptSettings(
+                selectedSettings,
+                reviewResult.providerObservedSettings
+            );
             return {
                 status: 'failed',
                 errorCode:
@@ -2315,44 +2814,46 @@ export const runBoundedReviewWorkflow = async (
                         typedValidation.failure
                     ),
                     model: usage.model,
+                    ...toWorkflowAttemptIdentity({
+                        requestedProvider:
+                            selectedProfile?.provider ?? bounded.provider,
+                        requestedModel:
+                            selectedProfile?.providerModel ?? bounded.model,
+                        result: reviewResult,
+                    }),
+                    ...(selectedProfile?.id === undefined
+                        ? {}
+                        : { profileId: selectedProfile.id }),
+                    ...(reviewResult.completion === undefined
+                        ? {}
+                        : { completion: reviewResult.completion }),
+                    ...(attemptSettings === undefined
+                        ? {}
+                        : { settings: attemptSettings }),
+                    ...(selectedCapabilityFacts === undefined
+                        ? {}
+                        : { capabilities: selectedCapabilityFacts }),
                     usage: combinedResultUsage,
                     estimatedCost: usage.estimatedCost,
                     terminationReason: 'executor_error_fail_open',
+                    ...withWorkflowRoutingAttempts(routingAttempts),
                     ...(parseFailure?.isErr() === true
                         ? {
                               signals: {
                                   ...buildWorkflowReviewParseFailureSignals(
                                       parseFailure.error
                                   ),
-                                  ...(routingAttempts === undefined
-                                      ? {}
-                                      : buildRoutingChainSignals({
-                                            attempts: routingAttempts,
-                                            selectedProfileId:
-                                                selectedProfile?.id ?? null,
-                                            selectedProvider:
-                                                selectedProfile?.provider,
-                                            selectedModel:
-                                                selectedProfile?.providerModel,
-                                        })),
                               },
                           }
-                        : routingAttempts === undefined
-                          ? {}
-                          : {
-                                signals: buildRoutingChainSignals({
-                                    attempts: routingAttempts,
-                                    selectedProfileId:
-                                        selectedProfile?.id ?? null,
-                                    selectedProvider: selectedProfile?.provider,
-                                    selectedModel:
-                                        selectedProfile?.providerModel,
-                                }),
-                            }),
+                        : {}),
                 }),
             };
         }
         const decision = typedValidation.value;
+        const attemptSettings = toWorkflowAttemptSettings(
+            selectedSettings,
+            reviewResult.providerObservedSettings
+        );
         const hints = extractRoutingHintsFromAssess({
             assessRawText: reviewResult.text,
             reviewDecision: decision,
@@ -2366,14 +2867,6 @@ export const runBoundedReviewWorkflow = async (
                 routingHintApplied: hintDecision.lane,
                 routingHintConflictResolved: hintDecision.conflictResolved,
             }),
-            ...(routingAttempts === undefined
-                ? {}
-                : buildRoutingChainSignals({
-                      attempts: routingAttempts,
-                      selectedProfileId: selectedProfile?.id ?? null,
-                      selectedProvider: selectedProfile?.provider,
-                      selectedModel: selectedProfile?.providerModel,
-                  })),
         };
         const outcome =
             decision.reviewDecision === 'finalize'
@@ -2391,8 +2884,28 @@ export const runBoundedReviewWorkflow = async (
                 summary:
                     'Assessment evaluated draft quality and emitted a declared workflow outcome.',
                 model: usage.model,
+                ...toWorkflowAttemptIdentity({
+                    requestedProvider:
+                        selectedProfile?.provider ?? bounded.provider,
+                    requestedModel:
+                        selectedProfile?.providerModel ?? bounded.model,
+                    result: reviewResult,
+                }),
+                ...(selectedProfile?.id === undefined
+                    ? {}
+                    : { profileId: selectedProfile.id }),
+                ...(reviewResult.completion === undefined
+                    ? {}
+                    : { completion: reviewResult.completion }),
+                ...(attemptSettings === undefined
+                    ? {}
+                    : { settings: attemptSettings }),
+                ...(selectedCapabilityFacts === undefined
+                    ? {}
+                    : { capabilities: selectedCapabilityFacts }),
                 usage: combinedResultUsage,
                 estimatedCost: usage.estimatedCost,
+                ...withWorkflowRoutingAttempts(routingAttempts),
                 signals,
                 ...(decision.reviewDecision === 'revise' &&
                 !workflowPolicy.enableRevision
@@ -2829,6 +3342,7 @@ export const runBoundedReviewWorkflow = async (
                   : workflowStepKind(lastExecutedStepId);
     const workflowLineage = buildWorkflowLineage({
         execution,
+        workflow,
         workflowName: workflowConfig.workflowName,
         maxDurationMs: executionLimits.maxDurationMs,
         executionLimits,
