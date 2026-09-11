@@ -103,6 +103,33 @@ test('normalizes only structured billing and account availability failures', () 
     );
 });
 
+test('normalizes explicit structured-output transport failures only', () => {
+    const normalized = normalizeGenerationRuntimeError(
+        apiError({
+            statusCode: 400,
+            responseBody: JSON.stringify({
+                error: { code: 'response_format_not_supported' },
+            }),
+        })
+    );
+    assert.ok(normalized instanceof GenerationRuntimeError);
+    assert.deepEqual(normalized.details, {
+        classification: 'structured_output_unavailable',
+    });
+
+    assert.equal(
+        normalizeGenerationRuntimeError(
+            apiError({
+                statusCode: 400,
+                responseBody: JSON.stringify({
+                    error: { code: 'invalid_request' },
+                }),
+            })
+        ),
+        undefined
+    );
+});
+
 test('normalizes retryable transport failures without turning them into availability claims', () => {
     const normalized = normalizeGenerationRuntimeError(
         apiError({ statusCode: 503, isRetryable: true })
@@ -1250,11 +1277,18 @@ test('voltagent runtime requires a request model or configured default model', a
 
 test('default VoltAgent executor maps structured output to a validated JSON result', async () => {
     let sawOutput = false;
+    let sawJsonOutput = false;
     const fakeAgent = {
         generateText: async (
             ...args: Parameters<Agent['generateText']>
         ): Promise<Awaited<ReturnType<Agent['generateText']>>> => {
-            sawOutput = args[1]?.output !== undefined;
+            const output = args[1]?.output;
+            sawOutput = output !== undefined;
+            sawJsonOutput =
+                output !== undefined &&
+                typeof output === 'object' &&
+                'name' in output &&
+                output.name === 'json';
             return {
                 content: [],
                 text: 'untrusted raw text',
@@ -1338,11 +1372,20 @@ test('default VoltAgent executor maps structured output to a validated JSON resu
                     additionalProperties: false,
                 },
             },
+            jsonMode: true,
         }
     );
 
     assert.equal(sawOutput, true);
     assert.equal(result.text, '{"verdict":"clear","feedback":""}');
+
+    const jsonResult = await executor.generateText(
+        [{ role: 'user', content: 'Return JSON.' }],
+        { jsonMode: true }
+    );
+
+    assert.equal(sawJsonOutput, true);
+    assert.equal(jsonResult.text, '{"verdict":"clear","feedback":""}');
 });
 
 test('default VoltAgent executor maps usage from the installed AI SDK token fields', async () => {
@@ -1426,6 +1469,19 @@ test('default VoltAgent executor maps usage from the installed AI SDK token fiel
         reasoningTokens: 0,
         totalTokens: 30,
     });
+
+    await assert.rejects(
+        () =>
+            executor.generateText(
+                [{ role: 'user', content: 'Return the structured result.' }],
+                { structuredOutput }
+            ),
+        (error: unknown) =>
+            error instanceof GenerationRuntimeError &&
+            error.details.classification === 'structured_output_unavailable' &&
+            error.model === 'openai/gpt-5-mini' &&
+            error.usage?.totalTokens === 30
+    );
 });
 
 test('default VoltAgent executor passes the configured logger into Agent creation', async () => {

@@ -10,6 +10,7 @@ import type {
     PartialResponseTemperament,
     TraceAxisScore,
 } from '@footnote/contracts/policy';
+import type { GenerationStructuredOutput } from '@footnote/agent-runtime';
 import { err, ok, type Result } from 'neverthrow';
 import { z } from 'zod';
 import { sanitizeReviewModuleIds } from '../reviewModules.js';
@@ -31,10 +32,7 @@ export type ReviewDecision = {
 };
 
 export type ReviewDecisionParseFailureReason =
-    | 'empty_output'
-    | 'non_json_object'
-    | 'invalid_json'
-    | 'schema_invalid';
+    'empty_output' | 'non_json_object' | 'invalid_json' | 'schema_invalid';
 
 export type ReviewDecisionParseFailure = {
     reason: ReviewDecisionParseFailureReason;
@@ -93,11 +91,11 @@ const TraceAxisScoreSchema: z.ZodType<TraceAxisScore> = z.union([
 
 const PartialResponseTemperamentSchema = z
     .object({
-        tightness: TraceAxisScoreSchema.optional(),
-        rationale: TraceAxisScoreSchema.optional(),
-        attribution: TraceAxisScoreSchema.optional(),
-        caution: TraceAxisScoreSchema.optional(),
-        extent: TraceAxisScoreSchema.optional(),
+        tightness: TraceAxisScoreSchema.nullable().optional(),
+        rationale: TraceAxisScoreSchema.nullable().optional(),
+        attribution: TraceAxisScoreSchema.nullable().optional(),
+        caution: TraceAxisScoreSchema.nullable().optional(),
+        extent: TraceAxisScoreSchema.nullable().optional(),
     })
     .strict();
 
@@ -107,20 +105,22 @@ const ReviewDecisionSchema = z
         reviewReason: z.string().refine((value) => value.trim().length > 0, {
             message: 'reviewReason must be non-empty after trimming.',
         }),
-        revisionInstruction: z.string().optional(),
-        traceAlignment: z.enum(['aligned', 'misaligned']).optional(),
-        traceAlignmentReason: z.string().optional(),
-        finalTemperament: PartialResponseTemperamentSchema.optional(),
-        moduleHints: z.array(z.string()).optional(),
+        revisionInstruction: z.string().nullable().optional(),
+        traceAlignment: z.enum(['aligned', 'misaligned']).nullable().optional(),
+        traceAlignmentReason: z.string().nullable().optional(),
+        finalTemperament:
+            PartialResponseTemperamentSchema.nullable().optional(),
+        moduleHints: z.array(z.string()).nullable().optional(),
         concerns: z
             .object({
-                length: z.enum(['too_long', 'ok']).optional(),
-                style: z.enum(['too_stiff', 'ok']).optional(),
-                evidence: z.enum(['needs_caution', 'ok']).optional(),
+                length: z.enum(['too_long', 'ok']).nullable().optional(),
+                style: z.enum(['too_stiff', 'ok']).nullable().optional(),
+                evidence: z.enum(['needs_caution', 'ok']).nullable().optional(),
             })
             .strict()
+            .nullable()
             .optional(),
-        routingHints: z.array(z.string()).optional(),
+        routingHints: z.array(z.string()).nullable().optional(),
     })
     .passthrough()
     .superRefine((value, context) => {
@@ -142,6 +142,7 @@ const ReviewDecisionSchema = z
             value.traceAlignmentReason?.trim();
         const hasFinalTemperamentAxes =
             value.finalTemperament !== undefined &&
+            value.finalTemperament !== null &&
             Object.keys(value.finalTemperament).length > 0;
         if (value.traceAlignment === 'misaligned') {
             if (
@@ -166,6 +167,103 @@ const ReviewDecisionSchema = z
         }
     });
 
+/** Native schema request for reviewers; the parser remains the final authority. */
+export const REVIEW_DECISION_STRUCTURED_OUTPUT: GenerationStructuredOutput = {
+    name: 'review_decision',
+    description:
+        'A bounded decision about whether a draft is final or needs revision.',
+    schema: {
+        type: 'object',
+        properties: {
+            reviewDecision: { type: 'string', enum: ['finalize', 'revise'] },
+            reviewReason: { type: 'string' },
+            revisionInstruction: { type: ['string', 'null'] },
+            traceAlignment: {
+                type: ['string', 'null'],
+                enum: ['aligned', 'misaligned', null],
+            },
+            traceAlignmentReason: { type: ['string', 'null'] },
+            finalTemperament: {
+                type: ['object', 'null'],
+                properties: {
+                    tightness: {
+                        type: ['integer', 'null'],
+                        minimum: 1,
+                        maximum: 5,
+                    },
+                    rationale: {
+                        type: ['integer', 'null'],
+                        minimum: 1,
+                        maximum: 5,
+                    },
+                    attribution: {
+                        type: ['integer', 'null'],
+                        minimum: 1,
+                        maximum: 5,
+                    },
+                    caution: {
+                        type: ['integer', 'null'],
+                        minimum: 1,
+                        maximum: 5,
+                    },
+                    extent: {
+                        type: ['integer', 'null'],
+                        minimum: 1,
+                        maximum: 5,
+                    },
+                },
+                required: [
+                    'tightness',
+                    'rationale',
+                    'attribution',
+                    'caution',
+                    'extent',
+                ],
+                additionalProperties: false,
+            },
+            moduleHints: {
+                type: ['array', 'null'],
+                items: { type: 'string' },
+            },
+            concerns: {
+                type: ['object', 'null'],
+                properties: {
+                    length: {
+                        type: ['string', 'null'],
+                        enum: ['too_long', 'ok', null],
+                    },
+                    style: {
+                        type: ['string', 'null'],
+                        enum: ['too_stiff', 'ok', null],
+                    },
+                    evidence: {
+                        type: ['string', 'null'],
+                        enum: ['needs_caution', 'ok', null],
+                    },
+                },
+                required: ['length', 'style', 'evidence'],
+                additionalProperties: false,
+            },
+            routingHints: {
+                type: ['array', 'null'],
+                items: { type: 'string' },
+            },
+        },
+        required: [
+            'reviewDecision',
+            'reviewReason',
+            'revisionInstruction',
+            'traceAlignment',
+            'traceAlignmentReason',
+            'finalTemperament',
+            'moduleHints',
+            'concerns',
+            'routingHints',
+        ],
+        additionalProperties: false,
+    },
+};
+
 const normalizeReviewDecision = (
     parsedDecision: z.infer<typeof ReviewDecisionSchema>
 ): ReviewDecision => {
@@ -174,16 +272,41 @@ const normalizeReviewDecision = (
     const moduleHints = parsedDecision.moduleHints
         ? sanitizeReviewModuleIds(parsedDecision.moduleHints)
         : undefined;
+    const normalizedFinalTemperament: PartialResponseTemperament = {
+        ...(parsedDecision.finalTemperament?.tightness !== undefined &&
+            parsedDecision.finalTemperament.tightness !== null && {
+                tightness: parsedDecision.finalTemperament.tightness,
+            }),
+        ...(parsedDecision.finalTemperament?.rationale !== undefined &&
+            parsedDecision.finalTemperament.rationale !== null && {
+                rationale: parsedDecision.finalTemperament.rationale,
+            }),
+        ...(parsedDecision.finalTemperament?.attribution !== undefined &&
+            parsedDecision.finalTemperament.attribution !== null && {
+                attribution: parsedDecision.finalTemperament.attribution,
+            }),
+        ...(parsedDecision.finalTemperament?.caution !== undefined &&
+            parsedDecision.finalTemperament.caution !== null && {
+                caution: parsedDecision.finalTemperament.caution,
+            }),
+        ...(parsedDecision.finalTemperament?.extent !== undefined &&
+            parsedDecision.finalTemperament.extent !== null && {
+                extent: parsedDecision.finalTemperament.extent,
+            }),
+    };
     const normalizedConcerns: NonNullable<ReviewDecision['concerns']> = {
-        ...(parsedDecision.concerns?.length !== undefined && {
-            length: parsedDecision.concerns.length,
-        }),
-        ...(parsedDecision.concerns?.style !== undefined && {
-            style: parsedDecision.concerns.style,
-        }),
-        ...(parsedDecision.concerns?.evidence !== undefined && {
-            evidence: parsedDecision.concerns.evidence,
-        }),
+        ...(parsedDecision.concerns?.length !== undefined &&
+            parsedDecision.concerns.length !== null && {
+                length: parsedDecision.concerns.length,
+            }),
+        ...(parsedDecision.concerns?.style !== undefined &&
+            parsedDecision.concerns.style !== null && {
+                style: parsedDecision.concerns.style,
+            }),
+        ...(parsedDecision.concerns?.evidence !== undefined &&
+            parsedDecision.concerns.evidence !== null && {
+                evidence: parsedDecision.concerns.evidence,
+            }),
     };
 
     return {
@@ -192,22 +315,26 @@ const normalizeReviewDecision = (
         ...(normalizedRevisionInstruction !== undefined && {
             revisionInstruction: normalizedRevisionInstruction,
         }),
-        ...(parsedDecision.traceAlignment !== undefined && {
-            traceAlignment: parsedDecision.traceAlignment,
-        }),
-        ...(parsedDecision.traceAlignmentReason !== undefined && {
-            traceAlignmentReason: parsedDecision.traceAlignmentReason.trim(),
-        }),
-        ...(parsedDecision.finalTemperament !== undefined && {
-            finalTemperament: parsedDecision.finalTemperament,
+        ...(parsedDecision.traceAlignment !== undefined &&
+            parsedDecision.traceAlignment !== null && {
+                traceAlignment: parsedDecision.traceAlignment,
+            }),
+        ...(parsedDecision.traceAlignmentReason !== undefined &&
+            parsedDecision.traceAlignmentReason !== null && {
+                traceAlignmentReason:
+                    parsedDecision.traceAlignmentReason.trim(),
+            }),
+        ...(Object.keys(normalizedFinalTemperament).length > 0 && {
+            finalTemperament: normalizedFinalTemperament,
         }),
         ...(moduleHints !== undefined && { moduleHints }),
         ...(Object.keys(normalizedConcerns).length > 0 && {
             concerns: normalizedConcerns,
         }),
-        ...(parsedDecision.routingHints !== undefined && {
-            routingHints: parsedDecision.routingHints,
-        }),
+        ...(parsedDecision.routingHints !== undefined &&
+            parsedDecision.routingHints !== null && {
+                routingHints: parsedDecision.routingHints,
+            }),
     };
 };
 

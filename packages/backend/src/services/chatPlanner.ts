@@ -5,10 +5,12 @@
  * @footnote-risk: high - Planner mistakes can pick the wrong modality, skip retrieval, or suppress expected replies.
  * @footnote-ethics: high - Action selection directly affects responsiveness, grounding, and user trust.
  */
-import type {
-    GenerationSearchIntent,
-    GenerationUsage,
-    RuntimeMessage,
+import {
+    normalizeGenerationUsage,
+    type GenerationSearchIntent,
+    type GenerationResult,
+    type GenerationUsage,
+    type RuntimeMessage,
 } from '@footnote/agent-runtime';
 import type {
     PostChatRequest,
@@ -63,6 +65,7 @@ import {
     buildPlannerInvocationRejectionLogMeta,
     isWorkflowOwnedPlannerInvocation,
 } from './chatPlannerInvocation.js';
+import { classifyTypedModelOutputFailure } from './typedModelOutput.js';
 import type { ChatPlannerInvocationContext } from './chatPlannerInvocation.js';
 export type {
     ChatPlannerInvocationContext,
@@ -216,6 +219,54 @@ type CreateChatPlannerOptions = {
     safetyIdentifier?: string;
 };
 
+type StructuredPlannerFailureUsage = {
+    model: string;
+    usage: GenerationUsage;
+};
+
+const readStructuredPlannerFailureOutcome = (
+    error: unknown
+): PlannerStructuredOutputOutcome | undefined => {
+    if (typeof error !== 'object' || error === null || Array.isArray(error)) {
+        return undefined;
+    }
+    const candidate = error as { plannerFailureOutcome?: unknown };
+    const outcome = candidate.plannerFailureOutcome;
+    if (
+        outcome === 'refusal' ||
+        outcome === 'incomplete' ||
+        outcome === 'no_output' ||
+        outcome === 'schema_rejected' ||
+        outcome === 'parse_failure' ||
+        outcome === 'runtime_failure' ||
+        outcome === 'unsupported_route'
+    ) {
+        return outcome;
+    }
+    return undefined;
+};
+
+const readStructuredPlannerFailureUsage = (
+    error: unknown
+): StructuredPlannerFailureUsage | undefined => {
+    if (typeof error !== 'object' || error === null || Array.isArray(error)) {
+        return undefined;
+    }
+    const candidate = error as {
+        plannerModel?: unknown;
+        plannerUsage?: unknown;
+    };
+    if (typeof candidate.plannerModel !== 'string') {
+        return undefined;
+    }
+    const usage = normalizeGenerationUsage(candidate.plannerUsage);
+    if (usage === undefined) return undefined;
+    return {
+        model: candidate.plannerModel,
+        usage,
+    };
+};
+
 /**
  * Narrow planner-only execution input.
  * This stays backend-local so planner policy can evolve beyond current providers
@@ -231,6 +282,13 @@ type ChatPlannerExecutionRequest = {
     signal?: AbortSignal;
 };
 
+type ChatPlannerRequestPayload = ChatPlannerExecutionRequest & {
+    /** Prompt messages for a text-JSON fallback from a structured attempt. */
+    compatibilityMessages?: () => RuntimeMessage[];
+    /** Force the parser path after a provider JSON-mode attempt has failed. */
+    forceParserCompatibility?: boolean;
+};
+
 /**
  * Narrow planner-only execution output.
  * The planner only needs text plus enough runtime facts for logging/costs.
@@ -240,11 +298,13 @@ type ChatPlannerExecutionResult = {
     provider?: string;
     model?: string;
     usage?: GenerationUsage;
+    finishReason?: string;
+    completion?: GenerationResult['completion'];
     upstreamAttribution?: ChatPlannerExecution['upstreamAttribution'];
 };
 
 type ChatPlannerExecutor = (
-    request: ChatPlannerExecutionRequest
+    request: ChatPlannerRequestPayload
 ) => Promise<ChatPlannerExecutionResult>;
 
 type ChatPlannerStructuredExecutionResult = {
@@ -260,22 +320,55 @@ type ChatPlannerStructuredExecutionResult = {
 export class ChatPlannerStructuredOutputError extends Error {
     readonly outcome: PlannerStructuredOutputOutcome;
     readonly retryable: boolean;
+    readonly fallbackOutputPath?: 'parser_compatibility';
 
     constructor(
         outcome: PlannerStructuredOutputOutcome,
         message: string,
         options?: ErrorOptions,
-        retryable = true
+        retryable = true,
+        fallbackOutputPath?: 'parser_compatibility'
     ) {
         super(message, options);
         this.name = 'ChatPlannerStructuredOutputError';
         this.outcome = outcome;
         this.retryable = retryable;
+        this.fallbackOutputPath = fallbackOutputPath;
     }
 }
 
+const rejectInvalidPlannerTextJsonResult = (
+    result: ChatPlannerExecutionResult
+): void => {
+    const failure = classifyTypedModelOutputFailure(result);
+    if (failure === undefined) {
+        return;
+    }
+    const outcome: PlannerStructuredOutputOutcome =
+        failure === 'incomplete'
+            ? 'incomplete'
+            : failure === 'empty'
+              ? 'no_output'
+              : failure === 'refusal'
+                ? 'refusal'
+                : failure === 'runtime_failed'
+                  ? 'runtime_failure'
+                  : 'parse_failure';
+    const message =
+        failure === 'incomplete'
+            ? 'Planner text JSON output was incomplete.'
+            : failure === 'empty'
+              ? 'Planner text JSON output was empty.'
+              : failure === 'refusal'
+                ? 'Planner text JSON output was refused.'
+                : failure === 'runtime_failed'
+                  ? 'Planner text JSON runtime failed.'
+                  : 'Planner text JSON output was invalid.';
+    throw new ChatPlannerStructuredOutputError(outcome, message);
+};
+
 type ChatPlannerStructuredExecutor = (
-    request: ChatPlannerExecutionRequest
+    request: ChatPlannerRequestPayload
 ) => Promise<ChatPlannerStructuredExecutionResult>;
 type ChatPlannerExecutionMode = 'structured' | 'text_json';
 
@@ -1692,20 +1785,34 @@ export const createChatPlanner = ({
         const buildPlannerRequestPayload = (
             mode: ChatPlannerExecutionMode,
             contextTier: PlannerContextTier
-        ): ChatPlannerExecutionRequest => ({
-            messages: buildPlannerMessages({
+        ): ChatPlannerRequestPayload => {
+            const messages = buildPlannerMessages({
                 plannerPrompt: renderPlannerModePrompt(mode),
                 plannerProfileContext: plannerCapabilityContext,
                 plannerTrustGraphTargetContext,
                 requestSummary,
                 request,
                 contextTier,
-            }),
-            model: defaultModel,
-            maxOutputTokens: plannerOutputTokenBudget,
-            reasoningEffort: plannerReasoningEffort,
-            ...(safetyIdentifier !== undefined && { safetyIdentifier }),
-        });
+            });
+            return {
+                messages,
+                model: defaultModel,
+                maxOutputTokens: plannerOutputTokenBudget,
+                reasoningEffort: plannerReasoningEffort,
+                ...(safetyIdentifier !== undefined && { safetyIdentifier }),
+                ...(mode === 'structured' && {
+                    compatibilityMessages: () =>
+                        buildPlannerMessages({
+                            plannerPrompt: renderPlannerModePrompt('text_json'),
+                            plannerProfileContext: plannerCapabilityContext,
+                            plannerTrustGraphTargetContext,
+                            requestSummary,
+                            request,
+                            contextTier,
+                        }),
+                }),
+            };
+        };
         const requestPayload = buildPlannerRequestPayload(
             plannerMode,
             'current_window'
@@ -1769,42 +1876,43 @@ export const createChatPlanner = ({
             usageModel: string,
             usage?: GenerationUsage
         ) => {
-            const promptTokens = usage?.promptTokens ?? 0;
-            const completionTokens = usage?.completionTokens ?? 0;
+            const normalizedUsage = normalizeGenerationUsage(usage);
+            const promptTokens = normalizedUsage?.promptTokens ?? 0;
+            const completionTokens = normalizedUsage?.completionTokens ?? 0;
             const totalTokens =
-                usage?.totalTokens ?? promptTokens + completionTokens;
+                normalizedUsage?.totalTokens ?? promptTokens + completionTokens;
             const estimatedCost = estimateBackendTextCost(
                 usageModel,
                 promptTokens,
                 completionTokens,
                 {
-                    ...(usage?.cachedInputTokens !== undefined && {
-                        cachedInputTokens: usage.cachedInputTokens,
+                    ...(normalizedUsage?.cachedInputTokens !== undefined && {
+                        cachedInputTokens: normalizedUsage.cachedInputTokens,
                     }),
-                    ...(usage?.cacheWriteTokens !== undefined && {
-                        cacheWriteTokens: usage.cacheWriteTokens,
+                    ...(normalizedUsage?.cacheWriteTokens !== undefined && {
+                        cacheWriteTokens: normalizedUsage.cacheWriteTokens,
                     }),
                 }
             );
-            if (usage !== undefined) {
+            if (normalizedUsage !== undefined) {
                 plannerUsageRecorded = true;
                 plannerUsageTotals.promptTokens += promptTokens;
-                if (usage.cachedInputTokens !== undefined) {
+                if (normalizedUsage.cachedInputTokens !== undefined) {
                     plannerUsageTotals.cachedInputTokens =
                         (plannerUsageTotals.cachedInputTokens ?? 0) +
-                        usage.cachedInputTokens;
+                        normalizedUsage.cachedInputTokens;
                 }
-                if (usage.cacheWriteTokens !== undefined) {
+                if (normalizedUsage.cacheWriteTokens !== undefined) {
                     plannerUsageTotals.cacheWriteTokens =
                         (plannerUsageTotals.cacheWriteTokens ?? 0) +
-                        usage.cacheWriteTokens;
+                        normalizedUsage.cacheWriteTokens;
                 }
                 plannerUsageTotals.completionTokens += completionTokens;
                 plannerUsageTotals.totalTokens += totalTokens;
-                if (usage.reasoningTokens !== undefined) {
+                if (normalizedUsage.reasoningTokens !== undefined) {
                     plannerUsageTotals.reasoningTokens =
                         (plannerUsageTotals.reasoningTokens ?? 0) +
-                        usage.reasoningTokens;
+                        normalizedUsage.reasoningTokens;
                 }
                 plannerUsageTotals.inputCostUsd += estimatedCost.inputCostUsd;
                 plannerUsageTotals.outputCostUsd += estimatedCost.outputCostUsd;
@@ -1816,11 +1924,13 @@ export const createChatPlanner = ({
                         feature: 'chat_planner',
                         model: usageModel,
                         promptTokens,
-                        ...(usage?.cachedInputTokens !== undefined && {
-                            cachedInputTokens: usage.cachedInputTokens,
+                        ...(normalizedUsage?.cachedInputTokens !==
+                            undefined && {
+                            cachedInputTokens:
+                                normalizedUsage.cachedInputTokens,
                         }),
-                        ...(usage?.cacheWriteTokens !== undefined && {
-                            cacheWriteTokens: usage.cacheWriteTokens,
+                        ...(normalizedUsage?.cacheWriteTokens !== undefined && {
+                            cacheWriteTokens: normalizedUsage.cacheWriteTokens,
                         }),
                         completionTokens,
                         totalTokens,
@@ -2009,6 +2119,14 @@ export const createChatPlanner = ({
                         signal: structuredAbortContext.signal,
                     });
                 } catch (structuredError) {
+                    const failedStructuredUsage =
+                        readStructuredPlannerFailureUsage(structuredError);
+                    if (failedStructuredUsage !== undefined) {
+                        recordPlannerUsage(
+                            failedStructuredUsage.model,
+                            failedStructuredUsage.usage
+                        );
+                    }
                     if (
                         structuredError instanceof Error &&
                         structuredError.name === 'AbortError' &&
@@ -2077,6 +2195,7 @@ export const createChatPlanner = ({
                 plannerResponse.model || defaultModel,
                 plannerResponse.usage
             );
+            rejectInvalidPlannerTextJsonResult(plannerResponse);
             const parsed = parsePlannerCandidateFromTextJson(
                 plannerResponse.text
             );
@@ -2138,11 +2257,17 @@ export const createChatPlanner = ({
                 executePlanner &&
                 (allowTextJsonCompatibilityFallback ||
                     error instanceof SyntaxError ||
+                    (error instanceof ChatPlannerStructuredOutputError &&
+                        (error.outcome === 'unsupported_route' ||
+                            error.outcome === 'schema_rejected')) ||
                     (error instanceof Error &&
                         /Failed structured planner argument parsing/i.test(
                             error.message
                         )));
             if (shouldAttemptCompatibilityFallback) {
+                const forceParserCompatibility =
+                    error instanceof ChatPlannerStructuredOutputError &&
+                    error.fallbackOutputPath === 'parser_compatibility';
                 logger.warn(
                     `chat planner structured execution failed; attempting text JSON compatibility fallback. error=${error instanceof Error ? error.message : String(error)}`,
                     {
@@ -2169,12 +2294,15 @@ export const createChatPlanner = ({
                 );
                 try {
                     plannerMode = 'text_json';
-                    const textJsonResponse = await executePlanner(
-                        buildPlannerRequestPayload(
+                    const textJsonResponse = await executePlanner({
+                        ...buildPlannerRequestPayload(
                             'text_json',
                             'current_window'
-                        )
-                    );
+                        ),
+                        ...(forceParserCompatibility && {
+                            forceParserCompatibility: true,
+                        }),
+                    });
                     plannerResponseText = textJsonResponse.text;
                     upstreamAttribution = textJsonResponse.upstreamAttribution;
                     plannerModel = textJsonResponse.model;
@@ -2183,6 +2311,7 @@ export const createChatPlanner = ({
                         textJsonResponse.model || defaultModel,
                         textJsonResponse.usage
                     );
+                    rejectInvalidPlannerTextJsonResult(textJsonResponse);
                     const parsed = parsePlannerCandidateFromTextJson(
                         textJsonResponse.text
                     );
@@ -2217,6 +2346,14 @@ export const createChatPlanner = ({
                             : {}),
                     });
                 } catch (textJsonError) {
+                    const failedFallbackUsage =
+                        readStructuredPlannerFailureUsage(textJsonError);
+                    if (failedFallbackUsage !== undefined) {
+                        recordPlannerUsage(
+                            failedFallbackUsage.model,
+                            failedFallbackUsage.usage
+                        );
+                    }
                     resolvedError = textJsonError;
                 }
             }
@@ -2235,9 +2372,10 @@ export const createChatPlanner = ({
             structuredOutputOutcome =
                 resolvedError instanceof ChatPlannerStructuredOutputError
                     ? resolvedError.outcome
-                    : resolvedError instanceof SyntaxError
-                      ? 'parse_failure'
-                      : 'runtime_failure';
+                    : (readStructuredPlannerFailureOutcome(resolvedError) ??
+                      (resolvedError instanceof SyntaxError
+                          ? 'parse_failure'
+                          : 'runtime_failure'));
             logger.warn(
                 `chat planner failed; using fallback plan. reasonCode=${reasonCode} error=${resolvedError instanceof Error ? resolvedError.message : String(resolvedError)}`,
                 {

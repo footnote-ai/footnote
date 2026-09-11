@@ -7,11 +7,14 @@
  * @footnote-ethics: high - Mechanical limits protect user trust without delegating answer quality to an opaque judge.
  */
 
-import type { GenerationResult } from '@footnote/agent-runtime';
+import {
+    isNonNegativeSafeInteger,
+    normalizeGenerationUsage,
+    type GenerationResult,
+} from '@footnote/agent-runtime';
 import type {
     ExecutionReasonCode,
     GenerationCompletion,
-    GenerationExecutionUsage,
     WorkflowRoutingChainAttemptSignal,
 } from '@footnote/contracts/policy';
 import type { RoutingChainAttemptLog } from './stepRoutingExecutor.js';
@@ -20,9 +23,6 @@ const MAX_GENERATION_EVIDENCE_STRING_LENGTH = 100;
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
     typeof value === 'object' && value !== null && !Array.isArray(value);
-
-const isNonNegativeSafeInteger = (value: unknown): value is number =>
-    typeof value === 'number' && Number.isSafeInteger(value) && value >= 0;
 
 const normalizeEvidenceString = (value: unknown): string | undefined =>
     typeof value === 'string' &&
@@ -57,40 +57,6 @@ const normalizeGenerationCompletion = (
         visibleTextLength,
         ...(reason === undefined ? {} : { reason }),
     };
-};
-
-const normalizeGenerationUsage = (
-    value: unknown
-): GenerationExecutionUsage | undefined => {
-    if (!isRecord(value)) {
-        return undefined;
-    }
-    const usage: GenerationExecutionUsage = {};
-    const promptTokens = value.promptTokens;
-    const cachedInputTokens = value.cachedInputTokens;
-    const cacheWriteTokens = value.cacheWriteTokens;
-    const completionTokens = value.completionTokens;
-    const totalTokens = value.totalTokens;
-    const reasoningTokens = value.reasoningTokens;
-    if (isNonNegativeSafeInteger(promptTokens)) {
-        usage.promptTokens = promptTokens;
-    }
-    if (isNonNegativeSafeInteger(cachedInputTokens)) {
-        usage.cachedInputTokens = cachedInputTokens;
-    }
-    if (isNonNegativeSafeInteger(cacheWriteTokens)) {
-        usage.cacheWriteTokens = cacheWriteTokens;
-    }
-    if (isNonNegativeSafeInteger(completionTokens)) {
-        usage.completionTokens = completionTokens;
-    }
-    if (isNonNegativeSafeInteger(totalTokens)) {
-        usage.totalTokens = totalTokens;
-    }
-    if (isNonNegativeSafeInteger(reasoningTokens)) {
-        usage.reasoningTokens = reasoningTokens;
-    }
-    return Object.keys(usage).length === 0 ? undefined : usage;
 };
 
 /**
@@ -170,6 +136,9 @@ export const attachGenerationAttemptEvidence = (
     resultsByAttemptIndex: ReadonlyMap<number, GenerationResult>
 ): RoutingChainAttemptLog[] =>
     attempts.map((attempt) => {
+        if (attempt.status === 'failed_transport_fallback') {
+            return attempt;
+        }
         const result = resultsByAttemptIndex.get(attempt.index);
         if (result === undefined) {
             return attempt;

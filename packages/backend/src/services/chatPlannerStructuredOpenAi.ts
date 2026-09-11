@@ -5,7 +5,12 @@
  * @footnote-risk: high - API contract mistakes here can hard-fail planner execution.
  * @footnote-ethics: high - Structured planner correctness affects grounding and response behavior.
  */
-import type { GenerationUsage, RuntimeMessage } from '@footnote/agent-runtime';
+import {
+    GenerationRuntimeError,
+    normalizeGenerationUsage,
+    type GenerationUsage,
+    type RuntimeMessage,
+} from '@footnote/agent-runtime';
 import type { SupportedReasoningEffort } from '@footnote/contracts';
 import {
     CHAT_PLANNER_TOOL_NAME,
@@ -50,6 +55,71 @@ type ResponsesInputMessage = {
               type: 'input_text';
               text: string;
           }>;
+};
+
+type ResponsesUsage = {
+    input_tokens?: number;
+    input_tokens_details?: {
+        cached_tokens?: number;
+        cache_write_tokens?: number;
+    };
+    output_tokens?: number;
+    output_tokens_details?: {
+        reasoning_tokens?: number;
+    };
+    total_tokens?: number;
+};
+
+const STRUCTURED_OUTPUT_UNAVAILABLE_ERROR_CODES = new Set([
+    'json_schema_not_supported',
+    'response_format_not_supported',
+    'schema_not_supported',
+    'structured_output_not_supported',
+    'unsupported_response_format',
+]);
+
+const readProviderErrorCode = (value: unknown): string | undefined => {
+    if (typeof value !== 'object' || value === null || Array.isArray(value)) {
+        return undefined;
+    }
+    const record = value as Record<string, unknown>;
+    const nestedError = record.error;
+    if (
+        typeof nestedError === 'object' &&
+        nestedError !== null &&
+        !Array.isArray(nestedError)
+    ) {
+        const nestedCode = (nestedError as Record<string, unknown>).code;
+        if (typeof nestedCode === 'string') {
+            return nestedCode.trim().toLowerCase();
+        }
+    }
+    return typeof record.code === 'string'
+        ? record.code.trim().toLowerCase()
+        : undefined;
+};
+
+const normalizeResponsesUsage = (
+    usage: ResponsesUsage | undefined
+): GenerationUsage | undefined => {
+    const normalized = normalizeGenerationUsage({
+        promptTokens: usage?.input_tokens,
+        cachedInputTokens: usage?.input_tokens_details?.cached_tokens,
+        cacheWriteTokens: usage?.input_tokens_details?.cache_write_tokens,
+        completionTokens: usage?.output_tokens,
+        reasoningTokens: usage?.output_tokens_details?.reasoning_tokens,
+        totalTokens: usage?.total_tokens,
+    });
+    const promptTokens = normalized?.promptTokens;
+    const completionTokens = normalized?.completionTokens;
+    const hasComponentTokens =
+        promptTokens !== undefined || completionTokens !== undefined;
+    const totalTokens =
+        normalized?.totalTokens ??
+        (hasComponentTokens
+            ? (promptTokens ?? 0) + (completionTokens ?? 0)
+            : undefined);
+    return normalizeGenerationUsage({ ...normalized, totalTokens });
 };
 
 const normalizeVerbosity = (
@@ -142,6 +212,22 @@ export const createOpenAiChatPlannerStructuredExecutor = ({
         const response = await performRequest(0);
         if (!response.ok) {
             const errorText = await response.text();
+            let payload: unknown;
+            try {
+                payload = JSON.parse(errorText) as unknown;
+            } catch {
+                payload = undefined;
+            }
+            const providerErrorCode = readProviderErrorCode(payload);
+            if (
+                providerErrorCode !== undefined &&
+                STRUCTURED_OUTPUT_UNAVAILABLE_ERROR_CODES.has(providerErrorCode)
+            ) {
+                throw new GenerationRuntimeError(
+                    'Planner structured transport is unavailable.',
+                    { classification: 'structured_output_unavailable' }
+                );
+            }
             throw new Error(
                 `Planner structured API error: ${response.status} ${response.statusText} - ${errorText}`
             );
@@ -149,29 +235,43 @@ export const createOpenAiChatPlannerStructuredExecutor = ({
 
         const data = (await response.json()) as {
             model?: string;
-            usage?: {
-                input_tokens?: number;
-                input_tokens_details?: {
-                    cached_tokens?: number;
-                    cache_write_tokens?: number;
-                };
-                output_tokens?: number;
-                total_tokens?: number;
-            };
+            usage?: ResponsesUsage;
             output?: PlannerToolCallOutputItem[];
         };
+
+        const responseModel = data.model ?? request.model;
+        const usage = normalizeResponsesUsage(data.usage);
 
         const outputItems = Array.isArray(data.output) ? data.output : [];
         const functionCallItem = outputItems.find(
             (item) =>
                 item.type === 'function_call' &&
-                item.name === CHAT_PLANNER_TOOL_NAME &&
-                typeof item.arguments === 'string'
+                item.name === CHAT_PLANNER_TOOL_NAME
         );
 
-        if (!functionCallItem?.arguments) {
-            throw new Error(
-                'Planner structured call did not return a function_call payload.'
+        if (
+            !functionCallItem?.arguments ||
+            (functionCallItem.status !== undefined &&
+                functionCallItem.status !== 'completed')
+        ) {
+            const plannerFailureOutcome =
+                functionCallItem?.status === 'incomplete'
+                    ? 'incomplete'
+                    : functionCallItem?.status === 'refusal' ||
+                        functionCallItem?.status === 'refused'
+                      ? 'refusal'
+                      : functionCallItem?.status === 'failed'
+                        ? 'runtime_failure'
+                        : 'no_output';
+            throw Object.assign(
+                new SyntaxError(
+                    'Planner structured call did not return a completed function_call payload.'
+                ),
+                {
+                    plannerFailureOutcome,
+                    plannerModel: responseModel,
+                    plannerUsage: usage,
+                }
             );
         }
 
@@ -184,26 +284,22 @@ export const createOpenAiChatPlannerStructuredExecutor = ({
             const argumentPreview = functionCallItem.arguments
                 .replace(/\s+/g, ' ')
                 .slice(0, 280);
-            throw new SyntaxError(
-                `Failed structured planner argument parsing (length=${functionCallItem.arguments.length}): ${parserMessage}. preview=${argumentPreview}`,
-                { cause: error }
+            throw Object.assign(
+                new SyntaxError(
+                    `Failed structured planner argument parsing (length=${functionCallItem.arguments.length}): ${parserMessage}. preview=${argumentPreview}`,
+                    { cause: error }
+                ),
+                {
+                    plannerFailureOutcome: 'parse_failure',
+                    plannerModel: responseModel,
+                    plannerUsage: usage,
+                }
             );
         }
         return {
             decision: parsedDecision,
-            model: data.model ?? request.model,
-            usage: {
-                promptTokens: data.usage?.input_tokens,
-                cachedInputTokens:
-                    data.usage?.input_tokens_details?.cached_tokens,
-                cacheWriteTokens:
-                    data.usage?.input_tokens_details?.cache_write_tokens,
-                completionTokens: data.usage?.output_tokens,
-                totalTokens:
-                    data.usage?.total_tokens ??
-                    (data.usage?.input_tokens ?? 0) +
-                        (data.usage?.output_tokens ?? 0),
-            },
+            model: responseModel,
+            usage,
             rawArguments: functionCallItem.arguments,
         };
     };

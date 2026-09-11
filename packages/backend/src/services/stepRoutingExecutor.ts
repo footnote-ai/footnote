@@ -27,6 +27,7 @@ import {
 
 export type RoutingChainAttemptStatus =
     | 'executed'
+    | 'failed_transport_fallback'
     | 'failed_transient_advanced'
     | 'failed_non_transient_stopped'
     | 'skipped_ineligible'
@@ -50,6 +51,18 @@ export type RoutingChainAttemptLog = {
     chooseOneSelectedIndex?: number;
     seedKeyType?: 'session_id' | 'correlation_id';
 };
+
+/** Bounded evidence for a provider call nested inside one route candidate. */
+export type RoutingChainInternalAttempt = Pick<
+    RoutingChainAttemptLog,
+    | 'status'
+    | 'reasonCode'
+    | 'errorMessage'
+    | 'temporaryUnavailableReason'
+    | 'finishReason'
+    | 'completion'
+    | 'usage'
+>;
 
 export type RoutingChainExecutionResult<TSuccess> =
     | {
@@ -153,7 +166,8 @@ export const executeStepRoutingChain = async <TSuccess>(input: {
     requiresSearch: boolean;
     runWithProfile: (
         profile: ModelProfile,
-        attemptIndex: number
+        attemptIndex: number,
+        recordAttempt: (attempt: RoutingChainInternalAttempt) => void
     ) => Promise<TSuccess>;
     providerAvailability?: ProviderAvailabilityStore;
     /**
@@ -235,7 +249,25 @@ export const executeStepRoutingChain = async <TSuccess>(input: {
         }
 
         try {
-            const value = await input.runWithProfile(profile, index);
+            const value = await input.runWithProfile(
+                profile,
+                index,
+                (internalAttempt) => {
+                    attempts.push({
+                        index,
+                        step: input.step,
+                        profileId: profile.id,
+                        provider: profile.provider,
+                        model: profile.providerModel,
+                        ...internalAttempt,
+                        chooseOneUsed: candidate.chooseOneUsed,
+                        chooseOneCandidates: candidate.chooseOneCandidates,
+                        chooseOneSelectedIndex:
+                            candidate.chooseOneSelectedIndex,
+                        seedKeyType: candidate.seedKeyType,
+                    });
+                }
+            );
             const retryReasonCode = input.retryReasonCode?.(value);
             if (retryReasonCode !== undefined) {
                 attempts.push({

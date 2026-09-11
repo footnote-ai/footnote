@@ -72,6 +72,7 @@ const runGeneration = async (input: {
     runtime: GenerationRuntime;
     request: GenerationRequest;
     candidates: ModelProfile[];
+    assessCandidates?: ModelProfile[];
     nativeSearchRequired?: boolean;
     providerAvailability?: ProviderAvailabilityStore;
 }) =>
@@ -86,9 +87,11 @@ const runGeneration = async (input: {
             maxIterations: 1,
             maxDurationMs: 10_000,
             executionLimits: {
-                maxWorkflowSteps: 2,
+                maxWorkflowSteps: input.assessCandidates === undefined ? 2 : 4,
                 maxToolCalls: 0,
-                maxDeliberationCalls: 0,
+                maxDeliberationCalls:
+                    input.assessCandidates === undefined ? 0 : 1,
+                maxReviewCycles: input.assessCandidates === undefined ? 0 : 1,
                 // Even the stale 96k live override leaves ample room for
                 // this large but ordinary prompt when admission is honest.
                 maxTokensTotal: 96_000,
@@ -100,19 +103,24 @@ const runGeneration = async (input: {
             enableToolUse: false,
             enableReplanning: false,
             enableGeneration: true,
-            enableAssessment: false,
+            enableAssessment: input.assessCandidates !== undefined,
             enableRevision: false,
         },
         captureUsage: usage,
         stepRoutingChainSet: {
             enabledProfilesById: new Map(
-                input.candidates.map((profile) => [profile.id, profile])
+                [...input.candidates, ...(input.assessCandidates ?? [])].map(
+                    (profile) => [profile.id, profile]
+                )
             ),
             generateCandidates: input.candidates.map((profile) => ({
                 profileId: profile.id,
                 chooseOneUsed: false,
             })),
-            assessCandidates: [],
+            assessCandidates: (input.assessCandidates ?? []).map((profile) => ({
+                profileId: profile.id,
+                chooseOneUsed: false,
+            })),
             nativeSearchRequired: input.nativeSearchRequired,
             providerAvailability: input.providerAvailability,
         },
@@ -329,6 +337,357 @@ test('rejects empty completed output before selecting a fallback candidate', asy
     assert.equal(attempts[0]?.profileId, first.id);
     assert.equal(attempts[0]?.reasonCode, 'generation_empty_output');
     assert.equal(attempts[1]?.profileId, second.id);
+});
+
+test('validates every routed review Attempt before accepting a decision', async () => {
+    const first = {
+        ...makeProfile('first-review-profile'),
+        capabilities: {
+            canUseSearch: false,
+            toolCapabilities: {
+                'generation.structured_output': false,
+                'generation.json_mode': false,
+            },
+        },
+    };
+    const second = {
+        ...makeProfile('second-review-profile'),
+        capabilities: {
+            canUseSearch: false,
+            toolCapabilities: {
+                'generation.structured_output': false,
+                'generation.json_mode': true,
+            },
+        },
+    };
+    const requests: GenerationRequest[] = [];
+    const runtime: GenerationRuntime = {
+        kind: 'test-runtime',
+        async generate(request) {
+            requests.push(request);
+            if (requests.length === 1) {
+                return {
+                    text: 'A complete draft.',
+                    model: request.model,
+                    completion: { status: 'completed', visibleTextLength: 17 },
+                    usage: {
+                        promptTokens: 10,
+                        completionTokens: 5,
+                        totalTokens: 15,
+                    },
+                    provenance: 'Inferred' as const,
+                    citations: [],
+                };
+            }
+            if (requests.length === 2) {
+                return {
+                    text: '{malformed',
+                    model: first.providerModel,
+                    completion: { status: 'completed', visibleTextLength: 10 },
+                    usage: {
+                        promptTokens: 20,
+                        completionTokens: 3,
+                        totalTokens: 23,
+                    },
+                    provenance: 'Inferred' as const,
+                    citations: [],
+                };
+            }
+            return {
+                text: JSON.stringify({
+                    reviewDecision: 'finalize',
+                    reviewReason: 'The draft is complete.',
+                }),
+                model: second.providerModel,
+                completion: { status: 'completed', visibleTextLength: 71 },
+                usage: {
+                    promptTokens: 20,
+                    completionTokens: 8,
+                    totalTokens: 28,
+                },
+                provenance: 'Inferred' as const,
+                citations: [],
+            };
+        },
+    };
+
+    const result = await runGeneration({
+        runtime,
+        request: { messages: [{ role: 'user', content: 'Reply.' }] },
+        candidates: [first],
+        assessCandidates: [first, second],
+    });
+
+    assert.equal(result.outcome, 'generated');
+    assert.equal(requests.length, 3);
+    assert.equal(requests[1]?.structuredOutput, undefined);
+    assert.equal(requests[1]?.jsonMode, undefined);
+    assert.equal(requests[2]?.structuredOutput, undefined);
+    assert.equal(requests[2]?.jsonMode, true);
+    const assessStep = result.workflowLineage.steps.find(
+        (step) => step.stepKind === 'assess'
+    );
+    assert.ok(assessStep);
+    assert.equal(assessStep.usage?.totalTokens, 51);
+    const attempts = JSON.parse(
+        String(assessStep.outcome.signals?.routingChainAttemptsJson)
+    ) as Array<{ profileId: string; status: string; reasonCode?: string }>;
+    assert.deepEqual(
+        attempts.map((attempt) => [attempt.profileId, attempt.status]),
+        [
+            [first.id, 'failed_transient_advanced'],
+            [second.id, 'executed'],
+        ]
+    );
+    assert.equal(attempts[0]?.reasonCode, 'generation_runtime_error');
+});
+
+test('uses JSON mode after an explicit native schema transport rejection', async () => {
+    const profile = {
+        ...makeProfile('native-review-profile'),
+        capabilities: {
+            canUseSearch: false,
+            toolCapabilities: {
+                'generation.structured_output': true,
+                'generation.json_mode': true,
+            },
+        },
+    };
+    const requests: GenerationRequest[] = [];
+    const runtime: GenerationRuntime = {
+        kind: 'test-runtime',
+        async generate(request) {
+            requests.push(request);
+            if (requests.length === 1) {
+                return {
+                    text: 'A complete draft.',
+                    model: request.model,
+                    completion: { status: 'completed', visibleTextLength: 17 },
+                    usage: {
+                        promptTokens: 10,
+                        completionTokens: 5,
+                        totalTokens: 15,
+                    },
+                    provenance: 'Inferred' as const,
+                    citations: [],
+                };
+            }
+            if (requests.length === 2) {
+                throw new GenerationRuntimeError(
+                    'native schema unavailable',
+                    {
+                        classification: 'structured_output_unavailable',
+                    },
+                    {
+                        model: request.model,
+                        usage: {
+                            promptTokens: 10,
+                            completionTokens: 5,
+                            totalTokens: 15,
+                        },
+                    }
+                );
+            }
+            return {
+                text: JSON.stringify({
+                    reviewDecision: 'finalize',
+                    reviewReason: 'The draft is complete.',
+                }),
+                model: request.model,
+                completion: { status: 'completed', visibleTextLength: 71 },
+                usage: {
+                    promptTokens: 20,
+                    completionTokens: 8,
+                    totalTokens: 28,
+                },
+                provenance: 'Inferred' as const,
+                citations: [],
+            };
+        },
+    };
+
+    const result = await runGeneration({
+        runtime,
+        request: { messages: [{ role: 'user', content: 'Reply.' }] },
+        candidates: [profile],
+        assessCandidates: [profile],
+    });
+
+    assert.equal(result.outcome, 'generated');
+    assert.equal(requests[1]?.structuredOutput?.name, 'review_decision');
+    assert.equal(requests[1]?.jsonMode, undefined);
+    assert.equal(requests[2]?.structuredOutput, undefined);
+    assert.equal(requests[2]?.jsonMode, true);
+    const assessStep = result.workflowLineage.steps.find(
+        (step) => step.stepKind === 'assess'
+    );
+    assert.ok(assessStep);
+    assert.equal(assessStep.usage?.totalTokens, 43);
+    const attempts = JSON.parse(
+        String(assessStep.outcome.signals?.routingChainAttemptsJson)
+    ) as Array<{
+        status: string;
+        finishReason?: string;
+        completion?: { status?: string };
+    }>;
+    assert.deepEqual(
+        attempts.map((attempt) => attempt.status),
+        ['failed_transport_fallback', 'executed']
+    );
+    assert.equal(attempts[0]?.finishReason, 'structured_output_unavailable');
+    assert.equal(attempts[0]?.completion?.status, 'failed');
+});
+
+test('falls from JSON compatibility to parser compatibility with usage evidence', async () => {
+    const profile = {
+        ...makeProfile('json-review-profile'),
+        capabilities: {
+            canUseSearch: false,
+            toolCapabilities: {
+                'generation.structured_output': false,
+                'generation.json_mode': true,
+            },
+        },
+    };
+    const requests: GenerationRequest[] = [];
+    const runtime: GenerationRuntime = {
+        kind: 'test-runtime',
+        async generate(request) {
+            requests.push(request);
+            if (requests.length === 1) {
+                return {
+                    text: 'A complete draft.',
+                    model: request.model,
+                    completion: {
+                        status: 'completed',
+                        visibleTextLength: 17,
+                    },
+                    usage: {
+                        promptTokens: 10,
+                        completionTokens: 5,
+                        totalTokens: 15,
+                    },
+                    provenance: 'Inferred' as const,
+                    citations: [],
+                };
+            }
+            if (requests.length === 2) {
+                assert.equal(request.jsonMode, true);
+                throw new GenerationRuntimeError(
+                    'JSON mode unavailable',
+                    { classification: 'structured_output_unavailable' },
+                    {
+                        model: request.model,
+                        usage: {
+                            promptTokens: 4,
+                            completionTokens: 2,
+                            totalTokens: 6,
+                        },
+                    }
+                );
+            }
+            assert.equal(request.jsonMode, undefined);
+            assert.equal(request.structuredOutput, undefined);
+            return {
+                text: JSON.stringify({
+                    reviewDecision: 'finalize',
+                    reviewReason: 'The parser fallback completed the review.',
+                }),
+                model: request.model,
+                completion: {
+                    status: 'completed',
+                    visibleTextLength: 87,
+                },
+                usage: {
+                    promptTokens: 5,
+                    completionTokens: 3,
+                    totalTokens: 8,
+                },
+                provenance: 'Inferred' as const,
+                citations: [],
+            };
+        },
+    };
+
+    const result = await runGeneration({
+        runtime,
+        request: { messages: [{ role: 'user', content: 'Reply.' }] },
+        candidates: [profile],
+        assessCandidates: [profile],
+    });
+
+    assert.equal(result.outcome, 'generated');
+    assert.equal(requests.length, 3);
+    const assessStep = result.workflowLineage.steps.find(
+        (step) => step.stepKind === 'assess'
+    );
+    assert.ok(assessStep);
+    assert.equal(assessStep.usage?.totalTokens, 14);
+    const attempts = JSON.parse(
+        String(assessStep.outcome.signals?.routingChainAttemptsJson)
+    ) as Array<{ status: string; usage?: { totalTokens?: number } }>;
+    assert.deepEqual(
+        attempts.map((attempt) => attempt.status),
+        ['failed_transport_fallback', 'executed']
+    );
+    assert.equal(attempts[0]?.usage?.totalTokens, 6);
+});
+
+test('fails review open to the latest valid draft after all routed decisions fail', async () => {
+    const profile = makeProfile('review-profile');
+    let calls = 0;
+    const runtime: GenerationRuntime = {
+        kind: 'test-runtime',
+        async generate(request) {
+            calls += 1;
+            return calls === 1
+                ? {
+                      text: 'Keep this draft.',
+                      model: request.model,
+                      completion: {
+                          status: 'completed',
+                          visibleTextLength: 16,
+                      },
+                      usage: {
+                          promptTokens: 10,
+                          completionTokens: 5,
+                          totalTokens: 15,
+                      },
+                      provenance: 'Inferred' as const,
+                      citations: [],
+                  }
+                : {
+                      text: '',
+                      model: request.model,
+                      finishReason: 'refusal',
+                      completion: { status: 'completed', visibleTextLength: 0 },
+                      usage: {
+                          promptTokens: 20,
+                          completionTokens: 1,
+                          totalTokens: 21,
+                      },
+                      provenance: 'Inferred' as const,
+                      citations: [],
+                  };
+        },
+    };
+
+    const result = await runGeneration({
+        runtime,
+        request: { messages: [{ role: 'user', content: 'Reply.' }] },
+        candidates: [profile],
+        assessCandidates: [profile],
+    });
+
+    assert.equal(result.outcome, 'generated');
+    assert.equal(result.generationResult.text, 'Keep this draft.');
+    assert.equal(result.workflowLineage.status, 'degraded');
+    const assessStep = result.workflowLineage.steps.find(
+        (step) => step.stepKind === 'assess'
+    );
+    assert.equal(assessStep?.outcome.status, 'failed');
+    assert.equal(assessStep?.reasonCode, 'routing_chain_exhausted');
+    assert.equal(assessStep?.usage?.totalTokens, 21);
 });
 
 test('keeps an all-incomplete routed generation rejected and retains its usage', async () => {
