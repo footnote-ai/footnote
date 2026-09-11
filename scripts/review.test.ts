@@ -65,3 +65,30 @@ test('review parser keeps structured warnings and errors from validators', () =>
         },
     ]);
 });
+
+test('review parser preserves failure status when output contains only warnings', () => {
+    const diagnostics = parseStructuredDiagnostics(
+        {
+            status: 1,
+            stdout: '{"file":".devin/wiki.json","line":1,"message":"Headroom is low.","severity":"warning"}',
+            stderr: '',
+        },
+        'scripts/validate-deepwiki.ts'
+    );
+
+    assert.deepEqual(diagnostics, [
+        {
+            file: '.devin/wiki.json',
+            line: 1,
+            message: 'Headroom is low.',
+            severity: 'warning',
+        },
+        {
+            file: 'scripts/validate-deepwiki.ts',
+            line: 1,
+            message:
+                'Structured validation failed without a parseable error diagnostic.',
+            severity: 'error',
+        },
+    ]);
+});

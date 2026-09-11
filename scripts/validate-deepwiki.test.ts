@@ -171,6 +171,44 @@ test('rejects path aliases that reference the same entrypoint', () => {
     );
 });
 
+test('rejects an entrypoint symlink that resolves outside the repository', (t) => {
+    const repoRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'deepwiki-repo-'));
+    const outsideRoot = fs.mkdtempSync(
+        path.join(os.tmpdir(), 'deepwiki-outside-')
+    );
+    const linkPath = path.join(repoRoot, 'linked-entrypoint');
+
+    try {
+        fs.writeFileSync(path.join(outsideRoot, 'README.md'), '# outside');
+        try {
+            fs.symlinkSync(outsideRoot, linkPath, 'junction');
+        } catch (error) {
+            if (
+                error instanceof Error &&
+                'code' in error &&
+                (error.code === 'EPERM' || error.code === 'EACCES')
+            ) {
+                t.skip('symlink creation is not available in this environment');
+                return;
+            }
+            throw error;
+        }
+
+        const document = createDocument();
+        document.pages[0].entrypoints = ['linked-entrypoint'];
+        const result = validateDeepWikiDocument(document, repoRoot);
+
+        assert.ok(
+            result.diagnostics.some((diagnostic) =>
+                diagnostic.message.includes('outside the repository')
+            )
+        );
+    } finally {
+        fs.rmSync(repoRoot, { force: true, recursive: true });
+        fs.rmSync(outsideRoot, { force: true, recursive: true });
+    }
+});
+
 test('reads the checked-in configuration through the CLI-facing validator', () => {
     const result = withTempRepo(
         {

@@ -170,8 +170,13 @@ const isInsideRepository = (repoRoot: string, entrypoint: string): boolean => {
         return false;
     }
 
-    const resolvedPath = path.resolve(repoRoot, entrypoint);
-    const relativePath = path.relative(repoRoot, resolvedPath);
+    const resolvedRoot = path.resolve(repoRoot);
+    const resolvedPath = path.resolve(resolvedRoot, entrypoint);
+    const canonicalRoot = fs.realpathSync.native(resolvedRoot);
+    const canonicalPath = fs.existsSync(resolvedPath)
+        ? fs.realpathSync.native(resolvedPath)
+        : resolvedPath;
+    const relativePath = path.relative(canonicalRoot, canonicalPath);
     return (
         relativePath === '' ||
         (!relativePath.startsWith('..') && !path.isAbsolute(relativePath))

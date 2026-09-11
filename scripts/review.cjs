@@ -348,14 +348,15 @@ function parseStructuredDiagnostics(result, fallbackFile) {
         }
     }
 
-    if (diagnostics.length === 0 && result.status !== 0) {
+    if (
+        result.status !== 0 &&
+        !diagnostics.some((diagnostic) => diagnostic.severity === 'error')
+    ) {
         diagnostics.push({
             file: fallbackFile,
             line: 1,
             message:
-                result.stderr.trim() ||
-                result.stdout.trim() ||
-                'Structured validation failed without a parseable diagnostic.',
+                'Structured validation failed without a parseable error diagnostic.',
             severity: 'error',
         });
     }
