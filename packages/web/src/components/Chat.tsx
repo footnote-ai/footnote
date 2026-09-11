@@ -227,7 +227,6 @@ const Chat = (): JSX.Element => {
                 showStatus(EMPTY_RESPONSE_MESSAGE);
                 setAnswer('');
                 setMetadata(null);
-                captcha.resetAfterSubmission();
                 return;
             }
 
