@@ -103,6 +103,8 @@ export type ResponseMetadataRuntimeContext = {
             status: ExecutionStatus;
             reasonCode?: ExecutionReasonCode;
             outcome?: EvaluatorOutcome;
+            startedAtMs?: number;
+            finishedAtMs?: number;
             durationMs?: number;
         };
         generation?: {

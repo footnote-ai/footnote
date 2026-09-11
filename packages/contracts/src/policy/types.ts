@@ -11,6 +11,7 @@ import type {
 } from './contextIntegrations.js';
 import type { ProjectContextMetadata } from './projectContext.js';
 import type { PresentationGenerationSettings } from '../model-profiles.js';
+import type { ModelCapabilitySupport } from '../model-capabilities.js';
 
 // This file is the single source of truth for cross-package metadata shapes.
 // It primarily defines types and narrow pure helpers for contract-safe checks.
@@ -664,6 +665,7 @@ export const WORKFLOW_STEP_KINDS = [
     'tool',
     'generate',
     'assess',
+    'evaluator',
     'revise',
     'presentation',
     'finalize',
@@ -948,6 +950,76 @@ export type StepOutcome = {
     recommendations?: string[];
 };
 
+export type WorkflowResultReference = {
+    resultId?: string;
+    name: string;
+    optional?: boolean;
+};
+
+export type WorkflowResultRecord = {
+    resultId: string;
+    name: string;
+    status: 'produced' | 'unavailable';
+    producedByStepId: string;
+    producedByAttempt: number;
+};
+
+export type WorkflowAttemptRoutingRecord = {
+    index: number;
+    profileId: string;
+    provider?: string;
+    model?: string;
+    status: string;
+    reasonCode?: string;
+    finishReason?: string;
+    completion?: GenerationCompletion;
+    usage?: GenerationExecutionUsage;
+    chooseOneUsed: boolean;
+    chooseOneSelectedIndex?: number;
+    temporaryUnavailableReason?: string;
+};
+
+export type WorkflowAttemptSettings = {
+    requested?: Record<string, string | number>;
+    applied?: Record<string, string | number>;
+    ignored?: Array<{ setting: string; reasonCode: string }>;
+    observed?: Record<string, string | number>;
+};
+
+export type WorkflowAttemptCapabilities = {
+    reasoningEfforts: Record<string, ModelCapabilitySupport>;
+    verbosity: Record<string, ModelCapabilitySupport>;
+    temperature: ModelCapabilitySupport;
+    topP: ModelCapabilitySupport;
+    outputLimit: ModelCapabilitySupport;
+    structuredOutput: ModelCapabilitySupport;
+    jsonMode: ModelCapabilitySupport;
+    nativeSearch: ModelCapabilitySupport;
+};
+
+export type WorkflowAttemptRecord = {
+    attempt: number;
+    status: 'succeeded' | 'failed' | 'rejected';
+    startedAt: string;
+    finishedAt: string;
+    durationMs: number;
+    profileId?: string;
+    provider?: string;
+    model?: string;
+    settings?: WorkflowAttemptSettings;
+    capabilities?: WorkflowAttemptCapabilities;
+    completion?: GenerationCompletion;
+    usage?: GenerationExecutionUsage;
+    cost?: {
+        inputCostUsd: number;
+        outputCostUsd: number;
+        totalCostUsd: number;
+    };
+    reasonCode?: string;
+    terminationReason?: string;
+    routingAttempts?: WorkflowAttemptRoutingRecord[];
+};
+
 export type StepRecord = {
     stepId: string;
     parentStepId?: string;
@@ -971,10 +1043,15 @@ export type StepRecord = {
         outputCostUsd: number;
         totalCostUsd: number;
     };
+    inputRefs?: WorkflowResultReference[];
+    resultRefs?: WorkflowResultReference[];
+    attempts?: WorkflowAttemptRecord[];
     outcome: StepOutcome;
 };
 
 export type WorkflowRecord = {
+    runId?: string;
+    runStatus?: 'completed' | 'degraded' | 'limited' | 'failed' | 'rejected';
     workflowId: string;
     workflowName: string;
     status: 'completed' | 'degraded';
@@ -984,6 +1061,7 @@ export type WorkflowRecord = {
     maxDurationMs: number;
     effectiveLimits?: WorkflowEffectiveLimit[];
     limitStop?: WorkflowLimitStop;
+    results?: WorkflowResultRecord[];
     steps: StepRecord[];
 };
 

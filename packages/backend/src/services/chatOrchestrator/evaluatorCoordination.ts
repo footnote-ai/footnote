@@ -27,6 +27,8 @@ export type EvaluatorExecutionContext = {
     status: ExecutionStatus;
     reasonCode?: ExecutionReasonCode;
     outcome?: EvaluatorOutcome;
+    startedAtMs: number;
+    finishedAtMs: number;
     durationMs: number;
 };
 
@@ -95,11 +97,14 @@ export const runDeterministicEvaluator = (
             );
         }
 
+        const finishedAtMs = Date.now();
         return {
             evaluatorExecutionContext: {
                 status: 'executed',
                 outcome: evaluatorOutcome,
-                durationMs: Math.max(0, Date.now() - input.startedAtMs),
+                startedAtMs: input.startedAtMs,
+                finishedAtMs,
+                durationMs: Math.max(0, finishedAtMs - input.startedAtMs),
             },
             evaluatorSafetyTierHint: evaluatorOutcome.safetyDecision.safetyTier,
         };
@@ -110,11 +115,14 @@ export const runDeterministicEvaluator = (
                 error: error instanceof Error ? error.message : String(error),
             }
         );
+        const finishedAtMs = Date.now();
         return {
             evaluatorExecutionContext: {
                 status: 'failed',
                 reasonCode: 'evaluator_runtime_error',
-                durationMs: Math.max(0, Date.now() - input.startedAtMs),
+                startedAtMs: input.startedAtMs,
+                finishedAtMs,
+                durationMs: Math.max(0, finishedAtMs - input.startedAtMs),
             },
             evaluatorSafetyTierHint: undefined,
         };

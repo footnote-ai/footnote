@@ -223,6 +223,38 @@ test('gives a large-prompt generation useful output room and advances after inco
         visibleTextLength: 0,
     });
     assert.equal(attempts[0]?.usage?.totalTokens, 14_000);
+
+    assert.deepEqual(
+        generateStep.attempts?.[0]?.routingAttempts?.map((attempt) => [
+            attempt.profileId,
+            attempt.status,
+        ]),
+        [
+            ['first-profile', 'failed_transient_advanced'],
+            ['second-profile', 'executed'],
+        ]
+    );
+    assert.equal(
+        generateStep.attempts?.[0]?.routingAttempts?.[0]?.usage?.totalTokens,
+        14_000
+    );
+    assert.equal(generateStep.attempts?.[0]?.provider, 'openai');
+    assert.equal(generateStep.attempts?.[0]?.profileId, 'second-profile');
+    assert.equal(
+        generateStep.attempts?.[0]?.capabilities?.nativeSearch,
+        'unsupported'
+    );
+    assert.ok(generateStep.attempts?.[0]?.settings?.applied);
+    assert.equal(generateStep.resultRefs?.[0]?.name, 'draft');
+    assert.equal(result.workflowLineage.results?.length, 1);
+    assert.equal(result.workflowLineage.results?.[0]?.status, 'produced');
+    assert.equal(
+        result.workflowLineage.results?.[0]?.producedByStepId,
+        generateStep.stepId
+    );
+    const canonicalJson = JSON.stringify(result.workflowLineage);
+    assert.equal(canonicalJson.includes('A complete answer.'), false);
+    assert.equal(canonicalJson.includes('Explain this context.'), false);
 });
 
 test('does not treat context search as a provider-native search requirement', async () => {
@@ -736,6 +768,10 @@ test('keeps an all-incomplete routed generation rejected and retains its usage',
         'generation_incomplete_before_output'
     );
     assert.equal(generateStep.usage?.totalTokens, 360);
+    assert.equal(generateStep.resultRefs?.[0]?.name, 'draft');
+    assert.equal(generateStep.attempts?.[0]?.status, 'failed');
+    assert.equal(generateStep.attempts?.[0]?.completion?.status, 'incomplete');
+    assert.equal(result.workflowLineage.results?.[0]?.status, 'unavailable');
 });
 
 test('preserves temporary-unavailable and fallback provenance across later automatic requests', async () => {

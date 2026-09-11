@@ -23,9 +23,18 @@ import type {
     ContextStepRequest as ContractContextStepRequest,
     ContextStepResult as ContractContextStepResult,
     ExecutionReasonCode,
+    EvaluatorOutcome,
+    GenerationCompletion,
+    GenerationExecutionUsage,
     PresentationMetadata,
     StepSignals,
     StepRecord,
+    WorkflowAttemptRecord,
+    WorkflowAttemptRoutingRecord,
+    WorkflowAttemptCapabilities,
+    WorkflowAttemptSettings,
+    WorkflowResultRecord,
+    WorkflowResultReference,
     WorkflowRecord,
     WorkflowStepKind,
     WorkflowTerminationReason,
@@ -323,6 +332,11 @@ type ChatStepMetadata = {
     summary: string;
     reasonCode?: ExecutionReasonCode;
     model?: string;
+    provider?: string;
+    profileId?: string;
+    completion?: GenerationCompletion;
+    settings?: WorkflowAttemptSettings;
+    capabilities?: WorkflowAttemptCapabilities;
     usage?: GenerationResult['usage'];
     estimatedCost?: ReviewWorkflowUsageSummary['estimatedCost'];
     signals?: StepSignals;
@@ -332,6 +346,33 @@ type ChatStepMetadata = {
     presentation?: PresentationMetadata;
     candidateId?: string;
 };
+
+const toWorkflowSettingRecord = (
+    value: object
+): Record<string, string | number> => {
+    const result: Record<string, string | number> = {};
+    for (const [key, setting] of Object.entries(value)) {
+        if (typeof setting === 'string' || typeof setting === 'number') {
+            result[key] = setting;
+        }
+    }
+    return result;
+};
+
+const toWorkflowAttemptSettings = (
+    resolution: ReturnType<typeof resolveModelSettings>
+): WorkflowAttemptSettings => ({
+    requested: toWorkflowSettingRecord(resolution.requested),
+    applied: toWorkflowSettingRecord(resolution.applied),
+    ...(resolution.ignored.length === 0
+        ? {}
+        : {
+              ignored: resolution.ignored.map(({ setting, reasonCode }) => ({
+                  setting,
+                  reasonCode,
+              })),
+          }),
+});
 
 const encodeMetadata = (metadata: ChatStepMetadata): Result | undefined =>
     toSerializable(metadata);
@@ -411,6 +452,130 @@ const metadataFromAttempt = (
     return fallback;
 };
 
+const readCanonicalRoutingAttempts = (
+    signals: StepSignals | undefined
+): WorkflowAttemptRoutingRecord[] | undefined => {
+    const readUsage = (
+        value: unknown
+    ): GenerationExecutionUsage | undefined => {
+        if (
+            typeof value !== 'object' ||
+            value === null ||
+            Array.isArray(value)
+        ) {
+            return undefined;
+        }
+        const candidate = value as Record<string, unknown>;
+        const usage: GenerationExecutionUsage = {};
+        for (const field of [
+            'promptTokens',
+            'cachedInputTokens',
+            'cacheWriteTokens',
+            'completionTokens',
+            'totalTokens',
+            'reasoningTokens',
+        ] as const) {
+            if (
+                Number.isSafeInteger(candidate[field]) &&
+                (candidate[field] as number) >= 0
+            ) {
+                usage[field] = candidate[field] as number;
+            }
+        }
+        return Object.keys(usage).length > 0 ? usage : undefined;
+    };
+    const readCompletion = (
+        value: unknown
+    ): GenerationCompletion | undefined => {
+        if (
+            typeof value !== 'object' ||
+            value === null ||
+            Array.isArray(value)
+        ) {
+            return undefined;
+        }
+        const candidate = value as Record<string, unknown>;
+        if (
+            (candidate.status !== 'completed' &&
+                candidate.status !== 'incomplete' &&
+                candidate.status !== 'failed' &&
+                candidate.status !== 'unknown') ||
+            !Number.isSafeInteger(candidate.visibleTextLength) ||
+            (candidate.visibleTextLength as number) < 0
+        ) {
+            return undefined;
+        }
+        return {
+            status: candidate.status,
+            visibleTextLength: candidate.visibleTextLength as number,
+            ...(typeof candidate.reason === 'string' && {
+                reason: candidate.reason.slice(0, 100),
+            }),
+        };
+    };
+    const encoded = signals?.routingChainAttemptsJson;
+    if (typeof encoded !== 'string') return undefined;
+    try {
+        const parsed: unknown = JSON.parse(encoded);
+        if (!Array.isArray(parsed)) return undefined;
+        const attempts: WorkflowAttemptRoutingRecord[] = [];
+        for (const value of parsed) {
+            if (typeof value !== 'object' || value === null) continue;
+            const candidate = value as Record<string, unknown>;
+            if (
+                !Number.isSafeInteger(candidate.index) ||
+                (candidate.index as number) < 0 ||
+                typeof candidate.profileId !== 'string' ||
+                candidate.profileId.length === 0 ||
+                typeof candidate.status !== 'string' ||
+                typeof candidate.chooseOneUsed !== 'boolean'
+            ) {
+                continue;
+            }
+            const attempt: WorkflowAttemptRoutingRecord = {
+                index: candidate.index as number,
+                profileId: candidate.profileId,
+                status: candidate.status,
+                chooseOneUsed: candidate.chooseOneUsed,
+                ...(typeof candidate.provider === 'string' && {
+                    provider: candidate.provider,
+                }),
+                ...(typeof candidate.model === 'string' && {
+                    model: candidate.model,
+                }),
+                ...(typeof candidate.reasonCode === 'string' && {
+                    reasonCode: candidate.reasonCode,
+                }),
+                ...(typeof candidate.finishReason === 'string' && {
+                    finishReason: candidate.finishReason,
+                }),
+                ...(readCompletion(candidate.completion) === undefined
+                    ? {}
+                    : { completion: readCompletion(candidate.completion) }),
+                ...(readUsage(candidate.usage) === undefined
+                    ? {}
+                    : { usage: readUsage(candidate.usage) }),
+                ...(Number.isSafeInteger(candidate.chooseOneSelectedIndex) &&
+                (candidate.chooseOneSelectedIndex as number) >= 0
+                    ? {
+                          chooseOneSelectedIndex:
+                              candidate.chooseOneSelectedIndex as number,
+                      }
+                    : {}),
+                ...(typeof candidate.temporaryUnavailableReason ===
+                    'string' && {
+                    temporaryUnavailableReason:
+                        candidate.temporaryUnavailableReason,
+                }),
+            };
+            attempts.push(attempt);
+        }
+        return attempts.length > 0 ? attempts : undefined;
+    } catch {
+        return undefined;
+    }
+};
+
 const toWorkflowCost = (
     estimatedCost: ReviewWorkflowUsageSummary['estimatedCost']
 ): ReviewWorkflowUsageSummary['estimatedCost'] => ({
@@ -421,6 +586,7 @@ const toWorkflowCost = (
 
 const buildWorkflowLineage = (input: {
     execution: Awaited<ReturnType<typeof executeWorkflow>>;
+    workflow: Workflow;
     workflowName: string;
     maxDurationMs: number;
     executionLimits: ExecutionLimits;
@@ -432,6 +598,8 @@ const buildWorkflowLineage = (input: {
     preExistingPlannerStep?: StepRecord;
 }): WorkflowRecord => {
     const records: StepRecord[] = [];
+    const results: WorkflowResultRecord[] = [];
+    const latestResultByName = new Map<string, WorkflowResultRecord>();
     const semanticSteps = input.execution.run.steps.filter(
         (step) =>
             step.stepId !== 'finish' &&
@@ -475,8 +643,110 @@ const buildWorkflowLineage = (input: {
         if (exhaustedLimit === 'maxToolCalls') {
             fallback.reasonCode = 'max_tool_calls_reached';
         }
+        const stepId = `step_${index + 1}`;
+        const declaredStep = input.workflow.steps[step.stepId];
+        const inputRefs: WorkflowResultReference[] | undefined =
+            declaredStep?.input?.map((reference) => ({
+                name: reference.name,
+                ...(latestResultByName.get(reference.name) === undefined
+                    ? {}
+                    : {
+                          resultId: latestResultByName.get(reference.name)
+                              ?.resultId,
+                      }),
+                ...(reference.optional === true ? { optional: true } : {}),
+            }));
+        const attemptRecords: WorkflowAttemptRecord[] = step.attempts.map(
+            (attempt) => {
+                const attemptMetadata = readAs<ChatStepMetadata>(
+                    attempt.metadata
+                );
+                const routingAttempts =
+                    attemptMetadata?.signals === undefined
+                        ? undefined
+                        : readCanonicalRoutingAttempts(attemptMetadata.signals);
+                return {
+                    attempt: attempt.attempt,
+                    status: attempt.status,
+                    startedAt: new Date(attempt.startedAtMs).toISOString(),
+                    finishedAt: new Date(attempt.finishedAtMs).toISOString(),
+                    durationMs: Math.max(
+                        0,
+                        attempt.finishedAtMs - attempt.startedAtMs
+                    ),
+                    ...(attemptMetadata?.model === undefined
+                        ? {}
+                        : { model: attemptMetadata.model }),
+                    ...(attemptMetadata?.provider === undefined
+                        ? {}
+                        : { provider: attemptMetadata.provider }),
+                    ...(attemptMetadata?.profileId === undefined
+                        ? {}
+                        : { profileId: attemptMetadata.profileId }),
+                    ...(attemptMetadata?.completion === undefined
+                        ? {}
+                        : { completion: attemptMetadata.completion }),
+                    ...(attemptMetadata?.settings === undefined
+                        ? {}
+                        : { settings: attemptMetadata.settings }),
+                    ...(attemptMetadata?.capabilities === undefined
+                        ? {}
+                        : { capabilities: attemptMetadata.capabilities }),
+                    ...(attemptMetadata?.usage === undefined
+                        ? {}
+                        : { usage: attemptMetadata.usage }),
+                    ...(attemptMetadata?.estimatedCost === undefined
+                        ? {}
+                        : {
+                              cost: toWorkflowCost(
+                                  attemptMetadata.estimatedCost
+                              ),
+                          }),
+                    ...(attemptMetadata?.reasonCode === undefined
+                        ? attempt.errorCode === undefined
+                            ? {}
+                            : { reasonCode: attempt.errorCode }
+                        : { reasonCode: attemptMetadata.reasonCode }),
+                    ...(attemptMetadata?.terminationReason === undefined
+                        ? {}
+                        : {
+                              terminationReason:
+                                  attemptMetadata.terminationReason,
+                          }),
+                    ...(routingAttempts === undefined
+                        ? {}
+                        : { routingAttempts }),
+                };
+            }
+        );
+        const outputName = declaredStep?.output?.name;
+        const resultId =
+            outputName === undefined
+                ? undefined
+                : `${input.execution.run.runId}:${stepId}:${outputName}`;
+        const resultRecord: WorkflowResultRecord | undefined =
+            resultId === undefined || outputName === undefined
+                ? undefined
+                : {
+                      resultId,
+                      name: outputName,
+                      status:
+                          successfulAttempt !== undefined &&
+                          step.result !== undefined
+                              ? 'produced'
+                              : 'unavailable',
+                      producedByStepId: stepId,
+                      producedByAttempt:
+                          executionAttempt?.attempt ?? step.attempts.length,
+                  };
+        if (resultRecord !== undefined) {
+            results.push(resultRecord);
+            if (resultRecord.status === 'produced') {
+                latestResultByName.set(resultRecord.name, resultRecord);
+            }
+        }
         records.push({
-            stepId: `step_${index + 1}`,
+            stepId,
             ...(parent === undefined ? {} : { parentStepId: parent.stepId }),
             attempt:
                 kind === 'generate'
@@ -505,6 +775,18 @@ const buildWorkflowLineage = (input: {
             ...(metadata.estimatedCost === undefined
                 ? {}
                 : { cost: toWorkflowCost(metadata.estimatedCost) }),
+            ...(inputRefs === undefined ? {} : { inputRefs }),
+            ...(resultRecord === undefined
+                ? {}
+                : {
+                      resultRefs: [
+                          {
+                              resultId: resultRecord.resultId,
+                              name: resultRecord.name,
+                          },
+                      ],
+                  }),
+            attempts: attemptRecords,
             outcome: {
                 status: metadata.status,
                 summary: metadata.summary,
@@ -549,6 +831,8 @@ const buildWorkflowLineage = (input: {
     }
     return {
         workflowId: input.execution.run.workflowId,
+        runId: input.execution.run.runId,
+        runStatus: input.execution.status,
         workflowName: input.workflowName,
         status:
             input.terminationReason === 'goal_satisfied' &&
@@ -570,7 +854,110 @@ const buildWorkflowLineage = (input: {
             exhaustedLimitKey: input.exhaustedLimitKey,
             stoppedBeforeStepKind: input.stoppedBeforeStepKind,
         }),
+        results,
         steps: records,
+    };
+};
+
+/** Projects the deterministic evaluator into the same bounded Run record.
+ * The finding is evidence only; workflow topology and breaker authority stay
+ * with their existing backend owners, and evaluator failure remains fail-open.
+ */
+export const addEvaluatorStepToWorkflowLineage = (input: {
+    workflow: WorkflowRecord;
+    evaluator?: {
+        status: 'executed' | 'failed' | 'skipped';
+        reasonCode?: string;
+        outcome?: EvaluatorOutcome;
+        startedAtMs?: number;
+        finishedAtMs?: number;
+        durationMs?: number;
+    };
+}): WorkflowRecord => {
+    if (input.evaluator === undefined || input.workflow.runId === undefined) {
+        return input.workflow;
+    }
+    const finishedAtMs = input.evaluator.finishedAtMs ?? Date.now();
+    const startedAtMs =
+        input.evaluator.startedAtMs ??
+        Math.max(0, finishedAtMs - (input.evaluator.durationMs ?? 0));
+    const durationMs =
+        input.evaluator.durationMs ?? Math.max(0, finishedAtMs - startedAtMs);
+    const resultId = `${input.workflow.runId}:evaluator_finding`;
+    const result: WorkflowResultRecord = {
+        resultId,
+        name: 'evaluator_finding',
+        status:
+            input.evaluator.outcome === undefined ? 'unavailable' : 'produced',
+        producedByStepId: 'step_evaluator',
+        producedByAttempt: 1,
+    };
+    const safetyDecision = input.evaluator.outcome?.safetyDecision;
+    const signals: StepSignals = {
+        ...(input.evaluator.outcome?.mode === undefined
+            ? {}
+            : { evaluatorMode: input.evaluator.outcome.mode }),
+        ...(input.evaluator.outcome?.authorityLevel === undefined
+            ? {}
+            : {
+                  evaluatorAuthorityLevel:
+                      input.evaluator.outcome.authorityLevel,
+              }),
+        ...(safetyDecision?.action === undefined
+            ? {}
+            : { evaluatorAction: safetyDecision.action }),
+        ...(safetyDecision?.ruleId === undefined
+            ? {}
+            : { evaluatorRuleId: safetyDecision.ruleId }),
+        ...(safetyDecision?.safetyTier === undefined
+            ? {}
+            : { evaluatorSafetyTier: safetyDecision.safetyTier }),
+    };
+    const attempt: WorkflowAttemptRecord = {
+        attempt: 1,
+        status: input.evaluator.status === 'executed' ? 'succeeded' : 'failed',
+        startedAt: new Date(startedAtMs).toISOString(),
+        finishedAt: new Date(finishedAtMs).toISOString(),
+        durationMs: Math.max(0, durationMs),
+        ...(input.evaluator.reasonCode === undefined
+            ? {}
+            : { reasonCode: input.evaluator.reasonCode }),
+    };
+    const step: StepRecord = {
+        stepId: 'step_evaluator',
+        attempt: 1,
+        stepKind: 'evaluator',
+        startedAt: attempt.startedAt,
+        finishedAt: attempt.finishedAt,
+        durationMs: attempt.durationMs,
+        resultRefs: [{ resultId, name: result.name }],
+        attempts: [attempt],
+        outcome: {
+            status:
+                input.evaluator.status === 'executed' ? 'executed' : 'failed',
+            summary:
+                input.evaluator.status === 'executed'
+                    ? 'Deterministic evaluator produced a bounded finding.'
+                    : 'Deterministic evaluator failed open without a finding.',
+            ...(input.evaluator.reasonCode === undefined
+                ? {}
+                : {
+                      signals: {
+                          ...signals,
+                          evaluatorReasonCode: input.evaluator.reasonCode,
+                      },
+                  }),
+            ...(input.evaluator.reasonCode === undefined &&
+            Object.keys(signals).length > 0
+                ? { signals }
+                : {}),
+        },
+    };
+    return {
+        ...input.workflow,
+        stepCount: input.workflow.stepCount + 1,
+        results: [...(input.workflow.results ?? []), result],
+        steps: [step, ...input.workflow.steps],
     };
 };
 
@@ -1774,6 +2161,10 @@ export const runBoundedReviewWorkflow = async (
         const generationAttemptsByIndex = new Map<number, GenerationResult>();
         let routingAttempts: RoutingChainAttemptLog[] | undefined;
         let selectedProfile: ModelProfile | undefined;
+        let selectedSettings:
+            ReturnType<typeof resolveModelSettings> | undefined;
+        let selectedCapabilityFacts:
+            ReturnType<typeof resolveAttemptCapabilityFacts> | undefined;
         try {
             const chainResult = stepRoutingChainSet?.generateCandidates.length
                 ? await executeStepRoutingChain({
@@ -1800,6 +2191,12 @@ export const runBoundedReviewWorkflow = async (
                               profile,
                               request: boundedRequest,
                           });
+                          selectedSettings = settingsResolution;
+                          selectedCapabilityFacts =
+                              resolveAttemptCapabilityFacts(
+                                  profile.provider,
+                                  profile.capabilities
+                              );
                           const result = normalizeGenerationResultEvidence(
                               await generationRuntime.generate({
                                   ...applyModelSettings(
@@ -1873,6 +2270,10 @@ export const runBoundedReviewWorkflow = async (
                     await generationRuntime.generate(boundedRequest)
                 );
                 generationAttempts.push(generationResult);
+                selectedCapabilityFacts = resolveAttemptCapabilityFacts(
+                    boundedRequest.provider,
+                    boundedRequest.capabilities
+                );
             }
         } catch (error) {
             return {
@@ -1931,6 +2332,25 @@ export const runBoundedReviewWorkflow = async (
                   : 'Generated refinement draft from assessment guidance.',
             reasonCode: admitted ? undefined : generationAdmission.reasonCode,
             model: usage.model,
+            ...(selectedProfile?.provider === undefined &&
+            boundedRequest.provider === undefined
+                ? {}
+                : {
+                      provider:
+                          selectedProfile?.provider ?? boundedRequest.provider,
+                  }),
+            ...(selectedProfile?.id === undefined
+                ? {}
+                : { profileId: selectedProfile.id }),
+            ...(generationResult.completion === undefined
+                ? {}
+                : { completion: generationResult.completion }),
+            ...(selectedSettings === undefined
+                ? {}
+                : { settings: toWorkflowAttemptSettings(selectedSettings) }),
+            ...(selectedCapabilityFacts === undefined
+                ? {}
+                : { capabilities: selectedCapabilityFacts }),
             usage: combineGenerationResultUsage(generationAttempts),
             estimatedCost: usage.estimatedCost,
             candidateId,
@@ -2143,6 +2563,10 @@ export const runBoundedReviewWorkflow = async (
             );
         let routingAttempts: RoutingChainAttemptLog[] | undefined;
         let selectedProfile: ModelProfile | undefined;
+        let selectedSettings:
+            ReturnType<typeof resolveModelSettings> | undefined;
+        let selectedCapabilityFacts:
+            ReturnType<typeof resolveAttemptCapabilityFacts> | undefined;
         try {
             const chain = stepRoutingChainSet?.assessCandidates.length
                 ? await executeStepRoutingChain({
@@ -2162,10 +2586,12 @@ export const runBoundedReviewWorkflow = async (
                               profile,
                               request: bounded,
                           });
+                          selectedSettings = settingsResolution;
                           const capabilityFacts = resolveAttemptCapabilityFacts(
                               profile.provider,
                               profile.capabilities
                           );
+                          selectedCapabilityFacts = capabilityFacts;
                           const outputPath = resolveTypedModelOutputPath({
                               provider: profile.provider,
                               capabilities: profile.capabilities,
@@ -2258,6 +2684,10 @@ export const runBoundedReviewWorkflow = async (
                     providerModel: bounded.model ?? 'unknown',
                 });
                 reviewAttempts.push(reviewResult);
+                selectedCapabilityFacts = resolveAttemptCapabilityFacts(
+                    bounded.provider,
+                    bounded.capabilities
+                );
             }
         } catch (error) {
             const usage = reviewUsage();
@@ -2315,6 +2745,24 @@ export const runBoundedReviewWorkflow = async (
                         typedValidation.failure
                     ),
                     model: usage.model,
+                    ...(selectedProfile?.provider === undefined
+                        ? {}
+                        : { provider: selectedProfile.provider }),
+                    ...(selectedProfile?.id === undefined
+                        ? {}
+                        : { profileId: selectedProfile.id }),
+                    ...(reviewResult.completion === undefined
+                        ? {}
+                        : { completion: reviewResult.completion }),
+                    ...(selectedSettings === undefined
+                        ? {}
+                        : {
+                              settings:
+                                  toWorkflowAttemptSettings(selectedSettings),
+                          }),
+                    ...(selectedCapabilityFacts === undefined
+                        ? {}
+                        : { capabilities: selectedCapabilityFacts }),
                     usage: combinedResultUsage,
                     estimatedCost: usage.estimatedCost,
                     terminationReason: 'executor_error_fail_open',
@@ -2391,6 +2839,23 @@ export const runBoundedReviewWorkflow = async (
                 summary:
                     'Assessment evaluated draft quality and emitted a declared workflow outcome.',
                 model: usage.model,
+                ...(selectedProfile?.provider === undefined
+                    ? {}
+                    : { provider: selectedProfile.provider }),
+                ...(selectedProfile?.id === undefined
+                    ? {}
+                    : { profileId: selectedProfile.id }),
+                ...(reviewResult.completion === undefined
+                    ? {}
+                    : { completion: reviewResult.completion }),
+                ...(selectedSettings === undefined
+                    ? {}
+                    : {
+                          settings: toWorkflowAttemptSettings(selectedSettings),
+                      }),
+                ...(selectedCapabilityFacts === undefined
+                    ? {}
+                    : { capabilities: selectedCapabilityFacts }),
                 usage: combinedResultUsage,
                 estimatedCost: usage.estimatedCost,
                 signals,
@@ -2829,6 +3294,7 @@ export const runBoundedReviewWorkflow = async (
                   : workflowStepKind(lastExecutedStepId);
     const workflowLineage = buildWorkflowLineage({
         execution,
+        workflow,
         workflowName: workflowConfig.workflowName,
         maxDurationMs: executionLimits.maxDurationMs,
         executionLimits,

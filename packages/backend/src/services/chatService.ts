@@ -67,6 +67,7 @@ import {
 } from './workflowProfileRegistry.js';
 import {
     runBoundedReviewWorkflow,
+    addEvaluatorStepToWorkflowLineage,
     type ContextStepExecutor,
     type RunBoundedReviewWorkflowResult,
     type WorkflowRunPolicy,
@@ -1627,10 +1628,15 @@ export const createChatService = ({
                 }
                 workflowContextStepResult = workflowResult.contextStepResult;
                 workflowContextStepResults = workflowResult.contextStepResults;
+                const canonicalWorkflowLineage =
+                    addEvaluatorStepToWorkflowLineage({
+                        workflow: workflowResult.workflowLineage,
+                        evaluator: executionContext?.evaluator,
+                    });
                 switch (workflowResult.outcome) {
                     case 'generated': {
                         generationResult = workflowResult.generationResult;
-                        workflowLineage = workflowResult.workflowLineage;
+                        workflowLineage = canonicalWorkflowLineage;
                         presentationMetadata = workflowResult.presentation;
                         responseCandidates = workflowResult.responseCandidates;
                         const generatedShortCircuit =
@@ -1678,7 +1684,7 @@ export const createChatService = ({
                         };
                     }
                     case 'no_generation': {
-                        workflowLineage = workflowResult.workflowLineage;
+                        workflowLineage = canonicalWorkflowLineage;
                         presentationMetadata = workflowResult.presentation;
                         const noGenShortCircuit = buildContextStepShortCircuit({
                             workflowContextStepResult,
