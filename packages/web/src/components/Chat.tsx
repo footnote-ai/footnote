@@ -7,7 +7,7 @@
  */
 
 import { FormEvent, useCallback, useEffect, useRef, useState } from 'react';
-import { Turnstile, type TurnstileInstance } from '@marsidev/react-turnstile';
+import { Turnstile } from '@marsidev/react-turnstile';
 import MarkdownResponse from './MarkdownResponse';
 import ProvenanceFooter from './ProvenanceFooter';
 import type { ResponseMetadata } from '@footnote/contracts/policy';
@@ -15,6 +15,7 @@ import { loadRuntimeConfig } from '../config';
 import { api, isApiClientError } from '../utils/api';
 import { notifyEmbedLayoutChanged } from '../utils/embedHeight';
 import { useTheme } from '../theme';
+import { useChatCaptcha } from '../hooks/useChatCaptcha';
 
 // Module augmentation for Vite environment variables
 declare global {
@@ -30,7 +31,6 @@ declare global {
 // Provide a stable fallback response in case the backend is unavailable so the space stays welcoming.
 const FALLBACK_REFLECTION =
     'I was unable to generate a response - please try again later.';
-const INVISIBLE_CHALLENGE_TIMEOUT_MS = 8000;
 type ChatStatusKind = 'error' | 'info';
 type ChatStatus = { kind: ChatStatusKind; message: string };
 
@@ -41,18 +41,10 @@ const Chat = (): JSX.Element => {
     const [answer, setAnswer] = useState('');
     const [metadata, setMetadata] = useState<ResponseMetadata | null>(null);
     const [isLoading, setIsLoading] = useState(false);
-    const [turnstileToken, setTurnstileToken] = useState<string | null>(null);
-    const [turnstileError, setTurnstileError] = useState<string | null>(null);
-    const [turnstileKey, setTurnstileKey] = useState(0);
     const [turnstileSiteKey, setTurnstileSiteKey] = useState('');
-    const [isTurnstileMounted, setIsTurnstileMounted] = useState(false);
-    const [isManagedChallengeVisible, setIsManagedChallengeVisible] =
-        useState(false);
     const abortRef = useRef<AbortController | null>(null);
     const inputRef = useRef<HTMLTextAreaElement | null>(null);
     const formRef = useRef<HTMLFormElement | null>(null);
-    const turnstileRef = useRef<TurnstileInstance | null>(null);
-    const isTurnstileExecutingRef = useRef(false);
     const hasInteractedRef = useRef(false); // Track if user has interacted to prevent initial status flash
 
     const ensureRuntimeConfigLoaded = async (): Promise<string> => {
@@ -75,12 +67,6 @@ const Chat = (): JSX.Element => {
         }
     };
 
-    const hasValidSiteKey =
-        turnstileSiteKey && turnstileSiteKey.trim().length > 0;
-
-    // Skip CAPTCHA when the site key is missing or invalid.
-    const isCaptchaDisabled = !hasValidSiteKey;
-
     const showStatus = (
         message: string,
         kind: ChatStatusKind = 'error'
@@ -88,116 +74,13 @@ const Chat = (): JSX.Element => {
         setStatus({ kind, message });
     };
 
-    // Turnstile tokens are short-lived and single-use. Do not log token values or previews.
-    const onTurnstileVerify = (token: string) => {
-        isTurnstileExecutingRef.current = false;
-        // Check if using test keys (test keys generate shorter dummy tokens like "XXXX.DUMMY.TOKEN.XXXX")
-        const isTestKey =
-            turnstileSiteKey.startsWith('1x00000000000000000000') ||
-            turnstileSiteKey.startsWith('2x00000000000000000000') ||
-            turnstileSiteKey.startsWith('3x00000000000000000000');
-
-        // Validate token - test keys generate shorter tokens, production tokens should be ~200+ chars
-        if (!token) {
-            setTurnstileError('CAPTCHA token is invalid. Please try again.');
-            setTurnstileToken(null);
-            return;
-        }
-
-        // Only validate length for production keys (test keys use dummy tokens)
-        if (!isTestKey && token.length < 50) {
-            setTurnstileError('CAPTCHA token is invalid. Please try again.');
-            setTurnstileToken(null);
-            return;
-        }
-
-        setTurnstileToken(token);
-        setTurnstileError(null);
-        setStatus((prev) => {
-            if (prev?.kind === 'error') {
-                return prev;
-            }
-            return null;
-        });
-    };
-
-    /** Falls back from the background check without blocking the chat form indefinitely. */
-    const showManagedChallenge = useCallback((): void => {
-        isTurnstileExecutingRef.current = false;
-        setIsTurnstileMounted(false);
-        setTurnstileToken(null);
-        setIsManagedChallengeVisible(true);
-        setTurnstileKey((prev) => prev + 1);
-        setTurnstileError(
-            'The background check could not finish. Please complete the visible CAPTCHA.'
-        );
+    const clearInformationalStatus = useCallback((): void => {
+        setStatus((previous) => (previous?.kind === 'error' ? previous : null));
     }, []);
-
-    const onManagedTurnstileError = () => {
-        isTurnstileExecutingRef.current = false;
-        setTurnstileError(
-            'CAPTCHA verification failed. Check Brave Shields for this site, then try again.'
-        );
-        setTurnstileToken(null);
-    };
-
-    const onTurnstileExpire = () => {
-        isTurnstileExecutingRef.current = false;
-        setTurnstileToken(null);
-        setTurnstileError('CAPTCHA expired. Please complete it again.');
-    };
-
-    useEffect(() => {
-        if (
-            isCaptchaDisabled ||
-            isManagedChallengeVisible ||
-            !isTurnstileMounted ||
-            !turnstileRef.current ||
-            turnstileToken ||
-            isTurnstileExecutingRef.current
-        ) {
-            return undefined;
-        }
-
-        const challengeTimer = window.setTimeout(() => {
-            if (!turnstileRef.current) {
-                return;
-            }
-
-            isTurnstileExecutingRef.current = true;
-            try {
-                turnstileRef.current.execute();
-                const responsePromise =
-                    turnstileRef.current.getResponsePromise?.();
-                if (responsePromise) {
-                    void responsePromise
-                        .catch(showManagedChallenge)
-                        .finally(() => {
-                            isTurnstileExecutingRef.current = false;
-                        });
-                }
-            } catch {
-                showManagedChallenge();
-            }
-        }, 100);
-
-        const fallbackTimer = window.setTimeout(
-            showManagedChallenge,
-            INVISIBLE_CHALLENGE_TIMEOUT_MS
-        );
-
-        return () => {
-            window.clearTimeout(challengeTimer);
-            window.clearTimeout(fallbackTimer);
-        };
-    }, [
-        isCaptchaDisabled,
-        isManagedChallengeVisible,
-        isTurnstileMounted,
-        showManagedChallenge,
-        turnstileKey,
-        turnstileToken,
-    ]);
+    const captcha = useChatCaptcha({
+        siteKey: turnstileSiteKey,
+        onVerified: clearInformationalStatus,
+    });
 
     // Auto-resize textarea based on content
     useEffect(() => {
@@ -229,10 +112,10 @@ const Chat = (): JSX.Element => {
     }, [
         answer,
         isLoading,
-        isManagedChallengeVisible,
         metadata,
         status,
-        turnstileError,
+        captcha.error,
+        captcha.isManagedChallengeVisible,
     ]);
 
     const onSubmit = async (event: FormEvent<HTMLFormElement>) => {
@@ -260,10 +143,10 @@ const Chat = (): JSX.Element => {
             runtimeSiteKey && runtimeSiteKey.trim().length > 0
         );
 
-        const resolvedToken = turnstileToken;
+        const resolvedToken = captcha.token;
         if (!captchaDisabledForRequest && !resolvedToken) {
-            if (!isManagedChallengeVisible) {
-                showManagedChallenge();
+            if (!captcha.isManagedChallengeVisible) {
+                captcha.showManagedChallenge();
             }
             showStatus(
                 'Please complete the visible CAPTCHA verification.',
@@ -349,12 +232,7 @@ const Chat = (): JSX.Element => {
             setMetadata(backendMetadata ?? null);
 
             // Turnstile tokens are single-use, so mount a fresh invisible challenge.
-            isTurnstileExecutingRef.current = false;
-            setTurnstileToken(null);
-            setTurnstileError(null);
-            setIsTurnstileMounted(false);
-            setIsManagedChallengeVisible(false);
-            setTurnstileKey((prev) => prev + 1);
+            captcha.resetAfterSubmission();
         } catch (error) {
             // A superseded request must not overwrite the newer request's status or answer.
             if (abortRef.current !== controller) {
@@ -389,14 +267,9 @@ const Chat = (): JSX.Element => {
 
                     setIsLoading(false);
                     showStatus(errorMessage);
-                    isTurnstileExecutingRef.current = false;
-                    setTurnstileToken(null);
-                    setIsTurnstileMounted(false);
-                    setIsManagedChallengeVisible(true);
-                    setTurnstileError(
+                    captcha.showManagedChallenge(
                         'Please complete the visible CAPTCHA and try again.'
                     );
-                    setTurnstileKey((prev) => prev + 1);
                     return;
                 }
 
@@ -414,14 +287,9 @@ const Chat = (): JSX.Element => {
                     showStatus(
                         'CAPTCHA service is unavailable. Please try again shortly.'
                     );
-                    isTurnstileExecutingRef.current = false;
-                    setTurnstileToken(null);
-                    setIsTurnstileMounted(false);
-                    setIsManagedChallengeVisible(true);
-                    setTurnstileError(
+                    captcha.showManagedChallenge(
                         'Please complete the visible CAPTCHA and try again.'
                     );
-                    setTurnstileKey((prev) => prev + 1);
                     return;
                 }
 
@@ -442,14 +310,9 @@ const Chat = (): JSX.Element => {
                     showStatus(
                         'CAPTCHA verification failed. Please refresh and try again.'
                     );
-                    isTurnstileExecutingRef.current = false;
-                    setTurnstileToken(null);
-                    setIsTurnstileMounted(false);
-                    setIsManagedChallengeVisible(true);
-                    setTurnstileError(
+                    captcha.showManagedChallenge(
                         'Please complete the visible CAPTCHA and try again.'
                     );
-                    setTurnstileKey((prev) => prev + 1);
                     setIsLoading(false);
                     return;
                 }
@@ -546,12 +409,14 @@ const Chat = (): JSX.Element => {
                         className="interaction-submit"
                         disabled={
                             isLoading ||
-                            (isManagedChallengeVisible && !turnstileToken)
+                            (captcha.isManagedChallengeVisible &&
+                                !captcha.token)
                         }
                         aria-label={
                             isLoading
                                 ? 'Submitting question'
-                                : isManagedChallengeVisible && !turnstileToken
+                                : captcha.isManagedChallengeVisible &&
+                                    !captcha.token
                                   ? 'Complete CAPTCHA to submit'
                                   : 'Submit question'
                         }
@@ -560,7 +425,8 @@ const Chat = (): JSX.Element => {
                             <>
                                 <span className="spinner" aria-hidden="true" />
                             </>
-                        ) : isManagedChallengeVisible && !turnstileToken ? (
+                        ) : captcha.isManagedChallengeVisible &&
+                          !captcha.token ? (
                             <span
                                 className="hourglass"
                                 aria-label="Complete CAPTCHA verification"
@@ -588,21 +454,20 @@ const Chat = (): JSX.Element => {
                 </div>
             )}
             {/* The background widget is absolutely positioned so it never reserves layout space. */}
-            {hasValidSiteKey &&
-                !isCaptchaDisabled &&
-                !isManagedChallengeVisible && (
+            {!captcha.isCaptchaDisabled &&
+                !captcha.isManagedChallengeVisible && (
                     <div
                         className="interaction-captcha interaction-captcha--invisible"
                         aria-hidden="true"
                     >
                         <Turnstile
-                            ref={turnstileRef}
-                            key={turnstileKey}
+                            ref={captcha.invisibleRef}
+                            key={captcha.invisibleKey}
                             siteKey={turnstileSiteKey}
-                            onSuccess={onTurnstileVerify}
-                            onError={showManagedChallenge}
-                            onExpire={onTurnstileExpire}
-                            onLoad={() => setIsTurnstileMounted(true)}
+                            onSuccess={captcha.onVerify}
+                            onError={captcha.onInvisibleError}
+                            onExpire={captcha.onExpire}
+                            onLoad={captcha.onInvisibleLoad}
                             options={{
                                 theme,
                                 size: 'invisible',
@@ -614,19 +479,18 @@ const Chat = (): JSX.Element => {
                     </div>
                 )}
             {/* Do not mount the managed widget until the invisible challenge fails. */}
-            {hasValidSiteKey &&
-                !isCaptchaDisabled &&
-                isManagedChallengeVisible && (
+            {!captcha.isCaptchaDisabled &&
+                captcha.isManagedChallengeVisible && (
                     <div
                         className="interaction-captcha interaction-captcha--managed"
                         aria-label="Complete CAPTCHA verification to submit your question"
                     >
                         <Turnstile
-                            key={turnstileKey}
+                            key={captcha.invisibleKey}
                             siteKey={turnstileSiteKey}
-                            onSuccess={onTurnstileVerify}
-                            onError={onManagedTurnstileError}
-                            onExpire={onTurnstileExpire}
+                            onSuccess={captcha.onVerify}
+                            onError={captcha.onManagedError}
+                            onExpire={captcha.onExpire}
                             options={{
                                 theme,
                                 size: 'normal',
@@ -634,9 +498,9 @@ const Chat = (): JSX.Element => {
                                 refreshExpired: 'auto',
                             }}
                         />
-                        {turnstileError && (
+                        {captcha.error && (
                             <p className="interaction-error" role="alert">
-                                {turnstileError}
+                                {captcha.error}
                             </p>
                         )}
                     </div>

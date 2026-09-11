@@ -53,11 +53,15 @@ const installTurnstileStub = async (page: Page): Promise<void> => {
             contentType: 'application/javascript',
             body: `
                 window.__footnoteTurnstileCallbacks = [];
+                window.__footnoteTurnstileExpireCallbacks = [];
+                window.__footnoteTurnstileErrorCallbacks = [];
                 window.__footnoteTurnstileResponses = new Map();
                 window.turnstile = {
                     render(container, params) {
                         window.__footnoteTurnstileCallbacks.push(params.callback);
-                        window.__footnoteTurnstileResponses.set(container, 'XXXX.DUMMY.TOKEN.XXXX');
+                        window.__footnoteTurnstileExpireCallbacks.push(params['expired-callback']);
+                        window.__footnoteTurnstileErrorCallbacks.push(params['error-callback']);
+                        window.__footnoteTurnstileResponses.set(container, 'XXXX.DUMMY.TOKEN.' + window.__footnoteTurnstileCallbacks.length + '.XXXX');
                         return String(window.__footnoteTurnstileCallbacks.length);
                     },
                     execute(container) {
@@ -177,7 +181,16 @@ test('CAPTCHA verification preserves an existing API error message', async ({
 }) => {
     await installTurnstileStub(page);
     await configureRuntime(page, '1x00000000000000000000AA');
+    let requestCount = 0;
     await page.route('**/api/chat', async (route) => {
+        requestCount += 1;
+        if (requestCount > 1) {
+            await route.fulfill({
+                contentType: 'application/json',
+                body: JSON.stringify(CHAT_RESPONSE),
+            });
+            return;
+        }
         await route.fulfill({
             status: 403,
             contentType: 'application/json',
@@ -227,6 +240,9 @@ test('CAPTCHA verification preserves an existing API error message', async ({
     });
 
     await expect(page.getByRole('status')).toHaveText(expectedError);
+    await submitQuestion(page, 'Please retry this request');
+    await expect(page.getByText(CHAT_RESPONSE.message)).toBeVisible();
+    await expect(page.locator('.interaction-status')).toHaveCount(0);
 });
 
 test('CAPTCHA verification clears an informational status', async ({
@@ -254,6 +270,128 @@ test('CAPTCHA verification clears an informational status', async ({
     });
 
     await expect(page.getByRole('status')).toHaveCount(0);
+});
+
+test('an invisible CAPTCHA failure falls back to the visible challenge', async ({
+    page,
+}) => {
+    await installTurnstileStub(page);
+    await configureRuntime(page, '1x00000000000000000000AA');
+
+    await page.goto('/chat');
+    await page.getByLabel('Ask a question').focus();
+    await expect
+        .poll(() =>
+            page.evaluate(
+                () => window.__footnoteTurnstileCallbacks?.length ?? 0
+            )
+        )
+        .toBeGreaterThan(0);
+
+    await page.evaluate(() => {
+        const callback = window.__footnoteTurnstileErrorCallbacks?.[0];
+        callback?.();
+    });
+
+    await expect(
+        page.getByLabel('Complete CAPTCHA verification to submit your question')
+    ).toBeVisible();
+    await expect(page.getByRole('alert')).toHaveText(
+        'The background check could not finish. Please complete the visible CAPTCHA.'
+    );
+});
+
+test('CAPTCHA expiration keeps the managed challenge available for retry', async ({
+    page,
+}) => {
+    await installTurnstileStub(page);
+    await configureRuntime(page, '1x00000000000000000000AA');
+    await page.route('**/api/chat', async (route) => {
+        await route.fulfill({
+            status: 403,
+            contentType: 'application/json',
+            body: JSON.stringify({ error: 'CAPTCHA verification failed' }),
+        });
+    });
+
+    await page.goto('/chat');
+    const questionInput = page.getByLabel('Ask a question');
+    await questionInput.focus();
+    await expect
+        .poll(() =>
+            page.evaluate(
+                () => window.__footnoteTurnstileCallbacks?.length ?? 0
+            )
+        )
+        .toBeGreaterThan(0);
+    await page.evaluate(() => {
+        const callback = window.__footnoteTurnstileCallbacks?.[0];
+        callback?.('XXXX.DUMMY.TOKEN.XXXX');
+    });
+    await submitQuestion(page, 'Expire this challenge');
+
+    await expect(
+        page.getByLabel('Complete CAPTCHA verification to submit your question')
+    ).toBeVisible();
+    await page.evaluate(() => {
+        const callback = window.__footnoteTurnstileExpireCallbacks?.at(-1);
+        callback?.();
+    });
+
+    await expect(page.getByRole('alert')).toHaveText(
+        'CAPTCHA expired. Please complete it again.'
+    );
+});
+
+test('a successful response mounts a fresh invisible CAPTCHA challenge', async ({
+    page,
+}) => {
+    await installTurnstileStub(page);
+    await configureRuntime(page, '1x00000000000000000000AA');
+    const submittedTokens: string[] = [];
+    await page.route('**/api/chat', async (route) => {
+        submittedTokens.push(
+            route.request().headers()['x-turnstile-token'] ?? ''
+        );
+        await route.fulfill({
+            contentType: 'application/json',
+            body: JSON.stringify(CHAT_RESPONSE),
+        });
+    });
+
+    await page.goto('/chat');
+    await page.getByLabel('Ask a question').focus();
+    await expect
+        .poll(() =>
+            page.evaluate(
+                () => window.__footnoteTurnstileCallbacks?.length ?? 0
+            )
+        )
+        .toBeGreaterThan(0);
+    await page.evaluate(() => {
+        const callback = window.__footnoteTurnstileCallbacks?.[0];
+        callback?.('XXXX.DUMMY.TOKEN.XXXX');
+    });
+    await submitQuestion(page, 'Refresh the challenge after success');
+
+    await expect(page.getByText(CHAT_RESPONSE.message)).toBeVisible();
+    await expect.poll(() => submittedTokens.length).toBe(1);
+    await expect
+        .poll(() =>
+            page.evaluate(
+                () => window.__footnoteTurnstileCallbacks?.length ?? 0
+            )
+        )
+        .toBeGreaterThan(1);
+    await page.evaluate(() => {
+        const callback = window.__footnoteTurnstileCallbacks?.at(-1);
+        callback?.('XXXX.DUMMY.TOKEN.2.XXXX');
+        window.__footnoteTurnstileCallbacks?.[0]?.('STALE.DUMMY.TOKEN.XXXX');
+    });
+    await submitQuestion(page, 'Use the fresh challenge');
+    await expect.poll(() => submittedTokens.length).toBe(2);
+    expect(submittedTokens[1]).toBe('XXXX.DUMMY.TOKEN.2.XXXX');
+    expect(submittedTokens[0]).not.toBe(submittedTokens[1]);
 });
 
 test('CAPTCHA verification preserves an error status with different wording', async ({
@@ -306,6 +444,8 @@ test('CAPTCHA verification preserves an error status with different wording', as
 declare global {
     interface Window {
         __footnoteTurnstileCallbacks?: Array<(token: string) => void>;
+        __footnoteTurnstileExpireCallbacks?: Array<() => void>;
+        __footnoteTurnstileErrorCallbacks?: Array<() => void>;
         __footnoteTurnstileResponses?: Map<HTMLElement, string>;
         turnstile?: {
             render: (
