@@ -1,39 +1,7 @@
 # Spec version for this file; change only when upgrading tooling.
 openapi: 3.1.0
 
-# Quick Map
-# - POST /api/chat: Chat (public; Turnstile + rate limits when configured)
-# - OPTIONS /api/chat: CORS preflight
-# - GET /api/chat/profiles: Enabled chat profile options (public)
-# - POST /api/internal/text: Trusted internal text task execution
-# - POST /api/internal/image: Trusted internal image task execution
-# - POST /api/internal/voice/tts: Trusted internal voice TTS execution
-# - GET /api/internal/voice/realtime: Trusted internal voice realtime session (WebSocket)
-# - POST /api/incidents/report: Incident report create (trusted internal auth)
-# - GET /api/incidents: Incident list (trusted internal auth)
-# - GET /api/incidents/{incidentId}: Incident detail (trusted internal auth)
-# - POST /api/incidents/{incidentId}/status: Incident status update (trusted internal auth)
-# - POST /api/incidents/{incidentId}/notes: Incident note append (trusted internal auth)
-# - POST /api/incidents/{incidentId}/remediation: Incident remediation update (trusted internal auth)
-# - POST /api/traces: Trace upsert (TraceToken required)
-# - POST /api/trace-cards: Generate/store trace-card and return PNG payload (TraceToken required)
-# - POST /api/trace-cards/from-trace: Generate/store trace-card from stored trace metadata by responseId (TraceToken required)
-# - GET /api/traces/{responseId}: Trace fetch (public)
-# - GET /api/traces/{responseId}/assets/trace-card.svg: Trace-card SVG fetch (public)
-# - POST /api/setup/session: Exchange one-time setup bootstrap code for short-lived setup session
-# - DELETE /api/setup/session: Clear setup session cookie
-# - POST /api/setup/operator-link: Local-only operator setup/settings link issuance
-# - GET /api/auth/login: Start optional OIDC account sign-in
-# - GET /api/auth/callback: Validate OIDC callback and create local account session
-# - GET /api/auth/session: Read account sign-in availability and local session
-# - POST /api/auth/logout: End local Footnote account session
-# - GET /api/admin/settings/schema: Admin editable settings schema metadata (AdminSettingsToken OR valid setup session)
-# - GET /api/admin/settings/template: Canonical commented settings template YAML (AdminSettingsToken OR valid setup session)
-# - GET /api/admin/settings.yaml: Admin canonical settings YAML read (AdminSettingsToken OR valid setup session)
-# - POST /api/admin/settings/validate: Admin settings YAML validation (AdminSettingsToken OR valid setup session)
-# - PUT /api/admin/settings.yaml: Admin settings YAML replace with If-Match concurrency (AdminSettingsToken OR valid setup session)
-# - GET /config.json: Runtime config (public)
-# - Operation/code index: docs/api/operation-map.md
+# Endpoint inventory and code index: docs/api/operation-map.md
 
 # ====================
 # Public API metadata

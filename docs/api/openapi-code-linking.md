@@ -44,7 +44,12 @@ export type GetTraceResponse = ResponseMetadata;
 ## Spec-Side Code References
 
 Each operation in `openapi.yaml` should include an `x-codeRefs` list with
-repo-root-relative references to implementation and contract locations.
+repo-root-relative references to implementation and contract locations. The
+extension is scoped to the object where it appears: operation references are
+validated against that operation, while references under
+`components.schemas` (including nested schema properties) are validated as
+schema references. Component and schema references never become references
+for the preceding operation.
 
 Example:
 
@@ -58,6 +63,11 @@ get:
 ```
 
 This enables navigation from spec -> code and provides input for drift checks.
+The validator also checks that every operation appears exactly once in the
+derived [operation map](./operation-map.md), with the same method and path.
+The old endpoint Quick Map comments were removed from `openapi.yaml` so the
+spec does not maintain a second endpoint inventory; use the operation map for
+that navigation view.
 
 ## Runtime Validation Pattern
 
@@ -106,6 +116,7 @@ For route-specific payload types, derive names from `operationId`:
 
 This convention is intentionally lightweight.
 Validation is enforced by `pnpm validate-openapi-links`.
-Future hardening: evaluate Spectral-based OpenAPI lint rules so baseline spec
-validation is tool-driven and this custom script stays focused on repo-specific
-linking checks.
+The check parses the complete YAML document structurally instead of scanning
+indentation, so component and nested schema extensions cannot be attributed to
+an adjacent path operation. The operation map is a derived navigation view;
+the OpenAPI document remains the contract authority.

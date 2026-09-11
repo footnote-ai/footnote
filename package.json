@@ -95,6 +95,7 @@
         "eslint-config-prettier": "catalog:",
         "eslint-plugin-react-hooks": "catalog:",
         "globby": "catalog:",
+        "js-yaml": "catalog:",
         "prettier": "catalog:",
         "tsx": "catalog:",
         "typescript": "catalog:"
