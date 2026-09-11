@@ -128,6 +128,7 @@ const Chat = (): JSX.Element => {
         setIsTurnstileMounted(false);
         setTurnstileToken(null);
         setIsManagedChallengeVisible(true);
+        setTurnstileKey((prev) => prev + 1);
         setTurnstileError(
             'The background check could not finish. Please complete the visible CAPTCHA.'
         );
@@ -446,6 +447,7 @@ const Chat = (): JSX.Element => {
                     setTurnstileError(
                         'Please complete the visible CAPTCHA and try again.'
                     );
+                    setTurnstileKey((prev) => prev + 1);
                     setIsLoading(false);
                     return;
                 }
