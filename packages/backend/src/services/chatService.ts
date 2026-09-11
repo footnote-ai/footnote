@@ -181,9 +181,15 @@ const getWorkflowGenerationRouting = (
         .reverse()
         .find((step) => step.stepKind === 'generate');
     const signals = generationStep?.outcome.signals;
-    const lastExecutedAttempt = parseWorkflowRoutingAttempts(
-        signals?.routingChainAttemptsJson
-    )
+    const canonicalRoutingAttempts =
+        generationStep?.attempts?.flatMap(
+            (attempt) => attempt.routingAttempts ?? []
+        ) ?? [];
+    const routingAttempts =
+        canonicalRoutingAttempts.length > 0
+            ? canonicalRoutingAttempts
+            : parseWorkflowRoutingAttempts(signals?.routingChainAttemptsJson);
+    const lastExecutedAttempt = routingAttempts
         .slice()
         .reverse()
         .find(isExecutedRoutingAttempt);
