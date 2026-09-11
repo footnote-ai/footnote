@@ -206,6 +206,9 @@ test('CAPTCHA verification preserves an existing API error message', async ({
             )
         )
         .toBeGreaterThan(0);
+    const initialCallbackCount = await page.evaluate(
+        () => window.__footnoteTurnstileCallbacks?.length ?? 0
+    );
     await page.evaluate(() => {
         const callback = window.__footnoteTurnstileCallbacks?.[0];
         callback?.('XXXX.DUMMY.TOKEN.XXXX');
@@ -219,6 +222,13 @@ test('CAPTCHA verification preserves an existing API error message', async ({
         page.getByLabel('Complete CAPTCHA verification to submit your question')
     ).toBeVisible();
 
+    await expect
+        .poll(() =>
+            page.evaluate(
+                () => window.__footnoteTurnstileCallbacks?.length ?? 0
+            )
+        )
+        .toBeGreaterThan(initialCallbackCount);
     await page.evaluate(() => {
         const callback = window.__footnoteTurnstileCallbacks?.at(-1);
         callback?.('XXXX.DUMMY.TOKEN.XXXX');
