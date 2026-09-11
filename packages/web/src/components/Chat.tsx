@@ -128,6 +128,7 @@ const Chat = (): JSX.Element => {
         setIsTurnstileMounted(false);
         setTurnstileToken(null);
         setIsManagedChallengeVisible(true);
+        setTurnstileKey((prev) => prev + 1);
         setTurnstileError(
             'The background check could not finish. Please complete the visible CAPTCHA.'
         );
@@ -323,15 +324,18 @@ const Chat = (): JSX.Element => {
                 );
             }
 
+            // Ignore a response that finished after a newer submission replaced it.
+            if (abortRef.current !== controller) {
+                return;
+            }
+
             // Clear timeout once we have a response
             clearTimeout(timeoutId);
 
             const chat = payload.message as string | undefined;
             // Trust the API contract: metadata is already normalized by the backend.
             const backendMetadata = payload.metadata as
-                | ResponseMetadata
-                | null
-                | undefined;
+                ResponseMetadata | null | undefined;
 
             setStatus('');
             setAnswer(
@@ -350,8 +354,25 @@ const Chat = (): JSX.Element => {
             setIsManagedChallengeVisible(false);
             setTurnstileKey((prev) => prev + 1);
         } catch (error) {
-            if ((error as Error).name === 'AbortError') {
-                if (didRequestTimeout && abortRef.current === controller) {
+            // A superseded request must not overwrite the newer request's status or answer.
+            if (abortRef.current !== controller) {
+                return;
+            }
+
+            const isWrappedRequestAbort =
+                isApiClientError(error) &&
+                (error.code === 'aborted_error' ||
+                    error.code === 'timeout_error');
+            if (
+                (error as Error).name === 'AbortError' ||
+                isWrappedRequestAbort
+            ) {
+                if (
+                    (didRequestTimeout ||
+                        (isApiClientError(error) &&
+                            error.code === 'timeout_error')) &&
+                    abortRef.current === controller
+                ) {
                     setStatus('The request timed out. Please try again.');
                 }
                 return;
@@ -426,6 +447,7 @@ const Chat = (): JSX.Element => {
                     setTurnstileError(
                         'Please complete the visible CAPTCHA and try again.'
                     );
+                    setTurnstileKey((prev) => prev + 1);
                     setIsLoading(false);
                     return;
                 }
