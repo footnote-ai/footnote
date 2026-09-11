@@ -16,6 +16,7 @@ For contributors:
 - [Output Testing](./output-testing.md): repeatable web and Discord answer checks.
 - [Response comparison](./response-comparison.md): YAML-driven, blindable presentation evidence.
 - [Architecture](./architecture/README.md)
+- [DeepWiki maintenance](./agents/deepwiki-maintenance.md): when the generated secondary map should change.
 - [Proposals](./proposals/index.md)
 
 Source runs use `pnpm`; quick install:

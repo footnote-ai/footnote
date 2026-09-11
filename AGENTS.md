@@ -19,6 +19,7 @@ Five triage state labels (`needs-triage`, `needs-info`, `ready-for-agent`, `read
 ### Domain docs
 
 Single-context: shared glossary at `docs/ai/CONTEXT.md`, decisions in `docs/ai/adr/`. See `docs/agents/domain.md`.
+For DeepWiki structure or source-entrypoint changes, follow `docs/agents/deepwiki-maintenance.md`.
 
 ## Project Stage
 

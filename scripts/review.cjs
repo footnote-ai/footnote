@@ -306,6 +306,65 @@ function parseFootnoteTagDiagnostics(
 }
 
 /**
+ * Parse newline-delimited JSON diagnostics emitted by a repository validator.
+ *
+ * The parser accepts only the shared diagnostic fields so a validator cannot accidentally
+ * inject arbitrary output into the review summary. A failed validator with no structured output
+ * still produces a fallback error instead of failing open.
+ * @param {CommandResult} result
+ * @param {string} fallbackFile
+ * @returns {Diagnostic[]}
+ */
+function parseStructuredDiagnostics(result, fallbackFile) {
+    /** @type {Diagnostic[]} */
+    const diagnostics = [];
+    const combinedOutput = `${result.stdout}\n${result.stderr}`;
+
+    for (const rawLine of combinedOutput.split(/\r?\n/)) {
+        const line = rawLine.trim();
+        if (!line.startsWith('{')) {
+            continue;
+        }
+
+        try {
+            const parsed = JSON.parse(line);
+            if (
+                !parsed ||
+                typeof parsed.file !== 'string' ||
+                typeof parsed.line !== 'number' ||
+                typeof parsed.message !== 'string' ||
+                (parsed.severity !== 'error' && parsed.severity !== 'warning')
+            ) {
+                continue;
+            }
+            diagnostics.push({
+                file: normalizePath(parsed.file),
+                line: parsed.line,
+                message: parsed.message,
+                severity: parsed.severity,
+            });
+        } catch {
+            // Non-diagnostic JSON is ignored; the fallback below handles a failed command.
+        }
+    }
+
+    if (
+        result.status !== 0 &&
+        !diagnostics.some((diagnostic) => diagnostic.severity === 'error')
+    ) {
+        diagnostics.push({
+            file: fallbackFile,
+            line: 1,
+            message:
+                'Structured validation failed without a parseable error diagnostic.',
+            severity: 'error',
+        });
+    }
+
+    return diagnostics;
+}
+
+/**
  * Parse output from the OpenAPI link validator.
  *
  * This validator mixes a few output styles:
@@ -752,6 +811,21 @@ function main() {
                 ),
         },
         {
+            name: 'validate-deepwiki',
+            shouldRun: () => true,
+            run: () =>
+                runCommand(pnpmBinary, [
+                    'exec',
+                    'tsx',
+                    'scripts/validate-deepwiki.ts',
+                ]),
+            parse: (result) =>
+                parseStructuredDiagnostics(
+                    result,
+                    'scripts/validate-deepwiki.ts'
+                ),
+        },
+        {
             name: 'validate-openapi-links',
             shouldRun: () => !changedOnly || shouldRunOpenApiInChangedMode,
             run: () =>
@@ -857,4 +931,5 @@ if (require.main === module) {
 
 module.exports = {
     parseFootnoteTagDiagnostics,
+    parseStructuredDiagnostics,
 };
