@@ -272,6 +272,51 @@ test('CAPTCHA verification clears an informational status', async ({
     await expect(page.getByRole('status')).toHaveCount(0);
 });
 
+test('a whitespace-only response shows an explicit unavailable state', async ({
+    page,
+}) => {
+    await installTurnstileStub(page);
+    await configureRuntime(page, '1x00000000000000000000AA');
+    await page.route('**/api/chat', async (route) => {
+        await route.fulfill({
+            contentType: 'application/json',
+            body: JSON.stringify({
+                ...CHAT_RESPONSE,
+                message: '   ',
+            }),
+        });
+    });
+
+    await page.goto('/chat');
+    const questionInput = page.getByLabel('Ask a question');
+    await questionInput.focus();
+    await expect
+        .poll(() =>
+            page.evaluate(
+                () => window.__footnoteTurnstileCallbacks?.length ?? 0
+            )
+        )
+        .toBeGreaterThan(0);
+    await page.evaluate(() => {
+        const callback = window.__footnoteTurnstileCallbacks?.[0];
+        callback?.('XXXX.DUMMY.TOKEN.XXXX');
+    });
+
+    await submitQuestion(page, 'Return an empty answer');
+
+    await expect(page.getByRole('status')).toHaveText(
+        'No answer was returned. Please try again.'
+    );
+    await expect(
+        page.getByText(
+            'I would begin by examining the ethical principles involved, then consider what transparency and care require.'
+        )
+    ).toHaveCount(0);
+    await expect(
+        page.getByLabel('Response provenance and metadata')
+    ).toHaveCount(0);
+});
+
 test('an invisible CAPTCHA failure falls back to the visible challenge', async ({
     page,
 }) => {
