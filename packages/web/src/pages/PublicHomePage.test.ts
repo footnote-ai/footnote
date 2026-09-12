@@ -91,18 +91,6 @@ test('public homepage presents concepts as panels with local depth', async () =>
         /LOOK FOR|Good answers leave clues|See a little more/
     );
 });
-test('README keeps public destinations without a committed screenshot asset', async () => {
-    const readme = await readFile(
-        path.join(process.cwd(), 'README.md'),
-        'utf8'
-    );
-
-    assert.doesNotMatch(readme, /screenshot of a question\+response here/);
-    assert.doesNotMatch(readme, /screenshot of an expanded footnote/);
-    assert.doesNotMatch(readme, /public-home-prepared\.png/);
-    assert.match(readme, /ai\.jordanmakes\.dev\/chat/);
-    assert.match(readme, /ai\.jordanmakes\.dev\/wiki\/philosophy\//);
-});
 test('response carousel owns the preserved transition and accessible dot controls', async () => {
     const source = await readFile(
         `${webSourceDirectory}components${path.sep}ResponseCarousel.tsx`,

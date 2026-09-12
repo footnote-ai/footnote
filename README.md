@@ -6,12 +6,18 @@
 
 ### AI that shows its work.
 
-Footnote is an open-source AI assistant that shows its work. Its answers can include where information came from, what is uncertain, and what the system did, so a person can check them.
+A lot of AI systems give answers that _look_ convincing, but reveal very little about how they were made. Footnote creates answers with a trail you can follow when it matters.
 
-Try the [live site](https://ai.jordanmakes.dev), ask a [real question in `/chat`](https://ai.jordanmakes.dev/chat), or read the [project philosophy](https://ai.jordanmakes.dev/wiki/philosophy/).
+Transparency is important, but you also need control: over what it can and can't do, what's remembered, how much money can be spent, how carefully sensitive questions should be handled, and much more.
+
+Footnote tries to bridge the gap between what AI can do and what people need in order to use it responsibly. See our [philosophy](docs/Philosophy.md) page for the thinking behind the project.
 
 Footnote is built with AI assistance. Read the
 [AI use disclosure](docs/ai/ai-use-disclosure.md) for more information.
+
+<!-- screenshot of a question+response here -->
+
+<!-- screenshot of an expanded footnote -->
 
 [Try the live demo](https://ai.jordanmakes.dev)
 
@@ -40,8 +46,8 @@ Footnote leverages Docker containers for easy deployment on your own hardware or
 
 ## Need help?
 
-- [Public documentation wiki](https://ai.jordanmakes.dev/wiki/getting-started/)
-- [Documentation source](docs/README.md)
+- [Docs](docs/README.md)
+- [Public documentation wiki](https://ai.jordanmakes.dev/wiki/)
 - [GitHub issues](https://github.com/footnote-ai/footnote/issues)
 - [GitHub discussions](https://github.com/footnote-ai/footnote/discussions)
 
