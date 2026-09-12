@@ -54,6 +54,37 @@ const execFileAsync = promisify(execFile);
 const toForwardSlashes = (filePath: string): string =>
     filePath.replaceAll('\\', '/');
 
+/**
+ * Normalizes a concrete repository-relative path for identity and metadata.
+ * Glob patterns must use `toForwardSlashes` because they are not concrete paths.
+ */
+export const normalizeRepositoryRelativePath = (
+    filePath: string
+): string | undefined => {
+    const forwardPath = toForwardSlashes(filePath);
+    if (
+        forwardPath.length === 0 ||
+        path.posix.isAbsolute(forwardPath) ||
+        path.win32.isAbsolute(filePath) ||
+        /^[a-zA-Z]:\//u.test(forwardPath)
+    ) {
+        return undefined;
+    }
+
+    const normalizedPath = path.posix.normalize(forwardPath);
+    if (
+        normalizedPath === '.' ||
+        normalizedPath === '..' ||
+        normalizedPath.startsWith('../') ||
+        path.posix.isAbsolute(normalizedPath) ||
+        normalizedPath.split('/').some((segment) => segment.length === 0)
+    ) {
+        return undefined;
+    }
+
+    return normalizedPath;
+};
+
 const comparePaths = (left: string, right: string): number => {
     if (left < right) {
         return -1;
@@ -151,7 +182,8 @@ const listTrackedFiles = async (
         stdout
             .split('\0')
             .filter((filePath) => filePath.length > 0)
-            .map(toForwardSlashes)
+            .map(normalizeRepositoryRelativePath)
+            .filter((filePath): filePath is string => filePath !== undefined)
     );
 };
 
@@ -196,12 +228,14 @@ export const resolveRepositoryContextFiles = async (
     ]);
     const includedTracked = new Set(
         includedMatches
-            .map(toForwardSlashes)
+            .map(normalizeRepositoryRelativePath)
+            .filter((filePath): filePath is string => filePath !== undefined)
             .filter((filePath) => trackedFiles.has(filePath))
     );
     const selectedTracked = new Set(
         selectedMatches
-            .map(toForwardSlashes)
+            .map(normalizeRepositoryRelativePath)
+            .filter((filePath): filePath is string => filePath !== undefined)
             .filter((filePath) => trackedFiles.has(filePath))
     );
 

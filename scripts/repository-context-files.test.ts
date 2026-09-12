@@ -16,6 +16,7 @@ import test from 'node:test';
 import { fileURLToPath } from 'node:url';
 import { promisify } from 'node:util';
 import {
+    normalizeRepositoryRelativePath,
     parseRepositoryContextPatterns,
     resolveRepositoryContextFiles,
 } from './lib/repository-context-files.js';
@@ -358,4 +359,21 @@ test('paths use forward slashes and results sort consistently', async () => {
     } finally {
         await repository.cleanup();
     }
+});
+
+test('normalizes concrete repository paths and rejects unsafe paths', () => {
+    assert.equal(
+        normalizeRepositoryRelativePath('docs\\.\\file.md'),
+        'docs/file.md'
+    );
+    assert.equal(
+        normalizeRepositoryRelativePath('docs//file.md'),
+        'docs/file.md'
+    );
+    assert.equal(normalizeRepositoryRelativePath('../file.md'), undefined);
+    assert.equal(normalizeRepositoryRelativePath('/file.md'), undefined);
+    assert.equal(
+        normalizeRepositoryRelativePath('C:\\repo\\file.md'),
+        undefined
+    );
 });

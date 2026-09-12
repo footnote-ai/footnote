@@ -613,6 +613,55 @@ test('loader does not replace malformed managed metadata', async (context) => {
     );
 });
 
+test('loader blocks noncanonical managed paths without adding a duplicate', async (context) => {
+    const repositoryRoot = await createTrackedRepository(
+        { 'README.md': 'stable content\n' },
+        'README.md\n'
+    );
+    const librarian = await createTestLibrarian();
+    context.after(async () => {
+        await librarian.close();
+        await fs.rm(repositoryRoot, { recursive: true, force: true });
+    });
+    const input = makeLoadInput(repositoryRoot, librarian.baseUrl);
+    await loadRepositoryContext(input);
+
+    const existingDocument = librarian.documents[0];
+    assert.ok(existingDocument !== undefined);
+    const metadata = existingDocument.metadata;
+    assert.ok(Array.isArray(metadata));
+    const pathTriple = metadata.find(
+        (triple: unknown) =>
+            isRecord(triple) &&
+            isRecord(triple.p) &&
+            triple.p.i === REPOSITORY_CONTEXT_PATH_PREDICATE
+    );
+    assert.ok(isRecord(pathTriple) && isRecord(pathTriple.o));
+    pathTriple.o.v = './README.md';
+    const requestCountBeforeLoad = librarian.requests.length;
+
+    const result = await loadRepositoryContext(input);
+
+    assert.deepEqual(result.counts, {
+        added: 0,
+        changed: 0,
+        unchanged: 0,
+        skipped: 0,
+        failed: 1,
+    });
+    assert.equal(
+        result.items[0]?.reason,
+        'managed remote document has malformed identity metadata'
+    );
+    assert.deepEqual(
+        librarian.requests
+            .slice(requestCountBeforeLoad)
+            .map((request) => request.operation)
+            .sort(),
+        ['list-documents', 'list-processing']
+    );
+});
+
 test('loader skips unsafe text and continues after one document fails', async (context) => {
     const repositoryRoot = await createTrackedRepository(
         {

@@ -14,6 +14,7 @@ import path from 'node:path';
 import { TextDecoder } from 'node:util';
 import {
     DEFAULT_REPOSITORY_CONTEXT_LIMITS,
+    normalizeRepositoryRelativePath,
     resolveRepositoryContextFiles,
     type RepositoryContextLimits,
 } from './repository-context-files.js';
@@ -40,11 +41,7 @@ const REPOSITORY_CONTEXT_TAGS = ['footnote', 'repository-context'];
 const UTF8_DECODER = new TextDecoder('utf-8', { fatal: true });
 
 export type RepositoryContextLoadStatus =
-    | 'added'
-    | 'changed'
-    | 'unchanged'
-    | 'skipped'
-    | 'failed';
+    'added' | 'changed' | 'unchanged' | 'skipped' | 'failed';
 
 export type RepositoryContextLoadInput = {
     repositoryRoot: string;
@@ -130,10 +127,17 @@ const isPathInside = (rootPath: string, candidatePath: string): boolean => {
 const formatError = (error: unknown): string =>
     error instanceof Error ? error.message : String(error);
 
-const makeIdentityHash = (repositoryId: string, filePath: string): string =>
-    createHash('sha256')
-        .update(`${repositoryId}\n${filePath}`, 'utf8')
+const makeIdentityHash = (repositoryId: string, filePath: string): string => {
+    const normalizedPath = normalizeRepositoryRelativePath(filePath);
+    if (normalizedPath === undefined) {
+        throw new Error(
+            `Cannot create repository context identity for unsafe path: ${filePath}`
+        );
+    }
+    return createHash('sha256')
+        .update(`${repositoryId}\n${normalizedPath}`, 'utf8')
         .digest('hex');
+};
 
 const makeDocumentIdentity = (
     repositoryId: string,
@@ -345,12 +349,7 @@ const hasInvalidIdentitySubject = (
 };
 
 const isSafeRepositoryPath = (filePath: string): boolean =>
-    filePath.length > 0 &&
-    !filePath.includes('\\') &&
-    !path.posix.isAbsolute(filePath) &&
-    filePath !== '..' &&
-    !filePath.startsWith('../') &&
-    path.posix.normalize(filePath) === filePath;
+    normalizeRepositoryRelativePath(filePath) === filePath;
 
 const inspectManagedRemoteDocuments = (
     documents: TrustGraphDocumentMetadata[],
@@ -381,20 +380,22 @@ const inspectManagedRemoteDocuments = (
             document,
             REPOSITORY_CONTEXT_SHA256_PREDICATE
         );
-        const remotePath = pathValues[0] ?? document.title ?? document.id;
+        const rawRemotePath = pathValues[0] ?? document.title ?? document.id;
+        const remotePath = normalizeRepositoryRelativePath(rawRemotePath);
         if (
             repositoryValues.length !== 1 ||
             pathValues.length !== 1 ||
             hashValues.length !== 1 ||
             hasInvalidIdentitySubject(document) ||
-            !isSafeRepositoryPath(remotePath) ||
+            remotePath === undefined ||
+            !isSafeRepositoryPath(rawRemotePath) ||
             !/^[a-f0-9]{64}$/u.test(hashValues[0] ?? '')
         ) {
-            if (isSafeRepositoryPath(remotePath)) {
+            if (remotePath !== undefined) {
                 blockedPaths.add(remotePath);
             }
             failures.push({
-                path: remotePath,
+                path: rawRemotePath,
                 status: 'failed',
                 documentId: document.id,
                 reason: 'managed remote document has malformed identity metadata',
