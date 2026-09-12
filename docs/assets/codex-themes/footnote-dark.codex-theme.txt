@@ -1,0 +1,1 @@
+codex-theme-v1:{"codeThemeId":"codex","theme":{"accent":"#86b095","contrast":60,"fonts":{"code":"IBM Plex Mono","ui":"Barlow Condensed","content":"Libre Baskerville"},"ink":"#e3e0d7","opaqueWindows":true,"semanticColors":{"diffAdded":"#86b095","diffRemoved":"#e27c7c","skill":"#c49d6e"},"surface":"#1c1b1a"},"variant":"dark"}
