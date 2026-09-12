@@ -235,17 +235,45 @@ const toVoltAgentMessages = (messages: RuntimeMessage[]): BaseMessage[] =>
 
 /**
  * Splits a transcript into a trusted system prompt and the remaining
- * conversation. Only a contiguous run of leading system-role messages is
- * promoted to instructions; any system message that appears after user or
- * assistant content is left in place so generation never blocks and no
- * user-visible content is dropped.
+ * conversation. Ollama chat templates require system messages to be at the
+ * beginning, so its adapter path promotes system messages from any position;
+ * other providers retain the existing leading-only behavior.
  *
- * @returns Instructions built from leading system messages (joined with a blank
- * line), and the remaining transcript with those messages removed.
+ * @returns Instructions built from the selected system messages (joined with a
+ * blank line), and the remaining transcript with those messages removed.
  */
 const splitLeadingSystemMessages = (
-    messages: RuntimeMessage[]
+    messages: RuntimeMessage[],
+    promoteAllSystemMessages = false
 ): { instructions: string | undefined; transcript: RuntimeMessage[] } => {
+    if (promoteAllSystemMessages) {
+        const instructionParts: string[] = [];
+        const seenInstructions = new Set<string>();
+        for (const message of messages) {
+            if (message.role !== 'system') {
+                continue;
+            }
+            const content = message.content;
+            const normalizedContent = content?.trim();
+            if (
+                !content ||
+                !normalizedContent ||
+                seenInstructions.has(normalizedContent)
+            ) {
+                continue;
+            }
+            seenInstructions.add(normalizedContent);
+            instructionParts.push(content);
+        }
+        return {
+            instructions:
+                instructionParts.length > 0
+                    ? instructionParts.join('\n\n')
+                    : undefined,
+            transcript: messages.filter((message) => message.role !== 'system'),
+        };
+    }
+
     const instructionParts: string[] = [];
     let index = 0;
     while (index < messages.length && messages[index]?.role === 'system') {
@@ -1380,8 +1408,10 @@ const createDefaultVoltAgentExecutor = ({
             messages: RuntimeMessage[],
             options: VoltAgentGenerateTextOptions
         ): Promise<VoltAgentTextResult> {
-            const { instructions, transcript } =
-                splitLeadingSystemMessages(messages);
+            const { instructions, transcript } = splitLeadingSystemMessages(
+                messages,
+                getVoltAgentProvider(model) === 'ollama'
+            );
             const searchInstruction = options.search
                 ? buildVoltAgentSearchInstruction(options.search)
                 : undefined;
@@ -1393,6 +1423,15 @@ const createDefaultVoltAgentExecutor = ({
                 .join('\n\n');
             const resolvedInstructions =
                 mergedInstructions.length > 0 ? mergedInstructions : undefined;
+            logger?.debug('Projected generation messages for provider.', {
+                event: 'generation.message_projection',
+                provider: getVoltAgentProvider(model),
+                model,
+                messageRoles: transcript.map((message) => message.role),
+                ...(options.maxOutputTokens !== undefined && {
+                    maxOutputTokens: options.maxOutputTokens,
+                }),
+            });
             const callOptions: VoltAgentCallOptions = {
                 ...(options.maxOutputTokens !== undefined && {
                     maxOutputTokens: options.maxOutputTokens,

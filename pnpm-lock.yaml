@@ -7,6 +7,9 @@ settings:
 
 catalogs:
   default:
+    '@ai-sdk/provider-utils':
+      specifier: ^4.0.38
+      version: 4.0.38
     '@discordjs/opus':
       specifier: ^0.10.0
       version: 0.10.0
@@ -205,7 +208,7 @@ overrides:
   csstype: 3.2.3
   '@hono/node-server': ^1.19.15
   '@opentelemetry/core': ^2.10.0
-  '@ai-sdk/provider-utils': ^4.0.38
+  ollama-ai-provider-v2>@ai-sdk/provider-utils: ^3.0.17
   '@astrojs/markdown-remark': ^7.3.1
   '@astrojs/starlight': ^0.42.0
   '@babel/core': ^7.29.6
@@ -316,7 +319,7 @@ importers:
         specifier: 2.0.59
         version: 2.0.59(zod@4.4.3)
       '@ai-sdk/provider-utils':
-        specifier: ^4.0.38
+        specifier: 'catalog:'
         version: 4.0.38(zod@4.4.3)
       '@footnote/contracts':
         specifier: workspace:*
@@ -766,6 +769,18 @@ packages:
     peerDependencies:
       zod: ^3.25.76 || ^4.1.8
 
+  '@ai-sdk/provider-utils@3.0.28':
+    resolution: {integrity: sha512-bXlX1WX7E50a2N+AJW+1a/x63m52aPhm+6xYe5THxWrx9vW9NR7E2Ay+1G1ndlCdMdYKo2Fnsd7kBhuyQPaphw==}
+    engines: {node: '>=18'}
+    peerDependencies:
+      zod: ^3.25.76 || ^4.1.8
+
+  '@ai-sdk/provider-utils@3.0.37':
+    resolution: {integrity: sha512-mLx1SgE20xKQ87xME+9uG6pFlYPTqGDrMFrZ6XcytDnmbWGwmCIh2Xb9zFrfXUrKycSFRDet4Zovj388L9b1dg==}
+    engines: {node: '>=18'}
+    peerDependencies:
+      zod: ^3.25.76 || ^4.1.8
+
   '@ai-sdk/provider-utils@4.0.38':
     resolution: {integrity: sha512-/HHGmtKllqjg1OLc023v9w9kK3laW7Z6TzfZukYQWCsGBbzB9p60zTvvpXFVcs44NZBVXL3viOa1HRKUbeee8g==}
     engines: {node: '>=18'}
@@ -774,6 +789,10 @@ packages:
 
   '@ai-sdk/provider@2.0.3':
     resolution: {integrity: sha512-h88OPkavHTiN9tMn2l5awAznGB0lXzjcLhgR1/rvjB2zlLprsNxbM2tt6OJsHUxduLC3klq0/eqaSf6fX5XVww==}
+    engines: {node: '>=18'}
+
+  '@ai-sdk/provider@2.0.4':
+    resolution: {integrity: sha512-B0M50w0W43jTzZGyZrNwwaK1M79aKPw6PD/dQhkBR7vkR68yCINWBo2CbBLJrbrqYc46TaiSfsTiT+S9EmVl0w==}
     engines: {node: '>=18'}
 
   '@ai-sdk/provider@3.0.14':
@@ -1378,7 +1397,7 @@ packages:
     deprecated: 'This package has moved to ''gitlab-ai-provider''. Please run: npm install gitlab-ai-provider'
     peerDependencies:
       '@ai-sdk/provider': '>=2.0.0'
-      '@ai-sdk/provider-utils': ^4.0.38
+      '@ai-sdk/provider-utils': '>=3.0.0'
 
   '@graphql-typed-document-node/core@3.2.0':
     resolution: {integrity: sha512-mB9oAsNCm9aM3/SOv4YtBMqZbYj10R7dkq8byBqxGY/ncFwhf2oQzMV+LCRlWoDSEBJ3COiR1yeDvMtsoOsuFQ==}
@@ -2562,7 +2581,7 @@ packages:
   '@voltagent/core@2.9.2':
     resolution: {integrity: sha512-D7CxQag3oqX5Ul2Zh7NdWgYlsWxL8wM4eAoZTDb3BYNf/uVrQPBX0COTwDU8tbDx8gQ+vkAbYKwFR+NbDbgY0Q==}
     peerDependencies:
-      '@ai-sdk/provider-utils': ^4.0.38
+      '@ai-sdk/provider-utils': 4.x
       '@voltagent/logger': 2.0.2
       ai: ^6.0.0
       zod: ^3.25.0 || ^4.0.0
@@ -5556,7 +5575,7 @@ snapshots:
     dependencies:
       '@ai-sdk/anthropic': 2.0.85(zod@4.4.3)
       '@ai-sdk/provider': 2.0.3
-      '@ai-sdk/provider-utils': 4.0.38(zod@4.4.3)
+      '@ai-sdk/provider-utils': 3.0.28(zod@4.4.3)
       '@smithy/eventstream-codec': 4.4.8
       '@smithy/util-utf8': 4.4.8
       aws4fetch: 1.0.20
@@ -5565,7 +5584,7 @@ snapshots:
   '@ai-sdk/anthropic@2.0.85(zod@4.4.3)':
     dependencies:
       '@ai-sdk/provider': 2.0.3
-      '@ai-sdk/provider-utils': 4.0.38(zod@4.4.3)
+      '@ai-sdk/provider-utils': 3.0.28(zod@4.4.3)
       zod: 4.4.3
 
   '@ai-sdk/anthropic@3.0.96(zod@4.4.3)':
@@ -5621,7 +5640,7 @@ snapshots:
       '@ai-sdk/google': 2.0.78(zod@4.4.3)
       '@ai-sdk/openai-compatible': 1.0.42(zod@4.4.3)
       '@ai-sdk/provider': 2.0.3
-      '@ai-sdk/provider-utils': 4.0.38(zod@4.4.3)
+      '@ai-sdk/provider-utils': 3.0.28(zod@4.4.3)
       google-auth-library: 10.9.0(supports-color@10.2.2)
       zod: 4.4.3
     transitivePeerDependencies:
@@ -5630,7 +5649,7 @@ snapshots:
   '@ai-sdk/google@2.0.78(zod@4.4.3)':
     dependencies:
       '@ai-sdk/provider': 2.0.3
-      '@ai-sdk/provider-utils': 4.0.38(zod@4.4.3)
+      '@ai-sdk/provider-utils': 3.0.28(zod@4.4.3)
       zod: 4.4.3
 
   '@ai-sdk/google@3.0.91(zod@4.4.3)':
@@ -5654,7 +5673,7 @@ snapshots:
   '@ai-sdk/openai-compatible@1.0.42(zod@4.4.3)':
     dependencies:
       '@ai-sdk/provider': 2.0.3
-      '@ai-sdk/provider-utils': 4.0.38(zod@4.4.3)
+      '@ai-sdk/provider-utils': 3.0.28(zod@4.4.3)
       zod: 4.4.3
 
   '@ai-sdk/openai-compatible@2.0.59(zod@4.4.3)':
@@ -5675,6 +5694,21 @@ snapshots:
       '@ai-sdk/provider-utils': 4.0.38(zod@4.4.3)
       zod: 4.4.3
 
+  '@ai-sdk/provider-utils@3.0.28(zod@4.4.3)':
+    dependencies:
+      '@ai-sdk/provider': 2.0.3
+      '@standard-schema/spec': 1.1.0
+      eventsource-parser: 3.1.0
+      zod: 4.4.3
+
+  '@ai-sdk/provider-utils@3.0.37(zod@4.4.3)':
+    dependencies:
+      '@ai-sdk/provider': 2.0.4
+      '@standard-schema/spec': 1.1.0
+      eventsource-parser: 3.1.0
+      undici: 6.28.0
+      zod: 4.4.3
+
   '@ai-sdk/provider-utils@4.0.38(zod@4.4.3)':
     dependencies:
       '@ai-sdk/provider': 3.0.14
@@ -5682,7 +5716,18 @@ snapshots:
       eventsource-parser: 3.1.0
       zod: 4.4.3
 
+  '@ai-sdk/provider-utils@4.0.38(zod@4.6.2)':
+    dependencies:
+      '@ai-sdk/provider': 3.0.14
+      '@standard-schema/spec': 1.1.0
+      eventsource-parser: 3.1.0
+      zod: 4.6.2
+
   '@ai-sdk/provider@2.0.3':
+    dependencies:
+      json-schema: 0.4.0
+
+  '@ai-sdk/provider@2.0.4':
     dependencies:
       json-schema: 0.4.0
 
@@ -5845,7 +5890,7 @@ snapshots:
   '@astrojs/sitemap@3.7.4':
     dependencies:
       sitemap: 9.0.1
-      zod: 4.4.3
+      zod: 4.6.2
 
   '@astrojs/starlight@0.42.0(@astrojs/markdown-remark@7.3.1(supports-color@10.2.2))(astro@7.3.2(@astrojs/markdown-remark@7.3.1(supports-color@10.2.2))(@emnapi/core@1.11.1)(@emnapi/runtime@1.11.3)(@types/node@25.9.2)(aws4fetch@1.0.20)(jiti@2.7.0)(tsx@4.23.12)(yaml@2.9.0))(supports-color@10.2.2)(typescript@5.9.3)':
     dependencies:
@@ -6369,7 +6414,7 @@ snapshots:
 
   '@footnote/contracts@file:packages/contracts':
     dependencies:
-      zod: 4.4.3
+      zod: 4.6.2
 
   '@gitlab/gitlab-ai-provider@3.6.1(@ai-sdk/provider-utils@4.0.38(zod@4.4.3))(@ai-sdk/provider@3.0.14)(bufferutil@4.1.0)(graphql@16.13.1)(supports-color@10.2.2)(ws@8.21.0(bufferutil@4.1.0))':
     dependencies:
@@ -6609,11 +6654,11 @@ snapshots:
   '@mymediset/sap-ai-provider@2.1.0(ai@6.0.224(zod@4.4.3))(debug@4.4.3(supports-color@10.2.2))(supports-color@10.2.2)':
     dependencies:
       '@ai-sdk/provider': 3.0.14
-      '@ai-sdk/provider-utils': 4.0.38(zod@4.4.3)
+      '@ai-sdk/provider-utils': 4.0.38(zod@4.6.2)
       '@sap-ai-sdk/orchestration': 2.12.0(debug@4.4.3(supports-color@10.2.2))(supports-color@10.2.2)
       ai: 6.0.224(zod@4.4.3)
-      zod: 4.4.3
-      zod-to-json-schema: 3.25.2(zod@4.4.3)
+      zod: 4.6.2
+      zod-to-json-schema: 3.25.2(zod@4.6.2)
     transitivePeerDependencies:
       - debug
       - supports-color
@@ -7051,7 +7096,7 @@ snapshots:
   '@sap-ai-sdk/prompt-registry@2.12.0(debug@4.4.3(supports-color@10.2.2))(supports-color@10.2.2)':
     dependencies:
       '@sap-ai-sdk/core': 2.12.0(debug@4.4.3(supports-color@10.2.2))(supports-color@10.2.2)
-      zod: 4.4.3
+      zod: 4.6.2
     transitivePeerDependencies:
       - debug
       - supports-color
@@ -9951,7 +9996,7 @@ snapshots:
   ollama-ai-provider-v2@1.5.5(zod@4.4.3):
     dependencies:
       '@ai-sdk/provider': 2.0.3
-      '@ai-sdk/provider-utils': 4.0.38(zod@4.4.3)
+      '@ai-sdk/provider-utils': 3.0.37(zod@4.4.3)
       zod: 4.4.3
 
   on-finished@2.4.1:
@@ -11110,11 +11155,15 @@ snapshots:
 
   zod-from-json-schema@0.5.4:
     dependencies:
-      zod: 4.4.3
+      zod: 4.6.2
 
   zod-to-json-schema@3.25.2(zod@4.4.3):
     dependencies:
       zod: 4.4.3
+
+  zod-to-json-schema@3.25.2(zod@4.6.2):
+    dependencies:
+      zod: 4.6.2
 
   zod-validation-error@4.0.2(zod@4.4.3):
     dependencies:

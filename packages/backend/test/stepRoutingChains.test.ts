@@ -281,3 +281,63 @@ test('default step routing prefers the OpenRouter model for planning', () => {
         );
     }
 });
+
+test('automatic fallback pools omit profiles that are not runtime-enabled', () => {
+    const unavailableProfileId = 'ollama-text-gptoss';
+    const unavailableProfile = profiles.find(
+        (profile) => profile.id === unavailableProfileId
+    );
+    assert.ok(unavailableProfile);
+
+    const enabledWithoutUnavailable = new Map(
+        profiles
+            .filter((profile) => profile.id !== unavailableProfileId)
+            .map((profile) => [profile.id, profile])
+    );
+    const allProfilesWithUnavailable = new Map([
+        ...enabledWithoutUnavailable,
+        [unavailableProfileId, { ...unavailableProfile, enabled: false }],
+    ]);
+
+    const disabledOverride = resolveStepRoutingChain(
+        {
+            modeId: 'balanced',
+            step: 'generate',
+            request: {
+                sessionId: 'disabled-override',
+                traceTarget: undefined,
+            },
+            correlationId: 'disabled-override',
+            stepOverrideProfileId: unavailableProfileId,
+        },
+        enabledWithoutUnavailable,
+        allProfilesWithUnavailable
+    );
+    assert.equal(
+        disabledOverride[0]?.profileId,
+        'openrouter-deepseek-v4-flash-0731'
+    );
+
+    for (let index = 0; index < 25; index += 1) {
+        const resolved = resolveStepRoutingChain(
+            {
+                modeId: 'balanced',
+                step: 'generate',
+                request: {
+                    sessionId: `disabled-fallback-${index}`,
+                    traceTarget: undefined,
+                },
+                correlationId: `disabled-fallback-${index}`,
+            },
+            enabledWithoutUnavailable,
+            allProfilesWithUnavailable
+        );
+
+        assert.equal(
+            resolved.some(
+                (candidate) => candidate.profileId === unavailableProfileId
+            ),
+            false
+        );
+    }
+});
