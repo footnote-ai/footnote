@@ -103,6 +103,10 @@ const maybeApplyTraceBandRule = (
     return entries;
 };
 
+/**
+ * Resolves explicit overrides and configured routing entries to enabled profile
+ * IDs, skipping disabled or otherwise unavailable entries.
+ */
 export const resolveStepRoutingChain = (
     input: ResolveStepRoutingChainInput,
     enabledProfilesById: Map<string, ModelProfile>,
@@ -133,7 +137,10 @@ export const resolveStepRoutingChain = (
         if (typeof entry === 'string') {
             const expandedIds = expandProfileOrPool(entry, pools);
             for (const expandedId of expandedIds) {
-                if (seenProfileIds.has(expandedId)) {
+                if (
+                    seenProfileIds.has(expandedId) ||
+                    !enabledProfilesById.has(expandedId)
+                ) {
                     continue;
                 }
                 resolved.push({

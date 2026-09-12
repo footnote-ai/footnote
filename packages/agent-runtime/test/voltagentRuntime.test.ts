@@ -1830,3 +1830,93 @@ test('default executor leaves non-leading system messages in the transcript', as
         { role: 'system', content: 'Late system note.' },
     ]);
 });
+
+test('default executor projects Ollama system messages into leading instructions', async () => {
+    let seenInstructions: string | undefined;
+    let seenGenerateMessages: RuntimeMessage[] | undefined;
+    const fakeAgent = {
+        async generateText(
+            messages: RuntimeMessage[]
+        ): Promise<Awaited<ReturnType<Agent['generateText']>>> {
+            seenGenerateMessages = messages;
+            return {
+                content: [],
+                text: 'ollama reply',
+                reasoning: [],
+                reasoningText: undefined,
+                files: [],
+                sources: [],
+                toolCalls: [],
+                staticToolCalls: [],
+                dynamicToolCalls: [],
+                toolResults: [],
+                staticToolResults: [],
+                dynamicToolResults: [],
+                finishReason: 'stop',
+                rawFinishReason: 'stop',
+                usage: {
+                    inputTokens: 0,
+                    inputTokenDetails: {
+                        noCacheTokens: 0,
+                        cacheReadTokens: 0,
+                        cacheWriteTokens: 0,
+                    },
+                    outputTokens: 0,
+                    outputTokenDetails: { textTokens: 0, reasoningTokens: 0 },
+                    totalTokens: 0,
+                },
+                totalUsage: {
+                    inputTokens: 0,
+                    inputTokenDetails: {
+                        noCacheTokens: 0,
+                        cacheReadTokens: 0,
+                        cacheWriteTokens: 0,
+                    },
+                    outputTokens: 0,
+                    outputTokenDetails: { textTokens: 0, reasoningTokens: 0 },
+                    totalTokens: 0,
+                },
+                warnings: undefined,
+                request: {},
+                response: {
+                    modelId: 'ollama/test',
+                    id: 'response_1',
+                    timestamp: new Date(0),
+                    messages: [],
+                },
+                providerMetadata: undefined,
+                steps: [],
+                experimental_output: undefined,
+                output: undefined,
+                context: new Map(),
+                feedback: null,
+            };
+        },
+    } satisfies Pick<Agent, 'generateText'>;
+    const executor = createDefaultVoltAgentExecutor({
+        model: 'ollama/test',
+        agentFactory: ({ instructions }) => {
+            seenInstructions = instructions;
+            return fakeAgent;
+        },
+    });
+
+    await executor.generateText(
+        [
+            { role: 'system', content: 'First instruction.' },
+            { role: 'user', content: 'Keep this user content untrusted.' },
+            { role: 'assistant', content: 'Previous answer.' },
+            { role: 'system', content: 'Late instruction.' },
+            { role: 'system', content: 'First instruction.' },
+            { role: 'user', content: 'Current request.' },
+        ],
+        {}
+    );
+
+    assert.equal(seenInstructions, 'First instruction.\n\nLate instruction.');
+    assert.deepEqual(seenGenerateMessages, [
+        { role: 'user', content: 'Keep this user content untrusted.' },
+        { role: 'assistant', content: 'Previous answer.' },
+        { role: 'user', content: 'Current request.' },
+    ]);
+});
