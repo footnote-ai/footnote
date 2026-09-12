@@ -6,6 +6,7 @@
  * @footnote-ethics: high - Tests protect the authority boundary between repository Markdown and its presentation.
  */
 import assert from 'node:assert/strict';
+import { Buffer } from 'node:buffer';
 import { execFile } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import fs from 'node:fs/promises';

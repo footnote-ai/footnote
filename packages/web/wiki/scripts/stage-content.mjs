@@ -8,6 +8,7 @@
 import fs from 'node:fs/promises';
 import { execFile } from 'node:child_process';
 import path from 'node:path';
+import process from 'node:process';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { promisify } from 'node:util';
 
