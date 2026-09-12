@@ -76,7 +76,7 @@
     },
     "devDependencies": {
         "@eslint/js": "catalog:",
-        "@playwright/test": "^1.61.0",
+        "@playwright/test": "^1.63.0",
         "@swc/core": "catalog:",
         "@swc/helpers": "catalog:",
         "@types/better-sqlite3": "catalog:",
