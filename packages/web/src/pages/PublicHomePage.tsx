@@ -6,6 +6,13 @@
  * @footnote-ethics: high - Prepared response state and public claims must not imply live execution or fabricated provenance.
  */
 
+import {
+    useRef,
+    useState,
+    type FocusEvent,
+    type MouseEvent,
+    type PointerEvent,
+} from 'react';
 import { Link } from 'react-router-dom';
 import MarkdownResponse from '@components/MarkdownResponse';
 import PublicFooter from '@components/PublicFooter';
@@ -13,6 +20,197 @@ import PublicHeader from '@components/PublicHeader';
 import TraceFooterPlaceholder from '@components/TraceFooterPlaceholder';
 import ResponseCarousel from '@components/ResponseCarousel';
 import { landingScenarios } from '../data/landingScenarios';
+
+type PublicConcept = {
+    id: string;
+    label: string;
+    description: string;
+    detailLead: string;
+    technicalLabel: string;
+    detailTail: string;
+    documentationHref: string;
+};
+
+const publicConcepts: readonly PublicConcept[] = [
+    {
+        id: 'origins',
+        label: 'Origins',
+        description: 'Where information came from.',
+        detailLead: 'Sources and context used to form the answer. See',
+        technicalLabel: 'provenance',
+        detailTail: '.',
+        documentationHref: '/wiki/architecture/canonical-response-footnote/',
+    },
+    {
+        id: 'uncertainty',
+        label: 'Uncertainty',
+        description: 'What may be wrong or missing.',
+        detailLead: 'What could not be confirmed or remains unresolved. See',
+        technicalLabel: 'uncertainty',
+        detailTail: '.',
+        documentationHref: '/wiki/architecture/platform-experience-standard/',
+    },
+    {
+        id: 'steps',
+        label: 'Steps',
+        description: 'What the system did.',
+        detailLead:
+            'Searches, tools, and other work used to produce the answer. See',
+        technicalLabel: 'workflow',
+        detailTail: '.',
+        documentationHref: '/wiki/architecture/workflow/',
+    },
+    {
+        id: 'limits',
+        label: 'Limits',
+        description: 'What it could not do or check.',
+        detailLead: 'What could not be accessed, checked, or completed. See',
+        technicalLabel: 'limitations',
+        detailTail: '.',
+        documentationHref: '/wiki/architecture/platform-experience-standard/',
+    },
+];
+
+const PublicConceptList = (): JSX.Element => {
+    const [activeConceptId, setActiveConceptId] = useState<string | null>(null);
+    const pointerActivationRef = useRef<string | null>(null);
+
+    const isMobileCardInteraction = (): boolean =>
+        typeof window !== 'undefined' &&
+        window.matchMedia('(hover: none), (pointer: coarse)').matches;
+
+    const handleConceptBlur = (event: FocusEvent<HTMLElement>): void => {
+        const nextTarget = event.relatedTarget;
+        if (
+            !(nextTarget instanceof HTMLElement) ||
+            !event.currentTarget.contains(nextTarget)
+        ) {
+            setActiveConceptId(null);
+        }
+    };
+
+    const handleConceptPointerDown = (
+        event: PointerEvent<HTMLDivElement>
+    ): void => {
+        pointerActivationRef.current = event.pointerType || 'mouse';
+    };
+
+    const handleConceptClick = (
+        conceptId: string,
+        event: MouseEvent<HTMLDivElement>
+    ): void => {
+        const target = event.target;
+        if (target instanceof HTMLElement && target.closest('a')) {
+            pointerActivationRef.current = null;
+            return;
+        }
+        if (
+            isMobileCardInteraction() ||
+            pointerActivationRef.current === 'touch'
+        ) {
+            setActiveConceptId((currentConceptId) =>
+                currentConceptId === conceptId ? null : conceptId
+            );
+        }
+        pointerActivationRef.current = null;
+    };
+
+    return (
+        <ul
+            className="public-home__concepts"
+            aria-label="What to check around an answer"
+        >
+            {publicConcepts.map((concept) => {
+                const isActive = activeConceptId === concept.id;
+                const popoverId = `public-home-concept-${concept.id}`;
+
+                return (
+                    <li
+                        className={`public-home__concept-wrap public-home__concept-wrap--${concept.id}`}
+                        data-concept={concept.id}
+                        key={concept.id}
+                        onBlur={handleConceptBlur}
+                        onFocus={() => {
+                            if (!pointerActivationRef.current) {
+                                setActiveConceptId(concept.id);
+                            }
+                        }}
+                        onMouseEnter={() => {
+                            if (!isMobileCardInteraction()) {
+                                setActiveConceptId(concept.id);
+                            }
+                        }}
+                        onMouseLeave={() => {
+                            if (!isMobileCardInteraction()) {
+                                setActiveConceptId(null);
+                            }
+                        }}
+                        data-active={isActive}
+                    >
+                        <div
+                            className="public-home__concept"
+                            tabIndex={0}
+                            role="group"
+                            aria-label={concept.label}
+                            onClick={(event) =>
+                                handleConceptClick(concept.id, event)
+                            }
+                            onPointerDown={handleConceptPointerDown}
+                        >
+                            <div className="public-home__concept-header">
+                                <strong>{concept.label}</strong>
+                                <span
+                                    className="public-home__concept-indicator"
+                                    aria-hidden="true"
+                                >
+                                    <svg
+                                        viewBox="0 0 12 8"
+                                        focusable="false"
+                                        aria-hidden="true"
+                                    >
+                                        <path d="m1 1 5 5 5-5" />
+                                    </svg>
+                                </span>
+                            </div>
+                            <div className="public-home__concept-body">
+                                <p
+                                    className="public-home__concept-summary"
+                                    aria-hidden={isActive}
+                                >
+                                    {concept.description}
+                                </p>
+                                <div
+                                    id={popoverId}
+                                    className="public-home__concept-detail"
+                                    role="region"
+                                    aria-hidden={!isActive}
+                                    aria-label={`${concept.label} explanation`}
+                                >
+                                    <p className="public-home__concept-detail-copy">
+                                        {concept.detailLead}{' '}
+                                        <a
+                                            href={concept.documentationHref}
+                                            target="_blank"
+                                            rel="noreferrer"
+                                        >
+                                            {concept.technicalLabel}
+                                            <span aria-hidden="true"> ↗</span>
+                                            <span className="sr-only">
+                                                {' '}
+                                                (opens in a new tab)
+                                            </span>
+                                        </a>
+                                        {concept.detailTail}
+                                    </p>
+                                </div>
+                            </div>
+                        </div>
+                    </li>
+                );
+            })}
+        </ul>
+    );
+};
 
 const PublicHomePage = (): JSX.Element => {
     return (
@@ -22,12 +220,18 @@ const PublicHomePage = (): JSX.Element => {
                 <section aria-labelledby="homepage-title">
                     <header className="public-home__intro">
                         <h1 id="homepage-title">AI that shows its work.</h1>
-                        <p>Footnote helps make AI answers easier to check.</p>
                         <p>
-                            Most chatbots rush to give you a polished answer,
-                            even when they&apos;re wrong. Footnote gives you the
-                            tools to see what shaped the answer: what it knows,
-                            what it doesn&apos;t, and where you can look next.
+                            <span className="public-home__intro-sentence">
+                                Most chatbots rush to give you a polished
+                                answer,{' '}
+                                <span className="public-home__no-wrap">
+                                    even when they&apos;re wrong.
+                                </span>
+                            </span>{' '}
+                            <span className="public-home__intro-sentence">
+                                We care more about giving you answers that are
+                                easy to check.
+                            </span>
                         </p>
                     </header>
                     <div className="public-home__intro-rule" />
@@ -54,7 +258,8 @@ const PublicHomePage = (): JSX.Element => {
                             )}
                         />
                         <p className="public-home__prepared">
-                            Pre-prepared response. <Link to="/chat">Chat</Link>
+                            This is a prepared example —{' '}
+                            <Link to="/chat">Ask a question</Link>
                         </p>
                     </div>
                 </section>
@@ -62,77 +267,17 @@ const PublicHomePage = (): JSX.Element => {
                     className="public-home__narrative"
                     aria-labelledby="narrative-title"
                 >
-                    <div className="public-home__narrative-intro">
-                        <p className="public-home__eyebrow">Why Footnote</p>
-                        <h2 id="narrative-title">
-                            Answers are easier to use when you can check them.
-                        </h2>
-                        <p>
-                            Footnote is an open-source AI assistant for answers
-                            you can inspect. It keeps the useful questions close
-                            to the answer: what shaped it, what may be missing,
-                            and where to look next.
-                        </p>
-                    </div>
-                    <div className="public-home__principles">
-                        <article className="public-home__principle">
-                            <h3>See what shaped an answer</h3>
-                            <p>
-                                A live response can show sources and runtime
-                                details that help explain how it was produced.
-                                Workflow details and limits stay visible when
-                                they matter; when a trace is available, it gives
-                                you a fuller record to inspect.
-                            </p>
-                            <a href="/wiki/architecture/canonical-response-footnote/">
-                                How response details fit together
-                            </a>
-                        </article>
-                        <article className="public-home__principle">
-                            <h3>Keep uncertainty visible</h3>
-                            <p>
-                                Missing evidence, unavailable work, and relevant
-                                limits should be visible instead of being
-                                smoothed into a confident-looking answer. The
-                                prepared example above is labeled so it cannot
-                                be mistaken for a fresh run.
-                            </p>
-                            <a href="/wiki/architecture/platform-experience-standard/">
-                                Read the experience standard
-                            </a>
-                        </article>
-                        <article className="public-home__principle">
-                            <h3>People keep the final say</h3>
-                            <p>
-                                Footnote is meant to support judgment, not
-                                replace it. Privacy and permissions are part of
-                                that control: the project asks what an assistant
-                                may do, what record remains, and how someone can
-                                correct or stop it.
-                            </p>
-                            <a href="/wiki/philosophy/">Read the philosophy</a>
-                        </article>
-                    </div>
-                    <div className="public-home__narrative-actions">
-                        <Link
-                            className="public-home__action public-home__action--primary"
-                            to="/chat"
-                        >
-                            Try a live question
-                        </Link>
-                        <a className="public-home__action" href="/wiki/">
-                            Explore the documentation
-                        </a>
-                    </div>
+                    <h2 id="narrative-title">What to check</h2>
+                    <PublicConceptList />
                 </section>
                 <section
                     className="public-home__get-started"
                     aria-labelledby="get-started-title"
                 >
-                    <h2 id="get-started-title">Get started</h2>
+                    <h2 id="get-started-title">Run it yourself</h2>
                     <p>
-                        Run Footnote yourself in minutes. It&apos;s as easy as
-                        double-clicking the file.
+                        Footnote is open source and can run on your own
+                        computer.
                     </p>
                     <div>
                         <a
@@ -147,7 +292,7 @@ const PublicHomePage = (): JSX.Element => {
                             className="public-home__documentation"
                             href="/wiki/getting-started/"
                         >
-                            Documentation
+                            Setup guide
                         </a>
                     </div>
                 </section>

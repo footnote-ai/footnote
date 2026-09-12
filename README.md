@@ -6,9 +6,9 @@
 
 ### AI that shows its work.
 
-Footnote is an open-source AI assistant for answers you can check. It pairs responses with inspectable provenance and trace metadata so people can see what shaped an answer, what it may be missing, and where to look next.
+Footnote is an open-source AI assistant that shows its work. Its answers can include where information came from, what is uncertain, and what the system did, so a person can check them.
 
-It is built for human judgment, not as an oracle. When a live response has relevant sources, limits, safety information, or workflow details, Footnote makes room for that context alongside the answer. Read the [project philosophy](https://ai.jordanmakes.dev/wiki/philosophy/) for the principles behind the work.
+Try the [live site](https://ai.jordanmakes.dev), ask a [real question in `/chat`](https://ai.jordanmakes.dev/chat), or read the [project philosophy](https://ai.jordanmakes.dev/wiki/philosophy/).
 
 Footnote is built with AI assistance. Read the
 [AI use disclosure](docs/ai/ai-use-disclosure.md) for more information.

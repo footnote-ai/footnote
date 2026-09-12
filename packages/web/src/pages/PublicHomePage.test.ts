@@ -21,10 +21,20 @@ test('public homepage keeps approved prepared-response content and destinations'
         'utf8'
     );
 
-    assert.match(source, /AI that shows its work/);
-    assert.match(source, /Most chatbots rush to give you a polished answer/);
-    assert.match(source, /Pre-prepared response/);
-    assert.match(source, /<Link to="\/chat">Chat<\/Link>/);
+    assert.match(source, /<h1 id="homepage-title">/);
+    assert.match(source, /We care more about\s+giving/);
+    assert.match(source, /className="public-home__no-wrap"/);
+    assert.match(source, /className="public-home__intro-sentence"/);
+    assert.doesNotMatch(
+        source,
+        /Footnote helps make AI answers easier to check/
+    );
+    assert.doesNotMatch(
+        source,
+        /Footnote gives you the tools to see what shaped/
+    );
+    assert.match(source, /This is a prepared example/);
+    assert.match(source, /to="\/chat"/);
     assert.doesNotMatch(source, /ai\.jordanmakes\.dev\/ask/);
     assert.match(source, /TraceFooterPlaceholder/);
     assert.match(source, /ResponseCarousel/);
@@ -35,37 +45,53 @@ test('public homepage keeps approved prepared-response content and destinations'
     );
     assert.match(source, /href="\/wiki\/getting-started\/"/);
     assert.match(source, />\s*Download\s*</);
-    assert.match(source, />\s*Documentation\s*</);
+    assert.match(source, />\s*Setup guide\s*</);
     assert.ok(
-        source.search(/>\s*Download\s*</) <
-            source.search(/>\s*Documentation\s*</)
+        source.search(/>\s*Download\s*</) < source.search(/>\s*Setup guide\s*</)
     );
     assert.doesNotMatch(source, /Download Footnote/);
     assert.doesNotMatch(source, /Quickstart/);
 });
 
-test('public homepage explains the product narrative and links to canonical depth', async () => {
+test('public homepage presents concepts as panels with local depth', async () => {
     const source = await readFile(
         `${pagesDirectory}PublicHomePage.tsx`,
         'utf8'
     );
 
-    assert.match(source, /See what shaped an answer/);
-    assert.match(source, /Keep uncertainty visible/);
-    assert.match(source, /People keep the final say/);
-    assert.match(
+    assert.match(source, /const PublicConceptList/);
+    assert.match(source, /className="public-home__concepts"/);
+    for (const concept of ['origins', 'uncertainty', 'steps', 'limits']) {
+        assert.match(source, new RegExp(`id: '${concept}'`));
+    }
+    assert.match(source, />What to check</);
+    assert.doesNotMatch(
         source,
-        /href="\/wiki\/architecture\/canonical-response-footnote\/"/
+        /Around an answer, these words name what to check/
     );
-    assert.match(
+    assert.match(source, /className="public-home__concept-header"/);
+    assert.match(source, /className="public-home__concept-body"/);
+    assert.match(source, /tabIndex=\{0\}/);
+    assert.match(source, /role="group"/);
+    assert.match(source, /handleConceptClick/);
+    assert.doesNotMatch(source, /<button/);
+    assert.doesNotMatch(source, /public-home__concept-toggle/);
+    assert.doesNotMatch(source, /aria-expanded=\{isActive\}/);
+    assert.match(source, /className="public-home__concept-detail"/);
+    assert.match(source, /href=\{concept\.documentationHref\}/);
+    assert.match(source, /target="_blank"/);
+    assert.match(source, /opens in a new tab/);
+    assert.match(source, /aria-hidden=\{!isActive\}/);
+    assert.match(source, /technicalLabel: 'provenance'/);
+    assert.doesNotMatch(source, /public-home__narrative-actions/);
+    assert.doesNotMatch(source, /How it works/);
+    assert.doesNotMatch(source, /<details/);
+    assert.doesNotMatch(
         source,
-        /href="\/wiki\/architecture\/platform-experience-standard\/"/
+        /LOOK FOR|Good answers leave clues|See a little more/
     );
-    assert.match(source, /href="\/wiki\/philosophy\/"/);
-    assert.match(source, /href="\/wiki\/"/);
 });
-
-test('README replaces screenshot placeholders with maintained public proof', async () => {
+test('README keeps maintained proof and public destinations', async () => {
     const readme = await readFile(
         path.join(process.cwd(), 'README.md'),
         'utf8'
@@ -74,8 +100,8 @@ test('README replaces screenshot placeholders with maintained public proof', asy
     assert.doesNotMatch(readme, /screenshot of a question\+response here/);
     assert.doesNotMatch(readme, /screenshot of an expanded footnote/);
     assert.match(readme, /docs\/assets\/public-home-prepared\.png/);
-    assert.match(readme, /prepared examples are curated demonstrations/i);
-    assert.match(readme, /ai\.jordanmakes\.dev\/wiki\//);
+    assert.match(readme, /ai\.jordanmakes\.dev\/chat/);
+    assert.match(readme, /ai\.jordanmakes\.dev\/wiki\/philosophy\//);
 });
 test('response carousel owns the preserved transition and accessible dot controls', async () => {
     const source = await readFile(
