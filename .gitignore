@@ -57,6 +57,9 @@ keys/
 
 # Frontend build artifacts
 packages/web/dist/
+packages/web/wiki/.astro-dist/
+packages/web/wiki/.astro/
+packages/web/wiki/src/content/docs/
 packages/web/tsconfig*.tsbuildinfo
 packages/web/vite.config.js
 packages/web/vite.config.js.map

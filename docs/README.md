@@ -4,6 +4,10 @@ This folder holds the main project docs. The subfolders cover the working
 system. The top-level files cover project background, licensing posture, and
 philosophy.
 
+The public presentation of this checked-in Markdown is available at
+`https://ai.jordanmakes.dev/wiki/`. DeepWiki remains a secondary generated code
+explainer, not the documentation authority.
+
 For first-time setup:
 
 - New users: [README Quickstart](../README.md#quickstart)

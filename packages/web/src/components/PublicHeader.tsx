@@ -22,13 +22,7 @@ const PublicHeader = (): JSX.Element => (
             >
                 GitHub
             </a>
-            <a
-                href="https://deepwiki.com/footnote-ai/footnote"
-                target="_blank"
-                rel="noreferrer"
-            >
-                Wiki
-            </a>
+            <a href="/wiki/">Wiki</a>
             <Link to="/account">Sign in</Link>
             <ThemeToggle />
         </nav>

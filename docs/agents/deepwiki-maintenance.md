@@ -1,8 +1,16 @@
-# DeepWiki Maintenance
+# Documentation and DeepWiki Maintenance
 
 Repository Markdown and source code are canonical. Update the checked-in docs
 with the code or behavior they describe; generated DeepWiki content is a
 secondary explanation and may lag behind `main`.
+
+## Canonical documentation maintenance
+
+When a PR materially changes a documented public feature, contract, workflow,
+architecture boundary, setup/deployment behavior, or other documented behavior,
+update the canonical checked-in Markdown in the same PR when that documentation
+exists. This does not mean every code change requires documentation, and it
+does not mean every documentation change requires a DeepWiki configuration edit.
 
 ## When to edit `.devin/wiki.json`
 

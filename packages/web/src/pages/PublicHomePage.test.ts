@@ -108,6 +108,8 @@ test('chat stays suggestion-free and falls back to an out-of-flow managed challe
     );
     assert.match(embedSource, /<Chat \/>/);
     assert.match(headerSource, /<Link to="\/account">\s*Sign in\s*<\/Link>/);
+    assert.match(headerSource, /<a href="\/wiki\/">\s*Wiki\s*<\/a>/);
+    assert.doesNotMatch(headerSource, /deepwiki\.com/);
     assert.doesNotMatch(headerSource, /Sign-in is not available yet/);
     assert.match(
         interactionStyles,

@@ -13,6 +13,8 @@ overrides:
     '@hono/node-server': ^1.19.15
     '@opentelemetry/core': ^2.10.0
     '@ai-sdk/provider-utils': ^4.0.38
+    '@astrojs/markdown-remark': ^7.3.1
+    '@astrojs/starlight': ^0.42.0
     '@babel/core': ^7.29.6
     '@discordjs/rest': ^2.6.3
     brace-expansion: ^5.0.9
@@ -62,6 +64,7 @@ catalog:
     '@typescript-eslint/parser': ^8.67.0
     '@vitejs/plugin-react': ^6.0.2
     autoprefixer: ^10.5.0
+    astro: ^7.3.2
     better-sqlite3: ^12.10.0
     bufferutil: ^4.1.0
     body-parser: ^2.2.2

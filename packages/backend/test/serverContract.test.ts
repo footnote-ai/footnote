@@ -449,6 +449,19 @@ test('backend stays available when static index output is missing', async (t) =>
     );
 });
 
+test('missing wiki pages do not fall back to the React SPA', async (t) => {
+    const harness = await startBackendServerContractHarness();
+    t.after(async () => {
+        await harness.stop();
+    });
+
+    const response = await fetch(
+        `${harness.baseUrl}/wiki/does-not-exist?from=contract-test`
+    );
+    assert.equal(response.status, 404);
+    assert.equal(await response.text(), 'Not Found');
+});
+
 test('admin settings server contract: auth, YAML read/write ETag flow, and restart semantics stay stable', async (t) => {
     const harness = await startBackendServerContractHarness({
         envOverrides: {

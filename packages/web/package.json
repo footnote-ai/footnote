@@ -5,7 +5,8 @@
     "type": "module",
     "scripts": {
         "dev": "vite",
-        "build": "tsc -b tsconfig.json && vite build",
+        "build": "tsc -b tsconfig.json && vite build && pnpm run build:wiki",
+        "build:wiki": "node wiki/scripts/stage-content.mjs && astro build --root wiki && node wiki/scripts/publish-dist.mjs",
         "preview": "vite preview",
         "type-check": "tsc --noEmit"
     },
@@ -23,7 +24,10 @@
         "@types/node": "catalog:",
         "@types/react": "catalog:",
         "@types/react-dom": "catalog:",
+        "@astrojs/markdown-remark": "catalog:",
+        "@astrojs/starlight": "catalog:",
         "@vitejs/plugin-react": "catalog:",
+        "astro": "catalog:",
         "autoprefixer": "catalog:",
         "esbuild": "catalog:",
         "postcss": "catalog:",

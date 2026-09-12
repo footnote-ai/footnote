@@ -39,6 +39,9 @@ COPY packages/contracts/src/ packages/contracts/src/
 COPY packages/discord-bot/ packages/discord-bot/
 COPY packages/prompts/src/ packages/prompts/src/
 COPY packages/web/ packages/web/
+COPY docs/ docs/
+COPY README.md SECURITY.md MIT_LICENSE.md HIPPOCRATIC_LICENSE.md ./
+COPY deploy/README.md deploy/README.md
 
 # The runtime image intentionally has no git checkout. The deploy helper
 # creates this bundle from `git show <sha>:<path>` before Docker runs, so copied

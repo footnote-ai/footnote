@@ -11,14 +11,17 @@ that boundary. It does not independently record LLM cost or create provenance.
 
 ## Route roles
 
-| Route                     | Owner                  | Purpose                                                                |
-| ------------------------- | ---------------------- | ---------------------------------------------------------------------- |
-| `/`                       | `PublicHomePage`       | Introduces Footnote with prepared answers and practical project links. |
-| `/chat`                   | `ChatPage` and `Chat`  | Runs the first-party live question flow.                               |
-| `/embed`                  | `EmbedPage` and `Chat` | Provides the live flow inside an externally sized embed page.          |
-| `/setup`                  | `SetupPage`            | Hosts first-setup behavior.                                            |
-| `/traces/:responseId`     | `TracePage`            | Displays an available response trace.                                  |
-| `/api/traces/:responseId` | `TracePage`            | Preserves the web trace-page route used under the API-shaped path.     |
+| Route                     | Owner                                        | Purpose                                                                          |
+| ------------------------- | -------------------------------------------- | -------------------------------------------------------------------------------- |
+| `/`                       | `PublicHomePage`                             | Introduces Footnote with prepared answers and practical project links.           |
+| `/chat`                   | `ChatPage` and `Chat`                        | Runs the first-party live question flow.                                         |
+| `/embed`                  | `EmbedPage` and `Chat`                       | Provides the live flow inside an externally sized embed page.                    |
+| `/setup`                  | `SetupPage`                                  | Hosts first-setup behavior.                                                      |
+| `/account`                | `AccountPage`                                | Hosts public account sign-in and local session status.                           |
+| `/admin`                  | `AdminPage`                                  | Hosts the admin settings interface; backend authorization remains authoritative. |
+| `/wiki/`                  | Astro/Starlight and backend static transport | Publishes repository-owned documentation without moving SPA routes.              |
+| `/traces/:responseId`     | `TracePage`                                  | Displays an available response trace.                                            |
+| `/api/traces/:responseId` | `TracePage`                                  | Preserves the web trace-page route used under the API-shaped path.               |
 
 `App.tsx` owns this route map. Non-home routes use `PublicPageLayout` for a
 consistent public header and footer. The homepage composes the same public
