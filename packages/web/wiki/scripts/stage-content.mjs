@@ -17,6 +17,8 @@ const packageRoot = path.resolve(
 );
 const repositoryRoot = path.resolve(packageRoot, '../..');
 const sourceRoot = path.join(packageRoot, 'wiki', 'src', 'content', 'docs');
+const documentationAssetsRoot = path.join(repositoryRoot, 'docs', 'assets');
+const stagedAssetsRoot = path.join(packageRoot, 'wiki', 'public', 'assets');
 const sourceUrlBase = 'https://github.com/footnote-ai/footnote/blob/main/';
 const editUrlBase = 'https://github.com/footnote-ai/footnote/edit/main/';
 const historyUrlBase = 'https://github.com/footnote-ai/footnote/commits/main/';
@@ -199,11 +201,51 @@ const publicLinkForTarget = (sourcePath, target) => {
     if (!resolved) {
         return target;
     }
+    if (resolved.relative.startsWith('docs/assets/')) {
+        const assetPath = resolved.relative.slice('docs/assets/'.length);
+        return `/wiki/assets/${assetPath}${resolved.anchor}`;
+    }
     const markdownRoute = routeBySource.get(resolved.relative);
     if (markdownRoute) {
         return `/wiki/${markdownRoute}/${resolved.anchor}`;
     }
     return `${githubSourceUrl(resolved.relative)}${resolved.anchor}`;
+};
+
+const stripFirstDocumentHeading = (content) => {
+    const lines = content.split('\n');
+    let fenceMarker;
+    for (let index = 0; index < lines.length; index += 1) {
+        const line = lines[index].replace(/\r$/u, '');
+        const fence = line.match(/^ {0,3}(`{3,}|~{3,})/u)?.[1];
+        if (fence) {
+            if (!fenceMarker) {
+                fenceMarker = fence[0];
+            } else if (fence[0] === fenceMarker) {
+                fenceMarker = undefined;
+            }
+            continue;
+        }
+        if (!fenceMarker && /^ {0,3}#\s+\S/u.test(line)) {
+            lines.splice(index, 1);
+            return lines.join('\n');
+        }
+    }
+    return content;
+};
+
+const copyDocumentationAssets = async () => {
+    await fs.rm(stagedAssetsRoot, { recursive: true, force: true });
+    try {
+        await fs.cp(documentationAssetsRoot, stagedAssetsRoot, {
+            recursive: true,
+        });
+    } catch (error) {
+        const err = error;
+        if (err?.code !== 'ENOENT') {
+            throw error;
+        }
+    }
 };
 
 const adaptMarkdownLinks = (sourcePath, content) =>
@@ -239,7 +281,10 @@ const stageFile = async (sourcePath) => {
         '---',
         '',
     ].join('\n');
-    const adaptedContent = adaptMarkdownLinks(sourcePath, content);
+    const adaptedContent = adaptMarkdownLinks(
+        sourcePath,
+        stripFirstDocumentHeading(content)
+    );
     const contentWithCanonicalLinks = `${adaptedContent}${
         adaptedContent.endsWith('\n') ? '' : '\n'
     }\n---\n\n[Canonical source](${githubSourceUrl(sourcePath)}) · [File history](${githubHistoryUrl(sourcePath)})\n`;
@@ -253,6 +298,7 @@ const stageFile = async (sourcePath) => {
 
 const main = async () => {
     await fs.rm(sourceRoot, { recursive: true, force: true });
+    await copyDocumentationAssets();
     const allFiles = [
         ...sourceFiles,
         ...(
@@ -275,9 +321,9 @@ const main = async () => {
             'editUrl: false',
             '---',
             '',
-            'Footnote is a transparency-first AI framework that pairs responses with inspectable provenance and trace metadata.',
+            'Footnote is an AI assistant that shows how its answers were made.',
             '',
-            'Use the navigation to explore the canonical repository documentation. The published wiki is a presentation of checked-in Markdown; Git history and implementation remain the authority.',
+            'Use the navigation to explore sources, workflows, and the canonical repository documentation. The published wiki presents checked-in Markdown; Git history and implementation remain the authority.',
             '',
             '[Read the documentation map](/wiki/documentation/)',
             '',

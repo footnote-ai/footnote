@@ -95,3 +95,10 @@ Prepared and live content must remain visually and semantically distinct:
 - `packages/web/src/components/PublicPageLayout.tsx`
 - `packages/web/src/data/landingScenarios.ts`
 - `packages/web/src/utils/embedHeight.ts`
+
+## Web style layers
+
+The shared web styles are composed from `packages/web/src/styles/index.css`.
+Reusable design constants live in `design-constants.css`, light/dark semantic
+mapping lives in `theme-map.css`, and component/page rules live in the
+remaining layer files.
