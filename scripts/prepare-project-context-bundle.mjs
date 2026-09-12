@@ -106,6 +106,17 @@ const revision = revisionOutput.trim();
 if (!revisionPattern.test(revision)) {
     throw new Error(`Unable to resolve a valid context revision: ${revision}`);
 }
+const { stdout: revisionDateOutput } = await execFileAsync(
+    'git',
+    ['-C', repositoryRoot, 'show', '-s', '--format=%cI', revision],
+    { encoding: 'utf8' }
+);
+const revisionDate = revisionDateOutput.trim();
+if (Number.isNaN(Date.parse(revisionDate))) {
+    throw new Error(
+        `Unable to resolve a valid context revision date: ${revisionDate}`
+    );
+}
 
 const allowlistContents = await gitShow(revision, '.footnote/context-files');
 const manifestContents = await gitShow(
@@ -165,6 +176,11 @@ await fs.mkdir(bundleRoot, { recursive: true });
 await fs.writeFile(
     path.join(bundleRoot, 'revision.txt'),
     `${revision}\n`,
+    'utf8'
+);
+await fs.writeFile(
+    path.join(bundleRoot, 'revision-date.txt'),
+    `${revisionDate}\n`,
     'utf8'
 );
 await fs.writeFile(

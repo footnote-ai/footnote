@@ -47,6 +47,7 @@ Footnote leverages Docker containers for easy deployment on your own hardware or
 ## Need help?
 
 - [Docs](docs/README.md)
+- [Public documentation wiki](https://ai.jordanmakes.dev/wiki/)
 - [GitHub issues](https://github.com/footnote-ai/footnote/issues)
 - [GitHub discussions](https://github.com/footnote-ai/footnote/discussions)
 

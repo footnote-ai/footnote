@@ -20,6 +20,15 @@ const MIME_MAP = new Map<string, string>([
     ['.jpeg', 'image/jpeg'],
     ['.webp', 'image/webp'],
     ['.ico', 'image/x-icon'],
+    ['.webmanifest', 'application/manifest+json; charset=utf-8'],
+    ['.woff', 'font/woff'],
+    ['.woff2', 'font/woff2'],
+    ['.wasm', 'application/wasm'],
+    ['.xml', 'application/xml; charset=utf-8'],
+    ['.pagefind', 'application/octet-stream'],
+    ['.pf_fragment', 'application/octet-stream'],
+    ['.pf_index', 'application/octet-stream'],
+    ['.pf_meta', 'application/octet-stream'],
     ['.txt', 'text/plain; charset=utf-8'],
 ]);
 
@@ -55,8 +64,27 @@ const sanitizePath = (rawPath: string): string => {
     return normalized.replace(/^\/+/, '');
 };
 
+type AssetResolverOptions = {
+    spaFallbackExemptPrefixes?: readonly string[];
+};
+
+const isPathWithinPrefix = (relativePath: string, prefix: string): boolean => {
+    const normalizedRelativePath = relativePath
+        .replace(/\\/gu, '/')
+        .replace(/^\/+/, '');
+    const normalizedPrefix = prefix.replace(/^\/+|\/+$/gu, '');
+    return (
+        normalizedPrefix.length > 0 &&
+        (normalizedRelativePath === normalizedPrefix ||
+            normalizedRelativePath.startsWith(`${normalizedPrefix}/`))
+    );
+};
+
 // --- Resolver factory ---
-const createAssetResolver = (distDir: string) => {
+const createAssetResolver = (
+    distDir: string,
+    { spaFallbackExemptPrefixes = [] }: AssetResolverOptions = {}
+) => {
     if (!distDir) {
         throw new Error('DIST_DIR is required for asset resolution.');
     }
@@ -84,6 +112,14 @@ const createAssetResolver = (distDir: string) => {
         const directContent = await tryReadFile(absolutePath);
         if (directContent) {
             return { content: directContent, absolutePath };
+        }
+
+        if (
+            spaFallbackExemptPrefixes.some((prefix) =>
+                isPathWithinPrefix(sanitized, prefix)
+            )
+        ) {
+            return undefined;
         }
 
         // SPA fallback for client-side routes.
