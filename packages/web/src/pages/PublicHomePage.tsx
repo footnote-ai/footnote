@@ -294,6 +294,12 @@ const PublicHomePage = (): JSX.Element => {
                         >
                             Setup guide
                         </a>
+                        <a
+                            className="public-home__documentation"
+                            href="/wiki/philosophy/"
+                        >
+                            Privacy and control
+                        </a>
                     </div>
                 </section>
             </main>

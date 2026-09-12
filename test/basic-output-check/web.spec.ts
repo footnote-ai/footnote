@@ -152,6 +152,9 @@ test('public homepage explains prepared and live paths', async ({
     await expect(
         page.getByRole('link', { name: 'Setup guide' })
     ).toHaveAttribute('href', '/wiki/getting-started/');
+    await expect(
+        page.getByRole('link', { name: 'Privacy and control' })
+    ).toHaveAttribute('href', '/wiki/philosophy/');
 
     await page.screenshot({
         animations: 'disabled',

@@ -44,8 +44,10 @@ test('public homepage keeps approved prepared-response content and destinations'
         /https:\/\/github\.com\/footnote-ai\/footnote\/releases/
     );
     assert.match(source, /href="\/wiki\/getting-started\/"/);
+    assert.match(source, /href="\/wiki\/philosophy\/"/);
     assert.match(source, />\s*Download\s*</);
     assert.match(source, />\s*Setup guide\s*</);
+    assert.match(source, />\s*Privacy and control\s*</);
     assert.ok(
         source.search(/>\s*Download\s*</) < source.search(/>\s*Setup guide\s*</)
     );
