@@ -8,7 +8,7 @@
 import fs from 'node:fs/promises';
 import { execFile } from 'node:child_process';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import { promisify } from 'node:util';
 
 const packageRoot = path.resolve(
@@ -107,8 +107,49 @@ const lifecycleForSource = (sourcePath) => {
     return 'current';
 };
 
+const firstDocumentHeading = (content) => {
+    const lines = content.split('\n');
+    let fence;
+    for (let index = 0; index < lines.length; index += 1) {
+        const line = lines[index].replace(/\r$/u, '');
+        if (fence) {
+            const closingFence = line.match(/^ {0,3}([`~]+)([ \t]*)$/u);
+            if (
+                closingFence &&
+                closingFence[1][0] === fence.marker &&
+                closingFence[1].length >= fence.length
+            ) {
+                fence = undefined;
+            }
+            continue;
+        }
+
+        const openingFence = line.match(/^ {0,3}(`{3,}|~{3,})/u)?.[1];
+        if (openingFence) {
+            fence = {
+                marker: openingFence[0],
+                length: openingFence.length,
+            };
+            continue;
+        }
+
+        const atxHeading = line.match(/^ {0,3}#\s+(.+)$/u)?.[1]?.trim();
+        if (atxHeading) {
+            return { end: index, start: index, text: atxHeading };
+        }
+
+        const setextHeading = lines[index + 1]
+            ?.replace(/\r$/u, '')
+            .match(/^ {0,3}=+[ \t]*$/u);
+        if (line.trim() && setextHeading) {
+            return { end: index + 1, start: index, text: line.trim() };
+        }
+    }
+    return undefined;
+};
+
 const titleForMarkdown = (sourcePath, content) => {
-    const heading = content.match(/^#\s+(.+)$/mu)?.[1]?.trim();
+    const heading = firstDocumentHeading(content)?.text;
     if (heading) {
         return heading;
     }
@@ -214,30 +255,45 @@ const publicLinkForTarget = (sourcePath, target) => {
 
 const stripFirstDocumentHeading = (content) => {
     const lines = content.split('\n');
-    let fenceMarker;
-    for (let index = 0; index < lines.length; index += 1) {
-        const line = lines[index].replace(/\r$/u, '');
-        const fence = line.match(/^ {0,3}(`{3,}|~{3,})/u)?.[1];
-        if (fence) {
-            if (!fenceMarker) {
-                fenceMarker = fence[0];
-            } else if (fence[0] === fenceMarker) {
-                fenceMarker = undefined;
-            }
-            continue;
-        }
-        if (!fenceMarker && /^ {0,3}#\s+\S/u.test(line)) {
-            lines.splice(index, 1);
-            return lines.join('\n');
-        }
+    const heading = firstDocumentHeading(content);
+    if (heading) {
+        lines.splice(heading.start, heading.end - heading.start + 1);
+        return lines.join('\n');
     }
     return content;
 };
+
+const safeDocumentationAssetExtensions = new Set([
+    '.avif',
+    '.bmp',
+    '.gif',
+    '.jpeg',
+    '.jpg',
+    '.mp3',
+    '.mp4',
+    '.ogg',
+    '.png',
+    '.wav',
+    '.webm',
+    '.webp',
+]);
+
+const isSafeDocumentationAsset = (sourcePath) =>
+    safeDocumentationAssetExtensions.has(
+        path.extname(sourcePath).toLowerCase()
+    );
 
 const copyDocumentationAssets = async () => {
     await fs.rm(stagedAssetsRoot, { recursive: true, force: true });
     try {
         await fs.cp(documentationAssetsRoot, stagedAssetsRoot, {
+            filter: async (sourcePath) => {
+                const stats = await fs.lstat(sourcePath);
+                return (
+                    stats.isDirectory() ||
+                    (stats.isFile() && isSafeDocumentationAsset(sourcePath))
+                );
+            },
             recursive: true,
         });
     } catch (error) {
@@ -332,4 +388,11 @@ const main = async () => {
     );
 };
 
-await main();
+if (
+    process.argv[1] &&
+    import.meta.url === pathToFileURL(process.argv[1]).href
+) {
+    await main();
+}
+
+export { stripFirstDocumentHeading, titleForMarkdown };

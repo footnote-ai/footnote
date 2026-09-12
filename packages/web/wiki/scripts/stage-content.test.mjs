@@ -7,11 +7,16 @@
  */
 import assert from 'node:assert/strict';
 import { execFile } from 'node:child_process';
+import { randomUUID } from 'node:crypto';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { execPath } from 'node:process';
 import { promisify } from 'node:util';
 import test from 'node:test';
+import {
+    stripFirstDocumentHeading,
+    titleForMarkdown,
+} from './stage-content.mjs';
 
 const execFileAsync = promisify(execFile);
 const packageRoot = path.resolve(import.meta.dirname, '../..');
@@ -24,12 +29,76 @@ const stageScript = path.join(
     'stage-content.mjs'
 );
 
+test('keeps shorter and annotated fence lines opaque', () => {
+    const content = [
+        '```',
+        '# inside the fence',
+        '``',
+        '# still inside the fence',
+        '``` trailing text',
+        '# also inside the fence',
+        '````',
+        '# first heading outside the fence',
+        '# second heading outside the fence',
+    ].join('\n');
+
+    const stripped = stripFirstDocumentHeading(content);
+    assert.match(stripped, /# inside the fence/u);
+    assert.match(stripped, /# still inside the fence/u);
+    assert.match(stripped, /# also inside the fence/u);
+    assert.doesNotMatch(stripped, /# first heading outside the fence/u);
+    assert.match(stripped, /# second heading outside the fence/u);
+});
+
+test('uses and removes the first Setext H1 outside fenced code', () => {
+    const content = [
+        '```',
+        'Fenced text',
+        '===',
+        '```',
+        '',
+        'Setext title',
+        '===',
+        '',
+        'Body',
+    ].join('\n');
+
+    assert.equal(titleForMarkdown('fallback.md', content), 'Setext title');
+    const stripped = stripFirstDocumentHeading(content);
+    assert.equal(
+        stripped,
+        ['```', 'Fenced text', '===', '```', '', '', 'Body'].join('\n')
+    );
+});
+
 test('stages canonical sources with route, lifecycle, and edit-link metadata', async () => {
-    await execFileAsync(execPath, [stageScript], {
-        cwd: packageRoot,
-    });
-    let documentationSource;
+    const documentationSourcePath = path.join(
+        repositoryRoot,
+        'docs',
+        'README.md'
+    );
+    const documentationSource = await fs.readFile(
+        documentationSourcePath,
+        'utf8'
+    );
+    const fixtureStem = `fixture-${randomUUID()}`;
+    const assetPath = path.join(
+        repositoryRoot,
+        'docs',
+        'assets',
+        `${fixtureStem}.png`
+    );
+    const unsafeAssetPath = path.join(
+        repositoryRoot,
+        'docs',
+        'assets',
+        `${fixtureStem}.svg`
+    );
+    const assetContents = Buffer.from([137, 80, 78, 71]);
     try {
+        await execFileAsync(execPath, [stageScript], {
+            cwd: packageRoot,
+        });
         const readGenerated = async (relativePath) =>
             await fs.readFile(path.join(generatedRoot, relativePath), 'utf8');
 
@@ -45,7 +114,6 @@ test('stages canonical sources with route, lifecycle, and edit-link metadata', a
         assert.match(documentation, /slug: "documentation"/);
         assert.match(documentation, /lastUpdated: \d{4}-\d{2}-\d{2}T/u);
         assert.match(documentation, /\/wiki\/getting-started\/#quickstart/);
-        assert.doesNotMatch(documentation, /^#\s+/mu);
         assert.match(architectureGuide, /^##\s+Important Concepts/mu);
         assert.match(documentation, /blob\/main\/docs\/README\.md/);
         assert.match(documentation, /commits\/main\/docs\/README\.md/);
@@ -61,30 +129,26 @@ test('stages canonical sources with route, lifecycle, and edit-link metadata', a
         assert.doesNotMatch(landing, /transparency-first AI framework/u);
         assert.match(landing, /slug: ""/);
 
-        const assetPath = path.join(
-            repositoryRoot,
-            'docs',
-            'assets',
-            'fixture.svg'
-        );
-        const documentationSourcePath = path.join(
-            repositoryRoot,
-            'docs',
-            'README.md'
-        );
-        documentationSource = await fs.readFile(
+        await fs.writeFile(
             documentationSourcePath,
+            `${documentationSource}\n# Second temporary heading\n`,
             'utf8'
         );
+        await execFileAsync(execPath, [stageScript], { cwd: packageRoot });
+        const stagedWithTwoHeadings = await readGenerated('documentation.md');
+        assert.doesNotMatch(stagedWithTwoHeadings, /^# Documentation Map$/mu);
+        assert.match(stagedWithTwoHeadings, /^# Second temporary heading$/mu);
+
         await fs.mkdir(path.dirname(assetPath), { recursive: true });
+        await fs.writeFile(assetPath, assetContents);
         await fs.writeFile(
-            assetPath,
+            unsafeAssetPath,
             '<svg xmlns="http://www.w3.org/2000/svg" />',
             'utf8'
         );
         await fs.writeFile(
             documentationSourcePath,
-            `${documentationSource}\n![fixture](assets/fixture.svg)\n`,
+            `${documentationSource}\n![fixture](assets/${fixtureStem}.png)\n`,
             'utf8'
         );
         await execFileAsync(execPath, [stageScript], { cwd: packageRoot });
@@ -93,35 +157,43 @@ test('stages canonical sources with route, lifecycle, and edit-link metadata', a
                 path.join(generatedRoot, 'documentation.md'),
                 'utf8'
             ),
-            /\/wiki\/assets\/fixture\.svg/u
+            new RegExp(`/wiki/assets/${fixtureStem}\\.png`, 'u')
         );
-        assert.equal(
+        assert.deepEqual(
             await fs.readFile(
                 path.join(
                     packageRoot,
                     'wiki',
                     'public',
                     'assets',
-                    'fixture.svg'
-                ),
-                'utf8'
+                    `${fixtureStem}.png`
+                )
             ),
-            '<svg xmlns="http://www.w3.org/2000/svg" />'
+            assetContents
+        );
+        await assert.rejects(
+            fs.access(
+                path.join(
+                    packageRoot,
+                    'wiki',
+                    'public',
+                    'assets',
+                    `${fixtureStem}.svg`
+                )
+            ),
+            /ENOENT/u
         );
     } finally {
-        await fs.rm(
-            path.join(repositoryRoot, 'docs', 'assets', 'fixture.svg'),
-            {
-                force: true,
-            }
+        await Promise.all(
+            [assetPath, unsafeAssetPath].map((temporaryAssetPath) =>
+                fs.rm(temporaryAssetPath, { force: true })
+            )
         );
-        if (typeof documentationSource !== 'undefined') {
-            await fs.writeFile(
-                path.join(repositoryRoot, 'docs', 'README.md'),
-                documentationSource,
-                'utf8'
-            );
-        }
+        await fs.writeFile(
+            documentationSourcePath,
+            documentationSource,
+            'utf8'
+        );
         await fs.rm(generatedRoot, { recursive: true, force: true });
         await fs.rm(path.join(packageRoot, 'wiki', 'public', 'assets'), {
             recursive: true,
