@@ -8,7 +8,8 @@
 import fs from 'node:fs/promises';
 import { execFile } from 'node:child_process';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
+import process from 'node:process';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import { promisify } from 'node:util';
 
 const packageRoot = path.resolve(
@@ -17,6 +18,8 @@ const packageRoot = path.resolve(
 );
 const repositoryRoot = path.resolve(packageRoot, '../..');
 const sourceRoot = path.join(packageRoot, 'wiki', 'src', 'content', 'docs');
+const documentationAssetsRoot = path.join(repositoryRoot, 'docs', 'assets');
+const stagedAssetsRoot = path.join(packageRoot, 'wiki', 'public', 'assets');
 const sourceUrlBase = 'https://github.com/footnote-ai/footnote/blob/main/';
 const editUrlBase = 'https://github.com/footnote-ai/footnote/edit/main/';
 const historyUrlBase = 'https://github.com/footnote-ai/footnote/commits/main/';
@@ -105,8 +108,49 @@ const lifecycleForSource = (sourcePath) => {
     return 'current';
 };
 
+const firstDocumentHeading = (content) => {
+    const lines = content.split('\n');
+    let fence;
+    for (let index = 0; index < lines.length; index += 1) {
+        const line = lines[index].replace(/\r$/u, '');
+        if (fence) {
+            const closingFence = line.match(/^ {0,3}([`~]+)([ \t]*)$/u);
+            if (
+                closingFence &&
+                closingFence[1][0] === fence.marker &&
+                closingFence[1].length >= fence.length
+            ) {
+                fence = undefined;
+            }
+            continue;
+        }
+
+        const openingFence = line.match(/^ {0,3}(`{3,}|~{3,})/u)?.[1];
+        if (openingFence) {
+            fence = {
+                marker: openingFence[0],
+                length: openingFence.length,
+            };
+            continue;
+        }
+
+        const atxHeading = line.match(/^ {0,3}#\s+(.+)$/u)?.[1]?.trim();
+        if (atxHeading) {
+            return { end: index, start: index, text: atxHeading };
+        }
+
+        const setextHeading = lines[index + 1]
+            ?.replace(/\r$/u, '')
+            .match(/^ {0,3}=+[ \t]*$/u);
+        if (line.trim() && setextHeading) {
+            return { end: index + 1, start: index, text: line.trim() };
+        }
+    }
+    return undefined;
+};
+
 const titleForMarkdown = (sourcePath, content) => {
-    const heading = content.match(/^#\s+(.+)$/mu)?.[1]?.trim();
+    const heading = firstDocumentHeading(content)?.text;
     if (heading) {
         return heading;
     }
@@ -199,11 +243,66 @@ const publicLinkForTarget = (sourcePath, target) => {
     if (!resolved) {
         return target;
     }
+    if (resolved.relative.startsWith('docs/assets/')) {
+        const assetPath = resolved.relative.slice('docs/assets/'.length);
+        return `/wiki/assets/${assetPath}${resolved.anchor}`;
+    }
     const markdownRoute = routeBySource.get(resolved.relative);
     if (markdownRoute) {
         return `/wiki/${markdownRoute}/${resolved.anchor}`;
     }
     return `${githubSourceUrl(resolved.relative)}${resolved.anchor}`;
+};
+
+const stripFirstDocumentHeading = (content) => {
+    const lines = content.split('\n');
+    const heading = firstDocumentHeading(content);
+    if (heading) {
+        lines.splice(heading.start, heading.end - heading.start + 1);
+        return lines.join('\n');
+    }
+    return content;
+};
+
+const safeDocumentationAssetExtensions = new Set([
+    '.avif',
+    '.bmp',
+    '.gif',
+    '.jpeg',
+    '.jpg',
+    '.mp3',
+    '.mp4',
+    '.ogg',
+    '.png',
+    '.wav',
+    '.webm',
+    '.webp',
+]);
+
+const isSafeDocumentationAsset = (sourcePath) =>
+    safeDocumentationAssetExtensions.has(
+        path.extname(sourcePath).toLowerCase()
+    );
+
+const copyDocumentationAssets = async () => {
+    await fs.rm(stagedAssetsRoot, { recursive: true, force: true });
+    try {
+        await fs.cp(documentationAssetsRoot, stagedAssetsRoot, {
+            filter: async (sourcePath) => {
+                const stats = await fs.lstat(sourcePath);
+                return (
+                    stats.isDirectory() ||
+                    (stats.isFile() && isSafeDocumentationAsset(sourcePath))
+                );
+            },
+            recursive: true,
+        });
+    } catch (error) {
+        const err = error;
+        if (err?.code !== 'ENOENT') {
+            throw error;
+        }
+    }
 };
 
 const adaptMarkdownLinks = (sourcePath, content) =>
@@ -239,7 +338,10 @@ const stageFile = async (sourcePath) => {
         '---',
         '',
     ].join('\n');
-    const adaptedContent = adaptMarkdownLinks(sourcePath, content);
+    const adaptedContent = adaptMarkdownLinks(
+        sourcePath,
+        stripFirstDocumentHeading(content)
+    );
     const contentWithCanonicalLinks = `${adaptedContent}${
         adaptedContent.endsWith('\n') ? '' : '\n'
     }\n---\n\n[Canonical source](${githubSourceUrl(sourcePath)}) · [File history](${githubHistoryUrl(sourcePath)})\n`;
@@ -253,6 +355,7 @@ const stageFile = async (sourcePath) => {
 
 const main = async () => {
     await fs.rm(sourceRoot, { recursive: true, force: true });
+    await copyDocumentationAssets();
     const allFiles = [
         ...sourceFiles,
         ...(
@@ -275,9 +378,9 @@ const main = async () => {
             'editUrl: false',
             '---',
             '',
-            'Footnote is a transparency-first AI framework that pairs responses with inspectable provenance and trace metadata.',
+            'Footnote is an AI assistant that shows how its answers were made.',
             '',
-            'Use the navigation to explore the canonical repository documentation. The published wiki is a presentation of checked-in Markdown; Git history and implementation remain the authority.',
+            'Use the navigation to explore sources, workflows, and the canonical repository documentation. The published wiki presents checked-in Markdown; Git history and implementation remain the authority.',
             '',
             '[Read the documentation map](/wiki/documentation/)',
             '',
@@ -286,4 +389,11 @@ const main = async () => {
     );
 };
 
-await main();
+if (
+    process.argv[1] &&
+    import.meta.url === pathToFileURL(process.argv[1]).href
+) {
+    await main();
+}
+
+export { stripFirstDocumentHeading, titleForMarkdown };

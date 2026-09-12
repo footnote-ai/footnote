@@ -24,6 +24,14 @@ private debug payloads, and source bodies. Prefer durable concepts and existing
 repository entrypoints over provider defaults or incidental implementation
 details.
 
+## Documentation visuals
+
+Keep screenshots, diagrams, and other checked-in documentation media under
+`docs/assets/`. Link to them with relative paths from canonical Markdown so the
+source remains useful on GitHub; the `/wiki/` build publishes the same files
+under `/wiki/assets/`. Add visuals when the referenced UI or behavior is stable,
+not as a requirement for every page.
+
 ## Validation
 
 Run `pnpm validate-deepwiki` after changing the configuration. Footnote's

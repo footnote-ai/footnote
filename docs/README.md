@@ -31,15 +31,11 @@ Standalone launcher note: running `footnote` with no command (or double-clicking
 the binary) opens the `footnote info` launcher menu. Use explicit commands like
 `footnote start`, `footnote setup`, and `footnote update` for automation.
 
-## Web Style Map
+## Documentation visuals
 
-The web package uses a layered stylesheet entrypoint at
-`packages/web/src/styles/index.css`.
-
-- Edit reusable design constants in `design-constants.css`.
-- Edit light/dark semantic mapping in `theme-map.css`.
-- Keep component/page rules in the remaining layer files (for example
-  `header-nav.css`, `interaction.css`, `trace.css`).
+Documentation visuals belong under `docs/assets/`. Keep links relative to the
+canonical Markdown when possible so they remain useful on GitHub; the wiki
+publication stages that directory at `/wiki/assets/`.
 
 ## Sections
 

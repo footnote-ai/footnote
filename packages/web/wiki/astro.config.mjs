@@ -35,16 +35,12 @@ export default defineConfig({
                         'architecture/public-web-surfaces',
                         'architecture/canonical-response-footnote',
                         'architecture/context-integrations',
+                        'architecture/first-setup-flow',
                     ],
                 },
                 {
-                    label: 'Use and operate',
-                    items: [
-                        'deployment',
-                        'auth',
-                        'architecture/first-setup-flow',
-                        'architecture/embedding',
-                    ],
+                    label: 'Set up and integrate',
+                    items: ['deployment', 'auth', 'architecture/embedding'],
                 },
                 {
                     label: 'Reference',
