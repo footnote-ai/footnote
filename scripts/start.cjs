@@ -50,6 +50,10 @@ const devSettingsLocalOverridePath = path.join(
     devSettingsDirPath,
     'footnote.local.yaml'
 );
+const localFourBotLauncherPath = path.join(
+    devSettingsDirPath,
+    'start-local-four-bots.mjs'
+);
 
 const pnpmBin = process.platform === 'win32' ? 'pnpm.cmd' : 'pnpm';
 const nodeBin = process.execPath;
@@ -257,6 +261,20 @@ const main = async () => {
         if (installStatus !== 0) {
             process.exit(installStatus);
         }
+    }
+
+    // A local four-bot launcher is intentionally ignored so production and
+    // fresh-checkout starts retain the backend/web-only default.
+    if (fs.existsSync(localFourBotLauncherPath)) {
+        console.log(
+            `[start] Using local four-bot launcher ${localFourBotLauncherPath}.`
+        );
+        const localFourBotStatus = run(
+            nodeBin,
+            [localFourBotLauncherPath, ...cliArgs],
+            process.env
+        );
+        process.exit(localFourBotStatus);
     }
 
     const requestedBasePort = resolveFootnoteBasePort(process.env);
