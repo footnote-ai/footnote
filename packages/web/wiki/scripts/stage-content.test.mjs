@@ -9,6 +9,7 @@ import assert from 'node:assert/strict';
 import { execFile } from 'node:child_process';
 import fs from 'node:fs/promises';
 import path from 'node:path';
+import { execPath } from 'node:process';
 import { promisify } from 'node:util';
 import test from 'node:test';
 
@@ -23,7 +24,7 @@ const stageScript = path.join(
 );
 
 test('stages canonical sources with route, lifecycle, and edit-link metadata', async () => {
-    await execFileAsync(process.execPath, [stageScript], {
+    await execFileAsync(execPath, [stageScript], {
         cwd: packageRoot,
     });
     try {
