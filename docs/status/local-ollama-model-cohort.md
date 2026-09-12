@@ -5,6 +5,20 @@ slots. It is an experiment configuration, not a production model policy. The
 runtime source remains the ignored `.footnote-dev/footnote.local.yaml` and
 `.footnote-dev/model-catalog.yaml` override files.
 
+## Local Discord identities
+
+The local server uses four separate Jr Discord applications so Ollama persona
+testing cannot accidentally connect the normal/default bots. The local
+override changes only the credential environment-variable references; the
+persona IDs, display names, aliases, and prompt overlays remain `footnote`,
+`danny`, `myuri`, and `winter`. The tracked `footnote.yaml` continues to point
+at the normal/default applications.
+
+Load the Jr credentials from a local env file outside the repository before
+running `pnpm start`. The server supervisor then launches each configured bot
+with its resolved credentials and registers that application's guild commands
+at startup. No Jr credential values belong in this repository.
+
 ## Hardware envelope
 
 - AMD Radeon RX 7800 XT with 16 GB VRAM
