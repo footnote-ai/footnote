@@ -6,18 +6,16 @@
 
 ### AI that shows its work.
 
-A lot of AI systems give answers that _look_ convincing, but reveal very little about how they were made. Footnote creates answers with a trail you can follow when it matters.
+Footnote is an open-source AI assistant for answers you can check. It pairs responses with inspectable provenance and trace metadata so people can see what shaped an answer, what it may be missing, and where to look next.
 
-Transparency is important, but you also need control: over what it can and can't do, what's remembered, how much money can be spent, how carefully sensitive questions should be handled, and much more.
-
-Footnote tries to bridge the gap between what AI can do and what people need in order to use it responsibly. See our [philosophy](docs/Philosophy.md) page for the thinking behind the project.
+It is built for human judgment, not as an oracle. When a live response has relevant sources, limits, safety information, or workflow details, Footnote makes room for that context alongside the answer. Read the [project philosophy](https://ai.jordanmakes.dev/wiki/philosophy/) for the principles behind the work.
 
 Footnote is built with AI assistance. Read the
 [AI use disclosure](docs/ai/ai-use-disclosure.md) for more information.
 
-<!-- screenshot of a question+response here -->
+![Prepared Footnote response example](docs/assets/public-home-prepared.png)
 
-<!-- screenshot of an expanded footnote -->
+_The homepage's prepared examples are curated demonstrations of Footnote's answer shape, not live runs or durable traces._
 
 [Try the live demo](https://ai.jordanmakes.dev)
 
@@ -46,8 +44,8 @@ Footnote leverages Docker containers for easy deployment on your own hardware or
 
 ## Need help?
 
-- [Docs](docs/README.md)
-- [Public documentation wiki](https://ai.jordanmakes.dev/wiki/)
+- [Public documentation wiki](https://ai.jordanmakes.dev/wiki/getting-started/)
+- [Documentation source](docs/README.md)
 - [GitHub issues](https://github.com/footnote-ai/footnote/issues)
 - [GitHub discussions](https://github.com/footnote-ai/footnote/discussions)
 

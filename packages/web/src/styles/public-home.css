@@ -495,3 +495,99 @@
         font-size: 0.75rem;
     }
 }
+
+.public-home__narrative {
+    border-top: 1px solid var(--public-rule);
+}
+
+.public-home__narrative-intro {
+    max-width: 47.5rem;
+}
+
+.public-home__eyebrow {
+    margin: 0 0 1rem;
+    color: var(--public-muted);
+    font-family: var(--fn-font-mono);
+    font-size: 0.8rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+}
+
+.public-home__narrative h2 {
+    max-width: 43rem;
+    margin: 0 0 1rem;
+    font-family: var(--fn-font-display);
+    font-size: clamp(1.8rem, 3vw, 2.7rem);
+    font-weight: 550;
+    letter-spacing: -0.025em;
+    line-height: 1.05;
+}
+
+.public-home__narrative-intro > p:last-child {
+    max-width: 47.5rem;
+    margin: 0;
+    color: var(--public-muted);
+    font-size: clamp(1.12rem, 1.55vw, 1.35rem);
+    line-height: 1.5;
+}
+
+.public-home__principles {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 1.5rem;
+    margin-top: clamp(2.5rem, 5vw, 4rem);
+}
+
+.public-home__principle {
+    padding-top: 1rem;
+    border-top: 1px solid var(--public-rule);
+}
+
+.public-home__principle h3 {
+    margin: 0 0 0.8rem;
+    font-family: var(--fn-font-display);
+    font-size: 1.35rem;
+    font-weight: 550;
+    line-height: 1.15;
+}
+
+.public-home__principle p {
+    margin: 0 0 1rem;
+    color: var(--public-muted);
+    font-size: 1rem;
+    line-height: 1.55;
+}
+
+.public-home__principle a,
+.public-home__narrative-actions a {
+    font-family: var(--fn-font-mono);
+    font-size: 0.8rem;
+    text-underline-offset: 0.22rem;
+}
+
+.public-home__narrative-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 1rem;
+    margin-top: clamp(2.5rem, 5vw, 4rem);
+}
+
+.public-home__action {
+    padding: 0.75rem 1rem;
+    border: 1px solid var(--public-rule);
+    border-radius: 0.3rem;
+    background: var(--public-paper-raised);
+    text-decoration: none;
+}
+
+.public-home__action--primary {
+    border-color: var(--public-ink);
+    background: var(--public-ink);
+    color: var(--public-paper) !important;
+}
+
+@media (max-width: 760px) {
+    .public-home__principles {
+        grid-template-columns: 1fr;
+    }
+}

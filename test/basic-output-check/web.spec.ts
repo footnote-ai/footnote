@@ -74,3 +74,50 @@ test('shows one ordinary answer with its provenance', async ({
         path: testInfo.outputPath('ordinary-text-answer.png'),
     });
 });
+
+test('public homepage explains prepared and live paths', async ({
+    page,
+}, testInfo) => {
+    await page.goto('/');
+
+    await expect(
+        page.getByRole('heading', { name: 'AI that shows its work.' })
+    ).toBeVisible();
+    await expect(page.getByText('Pre-prepared response.')).toBeVisible();
+    await expect(
+        page.getByRole('heading', { name: 'See what shaped an answer' })
+    ).toBeVisible();
+    await expect(
+        page.getByRole('link', { name: 'Try a live question' })
+    ).toHaveAttribute('href', '/chat');
+    await expect(
+        page.getByRole('link', { name: 'Explore the documentation' })
+    ).toHaveAttribute('href', '/wiki/');
+    await expect(
+        page.getByRole('link', { name: 'How response details fit together' })
+    ).toHaveAttribute(
+        'href',
+        '/wiki/architecture/canonical-response-footnote/'
+    );
+
+    await page.screenshot({
+        animations: 'disabled',
+        fullPage: true,
+        path: testInfo.outputPath('public-home-prepared.png'),
+    });
+});
+
+test('public homepage remains usable at mobile width', async ({ page }) => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.goto('/');
+
+    await expect(
+        page.getByRole('heading', { name: 'AI that shows its work.' })
+    ).toBeVisible();
+    await expect(
+        page.getByRole('link', { name: 'Try a live question' })
+    ).toBeVisible();
+    await expect
+        .poll(() => page.evaluate(() => document.documentElement.scrollWidth))
+        .toBeLessThanOrEqual(390);
+});

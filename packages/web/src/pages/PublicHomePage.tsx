@@ -1,9 +1,9 @@
 /**
- * @description: Renders the public Footnote homepage with one prepared answer and a reserved trace-footer position.
+ * @description: Renders the public Footnote homepage, prepared examples, and concise product narrative.
  * @footnote-scope: web
  * @footnote-module: PublicHomePage
  * @footnote-risk: medium - Homepage changes affect public discovery and prepared-example presentation.
- * @footnote-ethics: high - Prepared response state and the empty trace position must not imply live execution or fabricated provenance.
+ * @footnote-ethics: high - Prepared response state and public claims must not imply live execution or fabricated provenance.
  */
 
 import { Link } from 'react-router-dom';
@@ -59,6 +59,73 @@ const PublicHomePage = (): JSX.Element => {
                     </div>
                 </section>
                 <section
+                    className="public-home__narrative"
+                    aria-labelledby="narrative-title"
+                >
+                    <div className="public-home__narrative-intro">
+                        <p className="public-home__eyebrow">Why Footnote</p>
+                        <h2 id="narrative-title">
+                            Answers are easier to use when you can check them.
+                        </h2>
+                        <p>
+                            Footnote is an open-source AI assistant for answers
+                            you can inspect. It keeps the useful questions close
+                            to the answer: what shaped it, what may be missing,
+                            and where to look next.
+                        </p>
+                    </div>
+                    <div className="public-home__principles">
+                        <article className="public-home__principle">
+                            <h3>See what shaped an answer</h3>
+                            <p>
+                                A live response can show sources and runtime
+                                details that help explain how it was produced.
+                                Workflow details and limits stay visible when
+                                they matter; when a trace is available, it gives
+                                you a fuller record to inspect.
+                            </p>
+                            <a href="/wiki/architecture/canonical-response-footnote/">
+                                How response details fit together
+                            </a>
+                        </article>
+                        <article className="public-home__principle">
+                            <h3>Keep uncertainty visible</h3>
+                            <p>
+                                Missing evidence, unavailable work, and relevant
+                                limits should be visible instead of being
+                                smoothed into a confident-looking answer. The
+                                prepared example above is labeled so it cannot
+                                be mistaken for a fresh run.
+                            </p>
+                            <a href="/wiki/architecture/platform-experience-standard/">
+                                Read the experience standard
+                            </a>
+                        </article>
+                        <article className="public-home__principle">
+                            <h3>People keep the final say</h3>
+                            <p>
+                                Footnote is meant to support judgment, not
+                                replace it. Privacy and permissions are part of
+                                that control: the project asks what an assistant
+                                may do, what record remains, and how someone can
+                                correct or stop it.
+                            </p>
+                            <a href="/wiki/philosophy/">Read the philosophy</a>
+                        </article>
+                    </div>
+                    <div className="public-home__narrative-actions">
+                        <Link
+                            className="public-home__action public-home__action--primary"
+                            to="/chat"
+                        >
+                            Try a live question
+                        </Link>
+                        <a className="public-home__action" href="/wiki/">
+                            Explore the documentation
+                        </a>
+                    </div>
+                </section>
+                <section
                     className="public-home__get-started"
                     aria-labelledby="get-started-title"
                 >
@@ -78,9 +145,7 @@ const PublicHomePage = (): JSX.Element => {
                         </a>
                         <a
                             className="public-home__documentation"
-                            href="https://github.com/footnote-ai/footnote#quickstart"
-                            target="_blank"
-                            rel="noreferrer"
+                            href="/wiki/getting-started/"
                         >
                             Documentation
                         </a>

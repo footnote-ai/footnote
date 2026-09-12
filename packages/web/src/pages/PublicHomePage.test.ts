@@ -33,10 +33,7 @@ test('public homepage keeps approved prepared-response content and destinations'
         source,
         /https:\/\/github\.com\/footnote-ai\/footnote\/releases/
     );
-    assert.match(
-        source,
-        /https:\/\/github\.com\/footnote-ai\/footnote#quickstart/
-    );
+    assert.match(source, /href="\/wiki\/getting-started\/"/);
     assert.match(source, />\s*Download\s*</);
     assert.match(source, />\s*Documentation\s*</);
     assert.ok(
@@ -47,6 +44,39 @@ test('public homepage keeps approved prepared-response content and destinations'
     assert.doesNotMatch(source, /Quickstart/);
 });
 
+test('public homepage explains the product narrative and links to canonical depth', async () => {
+    const source = await readFile(
+        `${pagesDirectory}PublicHomePage.tsx`,
+        'utf8'
+    );
+
+    assert.match(source, /See what shaped an answer/);
+    assert.match(source, /Keep uncertainty visible/);
+    assert.match(source, /People keep the final say/);
+    assert.match(
+        source,
+        /href="\/wiki\/architecture\/canonical-response-footnote\/"/
+    );
+    assert.match(
+        source,
+        /href="\/wiki\/architecture\/platform-experience-standard\/"/
+    );
+    assert.match(source, /href="\/wiki\/philosophy\/"/);
+    assert.match(source, /href="\/wiki\/"/);
+});
+
+test('README replaces screenshot placeholders with maintained public proof', async () => {
+    const readme = await readFile(
+        path.join(process.cwd(), 'README.md'),
+        'utf8'
+    );
+
+    assert.doesNotMatch(readme, /screenshot of a question\+response here/);
+    assert.doesNotMatch(readme, /screenshot of an expanded footnote/);
+    assert.match(readme, /docs\/assets\/public-home-prepared\.png/);
+    assert.match(readme, /prepared examples are curated demonstrations/i);
+    assert.match(readme, /ai\.jordanmakes\.dev\/wiki\//);
+});
 test('response carousel owns the preserved transition and accessible dot controls', async () => {
     const source = await readFile(
         `${webSourceDirectory}components${path.sep}ResponseCarousel.tsx`,
