@@ -40,7 +40,10 @@ test('stages canonical sources with route, lifecycle, and edit-link metadata', a
 
         assert.match(documentation, /lifecycle: current/);
         assert.match(documentation, /slug: "documentation"/);
+        assert.match(documentation, /lastUpdated: \d{4}-\d{2}-\d{2}T/u);
         assert.match(documentation, /\/wiki\/getting-started\/#quickstart/);
+        assert.match(documentation, /blob\/main\/docs\/README\.md/);
+        assert.match(documentation, /commits\/main\/docs\/README\.md/);
         assert.match(documentation, /edit\/main\/docs\/README\.md/);
         assert.match(proposal, /lifecycle: proposal/);
         assert.match(history, /lifecycle: historical/);

@@ -6,8 +6,10 @@
  * @footnote-ethics: high - The staging boundary must preserve canonical authority and avoid silently changing meaning.
  */
 import fs from 'node:fs/promises';
+import { execFile } from 'node:child_process';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { promisify } from 'node:util';
 
 const packageRoot = path.resolve(
     path.dirname(fileURLToPath(import.meta.url)),
@@ -17,6 +19,14 @@ const repositoryRoot = path.resolve(packageRoot, '../..');
 const sourceRoot = path.join(packageRoot, 'wiki', 'src', 'content', 'docs');
 const sourceUrlBase = 'https://github.com/footnote-ai/footnote/blob/main/';
 const editUrlBase = 'https://github.com/footnote-ai/footnote/edit/main/';
+const historyUrlBase = 'https://github.com/footnote-ai/footnote/commits/main/';
+const execFileAsync = promisify(execFile);
+const bundledRevisionDatePath = path.join(
+    repositoryRoot,
+    '.footnote',
+    'context-bundle',
+    'revision-date.txt'
+);
 
 const sourceFiles = [
     'README.md',
@@ -110,6 +120,46 @@ const quoteYaml = (value) => JSON.stringify(value);
 const routeBySource = new Map();
 const githubSourceUrl = (sourcePath) =>
     `${sourceUrlBase}${toPosix(sourcePath)}`;
+const githubHistoryUrl = (sourcePath) =>
+    `${historyUrlBase}${toPosix(sourcePath)}`;
+
+const readGitDate = async (sourcePath) => {
+    const { stdout } = await execFileAsync(
+        'git',
+        ['-C', repositoryRoot, 'log', '-1', '--format=%cI', '--', sourcePath],
+        { encoding: 'utf8' }
+    );
+    const value = stdout.trim();
+    return value.length > 0 ? value : undefined;
+};
+
+const readBundledRevisionDate = async () => {
+    try {
+        const value = (
+            await fs.readFile(bundledRevisionDatePath, 'utf8')
+        ).trim();
+        return value.length > 0 ? value : undefined;
+    } catch (error) {
+        const err = error;
+        if (err?.code === 'ENOENT') return undefined;
+        throw err;
+    }
+};
+
+const lastUpdatedForSource = async (sourcePath) => {
+    let value;
+    try {
+        value = await readGitDate(sourcePath);
+    } catch {
+        value = await readBundledRevisionDate();
+    }
+    if (!value || Number.isNaN(Date.parse(value))) {
+        throw new Error(
+            `Unable to determine a trusted Git date for ${sourcePath}.`
+        );
+    }
+    return value;
+};
 
 const markdownFilesUnder = async (relativeDirectory) => {
     const directory = path.join(repositoryRoot, relativeDirectory);
@@ -178,19 +228,25 @@ const stageFile = async (sourcePath) => {
     const targetPath = path.join(sourceRoot, `${route}.md`);
     const title = titleForMarkdown(sourcePath, content);
     const lifecycle = lifecycleForSource(sourcePath);
+    const lastUpdated = await lastUpdatedForSource(sourcePath);
     const frontmatter = [
         '---',
         `title: ${quoteYaml(title)}`,
         `slug: ${quoteYaml(route)}`,
         `lifecycle: ${lifecycle}`,
+        `lastUpdated: ${lastUpdated}`,
         `editUrl: ${quoteYaml(`${editUrlBase}${toPosix(sourcePath)}`)}`,
         '---',
         '',
     ].join('\n');
+    const adaptedContent = adaptMarkdownLinks(sourcePath, content);
+    const contentWithCanonicalLinks = `${adaptedContent}${
+        adaptedContent.endsWith('\n') ? '' : '\n'
+    }\n---\n\n[Canonical source](${githubSourceUrl(sourcePath)}) · [File history](${githubHistoryUrl(sourcePath)})\n`;
     await fs.mkdir(path.dirname(targetPath), { recursive: true });
     await fs.writeFile(
         targetPath,
-        `${frontmatter}${adaptMarkdownLinks(sourcePath, content)}`,
+        `${frontmatter}${contentWithCanonicalLinks}`,
         'utf8'
     );
 };
@@ -213,7 +269,7 @@ const main = async () => {
         path.join(sourceRoot, 'index.md'),
         [
             '---',
-            'title: "Footnote Documentation"',
+            'title: "Welcome"',
             'slug: ""',
             'lifecycle: current',
             'editUrl: false',

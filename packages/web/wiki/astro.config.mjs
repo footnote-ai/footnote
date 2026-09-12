@@ -19,10 +19,9 @@ export default defineConfig({
             title: 'Footnote Documentation',
             description:
                 'Repository-owned documentation for the transparency-first Footnote AI framework.',
-            lastUpdated: false,
-            editLink: {
-                baseUrl: 'https://github.com/footnote-ai/footnote/edit/main/',
-            },
+            // Staging supplies source Git dates so the no-.git Docker build
+            // never falls back to an unverified timestamp.
+            lastUpdated: true,
             sidebar: [
                 {
                     label: 'Start here',

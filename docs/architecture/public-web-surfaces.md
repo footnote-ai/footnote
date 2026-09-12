@@ -23,9 +23,11 @@ that boundary. It does not independently record LLM cost or create provenance.
 | `/traces/:responseId`     | `TracePage`                                  | Displays an available response trace.                                            |
 | `/api/traces/:responseId` | `TracePage`                                  | Preserves the web trace-page route used under the API-shaped path.               |
 
-`App.tsx` owns this route map. Non-home routes use `PublicPageLayout` for a
-consistent public header and footer. The homepage composes the same public
-header and footer directly around its own page layout.
+`App.tsx` owns the React route map. React non-home routes use
+`PublicPageLayout` for a consistent public header and footer. The `/wiki/`
+route is owned by the static Astro/Starlight and backend transport surface.
+The homepage composes the same public header and footer directly around its
+own page layout.
 
 ## Prepared homepage answers
 
