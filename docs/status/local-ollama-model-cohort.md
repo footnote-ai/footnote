@@ -14,10 +14,10 @@ persona IDs, display names, aliases, and prompt overlays remain `footnote`,
 `danny`, `myuri`, and `winter`. The tracked `footnote.yaml` continues to point
 at the normal/default applications.
 
-Load the Jr credentials from a local env file outside the repository before
-running `pnpm start`. The server supervisor then launches each configured bot
-with its resolved credentials and registers that application's guild commands
-at startup. No Jr credential values belong in this repository.
+The Jr credentials live in the ignored repository `.env` for this short-lived
+local test setup. Run `pnpm start`; the server supervisor launches each
+configured bot with its resolved credentials and registers that application's
+guild commands at startup. No Jr credential values belong in Git.
 
 ## Hardware envelope
 
