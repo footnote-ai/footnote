@@ -13,10 +13,6 @@ Try the [live site](https://ai.jordanmakes.dev), ask a [real question in `/chat`
 Footnote is built with AI assistance. Read the
 [AI use disclosure](docs/ai/ai-use-disclosure.md) for more information.
 
-![Prepared Footnote response example](docs/assets/public-home-prepared.png)
-
-_The homepage's prepared examples are curated demonstrations of Footnote's answer shape, not live runs or durable traces._
-
 [Try the live demo](https://ai.jordanmakes.dev)
 
 ## Quickstart

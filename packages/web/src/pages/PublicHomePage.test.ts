@@ -91,7 +91,7 @@ test('public homepage presents concepts as panels with local depth', async () =>
         /LOOK FOR|Good answers leave clues|See a little more/
     );
 });
-test('README keeps maintained proof and public destinations', async () => {
+test('README keeps public destinations without a committed screenshot asset', async () => {
     const readme = await readFile(
         path.join(process.cwd(), 'README.md'),
         'utf8'
@@ -99,7 +99,7 @@ test('README keeps maintained proof and public destinations', async () => {
 
     assert.doesNotMatch(readme, /screenshot of a question\+response here/);
     assert.doesNotMatch(readme, /screenshot of an expanded footnote/);
-    assert.match(readme, /docs\/assets\/public-home-prepared\.png/);
+    assert.doesNotMatch(readme, /public-home-prepared\.png/);
     assert.match(readme, /ai\.jordanmakes\.dev\/chat/);
     assert.match(readme, /ai\.jordanmakes\.dev\/wiki\/philosophy\//);
 });
