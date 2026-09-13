@@ -59,25 +59,6 @@ export type Citation = {
     snippet?: string;
 };
 
-/** Immutable archive evidence pointers attached only to the NYC preview experience. */
-export type ArchiveSourceMetadata = {
-    sourceLabel: string;
-    chunkId: string;
-    documentId: string;
-    pageId: string;
-    pageNumber: number;
-    originalUrl: string;
-};
-
-/** Additive metadata for the bounded archive experience; generic citations remain canonical elsewhere. */
-export type ArchiveMetadata = {
-    experienceId: 'nyc-sept11';
-    version: string;
-    documentsIndexed: number;
-    completeArchive: false;
-    sources: ArchiveSourceMetadata[];
-};
-
 /**
  * ProvenanceAssessment records how a provenance label was chosen.
  * This is deterministic, serializable, and intended for trace inspection.
@@ -1689,7 +1670,6 @@ export type ResponseMetadata = {
     staleAfter: string; // ISO timestamp after which the data is stale.
     totalDurationMs?: number; // End-to-end orchestration duration when available.
     citations: Citation[]; // Sources used for the answer.
-    archive?: ArchiveMetadata;
     provenanceAssessment?: ProvenanceAssessment; // Classification-method disclosure for provenance, including conflicts and limitations.
     execution?: ExecutionEvent[]; // Structural execution record (evaluator/tool/generation events).
     workflow?: WorkflowRecord; // Optional workflow record of bounded multi-step execution; includes planner lineage via plan steps.

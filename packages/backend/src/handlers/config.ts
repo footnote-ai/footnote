@@ -53,6 +53,10 @@ const createRuntimeConfigHandler =
                     required: await isSetupRequiredNow(),
                     routePath: '/setup',
                 },
+                publicContext: {
+                    nycSept11Records:
+                        runtimeConfig.publicContext.nycSept11RecordsEnabled,
+                },
             };
 
             // --- Response ---

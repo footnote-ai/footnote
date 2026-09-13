@@ -33,7 +33,6 @@ export type WebApiClient = {
         request: PostChatRequest,
         options?: {
             turnstileToken?: string;
-            authCsrfToken?: string;
             signal?: AbortSignal;
         }
     ) => Promise<PostChatResponse>;
@@ -95,7 +94,6 @@ export const chatQuestion = (
     request: PostChatRequest,
     options?: {
         turnstileToken?: string;
-        authCsrfToken?: string;
         signal?: AbortSignal;
     }
 ): Promise<PostChatResponse> => api.chatQuestion(request, options);

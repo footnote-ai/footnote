@@ -16,8 +16,6 @@ export type {
     SafetyTier,
     SafetyRuleId,
     Citation,
-    ArchiveSourceMetadata,
-    ArchiveMetadata,
     ProvenanceAssessment,
     TraceAxisScore,
     PersonaExpressionStrength,

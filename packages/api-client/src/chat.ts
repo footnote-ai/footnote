@@ -43,7 +43,6 @@ export type ChatApi = {
         request: PostChatRequest,
         options?: {
             turnstileToken?: string;
-            authCsrfToken?: string;
             signal?: AbortSignal;
         }
     ) => Promise<PostChatResponse>;
@@ -121,7 +120,6 @@ export const createChatApi = (
         request: PostChatRequest,
         options?: {
             turnstileToken?: string;
-            authCsrfToken?: string;
             signal?: AbortSignal;
         }
     ): Promise<PostChatResponse> => {
@@ -134,10 +132,6 @@ export const createChatApi = (
         if (request.sessionId) {
             headers['x-session-id'] = request.sessionId;
         }
-        if (options?.authCsrfToken) {
-            headers['x-auth-csrf'] = options.authCsrfToken;
-        }
-
         const response = await requestJson<PostChatResponse>('/api/chat', {
             method: 'POST',
             headers,

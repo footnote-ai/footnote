@@ -87,6 +87,7 @@ export const buildRuntimeConfig = (
         voltagent,
         cors: web.cors,
         csp: web.csp,
+        publicContext: web.publicContext,
         reflect,
         agent,
         adminSettings,

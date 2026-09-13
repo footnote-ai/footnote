@@ -121,3 +121,40 @@ test('buildModelInput keeps evidence in the user channel and plan in a separate 
             manifestIndex < evidenceIndex
     );
 });
+
+test('buildModelInput prevents source-attributed claims after a requested context failure', () => {
+    const input = buildModelInput({
+        baseRequest: {
+            model: 'test-model',
+            messages: [{ role: 'user', content: 'What does the source say?' }],
+        },
+        context: {
+            messages: [{ role: 'user', content: 'What does the source say?' }],
+            envelope: contextEnvelope,
+        },
+        results: {
+            evidence: {
+                results: [],
+                failures: [
+                    {
+                        integrationName: 'trustgraph',
+                        requested: true,
+                        status: 'failed',
+                    },
+                ],
+            },
+        },
+        contextStepRequests: [
+            { integrationName: 'trustgraph', requested: true, eligible: true },
+        ],
+    });
+
+    const failureMessage = input.messages.find((message) =>
+        message.content.includes('Do not claim to have consulted that source')
+    );
+    assert.equal(failureMessage?.role, 'system');
+    assert.match(
+        failureMessage?.content ?? '',
+        /explain that it was unavailable for this response/u
+    );
+});

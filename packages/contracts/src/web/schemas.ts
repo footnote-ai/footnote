@@ -1935,29 +1935,6 @@ const responseMetadataShape = {
     staleAfter: z.string(),
     totalDurationMs: z.number().int().nonnegative().optional(),
     citations: z.array(CitationSchema),
-    archive: z
-        .object({
-            experienceId: z.literal('nyc-sept11'),
-            version: z.string().min(1),
-            documentsIndexed: z.number().int().nonnegative(),
-            completeArchive: z.literal(false),
-            sources: z
-                .array(
-                    z
-                        .object({
-                            sourceLabel: z.string().regex(/^S[1-5]$/),
-                            chunkId: z.string().min(1),
-                            documentId: z.string().min(1),
-                            pageId: z.string().min(1),
-                            pageNumber: z.number().int().positive(),
-                            originalUrl: z.string().url(),
-                        })
-                        .strict()
-                )
-                .max(5),
-        })
-        .strict()
-        .optional(),
     provenanceAssessment: ProvenanceAssessmentSchema.optional(),
     execution: z.array(ExecutionEventSchema).optional(),
     workflow: WorkflowRecordSchema.optional(),
@@ -2075,7 +2052,6 @@ export const TraceDisplayMetadataSchema: z.ZodType<TraceDisplayMetadata> = z
 export const PostChatRequestSchema = z
     .object({
         surface: ChatSurfaceSchema,
-        experienceId: z.literal('nyc-sept11').optional(),
         botPersonaId: ChatPersonaIdSchema.optional(),
         assistantIdentity: ChatAssistantIdentitySchema.optional(),
         personaExpressionProfileStrength:

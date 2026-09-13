@@ -55,6 +55,22 @@ test('public homepage keeps approved prepared-response content and destinations'
     assert.doesNotMatch(source, /Quickstart/);
 });
 
+test('public homepage keeps the NYC context announcement gated and concise', async () => {
+    const source = await readFile(
+        `${pagesDirectory}PublicHomePage.tsx`,
+        'utf8'
+    );
+    const noticeSource = await readFile(
+        `${webSourceDirectory}components/PublicContextNotice.tsx`,
+        'utf8'
+    );
+
+    assert.match(source, /loadRuntimeConfig/);
+    assert.match(source, /config\.publicContext\.nycSept11Records/);
+    assert.match(noticeSource, /Try it in chat/);
+    assert.match(noticeSource, /to="\/chat"/);
+});
+
 test('public homepage presents concepts as panels with local depth', async () => {
     const source = await readFile(
         `${pagesDirectory}PublicHomePage.tsx`,
@@ -152,6 +168,7 @@ test('chat stays suggestion-free and falls back to an out-of-flow managed challe
         chatPageSource,
         /Ask anything, and see how Footnote responds!/
     );
+    assert.match(chatPageSource, /PublicContextNotice/);
     assert.match(embedSource, /<Chat \/>/);
     assert.match(headerSource, /<Link to="\/account">\s*Sign in\s*<\/Link>/);
     assert.match(headerSource, /<a href="\/wiki\/">\s*Wiki\s*<\/a>/);

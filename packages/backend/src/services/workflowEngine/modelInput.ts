@@ -36,6 +36,18 @@ type ModelInputEvidenceFailure = {
     status: 'unavailable' | 'failed' | 'skipped';
 };
 
+const buildContextFailureMessage = (
+    integrationName: string,
+    status: ModelInputEvidenceFailure['status']
+): RuntimeMessage => ({
+    role: 'system',
+    content: [
+        `The requested context source "${integrationName}" was ${status}.`,
+        'Do not claim to have consulted that source or attribute facts to it.',
+        'If the user asked what that source says, explain that it was unavailable for this response and distinguish any answer based on other available context.',
+    ].join(' '),
+});
+
 /** Internal result envelope consumed by the model-input seam. */
 export type ModelInputEvidence = {
     results: readonly ContextStepResult[];
@@ -93,6 +105,15 @@ const buildResultMessages = (
                 role: 'system',
                 content,
             }));
+        const failureGuidance =
+            result.outcome === 'failed'
+                ? [
+                      buildContextFailureMessage(
+                          result.executionContext.toolName,
+                          'failed'
+                      ),
+                  ]
+                : [];
         const evidence =
             result.outcome === 'executed'
                 ? stringValues(result.evidence?.content)
@@ -104,7 +125,7 @@ const buildResultMessages = (
                           content,
                       }))
                 : [];
-        return [...instructions, ...evidence];
+        return [...instructions, ...failureGuidance, ...evidence];
     });
 
 const buildPlanMessage = (
@@ -151,6 +172,14 @@ export const buildModelInput = (input: BuildModelInputParams): ModelInput => {
             renderGenerationContextManifest(manifest)
         ),
         ...buildResultMessages(evidenceResults),
+        ...evidenceFailures
+            .filter((failure) => failure.requested)
+            .map((failure) =>
+                buildContextFailureMessage(
+                    failure.integrationName,
+                    failure.status
+                )
+            ),
         ...(planMessage === undefined ? [] : [planMessage]),
     ];
     return {

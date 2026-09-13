@@ -9,6 +9,7 @@
 import {
     useRef,
     useState,
+    useEffect,
     type FocusEvent,
     type MouseEvent,
     type PointerEvent,
@@ -18,8 +19,10 @@ import MarkdownResponse from '@components/MarkdownResponse';
 import PublicFooter from '@components/PublicFooter';
 import PublicHeader from '@components/PublicHeader';
 import TraceFooterPlaceholder from '@components/TraceFooterPlaceholder';
+import PublicContextNotice from '@components/PublicContextNotice';
 import ResponseCarousel from '@components/ResponseCarousel';
 import { landingScenarios } from '../data/landingScenarios';
+import { loadRuntimeConfig } from '../config';
 
 type PublicConcept = {
     id: string;
@@ -213,9 +216,22 @@ const PublicConceptList = (): JSX.Element => {
 };
 
 const PublicHomePage = (): JSX.Element => {
+    const [showNycContext, setShowNycContext] = useState(false);
+
+    useEffect(() => {
+        void loadRuntimeConfig().then((config) => {
+            setShowNycContext(config.publicContext.nycSept11Records);
+        });
+    }, []);
+
     return (
         <div className="public-home">
             <PublicHeader />
+            {showNycContext && (
+                <div className="public-home__announcement-frame">
+                    <PublicContextNotice variant="announcement" />
+                </div>
+            )}
             <main id="main-content" className="public-home__main">
                 <section aria-labelledby="homepage-title">
                     <header className="public-home__intro">

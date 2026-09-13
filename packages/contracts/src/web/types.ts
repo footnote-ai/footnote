@@ -426,8 +426,6 @@ export type ChatImageRequest = {
  */
 export type PostChatRequest = {
     surface: ChatSurface;
-    /** Fixed first-party experience selector; never accepts provider or scope controls. */
-    experienceId?: 'nyc-sept11';
     botPersonaId?: string;
     /** Trusted Discord adapter identity used only for response formatting. */
     assistantIdentity?: ChatAssistantIdentity;
@@ -1083,6 +1081,9 @@ export type GetRuntimeConfigResponse = {
     setup: {
         required: boolean;
         routePath: '/setup';
+    };
+    publicContext: {
+        nycSept11Records: boolean;
     };
 };
 

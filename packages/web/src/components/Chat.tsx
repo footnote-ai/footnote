@@ -34,9 +34,8 @@ const FALLBACK_REFLECTION =
 const EMPTY_RESPONSE_MESSAGE = 'No answer was returned. Please try again.';
 type ChatStatusKind = 'error' | 'info';
 type ChatStatus = { kind: ChatStatusKind; message: string };
-type ChatProps = { experienceId?: 'nyc-sept11' };
 
-const Chat = ({ experienceId }: ChatProps): JSX.Element => {
+const Chat = (): JSX.Element => {
     const { theme } = useTheme();
     const [question, setQuestion] = useState('');
     const [status, setStatus] = useState<ChatStatus | null>(null);
@@ -134,19 +133,6 @@ const Chat = ({ experienceId }: ChatProps): JSX.Element => {
             return;
         }
 
-        let authCsrfToken: string | undefined;
-        if (experienceId === 'nyc-sept11') {
-            const session = await api.getAuthSession();
-            if (!session.authenticated) {
-                showStatus(
-                    'Sign in on the Account page before using the archive preview.',
-                    'info'
-                );
-                return;
-            }
-            authCsrfToken = session.csrfToken;
-        }
-
         // Load runtime config lazily on interaction to avoid noisy startup 404s
         // when the backend is not present.
         let runtimeSiteKey = turnstileSiteKey;
@@ -192,7 +178,6 @@ const Chat = ({ experienceId }: ChatProps): JSX.Element => {
             const payload = await api.chatQuestion(
                 {
                     surface: 'web',
-                    ...(experienceId !== undefined && { experienceId }),
                     trigger: { kind: 'submit' },
                     latestUserInput: trimmedQuestion,
                     conversation: [
@@ -215,7 +200,6 @@ const Chat = ({ experienceId }: ChatProps): JSX.Element => {
                         !captchaDisabledForRequest && resolvedToken
                             ? resolvedToken
                             : undefined,
-                    authCsrfToken,
                     signal: controller.signal,
                 }
             );

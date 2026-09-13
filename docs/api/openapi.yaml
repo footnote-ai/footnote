@@ -1836,10 +1836,6 @@ components:
                 surface:
                     type: string
                     enum: [web, discord]
-                experienceId:
-                    type: string
-                    enum: [nyc-sept11]
-                    description: Fixed first-party archive experience selector; it cannot change archive scope or provider settings.
                 botPersonaId:
                     type: string
                     pattern: '^[a-z0-9][a-z0-9-]{0,31}$'
@@ -3893,8 +3889,6 @@ components:
                     type: array
                     items:
                         $ref: '#/components/schemas/Citation'
-                archive:
-                    $ref: '#/components/schemas/ArchiveMetadata'
                 execution:
                     type: array
                     items:
@@ -4764,62 +4758,6 @@ components:
                   required:
                       - responseId
 
-        ArchiveMetadata:
-            type: object
-            description: Additive provenance metadata for the bounded NYC September 11 archive preview.
-            properties:
-                experienceId:
-                    type: string
-                    enum: [nyc-sept11]
-                version:
-                    type: string
-                documentsIndexed:
-                    type: integer
-                    minimum: 0
-                completeArchive:
-                    type: boolean
-                    enum: [false]
-                sources:
-                    type: array
-                    maxItems: 5
-                    items:
-                        type: object
-                        properties:
-                            sourceLabel:
-                                type: string
-                                pattern: '^S[1-5]$'
-                            chunkId:
-                                type: string
-                            documentId:
-                                type: string
-                            pageId:
-                                type: string
-                            pageNumber:
-                                type: integer
-                                minimum: 1
-                            originalUrl:
-                                type: string
-                                format: uri
-                        required:
-                            [
-                                sourceLabel,
-                                chunkId,
-                                documentId,
-                                pageId,
-                                pageNumber,
-                                originalUrl,
-                            ]
-                        additionalProperties: false
-            required:
-                [
-                    experienceId,
-                    version,
-                    documentsIndexed,
-                    completeArchive,
-                    sources,
-                ]
-            additionalProperties: false
-
         TraceDisplayMetadata:
             description: Backend-owned trace-read projection. Complete records have an empty unavailableFields list; partial records explicitly name omitted malformed fields.
             allOf:
@@ -5038,9 +4976,19 @@ components:
                         - required
                         - routePath
                     additionalProperties: false
+                publicContext:
+                    type: object
+                    description: Public context-source messaging is enabled only after backend readiness validation.
+                    properties:
+                        nycSept11Records:
+                            type: boolean
+                    required:
+                        - nycSept11Records
+                    additionalProperties: false
             required:
                 - turnstileSiteKey
                 - setup
+                - publicContext
             additionalProperties: false
 
         AuthenticatedPrincipal:

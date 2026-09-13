@@ -662,6 +662,23 @@ export const envEntries = [
     }),
 
     defineEnv({
+        key: 'FOOTNOTE_PUBLIC_NYC_SEPT11_RECORDS_ENABLED',
+        owner: 'backend',
+        stage: 'runtime',
+        section: 'web',
+        required: false,
+        secret: false,
+        kind: 'boolean',
+        description:
+            'Gates public NYC September 11 records messaging; enable only after the supported TrustGraph raw-evidence seam and release gate are complete.',
+        defaultValue: literal(false),
+        usedBy: [
+            'packages/backend/src/config.ts',
+            'packages/backend/src/handlers/config.ts',
+        ],
+    }),
+
+    defineEnv({
         key: 'DISCORD_TOKEN',
         owner: 'discord-bot',
         stage: 'runtime',
