@@ -700,7 +700,7 @@ export class MessageProcessor {
         const currentDiscordUserId = message.client.user?.id;
         const modelVisibleMessages =
             currentDiscordUserId === undefined
-                ? sortedMessages
+                ? sortedMessages // Intentional fail-open fallback when bot identity is unavailable.
                 : sortedMessages.filter(
                       (contextMessage) =>
                           !contextMessage.author.bot ||

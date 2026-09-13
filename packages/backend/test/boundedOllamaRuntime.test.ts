@@ -134,6 +134,104 @@ test('bounded local Ollama admission rejects work beyond the queue bound', async
     await Promise.all([first, queued]);
 });
 
+test('queued local Ollama work can be cancelled without holding a slot', async () => {
+    let releaseFirst: (() => void) | undefined;
+    const firstStarted = new Promise<void>((resolve) => {
+        releaseFirst = resolve;
+    });
+    const calls: string[] = [];
+    const runtime: GenerationRuntime = {
+        kind: 'test-runtime',
+        async generate(request) {
+            calls.push(request.model ?? 'missing');
+            if (request.model === 'first') {
+                await firstStarted;
+            }
+            return createResult(request);
+        },
+    };
+    const bounded = createBoundedOllamaGenerationRuntime({
+        runtime,
+        enabled: true,
+        maxConcurrentGenerations: 1,
+        maxQueuedGenerations: 1,
+        logger,
+    });
+
+    const first = bounded.generate({
+        provider: 'ollama',
+        model: 'first',
+        messages: [],
+    });
+    await new Promise<void>((resolve) => setImmediate(resolve));
+    const controller = new AbortController();
+    const queued = bounded.generate({
+        provider: 'ollama',
+        model: 'queued',
+        messages: [],
+        signal: controller.signal,
+    });
+    await new Promise<void>((resolve) => setImmediate(resolve));
+
+    controller.abort();
+    await assert.rejects(
+        queued,
+        (error: unknown) =>
+            error instanceof Error && error.name === 'AbortError'
+    );
+    releaseFirst?.();
+    await first;
+
+    const subsequent = await bounded.generate({
+        provider: 'ollama',
+        model: 'subsequent',
+        messages: [],
+    });
+
+    assert.equal(subsequent.text, 'OK');
+    assert.deepEqual(calls, ['first', 'subsequent']);
+});
+
+test('admitted local Ollama work releases its slot when runtime generation rejects', async () => {
+    let shouldReject = true;
+    const calls: string[] = [];
+    const runtime: GenerationRuntime = {
+        kind: 'test-runtime',
+        async generate(request) {
+            calls.push(request.model ?? 'missing');
+            if (shouldReject) {
+                shouldReject = false;
+                throw new Error('runtime failure');
+            }
+            return createResult(request);
+        },
+    };
+    const bounded = createBoundedOllamaGenerationRuntime({
+        runtime,
+        enabled: true,
+        maxConcurrentGenerations: 1,
+        maxQueuedGenerations: 0,
+        logger,
+    });
+
+    await assert.rejects(
+        bounded.generate({
+            provider: 'ollama',
+            model: 'rejecting',
+            messages: [],
+        }),
+        /runtime failure/
+    );
+    const subsequent = await bounded.generate({
+        provider: 'ollama',
+        model: 'subsequent',
+        messages: [],
+    });
+
+    assert.equal(subsequent.text, 'OK');
+    assert.deepEqual(calls, ['rejecting', 'subsequent']);
+});
+
 test('remote or non-Ollama generation bypasses the local admission queue', async () => {
     let calls = 0;
     const runtime: GenerationRuntime = {

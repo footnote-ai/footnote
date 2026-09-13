@@ -241,6 +241,7 @@ const initializeServices = () => {
         ollamaHostname === 'localhost' ||
         ollamaHostname === '127.0.0.1' ||
         ollamaHostname === '::1' ||
+        ollamaHostname === '[::1]' ||
         ollamaHostname === 'host.docker.internal';
     if (ollamaHostname && ollamaBaseUrlIsLocal) {
         logger.info(
