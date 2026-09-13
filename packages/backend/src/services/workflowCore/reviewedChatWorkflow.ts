@@ -456,6 +456,9 @@ const toWorkflowRoutingAttempts = (
                   temporaryUnavailableReason:
                       attempt.temporaryUnavailableReason,
               }),
+        ...(attempt.selectionSource === undefined
+            ? {}
+            : { selectionSource: attempt.selectionSource }),
     }));
 };
 

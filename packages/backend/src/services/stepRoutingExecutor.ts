@@ -43,6 +43,8 @@ export type RoutingChainAttemptLog = {
     reasonCode?: ExecutionReasonCode;
     errorMessage?: string;
     temporaryUnavailableReason?: ProviderTemporaryUnavailableReason;
+    /** Identifies whether this candidate came from a caller override or the configured chain. */
+    selectionSource?: 'explicit' | 'configured';
     finishReason?: string;
     completion?: GenerationCompletion;
     usage?: GenerationExecutionUsage;
@@ -213,6 +215,9 @@ export const executeStepRoutingChain = async <TSuccess>(input: {
                 chooseOneCandidates: candidate.chooseOneCandidates,
                 chooseOneSelectedIndex: candidate.chooseOneSelectedIndex,
                 seedKeyType: candidate.seedKeyType,
+                ...(candidate.selectionSource !== undefined && {
+                    selectionSource: candidate.selectionSource,
+                }),
                 startedAtMs: timestampMs,
                 finishedAtMs: timestampMs,
             });
@@ -236,6 +241,9 @@ export const executeStepRoutingChain = async <TSuccess>(input: {
                 chooseOneCandidates: candidate.chooseOneCandidates,
                 chooseOneSelectedIndex: candidate.chooseOneSelectedIndex,
                 seedKeyType: candidate.seedKeyType,
+                ...(candidate.selectionSource !== undefined && {
+                    selectionSource: candidate.selectionSource,
+                }),
                 startedAtMs: timestampMs,
                 finishedAtMs: timestampMs,
             });
@@ -257,6 +265,9 @@ export const executeStepRoutingChain = async <TSuccess>(input: {
                 status: 'skipped_temporary_unavailable',
                 reasonCode: 'routing_chain_temporary_unavailable',
                 temporaryUnavailableReason: temporaryUnavailable.reason,
+                ...(candidate.selectionSource !== undefined && {
+                    selectionSource: candidate.selectionSource,
+                }),
                 errorMessage:
                     'Provider route skipped while its confirmed temporary unavailability is active.',
                 chooseOneUsed: candidate.chooseOneUsed,
@@ -289,6 +300,9 @@ export const executeStepRoutingChain = async <TSuccess>(input: {
                         chooseOneSelectedIndex:
                             candidate.chooseOneSelectedIndex,
                         seedKeyType: candidate.seedKeyType,
+                        ...(candidate.selectionSource !== undefined && {
+                            selectionSource: candidate.selectionSource,
+                        }),
                         startedAtMs:
                             internalAttempt.startedAtMs ?? finishedAtMs,
                         finishedAtMs,
@@ -312,6 +326,9 @@ export const executeStepRoutingChain = async <TSuccess>(input: {
                     chooseOneCandidates: candidate.chooseOneCandidates,
                     chooseOneSelectedIndex: candidate.chooseOneSelectedIndex,
                     seedKeyType: candidate.seedKeyType,
+                    ...(candidate.selectionSource !== undefined && {
+                        selectionSource: candidate.selectionSource,
+                    }),
                     startedAtMs,
                     finishedAtMs,
                 });
@@ -329,6 +346,9 @@ export const executeStepRoutingChain = async <TSuccess>(input: {
                 chooseOneCandidates: candidate.chooseOneCandidates,
                 chooseOneSelectedIndex: candidate.chooseOneSelectedIndex,
                 seedKeyType: candidate.seedKeyType,
+                ...(candidate.selectionSource !== undefined && {
+                    selectionSource: candidate.selectionSource,
+                }),
                 startedAtMs,
                 finishedAtMs,
             });
@@ -385,6 +405,9 @@ export const executeStepRoutingChain = async <TSuccess>(input: {
                 chooseOneCandidates: candidate.chooseOneCandidates,
                 chooseOneSelectedIndex: candidate.chooseOneSelectedIndex,
                 seedKeyType: candidate.seedKeyType,
+                ...(candidate.selectionSource !== undefined && {
+                    selectionSource: candidate.selectionSource,
+                }),
                 startedAtMs,
                 finishedAtMs,
             });

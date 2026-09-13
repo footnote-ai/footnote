@@ -145,10 +145,11 @@ export const resolveStepRoutingChain = (
                 }
                 resolved.push({
                     profileId: expandedId,
-                    ...(index === 0 &&
-                    input.stepOverrideProfileId?.trim().length
-                        ? { selectionSource: 'explicit' as const }
-                        : {}),
+                    selectionSource:
+                        index === 0 &&
+                        input.stepOverrideProfileId?.trim().length
+                            ? 'explicit'
+                            : 'configured',
                     chooseOneUsed: false,
                 });
                 seenProfileIds.add(expandedId);
@@ -174,9 +175,10 @@ export const resolveStepRoutingChain = (
         }
         resolved.push({
             profileId: selectedProfileId,
-            ...(index === 0 && input.stepOverrideProfileId?.trim().length
-                ? { selectionSource: 'explicit' as const }
-                : {}),
+            selectionSource:
+                index === 0 && input.stepOverrideProfileId?.trim().length
+                    ? 'explicit'
+                    : 'configured',
             chooseOneUsed: true,
             chooseOneCandidates: enabledCandidates,
             chooseOneSelectedIndex: selectedIndex,
@@ -196,6 +198,7 @@ export const resolveStepRoutingChain = (
         return [
             {
                 profileId: fallback.id,
+                selectionSource: 'configured',
                 chooseOneUsed: false,
             },
         ];
@@ -209,6 +212,7 @@ export const resolveStepRoutingChain = (
     return [
         {
             profileId: firstEnabled.id,
+            selectionSource: 'configured',
             chooseOneUsed: false,
         },
     ];

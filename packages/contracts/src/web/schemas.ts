@@ -614,6 +614,7 @@ const GenerationRoutingChainAttemptSchema = z
         seedKeyType: z.string().max(100).optional(),
         temporaryUnavailableReason:
             TemporaryProviderUnavailableReasonSchema.optional(),
+        selectionSource: z.enum(['explicit', 'configured']).optional(),
     })
     .strict();
 
@@ -1087,6 +1088,7 @@ const WorkflowAttemptRoutingRecordSchema = z
         chooseOneUsed: z.boolean(),
         chooseOneSelectedIndex: z.number().int().nonnegative().optional(),
         temporaryUnavailableReason: z.string().min(1).optional(),
+        selectionSource: z.enum(['explicit', 'configured']).optional(),
     })
     .strict();
 

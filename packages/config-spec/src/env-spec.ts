@@ -130,6 +130,34 @@ export const envEntries = [
     }),
 
     defineEnv({
+        key: 'OLLAMA_MAX_CONCURRENT_GENERATIONS',
+        owner: 'backend',
+        stage: 'runtime',
+        section: 'openai',
+        required: false,
+        secret: false,
+        kind: 'number',
+        description:
+            'Maximum simultaneous generations admitted to a local Ollama runtime.',
+        defaultValue: literal(1),
+        usedBy: ['packages/backend/src/config.ts'],
+    }),
+
+    defineEnv({
+        key: 'OLLAMA_MAX_QUEUED_GENERATIONS',
+        owner: 'backend',
+        stage: 'runtime',
+        section: 'openai',
+        required: false,
+        secret: false,
+        kind: 'number',
+        description:
+            'Maximum local Ollama generations waiting for an admission slot.',
+        defaultValue: literal(8),
+        usedBy: ['packages/backend/src/config.ts'],
+    }),
+
+    defineEnv({
         key: 'LITESTREAM_REPLICA_URL',
         owner: 'backend',
         stage: 'runtime',
@@ -730,6 +758,20 @@ export const envEntries = [
             'Stable profile identifier for the bot runtime persona overlay.',
         defaultValue: literal('footnote'),
         usedBy: ['packages/discord-bot/src/config/profile.ts'],
+    }),
+
+    defineEnv({
+        key: 'BOT_GENERATE_PROFILE_ID',
+        owner: 'discord-bot',
+        stage: 'bootstrap',
+        section: 'model-routing',
+        required: false,
+        secret: false,
+        kind: 'string',
+        description:
+            'Optional explicit response-generation profile ID for this Discord runtime. Kept separate from BOT_PROFILE_ID persona identity; the backend validates and owns routing and fallback.',
+        defaultValue: noDefault(),
+        usedBy: ['packages/discord-bot/src/config/runtime.ts'],
     }),
 
     defineEnv({
@@ -3149,6 +3191,7 @@ const BOOTSTRAP_ENV_ALLOWLIST = new Set<string>([
     'OIDC_REDIRECT_URI',
     'PROMPT_CONFIG_PATH',
     'TRACE_API_TOKEN_FILE',
+    'BOT_GENERATE_PROFILE_ID',
 ]);
 
 /**

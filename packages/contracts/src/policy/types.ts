@@ -813,6 +813,7 @@ export type WorkflowRoutingChainAttemptSignal = {
     chooseOneSelectedIndex?: number;
     seedKeyType?: string;
     temporaryUnavailableReason?: string;
+    selectionSource?: 'explicit' | 'configured';
 };
 
 /**
@@ -1008,6 +1009,7 @@ export type WorkflowAttemptRoutingRecord = {
     chooseOneUsed: boolean;
     chooseOneSelectedIndex?: number;
     temporaryUnavailableReason?: string;
+    selectionSource?: 'explicit' | 'configured';
 };
 
 export type WorkflowAttemptSettings = {

@@ -43,7 +43,7 @@ export const buildRuntimeConfig = (
     const { runtime, server } = buildRuntimeSections(effectiveEnv, warn);
     const accountAuth = buildAccountAuthSection(effectiveEnv, warn);
     const openai = buildOpenAISection(effectiveEnv, warn);
-    const ollama = buildOllamaSection(effectiveEnv);
+    const ollama = buildOllamaSection(effectiveEnv, warn);
     const openrouter = buildOpenRouterSection(effectiveEnv);
     const modelProfiles = buildModelProfilesSection(
         effectiveEnv,

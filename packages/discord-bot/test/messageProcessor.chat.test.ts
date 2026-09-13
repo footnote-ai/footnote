@@ -939,6 +939,77 @@ test('buildChatRequestFromMessage includes backend persona routing and formattin
     }
 });
 
+test('buildChatRequestFromMessage forwards an explicit generation binding separately from persona identity', async () => {
+    const processor = createProcessor();
+    const processorAccess = processor as unknown as ProcessorPrivateAccess;
+    const originalProfile = runtimeConfig.profile;
+    const runtimeConfigMutable = runtimeConfig as unknown as {
+        profile: BotProfileConfig;
+        generateProfileId?: string;
+    };
+    runtimeConfigMutable.profile = {
+        id: 'myuri',
+        displayName: 'Myuri',
+        mentionAliases: [],
+        promptOverlay: {
+            source: 'file',
+            text: 'Myuri overlay',
+            path: null,
+            length: 14,
+        },
+    };
+    const originalGenerateProfileId = runtimeConfigMutable.generateProfileId;
+    runtimeConfigMutable.generateProfileId = 'ollama-local-myuri';
+    processorAccess.buildRawConversationHistory = async () => [
+        { role: 'user', content: 'Use the bound generation profile.' },
+    ];
+
+    try {
+        const built = await processorAccess.buildChatRequestFromMessage(
+            createChatBuildMessage(),
+            ''
+        );
+
+        if (!built) {
+            throw new Error('Expected chat request to be built');
+        }
+
+        assert.equal(built.request.botPersonaId, 'myuri');
+        assert.equal(built.request.generateProfileId, 'ollama-local-myuri');
+    } finally {
+        runtimeConfigMutable.profile = originalProfile;
+        runtimeConfigMutable.generateProfileId = originalGenerateProfileId;
+    }
+});
+
+test('buildChatRequestFromMessage omits generation binding when it is not configured', async () => {
+    const processor = createProcessor();
+    const processorAccess = processor as unknown as ProcessorPrivateAccess;
+    const runtimeConfigMutable = runtimeConfig as unknown as {
+        generateProfileId?: string;
+    };
+    const originalGenerateProfileId = runtimeConfigMutable.generateProfileId;
+    runtimeConfigMutable.generateProfileId = undefined;
+    processorAccess.buildRawConversationHistory = async () => [
+        { role: 'user', content: 'Preserve the default routing behavior.' },
+    ];
+
+    try {
+        const built = await processorAccess.buildChatRequestFromMessage(
+            createChatBuildMessage(),
+            ''
+        );
+
+        if (!built) {
+            throw new Error('Expected chat request to be built');
+        }
+
+        assert.equal('generateProfileId' in built.request, false);
+    } finally {
+        runtimeConfigMutable.generateProfileId = originalGenerateProfileId;
+    }
+});
+
 test('buildChatRequestFromMessage forwards attachments for backend context integration', async () => {
     const processor = createProcessor();
     const processorAccess = processor as unknown as ProcessorPrivateAccess;
@@ -1044,6 +1115,100 @@ test('buildChatRequestFromMessage sends raw conversation without bot-side identi
     } finally {
         profileMutable.profile = originalProfile;
     }
+});
+
+test('buildRawConversationHistory excludes messages from other Discord bots', async () => {
+    const processor = createProcessor();
+    const processorAccess = processor as unknown as ProcessorPrivateAccess;
+    const makeContextMessage = (input: {
+        id: string;
+        authorId: string;
+        username: string;
+        bot: boolean;
+        content: string;
+        createdTimestamp: number;
+    }) => ({
+        id: input.id,
+        content: input.content,
+        createdTimestamp: input.createdTimestamp,
+        author: {
+            id: input.authorId,
+            username: input.username,
+            bot: input.bot,
+        },
+        mentions: { users: { values: () => [] } },
+    });
+    const message = {
+        id: 'current-message',
+        content: 'Current request',
+        createdTimestamp: 4,
+        author: { id: 'user-1', username: 'Jordan', bot: false },
+        mentions: { users: { values: () => [] } },
+        reference: null,
+        client: { user: { id: 'current-bot' } },
+        channel: {
+            messages: {
+                fetch: async () =>
+                    new Map([
+                        [
+                            'human-message',
+                            makeContextMessage({
+                                id: 'human-message',
+                                authorId: 'user-2',
+                                username: 'Alex',
+                                bot: false,
+                                content: 'Human context',
+                                createdTimestamp: 1,
+                            }),
+                        ],
+                        [
+                            'other-bot-message',
+                            makeContextMessage({
+                                id: 'other-bot-message',
+                                authorId: 'other-bot',
+                                username: 'OtherBot',
+                                bot: true,
+                                content: 'Do not treat this as user context',
+                                createdTimestamp: 2,
+                            }),
+                        ],
+                        [
+                            'current-bot-message',
+                            makeContextMessage({
+                                id: 'current-bot-message',
+                                authorId: 'current-bot',
+                                username: 'CurrentBot',
+                                bot: true,
+                                content: 'Prior assistant context',
+                                createdTimestamp: 3,
+                            }),
+                        ],
+                    ]),
+            },
+        },
+    };
+
+    const history = await processorAccess.buildRawConversationHistory(
+        message,
+        10
+    );
+
+    assert.deepEqual(
+        history.map((entry) => ({
+            messageId: entry.messageId,
+            role: entry.role,
+            authorId: entry.authorId,
+        })),
+        [
+            { messageId: 'human-message', role: 'user', authorId: 'user-2' },
+            {
+                messageId: 'current-bot-message',
+                role: 'assistant',
+                authorId: 'current-bot',
+            },
+            { messageId: 'current-message', role: 'user', authorId: 'user-1' },
+        ]
+    );
 });
 
 test('buildChatRequestFromMessage sanitizes Discord mentions before backend input', async () => {

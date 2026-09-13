@@ -68,6 +68,7 @@ import { createInternalVoiceTtsHandler } from './handlers/internalVoiceTts.js';
 import { createInternalVoiceRealtimeHandler } from './handlers/internalVoiceRealtime.js';
 import { buildRealtimeInstructions } from './services/prompts/realtimePromptComposer.js';
 import { createChatProfilesHandler } from './handlers/chatProfiles.js';
+import { createBoundedOllamaGenerationRuntime } from './services/boundedOllamaRuntime.js';
 import { createOpenMeteoForecastTool } from './services/contextIntegrations/weather/index.js';
 import { resolveExecutionContractTrustGraphRuntimeOptions } from './services/executionContractTrustGraph/index.js';
 import { createModelProfileResolver } from './services/modelProfileResolver.js';
@@ -244,6 +245,7 @@ const initializeServices = () => {
         ollamaHostname === 'localhost' ||
         ollamaHostname === '127.0.0.1' ||
         ollamaHostname === '::1' ||
+        ollamaHostname === '[::1]' ||
         ollamaHostname === 'host.docker.internal';
     if (ollamaHostname && ollamaBaseUrlIsLocal) {
         logger.info(
@@ -293,7 +295,7 @@ const initializeServices = () => {
         `Core generation runtime default profile: ${startupDefaultProfile.id} (${generationRuntimeDefaultModel}).`
     );
     if (hasOpenAiProvider || hasOllamaProvider || hasOpenRouterProvider) {
-        generationRuntime = createVoltAgentRuntime({
+        const baseGenerationRuntime = createVoltAgentRuntime({
             defaultModel: generationRuntimeDefaultModel,
             logger: voltAgentLogger,
             ollama: {
@@ -312,6 +314,16 @@ const initializeServices = () => {
                     secretKey: runtimeConfig.voltagent.secretKey!,
                 },
             }),
+        });
+        generationRuntime = createBoundedOllamaGenerationRuntime({
+            runtime: baseGenerationRuntime,
+            enabled:
+                ollamaBaseUrlIsLocal &&
+                runtimeConfig.ollama.localInferenceEnabled,
+            maxConcurrentGenerations:
+                runtimeConfig.ollama.maxConcurrentGenerations,
+            maxQueuedGenerations: runtimeConfig.ollama.maxQueuedGenerations,
+            logger,
         });
     } else {
         generationRuntime = null;

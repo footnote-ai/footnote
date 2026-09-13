@@ -607,6 +607,9 @@ export class MessageProcessor {
             request: {
                 surface: 'discord',
                 botPersonaId: runtimeConfig.profile.id,
+                ...(runtimeConfig.generateProfileId !== undefined && {
+                    generateProfileId: runtimeConfig.generateProfileId,
+                }),
                 assistantIdentity: toChatAssistantIdentity(
                     runtimeConfig.profile
                 ),
@@ -697,33 +700,46 @@ export class MessageProcessor {
             (left, right) => left.createdTimestamp - right.createdTimestamp
         );
 
-        const historyConversation = sortedMessages.map((contextMessage) => {
-            const isBotMessage =
-                contextMessage.author.id === message.client.user?.id;
-            const content =
-                contextMessage.content.trim() ||
-                buildEmbedSummary(contextMessage) ||
-                (isBotMessage
-                    ? 'Assistant response contained only non-text content.'
-                    : 'User message contained only non-text content.');
+        const currentDiscordUserId = message.client.user?.id;
+        const modelVisibleMessages =
+            currentDiscordUserId === undefined
+                ? sortedMessages // Intentional fail-open fallback when bot identity is unavailable.
+                : sortedMessages.filter(
+                      (contextMessage) =>
+                          !contextMessage.author.bot ||
+                          contextMessage.author.id === currentDiscordUserId
+                  );
+        const historyConversation = modelVisibleMessages.map(
+            (contextMessage) => {
+                const isBotMessage =
+                    contextMessage.author.id === currentDiscordUserId;
+                const content =
+                    contextMessage.content.trim() ||
+                    buildEmbedSummary(contextMessage) ||
+                    (isBotMessage
+                        ? 'Assistant response contained only non-text content.'
+                        : 'User message contained only non-text content.');
 
-            return {
-                role: isBotMessage ? ('assistant' as const) : ('user' as const),
-                content: normalizeDiscordMessageContent(
-                    content,
-                    this.getMentionUsers(contextMessage),
-                    runtimeConfig.personaRoster
-                ),
-                authorName:
-                    contextMessage.member?.displayName ??
-                    contextMessage.author.username,
-                authorId: contextMessage.author.id,
-                messageId: contextMessage.id,
-                createdAt: new Date(
-                    contextMessage.createdTimestamp
-                ).toISOString(),
-            };
-        });
+                return {
+                    role: isBotMessage
+                        ? ('assistant' as const)
+                        : ('user' as const),
+                    content: normalizeDiscordMessageContent(
+                        content,
+                        this.getMentionUsers(contextMessage),
+                        runtimeConfig.personaRoster
+                    ),
+                    authorName:
+                        contextMessage.member?.displayName ??
+                        contextMessage.author.username,
+                    authorId: contextMessage.author.id,
+                    messageId: contextMessage.id,
+                    createdAt: new Date(
+                        contextMessage.createdTimestamp
+                    ).toISOString(),
+                };
+            }
+        );
 
         const currentMessageContent =
             message.content.trim() ||
