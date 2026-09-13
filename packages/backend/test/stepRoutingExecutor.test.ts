@@ -76,6 +76,60 @@ test('executeStepRoutingChain advances on transient errors and succeeds on next 
     }
 });
 
+test('executeStepRoutingChain preserves explicit versus configured fallback provenance', async () => {
+    const first = makeProfile({
+        id: 'ollama-explicit',
+        provider: 'ollama',
+        providerModel: 'local-primary',
+        canUseSearch: false,
+    });
+    const second = makeProfile({
+        id: 'ollama-fallback',
+        provider: 'ollama',
+        providerModel: 'local-fallback',
+        canUseSearch: false,
+    });
+    const result = await executeStepRoutingChain({
+        step: 'generate',
+        candidates: [
+            {
+                profileId: first.id,
+                selectionSource: 'explicit',
+                chooseOneUsed: false,
+            },
+            {
+                profileId: second.id,
+                selectionSource: 'configured',
+                chooseOneUsed: false,
+            },
+        ],
+        enabledProfilesById: new Map([
+            [first.id, first],
+            [second.id, second],
+        ]),
+        requiresSearch: false,
+        runWithProfile: async (profile) => {
+            if (profile.id === first.id) {
+                throw new Error('temporary timeout');
+            }
+            return profile.id;
+        },
+    });
+
+    assert.equal(result.status, 'executed');
+    assert.deepEqual(
+        result.attempts.map((attempt) => [
+            attempt.profileId,
+            attempt.selectionSource,
+            attempt.status,
+        ]),
+        [
+            [first.id, 'explicit', 'failed_transient_advanced'],
+            [second.id, 'configured', 'executed'],
+        ]
+    );
+});
+
 test('executeStepRoutingChain stops on non-transient errors', async () => {
     const first = makeProfile({
         id: 'openai-text-medium',

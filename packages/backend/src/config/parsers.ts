@@ -138,7 +138,10 @@ export const parsePositiveIntEnv = (
         return fallback;
     }
 
-    const parsed = Number.parseInt(value, 10);
+    const trimmedValue = value.trim();
+    const parsed = /^[+-]?\d+$/.test(trimmedValue)
+        ? Number(trimmedValue)
+        : Number.NaN;
     if (Number.isFinite(parsed) && parsed > 0) {
         return parsed;
     }
@@ -163,7 +166,10 @@ export const parseNonNegativeIntEnv = (
         return fallback;
     }
 
-    const parsed = Number.parseInt(value, 10);
+    const trimmedValue = value.trim();
+    const parsed = /^[+-]?\d+$/.test(trimmedValue)
+        ? Number(trimmedValue)
+        : Number.NaN;
     if (Number.isFinite(parsed) && parsed >= 0) {
         return parsed;
     }

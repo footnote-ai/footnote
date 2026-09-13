@@ -19,7 +19,10 @@ import {
     resolveModelProfileCapabilityFacts,
     type ModelProfile,
 } from '@footnote/contracts';
-import type { SafetyTier } from '@footnote/contracts/policy';
+import type {
+    GenerationExecutionEvent,
+    SafetyTier,
+} from '@footnote/contracts/policy';
 import { renderConversationPromptLayers } from './prompts/conversationPromptLayers.js';
 import {
     createChatService,
@@ -1644,6 +1647,7 @@ export const createChatOrchestrator = ({
         const emitControlObservability = (input: {
             responseAction: 'message' | 'ignore' | 'react' | 'image';
             responseModality: ChatPlan['modality'];
+            actualGeneration?: GenerationExecutionEvent;
         }): void => {
             if (
                 plannerSummary === undefined ||
@@ -1655,7 +1659,7 @@ export const createChatOrchestrator = ({
                 workflowMode: workflowModeResolution.modeDecision,
                 executionContractResponseMode:
                     resolvedExecutionContract.response.responseMode,
-                requestedProfileId: undefined,
+                requestedProfileId: normalizedRequest.generateProfileId,
                 plannerSelectedProfileId: executionPlan.profileId,
                 selectedProfile: {
                     profileId: plannerSummary.selectedResponseProfile.id,
@@ -1676,10 +1680,13 @@ export const createChatOrchestrator = ({
                             workflowModeResolution.modeDecision.modeId,
                         executionContractResponseMode:
                             resolvedExecutionContract.response.responseMode,
-                        requestedProfileId: undefined,
+                        requestedProfileId: normalizedRequest.generateProfileId,
                         plannerSelectedProfileId: executionPlan.profileId,
                         selectedProfileId:
                             plannerSummary.selectedResponseProfile.id,
+                        actualGenerationProfileId:
+                            input.actualGeneration?.profileId,
+                        actualGenerationModel: input.actualGeneration?.model,
                         personaOverlaySource:
                             personaProfile.promptOverlay.source,
                         toolRequest: plannerSummary.toolRequestContext,
@@ -1719,7 +1726,7 @@ export const createChatOrchestrator = ({
                       workflowMode: workflowModeResolution.modeDecision,
                       executionContractResponseMode:
                           resolvedExecutionContract.response.responseMode,
-                      requestedProfileId: undefined,
+                      requestedProfileId: normalizedRequest.generateProfileId,
                       plannerSelectedProfileId: executionPlan.profileId,
                       selectedProfile: {
                           profileId: plannerSummary.selectedResponseProfile.id,
@@ -1792,6 +1799,13 @@ export const createChatOrchestrator = ({
         emitControlObservability({
             responseAction: 'message',
             responseModality: executionPlan.modality,
+            actualGeneration: response.metadata.execution
+                ?.slice()
+                .reverse()
+                .find(
+                    (event): event is GenerationExecutionEvent =>
+                        event.kind === 'generation'
+                ),
         });
         chatOrchestratorLogger.debug({
             event: 'chat.orchestration.timing',

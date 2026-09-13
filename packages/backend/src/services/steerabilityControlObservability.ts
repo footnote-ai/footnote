@@ -29,7 +29,10 @@ export type ControlObservabilityEnvelope = {
         executionContractResponseMode: 'fast_direct' | 'quality_grounded';
         requestedProfileId: string | null;
         plannerSelectedProfileId: string | null;
+        /** Planner-applied response profile; not the actual generation attempt. */
         selectedProfileId: string;
+        actualGenerationProfileId: string | null;
+        actualGenerationModel: string | null;
         personaOverlaySource: 'none' | 'inline' | 'file';
         toolRequest: {
             toolName: ToolInvocationRequest['toolName'];
@@ -60,6 +63,8 @@ const REQUIRED_CONTROL_OBSERVABILITY_FIELDS: readonly string[] = [
     'input.requestedProfileId',
     'input.plannerSelectedProfileId',
     'input.selectedProfileId',
+    'input.actualGenerationProfileId',
+    'input.actualGenerationModel',
     'input.personaOverlaySource',
     'input.toolRequest.toolName',
     'input.toolRequest.requested',
@@ -80,6 +85,8 @@ const REQUIRED_CONTROL_OBSERVABILITY_INPUT_FIELDS: readonly string[] = [
     'requestedProfileId',
     'plannerSelectedProfileId',
     'selectedProfileId',
+    'actualGenerationProfileId',
+    'actualGenerationModel',
     'personaOverlaySource',
     'toolRequest.toolName',
     'toolRequest.requested',
@@ -95,8 +102,12 @@ const REQUIRED_CONTROL_OBSERVABILITY_INPUT_FIELDS: readonly string[] = [
 const NULLABLE_REQUIRED_CONTROL_OBSERVABILITY_FIELDS = new Set<string>([
     'input.requestedProfileId',
     'input.plannerSelectedProfileId',
+    'input.actualGenerationProfileId',
+    'input.actualGenerationModel',
     'requestedProfileId',
     'plannerSelectedProfileId',
+    'actualGenerationProfileId',
+    'actualGenerationModel',
 ]);
 
 const getValueByPath = (
@@ -174,6 +185,8 @@ export const buildControlObservabilityEnvelope = (input: {
     requestedProfileId?: string;
     plannerSelectedProfileId?: string;
     selectedProfileId: string;
+    actualGenerationProfileId?: string;
+    actualGenerationModel?: string;
     personaOverlaySource: 'none' | 'inline' | 'file';
     toolRequest: ToolInvocationRequest;
     plannerApplyOutcome: PlannerExecutionApplyOutcome;
@@ -192,6 +205,8 @@ export const buildControlObservabilityEnvelope = (input: {
         ...input,
         requestedProfileId: trimToNull(input.requestedProfileId),
         plannerSelectedProfileId: trimToNull(input.plannerSelectedProfileId),
+        actualGenerationProfileId: trimToNull(input.actualGenerationProfileId),
+        actualGenerationModel: trimToNull(input.actualGenerationModel),
     } as Record<string, unknown>;
     const missingInputFields =
         listMissingControlObservabilityInputFields(normalizedInput);
@@ -207,11 +222,14 @@ export const buildControlObservabilityEnvelope = (input: {
             workflowModeId: input.workflowModeId,
             executionContractResponseMode: input.executionContractResponseMode,
             requestedProfileId: normalizedInput.requestedProfileId as
-                | string
-                | null,
+                string | null,
             plannerSelectedProfileId:
                 normalizedInput.plannerSelectedProfileId as string | null,
             selectedProfileId: input.selectedProfileId,
+            actualGenerationProfileId:
+                normalizedInput.actualGenerationProfileId as string | null,
+            actualGenerationModel: normalizedInput.actualGenerationModel as
+                string | null,
             personaOverlaySource: input.personaOverlaySource,
             toolRequest: {
                 toolName: input.toolRequest.toolName,
