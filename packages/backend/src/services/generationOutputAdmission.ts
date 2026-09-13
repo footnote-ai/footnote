@@ -211,6 +211,9 @@ export const toGenerationRoutingAttemptSignals = (
         ...(attempt.seedKeyType === undefined
             ? {}
             : { seedKeyType: attempt.seedKeyType }),
+        ...(attempt.selectionSource === undefined
+            ? {}
+            : { selectionSource: attempt.selectionSource }),
         ...(attempt.temporaryUnavailableReason === undefined
             ? {}
             : {

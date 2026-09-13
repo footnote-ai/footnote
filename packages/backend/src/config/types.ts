@@ -82,6 +82,8 @@ export type RuntimeConfig = {
         baseUrl: string | null;
         apiKey: string | null;
         localInferenceEnabled: boolean;
+        maxConcurrentGenerations: number;
+        maxQueuedGenerations: number;
     };
     openrouter: {
         apiKey: string | null;

@@ -289,6 +289,9 @@ export const buildPlannerStepRecord = ({
                           temporaryUnavailableReason:
                               attempt.temporaryUnavailableReason,
                       }),
+                ...(attempt.selectionSource === undefined
+                    ? {}
+                    : { selectionSource: attempt.selectionSource }),
             })),
         }),
     };

@@ -6,8 +6,14 @@
  * @footnote-ethics: medium - Provider routing determines where user prompts are processed.
  */
 
-import { parseBooleanFlag, parseOptionalTrimmedString } from '../parsers.js';
-import type { RuntimeConfig } from '../types.js';
+import {
+    parseBooleanFlag,
+    parseNonNegativeIntEnv,
+    parseOptionalTrimmedString,
+    parsePositiveIntEnv,
+} from '../parsers.js';
+import { envDefaultValues } from '@footnote/config-spec';
+import type { RuntimeConfig, WarningSink } from '../types.js';
 
 /**
  * Builds the Ollama section from env.
@@ -16,9 +22,22 @@ import type { RuntimeConfig } from '../types.js';
  * checks happen in model profile catalog loading.
  */
 export const buildOllamaSection = (
-    env: NodeJS.ProcessEnv
+    env: NodeJS.ProcessEnv,
+    warn: WarningSink
 ): RuntimeConfig['ollama'] => ({
     baseUrl: parseOptionalTrimmedString(env.OLLAMA_BASE_URL),
     apiKey: parseOptionalTrimmedString(env.OLLAMA_API_KEY),
     localInferenceEnabled: parseBooleanFlag(env.OLLAMA_LOCAL_INFERENCE_ENABLED),
+    maxConcurrentGenerations: parsePositiveIntEnv(
+        env.OLLAMA_MAX_CONCURRENT_GENERATIONS,
+        envDefaultValues.OLLAMA_MAX_CONCURRENT_GENERATIONS,
+        'OLLAMA_MAX_CONCURRENT_GENERATIONS',
+        warn
+    ),
+    maxQueuedGenerations: parseNonNegativeIntEnv(
+        env.OLLAMA_MAX_QUEUED_GENERATIONS,
+        envDefaultValues.OLLAMA_MAX_QUEUED_GENERATIONS,
+        'OLLAMA_MAX_QUEUED_GENERATIONS',
+        warn
+    ),
 });

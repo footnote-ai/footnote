@@ -130,6 +130,34 @@ export const envEntries = [
     }),
 
     defineEnv({
+        key: 'OLLAMA_MAX_CONCURRENT_GENERATIONS',
+        owner: 'backend',
+        stage: 'runtime',
+        section: 'openai',
+        required: false,
+        secret: false,
+        kind: 'number',
+        description:
+            'Maximum simultaneous generations admitted to a local Ollama runtime.',
+        defaultValue: literal(1),
+        usedBy: ['packages/backend/src/config.ts'],
+    }),
+
+    defineEnv({
+        key: 'OLLAMA_MAX_QUEUED_GENERATIONS',
+        owner: 'backend',
+        stage: 'runtime',
+        section: 'openai',
+        required: false,
+        secret: false,
+        kind: 'number',
+        description:
+            'Maximum local Ollama generations waiting for an admission slot.',
+        defaultValue: literal(8),
+        usedBy: ['packages/backend/src/config.ts'],
+    }),
+
+    defineEnv({
         key: 'LITESTREAM_REPLICA_URL',
         owner: 'backend',
         stage: 'runtime',
