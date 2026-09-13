@@ -607,6 +607,9 @@ export class MessageProcessor {
             request: {
                 surface: 'discord',
                 botPersonaId: runtimeConfig.profile.id,
+                ...(runtimeConfig.generateProfileId !== undefined && {
+                    generateProfileId: runtimeConfig.generateProfileId,
+                }),
                 assistantIdentity: toChatAssistantIdentity(
                     runtimeConfig.profile
                 ),

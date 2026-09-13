@@ -485,8 +485,11 @@ if (promptConfigPath) {
 }
 
 const profileConfig = readBotProfileConfig();
+const generateProfileId =
+    process.env.BOT_GENERATE_PROFILE_ID?.trim() || undefined;
 bootstrapLogger.info('Resolved bot profile configuration.', {
     profileId: profileConfig.id,
+    generateProfileId: generateProfileId ?? null,
     displayName: profileConfig.displayName,
     mentionAliasCount: profileConfig.mentionAliases.length,
     overlaySource: profileConfig.promptOverlay.source,
@@ -724,6 +727,8 @@ export const runtimeConfig = {
         process.env.INCIDENT_PSEUDONYMIZATION_SECRET!,
     promptConfigPath,
     profile: profileConfig,
+    /** Optional request-level generation binding; persona identity stays in profile. */
+    generateProfileId,
     personaRoster: personaRoster.entries,
     personaRosterResolution: personaRoster.resolution,
     webBaseUrl,

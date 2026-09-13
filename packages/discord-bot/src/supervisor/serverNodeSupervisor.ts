@@ -237,6 +237,10 @@ const buildNodeEnvironment = (
         INCIDENT_PSEUDONYMIZATION_SECRET: nodeConfig.credentials.incidentSecret,
         BOT_PROFILE_ID: nodeConfig.profile.id,
         BOT_PROFILE_DISPLAY_NAME: nodeConfig.profile.displayName,
+        // Preserve the optional bootstrap preference across the supervisor boundary.
+        ...(parentEnv.BOT_GENERATE_PROFILE_ID !== undefined && {
+            BOT_GENERATE_PROFILE_ID: parentEnv.BOT_GENERATE_PROFILE_ID,
+        }),
         ...(nodeConfig.profile.personaExpressionStrength !== undefined && {
             BOT_PROFILE_PERSONA_EXPRESSION_STRENGTH:
                 nodeConfig.profile.personaExpressionStrength,

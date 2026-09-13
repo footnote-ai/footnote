@@ -761,6 +761,20 @@ export const envEntries = [
     }),
 
     defineEnv({
+        key: 'BOT_GENERATE_PROFILE_ID',
+        owner: 'discord-bot',
+        stage: 'bootstrap',
+        section: 'model-routing',
+        required: false,
+        secret: false,
+        kind: 'string',
+        description:
+            'Optional explicit response-generation profile ID for this Discord runtime. Kept separate from BOT_PROFILE_ID persona identity; the backend validates and owns routing and fallback.',
+        defaultValue: noDefault(),
+        usedBy: ['packages/discord-bot/src/config/runtime.ts'],
+    }),
+
+    defineEnv({
         key: 'BOT_PROFILE_DISPLAY_NAME',
         owner: 'discord-bot',
         stage: 'bootstrap',
@@ -3177,6 +3191,7 @@ const BOOTSTRAP_ENV_ALLOWLIST = new Set<string>([
     'OIDC_REDIRECT_URI',
     'PROMPT_CONFIG_PATH',
     'TRACE_API_TOKEN_FILE',
+    'BOT_GENERATE_PROFILE_ID',
 ]);
 
 /**

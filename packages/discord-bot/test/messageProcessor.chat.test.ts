@@ -939,6 +939,77 @@ test('buildChatRequestFromMessage includes backend persona routing and formattin
     }
 });
 
+test('buildChatRequestFromMessage forwards an explicit generation binding separately from persona identity', async () => {
+    const processor = createProcessor();
+    const processorAccess = processor as unknown as ProcessorPrivateAccess;
+    const originalProfile = runtimeConfig.profile;
+    const runtimeConfigMutable = runtimeConfig as unknown as {
+        profile: BotProfileConfig;
+        generateProfileId?: string;
+    };
+    runtimeConfigMutable.profile = {
+        id: 'myuri',
+        displayName: 'Myuri',
+        mentionAliases: [],
+        promptOverlay: {
+            source: 'file',
+            text: 'Myuri overlay',
+            path: null,
+            length: 14,
+        },
+    };
+    const originalGenerateProfileId = runtimeConfigMutable.generateProfileId;
+    runtimeConfigMutable.generateProfileId = 'ollama-local-myuri';
+    processorAccess.buildRawConversationHistory = async () => [
+        { role: 'user', content: 'Use the bound generation profile.' },
+    ];
+
+    try {
+        const built = await processorAccess.buildChatRequestFromMessage(
+            createChatBuildMessage(),
+            ''
+        );
+
+        if (!built) {
+            throw new Error('Expected chat request to be built');
+        }
+
+        assert.equal(built.request.botPersonaId, 'myuri');
+        assert.equal(built.request.generateProfileId, 'ollama-local-myuri');
+    } finally {
+        runtimeConfigMutable.profile = originalProfile;
+        runtimeConfigMutable.generateProfileId = originalGenerateProfileId;
+    }
+});
+
+test('buildChatRequestFromMessage omits generation binding when it is not configured', async () => {
+    const processor = createProcessor();
+    const processorAccess = processor as unknown as ProcessorPrivateAccess;
+    const runtimeConfigMutable = runtimeConfig as unknown as {
+        generateProfileId?: string;
+    };
+    const originalGenerateProfileId = runtimeConfigMutable.generateProfileId;
+    runtimeConfigMutable.generateProfileId = undefined;
+    processorAccess.buildRawConversationHistory = async () => [
+        { role: 'user', content: 'Preserve the default routing behavior.' },
+    ];
+
+    try {
+        const built = await processorAccess.buildChatRequestFromMessage(
+            createChatBuildMessage(),
+            ''
+        );
+
+        if (!built) {
+            throw new Error('Expected chat request to be built');
+        }
+
+        assert.equal('generateProfileId' in built.request, false);
+    } finally {
+        runtimeConfigMutable.generateProfileId = originalGenerateProfileId;
+    }
+});
+
 test('buildChatRequestFromMessage forwards attachments for backend context integration', async () => {
     const processor = createProcessor();
     const processorAccess = processor as unknown as ProcessorPrivateAccess;
