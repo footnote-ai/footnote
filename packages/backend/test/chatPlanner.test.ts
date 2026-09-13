@@ -76,7 +76,13 @@ const planFromWorkflow = (
 
 const createPlanner = (
     normalizedText: string,
-    availableCapabilityProfiles: ChatPlannerCapabilityProfileOption[] = []
+    availableCapabilityProfiles: ChatPlannerCapabilityProfileOption[] = [],
+    availableTrustGraphTargets: Array<{
+        id: string;
+        flow: string;
+        collection: string;
+        description: string;
+    }> = []
 ) => {
     return createChatPlanner({
         executePlanner: async () => ({
@@ -84,6 +90,7 @@ const createPlanner = (
             model: 'gpt-5-mini',
         }),
         availableCapabilityProfiles,
+        availableTrustGraphTargets,
     });
 };
 
@@ -2368,4 +2375,70 @@ test('chatPlanner preserves bounded opaque TrustGraph target suggestions', async
         'meeting-archive',
         'unknown-target',
     ]);
+});
+
+test('chatPlanner preserves relevant NYC target selection and no-target unrelated selection', async () => {
+    const availableTrustGraphTargets = [
+        {
+            id: 'nyc-sept11',
+            flow: 'sept11-retrieval-deepseek-0731',
+            collection: 'sept11-tranche-0-retrieval',
+            description:
+                'NYC September 11 records: primary-source municipal records concerning response, cleanup, environmental conditions, inspections, agencies, residents, and recovery work.',
+        },
+    ];
+    const plan = (trustGraphTargetIds: string[]) =>
+        createPlanner(
+            JSON.stringify({
+                action: 'message',
+                modality: 'text',
+                requestedCapabilityProfile: 'balanced-general',
+                safetyTier: 'Low',
+                reasoning:
+                    trustGraphTargetIds.length > 0
+                        ? 'The NYC records are relevant.'
+                        : 'No configured context source is relevant.',
+                trustGraphTargetIds,
+                generation: {
+                    reasoningEffort: 'low',
+                    verbosity: 'low',
+                    temperament: {
+                        tightness: 3,
+                        rationale: 3,
+                        attribution: 3,
+                        caution: 3,
+                        extent: 3,
+                    },
+                },
+            }),
+            [],
+            availableTrustGraphTargets
+        );
+
+    const relevant = await planFromWorkflow(
+        plan(['nyc-sept11']),
+        createChatRequest({
+            latestUserInput:
+                'What do the NYC September 11 records say about air quality?',
+            conversation: [
+                {
+                    role: 'user',
+                    content:
+                        'What do the NYC September 11 records say about air quality?',
+                },
+            ],
+        })
+    );
+    assert.deepEqual(relevant.plan.trustGraphTargetIds, ['nyc-sept11']);
+
+    const unrelated = await planFromWorkflow(
+        plan([]),
+        createChatRequest({
+            latestUserInput: 'What is the weather in Chicago?',
+            conversation: [
+                { role: 'user', content: 'What is the weather in Chicago?' },
+            ],
+        })
+    );
+    assert.deepEqual(unrelated.plan.trustGraphTargetIds, []);
 });
