@@ -73,6 +73,16 @@ test('account auth keeps bootstrap values out of settings and the secret in env'
     assert.equal(envSpecByKey.OIDC_CLIENT_SECRET.secret, true);
 });
 
+test('Discord generation profile binding remains bootstrap-only and optional', () => {
+    assert.equal(envConfigSourceByKey.BOT_GENERATE_PROFILE_ID, 'bootstrap_env');
+    assert.equal(envSpecByKey.BOT_GENERATE_PROFILE_ID.required, false);
+    assert.equal(envSpecByKey.BOT_GENERATE_PROFILE_ID.secret, false);
+    assert.equal(
+        envSpecByKey.BOT_GENERATE_PROFILE_ID.defaultValue.kind,
+        'none'
+    );
+});
+
 test('TrustGraph target sets remain deployment configuration instead of settings YAML', () => {
     assert.equal(
         envConfigSourceByKey.EXECUTION_CONTRACT_TRUSTGRAPH_TARGETS,

@@ -14,7 +14,10 @@ import path from 'node:path';
 import { renderSettingsTemplateYaml } from '@footnote/config-spec';
 import { buildRuntimeConfig } from '../src/config/buildRuntimeConfig.js';
 import { settingsSpecEntries } from '../src/config/settings-spec.js';
-import { parseServerSettingsYaml } from '../src/config/settings.js';
+import {
+    buildEffectiveConfigEnv,
+    parseServerSettingsYaml,
+} from '../src/config/settings.js';
 
 const withSettingsFile = (contents: string): string => {
     const tempDir = fs.mkdtempSync(
@@ -69,6 +72,34 @@ test('settings_yaml env keys in process.env are ignored with warning', () => {
     assert.equal(
         warnings.some((message) => /WEB_API_RATE_LIMIT_IP/i.test(message)),
         false
+    );
+});
+
+test('Discord generation profile binding stays in bootstrap environment', () => {
+    assert.throws(
+        () =>
+            parseServerSettingsYaml({
+                rawText: [
+                    'version: 1',
+                    'model-routing:',
+                    '  bot-generate-profile-id: should-not-be-in-yaml',
+                    '',
+                ].join('\n'),
+                settingsPath: 'test-footnote.yaml',
+            }),
+        /maps to bootstrap env key BOT_GENERATE_PROFILE_ID/
+    );
+
+    assert.equal(
+        buildEffectiveConfigEnv(
+            { BOT_GENERATE_PROFILE_ID: 'ollama-local-myuri' },
+            {}
+        ).BOT_GENERATE_PROFILE_ID,
+        'ollama-local-myuri'
+    );
+    assert.equal(
+        buildEffectiveConfigEnv({}, {}).BOT_GENERATE_PROFILE_ID,
+        undefined
     );
 });
 
