@@ -149,6 +149,26 @@ const ProvenanceFooter = ({
             )}
 
             <div className="provenance-main">
+                {metadata.archive && (
+                    <div
+                        className="provenance-archive-sources"
+                        aria-label="NYC September 11 archive sources"
+                    >
+                        <strong>Archive sources</strong>
+                        {metadata.archive.sources.map((source) => (
+                            <div key={source.sourceLabel}>
+                                <a
+                                    href={source.originalUrl}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                >
+                                    [{source.sourceLabel}] {source.documentId} ·
+                                    page {source.pageNumber}
+                                </a>
+                            </div>
+                        ))}
+                    </div>
+                )}
                 {contextSummaries.length > 0 && (
                     <div
                         className="provenance-context-summary"

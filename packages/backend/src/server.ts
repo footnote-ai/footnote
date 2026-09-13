@@ -73,6 +73,10 @@ import { resolveExecutionContractTrustGraphRuntimeOptions } from './services/exe
 import { createModelProfileResolver } from './services/modelProfileResolver.js';
 import { createSetupBootstrapService } from './services/setupBootstrap.js';
 import { createAccountAuthService } from './services/accountAuth.js';
+import {
+    createNycSept11ArchiveHandler,
+    getNycSept11ArchiveServiceClient,
+} from './services/nycSept11Archive.js';
 import { createOidcAccountClient } from './services/oidcClient.js';
 import { settingsSpecEntries } from './config/settings-spec.js';
 
@@ -708,6 +712,12 @@ const handleChatRequest = createChatHandler({
     buildResponseMetadata,
     maxChatBodyBytes: runtimeConfig.reflect.maxBodyBytes,
     executionContractTrustGraph: executionContractTrustGraphRuntimeOptions,
+    archiveHandler: createNycSept11ArchiveHandler({
+        generationRuntime,
+        accountAuthService,
+        archiveServiceClient: getNycSept11ArchiveServiceClient(),
+        storeTrace: storeTraceWithStore,
+    }),
 });
 const { dispatchHttpRoute, dispatchUpgradeRoute } = createRouteDispatcher({
     handlers: {

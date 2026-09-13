@@ -31,7 +31,11 @@ export type WebApiClient = {
     requestJson: ReturnType<typeof createSharedWebApiClient>['requestJson'];
     chatQuestion: (
         request: PostChatRequest,
-        options?: { turnstileToken?: string; signal?: AbortSignal }
+        options?: {
+            turnstileToken?: string;
+            authCsrfToken?: string;
+            signal?: AbortSignal;
+        }
     ) => Promise<PostChatResponse>;
     getRuntimeConfig: (
         signal?: AbortSignal
@@ -89,7 +93,11 @@ export const api = createWebApiClient();
  */
 export const chatQuestion = (
     request: PostChatRequest,
-    options?: { turnstileToken?: string; signal?: AbortSignal }
+    options?: {
+        turnstileToken?: string;
+        authCsrfToken?: string;
+        signal?: AbortSignal;
+    }
 ): Promise<PostChatResponse> => api.chatQuestion(request, options);
 
 /**

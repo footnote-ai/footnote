@@ -37,6 +37,8 @@ const loadAccountPage = (): Promise<typeof import('@pages/AccountPage')> =>
     import('@pages/AccountPage');
 const loadAdminPage = (): Promise<typeof import('@pages/AdminPage')> =>
     import('@pages/AdminPage');
+const loadNycSept11Page = (): Promise<typeof import('@pages/NycSept11Page')> =>
+    import('@pages/NycSept11Page');
 
 const TracePage = lazy(loadTracePage);
 const EmbedPage = lazy(loadEmbedPage);
@@ -44,6 +46,7 @@ const SetupPage = lazy(loadSetupPage);
 const ChatPage = lazy(loadChatPage);
 const AccountPage = lazy(loadAccountPage);
 const AdminPage = lazy(loadAdminPage);
+const NycSept11Page = lazy(loadNycSept11Page);
 
 const routeFallback = (
     <PublicPageLayout>
@@ -78,6 +81,7 @@ const App = (): JSX.Element => {
                 loadChatPage(),
                 loadAccountPage(),
                 loadAdminPage(),
+                loadNycSept11Page(),
             ]);
         };
 
@@ -120,6 +124,14 @@ const App = (): JSX.Element => {
                     element={
                         <Suspense fallback={routeFallback}>
                             <AccountPage />
+                        </Suspense>
+                    }
+                />
+                <Route
+                    path="/explore/nyc-sept11"
+                    element={
+                        <Suspense fallback={routeFallback}>
+                            <NycSept11Page />
                         </Suspense>
                     }
                 />

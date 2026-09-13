@@ -31,6 +31,7 @@ import {
 import { getRequestIdentity, parseChatRequest } from './chatRequest.js';
 import { createChatRateLimitController } from './chatRateLimit.js';
 import { buildProviderUnavailableError, sendJson } from './chatResponses.js';
+import type { createNycSept11ArchiveHandler } from '../services/nycSept11Archive.js';
 
 type LogRequest = (
     req: IncomingMessage,
@@ -56,6 +57,7 @@ type ChatHandlerDeps = {
     buildResponseMetadata: BuildResponseMetadata;
     maxChatBodyBytes: number;
     executionContractTrustGraph?: CreateChatServiceOptions['executionContractTrustGraph'];
+    archiveHandler?: ReturnType<typeof createNycSept11ArchiveHandler>;
 };
 
 // The handler keeps transport concerns here and pushes business logic into helpers/services.
@@ -151,6 +153,7 @@ const createChatHandler = ({
     buildResponseMetadata,
     maxChatBodyBytes,
     executionContractTrustGraph,
+    archiveHandler,
 }: ChatHandlerDeps) => {
     const chatOrchestrator = generationRuntime
         ? createChatOrchestrator({
@@ -326,6 +329,17 @@ const createChatHandler = ({
                           ...parsedRequestResult.data,
                           assistantIdentity: undefined,
                       };
+
+            if (chatRequest.experienceId === 'nyc-sept11') {
+                if (!archiveHandler) {
+                    sendJson(res, 503, {
+                        error: 'Archive preview is unavailable',
+                    });
+                    return;
+                }
+                await archiveHandler(req, res, chatRequest);
+                return;
+            }
 
             // From here on, the request is fully normalized and can delegate to the shared workflow.
             const chatResponse = await chatOrchestrator.runChat(chatRequest);

@@ -70,6 +70,8 @@ export type {
     PresentationSettingOmissionReasonCode,
     PresentationSettingsMetadata,
     TrustGraphMetadata,
+    ArchiveSourceMetadata,
+    ArchiveMetadata,
     GitHubContextMetadata,
     GitHubContextReference,
     GitHubObjectReference,
