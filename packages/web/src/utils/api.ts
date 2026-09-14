@@ -12,6 +12,7 @@ import {
     type ApiClientError,
     type ApiErrorResponse,
     type CreateWebApiClientOptions,
+    type ChatQuestionOptions,
 } from '@footnote/api-client/web-client';
 import type {
     GetAuthSessionResponse,
@@ -31,10 +32,7 @@ export type WebApiClient = {
     requestJson: ReturnType<typeof createSharedWebApiClient>['requestJson'];
     chatQuestion: (
         request: PostChatRequest,
-        options?: {
-            turnstileToken?: string;
-            signal?: AbortSignal;
-        }
+        options?: ChatQuestionOptions
     ) => Promise<PostChatResponse>;
     getRuntimeConfig: (
         signal?: AbortSignal
@@ -92,10 +90,7 @@ export const api = createWebApiClient();
  */
 export const chatQuestion = (
     request: PostChatRequest,
-    options?: {
-        turnstileToken?: string;
-        signal?: AbortSignal;
-    }
+    options?: ChatQuestionOptions
 ): Promise<PostChatResponse> => api.chatQuestion(request, options);
 
 /**

@@ -72,7 +72,10 @@
         "lint:fix": "pnpm run format:write && pnpm exec eslint packages/ --fix",
         "lint-check": "pnpm exec eslint packages/",
         "backend:prepare": "pnpm --filter @footnote/config-spec run build:dev && pnpm --filter @footnote/prompts run build:dev",
-        "test:output": "pnpm exec playwright install chromium && pnpm exec playwright test && cross-env DISCORD_TOKEN=output-check-token DISCORD_CLIENT_ID=output-check-client DISCORD_USER_ID=output-check-user DISCORD_GUILD_IDS=output-check-guild INCIDENT_PSEUDONYMIZATION_SECRET=output-check-secret pnpm exec tsx --test packages/discord-bot/test/chatCommand.test.ts"
+        "test:output": "pnpm exec playwright install chromium && pnpm exec playwright test && cross-env DISCORD_TOKEN=output-check-token DISCORD_CLIENT_ID=output-check-client DISCORD_USER_ID=output-check-user DISCORD_GUILD_IDS=output-check-guild INCIDENT_PSEUDONYMIZATION_SECRET=output-check-secret pnpm exec tsx --test packages/discord-bot/test/chatCommand.test.ts",
+        "test:e2e:turnstile:pass": "cross-env TURNSTILE_E2E_MODE=pass pnpm exec playwright test --config=playwright.turnstile.config.ts",
+        "test:e2e:turnstile:fail": "cross-env TURNSTILE_E2E_MODE=fail pnpm exec playwright test --config=playwright.turnstile.config.ts",
+        "test:turnstile:production-guard": "pnpm exec tsx --test test/turnstile-integration/production-settings.test.ts"
     },
     "devDependencies": {
         "@eslint/js": "catalog:",

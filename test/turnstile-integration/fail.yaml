@@ -1,0 +1,29 @@
+version: 1
+
+server:
+    host: '127.0.0.1'
+    port: 3400
+    data-dir: '.footnote-turnstile-e2e-data'
+
+web:
+    allowed-origins:
+        - 'http://127.0.0.1:4173'
+        - 'http://localhost:4173'
+        - 'http://output-check.localhost:4173'
+        - 'http://127.0.0.1.nip.io:4173'
+    frame-ancestors:
+        - "'self'"
+
+turnstile:
+    turnstile-site-key: '2x00000000000000000000BB'
+    turnstile-allowed-hostnames:
+        - 'example.com'
+        - 'localhost'
+
+openai:
+    default-profile-id: 'openrouter-deepseek-v4-flash-0731'
+    planner-profile-id: 'openrouter-deepseek-v4-flash-0731'
+
+chat-workflow:
+    chat-workflow-mode-id: 'express'
+    chat-presentation-enabled: false

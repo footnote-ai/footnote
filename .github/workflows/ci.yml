@@ -27,6 +27,22 @@ jobs:
             - run: pnpm review
             - run: pnpm -r build
 
+    turnstile_browser:
+        name: Turnstile browser integration
+        runs-on: ubuntu-latest
+        steps:
+            - uses: actions/checkout@v7
+
+            - uses: actions/setup-node@v4
+              with:
+                  node-version: 22
+
+            - uses: pnpm/action-setup@v6
+            - run: pnpm install --frozen-lockfile
+            - run: pnpm exec playwright install --with-deps chromium
+            - run: pnpm test:e2e:turnstile:pass
+            - run: pnpm test:e2e:turnstile:fail
+
     launcher_changes:
         name: Detect launcher canary changes
         if: github.event_name == 'push'

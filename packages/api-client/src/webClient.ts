@@ -20,6 +20,7 @@ import { createAccountAuthApi, type AccountAuthApi } from './accountAuth.js';
 import {
     createChatApi,
     type ChatApi,
+    type ChatQuestionOptions,
     type CreateChatApiOptions,
     type DiscordChatApiResponse,
     type UnknownChatActionResponse,
@@ -28,6 +29,10 @@ import { createWebReadApi, type WebReadApi } from './web.js';
 
 export type CreateWebApiClientOptions = CreateApiTransportOptions &
     Pick<CreateChatApiOptions, 'traceApiToken'>;
+
+// Keep the transport behind Chat.tsx's 60-second user-facing deadline so the
+// UI's AbortSignal owns timeout reporting instead of racing the transport.
+export const DEFAULT_WEB_API_TIMEOUT_MS = 65_000;
 
 export type WebApiClient = {
     requestJson: ApiRequester;
@@ -43,7 +48,7 @@ export type WebApiClient = {
 export const createWebApiClient = ({
     baseUrl,
     defaultHeaders,
-    defaultTimeoutMs,
+    defaultTimeoutMs = DEFAULT_WEB_API_TIMEOUT_MS,
     fetchImpl = fetch,
     clientErrorName,
     traceApiToken,
@@ -77,6 +82,7 @@ export type {
     ApiRequestOptions,
     ApiRequester,
     ChatApi,
+    ChatQuestionOptions,
     CreateApiTransportOptions,
     CreateChatApiOptions,
     DiscordChatApiResponse,

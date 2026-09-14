@@ -448,7 +448,9 @@ const toWorkflowRoutingAttempts = (
             ? {}
             : { completion: attempt.completion }),
         ...(attempt.usage === undefined ? {} : { usage: attempt.usage }),
-        ...(attempt.cost === undefined ? {} : { cost: attempt.cost }),
+        ...(attempt.cost === undefined
+            ? {}
+            : { cost: toWorkflowCost(attempt.cost) }),
         ...(attempt.startedAtMs === undefined
             ? {}
             : { startedAt: new Date(attempt.startedAtMs).toISOString() }),

@@ -32,6 +32,8 @@ declare global {
 const FALLBACK_REFLECTION =
     'I was unable to generate a response - please try again later.';
 const EMPTY_RESPONSE_MESSAGE = 'No answer was returned. Please try again.';
+const INVALID_RESPONSE_MESSAGE =
+    'The server returned a response I could not display. Please try again.';
 type ChatStatusKind = 'error' | 'info';
 type ChatStatus = { kind: ChatStatusKind; message: string };
 
@@ -201,6 +203,10 @@ const Chat = (): JSX.Element => {
                             ? resolvedToken
                             : undefined,
                     signal: controller.signal,
+                    onRequestStarted:
+                        !captchaDisabledForRequest && resolvedToken
+                            ? captcha.consumeTokenAfterSubmission
+                            : undefined,
                 }
             );
 
@@ -235,9 +241,6 @@ const Chat = (): JSX.Element => {
 
             // Normalize backend metadata to ResponseMetadata format
             setMetadata(backendMetadata ?? null);
-
-            // Turnstile tokens are single-use, so mount a fresh invisible challenge.
-            captcha.resetAfterSubmission();
         } catch (error) {
             // A superseded request must not overwrite the newer request's status or answer.
             if (abortRef.current !== controller) {
@@ -264,6 +267,13 @@ const Chat = (): JSX.Element => {
             }
 
             if (isApiClientError(error)) {
+                if (error.code === 'invalid_payload') {
+                    showStatus(INVALID_RESPONSE_MESSAGE);
+                    setAnswer('');
+                    setMetadata(null);
+                    return;
+                }
+
                 // Handle CAPTCHA-specific errors
                 if (error.status === 403) {
                     const errorMessage = error.details
@@ -472,7 +482,7 @@ const Chat = (): JSX.Element => {
                             onSuccess={captcha.onVerify}
                             onError={captcha.onInvisibleError}
                             onExpire={captcha.onExpire}
-                            onLoad={captcha.onInvisibleLoad}
+                            onWidgetLoad={captcha.onInvisibleLoad}
                             options={{
                                 theme,
                                 size: 'invisible',

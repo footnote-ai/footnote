@@ -171,6 +171,8 @@ test('canonical Fly configuration enables presentation and backend context searc
         10
     );
     assert.equal(config.chatWorkflow.presentation.enabled, true);
+    assert.equal(config.turnstile.siteKey, '0x4AAAAAAB88uYTW8ZMNJsJl');
+    assert.deepEqual(config.turnstile.allowedHostnames, ['ai.jordanmakes.dev']);
     assert.equal(
         config.chatWorkflow.contextIntegrations.webSearch.enabled,
         true

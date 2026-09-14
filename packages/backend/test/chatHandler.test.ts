@@ -966,6 +966,115 @@ test('chat rate limits public callers before calling Turnstile', async () => {
     }
 });
 
+test('chat sends the canonical client IP to Turnstile', async () => {
+    const env = process.env as MutableEnv;
+    const previousTurnstileSecret = env.TURNSTILE_SECRET_KEY;
+    const previousTurnstileSite = env.TURNSTILE_SITE_KEY;
+    const previousAllowedHostnames = env.TURNSTILE_ALLOWED_HOSTNAMES;
+    const previousTrustProxy = process.env.WEB_TRUST_PROXY;
+    const originalFetch = globalThis.fetch;
+    const observedRemoteIps: Array<string | null> = [];
+
+    env.TURNSTILE_SECRET_KEY = 'turnstile-secret';
+    env.TURNSTILE_SITE_KEY = 'turnstile-site';
+    env.TURNSTILE_ALLOWED_HOSTNAMES = '127.0.0.1';
+    process.env.WEB_TRUST_PROXY = 'true';
+
+    globalThis.fetch = (async (input, init) => {
+        const url =
+            typeof input === 'string'
+                ? input
+                : input instanceof URL
+                  ? input.toString()
+                  : input.url;
+        if (
+            url === 'https://challenges.cloudflare.com/turnstile/v0/siteverify'
+        ) {
+            const body =
+                typeof init?.body === 'string'
+                    ? init.body
+                    : String(init?.body ?? '');
+            observedRemoteIps.push(new URLSearchParams(body).get('remoteip'));
+            return new Response(
+                JSON.stringify({
+                    success: true,
+                    hostname: '127.0.0.1',
+                    'challenge-ts': new Date().toISOString(),
+                }),
+                {
+                    status: 200,
+                    headers: { 'Content-Type': 'application/json' },
+                }
+            );
+        }
+
+        return originalFetch(input, init);
+    }) as typeof fetch;
+
+    const server = await createTestServer();
+
+    const requestBody = (latestUserInput: string): string =>
+        JSON.stringify(
+            createChatRequest({
+                surface: 'web',
+                trigger: { kind: 'submit' },
+                latestUserInput,
+                conversation: [{ role: 'user', content: latestUserInput }],
+                capabilities: {
+                    canReact: false,
+                    canGenerateImages: false,
+                    canUseTts: false,
+                },
+            })
+        );
+
+    try {
+        const directResponse = await fetch(`${server.url}/api/chat`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-Turnstile-Token': 'captcha-token',
+                'Fly-Client-IP': '203.0.113.20',
+                'CF-Connecting-IP': '1.2.3.4',
+                'X-Forwarded-For': '1.2.3.4',
+                'X-Session-Id': 'direct-ip-test',
+            },
+            body: requestBody('direct request'),
+        });
+        assert.equal(directResponse.status, 200);
+
+        const cloudflareResponse = await fetch(`${server.url}/api/chat`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-Turnstile-Token': 'captcha-token',
+                'Fly-Client-IP': '173.245.48.1',
+                'CF-Connecting-IP': '2001:db8::20',
+                'X-Forwarded-For': '1.2.3.4',
+                'X-Session-Id': 'cloudflare-ip-test',
+            },
+            body: requestBody('cloudflare request'),
+        });
+        assert.equal(cloudflareResponse.status, 200);
+        assert.deepEqual(observedRemoteIps, ['203.0.113.20', '2001:db8::20']);
+    } finally {
+        await server.close();
+        globalThis.fetch = originalFetch;
+        restoreTurnstileEnv(
+            env,
+            'TURNSTILE_SECRET_KEY',
+            previousTurnstileSecret
+        );
+        restoreTurnstileEnv(env, 'TURNSTILE_SITE_KEY', previousTurnstileSite);
+        restoreTurnstileEnv(
+            env,
+            'TURNSTILE_ALLOWED_HOSTNAMES',
+            previousAllowedHostnames
+        );
+        process.env.WEB_TRUST_PROXY = previousTrustProxy;
+    }
+});
+
 test('chat runtime path includes advisory TrustGraph metadata when configured', async () => {
     const env = process.env as MutableEnv;
     const previousTraceToken = env.TRACE_API_TOKEN;
