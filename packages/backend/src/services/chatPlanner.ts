@@ -203,6 +203,34 @@ export type ChatPlannerCapabilityProfileOption = {
     description: string;
 };
 
+/** Bounded outcome metadata for the immediately preceding context scope. */
+export type RecentContextTarget = {
+    id: string;
+    outcome: 'succeeded' | 'failed';
+};
+
+const CONTEXT_FOLLOW_UP_PATTERN =
+    /^(what about|how about|and\b|also\b|then\b|next\b|what else\b|tell me more\b|more\b|something\b|that\b|this\b|it\b|they\b|those\b)/i;
+const EXPLICIT_CONTEXT_REDIRECT_PATTERN =
+    /\b(search|check|look up|web|internet|wikipedia|public sources|according to)\b/i;
+
+/**
+ * Identifies only clearly underspecified continuation wording for advisory
+ * source carry-forward; explicit redirects and unrelated requests stay free.
+ */
+export const isLikelyContextFollowUp = (request: PostChatRequest): boolean => {
+    const priorUserMessageCount = request.conversation.filter(
+        (message) => message.role === 'user'
+    ).length;
+    const latestInput = request.latestUserInput.trim();
+    return (
+        priorUserMessageCount > 1 &&
+        latestInput.length > 0 &&
+        !EXPLICIT_CONTEXT_REDIRECT_PATTERN.test(latestInput) &&
+        CONTEXT_FOLLOW_UP_PATTERN.test(latestInput)
+    );
+};
+
 type CreateChatPlannerOptions = {
     executePlanner?: ChatPlannerExecutor;
     executePlannerStructured?: ChatPlannerStructuredExecutor;
@@ -214,6 +242,8 @@ type CreateChatPlannerOptions = {
     availableCapabilityProfiles?: ChatPlannerCapabilityProfileOption[];
     /** Deployment-provided routing descriptions; never treated as authority. */
     availableTrustGraphTargets?: readonly TrustGraphTargetConfig[];
+    /** Advisory scope from the immediately preceding request in this session. */
+    recentContextTargets?: readonly RecentContextTarget[];
     recordUsage?: (record: BackendLLMCostRecord) => void;
     /** Backend-derived pseudonym; never pass a raw surface identifier. */
     safetyIdentifier?: string;
@@ -1080,6 +1110,7 @@ const buildPlannerMessages = (input: {
     requestSummary: string;
     request: PostChatRequest;
     contextTier: PlannerContextTier;
+    recentContextTargetContext: string;
 }): RuntimeMessage[] => [
     { role: 'system', content: input.plannerPrompt },
     {
@@ -1089,6 +1120,10 @@ const buildPlannerMessages = (input: {
     {
         role: 'system',
         content: `Configured TrustGraph retrieval targets (bounded, operator-authored descriptions): ${input.plannerTrustGraphTargetContext}`,
+    },
+    {
+        role: 'system',
+        content: `Recent context scope (advisory, from the immediately preceding turn): ${input.recentContextTargetContext}. For an underspecified follow-up, preserve a successful scope when it remains sufficient; follow an explicit source redirect and prefer the smallest sufficient context set. Do not add unrelated integrations without a reason.`,
     },
     {
         role: 'system',
@@ -1778,6 +1813,7 @@ export const createChatPlanner = ({
     structuredExecutionTimeoutMs = runtimeConfig.openai.requestTimeoutMs,
     availableCapabilityProfiles = [],
     availableTrustGraphTargets = [],
+    recentContextTargets = [],
     recordUsage = recordBackendLLMUsage,
     safetyIdentifier,
 }: CreateChatPlannerOptions) => {
@@ -1807,6 +1843,15 @@ export const createChatPlanner = ({
                           0,
                           MAX_PLANNER_TRUST_GRAPH_DESCRIPTION_CHARS
                       ),
+                  }))
+              )
+            : '[]';
+    const recentContextTargetContext =
+        recentContextTargets.length > 0
+            ? JSON.stringify(
+                  recentContextTargets.map((target) => ({
+                      id: target.id.slice(0, 128),
+                      outcome: target.outcome,
                   }))
               )
             : '[]';
@@ -1899,6 +1944,11 @@ export const createChatPlanner = ({
         let plannerProvider: string | undefined;
         let plannerModel: string | undefined;
         const requestSummary = summarizeRequest(request);
+        const eligibleRecentContextTargetContext = isLikelyContextFollowUp(
+            request
+        )
+            ? recentContextTargetContext
+            : '[] (no eligible prior scope for this request)';
         const buildPlannerRequestPayload = (
             mode: ChatPlannerExecutionMode,
             contextTier: PlannerContextTier
@@ -1910,6 +1960,7 @@ export const createChatPlanner = ({
                 requestSummary,
                 request,
                 contextTier,
+                recentContextTargetContext: eligibleRecentContextTargetContext,
             });
             return {
                 messages,
@@ -1926,6 +1977,8 @@ export const createChatPlanner = ({
                             requestSummary,
                             request,
                             contextTier,
+                            recentContextTargetContext:
+                                eligibleRecentContextTargetContext,
                         }),
                 }),
             };

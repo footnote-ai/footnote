@@ -20,6 +20,7 @@ import {
     supportedVerbosityLevels,
 } from '@footnote/contracts/providers';
 import type { EnvSpecEntry } from './types.js';
+import { DEFAULT_BACKEND_REQUEST_TIMEOUT_MS } from '@footnote/contracts/policy';
 
 // This file is the single source of truth for environment metadata.
 // Each env variable is declared once below, and every exported view is derived
@@ -904,7 +905,7 @@ export const envEntries = [
         secret: false,
         kind: 'integer',
         description: 'Timeout budget for bot requests sent to the backend.',
-        defaultValue: literal(180000),
+        defaultValue: literal(DEFAULT_BACKEND_REQUEST_TIMEOUT_MS),
         usedBy: ['packages/discord-bot/src/config.ts'],
     }),
 

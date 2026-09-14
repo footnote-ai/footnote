@@ -7,6 +7,7 @@
  */
 import {
     createWebApiClient as createSharedWebApiClient,
+    DEFAULT_WEB_API_TIMEOUT_MS,
     isApiClientError as isSharedApiClientError,
     type ApiJsonResult,
     type ApiClientError,
@@ -27,6 +28,8 @@ import type {
 
 export const isApiClientError = (value: unknown): value is ApiClientError =>
     isSharedApiClientError(value, 'ApiClientError');
+
+export { DEFAULT_WEB_API_TIMEOUT_MS };
 
 export type WebApiClient = {
     requestJson: ReturnType<typeof createSharedWebApiClient>['requestJson'];

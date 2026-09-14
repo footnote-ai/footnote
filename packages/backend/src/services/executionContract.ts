@@ -7,6 +7,8 @@
  * @footnote-ethics: high - Execution Contract shape determines whether users get quick direct output or bounded grounded output, which impacts trust and operator accountability.
  */
 
+import { DEFAULT_BACKEND_WORKFLOW_TIMEOUT_MS } from '@footnote/contracts/policy';
+
 /**
  * Execution Contract schema version. Keep this explicit so future breaking
  * changes are easy to
@@ -138,7 +140,7 @@ export const EXECUTION_CONTRACT_LIMIT_PRESETS: Readonly<
         maxToolCalls: 3,
         maxDeliberationCalls: 3,
         maxTokensTotal: 96_000,
-        maxDurationMs: 300_000,
+        maxDurationMs: DEFAULT_BACKEND_WORKFLOW_TIMEOUT_MS,
     },
 };
 

@@ -118,6 +118,121 @@ test('chat planner uses the shared workflow output default', async () => {
     assert.equal(observedMaxOutputTokens, 2_000);
 });
 
+test('chat planner receives bounded recent context scope as advisory follow-up evidence', async () => {
+    let observedMessages: Array<{ role: string; content: string }> = [];
+    const planner = createChatPlanner({
+        executePlanner: async ({ messages }) => {
+            observedMessages = messages;
+            return {
+                text: JSON.stringify({
+                    action: 'message',
+                    modality: 'text',
+                    safetyTier: 'Low',
+                    reasoning: 'A grounded response is appropriate.',
+                    trustGraphTargetIds: ['archive-docs'],
+                    generation: { verbosity: 'low' },
+                }),
+                model: 'gpt-5-mini',
+            };
+        },
+        availableTrustGraphTargets: [
+            {
+                id: 'archive-docs',
+                flow: 'archive-flow',
+                collection: 'archive-collection',
+                description: 'Primary archive records.',
+            },
+        ],
+        recentContextTargets: [{ id: 'archive-docs', outcome: 'succeeded' }],
+    });
+
+    await planFromWorkflow(
+        planner,
+        createChatRequest({
+            latestUserInput: 'What about the following week?',
+            conversation: [
+                {
+                    role: 'user',
+                    content: 'According to the archive, what happened?',
+                },
+                {
+                    role: 'assistant',
+                    content: 'The archive records a response.',
+                },
+                { role: 'user', content: 'What about the following week?' },
+            ],
+        })
+    );
+
+    const scopeMessage = observedMessages.find((message) =>
+        message.content.startsWith('Recent context scope')
+    );
+    assert.ok(scopeMessage);
+    assert.match(scopeMessage.content, /archive-docs/);
+    assert.match(scopeMessage.content, /succeeded/);
+    assert.match(scopeMessage.content, /explicit source redirect/);
+});
+
+test('chat planner does not carry recent context into explicit redirects or unrelated requests', async () => {
+    const observedMessages: Array<Array<{ role: string; content: string }>> =
+        [];
+    const planner = createChatPlanner({
+        executePlanner: async ({ messages }) => {
+            observedMessages.push(messages);
+            return {
+                text: JSON.stringify({
+                    action: 'message',
+                    modality: 'text',
+                    safetyTier: 'Low',
+                    reasoning: 'A normal response is appropriate.',
+                    trustGraphTargetIds: [],
+                    generation: { verbosity: 'low' },
+                }),
+                model: 'gpt-5-mini',
+            };
+        },
+        recentContextTargets: [{ id: 'archive-docs', outcome: 'succeeded' }],
+    });
+    const priorConversation: PostChatRequest['conversation'] = [
+        { role: 'user', content: 'According to the archive, what happened?' },
+        { role: 'assistant', content: 'The archive records a response.' },
+    ];
+
+    await planFromWorkflow(
+        planner,
+        createChatRequest({
+            latestUserInput: 'Can you also check the web?',
+            conversation: [
+                ...priorConversation,
+                { role: 'user', content: 'Can you also check the web?' },
+            ],
+        })
+    );
+    await planFromWorkflow(
+        planner,
+        createChatRequest({
+            latestUserInput: 'What is the weather in Paris?',
+            conversation: [
+                ...priorConversation,
+                { role: 'user', content: 'What is the weather in Paris?' },
+            ],
+        })
+    );
+
+    assert.match(
+        observedMessages[0]?.find((message) =>
+            message.content.startsWith('Recent context scope')
+        )?.content ?? '',
+        /no eligible prior scope/
+    );
+    assert.match(
+        observedMessages[1]?.find((message) =>
+            message.content.startsWith('Recent context scope')
+        )?.content ?? '',
+        /no eligible prior scope/
+    );
+});
+
 test('chatPlanner forwards the configured planner reasoning effort', async () => {
     let observedReasoningEffort: string | undefined;
     const planner = createChatPlanner({
