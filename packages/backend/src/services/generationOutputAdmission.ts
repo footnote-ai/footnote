@@ -21,6 +21,45 @@ import type { RoutingChainAttemptLog } from './stepRoutingExecutor.js';
 
 const MAX_GENERATION_EVIDENCE_STRING_LENGTH = 100;
 
+const CITATION_ONLY_TOKEN_PATTERN =
+    /\[(?:(?:source|citation|reference|s|c|ref)\s*)?\d+\](?:\([^\r\n)]{1,2048}\))?/giu;
+
+const hasOnlyFormatting = (text: string): boolean =>
+    /^[\s\p{P}\p{S}\p{M}\p{Default_Ignorable_Code_Point}]*$/u.test(text);
+
+/**
+ * Identifies provider output that has no answer content while preserving
+ * legitimate short answers such as a grounded one-sentence abstention.
+ */
+const isStructurallyIncompleteText = (text: string): boolean => {
+    const trimmed = text.trim();
+    if (trimmed.length === 0) return true;
+    if (hasOnlyFormatting(trimmed)) return true;
+
+    const withoutCitationTokens = trimmed
+        .replace(CITATION_ONLY_TOKEN_PATTERN, '')
+        .replace(/https?:\/\/\S+/giu, '')
+        .replace(/^\s*(?:sources?|citations?)\s*:\s*/iu, '')
+        .trim();
+    if (withoutCitationTokens.length === 0) return true;
+    if (hasOnlyFormatting(withoutCitationTokens)) return true;
+
+    const semanticWords = withoutCitationTokens
+        .replace(/[^\p{L}\p{N}]+/gu, ' ')
+        .trim()
+        .toLocaleLowerCase();
+    if (/^(?:(?:source|citation|reference)s?\s*)+$/u.test(semanticWords)) {
+        return true;
+    }
+
+    // A leading punctuation-only fragment followed by a polite offer is not
+    // an answer. This remains generic and does not reject a complete answer
+    // that ends with an offer to help.
+    return /^[\s\p{P}\p{S}\p{M}\p{Default_Ignorable_Code_Point}]*\n+?(?:would you like|can i help|let me know)\b/iu.test(
+        trimmed
+    );
+};
+
 const isRecord = (value: unknown): value is Record<string, unknown> =>
     typeof value === 'object' && value !== null && !Array.isArray(value);
 
@@ -101,7 +140,8 @@ export type GenerationAdmission =
 /**
  * Decides whether a normalized generation result can become a response draft.
  * This intentionally checks only visible text and runtime completion facts; it
- * does not assess prose quality, formatting, relevance, or truth.
+ * does not assess prose quality, relevance, or truth. Structural rejection is
+ * limited to output with no substantive answer content.
  */
 export const admitGenerationResult = (
     result: GenerationResult
@@ -116,11 +156,7 @@ export const admitGenerationResult = (
             reasonCode: 'generation_incomplete_before_output',
         };
     }
-    if (
-        /^[\p{White_Space}\p{Default_Ignorable_Code_Point}]*$/u.test(
-            normalizedResult.text
-        )
-    ) {
+    if (isStructurallyIncompleteText(normalizedResult.text)) {
         return { admitted: false, reasonCode: 'generation_empty_output' };
     }
     return { admitted: true };

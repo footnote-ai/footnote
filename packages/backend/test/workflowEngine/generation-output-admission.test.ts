@@ -21,7 +21,7 @@ const result = (text: string): GenerationResult => ({
     model: 'test-model',
 });
 
-test('rejects empty and known incomplete generation results with exact reasons', () => {
+test('rejects empty and structurally incomplete generation results', () => {
     assert.deepEqual(admitGenerationResult(result('   ')), {
         admitted: false,
         reasonCode: 'generation_empty_output',
@@ -47,6 +47,20 @@ test('rejects empty and known incomplete generation results with exact reasons',
             reasonCode: 'generation_incomplete_before_output',
         }
     );
+    for (const text of [
+        '.',
+        '...',
+        '😊',
+        '[S1]',
+        'Sources: [1](https://example.test/source)',
+        ':citation:citation',
+        '.\n\nWould you like me to help find the source?',
+    ]) {
+        assert.deepEqual(admitGenerationResult(result(text)), {
+            admitted: false,
+            reasonCode: 'generation_empty_output',
+        });
+    }
     assert.deepEqual(
         admitGenerationResult({
             ...result(''),
@@ -69,8 +83,9 @@ test('accepts unusual but mechanically valid generation text', () => {
         '{"answer":"ok","items":[1,2,3]}',
         'こんにちは — مرحبًا — Привет',
         '| key | value |\n| --- | --- |\n| x | !!! |',
-        '+++ ??? ... \\ \\ = =',
         '\u200B visible text',
+        'The indexed records do not establish that claim.',
+        'No. The supplied evidence does not answer that question.',
     ];
 
     for (const text of validTexts) {

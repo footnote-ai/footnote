@@ -138,7 +138,7 @@ const runGeneration = async (input: {
         },
     });
 
-test('gives a large-prompt generation useful output room and advances after incomplete provider output', async () => {
+test('advances after a structurally incomplete completed provider output', async () => {
     const first = makeProfile('first-profile');
     const second = makeProfile('second-profile');
     const requests: GenerationRequest[] = [];
@@ -149,13 +149,12 @@ test('gives a large-prompt generation useful output room and advances after inco
             requests.push(request);
             if (requests.length === 1) {
                 return {
-                    text: '',
+                    text: '.',
                     model: first.providerModel,
-                    finishReason: 'length',
+                    finishReason: 'stop',
                     completion: {
-                        status: 'incomplete',
-                        reason: 'max_output_tokens',
-                        visibleTextLength: 0,
+                        status: 'completed',
+                        visibleTextLength: 1,
                     },
                     usage: {
                         promptTokens: 12_000,
@@ -228,15 +227,11 @@ test('gives a large-prompt generation useful output room and advances after inco
             ['second-profile', 'executed'],
         ]
     );
-    assert.equal(
-        attempts[0]?.reasonCode,
-        'generation_incomplete_before_output'
-    );
-    assert.equal(attempts[0]?.finishReason, 'length');
+    assert.equal(attempts[0]?.reasonCode, 'generation_empty_output');
+    assert.equal(attempts[0]?.finishReason, 'stop');
     assert.deepEqual(attempts[0]?.completion, {
-        status: 'incomplete',
-        reason: 'max_output_tokens',
-        visibleTextLength: 0,
+        status: 'completed',
+        visibleTextLength: 1,
     });
     assert.equal(attempts[0]?.usage?.totalTokens, 14_000);
     assert.equal(attempts[0]?.requestedProvider, 'openai');
