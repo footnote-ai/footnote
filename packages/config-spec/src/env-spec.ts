@@ -1655,7 +1655,8 @@ export const envEntries = [
         required: false,
         secret: false,
         kind: 'boolean',
-        description: 'Enables Express trust proxy behavior for web requests.',
+        description:
+            'Enables validated Cloudflare client-IP recovery using Fly-Client-IP and official Cloudflare CIDRs; never trusts arbitrary X-Forwarded-For.',
         defaultValue: literal(false),
         usedBy: ['packages/backend/src/config.ts'],
     }),

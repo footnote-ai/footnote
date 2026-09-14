@@ -51,7 +51,11 @@ class DeletesTraceDuringCardWriteStore extends SqliteTraceStore {
 
 const createTestServer = async (
     createStore: TraceStoreFactory = (dbPath) =>
-        new SqliteTraceStore({ dbPath })
+        new SqliteTraceStore({ dbPath }),
+    options: {
+        trustProxy?: boolean;
+        traceWriteLimit?: number;
+    } = {}
 ): Promise<TestServer> => {
     const tempRoot = await fs.mkdtemp(
         path.join(os.tmpdir(), 'trace-card-api-')
@@ -61,10 +65,13 @@ const createTestServer = async (
     const handlers = createTraceHandlers({
         traceStore: store,
         logRequest: () => undefined,
-        traceWriteLimiter: new SimpleRateLimiter({ limit: 20, window: 60000 }),
+        traceWriteLimiter: new SimpleRateLimiter({
+            limit: options.traceWriteLimit ?? 20,
+            window: 60000,
+        }),
         traceToken: TRACE_TOKEN,
         maxTraceBodyBytes: 20000,
-        trustProxy: false,
+        trustProxy: options.trustProxy ?? false,
     });
 
     const server = http.createServer((req, res) => {
@@ -75,6 +82,11 @@ const createTestServer = async (
         }
 
         const parsedUrl = new URL(req.url, 'http://localhost');
+
+        if (parsedUrl.pathname === '/api/traces') {
+            void handlers.handleTraceUpsertRequest(req, res);
+            return;
+        }
 
         if (parsedUrl.pathname === '/api/trace-cards') {
             void handlers.handleTraceCardCreateRequest(req, res);
@@ -126,6 +138,37 @@ const createTestServer = async (
         },
     };
 };
+
+test('trace rate limits ignore forged proxy headers from direct Fly traffic', async () => {
+    const server = await createTestServer(undefined, {
+        trustProxy: true,
+        traceWriteLimit: 1,
+    });
+
+    const request = (forgedClientIp: string): Promise<Response> =>
+        fetch(`${server.url}/api/traces`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-Trace-Token': TRACE_TOKEN,
+                'Fly-Client-IP': '203.0.113.20',
+                'CF-Connecting-IP': forgedClientIp,
+                'X-Forwarded-For': forgedClientIp,
+            },
+            body: '{}',
+        });
+
+    try {
+        const firstResponse = await request('1.2.3.4');
+        const secondResponse = await request('1.2.3.5');
+
+        assert.equal(firstResponse.status, 400);
+        assert.equal(secondResponse.status, 429);
+    } finally {
+        await server.close();
+        await server.cleanup();
+    }
+});
 
 test('POST /api/trace-cards does not replace an unreadable trace with a placeholder', async () => {
     const server = await createTestServer();
@@ -305,6 +348,7 @@ test('POST /api/trace-cards returns PNG payload and stores SVG asset', async () 
         });
 
         assert.equal(createResponse.status, 200);
+        assert.equal(createResponse.headers.get('cache-control'), 'no-store');
         const createPayload = (await createResponse.json()) as {
             responseId: string;
             pngBase64: string;
@@ -327,6 +371,7 @@ test('POST /api/trace-cards returns PNG payload and stores SVG asset', async () 
             assetResponse.headers.get('content-type'),
             'image/svg+xml; charset=utf-8'
         );
+        assert.equal(assetResponse.headers.get('cache-control'), 'no-store');
         const svg = await assetResponse.text();
         assert.match(svg, /<svg[^>]*>/);
         assert.match(svg, /TRACE card/);
@@ -378,6 +423,7 @@ test('GET /api/traces/:responseId/response-versions returns ordered candidates a
             `${server.url}/api/traces/${responseId}/response-versions`
         );
         assert.equal(response.status, 200);
+        assert.equal(response.headers.get('cache-control'), 'no-store');
         const payload = (await response.json()) as {
             responseId: string;
             candidates: Array<{ id: string; text: string; state: string }>;
@@ -419,6 +465,7 @@ test('GET /api/traces/:responseId/response-versions returns ordered candidates a
             `${server.url}/api/traces/${responseId}/response-versions`
         );
         assert.equal(staleResponse.status, 410);
+        assert.equal(staleResponse.headers.get('cache-control'), 'no-store');
         const stalePayload = (await staleResponse.json()) as {
             message: string;
             candidates: Array<{ id: string }>;
