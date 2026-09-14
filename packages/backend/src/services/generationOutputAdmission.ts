@@ -24,6 +24,9 @@ const MAX_GENERATION_EVIDENCE_STRING_LENGTH = 100;
 const CITATION_ONLY_TOKEN_PATTERN =
     /\[(?:(?:source|citation|reference|s|c|ref)\s*)?\d+\](?:\([^\r\n)]{1,2048}\))?/giu;
 
+const REPEATED_SOURCE_EVIDENCE_MARKER_PATTERN =
+    /(?:^|\n)\s*TRUSTGRAPH SOURCE EVIDENCE\b/giu;
+
 const hasOnlyFormatting = (text: string): boolean =>
     /^[\s\p{P}\p{S}\p{M}\p{Default_Ignorable_Code_Point}]*$/u.test(text);
 
@@ -35,6 +38,16 @@ const isStructurallyIncompleteText = (text: string): boolean => {
     const trimmed = text.trim();
     if (trimmed.length === 0) return true;
     if (hasOnlyFormatting(trimmed)) return true;
+
+    // A revision that repeats multiple raw evidence blocks is an evidence
+    // echo, not a user-facing answer. Reject it so the workflow can preserve
+    // the prior admitted draft rather than selecting the echoed context.
+    if (
+        (trimmed.match(REPEATED_SOURCE_EVIDENCE_MARKER_PATTERN)?.length ?? 0) >=
+        2
+    ) {
+        return true;
+    }
 
     const withoutCitationTokens = trimmed
         .replace(CITATION_ONLY_TOKEN_PATTERN, '')
