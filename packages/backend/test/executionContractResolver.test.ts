@@ -30,7 +30,7 @@ test('resolveExecutionContract maps known preset ids deterministically', () => {
     assert.equal(qualityGrounded.policyContract.limits.maxToolCalls, 3);
     assert.equal(qualityGrounded.policyContract.limits.maxDeliberationCalls, 3);
     assert.equal(qualityGrounded.policyContract.limits.maxTokensTotal, 96_000);
-    assert.equal(qualityGrounded.policyContract.limits.maxDurationMs, 180_000);
+    assert.equal(qualityGrounded.policyContract.limits.maxDurationMs, 300_000);
     assert.equal(
         qualityGrounded.policyContract.response.stoppingRule,
         'bounded_sufficient_answer'

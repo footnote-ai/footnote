@@ -138,7 +138,7 @@ export const EXECUTION_CONTRACT_LIMIT_PRESETS: Readonly<
         maxToolCalls: 3,
         maxDeliberationCalls: 3,
         maxTokensTotal: 96_000,
-        maxDurationMs: 180_000,
+        maxDurationMs: 300_000,
     },
 };
 
