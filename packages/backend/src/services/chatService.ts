@@ -284,6 +284,7 @@ import {
     normalizeGenerationResultEvidence,
     toGenerationRoutingAttemptSignals,
 } from './generationOutputAdmission.js';
+import { boundGenerationRequestToWorkflowBudget } from './workflowEngine/tokenBudget.js';
 
 const SURFACED_NO_GENERATION_MESSAGE =
     'I could not generate a response for this request.';
@@ -1730,6 +1731,34 @@ export const createChatService = ({
                         const fallbackGenerationRequest =
                             workflowResult.fallbackGenerationRequest ??
                             effectiveGenerationRequest;
+                        const fallbackRequestWithSignal: GenerationRequest = {
+                            ...fallbackGenerationRequest,
+                            ...(effectiveGenerationRequest.signal === undefined
+                                ? {}
+                                : {
+                                      signal: effectiveGenerationRequest.signal,
+                                  }),
+                        };
+                        // Fallback generation is still part of the same
+                        // workflow budget. Reattach the process-local signal
+                        // only at this runtime call site, then bound output
+                        // against the tokens already recorded by the workflow.
+                        const boundedFallbackGenerationRequest =
+                            boundGenerationRequestToWorkflowBudget({
+                                request: fallbackRequestWithSignal,
+                                totalTokens:
+                                    workflowResult.workflowLineage.steps.reduce(
+                                        (total, step) =>
+                                            total +
+                                            Math.max(
+                                                0,
+                                                step.usage?.totalTokens ?? 0
+                                            ),
+                                        0
+                                    ),
+                                maxTokensTotal:
+                                    workflowExecutionLimits.maxTokensTotal,
+                            });
                         const noGenShortCircuit = buildContextStepShortCircuit({
                             workflowContextStepResult,
                             workflowContextStepResults,
@@ -1832,12 +1861,13 @@ export const createChatService = ({
                             handling.runtimeAction ===
                                 'run_fallback_generation' &&
                             backendFailOpenAllowed &&
-                            !tokenBudgetAlreadyExhausted
+                            !tokenBudgetAlreadyExhausted &&
+                            boundedFallbackGenerationRequest !== undefined
                         ) {
                             try {
                                 const chainGenerationResult =
                                     await runGenerateWithChain(
-                                        fallbackGenerationRequest
+                                        boundedFallbackGenerationRequest
                                     );
                                 if (chainGenerationResult.isErr()) {
                                     logger.warn(

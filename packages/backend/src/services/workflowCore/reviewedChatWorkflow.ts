@@ -255,7 +255,7 @@ export type RunBoundedReviewWorkflowResult =
            * fail-open generation attempt. This prevents successful evidence
            * from disappearing when the reviewed draft is unavailable.
            */
-          fallbackGenerationRequest?: GenerationRequest;
+          fallbackGenerationRequest?: SerializableGenerationRequest;
           presentation?: PresentationMetadata;
           plannerStepResult?: PlannerStepResult;
           planContinuation?: PlanContinuation;
@@ -264,6 +264,18 @@ export type RunBoundedReviewWorkflowResult =
       };
 
 type SerializableRecord = { readonly [key: string]: Result };
+type SerializableGenerationRequest = Omit<GenerationRequest, 'signal'>;
+
+/**
+ * Projects a runtime generation request across the serializable workflow
+ * result boundary without leaking its process-local cancellation signal.
+ */
+const toSerializableGenerationRequest = (
+    request: GenerationRequest
+): SerializableGenerationRequest => {
+    const { signal: _signal, ...serializableRequest } = request;
+    return serializableRequest;
+};
 type ContinuePlanContinuation = Extract<
     PlanContinuation,
     { continuation: 'continue_message' }
@@ -3406,7 +3418,9 @@ export const runBoundedReviewWorkflow = async (
         readGenerationResult(execution.run.results.draft);
     const fallbackGenerationRequest =
         generationResult === undefined
-            ? messagesFor(execution.run.results).request
+            ? toSerializableGenerationRequest(
+                  messagesFor(execution.run.results).request
+              )
             : undefined;
     const plannerStepResult = plan?.plannerStepResult;
     const contextStepResult = evidence.results.at(0);

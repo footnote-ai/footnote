@@ -205,6 +205,7 @@ test('runBoundedReviewWorkflow executes injected context step and records contex
 });
 
 test('runBoundedReviewWorkflow retains projected context for fallback after empty generation', async () => {
+    const abortController = new AbortController();
     const result = await runBoundedReviewWorkflowForTest({
         generationRuntime: {
             kind: 'test-runtime',
@@ -225,6 +226,7 @@ test('runBoundedReviewWorkflow retains projected context for fallback after empt
         generationRequest: {
             model: 'gpt-5-mini',
             messages: [{ role: 'user', content: 'What totals?' }],
+            signal: abortController.signal,
         },
         messagesWithHints: [{ role: 'user', content: 'What totals?' }],
         generationStartedAtMs: Date.now(),
@@ -289,6 +291,13 @@ test('runBoundedReviewWorkflow retains projected context for fallback after empt
             .map((message) => message.content)
             .join('\n') ?? '',
         /TRUSTGRAPH SOURCE EVIDENCE: notices total 1,234/
+    );
+    assert.equal(
+        Object.prototype.hasOwnProperty.call(
+            result.fallbackGenerationRequest,
+            'signal'
+        ),
+        false
     );
 });
 
