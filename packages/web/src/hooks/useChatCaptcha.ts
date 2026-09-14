@@ -35,7 +35,7 @@ type ChatCaptcha = {
     onInvisibleLoad: () => void;
     onManagedError: () => void;
     onVerify: (token: string) => void;
-    resetAfterSubmission: () => void;
+    consumeTokenAfterSubmission: () => void;
     showManagedChallenge: (message?: string) => void;
     token: string | null;
 };
@@ -190,7 +190,7 @@ const useChatCaptcha = ({
         token,
     ]);
 
-    const resetAfterSubmission = useCallback((): void => {
+    const consumeTokenAfterSubmission = useCallback((): void => {
         isExecutingRef.current = false;
         challengeGenerationRef.current += 1;
         setToken(null);
@@ -211,7 +211,7 @@ const useChatCaptcha = ({
         onInvisibleLoad,
         onManagedError,
         onVerify,
-        resetAfterSubmission,
+        consumeTokenAfterSubmission,
         showManagedChallenge,
         token,
     };

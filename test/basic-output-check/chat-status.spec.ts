@@ -27,6 +27,59 @@ const CHAT_RESPONSE = {
     message: 'The newer answer wins.',
 };
 
+const INVALID_METADATA_RESPONSE = {
+    ...CHAT_RESPONSE,
+    metadata: {
+        ...CHAT_RESPONSE.metadata,
+        workflow: {
+            workflowId: 'chat-workflow',
+            workflowName: 'message_reviewed',
+            status: 'completed',
+            stepCount: 1,
+            maxSteps: 2,
+            maxDurationMs: 1000,
+            terminationReason: 'goal_satisfied',
+            steps: [
+                {
+                    stepId: 'step_1',
+                    attempt: 1,
+                    stepKind: 'generate',
+                    startedAt: '2026-01-01T00:00:00.000Z',
+                    finishedAt: '2026-01-01T00:00:00.001Z',
+                    durationMs: 1,
+                    attempts: [
+                        {
+                            attempt: 1,
+                            status: 'succeeded',
+                            startedAt: '2026-01-01T00:00:00.000Z',
+                            finishedAt: '2026-01-01T00:00:00.001Z',
+                            durationMs: 1,
+                            routingAttempts: [
+                                {
+                                    index: 0,
+                                    profileId: 'test-profile',
+                                    status: 'succeeded',
+                                    chooseOneUsed: false,
+                                    cost: {
+                                        inputCostUsd: 0,
+                                        outputCostUsd: 0,
+                                        totalCostUsd: 0,
+                                        costCompleteness: 'unknown',
+                                    },
+                                },
+                            ],
+                        },
+                    ],
+                    outcome: {
+                        status: 'executed',
+                        summary: 'Generated a response.',
+                    },
+                },
+            ],
+        },
+    },
+};
+
 const configureRuntime = async (
     page: Page,
     turnstileSiteKey = ''
@@ -436,6 +489,67 @@ test('a successful response mounts a fresh invisible CAPTCHA challenge', async (
     await submitQuestion(page, 'Use the fresh challenge');
     await expect.poll(() => submittedTokens.length).toBe(2);
     expect(submittedTokens[1]).toBe('XXXX.DUMMY.TOKEN.2.XXXX');
+    expect(submittedTokens[0]).not.toBe(submittedTokens[1]);
+});
+
+test('a schema-invalid response consumes the token and reports a truthful client error', async ({
+    page,
+}) => {
+    await installTurnstileStub(page);
+    await configureRuntime(page, '1x00000000000000000000AA');
+    const submittedTokens: string[] = [];
+    let requestCount = 0;
+    await page.route('**/api/chat', async (route) => {
+        requestCount += 1;
+        submittedTokens.push(
+            route.request().headers()['x-turnstile-token'] ?? ''
+        );
+        await route.fulfill({
+            contentType: 'application/json',
+            body: JSON.stringify(
+                requestCount === 1 ? INVALID_METADATA_RESPONSE : CHAT_RESPONSE
+            ),
+        });
+    });
+
+    await page.goto('/chat');
+    await page.getByLabel('Ask a question').focus();
+    await expect
+        .poll(() =>
+            page.evaluate(
+                () => window.__footnoteTurnstileCallbacks?.length ?? 0
+            )
+        )
+        .toBeGreaterThan(0);
+    await page.evaluate(() => {
+        window.__footnoteTurnstileCallbacks?.[0]?.('XXXX.DUMMY.TOKEN.1.XXXX');
+    });
+
+    await submitQuestion(page, 'Return a contract-invalid response');
+    await expect(page.getByRole('status')).toHaveText(
+        'The server returned a response I could not display. Please try again.'
+    );
+    await expect(
+        page.getByText(
+            'I was unable to generate a response - please try again later.'
+        )
+    ).toHaveCount(0);
+    await expect
+        .poll(() =>
+            page.evaluate(
+                () => window.__footnoteTurnstileCallbacks?.length ?? 0
+            )
+        )
+        .toBeGreaterThan(1);
+
+    await page.evaluate(() => {
+        window.__footnoteTurnstileCallbacks?.at(-1)?.(
+            'XXXX.DUMMY.TOKEN.2.XXXX'
+        );
+    });
+    await submitQuestion(page, 'Use the fresh token');
+    await expect(page.getByText(CHAT_RESPONSE.message)).toBeVisible();
+    expect(submittedTokens).toHaveLength(2);
     expect(submittedTokens[0]).not.toBe(submittedTokens[1]);
 });
 

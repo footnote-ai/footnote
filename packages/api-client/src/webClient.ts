@@ -20,6 +20,7 @@ import { createAccountAuthApi, type AccountAuthApi } from './accountAuth.js';
 import {
     createChatApi,
     type ChatApi,
+    type ChatQuestionOptions,
     type CreateChatApiOptions,
     type DiscordChatApiResponse,
     type UnknownChatActionResponse,
@@ -81,6 +82,7 @@ export type {
     ApiRequestOptions,
     ApiRequester,
     ChatApi,
+    ChatQuestionOptions,
     CreateApiTransportOptions,
     CreateChatApiOptions,
     DiscordChatApiResponse,

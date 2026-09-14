@@ -79,6 +79,7 @@ const runGeneration = async (input: {
     nativeSearchRequired?: boolean;
     providerAvailability?: ProviderAvailabilityStore;
     onUsage?: () => void;
+    includeDetailedCost?: boolean;
 }) =>
     runBoundedReviewWorkflow({
         generationRuntime: input.runtime,
@@ -114,11 +115,25 @@ const runGeneration = async (input: {
             input.onUsage?.();
             return usage(result, requestedModel);
         },
-        estimateCost: () => ({
-            inputCostUsd: 0,
-            outputCostUsd: 0,
-            totalCostUsd: 0,
-        }),
+        estimateCost: () =>
+            input.includeDetailedCost
+                ? Object.assign(
+                      {
+                          inputCostUsd: 0,
+                          outputCostUsd: 0,
+                          totalCostUsd: 0,
+                      },
+                      {
+                          costCompleteness: 'unknown',
+                          costAppliedRules: [],
+                          costIncompleteReasons: ['unpriced_model'],
+                      }
+                  )
+                : {
+                      inputCostUsd: 0,
+                      outputCostUsd: 0,
+                      totalCostUsd: 0,
+                  },
         stepRoutingChainSet: {
             enabledProfilesById: new Map(
                 [...input.candidates, ...(input.assessCandidates ?? [])].map(
@@ -208,6 +223,7 @@ test('gives a large-prompt generation useful output room and advances after inco
         onUsage: () => {
             usageCalls += 1;
         },
+        includeDetailedCost: true,
     });
 
     assert.equal(result.outcome, 'generated');
@@ -249,6 +265,11 @@ test('gives a large-prompt generation useful output room and advances after inco
     assert.ok(attempts[0]?.finishedAt);
     assert.ok((attempts[0]?.durationMs ?? -1) >= 0);
     assert.ok((attempts[0]?.cost?.totalCostUsd ?? -1) >= 0);
+    assert.deepEqual(Object.keys(attempts[0]?.cost ?? {}).sort(), [
+        'inputCostUsd',
+        'outputCostUsd',
+        'totalCostUsd',
+    ]);
 
     assert.deepEqual(
         generateStep.attempts?.[0]?.routingAttempts?.map((attempt) => [
