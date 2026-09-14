@@ -131,6 +131,16 @@ const sanitizeEvidenceItem = (
     if (item.targetId !== undefined && !isNonEmptyString(item.targetId)) {
         return { valid: false };
     }
+    if (
+        item.evidenceKind !== undefined &&
+        item.evidenceKind !== 'generated' &&
+        item.evidenceKind !== 'source'
+    ) {
+        return { valid: false };
+    }
+    if (item.sourceTitle !== undefined && !isNonEmptyString(item.sourceTitle)) {
+        return { valid: false };
+    }
 
     return {
         valid: true,
@@ -147,6 +157,10 @@ const sanitizeEvidenceItem = (
             adapterVersion: item.adapterVersion.trim(),
             ...(item.targetId !== undefined && {
                 targetId: item.targetId.trim(),
+            }),
+            evidenceKind: item.evidenceKind ?? 'generated',
+            ...(item.sourceTitle !== undefined && {
+                sourceTitle: item.sourceTitle.trim(),
             }),
         },
     };
@@ -250,6 +264,10 @@ const toAdvisoryEvidenceItems = (
         retrievalReason: item.retrievalReason,
         collectionScope: item.collectionScope,
         ...(item.targetId !== undefined && { targetId: item.targetId }),
+        evidenceKind: item.evidenceKind ?? 'generated',
+        ...(item.sourceTitle !== undefined && {
+            sourceTitle: item.sourceTitle,
+        }),
     }));
 
 const defaultLocalExecutionContractOutcome = (): LocalTerminalOutcome =>

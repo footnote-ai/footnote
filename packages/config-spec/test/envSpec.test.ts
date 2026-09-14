@@ -92,4 +92,16 @@ test('TrustGraph target sets remain deployment configuration instead of settings
         envSpecByKey.EXECUTION_CONTRACT_TRUSTGRAPH_TARGETS.secret,
         false
     );
+    assert.equal(
+        envConfigSourceByKey.EXECUTION_CONTRACT_TRUSTGRAPH_ENABLED,
+        'bootstrap_env'
+    );
+    assert.equal(
+        envConfigSourceByKey.EXECUTION_CONTRACT_TRUSTGRAPH_ADAPTER_MODE,
+        'bootstrap_env'
+    );
+    assert.equal(
+        envConfigSourceByKey.EXECUTION_CONTRACT_TRUSTGRAPH_BASE_URL,
+        'bootstrap_env'
+    );
 });

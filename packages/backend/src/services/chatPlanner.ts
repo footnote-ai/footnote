@@ -890,6 +890,90 @@ const normalizeTrustGraphTargetIds = (value: unknown): string[] => {
     return targetIds;
 };
 
+const EXPLICIT_CONTEXT_REQUEST_PATTERN =
+    /\b(?:search|look\s+(?:up|in)|find|retrieve|query|use|according\s+to|based\s+on|what\s+do)\b[\s\S]*\b(?:records?|archives?|documents?|reports?|files?|dataset|collection)\b/i;
+const CONTEXT_SOURCE_WORDS = new Set([
+    'record',
+    'records',
+    'archive',
+    'archives',
+    'document',
+    'documents',
+    'report',
+    'reports',
+    'file',
+    'files',
+    'dataset',
+    'collection',
+]);
+const CONTEXT_ROUTING_STOP_WORDS = new Set([
+    'about',
+    'after',
+    'also',
+    'and',
+    'are',
+    'from',
+    'into',
+    'that',
+    'the',
+    'their',
+    'this',
+    'which',
+    'with',
+]);
+
+const tokenizeContextRoutingText = (value: string): Set<string> =>
+    new Set(
+        value
+            .toLocaleLowerCase('en-US')
+            .replace(/[^\p{L}\p{N}]+/gu, ' ')
+            .split(/\s+/u)
+            .filter(
+                (token) =>
+                    token.length >= 2 && !CONTEXT_ROUTING_STOP_WORDS.has(token)
+            )
+    );
+
+/**
+ * Preserves an explicitly named configured source when a planner model
+ * chooses public search instead. This is a generic routing fallback: it only
+ * runs for source-search language and requires multiple description matches,
+ * so unrelated chats do not inherit every configured context target.
+ */
+const inferExplicitTrustGraphTargetIds = (
+    request: PostChatRequest,
+    targets: readonly TrustGraphTargetConfig[]
+): string[] => {
+    const query = request.latestUserInput.trim();
+    const queryTokens = tokenizeContextRoutingText(query);
+    if (
+        query.length === 0 ||
+        !EXPLICIT_CONTEXT_REQUEST_PATTERN.test(query) ||
+        ![...queryTokens].some((token) => CONTEXT_SOURCE_WORDS.has(token))
+    ) {
+        return [];
+    }
+
+    const rankedTargets = targets
+        .map((target) => {
+            const targetTokens = tokenizeContextRoutingText(target.description);
+            const overlap = [...queryTokens].filter((token) =>
+                targetTokens.has(token)
+            ).length;
+            return { target, overlap };
+        })
+        .filter(({ overlap }) => overlap >= 2)
+        .sort((left, right) => right.overlap - left.overlap);
+    const bestOverlap = rankedTargets[0]?.overlap;
+    if (bestOverlap === undefined) {
+        return [];
+    }
+
+    return rankedTargets
+        .filter(({ overlap }) => overlap === bestOverlap)
+        .map(({ target }) => target.id);
+};
+
 const summarizeConversationWindow = (
     conversation: PostChatRequest['conversation'],
     retainedRecentWindowSize: number
@@ -1727,6 +1811,33 @@ export const createChatPlanner = ({
               )
             : '[]';
 
+    const normalizePlanForRequest = (
+        request: PostChatRequest,
+        candidate: unknown
+    ): PlannerNormalizationResult => {
+        const normalization = normalizePlan(request, candidate);
+        const inferredTargetIds = inferExplicitTrustGraphTargetIds(
+            request,
+            availableTrustGraphTargets
+        );
+        if (inferredTargetIds.length === 0) {
+            return normalization;
+        }
+
+        return {
+            ...normalization,
+            plan: {
+                ...normalization.plan,
+                trustGraphTargetIds: [
+                    ...new Set([
+                        ...(normalization.plan.trustGraphTargetIds ?? []),
+                        ...inferredTargetIds,
+                    ]),
+                ],
+            },
+        };
+    };
+
     const planChat = async (
         request: PostChatRequest,
         invocationContext?: ChatPlannerInvocationContext
@@ -1970,7 +2081,7 @@ export const createChatPlanner = ({
             const expandedCandidate = parsePlannerCandidateFromTextJson(
                 expandedResponse.text
             );
-            const expandedNormalization = normalizePlan(
+            const expandedNormalization = normalizePlanForRequest(
                 request,
                 expandedCandidate
             );
@@ -2151,7 +2262,7 @@ export const createChatPlanner = ({
                     structuredResponse.model || defaultModel,
                     structuredResponse.usage
                 );
-                const normalization = normalizePlan(
+                const normalization = normalizePlanForRequest(
                     request,
                     structuredResponse.decision
                 );
@@ -2199,7 +2310,7 @@ export const createChatPlanner = ({
             const parsed = parsePlannerCandidateFromTextJson(
                 plannerResponse.text
             );
-            const normalization = normalizePlan(request, parsed);
+            const normalization = normalizePlanForRequest(request, parsed);
             logPlannerOutputIngestion({
                 normalization,
                 mode: 'text_json',
@@ -2315,7 +2426,10 @@ export const createChatPlanner = ({
                     const parsed = parsePlannerCandidateFromTextJson(
                         textJsonResponse.text
                     );
-                    const normalization = normalizePlan(request, parsed);
+                    const normalization = normalizePlanForRequest(
+                        request,
+                        parsed
+                    );
                     logPlannerOutputIngestion({
                         normalization,
                         mode: 'text_json',

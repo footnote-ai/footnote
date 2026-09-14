@@ -2381,7 +2381,7 @@ test('chatPlanner preserves relevant NYC target selection and no-target unrelate
     const availableTrustGraphTargets = [
         {
             id: 'nyc-sept11',
-            flow: 'sept11-retrieval-deepseek-0731',
+            flow: 'sept11-retrieval-deepseek-0731-hybrid-bge-small-raw',
             collection: 'sept11-tranche-0-retrieval',
             description:
                 'NYC September 11 records: primary-source municipal records concerning response, cleanup, environmental conditions, inspections, agencies, residents, and recovery work.',
@@ -2441,4 +2441,55 @@ test('chatPlanner preserves relevant NYC target selection and no-target unrelate
         })
     );
     assert.deepEqual(unrelated.plan.trustGraphTargetIds, []);
+});
+
+test('chatPlanner preserves explicitly named configured sources when planner omits them', async () => {
+    const planner = createPlanner(
+        JSON.stringify({
+            action: 'message',
+            modality: 'text',
+            requestedCapabilityProfile: 'balanced-general',
+            safetyTier: 'Low',
+            reasoning: 'Public search was selected.',
+            trustGraphTargetIds: [],
+            generation: {
+                reasoningEffort: 'low',
+                verbosity: 'low',
+                temperament: {
+                    tightness: 3,
+                    rationale: 3,
+                    attribution: 3,
+                    caution: 3,
+                    extent: 3,
+                },
+            },
+        }),
+        [],
+        [
+            {
+                id: 'nyc-sept11',
+                flow: 'sept11-flow',
+                collection: 'sept11-collection',
+                description:
+                    'NYC September 11 primary-source municipal records about inspections and cleanup.',
+            },
+        ]
+    );
+
+    const result = await planFromWorkflow(
+        planner,
+        createChatRequest({
+            latestUserInput:
+                'Search the September 11 records for building inspections.',
+            conversation: [
+                {
+                    role: 'user',
+                    content:
+                        'Search the September 11 records for building inspections.',
+                },
+            ],
+        })
+    );
+
+    assert.deepEqual(result.plan.trustGraphTargetIds, ['nyc-sept11']);
 });

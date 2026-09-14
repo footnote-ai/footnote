@@ -45,10 +45,18 @@ recall and added latency; that result is evidence about this corpus and
 benchmark, not a universal claim against every query-expansion strategy.
 
 The standalone `sept11-preview-rc1` retrieval service was diagnostic work. It is
-not the intended Footnote production architecture. TrustGraph 2.8.15 does not
-currently expose the supported raw-query/raw-evidence seam required to pass the
-release gate through the normal Footnote workflow. Until that seam exists, the
-feature remains disabled and tranche 1 remains on HOLD.
+not the intended Footnote production architecture. The maintained TrustGraph
+2.8.15 source now exposes the raw-query/evidence-only contract, and the local
+deployment selects it only for the flow
+`sept11-retrieval-deepseek-0731-hybrid-bge-small-raw` through the per-flow
+`query_strategy: raw` parameter. Existing flows retain their concept default.
+Footnote requests evidence-only mode through the generic adapter; that flag is
+not planner- or client-controlled.
+
+This is a local release-candidate integration, not a claim that the diagnostic
+raw-query path is a supported remote TrustGraph 2.8.15 production configuration.
+The 35-case generation-boundary gate and remote connectivity validation remain
+pending. Tranche 1 remains on HOLD.
 
 ## Coverage and epistemic limits
 
@@ -73,7 +81,8 @@ an archive-specific provenance store.
 
 Before public enablement:
 
-1. TrustGraph must expose a supported raw-query/raw-evidence context-step seam.
+1. The local per-flow raw-query/evidence-only TrustGraph contract must remain
+   reproducible in the maintained source and deployment image.
 2. Footnote must consume that seam through the existing server-owned target and
    Context Step integration.
 3. Focused contract, backend, web, provenance, and injection-resistance tests
@@ -81,5 +90,6 @@ Before public enablement:
 4. The frozen 35-case benchmark must pass through normal Footnote chat, with
    manual grounding and negative-answer review.
 
-Do not run more retrieval bake-offs, add OCR, ingest tranche 1, deploy, or
-change TrustGraph infrastructure as part of this Footnote work.
+Do not run more retrieval bake-offs, add OCR, ingest tranche 1, deploy remotely,
+or change TrustGraph infrastructure beyond the bounded local validation image as
+part of this Footnote work.

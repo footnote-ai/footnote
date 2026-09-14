@@ -22,6 +22,7 @@ type OwnershipBindingMode =
     RuntimeConfig['executionContractTrustGraph']['ownership']['bindingMode'];
 type StubAdapterMode =
     RuntimeConfig['executionContractTrustGraph']['adapter']['stubMode'];
+type TrustGraphTargetService = NonNullable<TrustGraphTargetConfig['service']>;
 
 const ADAPTER_MODES: ReadonlySet<AdapterMode> = new Set([
     'none',
@@ -39,6 +40,8 @@ const STUB_ADAPTER_MODES: ReadonlySet<StubAdapterMode> = new Set([
     'timeout',
     'poisoned',
 ]);
+const TRUSTGRAPH_TARGET_SERVICES: ReadonlySet<TrustGraphTargetService> =
+    new Set(['graph-rag', 'document-rag']);
 
 const MAX_CONFIGURED_TARGETS = 8;
 const TARGET_ID_PATTERN = /^[a-zA-Z0-9._:-]{1,128}$/;
@@ -72,6 +75,22 @@ const parseTargetString = (
     }
 
     return trimmed;
+};
+
+const parseTargetService = (
+    value: unknown,
+    index: number
+): TrustGraphTargetService | undefined => {
+    if (value === undefined) {
+        return undefined;
+    }
+    if (
+        typeof value !== 'string' ||
+        !TRUSTGRAPH_TARGET_SERVICES.has(value as TrustGraphTargetService)
+    ) {
+        return invalidTargets(`invalid_service_${index}`);
+    }
+    return value as TrustGraphTargetService;
 };
 
 const parseConfiguredTargets = (
@@ -110,6 +129,7 @@ const parseConfiguredTargets = (
         identities.add(id);
 
         const workspaceRef = record.workspaceRef;
+        const service = parseTargetService(record.service, index);
         if (
             workspaceRef !== undefined &&
             workspaceRef !== null &&
@@ -138,6 +158,7 @@ const parseConfiguredTargets = (
                         ? null
                         : (workspaceRef as string).trim(),
             }),
+            ...(service !== undefined && { service }),
         };
     });
 };
