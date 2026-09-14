@@ -117,10 +117,23 @@ const isScopeTuple = (input: unknown): input is ScopeTuple => {
  * projected to a stable HTTPS endpoint so trace/citation surfaces do not emit
  * non-HTTP schemes.
  */
-function resolveTrustGraphCitationUrl(sourceRef: string): string | undefined {
-    const normalized = sourceRef.trim();
-    if (/^https?:\/\//i.test(normalized)) {
-        return normalized.replace(/^http:\/\//i, 'https://');
+const MAX_CITATION_REFERENCE_CHARS = 2_048;
+
+function resolveTrustGraphCitationUrl(
+    sourceRef: string,
+    provenancePathRef: readonly string[]
+): string | undefined {
+    const references = /^trustgraph:\/\//i.test(sourceRef)
+        ? provenancePathRef
+        : [sourceRef];
+    for (const reference of references) {
+        const normalized = reference.trim();
+        if (
+            normalized.length <= MAX_CITATION_REFERENCE_CHARS &&
+            /^https?:\/\//i.test(normalized)
+        ) {
+            return normalized.replace(/^http:\/\//i, 'https://');
+        }
     }
     return undefined;
 }
@@ -145,7 +158,10 @@ const buildCitations = (
         .map((ref) => ({
             ref: ref.sourceRef,
             title: ref.sourceTitle ?? 'TrustGraph evidence',
-            url: resolveTrustGraphCitationUrl(ref.sourceRef),
+            url: resolveTrustGraphCitationUrl(
+                ref.sourceRef,
+                ref.provenancePathRef
+            ),
         }))
         .filter(
             (

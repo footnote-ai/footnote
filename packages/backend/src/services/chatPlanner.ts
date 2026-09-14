@@ -1816,6 +1816,12 @@ export const createChatPlanner = ({
         candidate: unknown
     ): PlannerNormalizationResult => {
         const normalization = normalizePlan(request, candidate);
+        if (
+            normalization.fallbackTier === 'safe_default_plan' ||
+            normalization.plan.action !== 'message'
+        ) {
+            return normalization;
+        }
         const inferredTargetIds = inferExplicitTrustGraphTargetIds(
             request,
             availableTrustGraphTargets

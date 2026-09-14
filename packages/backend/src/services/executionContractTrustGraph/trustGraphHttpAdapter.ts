@@ -55,6 +55,7 @@ type GraphRagSource = {
 type DocumentRagEvidence = {
     chunkId: string;
     text: string;
+    textTruncated: boolean;
     rank: number;
     score?: number;
     pageId?: string;
@@ -497,6 +498,10 @@ const parseDocumentRagPayload = (
                 'trustgraph_document_rag_invalid_evidence_control_characters'
             );
         }
+        const boundedText = truncateResponse(
+            normalizedText,
+            limits.maxResponseChars
+        );
         const normalizedSourceUri = sourceUri.trim();
         if (
             normalizedSourceUri.length > limits.maxSourceUriChars ||
@@ -533,7 +538,8 @@ const parseDocumentRagPayload = (
                   }`.slice(0, limits.maxSourceTitleChars);
         return {
             chunkId: chunkId.trim(),
-            text: normalizedText,
+            text: boundedText.response,
+            textTruncated: boundedText.truncated,
             rank,
             ...(score !== undefined && { score }),
             ...(pageId !== undefined && { pageId: pageId.trim() }),
@@ -599,7 +605,9 @@ const toEvidenceBundle = (input: {
                     ],
                     retrievalReason: result.evidenceTruncated
                         ? 'trustgraph_document_rag_evidence_truncated'
-                        : 'trustgraph_document_rag_source_evidence',
+                        : evidence.textTruncated
+                          ? 'trustgraph_document_rag_evidence_text_truncated'
+                          : 'trustgraph_document_rag_source_evidence',
                     confidenceScore: 0,
                     confidenceMethodId:
                         'trustgraph_document_rag_rank_not_confidence',
@@ -1005,11 +1013,19 @@ export class HttpTrustGraphEvidenceAdapter implements TrustGraphEvidenceAdapter 
             }
         }
 
-        const boundedResults = results.every(
+        const graphResults = results.filter(
             (result): result is GraphRagTargetResult => result.kind === 'graph'
-        )
-            ? applyAggregateResponseLimit(results, this.limits.maxResponseChars)
-            : results;
+        );
+        const boundedGraphResults = applyAggregateResponseLimit(
+            graphResults,
+            this.limits.maxResponseChars
+        );
+        let graphIndex = 0;
+        const boundedResults: TargetResult[] = results.map((result) =>
+            result.kind === 'graph'
+                ? (boundedGraphResults[graphIndex++] ?? result)
+                : result
+        );
         for (const result of boundedResults) {
             if (result.kind === 'graph' && result.sourceTruncated) {
                 logTargetSourcesTruncated(result.target, {

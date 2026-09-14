@@ -2443,6 +2443,82 @@ test('chatPlanner preserves relevant NYC target selection and no-target unrelate
     assert.deepEqual(unrelated.plan.trustGraphTargetIds, []);
 });
 
+test('chatPlanner does not infer TrustGraph targets for invalid planner fallbacks', async () => {
+    const planner = createPlanner(
+        JSON.stringify('not-an-object'),
+        [],
+        [
+            {
+                id: 'nyc-sept11',
+                flow: 'sept11-flow',
+                collection: 'sept11',
+                description: 'NYC September 11 municipal archive records.',
+            },
+        ]
+    );
+
+    const result = await planFromWorkflow(
+        planner,
+        createChatRequest({
+            latestUserInput:
+                'What do the NYC September 11 archive records say?',
+            conversation: [
+                {
+                    role: 'user',
+                    content:
+                        'What do the NYC September 11 archive records say?',
+                },
+            ],
+        })
+    );
+
+    assert.equal(result.execution.reasonCode, 'planner_invalid_output');
+    assert.deepEqual(result.plan.trustGraphTargetIds, []);
+});
+
+test('chatPlanner does not infer TrustGraph targets for non-message actions', async () => {
+    const planner = createPlanner(
+        JSON.stringify({
+            action: 'react',
+            modality: 'text',
+            reaction: '👍',
+            safetyTier: 'Low',
+            reasoning: 'A reaction is enough.',
+            generation: {
+                reasoningEffort: 'low',
+                verbosity: 'low',
+            },
+        }),
+        [],
+        [
+            {
+                id: 'nyc-sept11',
+                flow: 'sept11-flow',
+                collection: 'sept11',
+                description: 'NYC September 11 municipal archive records.',
+            },
+        ]
+    );
+
+    const result = await planFromWorkflow(
+        planner,
+        createChatRequest({
+            latestUserInput:
+                'What do the NYC September 11 archive records say?',
+            conversation: [
+                {
+                    role: 'user',
+                    content:
+                        'What do the NYC September 11 archive records say?',
+                },
+            ],
+        })
+    );
+
+    assert.equal(result.plan.action, 'react');
+    assert.deepEqual(result.plan.trustGraphTargetIds, []);
+});
+
 test('chatPlanner preserves explicitly named configured sources when planner omits them', async () => {
     const planner = createPlanner(
         JSON.stringify({

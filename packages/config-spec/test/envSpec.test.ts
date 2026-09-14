@@ -104,4 +104,8 @@ test('TrustGraph target sets remain deployment configuration instead of settings
         envConfigSourceByKey.EXECUTION_CONTRACT_TRUSTGRAPH_BASE_URL,
         'bootstrap_env'
     );
+    assert.equal(
+        envConfigSourceByKey.FOOTNOTE_PUBLIC_NYC_SEPT11_RECORDS_ENABLED,
+        'bootstrap_env'
+    );
 });

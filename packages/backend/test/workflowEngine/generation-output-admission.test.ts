@@ -55,6 +55,7 @@ test('rejects empty and structurally incomplete generation results', () => {
         'Sources: [1](https://example.test/source)',
         ':citation:citation',
         '.\n\nWould you like me to help find the source?',
+        '. Would you like me to help find the source?',
         'TRUSTGRAPH SOURCE EVIDENCE\nRetrieved source text: one\n\nTRUSTGRAPH SOURCE EVIDENCE\nRetrieved source text: two',
     ]) {
         assert.deepEqual(admitGenerationResult(result(text)), {

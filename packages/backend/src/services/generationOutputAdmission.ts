@@ -68,7 +68,7 @@ const isStructurallyIncompleteText = (text: string): boolean => {
     // A leading punctuation-only fragment followed by a polite offer is not
     // an answer. This remains generic and does not reject a complete answer
     // that ends with an offer to help.
-    return /^[\s\p{P}\p{S}\p{M}\p{Default_Ignorable_Code_Point}]*\n+?(?:would you like|can i help|let me know)\b/iu.test(
+    return /^[\s\p{P}\p{S}\p{M}\p{Default_Ignorable_Code_Point}]*\s+(?:would you like|can i help|let me know)\b/iu.test(
         trimmed
     );
 };
