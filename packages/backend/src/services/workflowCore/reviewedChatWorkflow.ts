@@ -250,6 +250,12 @@ export type RunBoundedReviewWorkflowResult =
     | {
           outcome: 'no_generation';
           workflowLineage: WorkflowRecord;
+          /**
+           * The final context-projected request is retained for a bounded
+           * fail-open generation attempt. This prevents successful evidence
+           * from disappearing when the reviewed draft is unavailable.
+           */
+          fallbackGenerationRequest?: GenerationRequest;
           presentation?: PresentationMetadata;
           plannerStepResult?: PlannerStepResult;
           planContinuation?: PlanContinuation;
@@ -3398,6 +3404,10 @@ export const runBoundedReviewWorkflow = async (
     const generationResult =
         readGenerationResult(execution.run.results.answer) ??
         readGenerationResult(execution.run.results.draft);
+    const fallbackGenerationRequest =
+        generationResult === undefined
+            ? messagesFor(execution.run.results).request
+            : undefined;
     const plannerStepResult = plan?.plannerStepResult;
     const contextStepResult = evidence.results.at(0);
     if (terminalAction !== undefined) {
@@ -3419,6 +3429,9 @@ export const runBoundedReviewWorkflow = async (
         return {
             outcome: 'no_generation',
             workflowLineage,
+            ...(fallbackGenerationRequest === undefined
+                ? {}
+                : { fallbackGenerationRequest }),
             ...(presentationMetadata === undefined
                 ? {}
                 : { presentation: presentationMetadata }),

@@ -1727,6 +1727,9 @@ export const createChatService = ({
                     case 'no_generation': {
                         workflowLineage = canonicalWorkflowLineage;
                         presentationMetadata = workflowResult.presentation;
+                        const fallbackGenerationRequest =
+                            workflowResult.fallbackGenerationRequest ??
+                            effectiveGenerationRequest;
                         const noGenShortCircuit = buildContextStepShortCircuit({
                             workflowContextStepResult,
                             workflowContextStepResults,
@@ -1834,7 +1837,7 @@ export const createChatService = ({
                             try {
                                 const chainGenerationResult =
                                     await runGenerateWithChain(
-                                        effectiveGenerationRequest
+                                        fallbackGenerationRequest
                                     );
                                 if (chainGenerationResult.isErr()) {
                                     logger.warn(

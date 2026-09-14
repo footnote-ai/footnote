@@ -9,6 +9,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 
 import type {
+    GenerationRequest,
     GenerationResult,
     GenerationRuntime,
 } from '@footnote/agent-runtime';
@@ -2819,6 +2820,74 @@ test('runChatMessages uses one bounded fallback for an unmapped no-generation re
     assert.equal(
         response.metadata.workflow?.terminationReason,
         'max_tool_calls_reached'
+    );
+});
+
+test('runChatMessages preserves the context-projected request for bounded fallback generation', async () => {
+    let fallbackRequest: GenerationRequest | undefined;
+    const chatService = createChatService({
+        generationRuntime: {
+            kind: 'test-runtime',
+            async generate(request) {
+                fallbackRequest = request;
+                return {
+                    text: 'context-aware fallback response',
+                    model: 'gpt-5-mini',
+                    usage: {
+                        promptTokens: 10,
+                        completionTokens: 5,
+                        totalTokens: 15,
+                    },
+                    provenance: 'Retrieved',
+                    citations: [],
+                };
+            },
+        },
+        storeTrace: async () => undefined,
+        buildResponseMetadata,
+        defaultModel: 'gpt-5-mini',
+        recordUsage: () => undefined,
+        chatWorkflowConfig: {
+            reviewLoopEnabled: true,
+            maxIterations: 1,
+            maxDurationMs: 15000,
+        },
+        runReviewWorkflow: async () =>
+            ({
+                outcome: 'no_generation',
+                fallbackGenerationRequest: {
+                    messages: [
+                        {
+                            role: 'user',
+                            content:
+                                'TRUSTGRAPH SOURCE EVIDENCE: notices total 1,234',
+                        },
+                    ],
+                },
+                workflowLineage: {
+                    workflowId: 'wf_context_fallback',
+                    workflowName: 'message_reviewed',
+                    status: 'degraded',
+                    terminationReason: 'budget_exhausted_time',
+                    stepCount: 1,
+                    maxSteps: 3,
+                    maxDurationMs: 15000,
+                    steps: [],
+                },
+            }) satisfies RunBoundedReviewWorkflowResult,
+    });
+
+    const response = await chatService.runChatMessages({
+        messages: [{ role: 'user', content: 'What totals?' }],
+        conversationSnapshot: 'What totals?',
+    });
+
+    assert.equal(response.message, 'context-aware fallback response');
+    assert.match(
+        fallbackRequest?.messages
+            .map((message) => message.content)
+            .join('\n') ?? '',
+        /TRUSTGRAPH SOURCE EVIDENCE: notices total 1,234/
     );
 });
 
