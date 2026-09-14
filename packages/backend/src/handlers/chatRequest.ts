@@ -9,6 +9,7 @@ import type { IncomingMessage } from 'node:http';
 import type { PostChatRequest } from '@footnote/contracts/web';
 import { PostChatRequestSchema } from '@footnote/contracts/web/schemas';
 import type { ChatFailureResponse } from './chatResponses.js';
+import { resolveClientIp } from '../http/clientIp.js';
 
 /**
  * Parsed chat request after JSON/body validation.
@@ -242,24 +243,7 @@ export const getRequestIdentity = (
     req: IncomingMessage,
     trustProxy: boolean
 ): RequestIdentity => {
-    let clientIp = req.socket.remoteAddress || 'unknown';
-
-    // Only trust X-Forwarded-For when the deployment explicitly says a proxy is in front.
-    if (trustProxy) {
-        const forwardedFor = req.headers['x-forwarded-for'];
-        if (forwardedFor) {
-            if (typeof forwardedFor === 'string') {
-                clientIp = forwardedFor.split(',')[0].trim();
-            } else if (Array.isArray(forwardedFor)) {
-                clientIp = forwardedFor[0].trim();
-            }
-        }
-    }
-
-    // Collapse IPv4-mapped IPv6 addresses so rate-limit keys stay stable.
-    if (clientIp.startsWith('::ffff:')) {
-        clientIp = clientIp.substring(7);
-    }
+    const { clientIp } = resolveClientIp(req, trustProxy);
 
     let sessionId: string | null = null;
     const rawSessionId = req.headers['x-session-id'];

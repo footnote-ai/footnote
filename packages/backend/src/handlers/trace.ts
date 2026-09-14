@@ -19,6 +19,7 @@ import { mirrorTraceMetadata } from '../services/traceStore.js';
 import { renderTraceCardPng } from '../services/traceCard/traceCardRaster.js';
 import { logger } from '../utils/logger.js';
 import { type TraceStore } from '../storage/traces/traceStore.js';
+import { resolveClientIp } from '../http/clientIp.js';
 
 // Shared log function signature used by handlers.
 type LogRequest = (
@@ -34,11 +35,7 @@ type TraceHandlerDeps = {
     traceWriteLimiter: SimpleRateLimiter | null; // Optional per-client limiter for trace writes.
     traceToken: string | null; // Shared secret required to accept incoming trace writes.
     maxTraceBodyBytes: number; // Upper bound for trace JSON payload size.
-    trustProxy: boolean; /* When true, read X-Forwarded-For to find the real client IP behind a proxy.
-    We use the client IP for rate limiting and request logs.
-    This matters because proxies hide the original IP unless we trust this header.
-    When false, we fall back to the direct socket IP, which is safer when the proxy header cannot be trusted.
-    The server sets this via WEB_TRUST_PROXY (true behind a reverse proxy, false for direct traffic). */
+    trustProxy: boolean; // Enables validated Cloudflare client-IP recovery; never trusts arbitrary X-Forwarded-For.
 };
 
 // Read results are modeled as simple statuses to avoid nested try/catch.
@@ -59,6 +56,10 @@ const sendJson = (
 ): void => {
     res.statusCode = statusCode;
     res.setHeader('Content-Type', 'application/json; charset=utf-8');
+    // Trace payloads can contain user- or execution-specific provenance.
+    // Keep every trace response out of intermediary caches, including 4xx/5xx
+    // envelopes and the response-version API.
+    res.setHeader('Cache-Control', 'no-store');
     if (extraHeaders) {
         for (const [header, value] of Object.entries(extraHeaders)) {
             res.setHeader(header, value);
@@ -75,6 +76,7 @@ const sendSvg = (
 ): void => {
     res.statusCode = statusCode;
     res.setHeader('Content-Type', 'image/svg+xml; charset=utf-8');
+    res.setHeader('Cache-Control', 'no-store');
     res.end(svg);
 };
 
@@ -110,29 +112,6 @@ const readTraceMetadata = async (
                 error instanceof Error ? error.message : String(error),
         };
     }
-};
-
-// --- Client IP parsing ---
-const getClientIp = (req: IncomingMessage, trustProxy: boolean): string => {
-    let clientIp = req.socket.remoteAddress || 'unknown';
-
-    // Honor reverse proxy headers only when explicitly enabled.
-    if (trustProxy) {
-        const forwardedFor = req.headers['x-forwarded-for'];
-        if (forwardedFor) {
-            if (typeof forwardedFor === 'string') {
-                clientIp = forwardedFor.split(',')[0].trim();
-            } else if (Array.isArray(forwardedFor)) {
-                clientIp = forwardedFor[0].trim();
-            }
-        }
-    }
-
-    if (clientIp.startsWith('::ffff:')) {
-        clientIp = clientIp.substring(7);
-    }
-
-    return clientIp;
 };
 
 // Preview-generated cards get synthetic ids so they can still be fetched later.
@@ -257,7 +236,7 @@ const createTraceHandlers = ({
             return null;
         }
 
-        const clientIp = getClientIp(req, trustProxy);
+        const { clientIp } = resolveClientIp(req, trustProxy);
         const rateLimitResult = traceWriteLimiter.check(clientIp);
         if (!rateLimitResult.allowed) {
             sendJson(

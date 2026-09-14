@@ -192,7 +192,6 @@ type CreateExpressAppDeps = {
 const createExpressApp = ({
     dispatchHttpRoute,
     normalizePathname,
-    trustProxy,
     handleIncidentListRequest,
     handleIncidentReportRequest,
     handleIncidentStatusRequest,
@@ -231,7 +230,9 @@ const createExpressApp = ({
     logRequest,
 }: CreateExpressAppDeps): express.Express => {
     const app = express();
-    app.set('trust proxy', trustProxy);
+    // Express's generic trust-proxy mode would trust arbitrary X-Forwarded-For.
+    // Security consumers use the explicit Fly/Cloudflare resolver instead.
+    app.set('trust proxy', false);
 
     // Stage 1: public and other Express-owned standard HTTP routes.
     // /api/chat split ownership is intentional: publicRoutes owns /api/chat/* subroutes (for example /api/chat/profiles), while chatRoutes owns only bare /api/chat.
