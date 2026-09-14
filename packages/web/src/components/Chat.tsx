@@ -472,7 +472,7 @@ const Chat = (): JSX.Element => {
                             onSuccess={captcha.onVerify}
                             onError={captcha.onInvisibleError}
                             onExpire={captcha.onExpire}
-                            onLoad={captcha.onInvisibleLoad}
+                            onWidgetLoad={captcha.onInvisibleLoad}
                             options={{
                                 theme,
                                 size: 'invisible',
