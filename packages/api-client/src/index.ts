@@ -25,6 +25,7 @@ import {
     createChatApi,
     type CreateChatApiOptions,
     type ChatApi,
+    type ChatQuestionOptions,
     type ChatToolExecutionContext,
     type DiscordChatApiResponse,
     type UnknownChatActionResponse,
@@ -168,6 +169,7 @@ export type {
 export type {
     ApiRequester,
     ChatApi,
+    ChatQuestionOptions,
     CreateApiTransportOptions,
     CreateChatApiOptions,
     CreateIncidentApiOptions,

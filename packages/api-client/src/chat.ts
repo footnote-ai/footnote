@@ -26,9 +26,14 @@ export type UnknownChatActionResponse = {
     [key: string]: unknown;
 };
 
+export type ChatQuestionOptions = {
+    turnstileToken?: string;
+    signal?: AbortSignal;
+    onRequestStarted?: () => void;
+};
+
 export type DiscordChatApiResponse =
-    | PostChatResponse
-    | UnknownChatActionResponse;
+    PostChatResponse | UnknownChatActionResponse;
 
 export type ChatToolExecutionContext = ToolExecutionContext;
 
@@ -42,7 +47,7 @@ export type ChatApi = {
     ) => Promise<DiscordChatApiResponse>;
     chatQuestion: (
         request: PostChatRequest,
-        options?: { turnstileToken?: string; signal?: AbortSignal }
+        options?: ChatQuestionOptions
     ) => Promise<PostChatResponse>;
 };
 
@@ -116,7 +121,7 @@ export const createChatApi = (
      */
     const chatQuestion = async (
         request: PostChatRequest,
-        options?: { turnstileToken?: string; signal?: AbortSignal }
+        options?: ChatQuestionOptions
     ): Promise<PostChatResponse> => {
         const validateResponse = await loadPostChatResponseValidator();
         const headers: Record<string, string> = {};
@@ -128,6 +133,7 @@ export const createChatApi = (
             headers['x-session-id'] = request.sessionId;
         }
 
+        options?.onRequestStarted?.();
         const response = await requestJson<PostChatResponse>('/api/chat', {
             method: 'POST',
             headers,
