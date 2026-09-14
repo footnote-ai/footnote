@@ -33,6 +33,13 @@ web:
         - 'http://localhost:8080'
         - 'http://localhost:3000'
 
+# Public Turnstile site key for the web client. Keep the secret key in the
+# deployment environment only.
+turnstile:
+    turnstile-site-key: '0x4AAAAAAB88uYTW8ZMNJsJl'
+    turnstile-allowed-hostnames:
+        - 'ai.jordanmakes.dev'
+
 # Discord bots supervised by the server process. Keep env key names only,
 # never secret values.
 discord-bots:
