@@ -9,7 +9,7 @@
 import { FormEvent, useCallback, useEffect, useRef, useState } from 'react';
 import { Turnstile } from '@marsidev/react-turnstile';
 import MarkdownResponse from './MarkdownResponse';
-import ProvenanceFooter from './ProvenanceFooter';
+import CanonicalResponseFootnote from './CanonicalResponseFootnote';
 import type { ResponseMetadata } from '@footnote/contracts/policy';
 import { loadRuntimeConfig } from '../config';
 import { api, isApiClientError } from '../utils/api';
@@ -520,7 +520,12 @@ const Chat = (): JSX.Element => {
                         )}
                     </div>
                 )}
-            {answer && metadata && <ProvenanceFooter metadata={metadata} />}
+            {answer && metadata && (
+                <CanonicalResponseFootnote
+                    metadata={metadata}
+                    artifacts={{ trace: 'unknown', report: 'unavailable' }}
+                />
+            )}
         </div>
     );
 };
