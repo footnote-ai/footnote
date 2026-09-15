@@ -164,6 +164,8 @@ export type {
 } from './responseFootnote.js';
 export {
     RESPONSE_FOOTNOTE_SECTIONS,
+    TRACE_TEMPERAMENT_AXIS_DESCRIPTIONS,
+    TRACE_TEMPERAMENT_AXIS_LABELS,
     projectResponseFootnote,
 } from './responseFootnote.js';
 export {

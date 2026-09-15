@@ -46,6 +46,7 @@ test('projects complete facts with final TRACE values and separate targets', () 
     assert.deepEqual(projection.trace.axes[0], {
         key: 'tightness',
         label: 'Tightness',
+        description: 'Efficient use of space and attention.',
         target: 3,
         final: 4,
         state: 'recorded',
@@ -96,6 +97,7 @@ test('marks missing final axes partial or unavailable without synthetic values',
     assert.deepEqual(projection.trace.axes[0], {
         key: 'tightness',
         label: 'Tightness',
+        description: 'Efficient use of space and attention.',
         target: 3,
         final: 3,
         state: 'recorded',
@@ -103,6 +105,7 @@ test('marks missing final axes partial or unavailable without synthetic values',
     assert.deepEqual(projection.trace.axes[1], {
         key: 'rationale',
         label: 'Rationale',
+        description: 'Shows enough of the why.',
         target: null,
         final: null,
         state: 'unavailable',
@@ -110,6 +113,7 @@ test('marks missing final axes partial or unavailable without synthetic values',
     assert.deepEqual(projection.trace.axes[2], {
         key: 'attribution',
         label: 'Attribution',
+        description: 'Separates sourced and inferred content.',
         target: null,
         final: null,
         state: 'unavailable',
@@ -138,4 +142,82 @@ test('returns unavailable facts and actions when metadata is absent', () => {
         projection.actions.trace.reason,
         'Response metadata is unavailable.'
     );
+});
+
+test('preserves explicit available and stale artifact states for identified metadata', () => {
+    const available = projectResponseFootnote({
+        metadata: toFootnote(fixtures.complete),
+        artifacts: { trace: 'available', report: 'available' },
+    });
+    const stale = projectResponseFootnote({
+        metadata: toFootnote(fixtures.complete),
+        artifacts: { trace: 'stale', report: 'stale' },
+    });
+
+    assert.equal(available.actions.trace.state, 'available');
+    assert.equal(available.actions.report.state, 'available');
+    assert.equal(stale.actions.trace.state, 'stale');
+    assert.equal(stale.actions.report.state, 'stale');
+});
+
+test('does not expose identity-dependent actions for blank or absent response ids', () => {
+    const blankIdentity = {
+        ...toFootnote(fixtures.complete),
+        responseId: '   ',
+    };
+    const projection = projectResponseFootnote({
+        metadata: blankIdentity,
+        artifacts: { trace: 'available', report: 'available' },
+    });
+
+    assert.equal(projection.actions.trace.state, 'unavailable');
+    assert.equal(projection.actions.report.state, 'unavailable');
+    assert.equal(
+        projection.actions.trace.reason,
+        'Response metadata is unavailable.'
+    );
+});
+
+test('keeps final values at the score boundaries and target-only axes partial', () => {
+    const boundaryMetadata: ResponseFootnote = {
+        ...toFootnote(fixtures.complete),
+        trace_target: {
+            ...toFootnote(fixtures.complete).trace_target,
+            tightness: 1,
+        },
+        trace_final: {
+            ...toFootnote(fixtures.complete).trace_final,
+            tightness: 1,
+            extent: 5,
+        },
+    };
+    const projection = projectResponseFootnote({
+        metadata: boundaryMetadata,
+        artifacts: { trace: 'unknown', report: 'unavailable' },
+    });
+    const tightness = projection.trace.axes.find(
+        (axis) => axis.key === 'tightness'
+    );
+    const extent = projection.trace.axes.find((axis) => axis.key === 'extent');
+
+    assert.equal(tightness?.target, 1);
+    assert.equal(tightness?.final, 1);
+    assert.equal(extent?.final, 5);
+
+    const targetOnly = projectResponseFootnote({
+        metadata: toFootnote(fixtures.partial),
+        artifacts: { trace: 'unknown', report: 'unavailable' },
+    }).trace.axes.find((axis) => axis.key === 'caution');
+    assert.equal(targetOnly?.target, 2);
+    assert.equal(targetOnly?.final, null);
+    assert.equal(targetOnly?.state, 'partial');
+});
+
+test('projection remains serializable through a JSON round trip', () => {
+    const projection = projectResponseFootnote({
+        metadata: toFootnote(fixtures.complete),
+        artifacts: { trace: 'available', report: 'unavailable' },
+    });
+
+    assert.deepEqual(JSON.parse(JSON.stringify(projection)), projection);
 });

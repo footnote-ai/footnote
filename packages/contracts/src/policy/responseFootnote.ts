@@ -66,6 +66,7 @@ export type ResponseFootnoteTraceAxisState =
 export type ResponseFootnoteTraceAxis = {
     key: TraceTemperamentAxisKey;
     label: string;
+    description: string;
     target: TraceAxisScore | null;
     final: TraceAxisScore | null;
     state: ResponseFootnoteTraceAxisState;
@@ -147,12 +148,27 @@ export type ResponseFootnote = Pick<
     | 'freshnessScore'
 >;
 
-const TRACE_AXIS_LABELS: Record<TraceTemperamentAxisKey, string> = {
+export const TRACE_TEMPERAMENT_AXIS_LABELS: Record<
+    TraceTemperamentAxisKey,
+    string
+> = {
     tightness: 'Tightness',
     rationale: 'Rationale',
     attribution: 'Attribution',
     caution: 'Caution',
     extent: 'Extent',
+};
+
+/** Shared axis meanings prevent surface-specific TRACE interpretation drift. */
+export const TRACE_TEMPERAMENT_AXIS_DESCRIPTIONS: Record<
+    TraceTemperamentAxisKey,
+    string
+> = {
+    tightness: 'Efficient use of space and attention.',
+    rationale: 'Shows enough of the why.',
+    attribution: 'Separates sourced and inferred content.',
+    caution: 'Uses caveats and avoids overclaiming.',
+    extent: 'Offers breadth and coverage.',
 };
 
 const UNAVAILABLE_RESPONSE_REASON = 'Response metadata is unavailable.';
@@ -165,20 +181,36 @@ const UNAVAILABLE_REPORT_REASON = 'Reporting is not available on this surface.';
 const projectFacts = (metadata: ResponseFootnote): ResponseFootnote => ({
     responseId: metadata.responseId,
     provenance: metadata.provenance,
-    provenanceAssessment: metadata.provenanceAssessment,
     citations: metadata.citations,
     safetyTier: metadata.safetyTier,
-    evaluator: metadata.evaluator,
-    workflow: metadata.workflow,
-    execution: metadata.execution,
-    reviewRuntime: metadata.reviewRuntime,
-    steerabilityControls: metadata.steerabilityControls,
     licenseContext: metadata.licenseContext,
     trace_target: metadata.trace_target,
     trace_final: metadata.trace_final,
-    trace_final_reason_code: metadata.trace_final_reason_code,
-    evidenceScore: metadata.evidenceScore,
-    freshnessScore: metadata.freshnessScore,
+    ...(metadata.provenanceAssessment !== undefined && {
+        provenanceAssessment: metadata.provenanceAssessment,
+    }),
+    ...(metadata.evaluator !== undefined && {
+        evaluator: metadata.evaluator,
+    }),
+    ...(metadata.workflow !== undefined && { workflow: metadata.workflow }),
+    ...(metadata.execution !== undefined && {
+        execution: metadata.execution,
+    }),
+    ...(metadata.reviewRuntime !== undefined && {
+        reviewRuntime: metadata.reviewRuntime,
+    }),
+    ...(metadata.steerabilityControls !== undefined && {
+        steerabilityControls: metadata.steerabilityControls,
+    }),
+    ...(metadata.trace_final_reason_code !== undefined && {
+        trace_final_reason_code: metadata.trace_final_reason_code,
+    }),
+    ...(metadata.evidenceScore !== undefined && {
+        evidenceScore: metadata.evidenceScore,
+    }),
+    ...(metadata.freshnessScore !== undefined && {
+        freshnessScore: metadata.freshnessScore,
+    }),
 });
 
 const projectSources = (
@@ -250,7 +282,8 @@ const projectTraceAxes = (
             const final = metadata?.trace_final[key] ?? null;
             return {
                 key,
-                label: TRACE_AXIS_LABELS[key],
+                label: TRACE_TEMPERAMENT_AXIS_LABELS[key],
+                description: TRACE_TEMPERAMENT_AXIS_DESCRIPTIONS[key],
                 target,
                 final,
                 state:

@@ -99,6 +99,8 @@ export type {
 } from './policy/index.js';
 export {
     RESPONSE_FOOTNOTE_SECTIONS,
+    TRACE_TEMPERAMENT_AXIS_DESCRIPTIONS,
+    TRACE_TEMPERAMENT_AXIS_LABELS,
     projectResponseFootnote,
 } from './policy/index.js';
 export { PROJECT_CONTEXT_CANONICAL_REPOSITORY } from './policy/index.js';
