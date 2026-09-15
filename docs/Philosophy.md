@@ -2,7 +2,8 @@
 
 AI can be helpful, but it can also sound sure of itself. You rarely get to know what information it relied on, which instructions shaped it, whether it relied on its memory or a particular tool, or when it decides to fill in a gap by guessing.
 
-*Footnote* is our attempt to make AI more honest, and kept within your control. 
+_Footnote_ is our attempt to make AI more honest while keeping it within your
+control.
 
 ## Bring the receipts
 
@@ -10,17 +11,24 @@ AI can be helpful, but it can also sound sure of itself. You rarely get to know 
 
 We should hold AI to the same basic standard. [OECD AI Principles](https://oecd.ai/en/ai-principles) call for "plain and easy-to-understand information" about the sources and processes behind an AI result, and say people should have enough of it to challenge that result. We want answers that are **checkable**.
 
-Footnote's should help you answer questions like: 
+Footnote should help you answer questions like:
+
 - Where did this come from?
 - What did the AI do?
 - What was it unsure about?
 - What would change the answer?
 
-A complex or sensitive question may need sources, checks, and a fuller record; A casual one, maybe just a small note. Either way, the detail is there if you need it.
+A complex or sensitive question may need sources, checks, and a fuller record; a
+casual one may need just a small note. Either way, the detail is there if you
+need it.
 
 ### More than citations
 
-AI has gotten very good at using the tools at its disposal. Its no longer just about *what it knows*, but also *what it can *do* with what it knows*. It might may have searched the web, read a document, used a calculator, or remembered something from an earlier conversation. *Any* of that could be important — You'd probably want it to use that calculator if it was helping with your taxes!
+AI has gotten very good at using the tools at its disposal. It's no longer just
+about _what it knows_, but also _what it can do_ with what it knows. It might
+have searched the web, read a document, used a calculator, or remembered
+something from an earlier conversation. _Any_ of that could be important—you'd
+probably want it to use that calculator if it was helping with your taxes!
 
 All of this put together is **provenance** — the wider story of how an answer came to be. The World Wide Web Consortium describes it as information about the "entities, activities, and people involved in producing a piece of data or thing."
 
