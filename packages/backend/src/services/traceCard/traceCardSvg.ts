@@ -250,6 +250,27 @@ const escapeXml = (value: string): string =>
 const truncateSvgText = (value: string, maxLength: number): string =>
     value.length <= maxLength ? value : `${value.slice(0, maxLength - 1)}…`;
 
+const wrapSvgText = (value: string, maxLineLength: number): string[] => {
+    const lines: string[] = [];
+    let line = '';
+
+    for (const word of value.split(' ')) {
+        const candidate = line.length === 0 ? word : `${line} ${word}`;
+        if (line.length > 0 && candidate.length > maxLineLength) {
+            lines.push(line);
+            line = word;
+        } else {
+            line = candidate;
+        }
+    }
+
+    if (line.length > 0) {
+        lines.push(line);
+    }
+
+    return lines;
+};
+
 const renderCanonicalTraceCardSvg = (
     projection: ResponseFootnoteRenderProjection
 ): string => {
@@ -305,11 +326,15 @@ const renderCanonicalTraceCardSvg = (
     });
 
     projection.trace.axes.forEach((axis, index) => {
-        const y = 104 + index * 57;
+        const y = 112 + index * 57;
         const score = axis.final;
+        const descriptionLines = wrapSvgText(axis.description, 28);
         axisLayers.push(
             `<text x="338" y="${y}" fill="${CANONICAL_INK}" font-family="sans-serif" font-size="20" font-weight="600">${escapeXml(axis.label)}</text>`,
-            `<text x="338" y="${y + 21}" fill="${CANONICAL_MUTED}" font-family="sans-serif" font-size="12">${escapeXml(truncateSvgText(axis.description, 42))}</text>`
+            ...descriptionLines.map(
+                (line, lineIndex) =>
+                    `<text x="338" y="${y + 21 + lineIndex * 13}" fill="${CANONICAL_MUTED}" font-family="sans-serif" font-size="12">${escapeXml(line)}</text>`
+            )
         );
         for (let tick = 0; tick < 5; tick += 1) {
             const filled = score !== null && tick < score;

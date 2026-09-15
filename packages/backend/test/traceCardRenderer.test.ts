@@ -132,7 +132,10 @@ test('renderTraceCardSvg uses the shared response projection for semantic PNG ca
     assert.match(svg, /height="470"/);
     assert.match(svg, /Evidence/);
     assert.match(svg, /Recorded fixture license/);
-    assert.match(svg, /Efficient use of space and attention\./);
+    assert.match(svg, /Efficient use of space and/);
+    assert.match(svg, /attention\./);
+    assert.match(svg, /Separates sourced and/);
+    assert.match(svg, /inferred content\./);
     assert.match(svg, /Final 5\/5/);
     assert.match(svg, /Target 4\/5/);
     assert.match(svg, /TRACE describes posture, not answer quality\./);
