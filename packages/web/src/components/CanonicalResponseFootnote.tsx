@@ -83,6 +83,17 @@ const axisScore = (axis: ResponseFootnoteTraceAxis): number | null =>
 const axisColorClass = (index: number): string =>
     `canonical-response-footnote__axis--${WHEEL_AXIS_CLASS_NAMES[index]}`;
 
+const toSafeExternalUrl = (value: string): string | null => {
+    try {
+        const parsed = new URL(value);
+        return parsed.protocol === 'http:' || parsed.protocol === 'https:'
+            ? parsed.toString()
+            : null;
+    } catch {
+        return null;
+    }
+};
+
 const renderWheel = (
     axes: ResponseFootnoteTraceAxis[],
     titleId: string,
@@ -181,7 +192,7 @@ const formatArtifactState = (state: ResponseFootnoteArtifactState): string => {
         case 'stale':
             return 'Stored artifact may be stale';
         case 'unavailable':
-            return 'Unavailable';
+            return 'Unavailable on web';
     }
 };
 
@@ -194,7 +205,7 @@ const ActionStatus = ({
 }): JSX.Element => (
     <span className="canonical-response-footnote__action-status">
         {formatArtifactState(state)}
-        {reason ? ` — ${reason}` : ''}
+        {reason && <span className="sr-only">{reason}</span>}
     </span>
 );
 
@@ -213,17 +224,26 @@ const SourceDetails = ({
             <p>{projection.summary.sources.explanation}</p>
             {projection.facts?.citations.length ? (
                 <ul>
-                    {projection.facts.citations.map((citation, index) => (
-                        <li key={`${citation.url}-${index}`}>
-                            <a
-                                href={citation.url}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                            >
-                                {citation.title || citation.url}
-                            </a>
-                        </li>
-                    ))}
+                    {projection.facts.citations.map((citation, index) => {
+                        const safeUrl = toSafeExternalUrl(citation.url);
+                        return (
+                            <li key={`${citation.url}-${index}`}>
+                                {safeUrl ? (
+                                    <a
+                                        href={safeUrl}
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                    >
+                                        {citation.title || citation.url}
+                                    </a>
+                                ) : (
+                                    <span>
+                                        {citation.title || citation.url}
+                                    </span>
+                                )}
+                            </li>
+                        );
+                    })}
                 </ul>
             ) : (
                 <p>No recorded citations.</p>
@@ -292,6 +312,20 @@ const DetailsDisclosure = ({
                     <p key={item}>{item}</p>
                 ))}
                 {executionSummary && <p>{executionSummary}</p>}
+                {projection.facts?.evaluator && (
+                    <p>
+                        Evaluator:{' '}
+                        {projection.facts.evaluator.authorityLevel ??
+                            projection.facts.evaluator.mode}{' '}
+                        / {projection.facts.evaluator.safetyDecision.action}
+                    </p>
+                )}
+                {projection.trace.finalReasonCode && (
+                    <p>
+                        Final TRACE reason: {projection.trace.finalReasonCode}
+                    </p>
+                )}
+                <p>TRACE describes posture, not answer quality.</p>
                 {projection.summary.license.value && (
                     <p>License: {projection.summary.license.value}</p>
                 )}
@@ -404,7 +438,7 @@ const CanonicalResponseFootnote = ({
     const traceTitleId = `${instanceId}-trace-title`;
     const traceDescriptionId = `${instanceId}-trace-description`;
     const traceHref = projection.facts?.responseId
-        ? `/api/traces/${encodeURIComponent(projection.facts.responseId)}`
+        ? `/traces/${encodeURIComponent(projection.facts.responseId)}`
         : undefined;
 
     return (
@@ -454,10 +488,6 @@ const CanonicalResponseFootnote = ({
             <div className="canonical-response-footnote__disclosures">
                 <SourceDetails projection={projection} />
                 <ControlsDetails projection={projection} />
-                <DetailsDisclosure projection={projection} />
-            </div>
-
-            <div className="canonical-response-footnote__actions">
                 <ActionLink
                     label="Trace"
                     state={projection.actions.trace.state}
@@ -469,6 +499,9 @@ const CanonicalResponseFootnote = ({
                     state={projection.actions.report.state}
                     reason={projection.actions.report.reason}
                 />
+            </div>
+            <div className="canonical-response-footnote__details-secondary">
+                <DetailsDisclosure projection={projection} />
             </div>
         </section>
     );
