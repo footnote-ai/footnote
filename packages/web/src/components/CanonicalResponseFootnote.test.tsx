@@ -73,6 +73,16 @@ test('rendered complete fixture keeps wheel filled levels equal to final bars', 
     assert.match(markup, /TRACE describes posture, not answer quality/);
     assert.match(markup, /<summary>Sources<\/summary>/);
     assert.match(markup, /<summary>Controls<\/summary>/);
+    assert.match(markup, /<h4>Workflow<\/h4>/);
+    assert.match(markup, /Classification: Retrieved/);
+    assert.match(
+        markup,
+        /Assessment method: Deterministic multi-signal provenance/
+    );
+    assert.match(markup, /Conflicts: none recorded/);
+    assert.match(markup, /Limitations: none recorded/);
+    assert.match(markup, /Sensitivity: Low/);
+    assert.match(markup, /Evaluator: observe \/ allow \/ Evaluator tier Low/);
 });
 
 test('rendered final score of one fills exactly one wheel level and bar', () => {
@@ -106,6 +116,27 @@ test('rendered partial fixture keeps missing and target-only axes unavailable', 
     assert.match(markup, /canonical-response-footnote__wheel-missing/);
 });
 
+test('rendered safety summary keeps sensitivity separate from divergent evaluator facts', () => {
+    const markup = render(
+        toFootnote(fixture.safetyDivergent),
+        'unknown',
+        'unavailable'
+    );
+
+    assert.match(markup, /Sensitivity: Low/);
+    assert.match(markup, /Evaluator: enforce \/ block \/ Evaluator tier High/);
+});
+
+test('rendered safety summary marks a missing evaluator unavailable', () => {
+    const markup = render(
+        toFootnote(fixture.partial),
+        'unknown',
+        'unavailable'
+    );
+
+    assert.match(markup, /Sensitivity: Medium/);
+    assert.match(markup, /Evaluator: Unavailable/);
+});
 test('rendered prepared fixture exposes sources and controls but no Trace href', () => {
     const markup = render(
         toFootnote(fixture.prepared),

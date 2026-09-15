@@ -5,11 +5,12 @@
  * @footnote-risk: medium - Rendering regressions can distort provenance visuals across Discord and web surfaces.
  * @footnote-ethics: medium - TRACE visuals shape user trust in how model behavior is communicated.
  */
-import type {
-    PartialResponseTemperament,
-    ResponseTemperament,
-    ResponseFootnoteRenderProjection,
-    TraceAxisScore,
+import {
+    RESPONSE_FOOTNOTE_SAFETY_LABELS,
+    type PartialResponseTemperament,
+    type ResponseTemperament,
+    type ResponseFootnoteRenderProjection,
+    type TraceAxisScore,
 } from '@footnote/contracts/policy';
 import type { TraceCardChipData } from '@footnote/contracts/web';
 
@@ -352,10 +353,12 @@ const renderCanonicalTraceCardSvg = (
         projection.summary.sources.count === null
             ? 'Unavailable'
             : `${projection.summary.sources.count} source${projection.summary.sources.count === 1 ? '' : 's'}`;
-    const safetyLabel = truncateSvgText(
-        projection.summary.safety.safetyTier ?? 'Unavailable',
-        22
-    );
+    const sensitivityLabel = `${RESPONSE_FOOTNOTE_SAFETY_LABELS.sensitivity}: ${projection.summary.safety.sensitivityTier ?? 'Unavailable'}`;
+    const evaluator = projection.summary.safety.evaluator;
+    const evaluatorLabel =
+        evaluator.state === 'recorded'
+            ? `${RESPONSE_FOOTNOTE_SAFETY_LABELS.evaluator}: ${evaluator.authority ?? 'Unavailable'} / ${evaluator.action ?? 'Unavailable'} / ${RESPONSE_FOOTNOTE_SAFETY_LABELS.evaluatorTier} ${evaluator.safetyTier ?? 'Unavailable'}`
+            : `${RESPONSE_FOOTNOTE_SAFETY_LABELS.evaluator}: Unavailable`;
     const licenseLabel = truncateSvgText(
         projection.summary.license.value ?? 'Unavailable',
         30
@@ -370,9 +373,9 @@ const renderCanonicalTraceCardSvg = (
         `<desc>${escapeXml(description)}</desc>`,
         `<rect width="860" height="470" rx="18" fill="${CANONICAL_PAPER}" />`,
         `<text x="32" y="42" fill="${CANONICAL_INK}" font-family="sans-serif" font-size="18" font-weight="600">Evidence</text><text x="32" y="69" fill="${CANONICAL_MUTED}" font-family="sans-serif" font-size="18">${escapeXml(sourceLabel)}</text>`,
-        `<text x="270" y="42" fill="${CANONICAL_INK}" font-family="sans-serif" font-size="18" font-weight="600">Safety attention</text><text x="270" y="69" fill="${CANONICAL_MUTED}" font-family="sans-serif" font-size="18">${escapeXml(safetyLabel)}</text>`,
+        `<text x="270" y="42" fill="${CANONICAL_INK}" font-family="sans-serif" font-size="18" font-weight="600">Safety attention</text><text x="270" y="67" fill="${CANONICAL_MUTED}" font-family="sans-serif" font-size="14">${escapeXml(sensitivityLabel)}</text><text x="270" y="86" fill="${CANONICAL_MUTED}" font-family="monospace" font-size="10">${escapeXml(evaluatorLabel)}</text>`,
         `<text x="570" y="42" fill="${CANONICAL_INK}" font-family="sans-serif" font-size="18" font-weight="600">Licensing</text><text x="570" y="69" fill="${CANONICAL_MUTED}" font-family="sans-serif" font-size="18">${escapeXml(licenseLabel)}</text>`,
-        `<line x1="24" y1="88" x2="836" y2="88" stroke="${CANONICAL_RULE}" />`,
+        `<line x1="24" y1="100" x2="836" y2="100" stroke="${CANONICAL_RULE}" />`,
         ...wheelLayers,
         `<circle cx="${centerX}" cy="${centerY}" r="${outerRadius}" fill="none" stroke="${CANONICAL_RULE}" stroke-width="1.5" />`,
         ...axisLayers,

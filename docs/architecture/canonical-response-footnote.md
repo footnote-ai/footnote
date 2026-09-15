@@ -16,6 +16,9 @@ response-footnote fields, while `summary`, `trace`, and `actions` provide
 presentation-safe values. It does not calculate provenance, safety authority,
 or TRACE scores. `licenseContext` is recorded metadata shown as licensing
 context, not a new license decision.
+`safetyTier` is a recorded sensitivity level, not an evaluator result;
+the projection keeps evaluator authority, decision, and evaluator safety tier
+separate and unavailable when not recorded.
 
 The full web version presents a compact summary of TRACE, sources, and safety,
 followed by four sections:
@@ -23,7 +26,12 @@ followed by four sections:
 - Sources
 - Workflow
 - Controls
-- Details
+- Details (including labeled Workflow, Provenance, and Safety record subsections)
+
+The web Details disclosure includes the Workflow subsection even when no
+workflow record was captured; it says workflow details are unavailable rather
+than fabricating a run. Provenance classification, assessment method, conflicts,
+and limitations are shown only when recorded.
 
 Other surfaces may expose these sections through platform-appropriate
 interactions while preserving their meaning. For example, Discord can use

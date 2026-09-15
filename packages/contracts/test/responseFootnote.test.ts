@@ -41,7 +41,10 @@ test('projects complete facts with final TRACE values and separate targets', () 
         'render facts must stay bounded to canonical footnote keys'
     );
     assert.equal(projection.summary.sources.count, 1);
-    assert.equal(projection.summary.safety.evaluatorAction, 'allow');
+    assert.equal(projection.summary.safety.sensitivityTier, 'Low');
+    assert.equal(projection.summary.safety.evaluator.action, 'allow');
+    assert.equal(projection.summary.safety.evaluator.authority, 'observe');
+    assert.equal(projection.summary.safety.evaluator.safetyTier, 'Low');
     assert.equal(projection.summary.license.value, 'Recorded fixture license');
     assert.deepEqual(projection.trace.axes[0], {
         key: 'tightness',
@@ -68,6 +71,30 @@ test('projects complete facts with final TRACE values and separate targets', () 
     });
 });
 
+test('preserves divergent sensitivity and evaluator records without collapsing them', () => {
+    const projection = projectResponseFootnote({
+        metadata: toFootnote(fixtures.safetyDivergent),
+        artifacts: liveArtifacts,
+    });
+
+    assert.equal(projection.summary.safety.sensitivityTier, 'Low');
+    assert.equal(projection.summary.safety.evaluator.state, 'recorded');
+    assert.equal(projection.summary.safety.evaluator.authority, 'enforce');
+    assert.equal(projection.summary.safety.evaluator.action, 'block');
+    assert.equal(projection.summary.safety.evaluator.safetyTier, 'High');
+});
+
+test('marks the evaluator record unavailable when metadata has only sensitivity', () => {
+    const projection = projectResponseFootnote({
+        metadata: toFootnote(fixtures.partial),
+        artifacts: liveArtifacts,
+    });
+
+    assert.equal(projection.summary.safety.sensitivityTier, 'Medium');
+    assert.equal(projection.summary.safety.evaluator.state, 'unavailable');
+    assert.equal(projection.summary.safety.evaluator.action, null);
+    assert.equal(projection.summary.safety.evaluator.safetyTier, null);
+});
 test('keeps prepared source and control facts inspectable while disabling artifact actions', () => {
     const projection = projectResponseFootnote({
         metadata: toFootnote(fixtures.prepared),

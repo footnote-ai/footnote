@@ -11,6 +11,7 @@ import { useId } from 'react';
 import {
     formatExecutionTimelineSummary,
     projectResponseFootnote,
+    RESPONSE_FOOTNOTE_SAFETY_LABELS,
     type ResponseFootnote,
     type ResponseFootnoteArtifactAvailability,
     type ResponseFootnoteArtifactState,
@@ -312,18 +313,73 @@ const DetailsDisclosure = ({
         <details className="canonical-response-footnote__details">
             <summary>Details</summary>
             <div className="canonical-response-footnote__details-body">
+                <h4>Workflow</h4>
                 {workflowItems.map((item) => (
                     <p key={item}>{item}</p>
                 ))}
                 {executionSummary && <p>{executionSummary}</p>}
-                {projection.facts?.evaluator && (
-                    <p>
-                        Evaluator:{' '}
-                        {projection.facts.evaluator.authorityLevel ??
-                            projection.facts.evaluator.mode}{' '}
-                        / {projection.facts.evaluator.safetyDecision.action}
-                    </p>
+                {!workflowItems.length && !executionSummary && (
+                    <p>Workflow details unavailable.</p>
                 )}
+                <h4>Provenance</h4>
+                {projection.facts ? (
+                    <>
+                        <p>Classification: {projection.facts.provenance}</p>
+                        {projection.facts.provenanceAssessment ? (
+                            <>
+                                <p>
+                                    Assessment method:{' '}
+                                    {
+                                        projection.facts.provenanceAssessment
+                                            .methodLabel
+                                    }{' '}
+                                    (
+                                    {
+                                        projection.facts.provenanceAssessment
+                                            .methodId
+                                    }
+                                    )
+                                </p>
+                                <p>
+                                    Conflicts:{' '}
+                                    {projection.facts.provenanceAssessment
+                                        .conflicts.length > 0
+                                        ? projection.facts.provenanceAssessment.conflicts.join(
+                                              '; '
+                                          )
+                                        : 'none recorded'}
+                                </p>
+                                <p>
+                                    Limitations:{' '}
+                                    {projection.facts.provenanceAssessment
+                                        .limitations.length > 0
+                                        ? projection.facts.provenanceAssessment.limitations.join(
+                                              '; '
+                                          )
+                                        : 'none recorded'}
+                                </p>
+                            </>
+                        ) : (
+                            <p>
+                                Assessment method, conflicts, and limitations
+                                unavailable.
+                            </p>
+                        )}
+                    </>
+                ) : (
+                    <p>Provenance classification and assessment unavailable.</p>
+                )}
+                <h4>Safety record</h4>
+                <p>
+                    {RESPONSE_FOOTNOTE_SAFETY_LABELS.sensitivity}:{' '}
+                    {projection.summary.safety.sensitivityTier ?? 'Unavailable'}
+                </p>
+                <p>
+                    {RESPONSE_FOOTNOTE_SAFETY_LABELS.evaluator}:{' '}
+                    {projection.summary.safety.evaluator.state === 'recorded'
+                        ? `${projection.summary.safety.evaluator.authority ?? 'Unavailable'} / ${projection.summary.safety.evaluator.action ?? 'Unavailable'} / ${RESPONSE_FOOTNOTE_SAFETY_LABELS.evaluatorTier} ${projection.summary.safety.evaluator.safetyTier ?? 'Unavailable'}`
+                        : 'Unavailable'}
+                </p>
                 {projection.trace.finalReasonCode && (
                     <p>
                         Final TRACE reason: {projection.trace.finalReasonCode}
@@ -332,9 +388,6 @@ const DetailsDisclosure = ({
                 <p>TRACE describes posture, not answer quality.</p>
                 {projection.summary.license.value && (
                     <p>License: {projection.summary.license.value}</p>
-                )}
-                {!workflowItems.length && !executionSummary && (
-                    <p>Additional workflow details unavailable.</p>
                 )}
             </div>
         </details>
@@ -477,7 +530,8 @@ const CanonicalResponseFootnote = ({
                 <SummaryItem
                     label="Safety attention"
                     value={
-                        projection.summary.safety.safetyTier ?? 'Unavailable'
+                        projection.summary.safety.sensitivityTier ??
+                        'Unavailable'
                     }
                     state={projection.summary.safety.state}
                 />

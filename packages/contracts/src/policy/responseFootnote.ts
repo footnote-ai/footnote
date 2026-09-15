@@ -80,11 +80,27 @@ export type ResponseFootnoteSourcesSummary = {
     explanation: string;
 };
 
+export const RESPONSE_FOOTNOTE_SAFETY_LABELS = {
+    sensitivity: 'Sensitivity',
+    evaluator: 'Evaluator',
+    authority: 'Authority',
+    decision: 'Decision',
+    evaluatorTier: 'Evaluator tier',
+} as const;
+
+export type ResponseFootnoteEvaluatorSummary = {
+    state: 'recorded' | 'unavailable';
+    action: SafetyAction | null;
+    authority: EvaluatorAuthorityLevel | null;
+    safetyTier: SafetyTier | null;
+};
+
 export type ResponseFootnoteSafetySummary = {
     state: 'recorded' | 'partial' | 'unavailable';
-    safetyTier: SafetyTier | null;
-    evaluatorAction: SafetyAction | null;
-    evaluatorAuthority: EvaluatorAuthorityLevel | null;
+    /** ResponseMetadata.safetyTier is the recorded sensitivity level. */
+    sensitivityTier: SafetyTier | null;
+    /** Evaluator outcome is a separate recorded decision and authority. */
+    evaluator: ResponseFootnoteEvaluatorSummary;
 };
 
 export type ResponseFootnoteLicenseSummary = {
@@ -242,17 +258,25 @@ const projectSafety = (
     if (!metadata) {
         return {
             state: 'unavailable',
-            safetyTier: null,
-            evaluatorAction: null,
-            evaluatorAuthority: null,
+            sensitivityTier: null,
+            evaluator: {
+                state: 'unavailable',
+                action: null,
+                authority: null,
+                safetyTier: null,
+            },
         };
     }
 
     return {
         state: metadata.evaluator ? 'recorded' : 'partial',
-        safetyTier: metadata.safetyTier,
-        evaluatorAction: metadata.evaluator?.safetyDecision.action ?? null,
-        evaluatorAuthority: metadata.evaluator?.authorityLevel ?? null,
+        sensitivityTier: metadata.safetyTier,
+        evaluator: {
+            state: metadata.evaluator ? 'recorded' : 'unavailable',
+            action: metadata.evaluator?.safetyDecision.action ?? null,
+            authority: metadata.evaluator?.authorityLevel ?? null,
+            safetyTier: metadata.evaluator?.safetyDecision.safetyTier ?? null,
+        },
     };
 };
 

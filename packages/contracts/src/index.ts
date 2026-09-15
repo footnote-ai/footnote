@@ -92,12 +92,14 @@ export type {
     ResponseFootnoteLicenseSummary,
     ResponseFootnoteProjectionInput,
     ResponseFootnoteRenderProjection,
+    ResponseFootnoteEvaluatorSummary,
     ResponseFootnoteSafetySummary,
     ResponseFootnoteSourcesSummary,
     ResponseFootnoteTraceAxis,
     ResponseFootnoteTraceAxisState,
 } from './policy/index.js';
 export {
+    RESPONSE_FOOTNOTE_SAFETY_LABELS,
     RESPONSE_FOOTNOTE_SECTIONS,
     TRACE_TEMPERAMENT_AXIS_DESCRIPTIONS,
     TRACE_TEMPERAMENT_AXIS_LABELS,

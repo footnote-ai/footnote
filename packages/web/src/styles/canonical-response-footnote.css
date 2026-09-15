@@ -248,6 +248,15 @@
     line-height: 1.45;
 }
 
+.canonical-response-footnote__details-body h4 {
+    margin: 0.35rem 0 0;
+    color: var(--canonical-footnote-ink);
+    font-family: var(--fn-font-mono);
+    font-size: 0.75rem;
+    letter-spacing: 0.03em;
+    text-transform: uppercase;
+}
+
 .canonical-response-footnote__details-body p,
 .canonical-response-footnote__details-body ul {
     margin: 0;

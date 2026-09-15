@@ -81,6 +81,27 @@
             "tightness": 3
         }
     },
+    "safetyDivergent": {
+        "responseId": "safety-divergent-fixture",
+        "provenance": "Retrieved",
+        "citations": [],
+        "safetyTier": "Low",
+        "evaluator": {
+            "authorityLevel": "enforce",
+            "mode": "enforced",
+            "provenance": "Retrieved",
+            "safetyDecision": {
+                "action": "block",
+                "safetyTier": "High",
+                "ruleId": "safety.professional.medical_or_legal_advice.v1",
+                "reasonCode": "professional_advice_guardrail",
+                "reason": "Recorded evaluator decision for fixture divergence."
+            }
+        },
+        "licenseContext": "",
+        "trace_target": {},
+        "trace_final": {}
+    },
     "prepared": {
         "responseId": "prepared-landing-fixture",
         "provenance": "Inferred",

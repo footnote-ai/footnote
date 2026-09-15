@@ -132,6 +132,8 @@ test('renderTraceCardSvg uses the shared response projection for semantic PNG ca
     assert.match(svg, /height="470"/);
     assert.match(svg, /Evidence/);
     assert.match(svg, /Recorded fixture license/);
+    assert.match(svg, /Sensitivity: Low/);
+    assert.match(svg, /Evaluator: observe \/ allow \/ Evaluator tier Low/);
     assert.match(svg, /Efficient use of space and/);
     assert.match(svg, /attention\./);
     assert.match(svg, /Separates sourced and/);
@@ -163,6 +165,32 @@ test('renderTraceCardSvg uses the shared response projection for semantic PNG ca
     }
 });
 
+test('semantic card keeps sensitivity and evaluator records distinct', () => {
+    const projection = projectResponseFootnote({
+        metadata: fixtureFootnote,
+        artifacts: { trace: 'available', report: 'unavailable' },
+    });
+    const divergent = {
+        ...projection,
+        summary: {
+            ...projection.summary,
+            safety: {
+                ...projection.summary.safety,
+                sensitivityTier: 'Low' as const,
+                evaluator: {
+                    state: 'recorded' as const,
+                    authority: 'enforce' as const,
+                    action: 'block' as const,
+                    safetyTier: 'High' as const,
+                },
+            },
+        },
+    };
+    const svg = renderTraceCardSvg({ projection: divergent });
+
+    assert.match(svg, /Sensitivity: Low/);
+    assert.match(svg, /Evaluator: enforce \/ block \/ Evaluator tier High/);
+});
 test('semantic card keeps missing final axes neutral and visibly unavailable', () => {
     const projection = projectResponseFootnote({
         metadata: fixture.partial as ResponseFootnote,
@@ -172,4 +200,6 @@ test('semantic card keeps missing final axes neutral and visibly unavailable', (
 
     assert.equal(countMatches(svg, /fill="#3F3C35" fill-opacity="0.22"/g), 4);
     assert.match(svg, /Final unavailable/);
+    assert.match(svg, /Sensitivity: Medium/);
+    assert.match(svg, /Evaluator: Unavailable/);
 });
