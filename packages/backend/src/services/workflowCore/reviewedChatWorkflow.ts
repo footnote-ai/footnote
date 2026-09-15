@@ -170,6 +170,10 @@ export type ContextStepExecutorInput = {
     workflowId: string;
     workflowName: string;
     attempt: number;
+    /** Workflow deadline cancellation for in-flight integration work. */
+    signal?: AbortSignal;
+    /** Remaining workflow time used to clamp integration-specific timeouts. */
+    timeoutMs?: number;
 };
 
 export type ContextStepExecutor = (
@@ -1530,6 +1534,7 @@ export const runBoundedReviewWorkflow = async (
                 attempt: handlerInput.attempt,
                 invocationContext: {
                     ...plannerStepRequest.invocationContext,
+                    signal: handlerInput.signal,
                     maxOutputTokens: Math.min(
                         DEFAULT_WORKFLOW_PLANNER_MAX_OUTPUT_TOKENS,
                         Math.max(
@@ -1772,6 +1777,8 @@ export const runBoundedReviewWorkflow = async (
                                 workflowId,
                                 workflowName: workflowConfig.workflowName,
                                 attempt: handlerInput.attempt,
+                                signal: handlerInput.signal,
+                                timeoutMs: handlerInput.remainingDurationMs,
                             }),
                         };
                     } catch (error) {
@@ -1915,7 +1922,7 @@ export const runBoundedReviewWorkflow = async (
         let effectiveAuthorityOutputTokens: number | undefined;
         const presentationRequest =
             executionLimits.maxTokensTotal >= UNBOUNDED_EXECUTION_LIMIT
-                ? projected.request
+                ? { ...projected.request, signal: handlerInput.signal }
                 : authorityAdmissionRequest === undefined
                   ? undefined
                   : (() => {
@@ -1971,6 +1978,7 @@ export const runBoundedReviewWorkflow = async (
                             : {
                                   ...projected.request,
                                   maxOutputTokens: budget.candidateOutputTokens,
+                                  signal: handlerInput.signal,
                               };
                     })();
         const result =
@@ -2119,7 +2127,10 @@ export const runBoundedReviewWorkflow = async (
         }
         const projected = messagesFor(handlerInput.results);
         const previousDraft = readGenerationResult(handlerInput.results.draft);
-        let request = projected.request;
+        let request: GenerationRequest = {
+            ...projected.request,
+            signal: handlerInput.signal,
+        };
         let refinementPromptResult:
             ReturnType<typeof composeRefinementPrompt> | undefined;
         let revisionHintLane: ReturnType<typeof decideRevisionRoutingHintLane> =
@@ -2481,6 +2492,7 @@ export const runBoundedReviewWorkflow = async (
         });
         const request: GenerationRequest = {
             ...projected.request,
+            signal: handlerInput.signal,
             messages: [
                 ...projected.messages,
                 { role: 'assistant', content: draft.text },
@@ -2989,6 +3001,7 @@ export const runBoundedReviewWorkflow = async (
                 attempt: handlerInput.iteration + 1,
                 invocationContext: {
                     ...plannerStepRequest.invocationContext,
+                    signal: handlerInput.signal,
                     maxOutputTokens: Math.min(
                         DEFAULT_WORKFLOW_PLANNER_MAX_OUTPUT_TOKENS,
                         Math.max(

@@ -113,6 +113,26 @@ test('TrustGraph Graph RAG response is injected as advisory user context with ta
     );
 });
 
+test('TrustGraph retrieval timeout is clamped to the remaining workflow budget', async () => {
+    let observedTimeoutMs: number | undefined;
+    const executor = createTrustGraphContextStepExecutor({
+        runtimeOptions: {
+            adapter: {
+                async getEvidenceBundle(input): Promise<EvidenceBundle> {
+                    observedTimeoutMs = input.budget.timeoutMs;
+                    return buildBundle(input.scopeTuple);
+                },
+            },
+            budget: { timeoutMs: 100, maxCalls: 1 },
+            ownershipValidationPolicy: bypassPolicy(),
+        },
+    });
+
+    await executor({ ...createExecutorInput(), timeoutMs: 7 });
+
+    assert.equal(observedTimeoutMs, 7);
+});
+
 test('TrustGraph retrieval failure remains fail-open without evidence', async () => {
     const executor = createTrustGraphContextStepExecutor({
         runtimeOptions: {

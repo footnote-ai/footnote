@@ -30,6 +30,7 @@ import {
 
 const DEFAULT_MAX_ATTEMPTS = 1;
 const MAX_ERROR_MESSAGE_LENGTH = 256;
+const MAX_TIMER_DELAY_MS = 2_147_483_647;
 
 type StepRun = Run['steps'][number];
 
@@ -542,6 +543,12 @@ export const executeWorkflow = async <TContext>(
             attemptNumber <= maxAttempts;
             attemptNumber += 1
         ) {
+            const remainingDurationMs = Math.max(
+                1,
+                input.executionLimits.maxDurationMs -
+                    Math.max(0, now() - run.startedAtMs)
+            );
+            const attemptController = new AbortController();
             const handlerInput = {
                 stepId: currentStepId,
                 context: input.context,
@@ -549,6 +556,8 @@ export const executeWorkflow = async <TContext>(
                 execution: executionLimitStateFor(run),
                 iteration: stepRunNumber,
                 attempt: attemptNumber,
+                signal: attemptController.signal,
+                remainingDurationMs,
             };
             const executionBeforeAttempt = executionLimitStateFor(run);
             const reservation = input.reserveAttempt?.(
@@ -636,6 +645,12 @@ export const executeWorkflow = async <TContext>(
             }
 
             const attemptStartedAtMs = now();
+            const deadlineTimer = setTimeout(
+                () => {
+                    attemptController.abort('workflow_deadline_exceeded');
+                },
+                Math.min(remainingDurationMs, MAX_TIMER_DELAY_MS)
+            );
             let attemptResult: AttemptResult;
             try {
                 const rawAttemptResult: unknown = await handler(handlerInput);
@@ -676,6 +691,8 @@ export const executeWorkflow = async <TContext>(
                         error instanceof Error ? error.message : String(error),
                     retryable: true,
                 };
+            } finally {
+                clearTimeout(deadlineTimer);
             }
             const attemptFinishedAtMs = now();
             recordRunAttempt({

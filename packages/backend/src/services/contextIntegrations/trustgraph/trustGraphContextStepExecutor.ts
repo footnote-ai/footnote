@@ -257,7 +257,11 @@ export const createTrustGraphContextStepExecutor = ({
      *   context; the same result remains in integrationContext for metadata
      *   and provenance mapping.
      */
-    return async ({ request }): Promise<ContextStepResult> => {
+    return async ({
+        request,
+        signal,
+        timeoutMs,
+    }): Promise<ContextStepResult> => {
         if (runtimeOptions === undefined) {
             return buildSkippedContextStepResult({
                 toolName: request.integrationName,
@@ -282,12 +286,22 @@ export const createTrustGraphContextStepExecutor = ({
                 queryIntent: parsed.queryIntent,
                 scopeTuple: parsed.scopeTuple,
                 targetIds: parseTargetIds(parsed.targetIds),
-                budget: runtimeOptions.budget,
+                budget: {
+                    ...runtimeOptions.budget,
+                    timeoutMs: Math.max(
+                        1,
+                        Math.min(
+                            runtimeOptions.budget.timeoutMs,
+                            timeoutMs ?? runtimeOptions.budget.timeoutMs
+                        )
+                    ),
+                },
                 ownershipValidationPolicy:
                     runtimeOptions.ownershipValidationPolicy,
                 scopeOwnershipValidator: runtimeOptions.scopeOwnershipValidator,
                 scopeValidationPolicy: runtimeOptions.scopeValidationPolicy,
                 adapter: runtimeOptions.adapter,
+                abortSignal: signal,
             });
             if (trustGraphResult.adapterStatus === 'timeout') {
                 return buildFailedContextStepResult({

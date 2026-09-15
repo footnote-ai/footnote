@@ -103,9 +103,19 @@ test('chat planner uses the shared workflow output default', async () => {
                 text: JSON.stringify({
                     action: 'message',
                     modality: 'text',
+                    requestedCapabilityProfile: 'balanced-general',
                     safetyTier: 'Low',
                     reasoning: 'A normal message is appropriate.',
-                    generation: { verbosity: 'low' },
+                    generation: {
+                        verbosity: 'low',
+                        temperament: {
+                            tightness: 3,
+                            rationale: 3,
+                            attribution: 3,
+                            caution: 3,
+                            extent: 3,
+                        },
+                    },
                 }),
                 model: 'deepseek/deepseek-v4-flash-0731',
             };
@@ -127,10 +137,20 @@ test('chat planner receives bounded recent context scope as advisory follow-up e
                 text: JSON.stringify({
                     action: 'message',
                     modality: 'text',
+                    requestedCapabilityProfile: 'balanced-general',
                     safetyTier: 'Low',
                     reasoning: 'A grounded response is appropriate.',
                     trustGraphTargetIds: ['archive-docs'],
-                    generation: { verbosity: 'low' },
+                    generation: {
+                        verbosity: 'low',
+                        temperament: {
+                            tightness: 3,
+                            rationale: 3,
+                            attribution: 3,
+                            caution: 3,
+                            extent: 3,
+                        },
+                    },
                 }),
                 model: 'gpt-5-mini',
             };
@@ -183,10 +203,20 @@ test('chat planner does not carry recent context into explicit redirects or unre
                 text: JSON.stringify({
                     action: 'message',
                     modality: 'text',
+                    requestedCapabilityProfile: 'balanced-general',
                     safetyTier: 'Low',
                     reasoning: 'A normal response is appropriate.',
-                    trustGraphTargetIds: [],
-                    generation: { verbosity: 'low' },
+                    trustGraphTargetIds: ['archive-docs'],
+                    generation: {
+                        verbosity: 'low',
+                        temperament: {
+                            tightness: 3,
+                            rationale: 3,
+                            attribution: 3,
+                            caution: 3,
+                            extent: 3,
+                        },
+                    },
                 }),
                 model: 'gpt-5-mini',
             };
@@ -201,10 +231,10 @@ test('chat planner does not carry recent context into explicit redirects or unre
     await planFromWorkflow(
         planner,
         createChatRequest({
-            latestUserInput: 'Can you also check the web?',
+            latestUserInput: 'Now search the web instead.',
             conversation: [
                 ...priorConversation,
-                { role: 'user', content: 'Can you also check the web?' },
+                { role: 'user', content: 'Now search the web instead.' },
             ],
         })
     );
@@ -231,6 +261,109 @@ test('chat planner does not carry recent context into explicit redirects or unre
         )?.content ?? '',
         /no eligible prior scope/
     );
+
+    const explicitRedirect = await planFromWorkflow(
+        planner,
+        createChatRequest({
+            latestUserInput: 'Now search the web instead.',
+            conversation: [
+                ...priorConversation,
+                { role: 'user', content: 'Now search the web instead.' },
+            ],
+        })
+    );
+    assert.deepEqual(explicitRedirect.plan.trustGraphTargetIds, []);
+
+    const secondExplicitRedirect = await planFromWorkflow(
+        planner,
+        createChatRequest({
+            latestUserInput: 'Use the web for this one.',
+            conversation: [
+                ...priorConversation,
+                { role: 'user', content: 'Use the web for this one.' },
+            ],
+        })
+    );
+    assert.deepEqual(secondExplicitRedirect.plan.trustGraphTargetIds, []);
+
+    const unrelated = await planFromWorkflow(
+        planner,
+        createChatRequest({
+            latestUserInput: 'Help me rewrite this paragraph.',
+            conversation: [
+                ...priorConversation,
+                { role: 'user', content: 'Help me rewrite this paragraph.' },
+            ],
+        })
+    );
+    assert.deepEqual(unrelated.plan.trustGraphTargetIds, []);
+});
+
+test('chat planner preserves recent context for explicit source augmentation', async () => {
+    let observedMessages: Array<{ role: string; content: string }> = [];
+    const planner = createChatPlanner({
+        executePlanner: async ({ messages }) => {
+            observedMessages = messages;
+            return {
+                text: JSON.stringify({
+                    action: 'message',
+                    modality: 'text',
+                    requestedCapabilityProfile: 'balanced-general',
+                    safetyTier: 'Low',
+                    reasoning: 'The archive and web are both relevant.',
+                    trustGraphTargetIds: ['archive-docs', 'web-search'],
+                    generation: {
+                        verbosity: 'low',
+                        temperament: {
+                            tightness: 3,
+                            rationale: 3,
+                            attribution: 3,
+                            caution: 3,
+                            extent: 3,
+                        },
+                    },
+                }),
+                model: 'gpt-5-mini',
+            };
+        },
+        availableTrustGraphTargets: [
+            {
+                id: 'web-search',
+                flow: 'web-flow',
+                collection: 'web-collection',
+                description: 'Public web sources.',
+            },
+        ],
+        recentContextTargets: [{ id: 'archive-docs', outcome: 'succeeded' }],
+    });
+
+    const result = await planFromWorkflow(
+        planner,
+        createChatRequest({
+            latestUserInput: 'Also check the web.',
+            conversation: [
+                {
+                    role: 'user',
+                    content: 'According to the archive, what happened?',
+                },
+                {
+                    role: 'assistant',
+                    content: 'The archive records a response.',
+                },
+                { role: 'user', content: 'Also check the web.' },
+            ],
+        })
+    );
+
+    const scopeMessage = observedMessages.find((message) =>
+        message.content.startsWith('Recent context scope')
+    );
+    assert.ok(scopeMessage);
+    assert.match(scopeMessage.content, /archive-docs/);
+    assert.deepEqual(result.plan.trustGraphTargetIds, [
+        'archive-docs',
+        'web-search',
+    ]);
 });
 
 test('chatPlanner forwards the configured planner reasoning effort', async () => {

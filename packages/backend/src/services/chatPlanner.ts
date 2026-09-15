@@ -209,10 +209,23 @@ export type RecentContextTarget = {
     outcome: 'succeeded' | 'failed';
 };
 
+export type ContextScopeIntent =
+    'continuation' | 'augmentation' | 'replacement' | 'unrelated';
+
 const CONTEXT_FOLLOW_UP_PATTERN =
     /^(what about|how about|and\b|also\b|then\b|next\b|what else\b|tell me more\b|more\b|something\b|that\b|this\b|it\b|they\b|those\b)/i;
 const EXPLICIT_CONTEXT_REDIRECT_PATTERN =
     /\b(search|check|look up|web|internet|wikipedia|public sources|according to)\b/i;
+const CONTEXT_AUGMENTATION_PATTERN =
+    /\b(?:also|as well|alongside|together|both)\b/i;
+const CONTEXT_COMPARISON_PATTERN =
+    /\bcompare\b[\s\S]*\b(?:with|against|and)\b/i;
+const CONTEXT_SCOPE_WORD_PATTERN =
+    /\b(?:web|internet|wikipedia|public sources?|archive|records?|documents?|reports?|files?|dataset|collection)\b/i;
+const CONTEXT_REPLACEMENT_PATTERN =
+    /\b(?:instead|rather than|forget|switch to)\b/i;
+const EXPLICIT_WEB_SOURCE_REQUEST_PATTERN =
+    /^(?:now\s+)?(?:search|check|look\s+up|use|query|find)\s+(?:the\s+)?(?:web|internet|public sources?)\b/i;
 
 /**
  * Identifies only clearly underspecified continuation wording for advisory
@@ -229,6 +242,32 @@ export const isLikelyContextFollowUp = (request: PostChatRequest): boolean => {
         !EXPLICIT_CONTEXT_REDIRECT_PATTERN.test(latestInput) &&
         CONTEXT_FOLLOW_UP_PATTERN.test(latestInput)
     );
+};
+
+/**
+ * Classifies the latest request's relationship to the preceding source scope.
+ * Prior targets may be retained for continuation or augmentation, but are not
+ * silently carried through a replacement or unrelated request.
+ */
+export const classifyContextScopeIntent = (
+    request: PostChatRequest
+): ContextScopeIntent => {
+    const latestInput = request.latestUserInput.trim();
+    if (isLikelyContextFollowUp(request)) return 'continuation';
+    if (
+        CONTEXT_SCOPE_WORD_PATTERN.test(latestInput) &&
+        (CONTEXT_AUGMENTATION_PATTERN.test(latestInput) ||
+            CONTEXT_COMPARISON_PATTERN.test(latestInput))
+    ) {
+        return 'augmentation';
+    }
+    if (
+        CONTEXT_REPLACEMENT_PATTERN.test(latestInput) ||
+        EXPLICIT_WEB_SOURCE_REQUEST_PATTERN.test(latestInput)
+    ) {
+        return 'replacement';
+    }
+    return 'unrelated';
 };
 
 type CreateChatPlannerOptions = {
@@ -1123,7 +1162,7 @@ const buildPlannerMessages = (input: {
     },
     {
         role: 'system',
-        content: `Recent context scope (advisory, from the immediately preceding turn): ${input.recentContextTargetContext}. For an underspecified follow-up, preserve a successful scope when it remains sufficient; follow an explicit source redirect and prefer the smallest sufficient context set. Do not add unrelated integrations without a reason.`,
+        content: `Recent context scope (advisory, from the immediately preceding turn): ${input.recentContextTargetContext}. Classify the latest request as continuation, augmentation, replacement, or unrelated. Preserve a successful scope for continuation; combine it with explicitly requested sources for augmentation; follow an explicit source redirect as replacement and drop prior targets; drop prior targets for unrelated requests. Do not add unrelated integrations without a reason.`,
     },
     {
         role: 'system',
@@ -1867,11 +1906,43 @@ export const createChatPlanner = ({
         ) {
             return normalization;
         }
-        const inferredTargetIds = inferExplicitTrustGraphTargetIds(
-            request,
-            availableTrustGraphTargets
+        const scopeIntent = classifyContextScopeIntent(request);
+        const recentTargetIds = new Set(
+            recentContextTargets.map((target) => target.id)
         );
-        if (inferredTargetIds.length === 0) {
+        const plannerTargetIds = normalization.plan.trustGraphTargetIds ?? [];
+        const retainedPlannerTargetIds =
+            scopeIntent === 'replacement' || scopeIntent === 'unrelated'
+                ? plannerTargetIds.filter(
+                      (targetId) => !recentTargetIds.has(targetId)
+                  )
+                : plannerTargetIds;
+        const inheritedTargetIds =
+            scopeIntent === 'continuation' || scopeIntent === 'augmentation'
+                ? recentContextTargets
+                      .filter((target) => target.outcome === 'succeeded')
+                      .map((target) => target.id)
+                : [];
+        const inferredTargetIds =
+            scopeIntent === 'replacement' || scopeIntent === 'unrelated'
+                ? inferExplicitTrustGraphTargetIds(
+                      request,
+                      availableTrustGraphTargets
+                  )
+                : [];
+        const resolvedTargetIds = [
+            ...new Set([
+                ...inheritedTargetIds,
+                ...retainedPlannerTargetIds,
+                ...inferredTargetIds,
+            ]),
+        ];
+        if (
+            resolvedTargetIds.length === plannerTargetIds.length &&
+            resolvedTargetIds.every(
+                (targetId, index) => targetId === plannerTargetIds[index]
+            )
+        ) {
             return normalization;
         }
 
@@ -1879,12 +1950,7 @@ export const createChatPlanner = ({
             ...normalization,
             plan: {
                 ...normalization.plan,
-                trustGraphTargetIds: [
-                    ...new Set([
-                        ...(normalization.plan.trustGraphTargetIds ?? []),
-                        ...inferredTargetIds,
-                    ]),
-                ],
+                trustGraphTargetIds: resolvedTargetIds,
             },
         };
     };
@@ -1944,11 +2010,11 @@ export const createChatPlanner = ({
         let plannerProvider: string | undefined;
         let plannerModel: string | undefined;
         const requestSummary = summarizeRequest(request);
-        const eligibleRecentContextTargetContext = isLikelyContextFollowUp(
-            request
-        )
-            ? recentContextTargetContext
-            : '[] (no eligible prior scope for this request)';
+        const scopeIntent = classifyContextScopeIntent(request);
+        const eligibleRecentContextTargetContext =
+            scopeIntent === 'continuation' || scopeIntent === 'augmentation'
+                ? recentContextTargetContext
+                : '[] (no eligible prior scope for this request)';
         const buildPlannerRequestPayload = (
             mode: ChatPlannerExecutionMode,
             contextTier: PlannerContextTier
@@ -1968,6 +2034,9 @@ export const createChatPlanner = ({
                 maxOutputTokens: plannerOutputTokenBudget,
                 reasoningEffort: plannerReasoningEffort,
                 ...(safetyIdentifier !== undefined && { safetyIdentifier }),
+                ...(invocationContext?.signal !== undefined && {
+                    signal: invocationContext.signal,
+                }),
                 ...(mode === 'structured' && {
                     compatibilityMessages: () =>
                         buildPlannerMessages({
