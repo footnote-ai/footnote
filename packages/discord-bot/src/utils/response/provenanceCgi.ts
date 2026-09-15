@@ -1,17 +1,11 @@
 /**
- * @description: Builds TRACE CGI provenance controls and trace-card request payloads for Discord follow-up messages.
+ * @description: Builds response-bound provenance controls for Discord follow-up messages.
  * @footnote-scope: interface
  * @footnote-module: ProvenanceCgi
  * @footnote-risk: medium - Broken control IDs or card payload mapping can block provenance actions.
  * @footnote-ethics: high - Provenance controls and scores affect transparency and user trust.
  */
 import { ActionRowBuilder, ButtonBuilder, ButtonStyle } from 'discord.js';
-import type {
-    PartialResponseTemperament,
-    ResponseMetadata,
-} from '@footnote/contracts/policy';
-import type { PostTraceCardRequest } from '@footnote/contracts/web';
-import { normalizeTraceAxisScoreWithStringParsing } from '../traceAxisScore.js';
 
 export type ProvenanceAction = 'details' | 'report_issue';
 
@@ -20,13 +14,6 @@ const PROVENANCE_ACTIONS = new Set<ProvenanceAction>([
     'report_issue',
 ]);
 const UNKNOWN_RESPONSE_ID_FALLBACK = 'unknown_response_id';
-const TRACE_AXIS_KEYS = [
-    'tightness',
-    'rationale',
-    'attribution',
-    'caution',
-    'extent',
-] as const;
 
 /**
  * Normalize a response identifier by trimming surrounding whitespace and substituting a fallback when empty.
@@ -37,66 +24,6 @@ const TRACE_AXIS_KEYS = [
 function normalizeResponseId(responseId: string): string {
     const trimmed = responseId.trim();
     return trimmed.length > 0 ? trimmed : UNKNOWN_RESPONSE_ID_FALLBACK;
-}
-
-const normalizeTemperament = (
-    temperament: ResponseMetadata['trace_final']
-): PartialResponseTemperament | undefined => {
-    if (!temperament) {
-        return undefined;
-    }
-
-    const normalized: PartialResponseTemperament = {};
-    for (const axis of TRACE_AXIS_KEYS) {
-        const score = normalizeTraceAxisScoreWithStringParsing(
-            temperament[axis]
-        );
-        if (score !== undefined) {
-            normalized[axis] = score;
-        }
-    }
-
-    return Object.keys(normalized).length > 0 ? normalized : undefined;
-};
-
-const normalizeTraceCardChips = (
-    metadata: ResponseMetadata
-): PostTraceCardRequest['chips'] | undefined => {
-    const evidenceScore = normalizeTraceAxisScoreWithStringParsing(
-        metadata.evidenceScore
-    );
-    const freshnessScore = normalizeTraceAxisScoreWithStringParsing(
-        metadata.freshnessScore
-    );
-
-    const chips: NonNullable<PostTraceCardRequest['chips']> = {};
-    if (evidenceScore !== undefined) {
-        chips.evidenceScore = evidenceScore;
-    }
-    if (freshnessScore !== undefined) {
-        chips.freshnessScore = freshnessScore;
-    }
-
-    return Object.keys(chips).length > 0 ? chips : undefined;
-};
-
-/**
- * Constructs a trace-card request payload from response metadata.
- *
- * @param metadata - Response metadata used to derive the request fields
- * @returns A PostTraceCardRequest with a normalized `responseId`; includes `temperament` and `chips` only when those values are present after normalization
- */
-export function buildTraceCardRequest(
-    metadata: ResponseMetadata
-): PostTraceCardRequest {
-    const temperament = normalizeTemperament(metadata.trace_final);
-    const chips = normalizeTraceCardChips(metadata);
-
-    return {
-        responseId: normalizeResponseId(metadata.responseId),
-        ...(temperament && { temperament }),
-        ...(chips && { chips }),
-    };
 }
 
 /**

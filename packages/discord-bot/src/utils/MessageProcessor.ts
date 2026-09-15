@@ -49,10 +49,7 @@ import {
     recoverContextDetailsFromTrace,
     type RecoveredImageContext,
 } from '../commands/image/contextResolver.js';
-import {
-    buildProvenanceActionRow,
-    buildTraceCardRequest,
-} from './response/provenanceCgi.js';
+import { buildProvenanceActionRow } from './response/provenanceCgi.js';
 import { botApi, isDiscordApiClientError } from '../api/botApi.js';
 import type { DiscordChatApiResponse } from '../api/index.js';
 import type {
@@ -1198,9 +1195,9 @@ export class MessageProcessor {
         const files: Array<{ filename: string; data: Buffer }> = [];
 
         try {
-            const traceCard = await botApi.postTraceCard(
-                buildTraceCardRequest(metadata)
-            );
+            const traceCard = await botApi.postTraceCardFromTrace({
+                responseId: metadata.responseId,
+            });
             files.push({
                 filename: 'trace-card.png',
                 data: Buffer.from(traceCard.pngBase64, 'base64'),
@@ -1276,13 +1273,37 @@ export class MessageProcessor {
                 provenanceReplyAnchor.channel,
                 originalMessage.author
             );
-            await provenanceHandler.sendMessage(
-                '',
-                preparedPayload.files,
-                false,
-                false,
-                preparedPayload.components
-            );
+            try {
+                await provenanceHandler.sendMessage(
+                    '',
+                    preparedPayload.files,
+                    false,
+                    false,
+                    preparedPayload.components
+                );
+            } catch (error) {
+                if (preparedPayload.files.length === 0) {
+                    throw error;
+                }
+
+                logger.warn(
+                    `Failed to attach provenance trace-card for response ${responseId}; retrying controls only.`,
+                    {
+                        responseId,
+                        error:
+                            error instanceof Error
+                                ? error.message
+                                : String(error),
+                    }
+                );
+                await provenanceHandler.sendMessage(
+                    '',
+                    [],
+                    false,
+                    false,
+                    preparedPayload.components
+                );
+            }
         } catch (error) {
             logger.error(
                 `Failed to send provenance CGI follow-up for response ${responseId}: ${

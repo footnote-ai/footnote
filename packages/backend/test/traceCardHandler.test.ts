@@ -14,6 +14,7 @@ import path from 'node:path';
 import Database from 'better-sqlite3';
 
 import type { ResponseMetadata } from '@footnote/contracts/policy';
+import { projectResponseFootnote } from '@footnote/contracts/policy';
 import { createTraceHandlers } from '../src/handlers/trace.js';
 import { SimpleRateLimiter } from '../src/services/rateLimiter.js';
 import { renderTraceCardSvg } from '../src/services/traceCard/traceCardSvg.js';
@@ -582,7 +583,7 @@ test('GET trace-card SVG returns 404 when asset is missing', async () => {
     }
 });
 
-test('POST /api/trace-cards/from-trace uses stored metadata trace_final and chip scores', async () => {
+test('POST /api/trace-cards/from-trace uses the shared projection final and target values', async () => {
     const server = await createTestServer();
     const responseId = 'from_trace_response_123';
     const traceTarget = {
@@ -644,11 +645,21 @@ test('POST /api/trace-cards/from-trace uses stored metadata trace_final and chip
         assert.equal(
             storedSvg,
             renderTraceCardSvg({
-                temperament: traceFinal,
-                chips: {
-                    evidenceScore: 4,
-                    freshnessScore: 3,
-                },
+                projection: projectResponseFootnote({
+                    metadata: {
+                        responseId,
+                        provenance: 'Retrieved',
+                        safetyTier: 'High',
+                        licenseContext: 'MIT + HL3',
+                        citations: [],
+                        trace_target: traceTarget,
+                        trace_final: traceFinal,
+                        trace_final_reason_code: 'runtime_posture_adjustment',
+                        evidenceScore: 4,
+                        freshnessScore: 3,
+                    },
+                    artifacts: { trace: 'available', report: 'unavailable' },
+                }),
             }),
             'trace-card should render from trace_final'
         );

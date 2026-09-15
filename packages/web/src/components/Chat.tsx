@@ -520,9 +520,9 @@ const Chat = (): JSX.Element => {
                         )}
                     </div>
                 )}
-            {answer && metadata && (
+            {answer && (
                 <CanonicalResponseFootnote
-                    metadata={metadata}
+                    metadata={metadata ?? null}
                     artifacts={{ trace: 'unknown', report: 'unavailable' }}
                 />
             )}
