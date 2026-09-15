@@ -1646,6 +1646,7 @@ export const createChatService = ({
                     personaExpressionGuidance:
                         presentationPersona?.expressionGuidance ??
                         BALANCED_PERSONA_EXPRESSION_GUIDANCE,
+                    retryInitialInadmissibleGeneration: true,
                 });
                 workflowPlannerStepResult = workflowResult.plannerStepResult;
                 workflowPlannerSummary =

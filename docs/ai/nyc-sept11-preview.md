@@ -30,7 +30,8 @@ operator-authored description such as:
 
 > NYC September 11 records: primary-source municipal records concerning
 > September 11 response, cleanup, environmental conditions, inspections,
-> agencies, residents, recovery work, and related matters.
+> agencies, residents, recovery work, air-quality and asbestos monitoring,
+> sampling locations and measurements, and related matters.
 
 The flow, collection, endpoint, credentials, and retrieval settings remain
 server-owned deployment configuration. They are not part of the browser or

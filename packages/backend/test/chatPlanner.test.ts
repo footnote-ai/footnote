@@ -2703,7 +2703,7 @@ test('chatPlanner preserves relevant NYC target selection and no-target unrelate
             flow: 'sept11-retrieval-deepseek-0731-hybrid-bge-small-raw',
             collection: 'sept11-tranche-0-retrieval',
             description:
-                'NYC September 11 records: primary-source municipal records concerning response, cleanup, environmental conditions, inspections, agencies, residents, and recovery work.',
+                'NYC September 11 records: primary-source municipal records concerning response, cleanup, environmental conditions, inspections, agencies, residents, recovery work, air-quality and asbestos monitoring, sampling locations and measurements, and related matters.',
         },
     ];
     const plan = (trustGraphTargetIds: string[]) =>

@@ -78,7 +78,7 @@ test('TrustGraph target configuration preserves the NYC records target as operat
                     flow: 'sept11-retrieval-deepseek-0731-hybrid-bge-small-raw',
                     collection: 'sept11-tranche-0-retrieval',
                     description:
-                        'NYC September 11 records: primary-source municipal records concerning response, cleanup, environmental conditions, inspections, agencies, residents, and recovery work.',
+                        'NYC September 11 records: primary-source municipal records concerning response, cleanup, environmental conditions, inspections, agencies, residents, recovery work, air-quality and asbestos monitoring, sampling locations and measurements, and related matters.',
                     workspaceRef: 'sept11',
                     service: 'document-rag',
                 },
@@ -93,7 +93,7 @@ test('TrustGraph target configuration preserves the NYC records target as operat
             flow: 'sept11-retrieval-deepseek-0731-hybrid-bge-small-raw',
             collection: 'sept11-tranche-0-retrieval',
             description:
-                'NYC September 11 records: primary-source municipal records concerning response, cleanup, environmental conditions, inspections, agencies, residents, and recovery work.',
+                'NYC September 11 records: primary-source municipal records concerning response, cleanup, environmental conditions, inspections, agencies, residents, recovery work, air-quality and asbestos monitoring, sampling locations and measurements, and related matters.',
             workspaceRef: 'sept11',
             service: 'document-rag',
         },

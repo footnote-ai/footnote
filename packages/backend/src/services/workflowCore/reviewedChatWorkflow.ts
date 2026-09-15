@@ -228,6 +228,11 @@ export type RunBoundedReviewWorkflowInput = {
         ) => ReviewWorkflowUsageSummary;
     };
     personaExpressionGuidance?: string;
+    /**
+     * Allows one bounded retry of an inadmissible initial generation before
+     * the configured routing chain is allowed to fail open.
+     */
+    retryInitialInadmissibleGeneration?: boolean;
 };
 
 export type RunBoundedReviewWorkflowResult =
@@ -2248,19 +2253,32 @@ export const runBoundedReviewWorkflow = async (
         let selectedCapabilityFacts:
             ReturnType<typeof resolveAttemptCapabilityFacts> | undefined;
         try {
+            const generationCandidates =
+                previousDraft === undefined
+                    ? (stepRoutingChainSet?.generateCandidates ?? [])
+                    : reorderRevisionCandidatesByHintLane({
+                          candidates:
+                              stepRoutingChainSet?.generateCandidates ?? [],
+                          enabledProfilesById:
+                              stepRoutingChainSet?.enabledProfilesById ??
+                              new Map(),
+                          lane: revisionHintLane.lane,
+                      });
+            const retryCandidates =
+                previousDraft === undefined &&
+                input.retryInitialInadmissibleGeneration === true &&
+                generationCandidates.length > 0 &&
+                generationCandidates[0] !== undefined
+                    ? [
+                          generationCandidates[0],
+                          generationCandidates[0],
+                          ...generationCandidates.slice(1),
+                      ]
+                    : generationCandidates;
             const chainResult = stepRoutingChainSet?.generateCandidates.length
                 ? await executeStepRoutingChain({
                       step: 'generate',
-                      candidates:
-                          previousDraft === undefined
-                              ? stepRoutingChainSet.generateCandidates
-                              : reorderRevisionCandidatesByHintLane({
-                                    candidates:
-                                        stepRoutingChainSet.generateCandidates,
-                                    enabledProfilesById:
-                                        stepRoutingChainSet.enabledProfilesById,
-                                    lane: revisionHintLane.lane,
-                                }),
+                      candidates: retryCandidates,
                       enabledProfilesById:
                           stepRoutingChainSet.enabledProfilesById,
                       requiresSearch:
