@@ -23,6 +23,7 @@ const execFileAsync = promisify(execFile);
 const packageRoot = path.resolve(import.meta.dirname, '../..');
 const repositoryRoot = path.resolve(packageRoot, '../..');
 const generatedRoot = path.join(packageRoot, 'wiki', 'src', 'content', 'docs');
+const machineReadableRoot = path.join(packageRoot, 'wiki', 'public');
 const stageScript = path.join(
     packageRoot,
     'wiki',
@@ -110,6 +111,14 @@ test('stages canonical sources with route, lifecycle, and edit-link metadata', a
         const architecture = await readGenerated(
             'architecture/public-web-surfaces.md'
         );
+        const machineIndex = await fs.readFile(
+            path.join(machineReadableRoot, 'llms.txt'),
+            'utf8'
+        );
+        const machineFull = await fs.readFile(
+            path.join(machineReadableRoot, 'llms-full.txt'),
+            'utf8'
+        );
 
         assert.match(documentation, /lifecycle: current/);
         assert.match(documentation, /slug: "documentation"/);
@@ -129,6 +138,14 @@ test('stages canonical sources with route, lifecycle, and edit-link metadata', a
         );
         assert.doesNotMatch(landing, /transparency-first AI framework/u);
         assert.match(landing, /slug: ""/);
+        assert.match(machineIndex, /^# Footnote Documentation$/mu);
+        assert.match(machineIndex, /\/wiki\/getting-started\//u);
+        assert.match(
+            machineIndex,
+            /source revision: (?:`[0-9a-f]{40}`|unavailable for this build)/u
+        );
+        assert.match(machineFull, /source path: `docs\/README\.md`/u);
+        assert.match(machineFull, /lifecycle: current/u);
 
         await fs.writeFile(
             documentationSourcePath,
@@ -139,6 +156,14 @@ test('stages canonical sources with route, lifecycle, and edit-link metadata', a
         const stagedWithTwoHeadings = await readGenerated('documentation.md');
         assert.doesNotMatch(stagedWithTwoHeadings, /^# Documentation Map$/mu);
         assert.match(stagedWithTwoHeadings, /^# Second temporary heading$/mu);
+        const dirtySourceMachineFull = await fs.readFile(
+            path.join(machineReadableRoot, 'llms-full.txt'),
+            'utf8'
+        );
+        assert.match(
+            dirtySourceMachineFull,
+            /source revision: unavailable for this build/u
+        );
 
         await fs.mkdir(path.dirname(assetPath), { recursive: true });
         await fs.writeFile(assetPath, assetContents);
@@ -200,5 +225,12 @@ test('stages canonical sources with route, lifecycle, and edit-link metadata', a
             recursive: true,
             force: true,
         });
+        await Promise.all(
+            ['llms.txt', 'llms-full.txt'].map((fileName) =>
+                fs.rm(path.join(machineReadableRoot, fileName), {
+                    force: true,
+                })
+            )
+        );
     }
 });
