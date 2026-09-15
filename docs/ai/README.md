@@ -36,8 +36,9 @@ the intended shape and examples.
 
 Always:
 
-- `pnpm lint:fix` after edits
+- `pnpm format:write` after edits
 - `pnpm lint` before final handoff or PR
+- `pnpm review --changed-only` before final handoff or PR
 
 When relevant:
 
