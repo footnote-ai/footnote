@@ -1930,6 +1930,26 @@ export const createChatPlanner = ({
                       availableTrustGraphTargets
                   )
                 : [];
+        // Search is a separate planner signal from the inherited source
+        // target. On an underspecified continuation, retaining both would
+        // silently broaden the user's established scope. Explicit
+        // augmentation and replacement intents remain eligible for search.
+        const hasEstablishedSourceScope = recentContextTargets.length > 0;
+        const shouldSuppressUnrequestedSearch =
+            scopeIntent === 'continuation' && hasEstablishedSourceScope;
+        const normalizedPlan = shouldSuppressUnrequestedSearch
+            ? {
+                  ...normalization.plan,
+                  generation: {
+                      ...normalization.plan.generation,
+                      search: undefined,
+                      ...(normalization.plan.generation.toolIntent?.toolName ===
+                          'web_search' && {
+                          toolIntent: undefined,
+                      }),
+                  },
+              }
+            : normalization.plan;
         const resolvedTargetIds = [
             ...new Set([
                 ...inheritedTargetIds,
@@ -1937,21 +1957,35 @@ export const createChatPlanner = ({
                 ...inferredTargetIds,
             ]),
         ];
-        if (
+        const targetIdsUnchanged =
             resolvedTargetIds.length === plannerTargetIds.length &&
             resolvedTargetIds.every(
                 (targetId, index) => targetId === plannerTargetIds[index]
-            )
-        ) {
+            );
+        if (targetIdsUnchanged && !shouldSuppressUnrequestedSearch) {
             return normalization;
         }
 
         return {
             ...normalization,
             plan: {
-                ...normalization.plan,
+                ...normalizedPlan,
                 trustGraphTargetIds: resolvedTargetIds,
             },
+            fallbackTier:
+                normalization.fallbackTier === 'none'
+                    ? 'field_corrections'
+                    : normalization.fallbackTier,
+            correctionCodes: shouldSuppressUnrequestedSearch
+                ? [
+                      ...normalization.correctionCodes,
+                      'web_search_suppressed_inherited_source_scope',
+                  ]
+                : normalization.correctionCodes,
+            applyOutcome:
+                normalization.applyOutcome === 'accepted'
+                    ? 'partially_applied'
+                    : normalization.applyOutcome,
         };
     };
 

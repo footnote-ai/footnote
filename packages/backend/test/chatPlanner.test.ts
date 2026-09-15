@@ -321,6 +321,11 @@ test('chat planner preserves recent context for explicit source augmentation', a
                             caution: 3,
                             extent: 3,
                         },
+                        search: {
+                            query: 'archive and web sources',
+                            contextSize: 'low',
+                            intent: 'current_facts',
+                        },
                     },
                 }),
                 model: 'gpt-5-mini',
@@ -364,6 +369,72 @@ test('chat planner preserves recent context for explicit source augmentation', a
         'archive-docs',
         'web-search',
     ]);
+    assert.equal(
+        result.plan.generation.search?.query,
+        'archive and web sources'
+    );
+});
+
+test('chat planner does not add web search to an inherited source continuation', async () => {
+    const planner = createChatPlanner({
+        executePlanner: async () => ({
+            text: JSON.stringify({
+                action: 'message',
+                modality: 'text',
+                requestedCapabilityProfile: 'balanced-general',
+                safetyTier: 'Low',
+                reasoning: 'The prior source remains relevant.',
+                trustGraphTargetIds: [],
+                generation: {
+                    verbosity: 'low',
+                    temperament: {
+                        tightness: 3,
+                        rationale: 3,
+                        attribution: 3,
+                        caution: 3,
+                        extent: 3,
+                    },
+                    search: {
+                        query: 'monitoring protocols',
+                        contextSize: 'low',
+                        intent: 'current_facts',
+                    },
+                    toolIntent: {
+                        toolName: 'web_search',
+                        requested: true,
+                        input: { query: 'monitoring protocols' },
+                    },
+                },
+            }),
+            model: 'gpt-5-mini',
+        }),
+        recentContextTargets: [{ id: 'archive-docs', outcome: 'succeeded' }],
+    });
+
+    const result = await planFromWorkflow(
+        planner,
+        createChatRequest({
+            latestUserInput: 'What about the monitoring protocols?',
+            conversation: [
+                {
+                    role: 'user',
+                    content: 'According to the archive, what happened?',
+                },
+                {
+                    role: 'assistant',
+                    content: 'The archive records a response.',
+                },
+                {
+                    role: 'user',
+                    content: 'What about the monitoring protocols?',
+                },
+            ],
+        })
+    );
+
+    assert.deepEqual(result.plan.trustGraphTargetIds, ['archive-docs']);
+    assert.equal(result.plan.generation.search, undefined);
+    assert.equal(result.plan.generation.toolIntent, undefined);
 });
 
 test('chatPlanner forwards the configured planner reasoning effort', async () => {
