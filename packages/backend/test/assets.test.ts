@@ -34,6 +34,10 @@ test('asset resolver serves nested wiki files without SPA fallback for missing w
             'wiki-reference'
         );
         await fs.writeFile(
+            path.join(distDir, 'wiki', 'llms.txt'),
+            '# Footnote Documentation'
+        );
+        await fs.writeFile(
             path.join(distDir, 'wiki', '_astro', 'font.woff2'),
             'font'
         );
@@ -43,6 +47,7 @@ test('asset resolver serves nested wiki files without SPA fallback for missing w
         });
         const wikiHome = await resolveAsset('/wiki/');
         const wikiReference = await resolveAsset('/wiki/reference/');
+        const machineIndex = await resolveAsset('/wiki/llms.txt');
         const wikiMissing = await resolveAsset('/wiki/missing/');
         const wikiMissingWithQuery = await resolveAsset(
             '/wiki/missing?search=docs'
@@ -51,12 +56,17 @@ test('asset resolver serves nested wiki files without SPA fallback for missing w
 
         assert.equal(await wikiHome?.content.toString(), 'wiki-home');
         assert.equal(await wikiReference?.content.toString(), 'wiki-reference');
+        assert.equal(
+            await machineIndex?.content.toString(),
+            '# Footnote Documentation'
+        );
         assert.equal(wikiMissing, undefined);
         assert.equal(wikiMissingWithQuery, undefined);
         assert.equal(await spaFallback?.content.toString(), 'react-app');
         assert.equal(MIME_MAP.get('.woff2'), 'font/woff2');
         assert.equal(MIME_MAP.get('.wasm'), 'application/wasm');
         assert.equal(MIME_MAP.get('.pf_fragment'), 'application/octet-stream');
+        assert.equal(MIME_MAP.get('.txt'), 'text/plain; charset=utf-8');
     } finally {
         await fs.rm(distDir, { recursive: true, force: true });
     }

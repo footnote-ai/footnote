@@ -11,6 +11,10 @@ import path from 'node:path';
 import process from 'node:process';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { promisify } from 'node:util';
+import {
+    readVerifiedSourceRevision,
+    writeMachineReadableFiles,
+} from './machine-readable.mjs';
 
 const packageRoot = path.resolve(
     path.dirname(fileURLToPath(import.meta.url)),
@@ -20,6 +24,7 @@ const repositoryRoot = path.resolve(packageRoot, '../..');
 const sourceRoot = path.join(packageRoot, 'wiki', 'src', 'content', 'docs');
 const documentationAssetsRoot = path.join(repositoryRoot, 'docs', 'assets');
 const stagedAssetsRoot = path.join(packageRoot, 'wiki', 'public', 'assets');
+const machineReadableOutputRoot = path.join(packageRoot, 'wiki', 'public');
 const sourceUrlBase = 'https://github.com/footnote-ai/footnote/blob/main/';
 const editUrlBase = 'https://github.com/footnote-ai/footnote/edit/main/';
 const historyUrlBase = 'https://github.com/footnote-ai/footnote/commits/main/';
@@ -387,6 +392,15 @@ const main = async () => {
         ].join('\n'),
         'utf8'
     );
+    const sourceRevision = await readVerifiedSourceRevision(repositoryRoot, [
+        ...sourceFiles,
+        ...sourceDirectories,
+    ]);
+    await writeMachineReadableFiles({
+        stagedRoot: sourceRoot,
+        outputRoot: machineReadableOutputRoot,
+        sourceRevision,
+    });
 };
 
 if (
