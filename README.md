@@ -23,26 +23,36 @@ Footnote is built with AI assistance. Read the
 
 ## Quickstart
 
-Try it out with a few clicks:
+Try Footnote without cloning the repository:
 
-[Download the latest release](https://github.com/footnote-ai/footnote/releases) which matches your system. Double-click the file to start.
+1. [Download the latest release](https://github.com/footnote-ai/footnote/releases)
+   for your system.
+2. Double-click the downloaded file to start Footnote.
+3. On first run, Footnote opens the setup page. Accept the defaults or adjust
+   the settings, select **Save settings**, then restart Footnote.
 
-On first run it will open the setup page—Accept the defaults, or tweak to your liking. Save, then restart Footnote.
+## Run from source (developers and contributors)
 
-## Advanced Start
-
-Run from the source code:
+Use this path to contribute to Footnote or run the repository directly.
 
 Prerequisites:
 
 - Node.js 22.13+
 - `pnpm` (`pnpm@11.16.0`+)
 
-Clone the repo and start with `pnpm start`
+```sh
+git clone https://github.com/footnote-ai/footnote.git
+cd footnote
+pnpm start
+```
+
+`pnpm start` creates missing local setup files, installs dependencies when
+needed, and starts the backend and web development services.
 
 ## Deployment
 
-Footnote leverages Docker containers for easy deployment on your own hardware or in the cloud—See the [deployment guide](deploy/README.md) for details.
+Footnote uses Docker containers for deployment on your own hardware or in the
+cloud. See the [deployment guide](deploy/README.md) for details.
 
 ## Need help?
 
