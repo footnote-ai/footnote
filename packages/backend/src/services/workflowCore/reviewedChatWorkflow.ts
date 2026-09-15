@@ -170,6 +170,10 @@ export type ContextStepExecutorInput = {
     workflowId: string;
     workflowName: string;
     attempt: number;
+    /** Workflow deadline cancellation for in-flight integration work. */
+    signal?: AbortSignal;
+    /** Remaining workflow time used to clamp integration-specific timeouts. */
+    timeoutMs?: number;
 };
 
 export type ContextStepExecutor = (
@@ -224,6 +228,11 @@ export type RunBoundedReviewWorkflowInput = {
         ) => ReviewWorkflowUsageSummary;
     };
     personaExpressionGuidance?: string;
+    /**
+     * Allows one bounded retry of an inadmissible initial generation before
+     * the configured routing chain is allowed to fail open.
+     */
+    retryInitialInadmissibleGeneration?: boolean;
 };
 
 export type RunBoundedReviewWorkflowResult =
@@ -250,6 +259,12 @@ export type RunBoundedReviewWorkflowResult =
     | {
           outcome: 'no_generation';
           workflowLineage: WorkflowRecord;
+          /**
+           * The final context-projected request is retained for a bounded
+           * fail-open generation attempt. This prevents successful evidence
+           * from disappearing when the reviewed draft is unavailable.
+           */
+          fallbackGenerationRequest?: SerializableGenerationRequest;
           presentation?: PresentationMetadata;
           plannerStepResult?: PlannerStepResult;
           planContinuation?: PlanContinuation;
@@ -258,6 +273,18 @@ export type RunBoundedReviewWorkflowResult =
       };
 
 type SerializableRecord = { readonly [key: string]: Result };
+type SerializableGenerationRequest = Omit<GenerationRequest, 'signal'>;
+
+/**
+ * Projects a runtime generation request across the serializable workflow
+ * result boundary without leaking its process-local cancellation signal.
+ */
+const toSerializableGenerationRequest = (
+    request: GenerationRequest
+): SerializableGenerationRequest => {
+    const { signal: _signal, ...serializableRequest } = request;
+    return serializableRequest;
+};
 type ContinuePlanContinuation = Extract<
     PlanContinuation,
     { continuation: 'continue_message' }
@@ -1512,6 +1539,7 @@ export const runBoundedReviewWorkflow = async (
                 attempt: handlerInput.attempt,
                 invocationContext: {
                     ...plannerStepRequest.invocationContext,
+                    signal: handlerInput.signal,
                     maxOutputTokens: Math.min(
                         DEFAULT_WORKFLOW_PLANNER_MAX_OUTPUT_TOKENS,
                         Math.max(
@@ -1754,6 +1782,8 @@ export const runBoundedReviewWorkflow = async (
                                 workflowId,
                                 workflowName: workflowConfig.workflowName,
                                 attempt: handlerInput.attempt,
+                                signal: handlerInput.signal,
+                                timeoutMs: handlerInput.remainingDurationMs,
                             }),
                         };
                     } catch (error) {
@@ -1897,7 +1927,7 @@ export const runBoundedReviewWorkflow = async (
         let effectiveAuthorityOutputTokens: number | undefined;
         const presentationRequest =
             executionLimits.maxTokensTotal >= UNBOUNDED_EXECUTION_LIMIT
-                ? projected.request
+                ? { ...projected.request, signal: handlerInput.signal }
                 : authorityAdmissionRequest === undefined
                   ? undefined
                   : (() => {
@@ -1953,6 +1983,7 @@ export const runBoundedReviewWorkflow = async (
                             : {
                                   ...projected.request,
                                   maxOutputTokens: budget.candidateOutputTokens,
+                                  signal: handlerInput.signal,
                               };
                     })();
         const result =
@@ -2101,7 +2132,10 @@ export const runBoundedReviewWorkflow = async (
         }
         const projected = messagesFor(handlerInput.results);
         const previousDraft = readGenerationResult(handlerInput.results.draft);
-        let request = projected.request;
+        let request: GenerationRequest = {
+            ...projected.request,
+            signal: handlerInput.signal,
+        };
         let refinementPromptResult:
             ReturnType<typeof composeRefinementPrompt> | undefined;
         let revisionHintLane: ReturnType<typeof decideRevisionRoutingHintLane> =
@@ -2219,19 +2253,32 @@ export const runBoundedReviewWorkflow = async (
         let selectedCapabilityFacts:
             ReturnType<typeof resolveAttemptCapabilityFacts> | undefined;
         try {
+            const generationCandidates =
+                previousDraft === undefined
+                    ? (stepRoutingChainSet?.generateCandidates ?? [])
+                    : reorderRevisionCandidatesByHintLane({
+                          candidates:
+                              stepRoutingChainSet?.generateCandidates ?? [],
+                          enabledProfilesById:
+                              stepRoutingChainSet?.enabledProfilesById ??
+                              new Map(),
+                          lane: revisionHintLane.lane,
+                      });
+            const retryCandidates =
+                previousDraft === undefined &&
+                input.retryInitialInadmissibleGeneration === true &&
+                generationCandidates.length > 0 &&
+                generationCandidates[0] !== undefined
+                    ? [
+                          generationCandidates[0],
+                          generationCandidates[0],
+                          ...generationCandidates.slice(1),
+                      ]
+                    : generationCandidates;
             const chainResult = stepRoutingChainSet?.generateCandidates.length
                 ? await executeStepRoutingChain({
                       step: 'generate',
-                      candidates:
-                          previousDraft === undefined
-                              ? stepRoutingChainSet.generateCandidates
-                              : reorderRevisionCandidatesByHintLane({
-                                    candidates:
-                                        stepRoutingChainSet.generateCandidates,
-                                    enabledProfilesById:
-                                        stepRoutingChainSet.enabledProfilesById,
-                                    lane: revisionHintLane.lane,
-                                }),
+                      candidates: retryCandidates,
                       enabledProfilesById:
                           stepRoutingChainSet.enabledProfilesById,
                       requiresSearch:
@@ -2463,6 +2510,7 @@ export const runBoundedReviewWorkflow = async (
         });
         const request: GenerationRequest = {
             ...projected.request,
+            signal: handlerInput.signal,
             messages: [
                 ...projected.messages,
                 { role: 'assistant', content: draft.text },
@@ -2971,6 +3019,7 @@ export const runBoundedReviewWorkflow = async (
                 attempt: handlerInput.iteration + 1,
                 invocationContext: {
                     ...plannerStepRequest.invocationContext,
+                    signal: handlerInput.signal,
                     maxOutputTokens: Math.min(
                         DEFAULT_WORKFLOW_PLANNER_MAX_OUTPUT_TOKENS,
                         Math.max(
@@ -3400,6 +3449,12 @@ export const runBoundedReviewWorkflow = async (
     const generationResult =
         readGenerationResult(execution.run.results.answer) ??
         readGenerationResult(execution.run.results.draft);
+    const fallbackGenerationRequest =
+        generationResult === undefined
+            ? toSerializableGenerationRequest(
+                  messagesFor(execution.run.results).request
+              )
+            : undefined;
     const plannerStepResult = plan?.plannerStepResult;
     const contextStepResult = evidence.results.at(0);
     if (terminalAction !== undefined) {
@@ -3421,6 +3476,9 @@ export const runBoundedReviewWorkflow = async (
         return {
             outcome: 'no_generation',
             workflowLineage,
+            ...(fallbackGenerationRequest === undefined
+                ? {}
+                : { fallbackGenerationRequest }),
             ...(presentationMetadata === undefined
                 ? {}
                 : { presentation: presentationMetadata }),

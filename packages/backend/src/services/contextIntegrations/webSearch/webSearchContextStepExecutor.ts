@@ -124,7 +124,7 @@ export const createWebSearchContextStepExecutor = ({
         serpApiGl,
         serpApiHl,
     });
-    return async ({ request }): Promise<ContextStepResult> => {
+    return async ({ request, timeoutMs }): Promise<ContextStepResult> => {
         if (!enabled) {
             return buildSkippedContextStepResult({
                 toolName: request.integrationName,
@@ -178,7 +178,10 @@ export const createWebSearchContextStepExecutor = ({
             }
             const result = await registryEntry.run({
                 query: input.query,
-                timeoutMs: providerTimeoutMs,
+                timeoutMs: Math.max(
+                    1,
+                    Math.min(providerTimeoutMs, timeoutMs ?? providerTimeoutMs)
+                ),
                 maxResults,
             });
             const durationMs = Math.max(0, Date.now() - providerStartedAt);

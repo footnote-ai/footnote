@@ -218,6 +218,227 @@ test('Graph RAG adapter admits only explicitly selected target IDs', async () =>
     }
 });
 
+test('Document RAG adapter requests evidence-only output and preserves source metadata', async () => {
+    let requestBody: Record<string, unknown> | undefined;
+    const { server, baseUrl } = await startServer(async (request, response) => {
+        requestBody = JSON.parse(await readRequestBody(request)) as Record<
+            string,
+            unknown
+        >;
+        response.setHeader('content-type', 'application/json');
+        response.end(
+            JSON.stringify({
+                message_type: 'evidence',
+                response: null,
+                evidence: [
+                    {
+                        'chunk-id': 'chunk-42',
+                        text: 'The source describes a building inspection.',
+                        rank: 1,
+                        score: 0.91,
+                        'page-id': 'page-7',
+                        'page-number': 14,
+                        'document-id': 'NYC-WTC_000099888',
+                        'source-uri': 'https://archive.example/record.pdf',
+                    },
+                ],
+            })
+        );
+    });
+
+    try {
+        const adapter = new HttpTrustGraphEvidenceAdapter({
+            baseUrl,
+            targets: [
+                {
+                    id: 'nyc-sept11',
+                    flow: 'sept11-raw',
+                    collection: 'sept11-tranche-0-retrieval',
+                    description: 'NYC records.',
+                    service: 'document-rag',
+                },
+            ],
+            apiToken: 'secret-token-for-test',
+            workspaceRef: 'sept11',
+            limits: TEST_LIMITS,
+        });
+
+        const bundle = await adapter.getEvidenceBundle({
+            queryIntent: 'Which buildings were inspected?',
+            scopeTuple: {
+                userId: 'user-1',
+                collectionId: 'sept11-tranche-0-retrieval',
+            },
+            budget: { timeoutMs: 100, maxCalls: 1 },
+            targetIds: ['nyc-sept11'],
+        });
+
+        assert.deepEqual(requestBody, {
+            query: 'Which buildings were inspected?',
+            workspace: 'sept11',
+            collection: 'sept11-tranche-0-retrieval',
+            'doc-limit': TEST_LIMITS.maxSources,
+            streaming: false,
+            'evidence-only': true,
+        });
+        assert.equal(bundle.items.length, 1);
+        const item = bundle.items[0];
+        assert.ok(item);
+        assert.equal(item.evidenceKind, 'source');
+        assert.equal(
+            item.claimText,
+            'The source describes a building inspection.'
+        );
+        assert.equal(
+            item.sourceRef,
+            'https://archive.example/record.pdf#page=14'
+        );
+        assert.equal(item.sourceTitle, 'NYC-WTC_000099888 · page 14');
+        assert.deepEqual(item.provenancePathRef, [
+            'target:nyc-sept11',
+            'chunk:chunk-42',
+            'document:NYC-WTC_000099888',
+            'page:page-7',
+            'page-number:14',
+            'https://archive.example/record.pdf',
+        ]);
+    } finally {
+        await closeServer(server);
+    }
+});
+
+test('Document RAG adapter rejects synthesized responses in evidence-only mode', async () => {
+    const { server, baseUrl } = await startServer((_request, response) => {
+        response.setHeader('content-type', 'application/json');
+        response.end(
+            JSON.stringify({
+                message_type: 'evidence',
+                response: 'This should not be synthesized.',
+                evidence: [],
+            })
+        );
+    });
+
+    try {
+        await assert.rejects(
+            new HttpTrustGraphEvidenceAdapter({
+                baseUrl,
+                targets: [
+                    {
+                        id: 'document-target',
+                        flow: 'document-flow',
+                        collection: 'documents',
+                        description: 'Document target.',
+                        service: 'document-rag',
+                    },
+                ],
+                apiToken: 'secret-token-for-test',
+                limits: TEST_LIMITS,
+            }).getEvidenceBundle({
+                queryIntent: 'query',
+                scopeTuple: { userId: 'user-1', projectId: 'project-1' },
+                budget: { timeoutMs: 100, maxCalls: 1 },
+                targetIds: ['document-target'],
+            }),
+            /trustgraph_document_rag_synthesis_in_evidence_payload/
+        );
+    } finally {
+        await closeServer(server);
+    }
+});
+
+test('mixed TrustGraph results keep graph aggregate and document text bounds', async () => {
+    const mixedLimits: TrustGraphGraphRagLimits = {
+        ...TEST_LIMITS,
+        maxSources: 4,
+    };
+    const targets: TrustGraphTargetConfig[] = [
+        ...['one', 'two', 'three'].map((id) => ({
+            id,
+            flow: `${id}-flow`,
+            collection: id,
+            description: `${id} graph target.`,
+        })),
+        {
+            id: 'document-target',
+            flow: 'document-flow',
+            collection: 'documents',
+            description: 'Document target.',
+            service: 'document-rag' as const,
+        },
+    ];
+    const { server, baseUrl } = await startServer((request, response) => {
+        response.setHeader('content-type', 'application/json');
+        if (request.url?.endsWith('/document-rag') === true) {
+            response.end(
+                JSON.stringify({
+                    message_type: 'evidence',
+                    evidence: [
+                        {
+                            'chunk-id': 'document-chunk',
+                            text: 'd'.repeat(mixedLimits.maxResponseChars + 1),
+                            rank: 1,
+                            'source-uri': 'https://example.test/document',
+                        },
+                    ],
+                })
+            );
+            return;
+        }
+        response.end(
+            JSON.stringify({
+                response: 'g'.repeat(mixedLimits.maxResponseChars),
+                sources: [{ uri: `https://example.test/${request.url}` }],
+            })
+        );
+    });
+
+    try {
+        const bundle = await createAdapter(
+            baseUrl,
+            targets,
+            mixedLimits
+        ).getEvidenceBundle({
+            queryIntent: 'query',
+            scopeTuple: { userId: 'user-1', projectId: 'project-1' },
+            budget: { timeoutMs: 100, maxCalls: 1 },
+            targetIds: targets.map((target) => target.id),
+        });
+
+        const documentItem = bundle.items.find(
+            (item) => item.targetId === 'document-target'
+        );
+        assert.ok(documentItem);
+        assert.equal(
+            documentItem.claimText.length <= mixedLimits.maxResponseChars,
+            true
+        );
+        assert.equal(
+            documentItem.retrievalReason,
+            'trustgraph_document_rag_evidence_text_truncated'
+        );
+        const graphItems = bundle.items.filter(
+            (item) => item.evidenceKind === 'generated'
+        );
+        assert.equal(graphItems.length, 3);
+        assert.equal(
+            graphItems.reduce(
+                (total, item) => total + item.claimText.length,
+                0
+            ) <=
+                mixedLimits.maxResponseChars * 2,
+            true
+        );
+        assert.ok(
+            graphItems.some((item) =>
+                item.retrievalReason.endsWith('_truncated')
+            )
+        );
+    } finally {
+        await closeServer(server);
+    }
+});
+
 test('Graph RAG adapter queries only configured targets and preserves target provenance', async () => {
     const requests: Array<{ path: string; collection: string }> = [];
     const { server, baseUrl } = await startServer(async (request, response) => {

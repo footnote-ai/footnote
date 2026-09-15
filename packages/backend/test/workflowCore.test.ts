@@ -552,6 +552,39 @@ test('does not count a successful-only Step after duration stops its retry', asy
     assert.equal(execution.run.steps[0]?.status, 'failed');
 });
 
+test('aborts an in-flight attempt at the workflow deadline before starting the next Step', async () => {
+    let expensiveStepCalls = 0;
+    const execution = await executeWorkflow({
+        workflow: workflow({
+            slow: step({ next: { next: 'expensive' } }),
+            expensive: step({ next: { done: null } }),
+        }),
+        context: { requestId: 'req-1' },
+        handlers: {
+            slow: async ({ signal }): Promise<AttemptResult> => {
+                await new Promise<void>((resolve) => {
+                    signal.addEventListener('abort', () => resolve(), {
+                        once: true,
+                    });
+                });
+                return { status: 'succeeded', outcome: 'next' };
+            },
+            expensive: async (): Promise<AttemptResult> => {
+                expensiveStepCalls += 1;
+                return { status: 'succeeded', outcome: 'done' };
+            },
+        },
+        executionLimits: { ...limits, maxDurationMs: 25 },
+        startedAtMs: Date.now(),
+    });
+
+    assert.equal(expensiveStepCalls, 0);
+    assert.deepEqual(execution.termination, {
+        reason: 'execution_limit',
+        limit: 'maxDurationMs',
+    });
+});
+
 test('rejects invalid definitions before any handler runs', async () => {
     const invalidDefinitions: readonly Workflow[] = [
         workflow({}, 'missing'),

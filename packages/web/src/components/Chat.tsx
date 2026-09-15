@@ -12,7 +12,11 @@ import MarkdownResponse from './MarkdownResponse';
 import ProvenanceFooter from './ProvenanceFooter';
 import type { ResponseMetadata } from '@footnote/contracts/policy';
 import { loadRuntimeConfig } from '../config';
-import { api, isApiClientError } from '../utils/api';
+import {
+    api,
+    DEFAULT_WEB_API_TIMEOUT_MS,
+    isApiClientError,
+} from '../utils/api';
 import { notifyEmbedLayoutChanged } from '../utils/embedHeight';
 import { useTheme } from '../theme';
 import { useChatCaptcha } from '../hooks/useChatCaptcha';
@@ -163,12 +167,13 @@ const Chat = (): JSX.Element => {
         const controller = new AbortController();
         abortRef.current = controller;
 
-        // Set a timeout for the fetch request (60 seconds)
+        // Keep the UI transport behind the backend workflow budget plus the
+        // shared margin so long-running grounded responses can complete.
         let didRequestTimeout = false;
         const timeoutId = setTimeout(() => {
             didRequestTimeout = true;
             controller.abort();
-        }, 60000);
+        }, DEFAULT_WEB_API_TIMEOUT_MS);
 
         // Clear previous status and answer when starting a new submission
         setStatus(null);

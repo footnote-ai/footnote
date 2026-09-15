@@ -997,6 +997,105 @@ test('runBoundedReviewWorkflow executes engine-bounded refinement path without r
     assert.equal(refineSystemMessage.content.includes('unknown_module'), false);
 });
 
+test('runBoundedReviewWorkflow preserves an admitted draft when revision echoes source evidence', async () => {
+    let generationCalls = 0;
+    const generationRuntime: GenerationRuntime = {
+        kind: 'test-runtime',
+        async generate() {
+            generationCalls += 1;
+            if (generationCalls === 1) {
+                return {
+                    text: 'initial evidence-backed answer',
+                    model: 'gpt-5-mini',
+                    usage: {
+                        promptTokens: 10,
+                        completionTokens: 8,
+                        totalTokens: 18,
+                    },
+                    provenance: 'Retrieved' as const,
+                    citations: [],
+                };
+            }
+            if (generationCalls === 2) {
+                return {
+                    text: '{"reviewDecision":"revise","reviewReason":"The draft needs a clearer answer.","revisionInstruction":"Answer directly and keep the citations."}',
+                    model: 'gpt-5-mini',
+                    usage: {
+                        promptTokens: 5,
+                        completionTokens: 5,
+                        totalTokens: 10,
+                    },
+                    provenance: 'Inferred' as const,
+                    citations: [],
+                };
+            }
+            return {
+                text: 'TRUSTGRAPH SOURCE EVIDENCE\nRetrieved source text: one\n\nTRUSTGRAPH SOURCE EVIDENCE\nRetrieved source text: two',
+                model: 'gpt-5-mini',
+                usage: {
+                    promptTokens: 20,
+                    completionTokens: 20,
+                    totalTokens: 40,
+                },
+                provenance: 'Retrieved' as const,
+                citations: [],
+            };
+        },
+    };
+
+    const result = await runBoundedReviewWorkflowForTest({
+        generationRuntime,
+        generationRequest: {
+            model: 'gpt-5-mini',
+            messages: [{ role: 'user', content: 'Answer from the records.' }],
+        },
+        messagesWithHints: [
+            { role: 'user', content: 'Answer from the records.' },
+        ],
+        generationStartedAtMs: Date.now(),
+        workflowConfig: {
+            workflowName: 'message_reviewed',
+            maxIterations: 2,
+            maxDurationMs: 15000,
+        },
+        workflowPolicy: {
+            enablePlanning: false,
+            enableToolUse: false,
+            enableReplanning: false,
+            enableGeneration: true,
+            enableAssessment: true,
+            enableRevision: true,
+        },
+        captureUsage: (generationResult) => ({
+            model: generationResult.model ?? 'gpt-5-mini',
+            promptTokens: generationResult.usage?.promptTokens ?? 0,
+            completionTokens: generationResult.usage?.completionTokens ?? 0,
+            totalTokens: generationResult.usage?.totalTokens ?? 0,
+            estimatedCost: {
+                inputCostUsd: 0,
+                outputCostUsd: 0,
+                totalCostUsd: 0,
+            },
+        }),
+    });
+
+    assert.equal(result.outcome, 'generated');
+    if (result.outcome !== 'generated')
+        throw new Error('Expected generated result.');
+    assert.equal(
+        result.generationResult.text,
+        'initial evidence-backed answer'
+    );
+    assert.deepEqual(
+        result.responseCandidates?.map((candidate) => ({
+            stage: candidate.stage,
+            state: candidate.state,
+        })),
+        [{ stage: 'initial_generation', state: 'selected' }]
+    );
+    assert.equal(generationCalls, 3);
+});
+
 test('runBoundedReviewWorkflow marks requested-but-blocked refinement without refinementApplied signals', async () => {
     let generationCalls = 0;
     const generationRuntime: GenerationRuntime = {

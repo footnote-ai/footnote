@@ -1179,6 +1179,17 @@ export type ReviewRuntimeSummary = {
     label: ReviewRuntimeLabel;
 };
 
+/**
+ * Shared default budgets for long-running grounded chat requests.
+ * The client margin prevents a transport timeout from racing the backend's
+ * bounded workflow while leaving explicit operator overrides authoritative.
+ */
+export const DEFAULT_BACKEND_WORKFLOW_TIMEOUT_MS = 300_000;
+export const DEFAULT_BACKEND_REQUEST_TIMEOUT_MARGIN_MS = 30_000;
+export const DEFAULT_BACKEND_REQUEST_TIMEOUT_MS =
+    DEFAULT_BACKEND_WORKFLOW_TIMEOUT_MS +
+    DEFAULT_BACKEND_REQUEST_TIMEOUT_MARGIN_MS;
+
 export const REVIEW_INTENSITY_LEVELS = [
     'none',
     'light',

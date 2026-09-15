@@ -26,6 +26,8 @@ export type TrustGraphTargetConfig = {
     /** Trusted operator-authored routing context, not an authority grant. */
     description: string;
     workspaceRef?: string | null;
+    /** Native TrustGraph service exposed by the configured flow. */
+    service?: 'graph-rag' | 'document-rag';
 };
 
 export type CoverageEstimate = {
@@ -50,6 +52,10 @@ export type EvidenceItem = {
     adapterVersion: string;
     /** Stable deployment-configured target identity, when supplied. */
     targetId?: string;
+    /** Distinguishes generated Graph RAG prose from retrieved source text. */
+    evidenceKind?: 'generated' | 'source';
+    /** Operator/source metadata used for human-readable citations. */
+    sourceTitle?: string;
 };
 
 /**
@@ -64,6 +70,8 @@ export type TrustGraphAdvisoryEvidenceItem = {
     retrievalReason: string;
     collectionScope: string;
     targetId?: string;
+    evidenceKind: 'generated' | 'source';
+    sourceTitle?: string;
 };
 
 export type EvidenceBundle = {

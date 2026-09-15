@@ -203,6 +203,73 @@ export type ChatPlannerCapabilityProfileOption = {
     description: string;
 };
 
+/** Bounded outcome metadata for the immediately preceding context scope. */
+export type RecentContextTarget = {
+    id: string;
+    outcome: 'succeeded' | 'failed';
+};
+
+export type ContextScopeIntent =
+    'continuation' | 'augmentation' | 'replacement' | 'unrelated';
+
+const CONTEXT_FOLLOW_UP_PATTERN =
+    /^(what about|how about|and\b|also\b|then\b|next\b|what else\b|tell me more\b|more\b|something\b|that\b|this\b|it\b|they\b|those\b)/i;
+const EXPLICIT_CONTEXT_REDIRECT_PATTERN =
+    /\b(search|check|look up|web|internet|wikipedia|public sources|according to)\b/i;
+const CONTEXT_AUGMENTATION_PATTERN =
+    /\b(?:also|as well|alongside|together|both)\b/i;
+const CONTEXT_COMPARISON_PATTERN =
+    /\bcompare\b[\s\S]*\b(?:with|against|and)\b/i;
+const CONTEXT_SCOPE_WORD_PATTERN =
+    /\b(?:web|internet|wikipedia|public sources?|archive|records?|documents?|reports?|files?|dataset|collection)\b/i;
+const CONTEXT_REPLACEMENT_PATTERN =
+    /\b(?:instead|rather than|forget|switch to)\b/i;
+const EXPLICIT_WEB_SOURCE_REQUEST_PATTERN =
+    /^(?:now\s+)?(?:search|check|look\s+up|use|query|find)\s+(?:the\s+)?(?:web|internet|public sources?)\b/i;
+
+/**
+ * Identifies only clearly underspecified continuation wording for advisory
+ * source carry-forward; explicit redirects and unrelated requests stay free.
+ */
+export const isLikelyContextFollowUp = (request: PostChatRequest): boolean => {
+    const priorUserMessageCount = request.conversation.filter(
+        (message) => message.role === 'user'
+    ).length;
+    const latestInput = request.latestUserInput.trim();
+    return (
+        priorUserMessageCount > 1 &&
+        latestInput.length > 0 &&
+        !EXPLICIT_CONTEXT_REDIRECT_PATTERN.test(latestInput) &&
+        CONTEXT_FOLLOW_UP_PATTERN.test(latestInput)
+    );
+};
+
+/**
+ * Classifies the latest request's relationship to the preceding source scope.
+ * Prior targets may be retained for continuation or augmentation, but are not
+ * silently carried through a replacement or unrelated request.
+ */
+export const classifyContextScopeIntent = (
+    request: PostChatRequest
+): ContextScopeIntent => {
+    const latestInput = request.latestUserInput.trim();
+    if (isLikelyContextFollowUp(request)) return 'continuation';
+    if (
+        CONTEXT_SCOPE_WORD_PATTERN.test(latestInput) &&
+        (CONTEXT_AUGMENTATION_PATTERN.test(latestInput) ||
+            CONTEXT_COMPARISON_PATTERN.test(latestInput))
+    ) {
+        return 'augmentation';
+    }
+    if (
+        CONTEXT_REPLACEMENT_PATTERN.test(latestInput) ||
+        EXPLICIT_WEB_SOURCE_REQUEST_PATTERN.test(latestInput)
+    ) {
+        return 'replacement';
+    }
+    return 'unrelated';
+};
+
 type CreateChatPlannerOptions = {
     executePlanner?: ChatPlannerExecutor;
     executePlannerStructured?: ChatPlannerStructuredExecutor;
@@ -214,6 +281,8 @@ type CreateChatPlannerOptions = {
     availableCapabilityProfiles?: ChatPlannerCapabilityProfileOption[];
     /** Deployment-provided routing descriptions; never treated as authority. */
     availableTrustGraphTargets?: readonly TrustGraphTargetConfig[];
+    /** Advisory scope from the immediately preceding request in this session. */
+    recentContextTargets?: readonly RecentContextTarget[];
     recordUsage?: (record: BackendLLMCostRecord) => void;
     /** Backend-derived pseudonym; never pass a raw surface identifier. */
     safetyIdentifier?: string;
@@ -890,6 +959,90 @@ const normalizeTrustGraphTargetIds = (value: unknown): string[] => {
     return targetIds;
 };
 
+const EXPLICIT_CONTEXT_REQUEST_PATTERN =
+    /\b(?:search|look\s+(?:up|in)|find|retrieve|query|use|according\s+to|based\s+on|what\s+do)\b[\s\S]*\b(?:records?|archives?|documents?|reports?|files?|dataset|collection)\b/i;
+const CONTEXT_SOURCE_WORDS = new Set([
+    'record',
+    'records',
+    'archive',
+    'archives',
+    'document',
+    'documents',
+    'report',
+    'reports',
+    'file',
+    'files',
+    'dataset',
+    'collection',
+]);
+const CONTEXT_ROUTING_STOP_WORDS = new Set([
+    'about',
+    'after',
+    'also',
+    'and',
+    'are',
+    'from',
+    'into',
+    'that',
+    'the',
+    'their',
+    'this',
+    'which',
+    'with',
+]);
+
+const tokenizeContextRoutingText = (value: string): Set<string> =>
+    new Set(
+        value
+            .toLocaleLowerCase('en-US')
+            .replace(/[^\p{L}\p{N}]+/gu, ' ')
+            .split(/\s+/u)
+            .filter(
+                (token) =>
+                    token.length >= 2 && !CONTEXT_ROUTING_STOP_WORDS.has(token)
+            )
+    );
+
+/**
+ * Preserves an explicitly named configured source when a planner model
+ * chooses public search instead. This is a generic routing fallback: it only
+ * runs for source-search language and requires multiple description matches,
+ * so unrelated chats do not inherit every configured context target.
+ */
+const inferExplicitTrustGraphTargetIds = (
+    request: PostChatRequest,
+    targets: readonly TrustGraphTargetConfig[]
+): string[] => {
+    const query = request.latestUserInput.trim();
+    const queryTokens = tokenizeContextRoutingText(query);
+    if (
+        query.length === 0 ||
+        !EXPLICIT_CONTEXT_REQUEST_PATTERN.test(query) ||
+        ![...queryTokens].some((token) => CONTEXT_SOURCE_WORDS.has(token))
+    ) {
+        return [];
+    }
+
+    const rankedTargets = targets
+        .map((target) => {
+            const targetTokens = tokenizeContextRoutingText(target.description);
+            const overlap = [...queryTokens].filter((token) =>
+                targetTokens.has(token)
+            ).length;
+            return { target, overlap };
+        })
+        .filter(({ overlap }) => overlap >= 2)
+        .sort((left, right) => right.overlap - left.overlap);
+    const bestOverlap = rankedTargets[0]?.overlap;
+    if (bestOverlap === undefined) {
+        return [];
+    }
+
+    return rankedTargets
+        .filter(({ overlap }) => overlap === bestOverlap)
+        .map(({ target }) => target.id);
+};
+
 const summarizeConversationWindow = (
     conversation: PostChatRequest['conversation'],
     retainedRecentWindowSize: number
@@ -996,6 +1149,7 @@ const buildPlannerMessages = (input: {
     requestSummary: string;
     request: PostChatRequest;
     contextTier: PlannerContextTier;
+    recentContextTargetContext: string;
 }): RuntimeMessage[] => [
     { role: 'system', content: input.plannerPrompt },
     {
@@ -1005,6 +1159,10 @@ const buildPlannerMessages = (input: {
     {
         role: 'system',
         content: `Configured TrustGraph retrieval targets (bounded, operator-authored descriptions): ${input.plannerTrustGraphTargetContext}`,
+    },
+    {
+        role: 'system',
+        content: `Recent context scope (advisory, from the immediately preceding turn): ${input.recentContextTargetContext}. Classify the latest request as continuation, augmentation, replacement, or unrelated. Preserve a successful scope for continuation; combine it with explicitly requested sources for augmentation; follow an explicit source redirect as replacement and drop prior targets; drop prior targets for unrelated requests. Do not add unrelated integrations without a reason.`,
     },
     {
         role: 'system',
@@ -1694,6 +1852,7 @@ export const createChatPlanner = ({
     structuredExecutionTimeoutMs = runtimeConfig.openai.requestTimeoutMs,
     availableCapabilityProfiles = [],
     availableTrustGraphTargets = [],
+    recentContextTargets = [],
     recordUsage = recordBackendLLMUsage,
     safetyIdentifier,
 }: CreateChatPlannerOptions) => {
@@ -1726,6 +1885,109 @@ export const createChatPlanner = ({
                   }))
               )
             : '[]';
+    const recentContextTargetContext =
+        recentContextTargets.length > 0
+            ? JSON.stringify(
+                  recentContextTargets.map((target) => ({
+                      id: target.id.slice(0, 128),
+                      outcome: target.outcome,
+                  }))
+              )
+            : '[]';
+
+    const normalizePlanForRequest = (
+        request: PostChatRequest,
+        candidate: unknown
+    ): PlannerNormalizationResult => {
+        const normalization = normalizePlan(request, candidate);
+        if (
+            normalization.fallbackTier === 'safe_default_plan' ||
+            normalization.plan.action !== 'message'
+        ) {
+            return normalization;
+        }
+        const scopeIntent = classifyContextScopeIntent(request);
+        const recentTargetIds = new Set(
+            recentContextTargets.map((target) => target.id)
+        );
+        const plannerTargetIds = normalization.plan.trustGraphTargetIds ?? [];
+        const retainedPlannerTargetIds =
+            scopeIntent === 'replacement' || scopeIntent === 'unrelated'
+                ? plannerTargetIds.filter(
+                      (targetId) => !recentTargetIds.has(targetId)
+                  )
+                : plannerTargetIds;
+        const inheritedTargetIds =
+            scopeIntent === 'continuation' || scopeIntent === 'augmentation'
+                ? recentContextTargets
+                      .filter((target) => target.outcome === 'succeeded')
+                      .map((target) => target.id)
+                : [];
+        const inferredTargetIds =
+            scopeIntent === 'replacement' || scopeIntent === 'unrelated'
+                ? inferExplicitTrustGraphTargetIds(
+                      request,
+                      availableTrustGraphTargets
+                  )
+                : [];
+        // Search is a separate planner signal from the inherited source
+        // target. On an underspecified continuation, retaining both would
+        // silently broaden the user's established scope. Explicit
+        // augmentation and replacement intents remain eligible for search.
+        const hasEstablishedSourceScope = recentContextTargets.length > 0;
+        const shouldSuppressUnrequestedSearch =
+            scopeIntent === 'continuation' && hasEstablishedSourceScope;
+        const normalizedPlan = shouldSuppressUnrequestedSearch
+            ? {
+                  ...normalization.plan,
+                  generation: {
+                      ...normalization.plan.generation,
+                      search: undefined,
+                      ...(normalization.plan.generation.toolIntent?.toolName ===
+                          'web_search' && {
+                          toolIntent: undefined,
+                      }),
+                  },
+              }
+            : normalization.plan;
+        const resolvedTargetIds = [
+            ...new Set([
+                ...inheritedTargetIds,
+                ...retainedPlannerTargetIds,
+                ...inferredTargetIds,
+            ]),
+        ];
+        const targetIdsUnchanged =
+            resolvedTargetIds.length === plannerTargetIds.length &&
+            resolvedTargetIds.every(
+                (targetId, index) => targetId === plannerTargetIds[index]
+            );
+        if (targetIdsUnchanged && !shouldSuppressUnrequestedSearch) {
+            return normalization;
+        }
+
+        return {
+            ...normalization,
+            plan: {
+                ...normalizedPlan,
+                trustGraphTargetIds: resolvedTargetIds,
+            },
+            fallbackTier:
+                normalization.fallbackTier === 'none'
+                    ? 'field_corrections'
+                    : normalization.fallbackTier,
+            correctionCodes: shouldSuppressUnrequestedSearch
+                ? [
+                      ...normalization.correctionCodes,
+                      'web_search_suppressed_inherited_source_scope',
+                  ]
+                : normalization.correctionCodes,
+            applyOutcome:
+                normalization.applyOutcome === 'accepted'
+                    ? 'partially_applied'
+                    : normalization.applyOutcome,
+        };
+    };
 
     const planChat = async (
         request: PostChatRequest,
@@ -1782,6 +2044,11 @@ export const createChatPlanner = ({
         let plannerProvider: string | undefined;
         let plannerModel: string | undefined;
         const requestSummary = summarizeRequest(request);
+        const scopeIntent = classifyContextScopeIntent(request);
+        const eligibleRecentContextTargetContext =
+            scopeIntent === 'continuation' || scopeIntent === 'augmentation'
+                ? recentContextTargetContext
+                : '[] (no eligible prior scope for this request)';
         const buildPlannerRequestPayload = (
             mode: ChatPlannerExecutionMode,
             contextTier: PlannerContextTier
@@ -1793,6 +2060,7 @@ export const createChatPlanner = ({
                 requestSummary,
                 request,
                 contextTier,
+                recentContextTargetContext: eligibleRecentContextTargetContext,
             });
             return {
                 messages,
@@ -1800,6 +2068,9 @@ export const createChatPlanner = ({
                 maxOutputTokens: plannerOutputTokenBudget,
                 reasoningEffort: plannerReasoningEffort,
                 ...(safetyIdentifier !== undefined && { safetyIdentifier }),
+                ...(invocationContext?.signal !== undefined && {
+                    signal: invocationContext.signal,
+                }),
                 ...(mode === 'structured' && {
                     compatibilityMessages: () =>
                         buildPlannerMessages({
@@ -1809,6 +2080,8 @@ export const createChatPlanner = ({
                             requestSummary,
                             request,
                             contextTier,
+                            recentContextTargetContext:
+                                eligibleRecentContextTargetContext,
                         }),
                 }),
             };
@@ -1970,7 +2243,7 @@ export const createChatPlanner = ({
             const expandedCandidate = parsePlannerCandidateFromTextJson(
                 expandedResponse.text
             );
-            const expandedNormalization = normalizePlan(
+            const expandedNormalization = normalizePlanForRequest(
                 request,
                 expandedCandidate
             );
@@ -2151,7 +2424,7 @@ export const createChatPlanner = ({
                     structuredResponse.model || defaultModel,
                     structuredResponse.usage
                 );
-                const normalization = normalizePlan(
+                const normalization = normalizePlanForRequest(
                     request,
                     structuredResponse.decision
                 );
@@ -2199,7 +2472,7 @@ export const createChatPlanner = ({
             const parsed = parsePlannerCandidateFromTextJson(
                 plannerResponse.text
             );
-            const normalization = normalizePlan(request, parsed);
+            const normalization = normalizePlanForRequest(request, parsed);
             logPlannerOutputIngestion({
                 normalization,
                 mode: 'text_json',
@@ -2315,7 +2588,10 @@ export const createChatPlanner = ({
                     const parsed = parsePlannerCandidateFromTextJson(
                         textJsonResponse.text
                     );
-                    const normalization = normalizePlan(request, parsed);
+                    const normalization = normalizePlanForRequest(
+                        request,
+                        parsed
+                    );
                     logPlannerOutputIngestion({
                         normalization,
                         mode: 'text_json',
