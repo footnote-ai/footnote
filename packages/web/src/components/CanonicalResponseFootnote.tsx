@@ -192,19 +192,23 @@ const formatArtifactState = (state: ResponseFootnoteArtifactState): string => {
         case 'stale':
             return 'Stored artifact may be stale';
         case 'unavailable':
-            return 'Unavailable on web';
+            return 'Unavailable for this response';
     }
 };
 
 const ActionStatus = ({
     state,
     reason,
+    unavailableLabel,
 }: {
     state: ResponseFootnoteArtifactState;
     reason?: string;
+    unavailableLabel?: string;
 }): JSX.Element => (
     <span className="canonical-response-footnote__action-status">
-        {formatArtifactState(state)}
+        {state === 'unavailable' && unavailableLabel
+            ? unavailableLabel
+            : formatArtifactState(state)}
         {reason && <span className="sr-only">{reason}</span>}
     </span>
 );
@@ -357,7 +361,11 @@ const ActionLink = ({
             >
                 {label}
                 {state !== 'available' && (
-                    <ActionStatus state={state} reason={reason} />
+                    <ActionStatus
+                        state={state}
+                        reason={reason}
+                        unavailableLabel="Unavailable for this response"
+                    />
                 )}
             </a>
         );
@@ -370,7 +378,15 @@ const ActionLink = ({
             title={reason}
         >
             {label}
-            <ActionStatus state={state} reason={reason} />
+            <ActionStatus
+                state={state}
+                reason={reason}
+                unavailableLabel={
+                    label === 'Report'
+                        ? 'Unavailable on web'
+                        : 'Unavailable for this response'
+                }
+            />
         </button>
     );
 };
@@ -488,17 +504,19 @@ const CanonicalResponseFootnote = ({
             <div className="canonical-response-footnote__disclosures">
                 <SourceDetails projection={projection} />
                 <ControlsDetails projection={projection} />
-                <ActionLink
-                    label="Trace"
-                    state={projection.actions.trace.state}
-                    reason={projection.actions.trace.reason}
-                    href={traceHref}
-                />
-                <ActionLink
-                    label="Report"
-                    state={projection.actions.report.state}
-                    reason={projection.actions.report.reason}
-                />
+                <div className="canonical-response-footnote__actions">
+                    <ActionLink
+                        label="Trace"
+                        state={projection.actions.trace.state}
+                        reason={projection.actions.trace.reason}
+                        href={traceHref}
+                    />
+                    <ActionLink
+                        label="Report"
+                        state={projection.actions.report.state}
+                        reason={projection.actions.report.reason}
+                    />
+                </div>
             </div>
             <div className="canonical-response-footnote__details-secondary">
                 <DetailsDisclosure projection={projection} />

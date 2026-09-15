@@ -75,6 +75,19 @@ test('rendered complete fixture keeps wheel filled levels equal to final bars', 
     assert.match(markup, /<summary>Controls<\/summary>/);
 });
 
+test('rendered final score of one fills exactly one wheel level and bar', () => {
+    const complete = toFootnote(fixture.complete);
+    const boundary: ResponseFootnote = {
+        ...complete,
+        trace_target: { ...complete.trace_target, tightness: 1 },
+        trace_final: { ...complete.trace_final, tightness: 1 },
+    };
+    const markup = render(boundary, 'available', 'unavailable');
+
+    assert.equal(axisPathCount(markup, 'tightness'), 1);
+    assert.equal(axisFilledBarCount(markup, 'tightness'), 1);
+});
+
 test('rendered partial fixture keeps missing and target-only axes unavailable', () => {
     const markup = render(
         toFootnote(fixture.partial),
@@ -117,6 +130,25 @@ test('rendered live fixture keeps unknown Trace link honest and Report disabled'
     assert.match(markup, /href="\/traces\/response-footnote-fixture-complete"/);
     assert.match(markup, /Availability unconfirmed/);
     assert.match(markup, /Unavailable on web/);
+});
+
+test('rendered citations link only safe http(s) URLs and retain unsafe text', () => {
+    const complete = toFootnote(fixture.complete);
+    const unsafe: ResponseFootnote = {
+        ...complete,
+        citations: [
+            { title: 'Safe HTTP', url: 'https://example.com/safe' },
+            { title: 'JavaScript citation', url: 'javascript:alert(1)' },
+            { title: 'Data citation', url: 'data:text/plain,unsafe' },
+        ],
+    };
+    const markup = render(unsafe, 'available', 'unavailable');
+
+    assert.match(markup, /href="https:\/\/example\.com\/safe"/);
+    assert.doesNotMatch(markup, /href="javascript:/);
+    assert.doesNotMatch(markup, /href="data:/);
+    assert.match(markup, /JavaScript citation/);
+    assert.match(markup, /Data citation/);
 });
 
 test('rendered null metadata is unavailable and generated ids remain unique', () => {
