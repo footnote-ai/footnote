@@ -21,6 +21,11 @@ export type GroundingEvidenceSummary = {
     explanation: string;
 };
 
+type GroundingEvidenceMetadata = Pick<
+    ResponseMetadata,
+    'citations' | 'provenanceAssessment' | 'execution'
+>;
+
 export const WORKFLOW_RECEIPT_LABELS = {
     reviewedBeforeFinal: 'Reviewed before final answer',
     reviewedAndRevisedBeforeFinal: 'Reviewed and revised before final answer',
@@ -131,7 +136,7 @@ export const resolvePlannerFallbackReceipt = (
  *   inferring it from mode names or posture labels.
  */
 export const summarizeGroundingEvidence = (
-    metadata: ResponseMetadata
+    metadata: GroundingEvidenceMetadata
 ): GroundingEvidenceSummary => {
     if (metadata.citations.length > 0) {
         const sourceCount = metadata.citations.length;

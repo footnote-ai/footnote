@@ -149,8 +149,23 @@ export { PersonaExpressionStrengthSchema } from './schemas.js';
 export type {
     ResponseFootnote,
     ResponseFootnoteSection,
+    ResponseFootnoteActionAvailability,
+    ResponseFootnoteActionId,
+    ResponseFootnoteArtifactAvailability,
+    ResponseFootnoteArtifactState,
+    ResponseFootnoteControlsSummary,
+    ResponseFootnoteLicenseSummary,
+    ResponseFootnoteProjectionInput,
+    ResponseFootnoteRenderProjection,
+    ResponseFootnoteSafetySummary,
+    ResponseFootnoteSourcesSummary,
+    ResponseFootnoteTraceAxis,
+    ResponseFootnoteTraceAxisState,
 } from './responseFootnote.js';
-export { RESPONSE_FOOTNOTE_SECTIONS } from './responseFootnote.js';
+export {
+    RESPONSE_FOOTNOTE_SECTIONS,
+    projectResponseFootnote,
+} from './responseFootnote.js';
 export {
     WORKFLOW_STEP_STATUSES,
     WORKFLOW_STEP_KINDS,
