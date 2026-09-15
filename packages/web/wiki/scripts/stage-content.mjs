@@ -392,10 +392,10 @@ const main = async () => {
         ].join('\n'),
         'utf8'
     );
-    const sourceRevision = await readVerifiedSourceRevision(
-        repositoryRoot,
-        allFiles
-    );
+    const sourceRevision = await readVerifiedSourceRevision(repositoryRoot, [
+        ...sourceFiles,
+        ...sourceDirectories,
+    ]);
     await writeMachineReadableFiles({
         stagedRoot: sourceRoot,
         outputRoot: machineReadableOutputRoot,

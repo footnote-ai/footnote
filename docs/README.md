@@ -12,9 +12,11 @@ For machine clients, the same build publishes an [`llms.txt`](https://ai.jordanm
 discovery index and an [`llms-full.txt`](https://ai.jordanmakes.dev/wiki/llms-full.txt)
 Markdown projection. These files are generated from the staged projection of
 the canonical files below; they do not introduce another documentation source.
-The index and each document retain public route, canonical source, lifecycle,
-and freshness metadata. An exact source revision is included only when the
-build can verify it; otherwise the projection says that it is unavailable.
+The index and each document retain public route, lifecycle, and freshness
+metadata. Canonical source metadata is included when a document has a
+repository source; the generated wiki landing page marks it unavailable. An
+exact source revision is included only when the build can verify it; otherwise
+the projection says that it is unavailable.
 The existing Starlight build also publishes its sitemap at
 `https://ai.jordanmakes.dev/wiki/sitemap-index.xml`.
 

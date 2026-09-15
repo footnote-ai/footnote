@@ -234,3 +234,41 @@ test('stages canonical sources with route, lifecycle, and edit-link metadata', a
         );
     }
 });
+
+test('marks the revision unavailable when a tracked Markdown source is deleted', async () => {
+    const sourcePath = path.join(
+        repositoryRoot,
+        'docs',
+        'architecture',
+        'embedding.md'
+    );
+    const source = await fs.readFile(sourcePath, 'utf8');
+
+    try {
+        await fs.rm(sourcePath);
+        await execFileAsync(execPath, [stageScript], { cwd: packageRoot });
+
+        const machineFull = await fs.readFile(
+            path.join(machineReadableRoot, 'llms-full.txt'),
+            'utf8'
+        );
+        assert.match(
+            machineFull,
+            /source revision: unavailable for this build/u
+        );
+    } finally {
+        await fs.writeFile(sourcePath, source, 'utf8');
+        await fs.rm(generatedRoot, { recursive: true, force: true });
+        await fs.rm(path.join(packageRoot, 'wiki', 'public', 'assets'), {
+            recursive: true,
+            force: true,
+        });
+        await Promise.all(
+            ['llms.txt', 'llms-full.txt'].map((fileName) =>
+                fs.rm(path.join(machineReadableRoot, fileName), {
+                    force: true,
+                })
+            )
+        );
+    }
+});
