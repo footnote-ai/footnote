@@ -276,6 +276,8 @@ type CreateChatPlannerOptions = {
     allowTextJsonCompatibilityFallback?: boolean;
     /** Optional provider-specific planner reasoning control. */
     plannerReasoningEffort?: ChatGenerationPlan['reasoningEffort'];
+    /** Sampling temperature for the planner's routing decision. */
+    plannerTemperature?: number;
     defaultModel?: string;
     structuredExecutionTimeoutMs?: number;
     availableCapabilityProfiles?: ChatPlannerCapabilityProfileOption[];
@@ -345,6 +347,8 @@ type ChatPlannerExecutionRequest = {
     messages: RuntimeMessage[];
     model: string;
     maxOutputTokens: number;
+    /** Planner routing is a control decision, so use deterministic sampling. */
+    temperature?: number;
     reasoningEffort?: ChatGenerationPlan['reasoningEffort'];
     verbosity?: ChatGenerationPlan['verbosity'];
     safetyIdentifier?: string;
@@ -1848,6 +1852,7 @@ export const createChatPlanner = ({
     executePlannerStructured,
     allowTextJsonCompatibilityFallback = false,
     plannerReasoningEffort = 'low',
+    plannerTemperature = 0,
     defaultModel = runtimeConfig.openai.defaultModel,
     structuredExecutionTimeoutMs = runtimeConfig.openai.requestTimeoutMs,
     availableCapabilityProfiles = [],
@@ -2066,6 +2071,7 @@ export const createChatPlanner = ({
                 messages,
                 model: defaultModel,
                 maxOutputTokens: plannerOutputTokenBudget,
+                temperature: plannerTemperature,
                 reasoningEffort: plannerReasoningEffort,
                 ...(safetyIdentifier !== undefined && { safetyIdentifier }),
                 ...(invocationContext?.signal !== undefined && {

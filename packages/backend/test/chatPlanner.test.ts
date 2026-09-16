@@ -96,9 +96,11 @@ const createPlanner = (
 
 test('chat planner uses the shared workflow output default', async () => {
     let observedMaxOutputTokens: number | undefined;
+    let observedTemperature: number | undefined;
     const planner = createChatPlanner({
-        executePlanner: async ({ maxOutputTokens }) => {
+        executePlanner: async ({ maxOutputTokens, temperature }) => {
             observedMaxOutputTokens = maxOutputTokens;
+            observedTemperature = temperature;
             return {
                 text: JSON.stringify({
                     action: 'message',
@@ -126,6 +128,7 @@ test('chat planner uses the shared workflow output default', async () => {
 
     assert.equal(DEFAULT_CHAT_PLANNER_MAX_OUTPUT_TOKENS, 2_000);
     assert.equal(observedMaxOutputTokens, 2_000);
+    assert.equal(observedTemperature, 0);
 });
 
 test('chat planner receives bounded recent context scope as advisory follow-up evidence', async () => {

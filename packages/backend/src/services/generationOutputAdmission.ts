@@ -27,6 +27,20 @@ const CITATION_ONLY_TOKEN_PATTERN =
 const REPEATED_SOURCE_EVIDENCE_MARKER_PATTERN =
     /(?:^|\n)\s*TRUSTGRAPH SOURCE EVIDENCE\b/giu;
 
+const NON_ANSWER_ACKNOWLEDGEMENT_PATTERN =
+    /^(?:lgtm|ok(?:ay)?|looks good|done|noted|thanks)[.!]?$/iu;
+
+const DISCLAIMING_NOTE_ONLY_PATTERN =
+    /^[\s\p{P}\p{S}\p{M}\p{Default_Ignorable_Code_Point}]*\s*(?:note|disclaimer|remark)\s*:/iu;
+
+const META_ONLY_OFFER_PATTERN =
+    /^(?:skills|capabilities|analysis|plan)\s*:\s*(?:\r?\n\s*[-*]\s+[^\r\n]+){1,8}\s*(?:\r?\n\s*)?(?:i can|if you want|let me know|would you like)\b[\s\S]*$/iu;
+
+const STATUS_ONLY_RESPONSE_PATTERN =
+    /^produced\s+with\s+(?:partial|limited)\s+support\s+from\s+(?:a\s+)?footnote\s+engine[.!]?$/iu;
+
+const PUNCTUATED_NUMERIC_FRAGMENT_PATTERN = /^[:;]\s*\d+(?:[.,]\d+)?\s*$/u;
+
 const hasOnlyFormatting = (text: string): boolean =>
     /^[\s\p{P}\p{S}\p{M}\p{Default_Ignorable_Code_Point}]*$/u.test(text);
 
@@ -38,6 +52,11 @@ const isStructurallyIncompleteText = (text: string): boolean => {
     const trimmed = text.trim();
     if (trimmed.length === 0) return true;
     if (hasOnlyFormatting(trimmed)) return true;
+    if (NON_ANSWER_ACKNOWLEDGEMENT_PATTERN.test(trimmed)) return true;
+    if (DISCLAIMING_NOTE_ONLY_PATTERN.test(trimmed)) return true;
+    if (META_ONLY_OFFER_PATTERN.test(trimmed)) return true;
+    if (STATUS_ONLY_RESPONSE_PATTERN.test(trimmed)) return true;
+    if (PUNCTUATED_NUMERIC_FRAGMENT_PATTERN.test(trimmed)) return true;
 
     // A revision that repeats multiple raw evidence blocks is an evidence
     // echo, not a user-facing answer. Reject it so the workflow can preserve
