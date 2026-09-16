@@ -7,8 +7,8 @@ injectWorkspacePackages: true
 overrides:
     body-parser: ^2.3.0
     'gray-matter>js-yaml': 3.15.2
-    '@types/react': 19.2.17
-    '@types/react-dom': 19.2.3
+    '@types/react': 19.3.0
+    '@types/react-dom': 19.3.0
     csstype: 3.2.3
     '@hono/node-server': ^1.19.15
     '@opentelemetry/core': ^2.10.0
@@ -42,14 +42,14 @@ allowBuilds:
     esbuild: true
     protobufjs: true
 catalog:
-    '@ai-sdk/provider-utils': ^4.0.38
+    '@ai-sdk/provider-utils': ^5.0.40
     '@discordjs/opus': ^0.10.0
     '@discordjs/voice': ^0.19.2
     '@eslint/js': ^10.0.1
-    '@marsidev/react-turnstile': ^1.5.3
-    '@openai/agents': ^0.11.8
+    '@marsidev/react-turnstile': ^1.6.1
+    '@openai/agents': ^0.18.0
     '@resvg/resvg-js': ^2.6.2
-    '@sapphire/shapeshift': ^4.0.0
+    '@sapphire/shapeshift': ^5.0.0
     '@swc/core': ^1.16.2
     '@swc/helpers': ^0.5.23
     '@types/better-sqlite3': ^7.6.13
@@ -58,16 +58,16 @@ catalog:
     '@types/js-yaml': ^4.0.9
     '@types/mime-types': ^3.0.1
     '@types/nodemailer': ^8.0.0
-    '@types/node': ^25.9.1
-    '@types/react': 19.2.17
-    '@types/react-dom': 19.2.3
+    '@types/node': ^26.5.1
+    '@types/react': 19.3.0
+    '@types/react-dom': 19.3.0
     '@types/ws': ^8.18.1
     '@typescript-eslint/eslint-plugin': ^8.70.0
     '@typescript-eslint/parser': ^8.70.0
-    '@vitejs/plugin-react': ^6.0.2
+    '@vitejs/plugin-react': ^6.1.1
     autoprefixer: ^10.5.6
     astro: ^7.3.2
-    better-sqlite3: ^12.10.0
+    better-sqlite3: ^13.0.3
     bufferutil: ^4.1.0
     body-parser: ^2.2.2
     cloudinary: ^2.11.0
@@ -76,7 +76,7 @@ catalog:
     cross-env: ^10.1.0
     csstype: 3.2.3
     date-fns: ^4.4.0
-    dependency-cruiser: ^17.4.3
+    dependency-cruiser: ^18.2.0
     discord.js: ^14.27.0
     dotenv: ^17.4.2
     esbuild: ^0.28.1
@@ -84,32 +84,32 @@ catalog:
     eslint-config-prettier: ^10.1.8
     eslint-plugin-react-hooks: ^7.1.1
     express: ^5.2.1
-    express-rate-limit: ^8.6.2
+    express-rate-limit: ^8.7.0
     globby: ^16.2.4
-    js-yaml: ^3.15.2
+    js-yaml: ^5.4.2
     jsonwebtoken: ^9.0.3
     mime-types: ^3.0.2
     neverthrow: ^8.2.0
     node-fetch: ^3.3.2
-    nodemailer: ^9.1.1
+    nodemailer: ^10.0.9
     only: ^0.0.2
-    openai: ^6.42.0
-    openid-client: ^6.8.4
+    openai: ^7.15.0
+    openid-client: ^6.8.8
     opusscript: ^0.1.1
     postcss: ^8.5.28
     prettier: 3.9.6
     prism-media: ^1.3.5
-    react: ^19.2.7
-    react-dom: ^19.2.7
+    react: ^19.3.0
+    react-dom: ^19.3.0
     react-markdown: ^10.1.0
-    react-router-dom: ^7.18.2
+    react-router-dom: ^7.18.3
     reindex: ^0.1.0
     remark-gfm: ^4.0.1
     rimraf: ^6.1.3
     tsx: ^4.23.13
     typescript: ^5.9.3
-    vite: ^8.0.16
+    vite: ^8.3.0
     winston: ^3.19.0
     winston-daily-rotate-file: ^5.0.0
     ws: ^8.21.3
-    zod: ^4.4.3
+    zod: ^4.6.4
