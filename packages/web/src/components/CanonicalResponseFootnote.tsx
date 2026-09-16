@@ -84,6 +84,87 @@ const axisScore = (axis: ResponseFootnoteTraceAxis): number | null =>
 const axisColorClass = (index: number): string =>
     `canonical-response-footnote__axis--${WHEEL_AXIS_CLASS_NAMES[index]}`;
 
+type SummaryIconName =
+    | 'evidence'
+    | 'safety'
+    | 'licensing'
+    | 'sources'
+    | 'controls'
+    | 'trace'
+    | 'report';
+
+const SummaryIcon = ({ name }: { name: SummaryIconName }): JSX.Element => {
+    if (name === 'evidence' || name === 'trace') {
+        return (
+            <svg
+                className="canonical-response-footnote__icon"
+                viewBox="0 0 32 32"
+                aria-hidden="true"
+            >
+                <path d="M8 3h11l6 6v20H8z" />
+                <path d="M19 3v7h6M12 17h9M12 22h9" />
+            </svg>
+        );
+    }
+    if (name === 'safety') {
+        return (
+            <svg
+                className="canonical-response-footnote__icon"
+                viewBox="0 0 32 32"
+                aria-hidden="true"
+            >
+                <path d="M16 3 27 7v8c0 7-4.5 11.5-11 14C9.5 26.5 5 22 5 15V7z" />
+                <path d="m10.5 15.5 3.5 3.5 7-8" />
+            </svg>
+        );
+    }
+    if (name === 'licensing') {
+        return (
+            <svg
+                className="canonical-response-footnote__icon"
+                viewBox="0 0 32 32"
+                aria-hidden="true"
+            >
+                <path d="M16 5v21M10 29h12M7 9h18M3 9l5 13H3zM29 9l-5 13h5zM11 5a5 5 0 0 1 10 0" />
+            </svg>
+        );
+    }
+    if (name === 'sources') {
+        return (
+            <svg
+                className="canonical-response-footnote__icon"
+                viewBox="0 0 32 32"
+                aria-hidden="true"
+            >
+                <path d="M4 7c4-3 8-3 12 0v21c-4-3-8-3-12 0zM28 7c-4-3-8-3-12 0v21c4-3 8-3 12 0z" />
+            </svg>
+        );
+    }
+    if (name === 'controls') {
+        return (
+            <svg
+                className="canonical-response-footnote__icon"
+                viewBox="0 0 32 32"
+                aria-hidden="true"
+            >
+                <path d="M4 8h24M4 16h24M4 24h24M10 5v6M22 13v6M14 21v6" />
+                <circle cx="10" cy="8" r="2.5" />
+                <circle cx="22" cy="16" r="2.5" />
+                <circle cx="14" cy="24" r="2.5" />
+            </svg>
+        );
+    }
+    return (
+        <svg
+            className="canonical-response-footnote__icon"
+            viewBox="0 0 32 32"
+            aria-hidden="true"
+        >
+            <path d="M7 28V5M7 6c7-5 12 4 19-1v15c-7 5-12-4-19 1" />
+        </svg>
+    );
+};
+
 const toSafeExternalUrl = (value: string): string | null => {
     try {
         const parsed = new URL(value);
@@ -403,6 +484,7 @@ const DetailsDisclosure = ({
 };
 
 const ActionLink = ({
+    icon,
     label,
     state,
     reason,
@@ -412,6 +494,7 @@ const ActionLink = ({
     state: ResponseFootnoteArtifactState;
     reason?: string;
     href?: string;
+    icon: SummaryIconName;
 }): JSX.Element => {
     if (href && state !== 'unavailable') {
         return (
@@ -420,7 +503,8 @@ const ActionLink = ({
                 href={href}
                 title={reason}
             >
-                {label}
+                <SummaryIcon name={icon} />
+                <span>{label}</span>
                 {state !== 'available' && (
                     <ActionStatus
                         state={state}
@@ -438,7 +522,8 @@ const ActionLink = ({
             disabled
             title={reason}
         >
-            {label}
+            <SummaryIcon name={icon} />
+            <span>{label}</span>
             <ActionStatus
                 state={state}
                 reason={reason}
@@ -459,7 +544,9 @@ const AxisRow = ({
 }): JSX.Element => {
     const final = axis.final;
     return (
-        <div className="canonical-response-footnote__axis-row">
+        <div
+            className={`canonical-response-footnote__axis-row ${axisColorClass(WHEEL_AXIS_CLASS_NAMES.indexOf(axis.key))}`}
+        >
             <div className="canonical-response-footnote__axis-copy">
                 <strong>{axis.label}</strong>
                 <span>{axis.description}</span>
@@ -568,6 +655,16 @@ const CanonicalResponseFootnote = ({
             </div>
 
             <div className="canonical-response-footnote__trace">
+                <svg
+                    className="canonical-response-footnote__connector"
+                    viewBox="0 0 100 30"
+                    preserveAspectRatio="none"
+                    aria-hidden="true"
+                >
+                    <path d="M5 17 53 3 73 17" />
+                    <circle cx="5" cy="17" r="2.5" />
+                    <circle cx="73" cy="17" r="2.5" />
+                </svg>
                 {renderWheel(
                     projection.trace.axes,
                     traceTitleId,
@@ -585,12 +682,14 @@ const CanonicalResponseFootnote = ({
                 <ControlsDetails projection={projection} />
                 <div className="canonical-response-footnote__actions">
                     <ActionLink
+                        icon="trace"
                         label="Trace"
                         state={projection.actions.trace.state}
                         reason={projection.actions.trace.reason}
                         href={traceHref}
                     />
                     <ActionLink
+                        icon="report"
                         label="Report"
                         state={projection.actions.report.state}
                         reason={projection.actions.report.reason}
