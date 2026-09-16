@@ -125,6 +125,10 @@ test('rendered safety summary keeps sensitivity separate from divergent evaluato
 
     assert.match(markup, /Sensitivity: Low/);
     assert.match(markup, /Evaluator: enforce \/ block \/ Evaluator tier High/);
+    assert.match(
+        markup,
+        /<span>Evaluator<\/span><strong[^>]*>enforce \/ block \/ Evaluator tier High/
+    );
 });
 
 test('rendered safety summary marks a missing evaluator unavailable', () => {
