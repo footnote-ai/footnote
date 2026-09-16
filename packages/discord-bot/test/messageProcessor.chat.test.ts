@@ -481,7 +481,7 @@ test('prepareProvenanceCgiPayload falls back to buttons-only when trace-card gen
     assert.deepEqual(customIds, ['details:resp_123', 'report_issue:resp_123']);
 });
 
-test('sendPreparedProvenanceCgi retries native controls when attachment upload fails', async () => {
+test('sendPreparedProvenanceCgi delegates attachment delivery to ResponseHandler', async () => {
     const processor = createProcessor();
     const processorAccess = processor as unknown as ProcessorPrivateAccess;
     const originalSendMessage = ResponseHandler.prototype.sendMessage;
@@ -492,10 +492,9 @@ test('sendPreparedProvenanceCgi retries native controls when attachment upload f
         files: Array<{ filename: string; data: string | Buffer }> = []
     ) => {
         sentFiles.push(files.length);
-        if (files.length > 0) {
-            throw new Error('attachment upload failed');
-        }
-        return { id: 'sent-controls-only' } as never;
+        return {
+            id: files.length > 0 ? 'sent-with-card' : 'sent-controls-only',
+        } as never;
     }) as typeof ResponseHandler.prototype.sendMessage;
 
     try {
@@ -520,7 +519,7 @@ test('sendPreparedProvenanceCgi retries native controls when attachment upload f
         ResponseHandler.prototype.sendMessage = originalSendMessage;
     }
 
-    assert.deepEqual(sentFiles, [1, 0]);
+    assert.deepEqual(sentFiles, [1]);
 });
 
 test('executeChatAction routes react actions without falling back to message generation', async () => {

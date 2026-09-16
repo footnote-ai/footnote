@@ -42,7 +42,10 @@ For now, Controls describes the controls that shaped the response; it can grow
 alongside Footnote's steerability capabilities.
 
 TRACE renders the five shared axes (Tightness, Rationale, Attribution, Caution,
-Extent) from final values on a `1..5` scale. Target values remain distinct. A
+Extent) from final values on a `1..5` scale. The deterministic axis meanings
+and source-field mapping are version `v1`, exposed as
+`TRACE_TEMPERAMENT_MAPPING_VERSION`; bump that constant only when the canonical
+mapping changes. Target values remain distinct. A
 missing final axis is neutral and labeled unavailable; a target-only axis is
 partial, never inferred as a final value.
 
@@ -71,6 +74,12 @@ does not manufacture a prepared Trace identity.
 
 The footnote is a focused view of response metadata, not a replacement for the
 full response or trace.
+
+Malformed TRACE scores and malformed control records are rejected by the shared
+`ResponseMetadataSchema` before they reach `projectResponseFootnote` (for
+example, scores outside `1..5` and empty control arrays). The projection keeps
+known partial/legacy shapes unavailable or partial without adding a second
+runtime validator or inventing an `invalid` presentation state.
 
 ## Related material
 

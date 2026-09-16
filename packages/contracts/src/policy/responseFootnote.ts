@@ -322,11 +322,14 @@ const projectTraceAxes = (
     const recordedCount = axes.filter(
         (axis) => axis.state === 'recorded'
     ).length;
+    const presentCount = axes.filter(
+        (axis) => axis.state !== 'unavailable'
+    ).length;
 
     return {
         axes,
         state:
-            metadata === null || recordedCount === 0
+            metadata === null || presentCount === 0
                 ? 'unavailable'
                 : recordedCount === axes.length
                   ? 'complete'

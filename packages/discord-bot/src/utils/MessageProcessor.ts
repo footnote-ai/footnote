@@ -1273,37 +1273,13 @@ export class MessageProcessor {
                 provenanceReplyAnchor.channel,
                 originalMessage.author
             );
-            try {
-                await provenanceHandler.sendMessage(
-                    '',
-                    preparedPayload.files,
-                    false,
-                    false,
-                    preparedPayload.components
-                );
-            } catch (error) {
-                if (preparedPayload.files.length === 0) {
-                    throw error;
-                }
-
-                logger.warn(
-                    `Failed to attach provenance trace-card for response ${responseId}; retrying controls only.`,
-                    {
-                        responseId,
-                        error:
-                            error instanceof Error
-                                ? error.message
-                                : String(error),
-                    }
-                );
-                await provenanceHandler.sendMessage(
-                    '',
-                    [],
-                    false,
-                    false,
-                    preparedPayload.components
-                );
-            }
+            await provenanceHandler.sendMessage(
+                '',
+                preparedPayload.files,
+                false,
+                false,
+                preparedPayload.components
+            );
         } catch (error) {
             logger.error(
                 `Failed to send provenance CGI follow-up for response ${responseId}: ${

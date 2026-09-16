@@ -265,7 +265,9 @@ const ControlsDetails = ({
     <details className="canonical-response-footnote__details">
         <summary>Controls</summary>
         <div className="canonical-response-footnote__details-body">
-            {projection.summary.controls.value?.controls.length ? (
+            {projection.summary.controls.state === 'unavailable' ? (
+                <p>Controls unavailable.</p>
+            ) : projection.summary.controls.value?.controls.length ? (
                 <ul>
                     {projection.summary.controls.value.controls.map(
                         (control) => (
@@ -314,12 +316,18 @@ const DetailsDisclosure = ({
             <summary>Details</summary>
             <div className="canonical-response-footnote__details-body">
                 <h4>Workflow</h4>
-                {workflowItems.map((item) => (
-                    <p key={item}>{item}</p>
-                ))}
-                {executionSummary && <p>{executionSummary}</p>}
-                {!workflowItems.length && !executionSummary && (
+                {!projection.facts?.workflow ? (
                     <p>Workflow details unavailable.</p>
+                ) : (
+                    <>
+                        {workflowItems.map((item) => (
+                            <p key={item}>{item}</p>
+                        ))}
+                        {executionSummary && <p>{executionSummary}</p>}
+                        {!workflowItems.length && !executionSummary && (
+                            <p>Workflow details unavailable.</p>
+                        )}
+                    </>
                 )}
                 <h4>Provenance</h4>
                 {projection.facts ? (

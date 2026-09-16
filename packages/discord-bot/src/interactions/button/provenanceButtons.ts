@@ -196,8 +196,9 @@ function formatSummarySection(
         `- License Context: \`${formatMarkdownValue(payload.licenseContext)}\``
     );
     if (payload.steerabilityControls) {
+        const controls = payload.steerabilityControls.controls;
         lines.push(
-            `- Recorded Controls: \`${formatMarkdownValue(payload.steerabilityControls.controls.map((control) => `${control.controlId}=${control.value} (${control.source}; ${control.mattered ? 'mattered' : 'did not matter'})`).join('; '), 420)}\``
+            `- Recorded Controls: \`${formatMarkdownValue(controls.length > 0 ? controls.map((control) => `${control.controlId}=${control.value} (${control.source}; ${control.mattered ? 'mattered' : 'did not matter'})`).join('; ') : 'none recorded', 420)}\``
         );
     } else {
         lines.push('- Recorded Controls: unavailable');

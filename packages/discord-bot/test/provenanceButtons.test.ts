@@ -38,7 +38,6 @@ test('details action renders markdown sections with execution table and trace vi
     const originalGetTrace = botApi.getTrace;
     const deferReplyPayloads: unknown[] = [];
     const editReplyPayloads: unknown[] = [];
-
     botApi.getTrace = (async () => ({
         status: 200,
         data: {

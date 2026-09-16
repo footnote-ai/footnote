@@ -138,8 +138,28 @@ export class ResponseHandler {
                     `Sending message to channel ${this.channel.id}(${this.channel.type} type) with options: ${JSON.stringify(messageOptions)}`
                 );
 
-                // Send the message
-                messages.push(await this.channel.send(messageOptions));
+                // An optional final-chunk attachment must never make the
+                // answer undeliverable. Retry only that same chunk without
+                // files, preserving its content, components, and reply.
+                try {
+                    messages.push(await this.channel.send(messageOptions));
+                } catch (error) {
+                    if (!isLastChunk || !chunkHasFiles) {
+                        throw error;
+                    }
+                    logger.warn(
+                        'Failed to send optional Discord attachments; retrying the same chunk without files.',
+                        {
+                            channelId: this.channel.id,
+                            error:
+                                error instanceof Error
+                                    ? error.message
+                                    : String(error),
+                        }
+                    );
+                    delete messageOptions.files;
+                    messages.push(await this.channel.send(messageOptions));
+                }
             }
 
             return messages.length === 1 ? messages[0] : messages;

@@ -123,6 +123,8 @@ test('rendered partial fixture keeps missing and target-only axes unavailable', 
     assert.match(markup, /Caution unavailable/);
     assert.match(markup, /Target 2 · Final unavailable/);
     assert.match(markup, /canonical-response-footnote__wheel-missing/);
+    assert.match(markup, /Workflow details unavailable/);
+    assert.match(markup, /Controls unavailable/);
 });
 
 test('rendered safety summary keeps sensitivity separate from divergent evaluator facts', () => {

@@ -13,6 +13,7 @@ import {
     projectResponseFootnote,
     type ResponseFootnoteArtifactAvailability,
 } from '../src/policy/responseFootnote.js';
+import { TRACE_TEMPERAMENT_MAPPING_VERSION } from '../src/policy/types.js';
 import fixtures from './fixtures/response-footnote.json' with { type: 'json' };
 
 const toFootnote = (value: unknown): ResponseFootnote =>
@@ -238,6 +239,17 @@ test('keeps final values at the score boundaries and target-only axes partial', 
     assert.equal(targetOnly?.target, 2);
     assert.equal(targetOnly?.final, null);
     assert.equal(targetOnly?.state, 'partial');
+    assert.equal(
+        projectResponseFootnote({
+            metadata: toFootnote(fixtures.partial),
+            artifacts: { trace: 'unknown', report: 'unavailable' },
+        }).trace.state,
+        'partial'
+    );
+});
+
+test('exposes the canonical TRACE mapping version', () => {
+    assert.equal(TRACE_TEMPERAMENT_MAPPING_VERSION, 'v1');
 });
 
 test('projection remains serializable through a JSON round trip', () => {

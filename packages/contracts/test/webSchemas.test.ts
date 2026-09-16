@@ -1227,6 +1227,18 @@ test('ResponseMetadataSchema rejects steerability controls with unknown enums', 
     assert.equal(parsed.success, false);
 });
 
+test('ResponseMetadataSchema rejects empty steerability controls before projection', () => {
+    const parsed = ResponseMetadataSchema.safeParse({
+        ...baseMetadata,
+        steerabilityControls: {
+            version: 'v1',
+            controls: [],
+        },
+    });
+
+    assert.equal(parsed.success, false);
+});
+
 test('ResponseMetadataSchema rejects workflow lineage with duplicate step ids', () => {
     const now = new Date().toISOString();
     const payload = createValidWorkflowMetadataPayload(now);
