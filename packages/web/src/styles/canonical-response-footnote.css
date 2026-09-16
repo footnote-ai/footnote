@@ -62,6 +62,17 @@
     border-right: 0;
 }
 
+.canonical-response-footnote__summary-safety {
+    gap: 0.7rem;
+}
+
+.canonical-response-footnote__summary-safety
+    > .canonical-response-footnote__summary-item {
+    padding: 0;
+    border: 0;
+    background: transparent;
+}
+
 .canonical-response-footnote__summary-item > span {
     color: var(--canonical-footnote-muted);
     font-family: var(--fn-font-mono);

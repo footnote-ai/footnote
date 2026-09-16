@@ -527,27 +527,31 @@ const CanonicalResponseFootnote = ({
                     }
                     state={projection.summary.sources.state}
                 />
-                <SummaryItem
-                    label={RESPONSE_FOOTNOTE_SAFETY_LABELS.sensitivity}
-                    value={
-                        projection.summary.safety.sensitivityTier ??
-                        'Unavailable'
-                    }
-                    state={projection.summary.safety.state}
-                />
-                <SummaryItem
-                    label={RESPONSE_FOOTNOTE_SAFETY_LABELS.evaluator}
-                    value={
-                        projection.summary.safety.evaluator.state === 'recorded'
-                            ? `${projection.summary.safety.evaluator.authority ?? 'Unavailable'} / ${projection.summary.safety.evaluator.action ?? 'Unavailable'} / ${RESPONSE_FOOTNOTE_SAFETY_LABELS.evaluatorTier} ${projection.summary.safety.evaluator.safetyTier ?? 'Unavailable'}`
-                            : 'Unavailable'
-                    }
-                    state={
-                        projection.summary.safety.evaluator.state === 'recorded'
-                            ? 'recorded'
-                            : 'unavailable'
-                    }
-                />
+                <div className="canonical-response-footnote__summary-item canonical-response-footnote__summary-safety">
+                    <SummaryItem
+                        label={RESPONSE_FOOTNOTE_SAFETY_LABELS.sensitivity}
+                        value={
+                            projection.summary.safety.sensitivityTier ??
+                            'Unavailable'
+                        }
+                        state={projection.summary.safety.state}
+                    />
+                    <SummaryItem
+                        label={RESPONSE_FOOTNOTE_SAFETY_LABELS.evaluator}
+                        value={
+                            projection.summary.safety.evaluator.state ===
+                            'recorded'
+                                ? `${projection.summary.safety.evaluator.authority ?? 'Unavailable'} / ${projection.summary.safety.evaluator.action ?? 'Unavailable'} / ${RESPONSE_FOOTNOTE_SAFETY_LABELS.evaluatorTier} ${projection.summary.safety.evaluator.safetyTier ?? 'Unavailable'}`
+                                : 'Unavailable'
+                        }
+                        state={
+                            projection.summary.safety.evaluator.state ===
+                            'recorded'
+                                ? 'recorded'
+                                : 'unavailable'
+                        }
+                    />
+                </div>
                 <SummaryItem
                     label="Licensing"
                     value={projection.summary.license.value ?? 'Unavailable'}

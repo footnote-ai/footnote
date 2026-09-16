@@ -73,6 +73,15 @@ test('rendered complete fixture keeps wheel filled levels equal to final bars', 
     assert.match(markup, /TRACE describes posture, not answer quality/);
     assert.match(markup, /<summary>Sources<\/summary>/);
     assert.match(markup, /<summary>Controls<\/summary>/);
+    assert.match(
+        markup,
+        /canonical-response-footnote__summary-safety[\s\S]*Sensitivity[\s\S]*Evaluator/
+    );
+    assert.equal(
+        count(markup, /canonical-response-footnote__summary-item/g),
+        5,
+        'three conceptual summary regions keep safety records nested instead of orphaning Licensing'
+    );
     assert.match(markup, /<h4>Workflow<\/h4>/);
     assert.match(markup, /Classification: Retrieved/);
     assert.match(
