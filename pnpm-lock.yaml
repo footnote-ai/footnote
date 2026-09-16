@@ -80,8 +80,8 @@ catalogs:
       specifier: ^4.1.0
       version: 4.1.0
     cloudinary:
-      specifier: ^2.10.0
-      version: 2.10.0
+      specifier: ^2.11.0
+      version: 2.11.0
     concurrently:
       specifier: ^10.0.5
       version: 10.0.5
@@ -465,7 +465,7 @@ importers:
         version: 4.1.0
       cloudinary:
         specifier: 'catalog:'
-        version: 2.10.0
+        version: 2.11.0
       date-fns:
         specifier: 'catalog:'
         version: 4.4.0
@@ -2875,8 +2875,8 @@ packages:
     resolution: {integrity: sha512-3Pe/CF1Nn94hyhIYpjtiLhdCoEoz0DqQ+988E9gmeEdQZlojxnOb74wctFyuwWQHzqyf9X7C7MG8juUpqBJT8w==}
     engines: {node: '>=0.8'}
 
-  cloudinary@2.10.0:
-    resolution: {integrity: sha512-sY09kYg7wprkndAOjZBAYqFZqwL+SxnEGcAvksOvFA+5upnFn949UjkEkHKNSwkBtW/xRDd0p6NgbSXZcxkI3w==}
+  cloudinary@2.11.0:
+    resolution: {integrity: sha512-o2pAkDDqrzPFE/mn9GCfFjBIGQmPs++Ts6rtkFl4vY528DNHiMovKWjH16HBjeGa9iwI7eAad24aWN2emT0aww==}
     engines: {node: '>=9'}
 
   clsx@2.1.1:
@@ -8028,7 +8028,7 @@ snapshots:
 
   clone@2.1.2: {}
 
-  cloudinary@2.10.0:
+  cloudinary@2.11.0:
     dependencies:
       lodash: 4.18.1
 
