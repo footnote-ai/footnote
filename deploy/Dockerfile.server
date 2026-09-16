@@ -36,6 +36,10 @@ COPY packages/api-client/src/ packages/api-client/src/
 COPY packages/backend/src/ packages/backend/src/
 COPY packages/config-spec/src/ packages/config-spec/src/
 COPY packages/contracts/src/ packages/contracts/src/
+# The web package's render tests use the shared semantic fixture during the
+# build-time TypeScript check. Keep that fixture available without copying the
+# rest of the contracts test suite into the runtime image.
+COPY packages/contracts/test/fixtures/ packages/contracts/test/fixtures/
 COPY packages/discord-bot/ packages/discord-bot/
 COPY packages/prompts/src/ packages/prompts/src/
 COPY packages/web/ packages/web/
