@@ -1388,6 +1388,58 @@ test('default VoltAgent executor maps structured output to a validated JSON resu
     assert.equal(jsonResult.text, '{"verdict":"clear","feedback":""}');
 });
 
+test('default VoltAgent executor uses the configured Ollama base URL', async () => {
+    let configuredModel: unknown;
+    const executor = createDefaultVoltAgentExecutor({
+        model: 'ollama/qwen3.8:27b-ud-q3_k_xl-8k',
+        ollama: {
+            provider: 'ollama',
+            baseUrl: 'http://host.docker.internal:11434',
+            localInferenceEnabled: true,
+        },
+        agentFactory: ({ model }) => {
+            configuredModel = model;
+            return {
+                async generateText(
+                    ..._args: Parameters<Agent['generateText']>
+                ): Promise<AgentGenerateTextResult> {
+                    return {
+                        text: 'local response',
+                        output: undefined,
+                        finishReason: 'stop',
+                        usage: {
+                            inputTokens: 0,
+                            inputTokenDetails: {
+                                noCacheTokens: 0,
+                                cacheReadTokens: 0,
+                                cacheWriteTokens: 0,
+                            },
+                            outputTokens: 0,
+                            outputTokenDetails: { reasoningTokens: 0 },
+                            totalTokens: 0,
+                        },
+                        response: {
+                            modelId: 'qwen3.8:27b-ud-q3_k_xl-8k',
+                        },
+                    } as unknown as AgentGenerateTextResult;
+                },
+            };
+        },
+    });
+
+    await executor.generateText(
+        [{ role: 'user', content: 'Reply briefly.' }],
+        {}
+    );
+
+    const languageModel = configuredModel as {
+        modelId?: string;
+        provider?: string;
+    };
+    assert.equal(languageModel.modelId, 'qwen3.8:27b-ud-q3_k_xl-8k');
+    assert.match(languageModel.provider ?? '', /ollama/);
+});
+
 test('default VoltAgent executor maps usage from the installed AI SDK token fields', async () => {
     const fakeAgent = {
         generateText: async (

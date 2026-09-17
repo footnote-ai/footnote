@@ -327,7 +327,7 @@ const isLocalOllamaHost = (hostname: string): boolean =>
     hostname === '::1' ||
     hostname === 'host.docker.internal';
 
-const normalizeOllamaCloudBaseUrl = (baseUrl: string): string | undefined => {
+const normalizeOllamaOpenAiBaseUrl = (baseUrl: string): string | undefined => {
     try {
         const parsed = new URL(baseUrl);
         const normalizedPath = parsed.pathname.replace(/\/+$/, '');
@@ -389,7 +389,7 @@ const resolveExecutorOllamaConfig = (
     const configuredBaseUrl = ollama?.baseUrl?.trim();
     if (provider === 'ollama-cloud') {
         const normalizedCloudBaseUrl = configuredBaseUrl
-            ? (normalizeOllamaCloudBaseUrl(configuredBaseUrl) ??
+            ? (normalizeOllamaOpenAiBaseUrl(configuredBaseUrl) ??
               configuredBaseUrl)
             : undefined;
         return {
@@ -1343,7 +1343,7 @@ const createDefaultVoltAgentExecutor = ({
     model,
     logger,
     voltOpsClient,
-    ollama: _ollama,
+    ollama,
     openrouter,
     openrouterRouting,
     agentFactory = ({
@@ -1391,12 +1391,28 @@ const createDefaultVoltAgentExecutor = ({
                       ),
               })(model.slice('openrouter/'.length))
             : undefined;
+    const ollamaModel =
+        (model.startsWith('ollama/') || model.startsWith('ollama-cloud/')) &&
+        ollama?.baseUrl !== undefined
+            ? (() => {
+                  const baseURL =
+                      normalizeOllamaOpenAiBaseUrl(ollama.baseUrl) ??
+                      ollama.baseUrl;
+                  const provider = createOpenAICompatible({
+                      name: ollama.provider,
+                      apiKey: ollama.apiKey ?? 'ollama',
+                      baseURL,
+                      includeUsage: true,
+                  });
+                  return provider(model.slice(model.indexOf('/') + 1));
+              })()
+            : undefined;
     const createAgent = (
         instructions: string | undefined,
         tools?: NonNullable<AgentOptions['tools']>
     ) =>
         agentFactory({
-            model: openRouterModel ?? model,
+            model: openRouterModel ?? ollamaModel ?? model,
             ...(instructions !== undefined && { instructions }),
             ...(logger !== undefined && { logger }),
             ...(voltOpsClient !== undefined && { voltOpsClient }),
