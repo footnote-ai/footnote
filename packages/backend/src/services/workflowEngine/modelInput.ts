@@ -22,6 +22,7 @@ import {
 } from './contextManifest.js';
 import { selectFollowUpSearchHint } from './contextStepHelpers.js';
 import { buildPlannerPayload } from '../chatOrchestrator/plannerPayload.js';
+import { estimateRuntimeMessageTokens } from './tokenBudget.js';
 
 type ModelInput = GenerationRequest;
 
@@ -68,6 +69,138 @@ type BuildModelInputParams = {
     };
     contextStepRequests: readonly ContextStepRequest[];
     openAiNativeSearchFromHintsEnabled?: boolean;
+};
+
+export type GenerationEvidenceProjection = {
+    trimmed: boolean;
+    inputTokensBefore: number;
+    inputTokensAfter: number;
+    retainedEvidenceCount: number;
+    droppedEvidenceCount: number;
+    truncatedEvidenceCount: number;
+};
+
+export type BoundedGenerationRequest = {
+    request: GenerationRequest;
+    evidenceProjection: GenerationEvidenceProjection;
+};
+
+const EVIDENCE_MARKERS = [
+    'TRUSTGRAPH SOURCE EVIDENCE',
+    'TRUSTGRAPH ADVISORY EVIDENCE',
+    'UNTRUSTED PROJECT CONTEXT:',
+    'UNTRUSTED SEARCH RESULT:',
+] as const;
+const ESTIMATED_CHARS_PER_TOKEN = 4;
+const MIN_EVIDENCE_MESSAGE_CHARS = 256;
+
+const isEvidenceMessage = (message: RuntimeMessage): boolean =>
+    EVIDENCE_MARKERS.some((marker) => message.content.startsWith(marker));
+
+const truncateEvidenceMessage = (
+    message: RuntimeMessage,
+    maxTokens: number
+): RuntimeMessage | undefined => {
+    const maxChars = Math.floor(maxTokens * ESTIMATED_CHARS_PER_TOKEN);
+    if (maxChars < MIN_EVIDENCE_MESSAGE_CHARS) {
+        return undefined;
+    }
+    if (message.content.length <= maxChars) {
+        return message;
+    }
+    return {
+        ...message,
+        content: `${message.content.slice(0, maxChars).trimEnd()}\n[Evidence text truncated to fit the selected model context.]`,
+    };
+};
+
+/**
+ * Keeps retrieval unchanged while fitting advisory evidence into a profile's
+ * declared input window. Evidence is retained in adapter rank order, and its
+ * source/provenance header stays ahead of any bounded text truncation.
+ */
+export const boundGenerationRequestToProfileInput = (input: {
+    request: GenerationRequest;
+    maxInputTokens?: number;
+}): BoundedGenerationRequest => {
+    const inputTokensBefore = estimateRuntimeMessageTokens(
+        input.request.messages
+    );
+    const maxInputTokens =
+        input.maxInputTokens === undefined ||
+        !Number.isFinite(input.maxInputTokens)
+            ? undefined
+            : Math.max(1, Math.floor(input.maxInputTokens));
+    const evidenceMessages = input.request.messages.filter(isEvidenceMessage);
+    if (
+        maxInputTokens === undefined ||
+        inputTokensBefore <= maxInputTokens ||
+        evidenceMessages.length === 0
+    ) {
+        return {
+            request: input.request,
+            evidenceProjection: {
+                trimmed: false,
+                inputTokensBefore,
+                inputTokensAfter: inputTokensBefore,
+                retainedEvidenceCount: evidenceMessages.length,
+                droppedEvidenceCount: 0,
+                truncatedEvidenceCount: 0,
+            },
+        };
+    }
+
+    const nonEvidenceTokens = estimateRuntimeMessageTokens(
+        input.request.messages.filter((message) => !isEvidenceMessage(message))
+    );
+    let remainingTokens = Math.max(0, maxInputTokens - nonEvidenceTokens);
+    let retainedEvidenceCount = 0;
+    let droppedEvidenceCount = 0;
+    let truncatedEvidenceCount = 0;
+    const retainedEvidence = new Map<RuntimeMessage, RuntimeMessage>();
+
+    for (const message of evidenceMessages) {
+        const messageTokens = estimateRuntimeMessageTokens([message]);
+        if (messageTokens <= remainingTokens) {
+            retainedEvidence.set(message, message);
+            remainingTokens -= messageTokens;
+            retainedEvidenceCount += 1;
+            continue;
+        }
+
+        const boundedMessage = truncateEvidenceMessage(
+            message,
+            remainingTokens
+        );
+        if (boundedMessage === undefined) {
+            droppedEvidenceCount += 1;
+            continue;
+        }
+        retainedEvidence.set(message, boundedMessage);
+        retainedEvidenceCount += 1;
+        truncatedEvidenceCount += 1;
+        remainingTokens = 0;
+    }
+    const messages = input.request.messages.flatMap((message) => {
+        if (!isEvidenceMessage(message)) {
+            return [message];
+        }
+        const retained = retainedEvidence.get(message);
+        return retained === undefined ? [] : [retained];
+    });
+    const inputTokensAfter = estimateRuntimeMessageTokens(messages);
+
+    return {
+        request: { ...input.request, messages },
+        evidenceProjection: {
+            trimmed: true,
+            inputTokensBefore,
+            inputTokensAfter,
+            retainedEvidenceCount,
+            droppedEvidenceCount,
+            truncatedEvidenceCount,
+        },
+    };
 };
 
 const insertManifest = (

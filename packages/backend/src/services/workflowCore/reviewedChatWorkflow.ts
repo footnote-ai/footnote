@@ -77,6 +77,7 @@ import {
 import { selectContextStepExecutor } from '../workflowEngine/contextStepHelpers.js';
 import {
     buildModelInput,
+    boundGenerationRequestToProfileInput,
     type ModelInputEvidence,
 } from '../workflowEngine/modelInput.js';
 import {
@@ -2307,9 +2308,27 @@ export const runBoundedReviewWorkflow = async (
                       providerAvailability:
                           stepRoutingChainSet.providerAvailability,
                       runWithProfile: async (profile, attemptIndex) => {
+                          const profileBoundedRequest =
+                              boundGenerationRequestToProfileInput({
+                                  request: boundedRequest,
+                                  maxInputTokens: profile.maxInputTokens,
+                              });
+                          if (
+                              profileBoundedRequest.evidenceProjection.trimmed
+                          ) {
+                              logger.info(
+                                  'chat.generation.evidence_projection_trimmed',
+                                  {
+                                      workflowId,
+                                      attemptIndex,
+                                      profileId: profile.id,
+                                      ...profileBoundedRequest.evidenceProjection,
+                                  }
+                              );
+                          }
                           const settingsResolution = resolveModelSettings({
                               profile,
-                              request: boundedRequest,
+                              request: profileBoundedRequest.request,
                           });
                           selectedSettings = settingsResolution;
                           selectedCapabilityFacts =
@@ -2320,7 +2339,7 @@ export const runBoundedReviewWorkflow = async (
                           const result = normalizeGenerationResultEvidence(
                               await generationRuntime.generate({
                                   ...applyModelSettings(
-                                      boundedRequest,
+                                      profileBoundedRequest.request,
                                       settingsResolution.applied
                                   ),
                                   model: profile.providerModel,
