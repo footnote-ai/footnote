@@ -658,6 +658,34 @@ test('buildResponseMetadata preserves mechanical generation admission reasons', 
     assert.doesNotThrow(() => ResponseMetadataSchema.parse(metadata));
 });
 
+test('buildResponseMetadata supplies a generic reason for failed generation without one', () => {
+    const metadata = buildResponseMetadata(
+        baseGenerationMetadata({
+            provenance: 'Inferred',
+            citations: [],
+        }),
+        baseRuntimeContext({
+            executionContext: {
+                generation: {
+                    status: 'failed',
+                    profileId: 'openrouter-deepseek',
+                    provider: 'openrouter',
+                    model: 'deepseek-v4-flash',
+                },
+            },
+        })
+    );
+
+    assert.equal(metadata.execution?.[0]?.kind, 'generation');
+    assert.equal(
+        metadata.execution?.[0]?.kind === 'generation'
+            ? metadata.execution[0].reasonCode
+            : undefined,
+        'generation_runtime_error'
+    );
+    assert.doesNotThrow(() => ResponseMetadataSchema.parse(metadata));
+});
+
 test('buildResponseMetadata ignores planner execution bridge fields and keeps execution timeline non-planner only', () => {
     const metadata = buildResponseMetadata(
         baseGenerationMetadata(),

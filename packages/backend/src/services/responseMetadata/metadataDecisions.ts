@@ -114,7 +114,10 @@ export const normalizeGenerationReasonCode = (
         return reasonCode;
     }
 
-    return undefined;
+    // Failed generation events must remain schema-valid even when a workflow
+    // boundary ended before it could attach a more specific generation code.
+    // Keep unknown explicit values dropped rather than rewriting them.
+    return reasonCode === undefined ? 'generation_runtime_error' : undefined;
 };
 
 export const normalizeToolReasonCode = (
