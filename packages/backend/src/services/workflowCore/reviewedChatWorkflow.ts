@@ -165,7 +165,7 @@ export type ReviewWorkflowUsageSummary = {
 // A refinement can require planner re-entry, generation, and another review.
 // Preserve an admitted draft when the remaining wall-clock budget cannot
 // reasonably accommodate that optional sequence.
-const MIN_REFINEMENT_REMAINING_MS = 60_000;
+const MIN_REFINEMENT_REMAINING_MS = 180_000;
 
 export type ContextStepRequest = ContractContextStepRequest;
 export type ContextStepResult = ContractContextStepResult;
