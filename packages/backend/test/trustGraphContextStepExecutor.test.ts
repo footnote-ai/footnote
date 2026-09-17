@@ -214,3 +214,43 @@ test('TrustGraph source evidence keeps source framing and page citation metadata
         'https://example.test/record.pdf#page=14'
     );
 });
+
+test('TrustGraph source evidence preserves OCR row and value candidates', async () => {
+    const adapter: TrustGraphEvidenceAdapter = {
+        async getEvidenceBundle(input): Promise<EvidenceBundle> {
+            const bundle = buildBundle(input.scopeTuple);
+            return {
+                ...bundle,
+                items: [
+                    {
+                        ...bundle.items[0],
+                        evidenceKind: 'source',
+                        claimText: [
+                            '120',
+                            '45',
+                            'WATER SAMPLES COLLECTED',
+                            'BUILDINGS INSPECTED',
+                        ].join('\n'),
+                    },
+                ],
+            };
+        },
+    };
+    const executor = createTrustGraphContextStepExecutor({
+        runtimeOptions: {
+            adapter,
+            budget: { timeoutMs: 100, maxCalls: 1 },
+            ownershipValidationPolicy: bypassPolicy(),
+        },
+    });
+
+    const result = await executor(createExecutorInput());
+
+    assert.equal(result.outcome, 'executed');
+    if (result.outcome !== 'executed') return;
+    const message = result.evidence?.content[0];
+    assert.ok(message);
+    assert.match(message, /OCR row candidates/i);
+    assert.match(message, /120.*WATER SAMPLES COLLECTED/s);
+    assert.match(message, /45.*BUILDINGS INSPECTED/s);
+});

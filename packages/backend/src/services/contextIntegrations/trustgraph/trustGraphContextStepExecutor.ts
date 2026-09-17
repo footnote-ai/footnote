@@ -183,7 +183,98 @@ const MAX_PROMPT_PROVENANCE_CHARS = 4_000;
 const TRUSTGRAPH_FAILURE_GUIDANCE =
     'TrustGraph retrieval was unavailable or unverifiable for this request. Continue fail-open, but do not turn that limitation into a fact about the subject and do not use earlier assistant claims or generated retrieval prose as evidence for a new personal-profile inference.';
 const TRUSTGRAPH_STRUCTURED_EVIDENCE_GUIDANCE =
-    'When retrieved source text contains labeled or tabular values, preserve each label-value association exactly as shown. Prefer an explicit sentence or bullet that directly pairs a label and value over an OCR-derived table column. If OCR places a contiguous numeric block before its row labels, pair values and labels by shared order only when the counts align exactly; otherwise treat the unlabeled sequence as unmapped. Do not reorder rows, borrow a value from another row, or infer a mapping.';
+    'When retrieved source text contains labeled or tabular values, preserve each label-value association exactly as shown. Prefer an explicit sentence or bullet that directly pairs a label and value over an OCR-derived table column. A mechanically aligned OCR row-candidate block is only an untrusted structural aid: use it to preserve source order, but do not let it override explicit prose. Treat any remaining unlabeled number sequence as unmapped; do not reorder rows, borrow a value from another row, or infer a mapping.';
+
+const OCR_NUMERIC_LINE_PATTERN = /^(?:\d{1,3}(?:,\d{3})+|\d+)(?:\.\d+)?%?$/u;
+const MAX_OCR_ROW_LABEL_LENGTH = 180;
+const MAX_OCR_LABEL_GAP = 32;
+
+const isUppercaseOcrRowLabel = (line: string): boolean => {
+    const normalized = line.replace(/[^\p{L}\p{N}]+/gu, ' ').trim();
+    if (normalized.length < 3 || normalized.length > MAX_OCR_ROW_LABEL_LENGTH) {
+        return false;
+    }
+    const letters = normalized.match(/\p{L}/gu) ?? [];
+    const uppercaseLetters = normalized.match(/\p{Lu}/gu) ?? [];
+    return (
+        letters.length >= 3 && uppercaseLetters.length / letters.length >= 0.8
+    );
+};
+
+type OcrRowCandidate = {
+    label: string;
+    value: string;
+};
+
+const findOcrRowCandidates = (
+    claimText: string
+): OcrRowCandidate[] | undefined => {
+    const lines = claimText
+        .split(/\r?\n/u)
+        .map((line) => line.trim())
+        .filter((line) => line.length > 0);
+
+    for (let numericStart = 0; numericStart < lines.length; numericStart += 1) {
+        if (!OCR_NUMERIC_LINE_PATTERN.test(lines[numericStart])) {
+            continue;
+        }
+        const values: string[] = [];
+        let numericEnd = numericStart;
+        while (
+            numericEnd < lines.length &&
+            OCR_NUMERIC_LINE_PATTERN.test(lines[numericEnd])
+        ) {
+            values.push(lines[numericEnd]);
+            numericEnd += 1;
+        }
+        if (values.length < 2) {
+            numericStart = numericEnd - 1;
+            continue;
+        }
+
+        for (
+            let labelStart = numericEnd;
+            labelStart < Math.min(lines.length, numericEnd + MAX_OCR_LABEL_GAP);
+            labelStart += 1
+        ) {
+            if (!isUppercaseOcrRowLabel(lines[labelStart])) {
+                continue;
+            }
+            const labels: string[] = [];
+            let labelEnd = labelStart;
+            while (
+                labelEnd < lines.length &&
+                isUppercaseOcrRowLabel(lines[labelEnd])
+            ) {
+                labels.push(lines[labelEnd]);
+                labelEnd += 1;
+            }
+            if (labels.length !== values.length) {
+                continue;
+            }
+            return values.map((value, index) => ({
+                value,
+                label: labels[index],
+            }));
+        }
+        numericStart = numericEnd - 1;
+    }
+    return undefined;
+};
+
+const appendOcrRowCandidates = (claimText: string): string => {
+    const candidates = findOcrRowCandidates(claimText);
+    if (candidates === undefined) {
+        return claimText;
+    }
+    return [
+        claimText,
+        '',
+        'Mechanically aligned OCR row candidates (untrusted structural aid; source order only):',
+        ...candidates.map(({ value, label }) => `- ${value} — ${label}`),
+        'These candidates preserve the source order for review; verify them against explicit source text before making a claim.',
+    ].join('\n');
+};
 
 const formatProvenanceReferences = (references: readonly string[]): string => {
     const retained: string[] = [];
@@ -234,7 +325,9 @@ const formatAdvisoryEvidence = (
             item.evidenceKind === 'source'
                 ? 'Retrieved source text:'
                 : 'Generated response:',
-            item.claimText,
+            item.evidenceKind === 'source'
+                ? appendOcrRowCandidates(item.claimText)
+                : item.claimText,
         ].join('\n')
     );
 
