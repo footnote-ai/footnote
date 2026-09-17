@@ -2891,6 +2891,64 @@ test('runChatMessages preserves the context-projected request for bounded fallba
     );
 });
 
+test('runChatMessages blocks fallback generation after an evidence review rejection', async () => {
+    let generationCalls = 0;
+    const chatService = createChatService({
+        generationRuntime: {
+            kind: 'test-runtime',
+            async generate() {
+                generationCalls += 1;
+                return {
+                    text: 'unreviewed fallback answer',
+                    model: 'gpt-5-mini',
+                    provenance: 'Retrieved' as const,
+                    citations: [],
+                };
+            },
+        },
+        storeTrace: async () => undefined,
+        buildResponseMetadata,
+        defaultModel: 'gpt-5-mini',
+        recordUsage: () => undefined,
+        chatWorkflowConfig: {
+            reviewLoopEnabled: true,
+            maxIterations: 1,
+            maxDurationMs: 15_000,
+        },
+        runReviewWorkflow: async () =>
+            ({
+                outcome: 'no_generation',
+                fallbackGenerationAllowed: false,
+                fallbackGenerationRequest: {
+                    messages: [{ role: 'user', content: 'Use the evidence.' }],
+                },
+                workflowLineage: {
+                    workflowId: 'wf_evidence_review_rejection',
+                    workflowName: 'message_reviewed',
+                    status: 'degraded',
+                    terminationReason: 'executor_error_fail_open',
+                    stepCount: 3,
+                    maxSteps: 4,
+                    maxDurationMs: 15_000,
+                    steps: [],
+                },
+            }) satisfies RunBoundedReviewWorkflowResult,
+    });
+
+    const response = await chatService.runChatMessages({
+        messages: [
+            { role: 'user', content: 'What does the source establish?' },
+        ],
+        conversationSnapshot: 'What does the source establish?',
+    });
+
+    assert.equal(
+        response.message,
+        'I could not generate a response for this request.'
+    );
+    assert.equal(generationCalls, 0);
+});
+
 test('runChatMessages bounds context-preserving fallback generation to remaining budget', async () => {
     let fallbackRequest: GenerationRequest | undefined;
     let generationCalls = 0;

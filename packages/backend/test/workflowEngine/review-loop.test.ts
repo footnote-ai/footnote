@@ -1249,6 +1249,93 @@ test('runBoundedReviewWorkflow preserves an admitted draft when revision echoes 
     assert.equal(generationCalls, 3);
 });
 
+test('runBoundedReviewWorkflow does not preserve a draft rejected for evidence when revision fails', async () => {
+    let generationCalls = 0;
+    const generationRuntime: GenerationRuntime = {
+        kind: 'test-runtime',
+        async generate() {
+            generationCalls += 1;
+            if (generationCalls === 1) {
+                return {
+                    text: 'initial source-attributed answer',
+                    model: 'gpt-5-mini',
+                    usage: {
+                        promptTokens: 10,
+                        completionTokens: 10,
+                        totalTokens: 20,
+                    },
+                    provenance: 'Retrieved' as const,
+                    citations: [],
+                };
+            }
+            if (generationCalls === 2) {
+                return {
+                    text: JSON.stringify({
+                        reviewDecision: 'revise',
+                        reviewReason:
+                            'The source attribution needs correction.',
+                        revisionInstruction:
+                            'Remove claims not supported by the supplied source.',
+                        concerns: { evidence: 'needs_caution' },
+                    }),
+                    model: 'gpt-5-mini',
+                    usage: {
+                        promptTokens: 5,
+                        completionTokens: 5,
+                        totalTokens: 10,
+                    },
+                    provenance: 'Inferred' as const,
+                    citations: [],
+                };
+            }
+            throw new Error('revision provider failure');
+        },
+    };
+
+    const result = await runBoundedReviewWorkflowForTest({
+        generationRuntime,
+        generationRequest: {
+            model: 'gpt-5-mini',
+            messages: [{ role: 'user', content: 'Answer from the records.' }],
+        },
+        messagesWithHints: [
+            { role: 'user', content: 'Answer from the records.' },
+        ],
+        generationStartedAtMs: Date.now(),
+        workflowConfig: {
+            workflowName: 'message_reviewed',
+            maxIterations: 2,
+            maxDurationMs: 300_000,
+        },
+        workflowPolicy: {
+            enablePlanning: false,
+            enableToolUse: false,
+            enableReplanning: false,
+            enableGeneration: true,
+            enableAssessment: true,
+            enableRevision: true,
+        },
+        captureUsage: (generationResult) => ({
+            model: generationResult.model ?? 'gpt-5-mini',
+            promptTokens: generationResult.usage?.promptTokens ?? 0,
+            completionTokens: generationResult.usage?.completionTokens ?? 0,
+            totalTokens: generationResult.usage?.totalTokens ?? 0,
+            estimatedCost: {
+                inputCostUsd: 0,
+                outputCostUsd: 0,
+                totalCostUsd: 0,
+            },
+        }),
+    });
+
+    assert.equal(result.outcome, 'no_generation');
+    if (result.outcome !== 'no_generation') {
+        throw new Error('Expected no-generation result.');
+    }
+    assert.equal(result.fallbackGenerationAllowed, false);
+    assert.equal(generationCalls, 3);
+});
+
 test('runBoundedReviewWorkflow marks requested-but-blocked refinement without refinementApplied signals', async () => {
     let generationCalls = 0;
     const generationRuntime: GenerationRuntime = {

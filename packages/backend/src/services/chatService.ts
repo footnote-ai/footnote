@@ -1891,6 +1891,8 @@ export const createChatService = ({
                             handling.runtimeAction ===
                                 'run_fallback_generation' &&
                             backendFailOpenAllowed &&
+                            workflowResult.fallbackGenerationAllowed !==
+                                false &&
                             !workflowBudgetAlreadyExhausted &&
                             boundedFallbackGenerationRequest !== undefined
                         ) {

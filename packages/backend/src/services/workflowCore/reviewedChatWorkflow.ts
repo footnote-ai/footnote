@@ -278,6 +278,11 @@ export type RunBoundedReviewWorkflowResult =
            * from disappearing when the reviewed draft is unavailable.
            */
           fallbackGenerationRequest?: SerializableGenerationRequest;
+          /**
+           * Prevents an unreviewed fallback from resurfacing a draft that an
+           * evidence review explicitly rejected.
+           */
+          fallbackGenerationAllowed?: boolean;
           presentation?: PresentationMetadata;
           plannerStepResult?: PlannerStepResult;
           planContinuation?: PlanContinuation;
@@ -3511,9 +3516,28 @@ export const runBoundedReviewWorkflow = async (
         continuation?.continuation === 'terminal_action'
             ? continuation.terminalAction
             : undefined;
-    const generationResult =
-        readGenerationResult(execution.run.results.answer) ??
-        readGenerationResult(execution.run.results.draft);
+    const latestGenerationStep = semanticExecutionSteps
+        .filter((step) => step.stepId === 'generate')
+        .at(-1);
+    const selectedCandidateId = latestGenerationStep?.attempts
+        .slice()
+        .reverse()
+        .map(
+            (attempt) => readAs<ChatStepMetadata>(attempt.metadata)?.candidateId
+        )
+        .find((value): value is string => value !== undefined);
+    const reviewDecision = readAs<{ decision: ReviewDecision }>(
+        execution.run.results.review
+    )?.decision;
+    const evidenceReviewRejectedUnrevisedDraft =
+        reviewDecision?.reviewDecision === 'revise' &&
+        reviewDecision.concerns?.evidence === 'needs_caution' &&
+        latestGenerationStep !== undefined &&
+        selectedCandidateId === undefined;
+    const generationResult = evidenceReviewRejectedUnrevisedDraft
+        ? undefined
+        : (readGenerationResult(execution.run.results.answer) ??
+          readGenerationResult(execution.run.results.draft));
     const fallbackGenerationRequest =
         generationResult === undefined
             ? toSerializableGenerationRequest(
@@ -3544,6 +3568,9 @@ export const runBoundedReviewWorkflow = async (
             ...(fallbackGenerationRequest === undefined
                 ? {}
                 : { fallbackGenerationRequest }),
+            ...(evidenceReviewRejectedUnrevisedDraft
+                ? { fallbackGenerationAllowed: false }
+                : {}),
             ...(presentationMetadata === undefined
                 ? {}
                 : { presentation: presentationMetadata }),
@@ -3557,14 +3584,6 @@ export const runBoundedReviewWorkflow = async (
                 : { contextStepResults: [...evidence.results] }),
         };
     }
-    const selectedCandidateId = semanticExecutionSteps
-        .filter((step) => step.stepId === 'generate')
-        .reverse()
-        .flatMap((step) => [...step.attempts].reverse())
-        .map(
-            (attempt) => readAs<ChatStepMetadata>(attempt.metadata)?.candidateId
-        )
-        .find((value): value is string => value !== undefined);
     if (selectedCandidateId !== undefined) {
         candidates.markSelected(selectedCandidateId);
     }
