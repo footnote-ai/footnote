@@ -1080,6 +1080,76 @@ test('runBoundedReviewWorkflow preserves an admitted draft when refinement canno
     assert.equal(assessStep.outcome.signals?.refinementSkippedForBudget, true);
 });
 
+test('runBoundedReviewWorkflow skips optional assessment when little budget remains after generation', async () => {
+    let generationCalls = 0;
+    const generationRuntime: GenerationRuntime = {
+        kind: 'test-runtime',
+        async generate() {
+            generationCalls += 1;
+            if (generationCalls > 1) {
+                throw new Error('optional assessment should not start');
+            }
+            await new Promise((resolve) => setTimeout(resolve, 5_000));
+            return {
+                text: 'initial evidence-backed answer',
+                model: 'gpt-5-mini',
+                usage: {
+                    promptTokens: 10,
+                    completionTokens: 10,
+                    totalTokens: 20,
+                },
+                provenance: 'Inferred' as const,
+                citations: [],
+            };
+        },
+    };
+
+    const result = await runBoundedReviewWorkflowForTest({
+        generationRuntime,
+        generationRequest: {
+            model: 'gpt-5-mini',
+            messages: [{ role: 'user', content: 'Draft answer' }],
+        },
+        messagesWithHints: [{ role: 'user', content: 'Draft answer' }],
+        generationStartedAtMs: Date.now(),
+        workflowConfig: {
+            workflowName: 'message_reviewed',
+            maxIterations: 2,
+            maxDurationMs: 10_000,
+        },
+        workflowPolicy: {
+            enablePlanning: false,
+            enableToolUse: false,
+            enableReplanning: false,
+            enableGeneration: true,
+            enableAssessment: true,
+            enableRevision: true,
+        },
+        captureUsage: (generationResult) => ({
+            model: generationResult.model ?? 'gpt-5-mini',
+            promptTokens: generationResult.usage?.promptTokens ?? 0,
+            completionTokens: generationResult.usage?.completionTokens ?? 0,
+            totalTokens: generationResult.usage?.totalTokens ?? 0,
+            estimatedCost: {
+                inputCostUsd: 0,
+                outputCostUsd: 0,
+                totalCostUsd: 0,
+            },
+        }),
+    });
+
+    assert.equal(result.outcome, 'generated');
+    assert.equal(
+        result.generationResult.text,
+        'initial evidence-backed answer'
+    );
+    assert.equal(generationCalls, 1);
+    assert.equal(
+        result.workflowLineage.steps.some((step) => step.stepKind === 'assess'),
+        false
+    );
+});
+
 test('runBoundedReviewWorkflow preserves an admitted draft when revision echoes source evidence', async () => {
     let generationCalls = 0;
     const generationRuntime: GenerationRuntime = {

@@ -166,6 +166,13 @@ export type ReviewWorkflowUsageSummary = {
 // Preserve an admitted draft when the remaining wall-clock budget cannot
 // reasonably accommodate that optional sequence.
 const MIN_REFINEMENT_REMAINING_MS = 180_000;
+const MAX_OPTIONAL_REVIEW_HEADROOM_MS = MIN_REFINEMENT_REMAINING_MS;
+
+const optionalReviewHeadroomMs = (maxDurationMs: number): number =>
+    Math.min(
+        MAX_OPTIONAL_REVIEW_HEADROOM_MS,
+        Math.max(1_000, Math.floor(maxDurationMs * 0.6))
+    );
 
 export type ContextStepRequest = ContractContextStepRequest;
 export type ContextStepResult = ContractContextStepResult;
@@ -1392,9 +1399,17 @@ export const runBoundedReviewWorkflow = async (
                           ]
                         : []),
                 ],
-                output: { name: 'draft', on: ['generated', 'incomplete'] },
+                output: {
+                    name: 'draft',
+                    on: [
+                        'generated',
+                        'generated_without_assessment',
+                        'incomplete',
+                    ],
+                },
                 next: {
                     generated: nextGenerate,
+                    generated_without_assessment: 'finish',
                     incomplete: 'finish',
                     failed: 'finish',
                 },
@@ -2407,6 +2422,15 @@ export const runBoundedReviewWorkflow = async (
         );
         const generationAdmission = admitGenerationResult(generationResult);
         const admitted = generationAdmission.admitted;
+        const remainingAfterGenerationMs = Math.max(
+            0,
+            executionLimits.maxDurationMs - (Date.now() - generationStartedAtMs)
+        );
+        const assessmentSkippedForBudget =
+            admitted &&
+            hasAssessmentStep &&
+            remainingAfterGenerationMs <
+                optionalReviewHeadroomMs(executionLimits.maxDurationMs);
         const parentCandidateId = candidates.latestCandidateId();
         const candidateId = !admitted
             ? undefined
@@ -2468,6 +2492,9 @@ export const runBoundedReviewWorkflow = async (
                 : undefined,
             signals: {
                 ...refinementStepSignals(),
+                ...(assessmentSkippedForBudget
+                    ? { assessmentSkippedForBudget: true }
+                    : {}),
             },
         });
         if (!admitted) {
@@ -2481,7 +2508,9 @@ export const runBoundedReviewWorkflow = async (
         }
         return {
             status: 'succeeded',
-            outcome: 'generated',
+            outcome: assessmentSkippedForBudget
+                ? 'generated_without_assessment'
+                : 'generated',
             result: toSerializable(generationResult),
             usage: { totalTokens: usage.totalTokens },
             metadata,
