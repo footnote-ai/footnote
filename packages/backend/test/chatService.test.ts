@@ -3192,6 +3192,59 @@ test('runChatMessages preserves no-generation lineage when fallback routing chai
     assert.equal(fallbackExecution, undefined);
 });
 
+test('runChatMessages does not start fallback after the workflow deadline has elapsed', async () => {
+    let generationCalls = 0;
+    const chatService = createChatService({
+        generationRuntime: {
+            kind: 'test-runtime',
+            async generate() {
+                generationCalls += 1;
+                return {
+                    text: 'late fallback',
+                    model: 'gpt-5-mini',
+                };
+            },
+        },
+        storeTrace: async () => undefined,
+        buildResponseMetadata,
+        defaultModel: 'gpt-5-mini',
+        recordUsage: () => undefined,
+        chatWorkflowConfig: {
+            modeId: 'grounded',
+            reviewLoopEnabled: true,
+            maxIterations: 1,
+            maxDurationMs: 1,
+        },
+        runReviewWorkflow: async () => {
+            await new Promise<void>((resolve) => setTimeout(resolve, 10));
+            return {
+                outcome: 'no_generation' as const,
+                workflowLineage: {
+                    workflowId: 'wf_deadline_elapsed',
+                    workflowName: 'message_reviewed',
+                    status: 'degraded' as const,
+                    terminationReason: 'budget_exhausted_steps' as const,
+                    stepCount: 0,
+                    maxSteps: 3,
+                    maxDurationMs: 1,
+                    steps: [],
+                },
+            } satisfies RunBoundedReviewWorkflowResult;
+        },
+    });
+
+    const response = await chatService.runChatMessages({
+        messages: [{ role: 'user', content: 'Summarize this.' }],
+        conversationSnapshot: 'Summarize this.',
+    });
+
+    assert.equal(generationCalls, 0);
+    assert.equal(
+        response.message,
+        'I could not generate a response for this request.'
+    );
+});
+
 test('runChatMessages attributes a failed workflow route to the actual Terra attempt', async () => {
     const response = await createChatService({
         generationRuntime: {
