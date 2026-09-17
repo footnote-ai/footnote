@@ -162,6 +162,11 @@ export type ReviewWorkflowUsageSummary = {
     };
 };
 
+// A refinement can require planner re-entry, generation, and another review.
+// Preserve an admitted draft when the remaining wall-clock budget cannot
+// reasonably accommodate that optional sequence.
+const MIN_REFINEMENT_REMAINING_MS = 60_000;
+
 export type ContextStepRequest = ContractContextStepRequest;
 export type ContextStepResult = ContractContextStepResult;
 
@@ -2500,6 +2505,7 @@ export const runBoundedReviewWorkflow = async (
                 }),
             };
         }
+        const assessmentStartedAtMs = Date.now();
         const projected = messagesFor(handlerInput.results);
         const assessPrompt = composeAssessPrompt({
             moduleIds: input.reviewModuleIds,
@@ -2912,6 +2918,11 @@ export const runBoundedReviewWorkflow = async (
             reviewDecision: decision,
         });
         const hintDecision = decideRevisionRoutingHintLane(hints);
+        const assessmentElapsedMs = Date.now() - assessmentStartedAtMs;
+        const refinementSkippedForBudget =
+            decision.reviewDecision === 'revise' &&
+            handlerInput.remainingDurationMs - assessmentElapsedMs <
+                MIN_REFINEMENT_REMAINING_MS;
         const signals: StepSignals = {
             ...buildAssessSignals(decision),
             ...buildAssessRoutingHintSignals({
@@ -2920,13 +2931,18 @@ export const runBoundedReviewWorkflow = async (
                 routingHintApplied: hintDecision.lane,
                 routingHintConflictResolved: hintDecision.conflictResolved,
             }),
+            ...(refinementSkippedForBudget
+                ? { refinementSkippedForBudget: true }
+                : {}),
         };
         const outcome =
             decision.reviewDecision === 'finalize'
                 ? 'done'
-                : handlerInput.iteration >= effectiveMaxIterations
-                  ? 'limit'
-                  : 'revise';
+                : refinementSkippedForBudget
+                  ? 'done'
+                  : handlerInput.iteration >= effectiveMaxIterations
+                    ? 'limit'
+                    : 'revise';
         return {
             status: 'succeeded',
             outcome,
@@ -2934,8 +2950,9 @@ export const runBoundedReviewWorkflow = async (
             usage: { totalTokens: usage.totalTokens },
             metadata: encodeMetadata({
                 status: 'executed',
-                summary:
-                    'Assessment evaluated draft quality and emitted a declared workflow outcome.',
+                summary: refinementSkippedForBudget
+                    ? 'Assessment requested refinement, but the remaining workflow budget preserved the admitted draft without optional refinement.'
+                    : 'Assessment evaluated draft quality and emitted a declared workflow outcome.',
                 model: usage.model,
                 ...toWorkflowAttemptIdentity({
                     requestedProvider:
