@@ -63,6 +63,7 @@ test('rejects empty and structurally incomplete generation results', () => {
         'Tracing the full sequence would require reading the complete text of that document.',
         '.\n\nWould you like me to help find the source?',
         '. Would you like me to help find the source?',
+        '. Could you tell me what specifically you are trying to establish?',
         'TRUSTGRAPH SOURCE EVIDENCE\nRetrieved source text: one\n\nTRUSTGRAPH SOURCE EVIDENCE\nRetrieved source text: two',
     ]) {
         assert.deepEqual(admitGenerationResult(result(text)), {
