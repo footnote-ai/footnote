@@ -713,7 +713,6 @@ export const executeWorkflow = async <TContext>(
                         errorMessage: error.message,
                         retryable: false,
                     };
-                    observedLimit = 'maxDurationMs';
                 } else {
                     attemptResult = {
                         status: 'failed',
