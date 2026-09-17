@@ -183,7 +183,7 @@ const MAX_PROMPT_PROVENANCE_CHARS = 4_000;
 const TRUSTGRAPH_FAILURE_GUIDANCE =
     'TrustGraph retrieval was unavailable or unverifiable for this request. Continue fail-open, but do not turn that limitation into a fact about the subject and do not use earlier assistant claims or generated retrieval prose as evidence for a new personal-profile inference.';
 const TRUSTGRAPH_STRUCTURED_EVIDENCE_GUIDANCE =
-    'When retrieved source text contains labeled or tabular values, preserve each label-value association exactly as shown. Prefer an explicit sentence or bullet that directly pairs a label and value over an OCR-derived table column. Treat an unlabeled number sequence as unmapped; do not reorder rows, borrow a value from another row, or infer a mapping.';
+    'When retrieved source text contains labeled or tabular values, preserve each label-value association exactly as shown. Prefer an explicit sentence or bullet that directly pairs a label and value over an OCR-derived table column. If OCR places a contiguous numeric block before its row labels, pair values and labels by shared order only when the counts align exactly; otherwise treat the unlabeled sequence as unmapped. Do not reorder rows, borrow a value from another row, or infer a mapping.';
 
 const formatProvenanceReferences = (references: readonly string[]): string => {
     const retained: string[] = [];
