@@ -65,6 +65,10 @@ test('rejects empty and structurally incomplete generation results', () => {
         '. Would you like me to help find the source?',
         '. Could you tell me what specifically you are trying to establish?',
         'TRUSTGRAPH SOURCE EVIDENCE\nRetrieved source text: one\n\nTRUSTGRAPH SOURCE EVIDENCE\nRetrieved source text: two',
+        '. A response fragment that lost its opening sentence.',
+        'The answer above already explains the result; I am only adding this note.',
+        "The user's question is repeated here. I should provide a final answer.",
+        'The conversation history already contains the answer. Let me re-read it.',
     ]) {
         assert.deepEqual(admitGenerationResult(result(text)), {
             admitted: false,

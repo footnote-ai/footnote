@@ -1047,6 +1047,43 @@ const inferExplicitTrustGraphTargetIds = (
         .map(({ target }) => target.id);
 };
 
+/**
+ * Recovers a strongly relevant configured context target when a planner
+ * omits it on an otherwise ordinary message. This bounded lexical fallback
+ * is intentionally conservative and only applies without an established
+ * prior scope, so it cannot make an unrelated follow-up sticky.
+ */
+const inferRelevantTrustGraphTargetIds = (
+    request: PostChatRequest,
+    targets: readonly TrustGraphTargetConfig[]
+): string[] => {
+    const queryTokens = tokenizeContextRoutingText(
+        request.latestUserInput.trim()
+    );
+    if (queryTokens.size === 0) {
+        return [];
+    }
+
+    const rankedTargets = targets
+        .map((target) => {
+            const targetTokens = tokenizeContextRoutingText(target.description);
+            const overlap = [...queryTokens].filter((token) =>
+                targetTokens.has(token)
+            ).length;
+            return { target, overlap };
+        })
+        .filter(({ overlap }) => overlap >= 3)
+        .sort((left, right) => right.overlap - left.overlap);
+    const bestOverlap = rankedTargets[0]?.overlap;
+    if (bestOverlap === undefined) {
+        return [];
+    }
+
+    return rankedTargets
+        .filter(({ overlap }) => overlap === bestOverlap)
+        .map(({ target }) => target.id);
+};
+
 const summarizeConversationWindow = (
     conversation: PostChatRequest['conversation'],
     retainedRecentWindowSize: number
@@ -1935,6 +1972,13 @@ export const createChatPlanner = ({
                       availableTrustGraphTargets
                   )
                 : [];
+        const relevantTargetIds =
+            scopeIntent === 'unrelated' && recentContextTargets.length === 0
+                ? inferRelevantTrustGraphTargetIds(
+                      request,
+                      availableTrustGraphTargets
+                  )
+                : [];
         // Search is a separate planner signal from the inherited source
         // target. On an underspecified continuation, retaining both would
         // silently broaden the user's established scope. Explicit
@@ -1960,6 +2004,7 @@ export const createChatPlanner = ({
                 ...inheritedTargetIds,
                 ...retainedPlannerTargetIds,
                 ...inferredTargetIds,
+                ...relevantTargetIds,
             ]),
         ];
         const targetIdsUnchanged =
@@ -1986,7 +2031,12 @@ export const createChatPlanner = ({
                       ...normalization.correctionCodes,
                       'web_search_suppressed_inherited_source_scope',
                   ]
-                : normalization.correctionCodes,
+                : relevantTargetIds.length > 0
+                  ? [
+                        ...normalization.correctionCodes,
+                        'relevant_context_target_inferred',
+                    ]
+                  : normalization.correctionCodes,
             applyOutcome:
                 normalization.applyOutcome === 'accepted'
                     ? 'partially_applied'

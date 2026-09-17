@@ -44,6 +44,20 @@ const PUNCTUATED_NUMERIC_FRAGMENT_PATTERN = /^[:;]\s*\d+(?:[.,]\d+)?\s*$/u;
 const INTERNAL_INSTRUCTION_LEAK_PATTERN =
     /(?:need for additional evidence|provide a clear answer to the user's question|your task is to produce only the final answer|do not use your prior knowledge|you are allowed to add additional information)/iu;
 
+const RESPONSE_PROCESS_LEAK_PATTERN =
+    /(?:the user(?:'s)?\s+(?:question|request)|conversation history|expected output format|(?:let me|i should|i will)\s+(?:re-)?read|the assistant response|the query is repeated)/iu;
+
+const STANDALONE_FRAGMENT_PATTERN =
+    /^[\s\p{P}\p{S}\p{M}\p{Default_Ignorable_Code_Point}]*\s+(?:the answer|the response|this answer|this response)\s+(?:above|below)\b/iu;
+
+const OUT_OF_CONTEXT_REFERENCE_PATTERN =
+    /\b(?:the|this)\s+(?:answer|response)\s+(?:above|below)\b/iu;
+
+const ORPHANED_ANSWER_REFERENCE_PATTERN =
+    /\b(?:not\s+(?:counting|including)|as\s+noted)\b[\s\S]{0,120}\b(?:the\s+)?(?:answer|response)\s+above\b/iu;
+
+const LEADING_FRAGMENT_MARKER_PATTERN = /^\s*[.:;]\s+(?=[\p{Lu}\p{N}])/u;
+
 const LIMITATION_ONLY_PATTERN =
     /^(?:tracing|determining|identifying|verifying|answering|summarizing|comparing)\b[\s\S]{0,500}(?:would require|requires|needs to)[\s\S]{0,250}(?:complete|full|entire)\s+(?:text|document|record|source)\b[\s\S]*$/iu;
 
@@ -64,6 +78,11 @@ const isStructurallyIncompleteText = (text: string): boolean => {
     if (STATUS_ONLY_RESPONSE_PATTERN.test(trimmed)) return true;
     if (PUNCTUATED_NUMERIC_FRAGMENT_PATTERN.test(trimmed)) return true;
     if (INTERNAL_INSTRUCTION_LEAK_PATTERN.test(trimmed)) return true;
+    if (RESPONSE_PROCESS_LEAK_PATTERN.test(trimmed)) return true;
+    if (STANDALONE_FRAGMENT_PATTERN.test(trimmed)) return true;
+    if (OUT_OF_CONTEXT_REFERENCE_PATTERN.test(trimmed)) return true;
+    if (ORPHANED_ANSWER_REFERENCE_PATTERN.test(trimmed)) return true;
+    if (LEADING_FRAGMENT_MARKER_PATTERN.test(trimmed)) return true;
     if (LIMITATION_ONLY_PATTERN.test(trimmed)) return true;
 
     // A revision that repeats multiple raw evidence blocks is an evidence

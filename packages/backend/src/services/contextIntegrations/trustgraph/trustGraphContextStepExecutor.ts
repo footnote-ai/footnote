@@ -182,6 +182,8 @@ const buildCitations = (
 const MAX_PROMPT_PROVENANCE_CHARS = 4_000;
 const TRUSTGRAPH_FAILURE_GUIDANCE =
     'TrustGraph retrieval was unavailable or unverifiable for this request. Continue fail-open, but do not turn that limitation into a fact about the subject and do not use earlier assistant claims or generated retrieval prose as evidence for a new personal-profile inference.';
+const TRUSTGRAPH_STRUCTURED_EVIDENCE_GUIDANCE =
+    'When retrieved source text contains labeled or tabular values, preserve each label-value association exactly as shown. Do not reorder rows, borrow a value from another row, or infer an unlabeled mapping.';
 
 const formatProvenanceReferences = (references: readonly string[]): string => {
     const retained: string[] = [];
@@ -334,6 +336,10 @@ export const createTrustGraphContextStepExecutor = ({
                 evidence: {
                     content: formatAdvisoryEvidence(trustGraphResult),
                 },
+                trustedInstructions:
+                    trustGraphResult.advisoryEvidenceItems.length > 0
+                        ? [TRUSTGRAPH_STRUCTURED_EVIDENCE_GUIDANCE]
+                        : undefined,
                 sources: buildCitations(trustGraphResult),
                 integrationContext: {
                     kind: 'trustgraph',

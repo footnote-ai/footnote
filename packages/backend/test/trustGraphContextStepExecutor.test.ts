@@ -204,6 +204,10 @@ test('TrustGraph source evidence keeps source framing and page citation metadata
     assert.match(message, /NYC-WTC_000099888 · page 14/);
     assert.match(message, /Retrieved source text/);
     assert.doesNotMatch(message, /GENERATED SYNTHESIS/);
+    assert.match(
+        result.trustedInstructions?.[0] ?? '',
+        /preserve each label-value association exactly as shown/i
+    );
     assert.equal(result.sources?.[0]?.title, 'NYC-WTC_000099888 · page 14');
     assert.equal(
         result.sources?.[0]?.url,

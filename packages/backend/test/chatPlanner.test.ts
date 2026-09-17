@@ -2765,6 +2765,57 @@ test('chatPlanner preserves relevant NYC target selection and no-target unrelate
     assert.deepEqual(unrelated.plan.trustGraphTargetIds, []);
 });
 
+test('chatPlanner infers a strongly relevant configured context target when omitted', async () => {
+    const planner = createPlanner(
+        JSON.stringify({
+            action: 'message',
+            modality: 'text',
+            requestedCapabilityProfile: 'balanced-general',
+            safetyTier: 'Low',
+            reasoning: 'No configured context source was selected.',
+            trustGraphTargetIds: [],
+            generation: {
+                reasoningEffort: 'low',
+                verbosity: 'low',
+                temperament: {
+                    tightness: 3,
+                    rationale: 3,
+                    attribution: 3,
+                    caution: 3,
+                    extent: 3,
+                },
+            },
+        }),
+        [],
+        [
+            {
+                id: 'archive-a',
+                flow: 'archive-flow',
+                collection: 'archive-collection',
+                description:
+                    'Primary municipal records about asbestos monitoring, sampling locations, air quality, inspections, and cleanup.',
+            },
+        ]
+    );
+
+    const result = await planFromWorkflow(
+        planner,
+        createChatRequest({
+            latestUserInput:
+                'Which sampling location is named in the asbestos monitoring report?',
+            conversation: [
+                {
+                    role: 'user',
+                    content:
+                        'Which sampling location is named in the asbestos monitoring report?',
+                },
+            ],
+        })
+    );
+
+    assert.deepEqual(result.plan.trustGraphTargetIds, ['archive-a']);
+});
+
 test('chatPlanner does not infer TrustGraph targets for invalid planner fallbacks', async () => {
     const planner = createPlanner(
         JSON.stringify('not-an-object'),
