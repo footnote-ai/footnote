@@ -41,6 +41,12 @@ const STATUS_ONLY_RESPONSE_PATTERN =
 
 const PUNCTUATED_NUMERIC_FRAGMENT_PATTERN = /^[:;]\s*\d+(?:[.,]\d+)?\s*$/u;
 
+const INTERNAL_INSTRUCTION_LEAK_PATTERN =
+    /(?:need for additional evidence|provide a clear answer to the user's question|your task is to produce only the final answer|do not use your prior knowledge|you are allowed to add additional information)/iu;
+
+const LIMITATION_ONLY_PATTERN =
+    /^(?:tracing|determining|identifying|verifying|answering|summarizing|comparing)\b[\s\S]{0,500}(?:would require|requires|needs to)[\s\S]{0,250}(?:complete|full|entire)\s+(?:text|document|record|source)\b[\s\S]*$/iu;
+
 const hasOnlyFormatting = (text: string): boolean =>
     /^[\s\p{P}\p{S}\p{M}\p{Default_Ignorable_Code_Point}]*$/u.test(text);
 
@@ -57,6 +63,8 @@ const isStructurallyIncompleteText = (text: string): boolean => {
     if (META_ONLY_OFFER_PATTERN.test(trimmed)) return true;
     if (STATUS_ONLY_RESPONSE_PATTERN.test(trimmed)) return true;
     if (PUNCTUATED_NUMERIC_FRAGMENT_PATTERN.test(trimmed)) return true;
+    if (INTERNAL_INSTRUCTION_LEAK_PATTERN.test(trimmed)) return true;
+    if (LIMITATION_ONLY_PATTERN.test(trimmed)) return true;
 
     // A revision that repeats multiple raw evidence blocks is an evidence
     // echo, not a user-facing answer. Reject it so the workflow can preserve

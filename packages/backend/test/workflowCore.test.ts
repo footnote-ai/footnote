@@ -585,6 +585,56 @@ test('aborts an in-flight attempt at the workflow deadline before starting the n
     });
 });
 
+test('returns at the workflow deadline when a handler ignores cancellation', async () => {
+    let handlerFinished = false;
+    const startedAtMs = Date.now();
+    const execution = await executeWorkflow({
+        workflow: workflow({
+            draft: step({
+                output: 'draft',
+                next: { done: 'optional' },
+            }),
+            optional: step({
+                input: [{ name: 'draft' }],
+                next: { done: null },
+            }),
+        }),
+        context: { requestId: 'req-1' },
+        handlers: {
+            draft: async (): Promise<AttemptResult> => ({
+                status: 'succeeded',
+                outcome: 'done',
+                result: { text: 'usable draft' },
+            }),
+            optional: async (): Promise<AttemptResult> => {
+                await new Promise<void>((resolve) =>
+                    setTimeout(() => {
+                        handlerFinished = true;
+                        resolve();
+                    }, 100)
+                );
+                return { status: 'succeeded', outcome: 'done' };
+            },
+        },
+        executionLimits: { ...limits, maxDurationMs: 25 },
+        startedAtMs,
+        now: () => Date.now(),
+    });
+
+    assert.equal(handlerFinished, false);
+    assert.deepEqual(execution.termination, {
+        reason: 'execution_limit',
+        limit: 'maxDurationMs',
+    });
+    assert.deepEqual(execution.run.results.draft, { text: 'usable draft' });
+    assert.equal(
+        execution.run.steps[1]?.attempts[0]?.errorCode,
+        'execution_deadline_exceeded'
+    );
+    await new Promise<void>((resolve) => setTimeout(resolve, 100));
+    assert.equal(handlerFinished, true);
+});
+
 test('rejects invalid definitions before any handler runs', async () => {
     const invalidDefinitions: readonly Workflow[] = [
         workflow({}, 'missing'),

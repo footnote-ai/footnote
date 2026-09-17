@@ -59,6 +59,8 @@ test('rejects empty and structurally incomplete generation results', () => {
         'Skills:\n- Legal/regulatory interpretation: medium-high\n- Data analysis: medium-high\n\nI can pull up a specific table if you want.',
         'Produced with partial support from a footnote engine.',
         ':2.0',
+        "Need for additional evidence\n\nProvide a clear answer to the user's question.",
+        'Tracing the full sequence would require reading the complete text of that document.',
         '.\n\nWould you like me to help find the source?',
         '. Would you like me to help find the source?',
         'TRUSTGRAPH SOURCE EVIDENCE\nRetrieved source text: one\n\nTRUSTGRAPH SOURCE EVIDENCE\nRetrieved source text: two',

@@ -1829,10 +1829,11 @@ export const createChatService = ({
                         const backendFailOpenAllowed =
                             ExecutionContract?.failOpen
                                 .allowFallbackGeneration ?? true;
-                        // Once the workflow has consumed its cumulative token
+                        // Once the workflow has consumed a cumulative workflow
                         // budget, a fallback would bypass the same accounting
                         // boundary. Preserve the admitted draft/lineage even
-                        // though provider-reported usage may have overrun it.
+                        // though provider-reported usage or wall-clock time may
+                        // have overrun it.
                         const tokenBudgetAlreadyExhausted =
                             workflowResult.workflowLineage.limitStop
                                 ?.exhaustedLimitKey === 'maxTokensTotal' &&
@@ -1841,13 +1842,24 @@ export const createChatService = ({
                                     limit.key === 'maxTokensTotal' &&
                                     limit.stoppedRun === true
                             ) === true;
+                        const timeBudgetAlreadyExhausted =
+                            workflowResult.workflowLineage.limitStop
+                                ?.exhaustedLimitKey === 'maxDurationMs' &&
+                            workflowResult.workflowLineage.effectiveLimits?.some(
+                                (limit) =>
+                                    limit.key === 'maxDurationMs' &&
+                                    limit.stoppedRun === true
+                            ) === true;
+                        const workflowBudgetAlreadyExhausted =
+                            tokenBudgetAlreadyExhausted ||
+                            timeBudgetAlreadyExhausted;
                         if (
                             handling.runtimeAction ===
                                 'run_fallback_generation' &&
-                            tokenBudgetAlreadyExhausted
+                            workflowBudgetAlreadyExhausted
                         ) {
                             logger.info(
-                                'Skipping fallback generation after cumulative workflow token budget exhaustion.',
+                                'Skipping fallback generation after workflow budget exhaustion.',
                                 {
                                     workflowName: workflowProfile.workflowName,
                                     terminationReason:
@@ -1862,7 +1874,7 @@ export const createChatService = ({
                             handling.runtimeAction ===
                                 'run_fallback_generation' &&
                             backendFailOpenAllowed &&
-                            !tokenBudgetAlreadyExhausted &&
+                            !workflowBudgetAlreadyExhausted &&
                             boundedFallbackGenerationRequest !== undefined
                         ) {
                             try {

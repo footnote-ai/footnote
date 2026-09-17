@@ -3044,10 +3044,15 @@ test('runChatMessages handles internal no-generation reasons with fallback gener
                         maxSteps: 3,
                         maxDurationMs: 15000,
                         steps: [],
-                        ...(terminationReason === 'budget_exhausted_tokens' && {
+                        ...((terminationReason === 'budget_exhausted_tokens' ||
+                            terminationReason === 'budget_exhausted_time') && {
                             effectiveLimits: [
                                 {
-                                    key: 'maxTokensTotal' as const,
+                                    key:
+                                        terminationReason ===
+                                        'budget_exhausted_tokens'
+                                            ? ('maxTokensTotal' as const)
+                                            : ('maxDurationMs' as const),
                                     state: 'enforced' as const,
                                     value: 100,
                                     stoppedRun: true,
@@ -3056,7 +3061,11 @@ test('runChatMessages handles internal no-generation reasons with fallback gener
                             limitStop: {
                                 stoppedByLimit: true,
                                 terminationReason,
-                                exhaustedLimitKey: 'maxTokensTotal' as const,
+                                exhaustedLimitKey:
+                                    terminationReason ===
+                                    'budget_exhausted_tokens'
+                                        ? ('maxTokensTotal' as const)
+                                        : ('maxDurationMs' as const),
                             },
                         }),
                     },
@@ -3068,13 +3077,14 @@ test('runChatMessages handles internal no-generation reasons with fallback gener
             conversationSnapshot: 'Summarize this.',
         });
 
-        const tokenBudgetExhausted =
-            terminationReason === 'budget_exhausted_tokens';
-        assert.equal(generationCalls, tokenBudgetExhausted ? 0 : 1);
-        assert.equal(usageRecords.length, tokenBudgetExhausted ? 0 : 1);
+        const workflowBudgetExhausted =
+            terminationReason === 'budget_exhausted_tokens' ||
+            terminationReason === 'budget_exhausted_time';
+        assert.equal(generationCalls, workflowBudgetExhausted ? 0 : 1);
+        assert.equal(usageRecords.length, workflowBudgetExhausted ? 0 : 1);
         assert.equal(
             response.message,
-            tokenBudgetExhausted
+            workflowBudgetExhausted
                 ? 'I could not generate a response for this request.'
                 : 'fallback single-pass response'
         );
@@ -3089,7 +3099,7 @@ test('runChatMessages handles internal no-generation reasons with fallback gener
         const fallbackExecution = response.metadata.execution?.find(
             (event) => event.kind === 'generation'
         );
-        if (tokenBudgetExhausted) {
+        if (workflowBudgetExhausted) {
             assert.equal(fallbackExecution, undefined);
             assert.equal(capturedGenerationExecution, undefined);
         } else {
