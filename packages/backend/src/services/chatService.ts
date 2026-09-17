@@ -1850,9 +1850,22 @@ export const createChatService = ({
                                     limit.key === 'maxDurationMs' &&
                                     limit.stoppedRun === true
                             ) === true;
+                        const fallbackHeadroomMs = Math.min(
+                            30_000,
+                            Math.max(
+                                1_000,
+                                Math.floor(
+                                    workflowExecutionLimits.maxDurationMs * 0.1
+                                )
+                            )
+                        );
                         const workflowDeadlineReached =
                             Date.now() - generationStartedAt >=
-                            workflowExecutionLimits.maxDurationMs;
+                            Math.max(
+                                0,
+                                workflowExecutionLimits.maxDurationMs -
+                                    fallbackHeadroomMs
+                            );
                         const workflowBudgetAlreadyExhausted =
                             tokenBudgetAlreadyExhausted ||
                             timeBudgetAlreadyExhausted ||
