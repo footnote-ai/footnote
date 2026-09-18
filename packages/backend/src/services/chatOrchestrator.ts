@@ -1876,6 +1876,7 @@ export const createChatOrchestrator = ({
             message: response.message,
             modality: executionPlan.modality,
             metadata: response.metadata,
+            answerProvenanceEligible: response.answerProvenanceEligible,
         };
     };
 

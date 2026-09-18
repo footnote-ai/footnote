@@ -134,6 +134,7 @@ test('web requests go through planner and are coerced to message when planner pi
     assert.ok(callCount >= 2);
     assert.equal(response.action, 'message');
     assert.equal(response.message, 'coerced web reply');
+    assert.equal(response.answerProvenanceEligible, true);
     assert.equal(
         finalMessages[0]?.content,
         renderConversationPromptLayers('web-chat').systemPrompt
