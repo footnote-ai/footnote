@@ -2814,6 +2814,7 @@ test('orchestrator returns clarification when tool returns needs_clarification s
     );
 
     assert.equal(response.action, 'message');
+    assert.equal(response.answerProvenanceEligible, false);
     assert.match(response.message, /Which New York did you mean?/);
     assert.match(response.message, /New York City/);
     assert.match(response.message, /New York State/);

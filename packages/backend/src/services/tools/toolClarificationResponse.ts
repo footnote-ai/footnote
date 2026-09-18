@@ -80,6 +80,7 @@ export const buildToolClarificationResponse = ({
         action: 'message',
         message: clarificationMessage,
         modality: 'text',
+        answerProvenanceEligible: false,
         metadata: {
             ...metadata,
             execution: [

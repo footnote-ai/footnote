@@ -344,6 +344,7 @@ const Chat = (): JSX.Element => {
             setStatus(null);
             setAnswer(FALLBACK_REFLECTION);
             setMetadata(null);
+            setAnswerProvenanceEligible(false);
         } finally {
             clearTimeout(timeoutId); // Ensure timeout is cleared in all cases
             if (abortRef.current === controller) {
