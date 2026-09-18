@@ -9,10 +9,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 
 import type { ResponseMetadata } from '@footnote/contracts/policy';
-import type {
-    PostChatRequest,
-    PostTraceCardRequest,
-} from '@footnote/contracts/web';
+import type { PostChatRequest } from '@footnote/contracts/web';
 import { botApi } from '../src/api/botApi.js';
 import { runtimeConfig } from '../src/config.js';
 import type { BotProfileConfig } from '../src/config/profile.js';
@@ -263,6 +260,53 @@ test('executeChatMessageAction sends text and provenance together when payload i
     assert.equal(delayedProvenanceCalls, 0);
 });
 
+test('executeChatMessageAction omits provenance for an ineligible message response', async () => {
+    const processor = createProcessor();
+    const processorAccess = processor as unknown as ProcessorPrivateAccess;
+    const message = createMessage();
+    const sentMessages: Array<{
+        content: string;
+        files: Array<{ filename: string; data: Buffer }>;
+        components: unknown[];
+    }> = [];
+
+    processorAccess.prepareProvenanceCgiPayload = async () => {
+        throw new Error('provenance should not be prepared');
+    };
+
+    await processorAccess.executeChatMessageAction(
+        message,
+        {
+            async sendMessage(
+                content: string,
+                files: Array<{ filename: string; data: Buffer }>,
+                _directReply: boolean,
+                _suppressEmbeds: boolean = true,
+                components: unknown[] = []
+            ) {
+                sentMessages.push({ content, files, components });
+                return { channel: { id: 'channel-1' } };
+            },
+        },
+        {
+            action: 'message',
+            message: 'I could not generate a response for this request.',
+            modality: 'text',
+            metadata: createMetadata(),
+            answerProvenanceEligible: false,
+        },
+        true
+    );
+
+    assert.deepEqual(sentMessages, [
+        {
+            content: 'I could not generate a response for this request.',
+            files: [],
+            components: [],
+        },
+    ]);
+});
+
 test('executeChatMessageAction falls back to a provenance follow-up when payload misses the wait window', async () => {
     const processor = createProcessor();
     const processorAccess = processor as unknown as ProcessorPrivateAccess;
@@ -339,7 +383,7 @@ test('executeChatMessageAction falls back to a provenance follow-up when payload
 test('prepareProvenanceCgiPayload and sendPreparedProvenanceCgi send image plus response-bound buttons', async () => {
     const processor = createProcessor();
     const processorAccess = processor as unknown as ProcessorPrivateAccess;
-    const originalPostTraceCard = botApi.postTraceCard;
+    const originalPostTraceCardFromTrace = botApi.postTraceCardFromTrace;
     const originalSendMessage = ResponseHandler.prototype.sendMessage;
     const sentCalls: Array<{
         content: string;
@@ -349,17 +393,16 @@ test('prepareProvenanceCgiPayload and sendPreparedProvenanceCgi send image plus 
         components: unknown[];
     }> = [];
     const capture = {
-        traceCardRequest: null as PostTraceCardRequest | null,
+        traceCardRequest: null as { responseId: string } | null,
     };
 
-    (botApi as { postTraceCard: typeof botApi.postTraceCard }).postTraceCard =
-        (async (request) => {
-            capture.traceCardRequest = request;
-            return {
-                responseId: request.responseId ?? 'resp_123',
-                pngBase64: 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAAB',
-            };
-        }) as typeof botApi.postTraceCard;
+    botApi.postTraceCardFromTrace = (async (request) => {
+        capture.traceCardRequest = request;
+        return {
+            responseId: request.responseId ?? 'resp_123',
+            pngBase64: 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAAB',
+        };
+    }) as typeof botApi.postTraceCardFromTrace;
 
     ResponseHandler.prototype.sendMessage = (async (
         content: string,
@@ -403,9 +446,7 @@ test('prepareProvenanceCgiPayload and sendPreparedProvenanceCgi send image plus 
             'resp_123'
         );
     } finally {
-        (
-            botApi as { postTraceCard: typeof botApi.postTraceCard }
-        ).postTraceCard = originalPostTraceCard;
+        botApi.postTraceCardFromTrace = originalPostTraceCardFromTrace;
         ResponseHandler.prototype.sendMessage = originalSendMessage;
     }
 
@@ -414,14 +455,6 @@ test('prepareProvenanceCgiPayload and sendPreparedProvenanceCgi send image plus 
     }
     const traceCardRequest = capture.traceCardRequest;
     assert.equal(traceCardRequest.responseId, 'resp_123');
-    assert.deepEqual(traceCardRequest.temperament, {
-        tightness: 5,
-        rationale: 3,
-    });
-    assert.deepEqual(traceCardRequest.chips, {
-        evidenceScore: 4,
-        freshnessScore: 5,
-    });
     assert.equal(sentCalls.length, 1);
     assert.equal(sentCalls[0].files.length, 1);
     assert.equal(sentCalls[0].files[0].filename, 'trace-card.png');
@@ -438,17 +471,16 @@ test('prepareProvenanceCgiPayload and sendPreparedProvenanceCgi send image plus 
 test('prepareProvenanceCgiPayload falls back to buttons-only when trace-card generation fails', async () => {
     const processor = createProcessor();
     const processorAccess = processor as unknown as ProcessorPrivateAccess;
-    const originalPostTraceCard = botApi.postTraceCard;
+    const originalPostTraceCardFromTrace = botApi.postTraceCardFromTrace;
     const originalSendMessage = ResponseHandler.prototype.sendMessage;
     const sentCalls: Array<{
         files: Array<{ filename: string; data: string | Buffer }>;
         components: unknown[];
     }> = [];
 
-    (botApi as { postTraceCard: typeof botApi.postTraceCard }).postTraceCard =
-        (async () => {
-            throw new Error('trace-card generation failed');
-        }) as typeof botApi.postTraceCard;
+    botApi.postTraceCardFromTrace = (async () => {
+        throw new Error('trace-card generation failed');
+    }) as typeof botApi.postTraceCardFromTrace;
 
     ResponseHandler.prototype.sendMessage = (async (
         _content: string,
@@ -480,9 +512,7 @@ test('prepareProvenanceCgiPayload falls back to buttons-only when trace-card gen
             'resp_123'
         );
     } finally {
-        (
-            botApi as { postTraceCard: typeof botApi.postTraceCard }
-        ).postTraceCard = originalPostTraceCard;
+        botApi.postTraceCardFromTrace = originalPostTraceCardFromTrace;
         ResponseHandler.prototype.sendMessage = originalSendMessage;
     }
 
@@ -496,6 +526,47 @@ test('prepareProvenanceCgiPayload falls back to buttons-only when trace-card gen
         .components.map((component) => component.custom_id)
         .filter((value): value is string => typeof value === 'string');
     assert.deepEqual(customIds, ['details:resp_123', 'report_issue:resp_123']);
+});
+
+test('sendPreparedProvenanceCgi delegates attachment delivery to ResponseHandler', async () => {
+    const processor = createProcessor();
+    const processorAccess = processor as unknown as ProcessorPrivateAccess;
+    const originalSendMessage = ResponseHandler.prototype.sendMessage;
+    const sentFiles: number[] = [];
+
+    ResponseHandler.prototype.sendMessage = (async (
+        _content: string,
+        files: Array<{ filename: string; data: string | Buffer }> = []
+    ) => {
+        sentFiles.push(files.length);
+        return {
+            id: files.length > 0 ? 'sent-with-card' : 'sent-controls-only',
+        } as never;
+    }) as typeof ResponseHandler.prototype.sendMessage;
+
+    try {
+        await processorAccess.sendPreparedProvenanceCgi(
+            {
+                id: 'anchor-attachment-failure',
+                channel: { id: 'channel-attachment-failure' },
+            },
+            {
+                id: 'message-attachment-failure',
+                author: { id: 'user-attachment-failure', username: 'Taylor' },
+            },
+            {
+                files: [
+                    { filename: 'trace-card.png', data: Buffer.from('card') },
+                ],
+                components: [buildProvenanceActionRow('resp_123')],
+            },
+            'resp_123'
+        );
+    } finally {
+        ResponseHandler.prototype.sendMessage = originalSendMessage;
+    }
+
+    assert.deepEqual(sentFiles, [1]);
 });
 
 test('executeChatAction routes react actions without falling back to message generation', async () => {

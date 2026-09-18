@@ -149,8 +149,27 @@ export { PersonaExpressionStrengthSchema } from './schemas.js';
 export type {
     ResponseFootnote,
     ResponseFootnoteSection,
+    ResponseFootnoteActionAvailability,
+    ResponseFootnoteActionId,
+    ResponseFootnoteArtifactAvailability,
+    ResponseFootnoteArtifactState,
+    ResponseFootnoteControlsSummary,
+    ResponseFootnoteLicenseSummary,
+    ResponseFootnoteProjectionInput,
+    ResponseFootnoteRenderProjection,
+    ResponseFootnoteEvaluatorSummary,
+    ResponseFootnoteSafetySummary,
+    ResponseFootnoteSourcesSummary,
+    ResponseFootnoteTraceAxis,
+    ResponseFootnoteTraceAxisState,
 } from './responseFootnote.js';
-export { RESPONSE_FOOTNOTE_SECTIONS } from './responseFootnote.js';
+export {
+    RESPONSE_FOOTNOTE_SAFETY_LABELS,
+    RESPONSE_FOOTNOTE_SECTIONS,
+    TRACE_TEMPERAMENT_AXIS_DESCRIPTIONS,
+    TRACE_TEMPERAMENT_AXIS_LABELS,
+    projectResponseFootnote,
+} from './responseFootnote.js';
 export {
     WORKFLOW_STEP_STATUSES,
     WORKFLOW_STEP_KINDS,
@@ -166,6 +185,7 @@ export {
     WORKFLOW_EVIDENCE_POSTURES,
     BOUNDED_REVIEW_ASSESS_DECISIONS,
     TRACE_TEMPERAMENT_AXIS_KEYS,
+    TRACE_TEMPERAMENT_MAPPING_VERSION,
     TRACE_ASSESS_FINAL_TEMPERAMENT_SIGNAL_KEYS,
     TRACE_PLANNER_TARGET_TEMPERAMENT_SIGNAL_KEYS,
     isTraceTemperamentEqual,

@@ -134,6 +134,7 @@ test('web requests go through planner and are coerced to message when planner pi
     assert.ok(callCount >= 2);
     assert.equal(response.action, 'message');
     assert.equal(response.message, 'coerced web reply');
+    assert.equal(response.answerProvenanceEligible, true);
     assert.equal(
         finalMessages[0]?.content,
         renderConversationPromptLayers('web-chat').systemPrompt
@@ -2813,6 +2814,7 @@ test('orchestrator returns clarification when tool returns needs_clarification s
     );
 
     assert.equal(response.action, 'message');
+    assert.equal(response.answerProvenanceEligible, false);
     assert.match(response.message, /Which New York did you mean?/);
     assert.match(response.message, /New York City/);
     assert.match(response.message, /New York State/);

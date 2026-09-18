@@ -45,9 +45,11 @@ const createInteraction = (overrides: {
     traceCaution?: number | null;
     traceExtent?: number | null;
     id?: string;
+    rejectFirstEditReply?: boolean;
 }) => {
     const editReplyPayloads: unknown[] = [];
     const deferReplyPayloads: unknown[] = [];
+    let editReplyAttempts = 0;
 
     return {
         interaction: {
@@ -105,6 +107,10 @@ const createInteraction = (overrides: {
                 deferReplyPayloads.push(payload);
             },
             editReply: async (payload: unknown) => {
+                editReplyAttempts += 1;
+                if (overrides.rejectFirstEditReply && editReplyAttempts === 1) {
+                    throw new Error('trace-card attachment rejected');
+                }
                 editReplyPayloads.push(payload);
             },
         },
@@ -251,6 +257,77 @@ test('/chat carries configured expression strength as a profile preference', asy
     } finally {
         botApi.chatViaApi = originalChatViaApi;
         runtimeConfigMutable.profile = originalProfile;
+    }
+});
+
+test('/chat retries the answer with native controls when attachment upload fails', async () => {
+    const originalChatViaApi = botApi.chatViaApi;
+    const originalPostTraceCardFromTrace = botApi.postTraceCardFromTrace;
+    botApi.chatViaApi = (async () =>
+        basicOutputFixture.response) as typeof botApi.chatViaApi;
+    botApi.postTraceCardFromTrace = (async (request) => ({
+        responseId: request.responseId,
+        pngBase64: Buffer.from('trace-card').toString('base64'),
+    })) as typeof botApi.postTraceCardFromTrace;
+
+    const { interaction, editReplyPayloads } = createInteraction({
+        prompt: basicOutputFixture.question,
+        rejectFirstEditReply: true,
+    });
+
+    try {
+        await chatCommand.execute(interaction as never);
+        assert.equal(editReplyPayloads.length, 1);
+        const payload = editReplyPayloads[0] as {
+            components?: unknown[];
+            files?: unknown[];
+        };
+        assert.equal(payload.components?.length, 1);
+        assert.equal(payload.files, undefined);
+    } finally {
+        botApi.chatViaApi = originalChatViaApi;
+        botApi.postTraceCardFromTrace = originalPostTraceCardFromTrace;
+    }
+});
+
+test('/chat omits answer provenance for an ineligible message response', async () => {
+    const originalChatViaApi = botApi.chatViaApi;
+    const originalPostTraceCardFromTrace = botApi.postTraceCardFromTrace;
+    let traceCardCalls = 0;
+    botApi.chatViaApi = (async () => ({
+        ...basicOutputFixture.response,
+        message: 'I could not generate a response for this request.',
+        answerProvenanceEligible: false,
+    })) as typeof botApi.chatViaApi;
+    botApi.postTraceCardFromTrace = (async () => {
+        traceCardCalls += 1;
+        return {
+            responseId: basicOutputFixture.response.metadata.responseId,
+            pngBase64: Buffer.from('trace-card').toString('base64'),
+        };
+    }) as typeof botApi.postTraceCardFromTrace;
+
+    const { interaction, editReplyPayloads } = createInteraction({
+        prompt: 'Try again.',
+    });
+
+    try {
+        await chatCommand.execute(interaction as never);
+        const payload = editReplyPayloads[0] as {
+            content?: string;
+            components?: unknown[];
+            files?: unknown[];
+        };
+        assert.equal(
+            payload.content,
+            'I could not generate a response for this request.'
+        );
+        assert.equal(payload.components, undefined);
+        assert.equal(payload.files, undefined);
+        assert.equal(traceCardCalls, 0);
+    } finally {
+        botApi.chatViaApi = originalChatViaApi;
+        botApi.postTraceCardFromTrace = originalPostTraceCardFromTrace;
     }
 });
 

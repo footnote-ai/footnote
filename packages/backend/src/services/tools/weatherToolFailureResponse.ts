@@ -89,6 +89,7 @@ export const buildWeatherToolFailureResponse = ({
         action: 'message',
         message: failureMessage,
         modality: 'text',
+        answerProvenanceEligible: false,
         metadata: {
             ...metadata,
             execution: [

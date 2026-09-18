@@ -38,13 +38,24 @@ test('details action renders markdown sections with execution table and trace vi
     const originalGetTrace = botApi.getTrace;
     const deferReplyPayloads: unknown[] = [];
     const editReplyPayloads: unknown[] = [];
-
     botApi.getTrace = (async () => ({
         status: 200,
         data: {
             responseId: 'resp_details_sections',
             provenance: 'Retrieved',
             safetyTier: 'Low',
+            evaluator: {
+                authorityLevel: 'influence',
+                mode: 'observe_only',
+                provenance: 'Inferred',
+                safetyDecision: {
+                    action: 'block',
+                    safetyTier: 'High',
+                    ruleId: 'safety.weaponization_request.v1',
+                    reasonCode: 'weaponization_request',
+                    reason: 'Deterministic weaponization-request rule matched.',
+                },
+            },
             tradeoffCount: 2,
             chainHash: 'hash_123',
             licenseContext: 'MIT',
@@ -158,6 +169,19 @@ test('details action renders markdown sections with execution table and trace vi
                     durationMs: 11,
                 },
             ],
+            steerabilityControls: {
+                version: 'v1',
+                controls: [
+                    {
+                        controlId: 'evidence_strictness',
+                        value: 'grounded',
+                        source: 'execution_contract',
+                        rationale: 'Preserved source boundaries.',
+                        mattered: true,
+                        impactedTargets: ['execution_contract_selection'],
+                    },
+                ],
+            },
         },
     })) as typeof botApi.getTrace;
 
@@ -198,6 +222,11 @@ test('details action renders markdown sections with execution table and trace vi
         assert.match(content, /Final Reason: `runtime_posture_adjustment`/);
         assert.match(content, /weaponization_request/);
         assert.match(content, /High\/Inferred\/block/);
+        assert.match(content, /Evaluator: `block` \/ authority `influence`/);
+        assert.match(
+            content,
+            /Recorded Controls: `evidence_strictness=grounded/
+        );
         assert.match(content, /```text/);
         assert.match(
             content,

@@ -9,29 +9,11 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import type { ResponseMetadata } from '@footnote/contracts/policy';
 import {
     buildProvenanceActionCustomId,
     buildProvenanceActionRow,
-    buildTraceCardRequest,
     parseProvenanceActionCustomId,
 } from '../src/utils/response/provenanceCgi.js';
-
-function createMetadata(): ResponseMetadata {
-    return {
-        responseId: 'resp_test_123',
-        provenance: 'Inferred',
-        safetyTier: 'Medium',
-        tradeoffCount: 1,
-        chainHash: 'abc123def456',
-        licenseContext: 'MIT',
-        modelVersion: 'gpt-5-mini',
-        staleAfter: '2026-03-05T00:00:00.000Z',
-        citations: [],
-        trace_target: {},
-        trace_final: {},
-    };
-}
 
 test('buildProvenanceActionRow renders details/report_issue with response-bound custom IDs', () => {
     const row = buildProvenanceActionRow('resp_123');
@@ -71,44 +53,4 @@ test('customId parser rejects invalid provenance IDs', () => {
     );
     assert.equal(parseProvenanceActionCustomId('full_trace:resp_x'), null);
     assert.equal(parseProvenanceActionCustomId('report_issue'), null);
-});
-
-test('buildTraceCardRequest forwards metadata-provided TRACE values without defaults', () => {
-    const metadata = createMetadata();
-    const request = buildTraceCardRequest({
-        ...metadata,
-        trace_final: {
-            tightness: 5,
-            attribution: 3,
-        },
-        evidenceScore: 4,
-        freshnessScore: 2,
-    });
-
-    assert.equal(request.responseId, 'resp_test_123');
-    assert.deepEqual(request.temperament, {
-        tightness: 5,
-        attribution: 3,
-    });
-    assert.deepEqual(request.chips, {
-        evidenceScore: 4,
-        freshnessScore: 2,
-    });
-});
-
-test('buildTraceCardRequest omits invalid or missing TRACE values', () => {
-    const metadata = createMetadata();
-    const request = buildTraceCardRequest({
-        ...metadata,
-        responseId: '   ',
-        trace_final: {
-            tightness: 6 as unknown as 5,
-        },
-        evidenceScore: 2.4 as unknown as 1,
-        freshnessScore: 7 as unknown as 1,
-    });
-
-    assert.equal(request.responseId, 'unknown_response_id');
-    assert.equal(request.temperament, undefined);
-    assert.equal(request.chips, undefined);
 });

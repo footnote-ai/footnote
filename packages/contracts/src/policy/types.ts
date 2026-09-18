@@ -130,6 +130,12 @@ export const TRACE_TEMPERAMENT_AXIS_KEYS = [
 export type TraceTemperamentAxisKey =
     (typeof TRACE_TEMPERAMENT_AXIS_KEYS)[number];
 
+/**
+ * Version of the deterministic TRACE axis meanings and source-field mapping.
+ * Bump this only when the canonical axis semantics or mapping changes.
+ */
+export const TRACE_TEMPERAMENT_MAPPING_VERSION = 'v1' as const;
+
 export const TRACE_ASSESS_FINAL_TEMPERAMENT_SIGNAL_KEYS: Record<
     TraceTemperamentAxisKey,
     keyof Pick<

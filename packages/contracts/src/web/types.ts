@@ -463,8 +463,10 @@ export type PostChatRequest = {
 };
 
 /**
- * Text reply. This is the only variant that carries response metadata because
- * it represents a completed generated answer.
+ * Text reply. This action means user-visible text should be displayed;
+ * metadata may describe an execution attempt rather than a completed answer.
+ * `answerProvenanceEligible` is the backend-owned distinction for the normal
+ * answer footnote and answer-bound controls.
  *
  * @api.operationId: postChat
  * @api.path: POST /api/chat
@@ -474,6 +476,12 @@ export type ChatMessageActionResponse = {
     message: string;
     modality: 'text' | 'tts';
     metadata: ResponseMetadata;
+    /**
+     * Whether the user-visible response is eligible for normal answer-provenance
+     * presentation. Omitted by older responses, which preserves their existing
+     * presentation.
+     */
+    answerProvenanceEligible?: boolean;
 };
 
 /**

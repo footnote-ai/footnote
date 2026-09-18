@@ -49,10 +49,7 @@ import {
     recoverContextDetailsFromTrace,
     type RecoveredImageContext,
 } from '../commands/image/contextResolver.js';
-import {
-    buildProvenanceActionRow,
-    buildTraceCardRequest,
-} from './response/provenanceCgi.js';
+import { buildProvenanceActionRow } from './response/provenanceCgi.js';
 import { botApi, isDiscordApiClientError } from '../api/botApi.js';
 import type { DiscordChatApiResponse } from '../api/index.js';
 import type {
@@ -78,6 +75,7 @@ type ChatMessageAction = {
     message: string;
     modality: 'text' | 'tts';
     metadata: ResponseMetadata;
+    answerProvenanceEligible?: boolean;
 };
 
 type ChatReactAction = {
@@ -130,7 +128,7 @@ type PreSendSafetyOutcome =
  */
 type PreparedProvenancePayload = {
     files: Array<{ filename: string; data: Buffer }>;
-    components: [ReturnType<typeof buildProvenanceActionRow>];
+    components: Array<ReturnType<typeof buildProvenanceActionRow>>;
 };
 
 const RESPONSE_CONTEXT_SIZE = 24;
@@ -1059,9 +1057,13 @@ export class MessageProcessor {
         const finalResponseText = chatResponse.message;
         // Start provenance work immediately so the trace card can race the main
         // response generation instead of always happening strictly afterward.
-        const provenancePayloadPromise = this.prepareProvenanceCgiPayload(
-            chatResponse.metadata
-        );
+        const provenancePayloadPromise =
+            chatResponse.answerProvenanceEligible === false
+                ? Promise.resolve<PreparedProvenancePayload>({
+                      files: [],
+                      components: [],
+                  })
+                : this.prepareProvenanceCgiPayload(chatResponse.metadata);
 
         let ttsResult:
             | Awaited<ReturnType<typeof botApi.runVoiceTtsViaApi>>['result']
@@ -1198,9 +1200,9 @@ export class MessageProcessor {
         const files: Array<{ filename: string; data: Buffer }> = [];
 
         try {
-            const traceCard = await botApi.postTraceCard(
-                buildTraceCardRequest(metadata)
-            );
+            const traceCard = await botApi.postTraceCardFromTrace({
+                responseId: metadata.responseId,
+            });
             files.push({
                 filename: 'trace-card.png',
                 data: Buffer.from(traceCard.pngBase64, 'base64'),

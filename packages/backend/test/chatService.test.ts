@@ -145,6 +145,7 @@ test('createChatService records backend token usage and estimated cost', async (
 
     assert.equal(response.action, 'message');
     assert.equal(response.message, 'chat response');
+    assert.equal(response.answerProvenanceEligible, true);
     assert.ok(usageRecords.length >= 1);
     assert.equal(usageRecords[0].feature, 'chat');
     assert.equal(usageRecords[0].model, 'gpt-5-mini');
@@ -250,6 +251,12 @@ test('runChat surfaces a controlled message when reasoning exhausts output befor
         response.action === 'message' ? response.message : undefined,
         'I could not complete a response within the model generation budget. Please try again.'
     );
+    assert.equal(
+        response.action === 'message'
+            ? response.answerProvenanceEligible
+            : undefined,
+        false
+    );
     assert.deepEqual(capturedGeneration?.completion, {
         status: 'incomplete',
         reason: 'max_output_tokens',
@@ -292,6 +299,12 @@ test('runChat surfaces a controlled message when a provider reports empty comple
     assert.equal(
         response.action === 'message' ? response.message : undefined,
         'I could not complete a response within the model generation budget. Please try again.'
+    );
+    assert.equal(
+        response.action === 'message'
+            ? response.answerProvenanceEligible
+            : undefined,
+        false
     );
 });
 
@@ -358,6 +371,7 @@ test('runChat preserves rejected direct routing attempts in response metadata', 
 
     assert.equal(response.action, 'message');
     assert.equal(response.message, 'direct fallback response');
+    assert.equal(response.answerProvenanceEligible, true);
     assert.equal(calls, 2);
     const generation = response.metadata.execution?.find(
         (event) => event.kind === 'generation'
@@ -2142,6 +2156,7 @@ test('runChatMessages executes Reviewed loop and forwards workflow lineage', asy
     });
 
     assert.equal(response.message, 'initial draft');
+    assert.equal(response.answerProvenanceEligible, true);
     assert.equal(callCount, 2);
     assert.equal(capturedWorkflow?.workflowName, 'message_reviewed');
     assert.equal(capturedWorkflow?.terminationReason, 'goal_satisfied');
@@ -2747,6 +2762,7 @@ test('runChatMessages handles surfaced no-generation reasons without runtime fal
             response.message,
             'I could not generate a response for this request.'
         );
+        assert.equal(response.answerProvenanceEligible, false);
         assert.equal(
             response.metadata.workflow?.terminationReason,
             terminationReason
@@ -2816,6 +2832,7 @@ test('runChatMessages uses one bounded fallback for an unmapped no-generation re
 
     assert.equal(generationCalls, 1);
     assert.equal(response.message, 'bounded fallback response');
+    assert.equal(response.answerProvenanceEligible, true);
     assert.equal(
         response.metadata.workflow?.terminationReason,
         'max_tool_calls_reached'
@@ -3019,6 +3036,7 @@ test('runChatMessages preserves no-generation lineage when fallback routing chai
         response.message,
         'I could not generate a response for this request.'
     );
+    assert.equal(response.answerProvenanceEligible, false);
     assert.equal(
         response.metadata.workflow?.terminationReason,
         'budget_exhausted_steps'
@@ -3599,6 +3617,7 @@ test('runChatMessages keeps no-generation surfaced when execution policy disable
         response.message,
         'I could not generate a response for this request.'
     );
+    assert.equal(response.answerProvenanceEligible, false);
     assert.equal(
         response.metadata.workflow?.terminationReason,
         'budget_exhausted_steps'
@@ -3656,6 +3675,7 @@ test('runChatMessages surfaces no-generation when direct generation routing chai
         response.message,
         'I could not generate a response for this request.'
     );
+    assert.equal(response.answerProvenanceEligible, false);
     assert.equal(traceMetadata?.workflow, undefined);
 });
 

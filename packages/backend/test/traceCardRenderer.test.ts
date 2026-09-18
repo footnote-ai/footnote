@@ -7,6 +7,9 @@
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import type { ResponseFootnote } from '@footnote/contracts/policy';
+import { projectResponseFootnote } from '@footnote/contracts/policy';
+import fixture from '../../contracts/test/fixtures/response-footnote.json' with { type: 'json' };
 
 import { renderTraceCardPng } from '../src/services/traceCard/traceCardRaster.js';
 import { renderTraceCardSvg } from '../src/services/traceCard/traceCardSvg.js';
@@ -23,6 +26,8 @@ const readPngDimensions = (png: Buffer): { width: number; height: number } => {
 
 const countMatches = (value: string, regex: RegExp): number =>
     (value.match(regex) ?? []).length;
+
+const fixtureFootnote = fixture.complete as ResponseFootnote;
 
 test('renderTraceCardSvg uses 5 wheel bands and renders metadata rows for valid scores', () => {
     const svg = renderTraceCardSvg({
@@ -114,4 +119,87 @@ test('renderTraceCardPng returns PNG bytes with expected signature and dimension
     const dimensions = readPngDimensions(png);
     assert.equal(dimensions.width, requestedWidth);
     assert.equal(dimensions.height, requestedHeight);
+});
+
+test('renderTraceCardSvg uses the shared response projection for semantic PNG cards', () => {
+    const projection = projectResponseFootnote({
+        metadata: fixtureFootnote,
+        artifacts: { trace: 'available', report: 'unavailable' },
+    });
+    const { svg, png } = renderTraceCardPng({ projection });
+
+    assert.match(svg, /width="860"/);
+    assert.match(svg, /height="470"/);
+    assert.match(svg, /Evidence/);
+    assert.match(svg, /Recorded fixture license/);
+    assert.match(svg, /Sensitivity: Low/);
+    assert.match(svg, /Evaluator: observe \/ allow \/ Evaluator tier Low/);
+    assert.match(svg, /Efficient use of space and/);
+    assert.match(svg, /attention\./);
+    assert.match(svg, /Separates sourced and/);
+    assert.match(svg, /inferred content\./);
+    assert.match(svg, /Final 5\/5/);
+    assert.match(svg, /Target 4\/5/);
+    assert.match(svg, /TRACE describes posture, not answer quality\./);
+    assert.doesNotMatch(svg, /trace-icon-evidence/);
+    assert.doesNotMatch(svg, /Freshness/);
+    assert.equal(readPngDimensions(png).width, 860);
+    assert.equal(readPngDimensions(png).height, 470);
+
+    for (const [axis, score] of Object.entries({
+        tightness: 4,
+        rationale: 3,
+        attribution: 5,
+        caution: 4,
+        extent: 2,
+    })) {
+        const axisMarkup = svg.match(
+            new RegExp(`<rect data-axis="${axis}"[^>]*/>`, 'g')
+        );
+        assert.equal(axisMarkup?.length, 5);
+        assert.equal(
+            axisMarkup?.filter((rect) => rect.includes('fill-opacity="0.9"'))
+                .length,
+            score
+        );
+    }
+});
+
+test('semantic card keeps sensitivity and evaluator records distinct', () => {
+    const projection = projectResponseFootnote({
+        metadata: fixtureFootnote,
+        artifacts: { trace: 'available', report: 'unavailable' },
+    });
+    const divergent = {
+        ...projection,
+        summary: {
+            ...projection.summary,
+            safety: {
+                ...projection.summary.safety,
+                sensitivityTier: 'Low' as const,
+                evaluator: {
+                    state: 'recorded' as const,
+                    authority: 'enforce' as const,
+                    action: 'block' as const,
+                    safetyTier: 'High' as const,
+                },
+            },
+        },
+    };
+    const svg = renderTraceCardSvg({ projection: divergent });
+
+    assert.match(svg, /Sensitivity: Low/);
+    assert.match(svg, /Evaluator: enforce \/ block \/ Evaluator tier High/);
+});
+test('semantic card keeps missing final axes neutral and visibly unavailable', () => {
+    const projection = projectResponseFootnote({
+        metadata: fixture.partial as ResponseFootnote,
+        artifacts: { trace: 'available', report: 'unavailable' },
+    });
+    const svg = renderTraceCardSvg({ projection });
+
+    assert.equal(countMatches(svg, /fill="#3F3C35" fill-opacity="0.22"/g), 4);
+    assert.match(svg, /Final unavailable/);
+    assert.match(svg, /Sensitivity: Medium/);
+    assert.match(svg, /Evaluator: Unavailable/);
 });

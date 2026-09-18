@@ -187,6 +187,22 @@ function formatSummarySection(
             `- Workflow Receipt: \`${formatMarkdownValue(workflowReceiptSummary, 220)}\``
         );
     }
+    if (payload.evaluator) {
+        lines.push(
+            `- Evaluator: \`${formatMarkdownValue(payload.evaluator.safetyDecision.action)}\` / authority \`${formatMarkdownValue(payload.evaluator.authorityLevel)}\``
+        );
+    }
+    lines.push(
+        `- License Context: \`${formatMarkdownValue(payload.licenseContext)}\``
+    );
+    if (payload.steerabilityControls) {
+        const controls = payload.steerabilityControls.controls;
+        lines.push(
+            `- Recorded Controls: \`${formatMarkdownValue(controls.length > 0 ? controls.map((control) => `${control.controlId}=${control.value} (${control.source}; ${control.mattered ? 'mattered' : 'did not matter'})`).join('; ') : 'none recorded', 420)}\``
+        );
+    } else {
+        lines.push('- Recorded Controls: unavailable');
+    }
     for (const summary of buildContextPresentationSummary({
         projectContext: payload.projectContext,
         githubContext: payload.githubContext,

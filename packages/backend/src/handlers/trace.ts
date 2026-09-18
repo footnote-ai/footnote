@@ -7,7 +7,10 @@
  */
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { createHash, randomUUID } from 'node:crypto';
-import type { ResponseMetadata } from '@footnote/contracts/policy';
+import {
+    projectResponseFootnote,
+    type ResponseMetadata,
+} from '@footnote/contracts/policy';
 import type { TraceDisplayMetadata } from '@footnote/contracts/web';
 import {
     PostTraceCardFromTraceRequestSchema,
@@ -791,11 +794,10 @@ const createTraceHandlers = ({
             }
 
             const { svg, png } = renderTraceCardPng({
-                temperament: metadata.trace_final,
-                chips: {
-                    evidenceScore: metadata.evidenceScore,
-                    freshnessScore: metadata.freshnessScore,
-                },
+                projection: projectResponseFootnote({
+                    metadata,
+                    artifacts: { trace: 'available', report: 'unavailable' },
+                }),
             });
 
             await writeAccess.store.upsertTraceCardSvg(responseId, svg);

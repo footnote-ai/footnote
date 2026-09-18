@@ -84,8 +84,27 @@ export type {
     GenerationContextManifestStatus,
     ResponseFootnote,
     ResponseFootnoteSection,
+    ResponseFootnoteActionAvailability,
+    ResponseFootnoteActionId,
+    ResponseFootnoteArtifactAvailability,
+    ResponseFootnoteArtifactState,
+    ResponseFootnoteControlsSummary,
+    ResponseFootnoteLicenseSummary,
+    ResponseFootnoteProjectionInput,
+    ResponseFootnoteRenderProjection,
+    ResponseFootnoteEvaluatorSummary,
+    ResponseFootnoteSafetySummary,
+    ResponseFootnoteSourcesSummary,
+    ResponseFootnoteTraceAxis,
+    ResponseFootnoteTraceAxisState,
 } from './policy/index.js';
-export { RESPONSE_FOOTNOTE_SECTIONS } from './policy/index.js';
+export {
+    RESPONSE_FOOTNOTE_SAFETY_LABELS,
+    RESPONSE_FOOTNOTE_SECTIONS,
+    TRACE_TEMPERAMENT_AXIS_DESCRIPTIONS,
+    TRACE_TEMPERAMENT_AXIS_LABELS,
+    projectResponseFootnote,
+} from './policy/index.js';
 export { PROJECT_CONTEXT_CANONICAL_REPOSITORY } from './policy/index.js';
 export {
     formatExecutionTimelineSummary,

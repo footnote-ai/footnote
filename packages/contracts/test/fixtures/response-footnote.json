@@ -1,0 +1,136 @@
+{
+    "complete": {
+        "responseId": "response-footnote-fixture-complete",
+        "provenance": "Retrieved",
+        "provenanceAssessment": {
+            "methodId": "deterministic_multi_signal_v1",
+            "methodLabel": "Deterministic multi-signal provenance",
+            "signals": {
+                "citationsPresent": true,
+                "retrievalRequested": true,
+                "retrievalUsed": true,
+                "retrievalToolExecuted": true,
+                "workflowEvidence": true,
+                "trustGraphEvidenceAvailable": false,
+                "trustGraphEvidenceUsed": false,
+                "assistantDeclaredSpeculative": false
+            },
+            "conflicts": [],
+            "limitations": []
+        },
+        "citations": [
+            {
+                "title": "Example source",
+                "url": "https://example.com/source"
+            }
+        ],
+        "safetyTier": "Low",
+        "evaluator": {
+            "authorityLevel": "observe",
+            "mode": "observe_only",
+            "provenance": "Retrieved",
+            "safetyDecision": {
+                "action": "allow",
+                "safetyTier": "Low",
+                "ruleId": null
+            }
+        },
+        "steerabilityControls": {
+            "version": "v1",
+            "controls": [
+                {
+                    "controlId": "evidence_strictness",
+                    "value": "grounded",
+                    "source": "execution_contract",
+                    "rationale": "Preserved source boundaries.",
+                    "mattered": true,
+                    "impactedTargets": ["execution_contract_selection"]
+                }
+            ]
+        },
+        "licenseContext": "Recorded fixture license",
+        "trace_target": {
+            "tightness": 3,
+            "rationale": 3,
+            "attribution": 4,
+            "caution": 4,
+            "extent": 2
+        },
+        "trace_final": {
+            "tightness": 4,
+            "rationale": 3,
+            "attribution": 5,
+            "caution": 4,
+            "extent": 2
+        },
+        "trace_final_reason_code": "runtime_posture_adjustment",
+        "evidenceScore": 4,
+        "freshnessScore": 3
+    },
+    "partial": {
+        "responseId": "response-footnote-fixture-partial",
+        "provenance": "Inferred",
+        "citations": [],
+        "safetyTier": "Medium",
+        "licenseContext": "",
+        "trace_target": {
+            "tightness": 3,
+            "caution": 2
+        },
+        "trace_final": {
+            "tightness": 3
+        }
+    },
+    "safetyDivergent": {
+        "responseId": "safety-divergent-fixture",
+        "provenance": "Retrieved",
+        "citations": [],
+        "safetyTier": "Low",
+        "evaluator": {
+            "authorityLevel": "enforce",
+            "mode": "enforced",
+            "provenance": "Retrieved",
+            "safetyDecision": {
+                "action": "block",
+                "safetyTier": "High",
+                "ruleId": "safety.professional.medical_or_legal_advice.v1",
+                "reasonCode": "professional_advice_guardrail",
+                "reason": "Recorded evaluator decision for fixture divergence."
+            }
+        },
+        "licenseContext": "",
+        "trace_target": {},
+        "trace_final": {}
+    },
+    "prepared": {
+        "responseId": "prepared-landing-fixture",
+        "provenance": "Inferred",
+        "citations": [
+            {
+                "title": "Prepared source",
+                "url": "https://example.com/prepared"
+            }
+        ],
+        "safetyTier": "Low",
+        "licenseContext": "Prepared license context",
+        "steerabilityControls": {
+            "version": "v1",
+            "controls": [
+                {
+                    "controlId": "workflow_mode",
+                    "value": "balanced",
+                    "source": "surface_profile",
+                    "rationale": "Captured prepared response setting.",
+                    "mattered": true,
+                    "impactedTargets": ["workflow_execution"]
+                }
+            ]
+        },
+        "trace_target": {
+            "tightness": 2
+        },
+        "trace_final": {
+            "tightness": 2
+        }
+    }
+}

@@ -350,6 +350,13 @@ const chatCommand: ChatCommandWithProfiles = {
                     return;
                 }
 
+                if (response.answerProvenanceEligible === false) {
+                    await interaction.editReply({
+                        content: replyBody,
+                    });
+                    return;
+                }
+
                 const components = [
                     buildProvenanceActionRow(metadata.responseId),
                 ];
@@ -380,11 +387,34 @@ const chatCommand: ChatCommandWithProfiles = {
                     );
                 }
 
-                await interaction.editReply({
+                const replyPayload = {
                     content: replyBody,
                     components,
                     files,
-                });
+                };
+                try {
+                    await interaction.editReply(replyPayload);
+                } catch (error) {
+                    if (files.length === 0) {
+                        throw error;
+                    }
+
+                    logger.warn(
+                        'Failed to attach /chat trace-card; retrying answer with controls only.',
+                        {
+                            responseId: metadata.responseId,
+                            interactionId: interaction.id,
+                            error:
+                                error instanceof Error
+                                    ? error.message
+                                    : String(error),
+                        }
+                    );
+                    await interaction.editReply({
+                        content: replyBody,
+                        components,
+                    });
+                }
                 return;
             }
 

@@ -9,7 +9,7 @@
 import { FormEvent, useCallback, useEffect, useRef, useState } from 'react';
 import { Turnstile } from '@marsidev/react-turnstile';
 import MarkdownResponse from './MarkdownResponse';
-import ProvenanceFooter from './ProvenanceFooter';
+import CanonicalResponseFootnote from './CanonicalResponseFootnote';
 import type { ResponseMetadata } from '@footnote/contracts/policy';
 import { loadRuntimeConfig } from '../config';
 import { api, isApiClientError } from '../utils/api';
@@ -43,6 +43,9 @@ const Chat = (): JSX.Element => {
     const [status, setStatus] = useState<ChatStatus | null>(null);
     const [answer, setAnswer] = useState('');
     const [metadata, setMetadata] = useState<ResponseMetadata | null>(null);
+    const [answerProvenanceEligible, setAnswerProvenanceEligible] = useState<
+        boolean | undefined
+    >(undefined);
     const [isLoading, setIsLoading] = useState(false);
     const [turnstileSiteKey, setTurnstileSiteKey] = useState('');
     const abortRef = useRef<AbortController | null>(null);
@@ -175,6 +178,7 @@ const Chat = (): JSX.Element => {
         setIsLoading(true);
         setAnswer('');
         setMetadata(null);
+        setAnswerProvenanceEligible(undefined);
 
         try {
             const payload = await api.chatQuestion(
@@ -233,6 +237,7 @@ const Chat = (): JSX.Element => {
                 showStatus(EMPTY_RESPONSE_MESSAGE);
                 setAnswer('');
                 setMetadata(null);
+                setAnswerProvenanceEligible(undefined);
                 return;
             }
 
@@ -241,6 +246,9 @@ const Chat = (): JSX.Element => {
 
             // Normalize backend metadata to ResponseMetadata format
             setMetadata(backendMetadata ?? null);
+            setAnswerProvenanceEligible(
+                payload.answerProvenanceEligible !== false
+            );
         } catch (error) {
             // A superseded request must not overwrite the newer request's status or answer.
             if (abortRef.current !== controller) {
@@ -336,6 +344,7 @@ const Chat = (): JSX.Element => {
             setStatus(null);
             setAnswer(FALLBACK_REFLECTION);
             setMetadata(null);
+            setAnswerProvenanceEligible(false);
         } finally {
             clearTimeout(timeoutId); // Ensure timeout is cleared in all cases
             if (abortRef.current === controller) {
@@ -520,7 +529,13 @@ const Chat = (): JSX.Element => {
                         )}
                     </div>
                 )}
-            {answer && metadata && <ProvenanceFooter metadata={metadata} />}
+            {answer && (
+                <CanonicalResponseFootnote
+                    metadata={metadata ?? null}
+                    artifacts={{ trace: 'unknown', report: 'unavailable' }}
+                    answerProvenanceEligible={answerProvenanceEligible}
+                />
+            )}
         </div>
     );
 };
