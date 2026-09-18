@@ -350,6 +350,13 @@ const chatCommand: ChatCommandWithProfiles = {
                     return;
                 }
 
+                if (response.answerProvenanceEligible === false) {
+                    await interaction.editReply({
+                        content: replyBody,
+                    });
+                    return;
+                }
+
                 const components = [
                     buildProvenanceActionRow(metadata.responseId),
                 ];

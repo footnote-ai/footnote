@@ -21,12 +21,14 @@ const toFootnote = (value: unknown): ResponseFootnote =>
 const render = (
     metadata: ResponseFootnote | null,
     trace: 'available' | 'unknown' | 'stale' | 'unavailable',
-    report: 'available' | 'unknown' | 'stale' | 'unavailable'
+    report: 'available' | 'unknown' | 'stale' | 'unavailable',
+    answerProvenanceEligible?: boolean
 ): string =>
     renderToStaticMarkup(
         <CanonicalResponseFootnote
             metadata={metadata}
             artifacts={{ trace, report }}
+            answerProvenanceEligible={answerProvenanceEligible}
         />
     );
 
@@ -217,6 +219,17 @@ test('rendered null metadata is unavailable and generated ids remain unique', ()
     assert.match(first, /data-state="unavailable"/);
     assert.match(first, /Trace.*Unavailable/);
     assert.match(first, /Report.*Unavailable/);
+});
+
+test('rendered ineligible response provenance is omitted', () => {
+    const markup = render(
+        toFootnote(fixture.complete),
+        'available',
+        'available',
+        false
+    );
+
+    assert.equal(markup, '');
 });
 
 test('canonical stylesheet declares neutral missing token and narrow layout rules', async () => {

@@ -57,6 +57,8 @@ export type ResponseFootnoteArtifactAvailability = {
 export type ResponseFootnoteProjectionInput = {
     metadata: ResponseFootnote | null;
     artifacts: ResponseFootnoteArtifactAvailability;
+    /** Backend-owned provenance-presentation disposition; omitted means legacy eligible behavior. */
+    answerProvenanceEligible?: boolean;
 };
 
 export type ResponseFootnoteTraceAxisState =
@@ -373,15 +375,35 @@ const projectActions = (
 export const projectResponseFootnote = ({
     metadata,
     artifacts,
+    answerProvenanceEligible,
 }: ResponseFootnoteProjectionInput): ResponseFootnoteRenderProjection => ({
-    status: metadata ? 'available' : 'unavailable',
-    facts: metadata ? projectFacts(metadata) : null,
+    status:
+        metadata && answerProvenanceEligible !== false
+            ? 'available'
+            : 'unavailable',
+    facts:
+        metadata && answerProvenanceEligible !== false
+            ? projectFacts(metadata)
+            : null,
     summary: {
-        sources: projectSources(metadata),
-        safety: projectSafety(metadata),
-        license: projectLicense(metadata),
-        controls: projectControls(metadata),
+        sources: projectSources(
+            answerProvenanceEligible === false ? null : metadata
+        ),
+        safety: projectSafety(
+            answerProvenanceEligible === false ? null : metadata
+        ),
+        license: projectLicense(
+            answerProvenanceEligible === false ? null : metadata
+        ),
+        controls: projectControls(
+            answerProvenanceEligible === false ? null : metadata
+        ),
     },
-    trace: projectTraceAxes(metadata),
-    actions: projectActions(metadata, artifacts),
+    trace: projectTraceAxes(
+        answerProvenanceEligible === false ? null : metadata
+    ),
+    actions: projectActions(
+        answerProvenanceEligible === false ? null : metadata,
+        artifacts
+    ),
 });

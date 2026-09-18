@@ -260,6 +260,53 @@ test('executeChatMessageAction sends text and provenance together when payload i
     assert.equal(delayedProvenanceCalls, 0);
 });
 
+test('executeChatMessageAction omits provenance for an ineligible message response', async () => {
+    const processor = createProcessor();
+    const processorAccess = processor as unknown as ProcessorPrivateAccess;
+    const message = createMessage();
+    const sentMessages: Array<{
+        content: string;
+        files: Array<{ filename: string; data: Buffer }>;
+        components: unknown[];
+    }> = [];
+
+    processorAccess.prepareProvenanceCgiPayload = async () => {
+        throw new Error('provenance should not be prepared');
+    };
+
+    await processorAccess.executeChatMessageAction(
+        message,
+        {
+            async sendMessage(
+                content: string,
+                files: Array<{ filename: string; data: Buffer }>,
+                _directReply: boolean,
+                _suppressEmbeds: boolean = true,
+                components: unknown[] = []
+            ) {
+                sentMessages.push({ content, files, components });
+                return { channel: { id: 'channel-1' } };
+            },
+        },
+        {
+            action: 'message',
+            message: 'I could not generate a response for this request.',
+            modality: 'text',
+            metadata: createMetadata(),
+            answerProvenanceEligible: false,
+        },
+        true
+    );
+
+    assert.deepEqual(sentMessages, [
+        {
+            content: 'I could not generate a response for this request.',
+            files: [],
+            components: [],
+        },
+    ]);
+});
+
 test('executeChatMessageAction falls back to a provenance follow-up when payload misses the wait window', async () => {
     const processor = createProcessor();
     const processorAccess = processor as unknown as ProcessorPrivateAccess;

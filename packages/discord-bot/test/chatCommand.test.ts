@@ -290,6 +290,47 @@ test('/chat retries the answer with native controls when attachment upload fails
     }
 });
 
+test('/chat omits answer provenance for an ineligible message response', async () => {
+    const originalChatViaApi = botApi.chatViaApi;
+    const originalPostTraceCardFromTrace = botApi.postTraceCardFromTrace;
+    let traceCardCalls = 0;
+    botApi.chatViaApi = (async () => ({
+        ...basicOutputFixture.response,
+        message: 'I could not generate a response for this request.',
+        answerProvenanceEligible: false,
+    })) as typeof botApi.chatViaApi;
+    botApi.postTraceCardFromTrace = (async () => {
+        traceCardCalls += 1;
+        return {
+            responseId: basicOutputFixture.response.metadata.responseId,
+            pngBase64: Buffer.from('trace-card').toString('base64'),
+        };
+    }) as typeof botApi.postTraceCardFromTrace;
+
+    const { interaction, editReplyPayloads } = createInteraction({
+        prompt: 'Try again.',
+    });
+
+    try {
+        await chatCommand.execute(interaction as never);
+        const payload = editReplyPayloads[0] as {
+            content?: string;
+            components?: unknown[];
+            files?: unknown[];
+        };
+        assert.equal(
+            payload.content,
+            'I could not generate a response for this request.'
+        );
+        assert.equal(payload.components, undefined);
+        assert.equal(payload.files, undefined);
+        assert.equal(traceCardCalls, 0);
+    } finally {
+        botApi.chatViaApi = originalChatViaApi;
+        botApi.postTraceCardFromTrace = originalPostTraceCardFromTrace;
+    }
+});
+
 test('/chat renders the shared basic output fixture', async () => {
     const originalChatViaApi = botApi.chatViaApi;
     const originalPostTraceCardFromTrace = botApi.postTraceCardFromTrace;

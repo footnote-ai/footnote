@@ -3152,6 +3152,9 @@ components:
                 modality:
                     type: string
                     enum: [text, tts]
+                answerProvenanceEligible:
+                    type: boolean
+                    description: Whether the user-visible response is eligible for normal answer-provenance presentation.
                 metadata:
                     $ref: '#/components/schemas/ResponseMetadata'
             required:

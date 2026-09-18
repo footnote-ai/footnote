@@ -43,6 +43,9 @@ const Chat = (): JSX.Element => {
     const [status, setStatus] = useState<ChatStatus | null>(null);
     const [answer, setAnswer] = useState('');
     const [metadata, setMetadata] = useState<ResponseMetadata | null>(null);
+    const [answerProvenanceEligible, setAnswerProvenanceEligible] = useState<
+        boolean | undefined
+    >(undefined);
     const [isLoading, setIsLoading] = useState(false);
     const [turnstileSiteKey, setTurnstileSiteKey] = useState('');
     const abortRef = useRef<AbortController | null>(null);
@@ -175,6 +178,7 @@ const Chat = (): JSX.Element => {
         setIsLoading(true);
         setAnswer('');
         setMetadata(null);
+        setAnswerProvenanceEligible(undefined);
 
         try {
             const payload = await api.chatQuestion(
@@ -233,6 +237,7 @@ const Chat = (): JSX.Element => {
                 showStatus(EMPTY_RESPONSE_MESSAGE);
                 setAnswer('');
                 setMetadata(null);
+                setAnswerProvenanceEligible(undefined);
                 return;
             }
 
@@ -241,6 +246,9 @@ const Chat = (): JSX.Element => {
 
             // Normalize backend metadata to ResponseMetadata format
             setMetadata(backendMetadata ?? null);
+            setAnswerProvenanceEligible(
+                payload.answerProvenanceEligible !== false
+            );
         } catch (error) {
             // A superseded request must not overwrite the newer request's status or answer.
             if (abortRef.current !== controller) {
@@ -524,6 +532,7 @@ const Chat = (): JSX.Element => {
                 <CanonicalResponseFootnote
                     metadata={metadata ?? null}
                     artifacts={{ trace: 'unknown', report: 'unavailable' }}
+                    answerProvenanceEligible={answerProvenanceEligible}
                 />
             )}
         </div>

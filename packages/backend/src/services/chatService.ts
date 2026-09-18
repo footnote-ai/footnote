@@ -1027,6 +1027,7 @@ export type RunChatMessagesResult =
           kind: 'message';
           message: string;
           metadata: ResponseMetadata;
+          answerProvenanceEligible: boolean;
           generationDurationMs: number;
           finalToolExecutionTelemetry?: FinalToolExecutionTelemetry;
           plannerSummary?: AppliedPlanState;
@@ -1041,6 +1042,7 @@ export type RunChatMessagesResult =
 type RunChatMessagesLegacyResult = {
     message: string;
     metadata: ResponseMetadata;
+    answerProvenanceEligible: boolean;
     generationDurationMs: number;
     finalToolExecutionTelemetry?: FinalToolExecutionTelemetry;
 };
@@ -1272,6 +1274,8 @@ export const createChatService = ({
                 kind: 'message',
                 message: normalizedMessage.content,
                 metadata: response.metadata,
+                answerProvenanceEligible:
+                    response.answerProvenanceEligible !== false,
                 generationDurationMs: Math.max(
                     0,
                     Date.now() - generationStartedAt
@@ -1518,6 +1522,7 @@ export const createChatService = ({
                       { action: 'message' }
                   >;
                   fallbackAfterInternalNoGeneration: boolean;
+                  generationCanBecomeAnswer: boolean;
               }
         > => {
             let generationResult: GenerationResult;
@@ -1536,6 +1541,7 @@ export const createChatService = ({
             let presentationMetadata: PresentationMetadata | undefined;
             let responseCandidates: ResponseCandidate[] | undefined;
             let fallbackAfterInternalNoGeneration = false;
+            let generationCanBecomeAnswer = false;
 
             if (workflowExecutionEnabled) {
                 const workflowPolicy: WorkflowRunPolicy =
@@ -1678,6 +1684,7 @@ export const createChatService = ({
                 switch (workflowResult.outcome) {
                     case 'generated': {
                         generationResult = workflowResult.generationResult;
+                        generationCanBecomeAnswer = true;
                         workflowLineage = canonicalWorkflowLineage;
                         presentationMetadata = workflowResult.presentation;
                         responseCandidates = workflowResult.responseCandidates;
@@ -1869,6 +1876,7 @@ export const createChatService = ({
                                     generationResult =
                                         chainGenerationResult.value
                                             .generationResult;
+                                    generationCanBecomeAnswer = true;
                                     fallbackAfterInternalNoGeneration = true;
                                     routedGenerationSelectedProfile =
                                         chainGenerationResult.value
@@ -1968,6 +1976,7 @@ export const createChatService = ({
                 } else {
                     generationResult =
                         chainGenerationResult.value.generationResult;
+                    generationCanBecomeAnswer = true;
                     routedGenerationSelectedProfile =
                         chainGenerationResult.value.selectedProfile;
                     generationRoutingAttribution = {
@@ -1996,6 +2005,7 @@ export const createChatService = ({
                 responseCandidates,
                 terminalActionResponse,
                 fallbackAfterInternalNoGeneration,
+                generationCanBecomeAnswer,
             };
         };
         const generationPhase = await executeGenerationPhase();
@@ -2060,7 +2070,12 @@ export const createChatService = ({
                 : workflowContextStepResult !== undefined
                   ? getContextStepSources(workflowContextStepResult)
                   : undefined;
+        // Keep the backend-known generation outcome separate from admission:
+        // surfaced no-generation copy is non-empty, but it is not an answer.
         const generationAdmission = admitGenerationResult(generationResult);
+        const answerProvenanceEligible =
+            generationPhase.generationCanBecomeAnswer &&
+            generationAdmission.admitted;
         const generationIncompleteBeforeOutput = !generationAdmission.admitted;
         const deliveredMessage = generationIncompleteBeforeOutput
             ? SURFACED_INCOMPLETE_GENERATION_MESSAGE
@@ -2551,6 +2566,7 @@ export const createChatService = ({
             kind: 'message',
             message: normalizedDeliveredMessage.content,
             metadata: metadataWithTrustGraph,
+            answerProvenanceEligible,
             generationDurationMs,
             ...(workflowPlannerSummary !== undefined && {
                 plannerSummary: workflowPlannerSummary,
@@ -2599,6 +2615,7 @@ export const createChatService = ({
         return {
             message: result.message,
             metadata: result.metadata,
+            answerProvenanceEligible: result.answerProvenanceEligible,
             generationDurationMs: result.generationDurationMs,
             ...(result.finalToolExecutionTelemetry !== undefined && {
                 finalToolExecutionTelemetry: result.finalToolExecutionTelemetry,
@@ -2661,6 +2678,7 @@ export const createChatService = ({
             message: response.message,
             modality: 'text',
             metadata: response.metadata,
+            answerProvenanceEligible: response.answerProvenanceEligible,
         };
     };
 

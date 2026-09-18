@@ -2099,6 +2099,7 @@ export const PostChatResponseSchema: z.ZodType<PostChatResponse> =
                 message: z.string(),
                 modality: z.enum(['text', 'tts']),
                 metadata: ResponseMetadataSchema,
+                answerProvenanceEligible: z.boolean().optional(),
             })
             .passthrough(),
         z

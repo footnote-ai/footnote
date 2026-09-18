@@ -172,6 +172,24 @@ test('returns unavailable facts and actions when metadata is absent', () => {
     );
 });
 
+test('suppresses ordinary footnote projection for an ineligible response', () => {
+    const projection = projectResponseFootnote({
+        metadata: toFootnote(fixtures.complete),
+        artifacts: { trace: 'available', report: 'available' },
+        answerProvenanceEligible: false,
+    });
+
+    assert.equal(projection.status, 'unavailable');
+    assert.equal(projection.facts, null);
+    assert.equal(projection.summary.sources.state, 'unavailable');
+    assert.equal(projection.summary.license.state, 'unavailable');
+    assert.equal(projection.trace.state, 'unavailable');
+    assert.equal(projection.actions.sources.state, 'unavailable');
+    assert.equal(projection.actions.controls.state, 'unavailable');
+    assert.equal(projection.actions.trace.state, 'unavailable');
+    assert.equal(projection.actions.report.state, 'unavailable');
+});
+
 test('preserves explicit available and stale artifact states for identified metadata', () => {
     const available = projectResponseFootnote({
         metadata: toFootnote(fixtures.complete),

@@ -21,6 +21,7 @@ import {
 export type CanonicalResponseFootnoteProps = {
     metadata: ResponseFootnote | null;
     artifacts: ResponseFootnoteArtifactAvailability;
+    answerProvenanceEligible?: boolean;
 };
 
 const SVG_SIZE = 240;
@@ -596,9 +597,17 @@ const SummaryItem = ({
 const CanonicalResponseFootnote = ({
     metadata,
     artifacts,
-}: CanonicalResponseFootnoteProps): JSX.Element => {
-    const projection = projectResponseFootnote({ metadata, artifacts });
+    answerProvenanceEligible,
+}: CanonicalResponseFootnoteProps): JSX.Element | null => {
+    const projection = projectResponseFootnote({
+        metadata,
+        artifacts,
+        answerProvenanceEligible,
+    });
     const instanceId = useId().replace(/:/g, '');
+    if (answerProvenanceEligible === false) {
+        return null;
+    }
     const traceTitleId = `${instanceId}-trace-title`;
     const traceDescriptionId = `${instanceId}-trace-description`;
     const traceHref = projection.facts?.responseId
