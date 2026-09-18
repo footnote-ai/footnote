@@ -59,6 +59,10 @@ export type StepHandlerInput<TContext = unknown> = {
     iteration: number;
     /** This Step's current Attempt, starting at 1. */
     attempt: number;
+    /** Abort signal for work that must stop at the workflow deadline. */
+    signal: AbortSignal;
+    /** Milliseconds remaining when this Attempt was admitted. */
+    remainingDurationMs: number;
 };
 
 export type StepHandler<TContext = unknown> = (

@@ -9,6 +9,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
+import { DEFAULT_BACKEND_REQUEST_TIMEOUT_MS } from '@footnote/contracts/policy';
 import type { PostChatRequest } from '@footnote/contracts/web';
 import {
     buildPromptRequest,
@@ -195,6 +196,10 @@ test('argument parser requires exactly one request source', () => {
                 'request.json',
             ]),
         /exactly one of --request-file <path> or --prompt <text>/
+    );
+    assert.equal(
+        parseAgentChatArguments(['--prompt', 'hello']).timeoutMs,
+        DEFAULT_BACKEND_REQUEST_TIMEOUT_MS
     );
 });
 

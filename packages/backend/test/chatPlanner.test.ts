@@ -76,7 +76,13 @@ const planFromWorkflow = (
 
 const createPlanner = (
     normalizedText: string,
-    availableCapabilityProfiles: ChatPlannerCapabilityProfileOption[] = []
+    availableCapabilityProfiles: ChatPlannerCapabilityProfileOption[] = [],
+    availableTrustGraphTargets: Array<{
+        id: string;
+        flow: string;
+        collection: string;
+        description: string;
+    }> = []
 ) => {
     return createChatPlanner({
         executePlanner: async () => ({
@@ -84,21 +90,34 @@ const createPlanner = (
             model: 'gpt-5-mini',
         }),
         availableCapabilityProfiles,
+        availableTrustGraphTargets,
     });
 };
 
 test('chat planner uses the shared workflow output default', async () => {
     let observedMaxOutputTokens: number | undefined;
+    let observedTemperature: number | undefined;
     const planner = createChatPlanner({
-        executePlanner: async ({ maxOutputTokens }) => {
+        executePlanner: async ({ maxOutputTokens, temperature }) => {
             observedMaxOutputTokens = maxOutputTokens;
+            observedTemperature = temperature;
             return {
                 text: JSON.stringify({
                     action: 'message',
                     modality: 'text',
+                    requestedCapabilityProfile: 'balanced-general',
                     safetyTier: 'Low',
                     reasoning: 'A normal message is appropriate.',
-                    generation: { verbosity: 'low' },
+                    generation: {
+                        verbosity: 'low',
+                        temperament: {
+                            tightness: 3,
+                            rationale: 3,
+                            attribution: 3,
+                            caution: 3,
+                            extent: 3,
+                        },
+                    },
                 }),
                 model: 'deepseek/deepseek-v4-flash-0731',
             };
@@ -109,6 +128,316 @@ test('chat planner uses the shared workflow output default', async () => {
 
     assert.equal(DEFAULT_CHAT_PLANNER_MAX_OUTPUT_TOKENS, 2_000);
     assert.equal(observedMaxOutputTokens, 2_000);
+    assert.equal(observedTemperature, 0);
+});
+
+test('chat planner receives bounded recent context scope as advisory follow-up evidence', async () => {
+    let observedMessages: Array<{ role: string; content: string }> = [];
+    const planner = createChatPlanner({
+        executePlanner: async ({ messages }) => {
+            observedMessages = messages;
+            return {
+                text: JSON.stringify({
+                    action: 'message',
+                    modality: 'text',
+                    requestedCapabilityProfile: 'balanced-general',
+                    safetyTier: 'Low',
+                    reasoning: 'A grounded response is appropriate.',
+                    trustGraphTargetIds: ['archive-docs'],
+                    generation: {
+                        verbosity: 'low',
+                        temperament: {
+                            tightness: 3,
+                            rationale: 3,
+                            attribution: 3,
+                            caution: 3,
+                            extent: 3,
+                        },
+                    },
+                }),
+                model: 'gpt-5-mini',
+            };
+        },
+        availableTrustGraphTargets: [
+            {
+                id: 'archive-docs',
+                flow: 'archive-flow',
+                collection: 'archive-collection',
+                description: 'Primary archive records.',
+            },
+        ],
+        recentContextTargets: [{ id: 'archive-docs', outcome: 'succeeded' }],
+    });
+
+    await planFromWorkflow(
+        planner,
+        createChatRequest({
+            latestUserInput: 'What about the following week?',
+            conversation: [
+                {
+                    role: 'user',
+                    content: 'According to the archive, what happened?',
+                },
+                {
+                    role: 'assistant',
+                    content: 'The archive records a response.',
+                },
+                { role: 'user', content: 'What about the following week?' },
+            ],
+        })
+    );
+
+    const scopeMessage = observedMessages.find((message) =>
+        message.content.startsWith('Recent context scope')
+    );
+    assert.ok(scopeMessage);
+    assert.match(scopeMessage.content, /archive-docs/);
+    assert.match(scopeMessage.content, /succeeded/);
+    assert.match(scopeMessage.content, /explicit source redirect/);
+});
+
+test('chat planner does not carry recent context into explicit redirects or unrelated requests', async () => {
+    const observedMessages: Array<Array<{ role: string; content: string }>> =
+        [];
+    const planner = createChatPlanner({
+        executePlanner: async ({ messages }) => {
+            observedMessages.push(messages);
+            return {
+                text: JSON.stringify({
+                    action: 'message',
+                    modality: 'text',
+                    requestedCapabilityProfile: 'balanced-general',
+                    safetyTier: 'Low',
+                    reasoning: 'A normal response is appropriate.',
+                    trustGraphTargetIds: ['archive-docs'],
+                    generation: {
+                        verbosity: 'low',
+                        temperament: {
+                            tightness: 3,
+                            rationale: 3,
+                            attribution: 3,
+                            caution: 3,
+                            extent: 3,
+                        },
+                    },
+                }),
+                model: 'gpt-5-mini',
+            };
+        },
+        recentContextTargets: [{ id: 'archive-docs', outcome: 'succeeded' }],
+    });
+    const priorConversation: PostChatRequest['conversation'] = [
+        { role: 'user', content: 'According to the archive, what happened?' },
+        { role: 'assistant', content: 'The archive records a response.' },
+    ];
+
+    await planFromWorkflow(
+        planner,
+        createChatRequest({
+            latestUserInput: 'Now search the web instead.',
+            conversation: [
+                ...priorConversation,
+                { role: 'user', content: 'Now search the web instead.' },
+            ],
+        })
+    );
+    await planFromWorkflow(
+        planner,
+        createChatRequest({
+            latestUserInput: 'What is the weather in Paris?',
+            conversation: [
+                ...priorConversation,
+                { role: 'user', content: 'What is the weather in Paris?' },
+            ],
+        })
+    );
+
+    assert.match(
+        observedMessages[0]?.find((message) =>
+            message.content.startsWith('Recent context scope')
+        )?.content ?? '',
+        /no eligible prior scope/
+    );
+    assert.match(
+        observedMessages[1]?.find((message) =>
+            message.content.startsWith('Recent context scope')
+        )?.content ?? '',
+        /no eligible prior scope/
+    );
+
+    const explicitRedirect = await planFromWorkflow(
+        planner,
+        createChatRequest({
+            latestUserInput: 'Now search the web instead.',
+            conversation: [
+                ...priorConversation,
+                { role: 'user', content: 'Now search the web instead.' },
+            ],
+        })
+    );
+    assert.deepEqual(explicitRedirect.plan.trustGraphTargetIds, []);
+
+    const secondExplicitRedirect = await planFromWorkflow(
+        planner,
+        createChatRequest({
+            latestUserInput: 'Use the web for this one.',
+            conversation: [
+                ...priorConversation,
+                { role: 'user', content: 'Use the web for this one.' },
+            ],
+        })
+    );
+    assert.deepEqual(secondExplicitRedirect.plan.trustGraphTargetIds, []);
+
+    const unrelated = await planFromWorkflow(
+        planner,
+        createChatRequest({
+            latestUserInput: 'Help me rewrite this paragraph.',
+            conversation: [
+                ...priorConversation,
+                { role: 'user', content: 'Help me rewrite this paragraph.' },
+            ],
+        })
+    );
+    assert.deepEqual(unrelated.plan.trustGraphTargetIds, []);
+});
+
+test('chat planner preserves recent context for explicit source augmentation', async () => {
+    let observedMessages: Array<{ role: string; content: string }> = [];
+    const planner = createChatPlanner({
+        executePlanner: async ({ messages }) => {
+            observedMessages = messages;
+            return {
+                text: JSON.stringify({
+                    action: 'message',
+                    modality: 'text',
+                    requestedCapabilityProfile: 'balanced-general',
+                    safetyTier: 'Low',
+                    reasoning: 'The archive and web are both relevant.',
+                    trustGraphTargetIds: ['archive-docs', 'web-search'],
+                    generation: {
+                        verbosity: 'low',
+                        temperament: {
+                            tightness: 3,
+                            rationale: 3,
+                            attribution: 3,
+                            caution: 3,
+                            extent: 3,
+                        },
+                        search: {
+                            query: 'archive and web sources',
+                            contextSize: 'low',
+                            intent: 'current_facts',
+                        },
+                    },
+                }),
+                model: 'gpt-5-mini',
+            };
+        },
+        availableTrustGraphTargets: [
+            {
+                id: 'web-search',
+                flow: 'web-flow',
+                collection: 'web-collection',
+                description: 'Public web sources.',
+            },
+        ],
+        recentContextTargets: [{ id: 'archive-docs', outcome: 'succeeded' }],
+    });
+
+    const result = await planFromWorkflow(
+        planner,
+        createChatRequest({
+            latestUserInput: 'Also check the web.',
+            conversation: [
+                {
+                    role: 'user',
+                    content: 'According to the archive, what happened?',
+                },
+                {
+                    role: 'assistant',
+                    content: 'The archive records a response.',
+                },
+                { role: 'user', content: 'Also check the web.' },
+            ],
+        })
+    );
+
+    const scopeMessage = observedMessages.find((message) =>
+        message.content.startsWith('Recent context scope')
+    );
+    assert.ok(scopeMessage);
+    assert.match(scopeMessage.content, /archive-docs/);
+    assert.deepEqual(result.plan.trustGraphTargetIds, [
+        'archive-docs',
+        'web-search',
+    ]);
+    assert.equal(
+        result.plan.generation.search?.query,
+        'archive and web sources'
+    );
+});
+
+test('chat planner does not add web search to an inherited source continuation', async () => {
+    const planner = createChatPlanner({
+        executePlanner: async () => ({
+            text: JSON.stringify({
+                action: 'message',
+                modality: 'text',
+                requestedCapabilityProfile: 'balanced-general',
+                safetyTier: 'Low',
+                reasoning: 'The prior source remains relevant.',
+                trustGraphTargetIds: [],
+                generation: {
+                    verbosity: 'low',
+                    temperament: {
+                        tightness: 3,
+                        rationale: 3,
+                        attribution: 3,
+                        caution: 3,
+                        extent: 3,
+                    },
+                    search: {
+                        query: 'monitoring protocols',
+                        contextSize: 'low',
+                        intent: 'current_facts',
+                    },
+                    toolIntent: {
+                        toolName: 'web_search',
+                        requested: true,
+                        input: { query: 'monitoring protocols' },
+                    },
+                },
+            }),
+            model: 'gpt-5-mini',
+        }),
+        recentContextTargets: [{ id: 'archive-docs', outcome: 'succeeded' }],
+    });
+
+    const result = await planFromWorkflow(
+        planner,
+        createChatRequest({
+            latestUserInput: 'What about the monitoring protocols?',
+            conversation: [
+                {
+                    role: 'user',
+                    content: 'According to the archive, what happened?',
+                },
+                {
+                    role: 'assistant',
+                    content: 'The archive records a response.',
+                },
+                {
+                    role: 'user',
+                    content: 'What about the monitoring protocols?',
+                },
+            ],
+        })
+    );
+
+    assert.deepEqual(result.plan.trustGraphTargetIds, ['archive-docs']);
+    assert.equal(result.plan.generation.search, undefined);
+    assert.equal(result.plan.generation.toolIntent, undefined);
 });
 
 test('chatPlanner forwards the configured planner reasoning effort', async () => {
@@ -2368,4 +2697,248 @@ test('chatPlanner preserves bounded opaque TrustGraph target suggestions', async
         'meeting-archive',
         'unknown-target',
     ]);
+});
+
+test('chatPlanner preserves relevant NYC target selection and no-target unrelated selection', async () => {
+    const availableTrustGraphTargets = [
+        {
+            id: 'nyc-sept11',
+            flow: 'sept11-retrieval-deepseek-0731-hybrid-bge-small-raw',
+            collection: 'sept11-tranche-0-retrieval',
+            description:
+                'NYC September 11 records: primary-source municipal records concerning response, cleanup, environmental conditions, inspections, agencies, residents, recovery work, air-quality and asbestos monitoring, sampling locations and measurements, and related matters.',
+        },
+    ];
+    const plan = (trustGraphTargetIds: string[]) =>
+        createPlanner(
+            JSON.stringify({
+                action: 'message',
+                modality: 'text',
+                requestedCapabilityProfile: 'balanced-general',
+                safetyTier: 'Low',
+                reasoning:
+                    trustGraphTargetIds.length > 0
+                        ? 'The NYC records are relevant.'
+                        : 'No configured context source is relevant.',
+                trustGraphTargetIds,
+                generation: {
+                    reasoningEffort: 'low',
+                    verbosity: 'low',
+                    temperament: {
+                        tightness: 3,
+                        rationale: 3,
+                        attribution: 3,
+                        caution: 3,
+                        extent: 3,
+                    },
+                },
+            }),
+            [],
+            availableTrustGraphTargets
+        );
+
+    const relevant = await planFromWorkflow(
+        plan(['nyc-sept11']),
+        createChatRequest({
+            latestUserInput:
+                'What do the NYC September 11 records say about air quality?',
+            conversation: [
+                {
+                    role: 'user',
+                    content:
+                        'What do the NYC September 11 records say about air quality?',
+                },
+            ],
+        })
+    );
+    assert.deepEqual(relevant.plan.trustGraphTargetIds, ['nyc-sept11']);
+
+    const unrelated = await planFromWorkflow(
+        plan([]),
+        createChatRequest({
+            latestUserInput: 'What is the weather in Chicago?',
+            conversation: [
+                { role: 'user', content: 'What is the weather in Chicago?' },
+            ],
+        })
+    );
+    assert.deepEqual(unrelated.plan.trustGraphTargetIds, []);
+});
+
+test('chatPlanner infers a strongly relevant configured context target when omitted', async () => {
+    const planner = createPlanner(
+        JSON.stringify({
+            action: 'message',
+            modality: 'text',
+            requestedCapabilityProfile: 'balanced-general',
+            safetyTier: 'Low',
+            reasoning: 'No configured context source was selected.',
+            trustGraphTargetIds: [],
+            generation: {
+                reasoningEffort: 'low',
+                verbosity: 'low',
+                temperament: {
+                    tightness: 3,
+                    rationale: 3,
+                    attribution: 3,
+                    caution: 3,
+                    extent: 3,
+                },
+            },
+        }),
+        [],
+        [
+            {
+                id: 'archive-a',
+                flow: 'archive-flow',
+                collection: 'archive-collection',
+                description:
+                    'Primary municipal records about asbestos monitoring, sampling locations, air quality, inspections, and cleanup.',
+            },
+        ]
+    );
+
+    const result = await planFromWorkflow(
+        planner,
+        createChatRequest({
+            latestUserInput:
+                'Which sampling location is named in the asbestos monitoring report?',
+            conversation: [
+                {
+                    role: 'user',
+                    content:
+                        'Which sampling location is named in the asbestos monitoring report?',
+                },
+            ],
+        })
+    );
+
+    assert.deepEqual(result.plan.trustGraphTargetIds, ['archive-a']);
+});
+
+test('chatPlanner does not infer TrustGraph targets for invalid planner fallbacks', async () => {
+    const planner = createPlanner(
+        JSON.stringify('not-an-object'),
+        [],
+        [
+            {
+                id: 'nyc-sept11',
+                flow: 'sept11-flow',
+                collection: 'sept11',
+                description: 'NYC September 11 municipal archive records.',
+            },
+        ]
+    );
+
+    const result = await planFromWorkflow(
+        planner,
+        createChatRequest({
+            latestUserInput:
+                'What do the NYC September 11 archive records say?',
+            conversation: [
+                {
+                    role: 'user',
+                    content:
+                        'What do the NYC September 11 archive records say?',
+                },
+            ],
+        })
+    );
+
+    assert.equal(result.execution.reasonCode, 'planner_invalid_output');
+    assert.deepEqual(result.plan.trustGraphTargetIds, []);
+});
+
+test('chatPlanner does not infer TrustGraph targets for non-message actions', async () => {
+    const planner = createPlanner(
+        JSON.stringify({
+            action: 'react',
+            modality: 'text',
+            reaction: '👍',
+            safetyTier: 'Low',
+            reasoning: 'A reaction is enough.',
+            generation: {
+                reasoningEffort: 'low',
+                verbosity: 'low',
+            },
+        }),
+        [],
+        [
+            {
+                id: 'nyc-sept11',
+                flow: 'sept11-flow',
+                collection: 'sept11',
+                description: 'NYC September 11 municipal archive records.',
+            },
+        ]
+    );
+
+    const result = await planFromWorkflow(
+        planner,
+        createChatRequest({
+            latestUserInput:
+                'What do the NYC September 11 archive records say?',
+            conversation: [
+                {
+                    role: 'user',
+                    content:
+                        'What do the NYC September 11 archive records say?',
+                },
+            ],
+        })
+    );
+
+    assert.equal(result.plan.action, 'react');
+    assert.deepEqual(result.plan.trustGraphTargetIds, []);
+});
+
+test('chatPlanner preserves explicitly named configured sources when planner omits them', async () => {
+    const planner = createPlanner(
+        JSON.stringify({
+            action: 'message',
+            modality: 'text',
+            requestedCapabilityProfile: 'balanced-general',
+            safetyTier: 'Low',
+            reasoning: 'Public search was selected.',
+            trustGraphTargetIds: [],
+            generation: {
+                reasoningEffort: 'low',
+                verbosity: 'low',
+                temperament: {
+                    tightness: 3,
+                    rationale: 3,
+                    attribution: 3,
+                    caution: 3,
+                    extent: 3,
+                },
+            },
+        }),
+        [],
+        [
+            {
+                id: 'nyc-sept11',
+                flow: 'sept11-flow',
+                collection: 'sept11-collection',
+                description:
+                    'NYC September 11 primary-source municipal records about inspections and cleanup.',
+            },
+        ]
+    );
+
+    const result = await planFromWorkflow(
+        planner,
+        createChatRequest({
+            latestUserInput:
+                'Search the September 11 records for building inspections.',
+            conversation: [
+                {
+                    role: 'user',
+                    content:
+                        'Search the September 11 records for building inspections.',
+                },
+            ],
+        })
+    );
+
+    assert.deepEqual(result.plan.trustGraphTargetIds, ['nyc-sept11']);
 });

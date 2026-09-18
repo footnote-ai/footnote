@@ -23,6 +23,8 @@ export type ChatPlannerInvocationContext = {
     purpose: ChatPlannerInvocationPurpose;
     /** Workflow-owned output reservation for this bounded planner call. */
     maxOutputTokens?: number;
+    /** Workflow deadline cancellation propagated to the planner provider. */
+    signal?: AbortSignal;
 };
 
 export const isWorkflowOwnedPlannerInvocation = (

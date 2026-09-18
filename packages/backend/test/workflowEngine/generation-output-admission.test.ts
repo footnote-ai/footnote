@@ -21,7 +21,7 @@ const result = (text: string): GenerationResult => ({
     model: 'test-model',
 });
 
-test('rejects empty and known incomplete generation results with exact reasons', () => {
+test('rejects empty and structurally incomplete generation results', () => {
     assert.deepEqual(admitGenerationResult(result('   ')), {
         admitted: false,
         reasonCode: 'generation_empty_output',
@@ -47,6 +47,34 @@ test('rejects empty and known incomplete generation results with exact reasons',
             reasonCode: 'generation_incomplete_before_output',
         }
     );
+    for (const text of [
+        '.',
+        '...',
+        '😊',
+        'LGTM',
+        '[S1]',
+        'Sources: [1](https://example.test/source)',
+        ':citation:citation',
+        '.\n\nNote: the retrieval results are untrusted evidence.',
+        'Skills:\n- Legal/regulatory interpretation: medium-high\n- Data analysis: medium-high\n\nI can pull up a specific table if you want.',
+        'Produced with partial support from a footnote engine.',
+        ':2.0',
+        "Need for additional evidence\n\nProvide a clear answer to the user's question.",
+        'Tracing the full sequence would require reading the complete text of that document.',
+        '.\n\nWould you like me to help find the source?',
+        '. Would you like me to help find the source?',
+        '. Could you tell me what specifically you are trying to establish?',
+        'TRUSTGRAPH SOURCE EVIDENCE\nRetrieved source text: one\n\nTRUSTGRAPH SOURCE EVIDENCE\nRetrieved source text: two',
+        '. A response fragment that lost its opening sentence.',
+        'The answer above already explains the result; I am only adding this note.',
+        "The user's question is repeated here. I should provide a final answer.",
+        'The conversation history already contains the answer. Let me re-read it.',
+    ]) {
+        assert.deepEqual(admitGenerationResult(result(text)), {
+            admitted: false,
+            reasonCode: 'generation_empty_output',
+        });
+    }
     assert.deepEqual(
         admitGenerationResult({
             ...result(''),
@@ -69,8 +97,9 @@ test('accepts unusual but mechanically valid generation text', () => {
         '{"answer":"ok","items":[1,2,3]}',
         'こんにちは — مرحبًا — Привет',
         '| key | value |\n| --- | --- |\n| x | !!! |',
-        '+++ ??? ... \\ \\ = =',
         '\u200B visible text',
+        'The indexed records do not establish that claim.',
+        'No. The supplied evidence does not answer that question.',
     ];
 
     for (const text of validTexts) {

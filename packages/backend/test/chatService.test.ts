@@ -9,6 +9,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 
 import type {
+    GenerationRequest,
     GenerationResult,
     GenerationRuntime,
 } from '@footnote/agent-runtime';
@@ -2839,6 +2840,210 @@ test('runChatMessages uses one bounded fallback for an unmapped no-generation re
     );
 });
 
+test('runChatMessages preserves the context-projected request for bounded fallback generation', async () => {
+    let fallbackRequest: GenerationRequest | undefined;
+    const chatService = createChatService({
+        generationRuntime: {
+            kind: 'test-runtime',
+            async generate(request) {
+                fallbackRequest = request;
+                return {
+                    text: 'context-aware fallback response',
+                    model: 'gpt-5-mini',
+                    usage: {
+                        promptTokens: 10,
+                        completionTokens: 5,
+                        totalTokens: 15,
+                    },
+                    provenance: 'Retrieved',
+                    citations: [],
+                };
+            },
+        },
+        storeTrace: async () => undefined,
+        buildResponseMetadata,
+        defaultModel: 'gpt-5-mini',
+        recordUsage: () => undefined,
+        chatWorkflowConfig: {
+            reviewLoopEnabled: true,
+            maxIterations: 1,
+            maxDurationMs: 15000,
+        },
+        runReviewWorkflow: async () =>
+            ({
+                outcome: 'no_generation',
+                fallbackGenerationRequest: {
+                    messages: [
+                        {
+                            role: 'user',
+                            content:
+                                'TRUSTGRAPH SOURCE EVIDENCE: notices total 1,234',
+                        },
+                    ],
+                },
+                workflowLineage: {
+                    workflowId: 'wf_context_fallback',
+                    workflowName: 'message_reviewed',
+                    status: 'degraded',
+                    terminationReason: 'budget_exhausted_time',
+                    stepCount: 1,
+                    maxSteps: 3,
+                    maxDurationMs: 15000,
+                    steps: [],
+                },
+            }) satisfies RunBoundedReviewWorkflowResult,
+    });
+
+    const response = await chatService.runChatMessages({
+        messages: [{ role: 'user', content: 'What totals?' }],
+        conversationSnapshot: 'What totals?',
+    });
+
+    assert.equal(response.message, 'context-aware fallback response');
+    assert.match(
+        fallbackRequest?.messages
+            .map((message) => message.content)
+            .join('\n') ?? '',
+        /TRUSTGRAPH SOURCE EVIDENCE: notices total 1,234/
+    );
+});
+
+test('runChatMessages blocks fallback generation after an evidence review rejection', async () => {
+    let generationCalls = 0;
+    const chatService = createChatService({
+        generationRuntime: {
+            kind: 'test-runtime',
+            async generate() {
+                generationCalls += 1;
+                return {
+                    text: 'unreviewed fallback answer',
+                    model: 'gpt-5-mini',
+                    provenance: 'Retrieved' as const,
+                    citations: [],
+                };
+            },
+        },
+        storeTrace: async () => undefined,
+        buildResponseMetadata,
+        defaultModel: 'gpt-5-mini',
+        recordUsage: () => undefined,
+        chatWorkflowConfig: {
+            reviewLoopEnabled: true,
+            maxIterations: 1,
+            maxDurationMs: 15_000,
+        },
+        runReviewWorkflow: async () =>
+            ({
+                outcome: 'no_generation',
+                fallbackGenerationAllowed: false,
+                fallbackGenerationRequest: {
+                    messages: [{ role: 'user', content: 'Use the evidence.' }],
+                },
+                workflowLineage: {
+                    workflowId: 'wf_evidence_review_rejection',
+                    workflowName: 'message_reviewed',
+                    status: 'degraded',
+                    terminationReason: 'executor_error_fail_open',
+                    stepCount: 3,
+                    maxSteps: 4,
+                    maxDurationMs: 15_000,
+                    steps: [],
+                },
+            }) satisfies RunBoundedReviewWorkflowResult,
+    });
+
+    const response = await chatService.runChatMessages({
+        messages: [
+            { role: 'user', content: 'What does the source establish?' },
+        ],
+        conversationSnapshot: 'What does the source establish?',
+    });
+
+    assert.equal(
+        response.message,
+        'I could not generate a response for this request.'
+    );
+    assert.equal(generationCalls, 0);
+});
+
+test('runChatMessages bounds context-preserving fallback generation to remaining budget', async () => {
+    let fallbackRequest: GenerationRequest | undefined;
+    let generationCalls = 0;
+    const chatService = createChatService({
+        generationRuntime: {
+            kind: 'test-runtime',
+            async generate(request) {
+                generationCalls += 1;
+                fallbackRequest = request;
+                return {
+                    text: 'bounded context fallback response',
+                    model: 'gpt-5-mini',
+                    usage: {
+                        promptTokens: 10,
+                        completionTokens: 5,
+                        totalTokens: 15,
+                    },
+                    provenance: 'Retrieved',
+                    citations: [],
+                };
+            },
+        },
+        storeTrace: async () => undefined,
+        buildResponseMetadata,
+        defaultModel: 'gpt-5-mini',
+        recordUsage: () => undefined,
+        chatWorkflowConfig: {
+            reviewLoopEnabled: true,
+            maxIterations: 1,
+            maxDurationMs: 15000,
+        },
+        runReviewWorkflow: async () =>
+            ({
+                outcome: 'no_generation',
+                fallbackGenerationRequest: {
+                    messages: [{ role: 'user', content: 'Use the evidence.' }],
+                    maxOutputTokens: 1_000_000,
+                },
+                workflowLineage: {
+                    workflowId: 'wf_bounded_context_fallback',
+                    workflowName: 'message_reviewed',
+                    status: 'degraded',
+                    terminationReason: 'budget_exhausted_time',
+                    stepCount: 1,
+                    maxSteps: 3,
+                    maxDurationMs: 15000,
+                    steps: [
+                        {
+                            stepId: 'step_context',
+                            stepKind: 'tool',
+                            attempt: 1,
+                            startedAt: '2026-09-14T00:00:00.000Z',
+                            finishedAt: '2026-09-14T00:00:00.001Z',
+                            durationMs: 1,
+                            usage: { totalTokens: 511_999 },
+                            outcome: {
+                                status: 'executed',
+                                summary: 'Context retrieved.',
+                            },
+                        },
+                    ],
+                },
+            }) satisfies RunBoundedReviewWorkflowResult,
+    });
+
+    const response = await chatService.runChatMessages({
+        messages: [{ role: 'user', content: 'What does the evidence say?' }],
+        conversationSnapshot: 'What does the evidence say?',
+    });
+
+    assert.equal(
+        response.message,
+        'I could not generate a response for this request.'
+    );
+    assert.equal(generationCalls, 0);
+    assert.equal(fallbackRequest, undefined);
+});
+
 test('runChatMessages handles internal no-generation reasons with fallback generation marker and preserved lineage', async () => {
     const internalReasons: Array<
         Extract<
@@ -2914,10 +3119,15 @@ test('runChatMessages handles internal no-generation reasons with fallback gener
                         maxSteps: 3,
                         maxDurationMs: 15000,
                         steps: [],
-                        ...(terminationReason === 'budget_exhausted_tokens' && {
+                        ...((terminationReason === 'budget_exhausted_tokens' ||
+                            terminationReason === 'budget_exhausted_time') && {
                             effectiveLimits: [
                                 {
-                                    key: 'maxTokensTotal' as const,
+                                    key:
+                                        terminationReason ===
+                                        'budget_exhausted_tokens'
+                                            ? ('maxTokensTotal' as const)
+                                            : ('maxDurationMs' as const),
                                     state: 'enforced' as const,
                                     value: 100,
                                     stoppedRun: true,
@@ -2926,7 +3136,11 @@ test('runChatMessages handles internal no-generation reasons with fallback gener
                             limitStop: {
                                 stoppedByLimit: true,
                                 terminationReason,
-                                exhaustedLimitKey: 'maxTokensTotal' as const,
+                                exhaustedLimitKey:
+                                    terminationReason ===
+                                    'budget_exhausted_tokens'
+                                        ? ('maxTokensTotal' as const)
+                                        : ('maxDurationMs' as const),
                             },
                         }),
                     },
@@ -2938,13 +3152,14 @@ test('runChatMessages handles internal no-generation reasons with fallback gener
             conversationSnapshot: 'Summarize this.',
         });
 
-        const tokenBudgetExhausted =
-            terminationReason === 'budget_exhausted_tokens';
-        assert.equal(generationCalls, tokenBudgetExhausted ? 0 : 1);
-        assert.equal(usageRecords.length, tokenBudgetExhausted ? 0 : 1);
+        const workflowBudgetExhausted =
+            terminationReason === 'budget_exhausted_tokens' ||
+            terminationReason === 'budget_exhausted_time';
+        assert.equal(generationCalls, workflowBudgetExhausted ? 0 : 1);
+        assert.equal(usageRecords.length, workflowBudgetExhausted ? 0 : 1);
         assert.equal(
             response.message,
-            tokenBudgetExhausted
+            workflowBudgetExhausted
                 ? 'I could not generate a response for this request.'
                 : 'fallback single-pass response'
         );
@@ -2959,7 +3174,7 @@ test('runChatMessages handles internal no-generation reasons with fallback gener
         const fallbackExecution = response.metadata.execution?.find(
             (event) => event.kind === 'generation'
         );
-        if (tokenBudgetExhausted) {
+        if (workflowBudgetExhausted) {
             assert.equal(fallbackExecution, undefined);
             assert.equal(capturedGenerationExecution, undefined);
         } else {
@@ -3051,6 +3266,59 @@ test('runChatMessages preserves no-generation lineage when fallback routing chai
             event.profileId === 'workflow_internal_fallback'
     );
     assert.equal(fallbackExecution, undefined);
+});
+
+test('runChatMessages does not start fallback after the workflow deadline has elapsed', async () => {
+    let generationCalls = 0;
+    const chatService = createChatService({
+        generationRuntime: {
+            kind: 'test-runtime',
+            async generate() {
+                generationCalls += 1;
+                return {
+                    text: 'late fallback',
+                    model: 'gpt-5-mini',
+                };
+            },
+        },
+        storeTrace: async () => undefined,
+        buildResponseMetadata,
+        defaultModel: 'gpt-5-mini',
+        recordUsage: () => undefined,
+        chatWorkflowConfig: {
+            modeId: 'grounded',
+            reviewLoopEnabled: true,
+            maxIterations: 1,
+            maxDurationMs: 1,
+        },
+        runReviewWorkflow: async () => {
+            await new Promise<void>((resolve) => setTimeout(resolve, 10));
+            return {
+                outcome: 'no_generation' as const,
+                workflowLineage: {
+                    workflowId: 'wf_deadline_elapsed',
+                    workflowName: 'message_reviewed',
+                    status: 'degraded' as const,
+                    terminationReason: 'budget_exhausted_steps' as const,
+                    stepCount: 0,
+                    maxSteps: 3,
+                    maxDurationMs: 1,
+                    steps: [],
+                },
+            } satisfies RunBoundedReviewWorkflowResult;
+        },
+    });
+
+    const response = await chatService.runChatMessages({
+        messages: [{ role: 'user', content: 'Summarize this.' }],
+        conversationSnapshot: 'Summarize this.',
+    });
+
+    assert.equal(generationCalls, 0);
+    assert.equal(
+        response.message,
+        'I could not generate a response for this request.'
+    );
 });
 
 test('runChatMessages attributes a failed workflow route to the actual Terra attempt', async () => {

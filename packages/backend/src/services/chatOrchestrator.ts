@@ -32,6 +32,7 @@ import {
     createChatPlanner,
     type ChatPlan,
     type ChatPlannerInvocationContext,
+    type RecentContextTarget,
     ChatPlannerStructuredOutputError,
 } from './chatPlanner.js';
 import { createOpenAiChatPlannerStructuredExecutor } from './chatPlannerStructuredOpenAi.js';
@@ -200,6 +201,62 @@ export const createChatOrchestrator = ({
         typeof logger.child === 'function'
             ? logger.child({ module: 'chatOrchestrator' })
             : logger;
+    const recentContextScopes = new Map<
+        string,
+        { targets: RecentContextTarget[]; updatedAtMs: number }
+    >();
+    const recentContextScopeTtlMs = 15 * 60_000;
+    const maxRecentContextScopes = 512;
+    const resolveRecentContextScopeKey = (
+        request: PostChatRequest
+    ): string | undefined => {
+        const stableRequestKey = request.sessionId;
+        if (stableRequestKey !== undefined) {
+            return `${request.surface}:session:${stableRequestKey}`;
+        }
+        const channelId = request.surfaceContext?.channelId;
+        const userId = request.surfaceContext?.userId;
+        if (channelId !== undefined && userId !== undefined) {
+            return `${request.surface}:channel:${channelId}:user:${userId}`;
+        }
+        return undefined;
+    };
+    const readRecentContextTargets = (
+        request: PostChatRequest
+    ): RecentContextTarget[] => {
+        const key = resolveRecentContextScopeKey(request);
+        if (key === undefined) return [];
+        const state = recentContextScopes.get(key);
+        if (
+            state === undefined ||
+            Date.now() - state.updatedAtMs > recentContextScopeTtlMs
+        ) {
+            recentContextScopes.delete(key);
+            return [];
+        }
+        return state.targets.map((target) => ({ ...target }));
+    };
+    const recordRecentContextTargets = (
+        request: PostChatRequest,
+        targets: readonly RecentContextTarget[]
+    ): void => {
+        const key = resolveRecentContextScopeKey(request);
+        if (key === undefined) return;
+        if (targets.length === 0) {
+            recentContextScopes.delete(key);
+            return;
+        }
+        if (recentContextScopes.size >= maxRecentContextScopes) {
+            const oldestKey = recentContextScopes.keys().next().value;
+            if (typeof oldestKey === 'string') {
+                recentContextScopes.delete(oldestKey);
+            }
+        }
+        recentContextScopes.set(key, {
+            targets: targets.map((target) => ({ ...target })),
+            updatedAtMs: Date.now(),
+        });
+    };
     const catalogProfiles = runtimeConfig.modelProfiles.catalog;
     const enabledProfiles = catalogProfiles.filter(
         (profile) => profile.enabled
@@ -273,7 +330,8 @@ export const createChatOrchestrator = ({
         : undefined;
     const createRuntimeChatPlanner = (
         getActivePlannerProfile: () => ModelProfile,
-        safetyIdentifier: string | undefined
+        safetyIdentifier: string | undefined,
+        recentContextTargets: readonly RecentContextTarget[]
     ) => {
         const hasStructuredPlannerProfile = catalogProfiles.some(
             (profile) =>
@@ -291,6 +349,7 @@ export const createChatOrchestrator = ({
             availableCapabilityProfiles: plannerCapabilityOptions,
             availableTrustGraphTargets:
                 executionContractTrustGraph?.targets ?? [],
+            recentContextTargets,
             // DeepSeek's reasoning channel can consume the entire bounded
             // text-JSON planner allowance before emitting its small decision
             // object. The planner is a routing hint, not a deliberative step;
@@ -747,10 +806,6 @@ export const createChatOrchestrator = ({
             },
             chatOrchestratorLogger
         );
-        const chatPlanner = createRuntimeChatPlanner(
-            () => activePlannerProfile,
-            safetyIdentifier
-        );
         const isWeatherLikeRequest = (input: string): boolean => {
             const normalized = input.trim().toLowerCase();
             if (normalized.length === 0) {
@@ -804,6 +859,11 @@ export const createChatOrchestrator = ({
             });
             throw error;
         }
+        const chatPlanner = createRuntimeChatPlanner(
+            () => activePlannerProfile,
+            safetyIdentifier,
+            readRecentContextTargets(normalizedRequest)
+        );
         const botProfileDisplayName = personaProfile.displayName;
         const addressing = normalizedRequest.trigger.addressing;
         // Backend policy owns Discord participation after normalization and
@@ -1743,6 +1803,7 @@ export const createChatOrchestrator = ({
                   })
                 : undefined;
         if (response.kind === 'terminal_action') {
+            recordRecentContextTargets(normalizedRequest, []);
             const terminalResponse =
                 response.response ??
                 ({
@@ -1786,6 +1847,16 @@ export const createChatOrchestrator = ({
         const totalDurationMs =
             response.metadata.totalDurationMs ??
             Math.max(0, Date.now() - orchestrationStartedAt);
+        recordRecentContextTargets(
+            normalizedRequest,
+            executionPlan.trustGraphTargetIds?.map((id) => ({
+                id,
+                outcome:
+                    response.metadata.trustGraph?.adapterStatus === 'success'
+                        ? ('succeeded' as const)
+                        : ('failed' as const),
+            })) ?? []
+        );
         if (finalizedSteerabilityControls !== undefined) {
             response.metadata.steerabilityControls =
                 finalizedSteerabilityControls;

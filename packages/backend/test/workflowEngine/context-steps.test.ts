@@ -204,6 +204,103 @@ test('runBoundedReviewWorkflow executes injected context step and records contex
     ]);
 });
 
+test('runBoundedReviewWorkflow retains projected context for fallback after empty generation', async () => {
+    const abortController = new AbortController();
+    const result = await runBoundedReviewWorkflowForTest({
+        generationRuntime: {
+            kind: 'test-runtime',
+            async generate() {
+                return {
+                    text: '',
+                    model: 'gpt-5-mini',
+                    finishReason: 'stop',
+                    completion: {
+                        status: 'completed',
+                        visibleTextLength: 0,
+                    },
+                    provenance: 'Inferred',
+                    citations: [],
+                };
+            },
+        },
+        generationRequest: {
+            model: 'gpt-5-mini',
+            messages: [{ role: 'user', content: 'What totals?' }],
+            signal: abortController.signal,
+        },
+        messagesWithHints: [{ role: 'user', content: 'What totals?' }],
+        generationStartedAtMs: Date.now(),
+        workflowConfig: {
+            workflowName: 'message_reviewed',
+            maxIterations: 1,
+            maxDurationMs: 15000,
+            executionLimits: {
+                maxWorkflowSteps: 3,
+                maxToolCalls: 1,
+                maxDeliberationCalls: 0,
+                maxReviewCycles: 0,
+                maxTokensTotal: 96_000,
+                maxDurationMs: 15000,
+            },
+        },
+        workflowPolicy: {
+            enablePlanning: false,
+            enableToolUse: true,
+            enableReplanning: false,
+            enableGeneration: true,
+            enableAssessment: false,
+            enableRevision: false,
+        },
+        contextStepRequests: [
+            {
+                integrationName: 'trustgraph',
+                requested: true,
+                eligible: true,
+                input: { queryIntent: 'What totals?' },
+            },
+        ],
+        contextStepExecutor: async () => ({
+            outcome: 'executed' as const,
+            executionContext: {
+                toolName: 'trustgraph',
+                status: 'executed' as const,
+            },
+            evidence: {
+                content: ['TRUSTGRAPH SOURCE EVIDENCE: notices total 1,234'],
+            },
+        }),
+        captureUsage: (generationResult) => ({
+            model: generationResult.model ?? 'gpt-5-mini',
+            promptTokens: generationResult.usage?.promptTokens ?? 0,
+            completionTokens: generationResult.usage?.completionTokens ?? 0,
+            totalTokens: generationResult.usage?.totalTokens ?? 0,
+            estimatedCost: {
+                inputCostUsd: 0,
+                outputCostUsd: 0,
+                totalCostUsd: 0,
+            },
+        }),
+    });
+
+    assert.equal(result.outcome, 'no_generation');
+    if (result.outcome !== 'no_generation') {
+        throw new Error('Expected empty generation to produce no_generation.');
+    }
+    assert.match(
+        result.fallbackGenerationRequest?.messages
+            .map((message) => message.content)
+            .join('\n') ?? '',
+        /TRUSTGRAPH SOURCE EVIDENCE: notices total 1,234/
+    );
+    assert.equal(
+        Object.prototype.hasOwnProperty.call(
+            result.fallbackGenerationRequest,
+            'signal'
+        ),
+        false
+    );
+});
+
 test('runBoundedReviewWorkflow preserves backend-injected context steps after planner continuation', async () => {
     const executedIntegrations: string[] = [];
     const generationRuntime: GenerationRuntime = {

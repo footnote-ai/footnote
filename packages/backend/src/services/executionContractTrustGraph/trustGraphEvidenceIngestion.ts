@@ -61,11 +61,13 @@ const invokeAdapterWithTimeout = async (input: {
     scopeTuple: ScopeTuple;
     budget: Budget;
     targetIds?: readonly string[];
+    abortSignal?: AbortSignal;
 }): Promise<EvidenceBundle> => {
     const timeoutMs = Math.max(1, Math.floor(input.budget.timeoutMs));
     const abortController = new AbortController();
     let cancellationRequested = false;
     let timeoutHandle: NodeJS.Timeout | undefined;
+    let removeExternalAbortListener: (() => void) | undefined;
 
     try {
         const timeoutPromise = new Promise<never>((_, reject) => {
@@ -74,6 +76,27 @@ const invokeAdapterWithTimeout = async (input: {
                 abortController.abort(TRUSTGRAPH_ABORT_ERROR);
                 reject(new TrustGraphAdapterTimeoutError(true));
             }, timeoutMs);
+        });
+        const externalAbortPromise = new Promise<never>((_, reject) => {
+            const onExternalAbort = (): void => {
+                cancellationRequested = true;
+                abortController.abort(TRUSTGRAPH_ABORT_ERROR);
+                reject(new TrustGraphAdapterTimeoutError(true));
+            };
+            if (input.abortSignal?.aborted === true) {
+                onExternalAbort();
+                return;
+            }
+            if (input.abortSignal !== undefined) {
+                input.abortSignal.addEventListener('abort', onExternalAbort, {
+                    once: true,
+                });
+                removeExternalAbortListener = () =>
+                    input.abortSignal?.removeEventListener(
+                        'abort',
+                        onExternalAbort
+                    );
+            }
         });
 
         const bundle = await Promise.race([
@@ -85,6 +108,7 @@ const invokeAdapterWithTimeout = async (input: {
                 targetIds: input.targetIds ?? [],
             }),
             timeoutPromise,
+            externalAbortPromise,
         ]);
 
         return bundle;
@@ -100,6 +124,7 @@ const invokeAdapterWithTimeout = async (input: {
         if (timeoutHandle !== undefined) {
             clearTimeout(timeoutHandle);
         }
+        removeExternalAbortListener?.();
     }
 };
 
@@ -131,6 +156,16 @@ const sanitizeEvidenceItem = (
     if (item.targetId !== undefined && !isNonEmptyString(item.targetId)) {
         return { valid: false };
     }
+    if (
+        item.evidenceKind !== undefined &&
+        item.evidenceKind !== 'generated' &&
+        item.evidenceKind !== 'source'
+    ) {
+        return { valid: false };
+    }
+    if (item.sourceTitle !== undefined && !isNonEmptyString(item.sourceTitle)) {
+        return { valid: false };
+    }
 
     return {
         valid: true,
@@ -147,6 +182,10 @@ const sanitizeEvidenceItem = (
             adapterVersion: item.adapterVersion.trim(),
             ...(item.targetId !== undefined && {
                 targetId: item.targetId.trim(),
+            }),
+            evidenceKind: item.evidenceKind ?? 'generated',
+            ...(item.sourceTitle !== undefined && {
+                sourceTitle: item.sourceTitle.trim(),
             }),
         },
     };
@@ -250,6 +289,10 @@ const toAdvisoryEvidenceItems = (
         retrievalReason: item.retrievalReason,
         collectionScope: item.collectionScope,
         ...(item.targetId !== undefined && { targetId: item.targetId }),
+        evidenceKind: item.evidenceKind ?? 'generated',
+        ...(item.sourceTitle !== undefined && {
+            sourceTitle: item.sourceTitle,
+        }),
     }));
 
 const defaultLocalExecutionContractOutcome = (): LocalTerminalOutcome =>
@@ -272,6 +315,8 @@ export type RunEvidenceIngestionInput = {
         >
     >;
     scopeOwnershipValidator?: ScopeOwnershipValidator;
+    /** Workflow deadline cancellation propagated to the adapter boundary. */
+    abortSignal?: AbortSignal;
     evaluateLocalExecutionContractOutcome?: () => LocalTerminalOutcome;
 };
 
@@ -608,6 +653,7 @@ export const runEvidenceIngestion = async (
             scopeTuple: scopeValidation.normalizedScope,
             budget: input.budget,
             targetIds: input.targetIds ?? [],
+            abortSignal: input.abortSignal,
         });
         adapterBundle = adapterInvocation;
         if (

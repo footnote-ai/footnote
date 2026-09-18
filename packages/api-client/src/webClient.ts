@@ -26,13 +26,14 @@ import {
     type UnknownChatActionResponse,
 } from './chat.js';
 import { createWebReadApi, type WebReadApi } from './web.js';
+import { DEFAULT_BACKEND_REQUEST_TIMEOUT_MS } from '@footnote/contracts/policy';
 
 export type CreateWebApiClientOptions = CreateApiTransportOptions &
     Pick<CreateChatApiOptions, 'traceApiToken'>;
 
-// Keep the transport behind Chat.tsx's 60-second user-facing deadline so the
-// UI's AbortSignal owns timeout reporting instead of racing the transport.
-export const DEFAULT_WEB_API_TIMEOUT_MS = 65_000;
+// Keep the browser transport behind the backend's bounded workflow plus the
+// shared transport margin so valid long-running responses are not aborted.
+export const DEFAULT_WEB_API_TIMEOUT_MS = DEFAULT_BACKEND_REQUEST_TIMEOUT_MS;
 
 export type WebApiClient = {
     requestJson: ApiRequester;

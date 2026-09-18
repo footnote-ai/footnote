@@ -30,7 +30,7 @@ const abortableFetch = async (
         );
     });
 
-test('web API client leaves the 60-second UI deadline as the timeout owner', async () => {
+test('web API client uses the shared backend workflow margin by default', async () => {
     const scheduledTimeouts: number[] = [];
     const originalSetTimeout = globalThis.setTimeout;
     const controller = new AbortController();
@@ -61,7 +61,7 @@ test('web API client leaves the 60-second UI deadline as the timeout owner', asy
     }
 
     assert.deepEqual(scheduledTimeouts, [DEFAULT_WEB_API_TIMEOUT_MS]);
-    assert.ok(DEFAULT_WEB_API_TIMEOUT_MS > 60_000);
+    assert.equal(DEFAULT_WEB_API_TIMEOUT_MS, 330_000);
 });
 
 test('web API client honors an explicit timeout override', async () => {

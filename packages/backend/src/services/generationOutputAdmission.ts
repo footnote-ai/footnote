@@ -21,6 +21,104 @@ import type { RoutingChainAttemptLog } from './stepRoutingExecutor.js';
 
 const MAX_GENERATION_EVIDENCE_STRING_LENGTH = 100;
 
+const CITATION_ONLY_TOKEN_PATTERN =
+    /\[(?:(?:source|citation|reference|s|c|ref)\s*)?\d+\](?:\([^\r\n)]{1,2048}\))?/giu;
+
+const REPEATED_SOURCE_EVIDENCE_MARKER_PATTERN =
+    /(?:^|\n)\s*TRUSTGRAPH SOURCE EVIDENCE\b/giu;
+
+const NON_ANSWER_ACKNOWLEDGEMENT_PATTERN =
+    /^(?:lgtm|ok(?:ay)?|looks good|done|noted|thanks)[.!]?$/iu;
+
+const DISCLAIMING_NOTE_ONLY_PATTERN =
+    /^[\s\p{P}\p{S}\p{M}\p{Default_Ignorable_Code_Point}]*\s*(?:note|disclaimer|remark)\s*:/iu;
+
+const META_ONLY_OFFER_PATTERN =
+    /^(?:skills|capabilities|analysis|plan)\s*:\s*(?:\r?\n\s*[-*]\s+[^\r\n]+){1,8}\s*(?:\r?\n\s*)?(?:i can|if you want|let me know|would you like)\b[\s\S]*$/iu;
+
+const STATUS_ONLY_RESPONSE_PATTERN =
+    /^produced\s+with\s+(?:partial|limited)\s+support\s+from\s+(?:a\s+)?footnote\s+engine[.!]?$/iu;
+
+const PUNCTUATED_NUMERIC_FRAGMENT_PATTERN = /^[:;]\s*\d+(?:[.,]\d+)?\s*$/u;
+
+const INTERNAL_INSTRUCTION_LEAK_PATTERN =
+    /(?:need for additional evidence|provide a clear answer to the user's question|your task is to produce only the final answer|do not use your prior knowledge|you are allowed to add additional information)/iu;
+
+const RESPONSE_PROCESS_LEAK_PATTERN =
+    /(?:the user(?:'s)?\s+(?:question|request)|conversation history|expected output format|(?:let me|i should|i will)\s+(?:re-)?read|the assistant response|the query is repeated)/iu;
+
+const STANDALONE_FRAGMENT_PATTERN =
+    /^[\s\p{P}\p{S}\p{M}\p{Default_Ignorable_Code_Point}]*\s+(?:the answer|the response|this answer|this response)\s+(?:above|below)\b/iu;
+
+const OUT_OF_CONTEXT_REFERENCE_PATTERN =
+    /\b(?:the|this)\s+(?:answer|response)\s+(?:above|below)\b/iu;
+
+const ORPHANED_ANSWER_REFERENCE_PATTERN =
+    /\b(?:not\s+(?:counting|including)|as\s+noted)\b[\s\S]{0,120}\b(?:the\s+)?(?:answer|response)\s+above\b/iu;
+
+const LEADING_FRAGMENT_MARKER_PATTERN = /^\s*[.:;]\s+(?=[\p{Lu}\p{N}])/u;
+
+const LIMITATION_ONLY_PATTERN =
+    /^(?:tracing|determining|identifying|verifying|answering|summarizing|comparing)\b[\s\S]{0,500}(?:would require|requires|needs to)[\s\S]{0,250}(?:complete|full|entire)\s+(?:text|document|record|source)\b[\s\S]*$/iu;
+
+const hasOnlyFormatting = (text: string): boolean =>
+    /^[\s\p{P}\p{S}\p{M}\p{Default_Ignorable_Code_Point}]*$/u.test(text);
+
+/**
+ * Identifies provider output that has no answer content while preserving
+ * legitimate short answers such as a grounded one-sentence abstention.
+ */
+const isStructurallyIncompleteText = (text: string): boolean => {
+    const trimmed = text.trim();
+    if (trimmed.length === 0) return true;
+    if (hasOnlyFormatting(trimmed)) return true;
+    if (NON_ANSWER_ACKNOWLEDGEMENT_PATTERN.test(trimmed)) return true;
+    if (DISCLAIMING_NOTE_ONLY_PATTERN.test(trimmed)) return true;
+    if (META_ONLY_OFFER_PATTERN.test(trimmed)) return true;
+    if (STATUS_ONLY_RESPONSE_PATTERN.test(trimmed)) return true;
+    if (PUNCTUATED_NUMERIC_FRAGMENT_PATTERN.test(trimmed)) return true;
+    if (INTERNAL_INSTRUCTION_LEAK_PATTERN.test(trimmed)) return true;
+    if (RESPONSE_PROCESS_LEAK_PATTERN.test(trimmed)) return true;
+    if (STANDALONE_FRAGMENT_PATTERN.test(trimmed)) return true;
+    if (OUT_OF_CONTEXT_REFERENCE_PATTERN.test(trimmed)) return true;
+    if (ORPHANED_ANSWER_REFERENCE_PATTERN.test(trimmed)) return true;
+    if (LEADING_FRAGMENT_MARKER_PATTERN.test(trimmed)) return true;
+    if (LIMITATION_ONLY_PATTERN.test(trimmed)) return true;
+
+    // A revision that repeats multiple raw evidence blocks is an evidence
+    // echo, not a user-facing answer. Reject it so the workflow can preserve
+    // the prior admitted draft rather than selecting the echoed context.
+    if (
+        (trimmed.match(REPEATED_SOURCE_EVIDENCE_MARKER_PATTERN)?.length ?? 0) >=
+        2
+    ) {
+        return true;
+    }
+
+    const withoutCitationTokens = trimmed
+        .replace(CITATION_ONLY_TOKEN_PATTERN, '')
+        .replace(/https?:\/\/\S+/giu, '')
+        .replace(/^\s*(?:sources?|citations?)\s*:\s*/iu, '')
+        .trim();
+    if (withoutCitationTokens.length === 0) return true;
+    if (hasOnlyFormatting(withoutCitationTokens)) return true;
+
+    const semanticWords = withoutCitationTokens
+        .replace(/[^\p{L}\p{N}]+/gu, ' ')
+        .trim()
+        .toLocaleLowerCase();
+    if (/^(?:(?:source|citation|reference)s?\s*)+$/u.test(semanticWords)) {
+        return true;
+    }
+
+    // A leading punctuation-only fragment followed by a polite offer is not
+    // an answer. This remains generic and does not reject a complete answer
+    // that ends with an offer to help.
+    return /^[\s\p{P}\p{S}\p{M}\p{Default_Ignorable_Code_Point}]*\s+(?:would you like|can i help|let me know|could you (?:tell me|clarify|specify))\b/iu.test(
+        trimmed
+    );
+};
+
 const isRecord = (value: unknown): value is Record<string, unknown> =>
     typeof value === 'object' && value !== null && !Array.isArray(value);
 
@@ -101,7 +199,8 @@ export type GenerationAdmission =
 /**
  * Decides whether a normalized generation result can become a response draft.
  * This intentionally checks only visible text and runtime completion facts; it
- * does not assess prose quality, formatting, relevance, or truth.
+ * does not assess prose quality, relevance, or truth. Structural rejection is
+ * limited to output with no substantive answer content.
  */
 export const admitGenerationResult = (
     result: GenerationResult
@@ -116,11 +215,7 @@ export const admitGenerationResult = (
             reasonCode: 'generation_incomplete_before_output',
         };
     }
-    if (
-        /^[\p{White_Space}\p{Default_Ignorable_Code_Point}]*$/u.test(
-            normalizedResult.text
-        )
-    ) {
+    if (isStructurallyIncompleteText(normalizedResult.text)) {
         return { admitted: false, reasonCode: 'generation_empty_output' };
     }
     return { admitted: true };

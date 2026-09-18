@@ -80,6 +80,7 @@ const runGeneration = async (input: {
     providerAvailability?: ProviderAvailabilityStore;
     onUsage?: () => void;
     includeDetailedCost?: boolean;
+    retryInitialInadmissibleGeneration?: boolean;
 }) =>
     runBoundedReviewWorkflow({
         generationRuntime: input.runtime,
@@ -151,9 +152,11 @@ const runGeneration = async (input: {
             nativeSearchRequired: input.nativeSearchRequired,
             providerAvailability: input.providerAvailability,
         },
+        retryInitialInadmissibleGeneration:
+            input.retryInitialInadmissibleGeneration,
     });
 
-test('gives a large-prompt generation useful output room and advances after incomplete provider output', async () => {
+test('advances after a structurally incomplete completed provider output', async () => {
     const first = makeProfile('first-profile');
     const second = makeProfile('second-profile');
     const requests: GenerationRequest[] = [];
@@ -164,13 +167,12 @@ test('gives a large-prompt generation useful output room and advances after inco
             requests.push(request);
             if (requests.length === 1) {
                 return {
-                    text: '',
+                    text: '.',
                     model: first.providerModel,
-                    finishReason: 'length',
+                    finishReason: 'stop',
                     completion: {
-                        status: 'incomplete',
-                        reason: 'max_output_tokens',
-                        visibleTextLength: 0,
+                        status: 'completed',
+                        visibleTextLength: 1,
                     },
                     usage: {
                         promptTokens: 12_000,
@@ -244,15 +246,11 @@ test('gives a large-prompt generation useful output room and advances after inco
             ['second-profile', 'executed'],
         ]
     );
-    assert.equal(
-        attempts[0]?.reasonCode,
-        'generation_incomplete_before_output'
-    );
-    assert.equal(attempts[0]?.finishReason, 'length');
+    assert.equal(attempts[0]?.reasonCode, 'generation_empty_output');
+    assert.equal(attempts[0]?.finishReason, 'stop');
     assert.deepEqual(attempts[0]?.completion, {
-        status: 'incomplete',
-        reason: 'max_output_tokens',
-        visibleTextLength: 0,
+        status: 'completed',
+        visibleTextLength: 1,
     });
     assert.equal(attempts[0]?.usage?.totalTokens, 14_000);
     assert.equal(attempts[0]?.requestedProvider, 'openai');
@@ -419,6 +417,86 @@ test('rejects empty completed output before selecting a fallback candidate', asy
     assert.equal(attempts[0]?.profileId, first.id);
     assert.equal(attempts[0]?.reasonCode, 'generation_empty_output');
     assert.equal(attempts[1]?.profileId, second.id);
+});
+
+test('retries one inadmissible initial generation before failing over', async () => {
+    const profile = makeProfile('primary-profile');
+    let calls = 0;
+    const runtime: GenerationRuntime = {
+        kind: 'test-runtime',
+        async generate(request) {
+            calls += 1;
+            return calls === 1
+                ? {
+                      text: '',
+                      model: request.model,
+                      finishReason: 'stop',
+                      completion: {
+                          status: 'completed',
+                          visibleTextLength: 0,
+                      },
+                      usage: {
+                          promptTokens: 10,
+                          completionTokens: 2,
+                          totalTokens: 12,
+                      },
+                      provenance: 'Inferred' as const,
+                      citations: [],
+                  }
+                : {
+                      text: 'Recovered grounded abstention.',
+                      model: request.model,
+                      finishReason: 'stop',
+                      completion: {
+                          status: 'completed',
+                          visibleTextLength: 30,
+                      },
+                      usage: {
+                          promptTokens: 10,
+                          completionTokens: 6,
+                          totalTokens: 16,
+                      },
+                      provenance: 'Retrieved' as const,
+                      citations: [],
+                  };
+        },
+    };
+
+    const result = await runGeneration({
+        runtime,
+        request: { messages: [{ role: 'user', content: 'Reply.' }] },
+        candidates: [profile],
+        retryInitialInadmissibleGeneration: true,
+    });
+
+    assert.equal(result.outcome, 'generated');
+    if (result.outcome !== 'generated') {
+        throw new Error('Expected the bounded retry to recover generation.');
+    }
+    assert.equal(
+        result.generationResult.text,
+        'Recovered grounded abstention.'
+    );
+    assert.equal(calls, 2);
+    const generateStep = result.workflowLineage.steps.find(
+        (step) => step.stepKind === 'generate'
+    );
+    assert.ok(generateStep);
+    assert.deepEqual(
+        generateStep.attempts?.[0]?.routingAttempts?.map((attempt) => [
+            attempt.profileId,
+            attempt.status,
+            attempt.reasonCode,
+        ]),
+        [
+            [
+                profile.id,
+                'failed_transient_advanced',
+                'generation_empty_output',
+            ],
+            [profile.id, 'executed', undefined],
+        ]
+    );
 });
 
 test('validates every routed review Attempt before accepting a decision', async () => {

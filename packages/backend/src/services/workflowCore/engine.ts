@@ -30,6 +30,14 @@ import {
 
 const DEFAULT_MAX_ATTEMPTS = 1;
 const MAX_ERROR_MESSAGE_LENGTH = 256;
+const MAX_TIMER_DELAY_MS = 2_147_483_647;
+
+class WorkflowDeadlineExceededError extends Error {
+    public constructor() {
+        super('Workflow execution reached its wall-clock deadline.');
+        this.name = 'WorkflowDeadlineExceededError';
+    }
+}
 
 type StepRun = Run['steps'][number];
 
@@ -70,6 +78,7 @@ const toAttempt = (input: {
     startedAtMs: number;
     finishedAtMs: number;
     result: AttemptResult;
+    exhaustedLimit?: ExhaustedExecutionLimit;
 }): Attempt => {
     const usage: AttemptUsage | undefined =
         input.result.usage === undefined
@@ -98,6 +107,9 @@ const toAttempt = (input: {
             ...(input.result.metadata === undefined
                 ? {}
                 : { metadata: input.result.metadata }),
+            ...(input.exhaustedLimit === undefined
+                ? {}
+                : { exhaustedLimit: input.exhaustedLimit }),
         };
     }
 
@@ -110,6 +122,9 @@ const toAttempt = (input: {
         ...(input.result.metadata === undefined
             ? {}
             : { metadata: input.result.metadata }),
+        ...(input.exhaustedLimit === undefined
+            ? {}
+            : { exhaustedLimit: input.exhaustedLimit }),
         errorCode: input.result.errorCode,
         ...(boundedErrorMessage(input.result.errorMessage) === undefined
             ? {}
@@ -542,6 +557,12 @@ export const executeWorkflow = async <TContext>(
             attemptNumber <= maxAttempts;
             attemptNumber += 1
         ) {
+            const remainingDurationMs = Math.max(
+                1,
+                input.executionLimits.maxDurationMs -
+                    Math.max(0, now() - run.startedAtMs)
+            );
+            const attemptController = new AbortController();
             const handlerInput = {
                 stepId: currentStepId,
                 context: input.context,
@@ -549,6 +570,8 @@ export const executeWorkflow = async <TContext>(
                 execution: executionLimitStateFor(run),
                 iteration: stepRunNumber,
                 attempt: attemptNumber,
+                signal: attemptController.signal,
+                remainingDurationMs,
             };
             const executionBeforeAttempt = executionLimitStateFor(run);
             const reservation = input.reserveAttempt?.(
@@ -636,9 +659,23 @@ export const executeWorkflow = async <TContext>(
             }
 
             const attemptStartedAtMs = now();
+            let rejectDeadline: ((reason: unknown) => void) | undefined;
+            const deadlinePromise = new Promise<never>((_, reject) => {
+                rejectDeadline = reject;
+            });
+            const deadlineTimer = setTimeout(
+                () => {
+                    rejectDeadline?.(new WorkflowDeadlineExceededError());
+                    attemptController.abort('workflow_deadline_exceeded');
+                },
+                Math.min(remainingDurationMs, MAX_TIMER_DELAY_MS)
+            );
             let attemptResult: AttemptResult;
             try {
-                const rawAttemptResult: unknown = await handler(handlerInput);
+                const rawAttemptResult: unknown = await Promise.race([
+                    handler(handlerInput),
+                    deadlinePromise,
+                ]);
                 if (!isValidHandlerResult(rawAttemptResult)) {
                     const attemptFinishedAtMs = now();
                     attempts.push(
@@ -669,13 +706,26 @@ export const executeWorkflow = async <TContext>(
                 }
                 attemptResult = rawAttemptResult;
             } catch (error) {
-                attemptResult = {
-                    status: 'failed',
-                    errorCode: 'handler_error',
-                    errorMessage:
-                        error instanceof Error ? error.message : String(error),
-                    retryable: true,
-                };
+                if (error instanceof WorkflowDeadlineExceededError) {
+                    attemptResult = {
+                        status: 'failed',
+                        errorCode: 'execution_deadline_exceeded',
+                        errorMessage: error.message,
+                        retryable: false,
+                    };
+                } else {
+                    attemptResult = {
+                        status: 'failed',
+                        errorCode: 'handler_error',
+                        errorMessage:
+                            error instanceof Error
+                                ? error.message
+                                : String(error),
+                        retryable: true,
+                    };
+                }
+            } finally {
+                clearTimeout(deadlineTimer);
             }
             const attemptFinishedAtMs = now();
             recordRunAttempt({
@@ -695,6 +745,9 @@ export const executeWorkflow = async <TContext>(
                 startedAtMs: attemptStartedAtMs,
                 finishedAtMs: attemptFinishedAtMs,
                 result: attemptResult,
+                ...(observedLimit === undefined
+                    ? {}
+                    : { exhaustedLimit: observedLimit }),
             });
 
             if (attemptResult.status === 'succeeded') {

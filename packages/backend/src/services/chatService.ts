@@ -284,6 +284,7 @@ import {
     normalizeGenerationResultEvidence,
     toGenerationRoutingAttemptSignals,
 } from './generationOutputAdmission.js';
+import { boundGenerationRequestToWorkflowBudget } from './workflowEngine/tokenBudget.js';
 
 const SURFACED_NO_GENERATION_MESSAGE =
     'I could not generate a response for this request.';
@@ -1651,6 +1652,7 @@ export const createChatService = ({
                     personaExpressionGuidance:
                         presentationPersona?.expressionGuidance ??
                         BALANCED_PERSONA_EXPRESSION_GUIDANCE,
+                    retryInitialInadmissibleGeneration: true,
                 });
                 workflowPlannerStepResult = workflowResult.plannerStepResult;
                 workflowPlannerSummary =
@@ -1734,6 +1736,37 @@ export const createChatService = ({
                     case 'no_generation': {
                         workflowLineage = canonicalWorkflowLineage;
                         presentationMetadata = workflowResult.presentation;
+                        const fallbackGenerationRequest =
+                            workflowResult.fallbackGenerationRequest ??
+                            effectiveGenerationRequest;
+                        const fallbackRequestWithSignal: GenerationRequest = {
+                            ...fallbackGenerationRequest,
+                            ...(effectiveGenerationRequest.signal === undefined
+                                ? {}
+                                : {
+                                      signal: effectiveGenerationRequest.signal,
+                                  }),
+                        };
+                        // Fallback generation is still part of the same
+                        // workflow budget. Reattach the process-local signal
+                        // only at this runtime call site, then bound output
+                        // against the tokens already recorded by the workflow.
+                        const boundedFallbackGenerationRequest =
+                            boundGenerationRequestToWorkflowBudget({
+                                request: fallbackRequestWithSignal,
+                                totalTokens:
+                                    workflowResult.workflowLineage.steps.reduce(
+                                        (total, step) =>
+                                            total +
+                                            Math.max(
+                                                0,
+                                                step.usage?.totalTokens ?? 0
+                                            ),
+                                        0
+                                    ),
+                                maxTokensTotal:
+                                    workflowExecutionLimits.maxTokensTotal,
+                            });
                         const noGenShortCircuit = buildContextStepShortCircuit({
                             workflowContextStepResult,
                             workflowContextStepResults,
@@ -1803,10 +1836,11 @@ export const createChatService = ({
                         const backendFailOpenAllowed =
                             ExecutionContract?.failOpen
                                 .allowFallbackGeneration ?? true;
-                        // Once the workflow has consumed its cumulative token
+                        // Once the workflow has consumed a cumulative workflow
                         // budget, a fallback would bypass the same accounting
                         // boundary. Preserve the admitted draft/lineage even
-                        // though provider-reported usage may have overrun it.
+                        // though provider-reported usage or wall-clock time may
+                        // have overrun it.
                         const tokenBudgetAlreadyExhausted =
                             workflowResult.workflowLineage.limitStop
                                 ?.exhaustedLimitKey === 'maxTokensTotal' &&
@@ -1815,13 +1849,41 @@ export const createChatService = ({
                                     limit.key === 'maxTokensTotal' &&
                                     limit.stoppedRun === true
                             ) === true;
+                        const timeBudgetAlreadyExhausted =
+                            workflowResult.workflowLineage.limitStop
+                                ?.exhaustedLimitKey === 'maxDurationMs' &&
+                            workflowResult.workflowLineage.effectiveLimits?.some(
+                                (limit) =>
+                                    limit.key === 'maxDurationMs' &&
+                                    limit.stoppedRun === true
+                            ) === true;
+                        const fallbackHeadroomMs = Math.min(
+                            30_000,
+                            Math.max(
+                                1_000,
+                                Math.floor(
+                                    workflowExecutionLimits.maxDurationMs * 0.1
+                                )
+                            )
+                        );
+                        const workflowDeadlineReached =
+                            Date.now() - generationStartedAt >=
+                            Math.max(
+                                0,
+                                workflowExecutionLimits.maxDurationMs -
+                                    fallbackHeadroomMs
+                            );
+                        const workflowBudgetAlreadyExhausted =
+                            tokenBudgetAlreadyExhausted ||
+                            timeBudgetAlreadyExhausted ||
+                            workflowDeadlineReached;
                         if (
                             handling.runtimeAction ===
                                 'run_fallback_generation' &&
-                            tokenBudgetAlreadyExhausted
+                            workflowBudgetAlreadyExhausted
                         ) {
                             logger.info(
-                                'Skipping fallback generation after cumulative workflow token budget exhaustion.',
+                                'Skipping fallback generation after workflow budget exhaustion.',
                                 {
                                     workflowName: workflowProfile.workflowName,
                                     terminationReason:
@@ -1836,12 +1898,15 @@ export const createChatService = ({
                             handling.runtimeAction ===
                                 'run_fallback_generation' &&
                             backendFailOpenAllowed &&
-                            !tokenBudgetAlreadyExhausted
+                            workflowResult.fallbackGenerationAllowed !==
+                                false &&
+                            !workflowBudgetAlreadyExhausted &&
+                            boundedFallbackGenerationRequest !== undefined
                         ) {
                             try {
                                 const chainGenerationResult =
                                     await runGenerateWithChain(
-                                        effectiveGenerationRequest
+                                        boundedFallbackGenerationRequest
                                     );
                                 if (chainGenerationResult.isErr()) {
                                     logger.warn(

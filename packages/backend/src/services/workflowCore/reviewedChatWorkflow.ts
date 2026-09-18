@@ -77,6 +77,7 @@ import {
 import { selectContextStepExecutor } from '../workflowEngine/contextStepHelpers.js';
 import {
     buildModelInput,
+    boundGenerationRequestToProfileInput,
     type ModelInputEvidence,
 } from '../workflowEngine/modelInput.js';
 import {
@@ -162,6 +163,18 @@ export type ReviewWorkflowUsageSummary = {
     };
 };
 
+// A refinement can require planner re-entry, generation, and another review.
+// Preserve an admitted draft when the remaining wall-clock budget cannot
+// reasonably accommodate that optional sequence.
+const MIN_REFINEMENT_REMAINING_MS = 180_000;
+const MAX_OPTIONAL_REVIEW_HEADROOM_MS = MIN_REFINEMENT_REMAINING_MS;
+
+const optionalReviewHeadroomMs = (maxDurationMs: number): number =>
+    Math.min(
+        MAX_OPTIONAL_REVIEW_HEADROOM_MS,
+        Math.max(1_000, Math.floor(maxDurationMs * 0.6))
+    );
+
 export type ContextStepRequest = ContractContextStepRequest;
 export type ContextStepResult = ContractContextStepResult;
 
@@ -170,6 +183,10 @@ export type ContextStepExecutorInput = {
     workflowId: string;
     workflowName: string;
     attempt: number;
+    /** Workflow deadline cancellation for in-flight integration work. */
+    signal?: AbortSignal;
+    /** Remaining workflow time used to clamp integration-specific timeouts. */
+    timeoutMs?: number;
 };
 
 export type ContextStepExecutor = (
@@ -224,6 +241,11 @@ export type RunBoundedReviewWorkflowInput = {
         ) => ReviewWorkflowUsageSummary;
     };
     personaExpressionGuidance?: string;
+    /**
+     * Allows one bounded retry of an inadmissible initial generation before
+     * the configured routing chain is allowed to fail open.
+     */
+    retryInitialInadmissibleGeneration?: boolean;
 };
 
 export type RunBoundedReviewWorkflowResult =
@@ -250,6 +272,17 @@ export type RunBoundedReviewWorkflowResult =
     | {
           outcome: 'no_generation';
           workflowLineage: WorkflowRecord;
+          /**
+           * The final context-projected request is retained for a bounded
+           * fail-open generation attempt. This prevents successful evidence
+           * from disappearing when the reviewed draft is unavailable.
+           */
+          fallbackGenerationRequest?: SerializableGenerationRequest;
+          /**
+           * Prevents an unreviewed fallback from resurfacing a draft that an
+           * evidence review explicitly rejected.
+           */
+          fallbackGenerationAllowed?: boolean;
           presentation?: PresentationMetadata;
           plannerStepResult?: PlannerStepResult;
           planContinuation?: PlanContinuation;
@@ -258,6 +291,18 @@ export type RunBoundedReviewWorkflowResult =
       };
 
 type SerializableRecord = { readonly [key: string]: Result };
+type SerializableGenerationRequest = Omit<GenerationRequest, 'signal'>;
+
+/**
+ * Projects a runtime generation request across the serializable workflow
+ * result boundary without leaking its process-local cancellation signal.
+ */
+const toSerializableGenerationRequest = (
+    request: GenerationRequest
+): SerializableGenerationRequest => {
+    const { signal: _signal, ...serializableRequest } = request;
+    return serializableRequest;
+};
 type ContinuePlanContinuation = Extract<
     PlanContinuation,
     { continuation: 'continue_message' }
@@ -1360,9 +1405,17 @@ export const runBoundedReviewWorkflow = async (
                           ]
                         : []),
                 ],
-                output: { name: 'draft', on: ['generated', 'incomplete'] },
+                output: {
+                    name: 'draft',
+                    on: [
+                        'generated',
+                        'generated_without_assessment',
+                        'incomplete',
+                    ],
+                },
                 next: {
                     generated: nextGenerate,
+                    generated_without_assessment: 'finish',
                     incomplete: 'finish',
                     failed: 'finish',
                 },
@@ -1512,6 +1565,7 @@ export const runBoundedReviewWorkflow = async (
                 attempt: handlerInput.attempt,
                 invocationContext: {
                     ...plannerStepRequest.invocationContext,
+                    signal: handlerInput.signal,
                     maxOutputTokens: Math.min(
                         DEFAULT_WORKFLOW_PLANNER_MAX_OUTPUT_TOKENS,
                         Math.max(
@@ -1754,6 +1808,8 @@ export const runBoundedReviewWorkflow = async (
                                 workflowId,
                                 workflowName: workflowConfig.workflowName,
                                 attempt: handlerInput.attempt,
+                                signal: handlerInput.signal,
+                                timeoutMs: handlerInput.remainingDurationMs,
                             }),
                         };
                     } catch (error) {
@@ -1897,7 +1953,7 @@ export const runBoundedReviewWorkflow = async (
         let effectiveAuthorityOutputTokens: number | undefined;
         const presentationRequest =
             executionLimits.maxTokensTotal >= UNBOUNDED_EXECUTION_LIMIT
-                ? projected.request
+                ? { ...projected.request, signal: handlerInput.signal }
                 : authorityAdmissionRequest === undefined
                   ? undefined
                   : (() => {
@@ -1953,6 +2009,7 @@ export const runBoundedReviewWorkflow = async (
                             : {
                                   ...projected.request,
                                   maxOutputTokens: budget.candidateOutputTokens,
+                                  signal: handlerInput.signal,
                               };
                     })();
         const result =
@@ -2101,7 +2158,10 @@ export const runBoundedReviewWorkflow = async (
         }
         const projected = messagesFor(handlerInput.results);
         const previousDraft = readGenerationResult(handlerInput.results.draft);
-        let request = projected.request;
+        let request: GenerationRequest = {
+            ...projected.request,
+            signal: handlerInput.signal,
+        };
         let refinementPromptResult:
             ReturnType<typeof composeRefinementPrompt> | undefined;
         let revisionHintLane: ReturnType<typeof decideRevisionRoutingHintLane> =
@@ -2219,19 +2279,32 @@ export const runBoundedReviewWorkflow = async (
         let selectedCapabilityFacts:
             ReturnType<typeof resolveAttemptCapabilityFacts> | undefined;
         try {
+            const generationCandidates =
+                previousDraft === undefined
+                    ? (stepRoutingChainSet?.generateCandidates ?? [])
+                    : reorderRevisionCandidatesByHintLane({
+                          candidates:
+                              stepRoutingChainSet?.generateCandidates ?? [],
+                          enabledProfilesById:
+                              stepRoutingChainSet?.enabledProfilesById ??
+                              new Map(),
+                          lane: revisionHintLane.lane,
+                      });
+            const retryCandidates =
+                previousDraft === undefined &&
+                input.retryInitialInadmissibleGeneration === true &&
+                generationCandidates.length > 0 &&
+                generationCandidates[0] !== undefined
+                    ? [
+                          generationCandidates[0],
+                          generationCandidates[0],
+                          ...generationCandidates.slice(1),
+                      ]
+                    : generationCandidates;
             const chainResult = stepRoutingChainSet?.generateCandidates.length
                 ? await executeStepRoutingChain({
                       step: 'generate',
-                      candidates:
-                          previousDraft === undefined
-                              ? stepRoutingChainSet.generateCandidates
-                              : reorderRevisionCandidatesByHintLane({
-                                    candidates:
-                                        stepRoutingChainSet.generateCandidates,
-                                    enabledProfilesById:
-                                        stepRoutingChainSet.enabledProfilesById,
-                                    lane: revisionHintLane.lane,
-                                }),
+                      candidates: retryCandidates,
                       enabledProfilesById:
                           stepRoutingChainSet.enabledProfilesById,
                       requiresSearch:
@@ -2240,9 +2313,27 @@ export const runBoundedReviewWorkflow = async (
                       providerAvailability:
                           stepRoutingChainSet.providerAvailability,
                       runWithProfile: async (profile, attemptIndex) => {
+                          const profileBoundedRequest =
+                              boundGenerationRequestToProfileInput({
+                                  request: boundedRequest,
+                                  maxInputTokens: profile.maxInputTokens,
+                              });
+                          if (
+                              profileBoundedRequest.evidenceProjection.trimmed
+                          ) {
+                              logger.info(
+                                  'chat.generation.evidence_projection_trimmed',
+                                  {
+                                      workflowId,
+                                      attemptIndex,
+                                      profileId: profile.id,
+                                      ...profileBoundedRequest.evidenceProjection,
+                                  }
+                              );
+                          }
                           const settingsResolution = resolveModelSettings({
                               profile,
-                              request: boundedRequest,
+                              request: profileBoundedRequest.request,
                           });
                           selectedSettings = settingsResolution;
                           selectedCapabilityFacts =
@@ -2253,7 +2344,7 @@ export const runBoundedReviewWorkflow = async (
                           const result = normalizeGenerationResultEvidence(
                               await generationRuntime.generate({
                                   ...applyModelSettings(
-                                      boundedRequest,
+                                      profileBoundedRequest.request,
                                       settingsResolution.applied
                                   ),
                                   model: profile.providerModel,
@@ -2355,6 +2446,15 @@ export const runBoundedReviewWorkflow = async (
         );
         const generationAdmission = admitGenerationResult(generationResult);
         const admitted = generationAdmission.admitted;
+        const remainingAfterGenerationMs = Math.max(
+            0,
+            executionLimits.maxDurationMs - (Date.now() - generationStartedAtMs)
+        );
+        const assessmentSkippedForBudget =
+            admitted &&
+            hasAssessmentStep &&
+            remainingAfterGenerationMs <
+                optionalReviewHeadroomMs(executionLimits.maxDurationMs);
         const parentCandidateId = candidates.latestCandidateId();
         const candidateId = !admitted
             ? undefined
@@ -2416,6 +2516,9 @@ export const runBoundedReviewWorkflow = async (
                 : undefined,
             signals: {
                 ...refinementStepSignals(),
+                ...(assessmentSkippedForBudget
+                    ? { assessmentSkippedForBudget: true }
+                    : {}),
             },
         });
         if (!admitted) {
@@ -2429,7 +2532,9 @@ export const runBoundedReviewWorkflow = async (
         }
         return {
             status: 'succeeded',
-            outcome: 'generated',
+            outcome: assessmentSkippedForBudget
+                ? 'generated_without_assessment'
+                : 'generated',
             result: toSerializable(generationResult),
             usage: { totalTokens: usage.totalTokens },
             metadata,
@@ -2453,6 +2558,7 @@ export const runBoundedReviewWorkflow = async (
                 }),
             };
         }
+        const assessmentStartedAtMs = Date.now();
         const projected = messagesFor(handlerInput.results);
         const assessPrompt = composeAssessPrompt({
             moduleIds: input.reviewModuleIds,
@@ -2463,6 +2569,7 @@ export const runBoundedReviewWorkflow = async (
         });
         const request: GenerationRequest = {
             ...projected.request,
+            signal: handlerInput.signal,
             messages: [
                 ...projected.messages,
                 { role: 'assistant', content: draft.text },
@@ -2864,6 +2971,11 @@ export const runBoundedReviewWorkflow = async (
             reviewDecision: decision,
         });
         const hintDecision = decideRevisionRoutingHintLane(hints);
+        const assessmentElapsedMs = Date.now() - assessmentStartedAtMs;
+        const refinementSkippedForBudget =
+            decision.reviewDecision === 'revise' &&
+            handlerInput.remainingDurationMs - assessmentElapsedMs <
+                MIN_REFINEMENT_REMAINING_MS;
         const signals: StepSignals = {
             ...buildAssessSignals(decision),
             ...buildAssessRoutingHintSignals({
@@ -2872,13 +2984,18 @@ export const runBoundedReviewWorkflow = async (
                 routingHintApplied: hintDecision.lane,
                 routingHintConflictResolved: hintDecision.conflictResolved,
             }),
+            ...(refinementSkippedForBudget
+                ? { refinementSkippedForBudget: true }
+                : {}),
         };
         const outcome =
             decision.reviewDecision === 'finalize'
                 ? 'done'
-                : handlerInput.iteration >= effectiveMaxIterations
-                  ? 'limit'
-                  : 'revise';
+                : refinementSkippedForBudget
+                  ? 'done'
+                  : handlerInput.iteration >= effectiveMaxIterations
+                    ? 'limit'
+                    : 'revise';
         return {
             status: 'succeeded',
             outcome,
@@ -2886,8 +3003,9 @@ export const runBoundedReviewWorkflow = async (
             usage: { totalTokens: usage.totalTokens },
             metadata: encodeMetadata({
                 status: 'executed',
-                summary:
-                    'Assessment evaluated draft quality and emitted a declared workflow outcome.',
+                summary: refinementSkippedForBudget
+                    ? 'Assessment requested refinement, but the remaining workflow budget preserved the admitted draft without optional refinement.'
+                    : 'Assessment evaluated draft quality and emitted a declared workflow outcome.',
                 model: usage.model,
                 ...toWorkflowAttemptIdentity({
                     requestedProvider:
@@ -2971,6 +3089,7 @@ export const runBoundedReviewWorkflow = async (
                 attempt: handlerInput.iteration + 1,
                 invocationContext: {
                     ...plannerStepRequest.invocationContext,
+                    signal: handlerInput.signal,
                     maxOutputTokens: Math.min(
                         DEFAULT_WORKFLOW_PLANNER_MAX_OUTPUT_TOKENS,
                         Math.max(
@@ -3397,9 +3516,34 @@ export const runBoundedReviewWorkflow = async (
         continuation?.continuation === 'terminal_action'
             ? continuation.terminalAction
             : undefined;
-    const generationResult =
-        readGenerationResult(execution.run.results.answer) ??
-        readGenerationResult(execution.run.results.draft);
+    const latestGenerationStep = semanticExecutionSteps
+        .filter((step) => step.stepId === 'generate')
+        .at(-1);
+    const selectedCandidateId = latestGenerationStep?.attempts
+        .slice()
+        .reverse()
+        .map(
+            (attempt) => readAs<ChatStepMetadata>(attempt.metadata)?.candidateId
+        )
+        .find((value): value is string => value !== undefined);
+    const reviewDecision = readAs<{ decision: ReviewDecision }>(
+        execution.run.results.review
+    )?.decision;
+    const evidenceReviewRejectedUnrevisedDraft =
+        reviewDecision?.reviewDecision === 'revise' &&
+        reviewDecision.concerns?.evidence === 'needs_caution' &&
+        latestGenerationStep !== undefined &&
+        selectedCandidateId === undefined;
+    const generationResult = evidenceReviewRejectedUnrevisedDraft
+        ? undefined
+        : (readGenerationResult(execution.run.results.answer) ??
+          readGenerationResult(execution.run.results.draft));
+    const fallbackGenerationRequest =
+        generationResult === undefined
+            ? toSerializableGenerationRequest(
+                  messagesFor(execution.run.results).request
+              )
+            : undefined;
     const plannerStepResult = plan?.plannerStepResult;
     const contextStepResult = evidence.results.at(0);
     if (terminalAction !== undefined) {
@@ -3421,6 +3565,12 @@ export const runBoundedReviewWorkflow = async (
         return {
             outcome: 'no_generation',
             workflowLineage,
+            ...(fallbackGenerationRequest === undefined
+                ? {}
+                : { fallbackGenerationRequest }),
+            ...(evidenceReviewRejectedUnrevisedDraft
+                ? { fallbackGenerationAllowed: false }
+                : {}),
             ...(presentationMetadata === undefined
                 ? {}
                 : { presentation: presentationMetadata }),
@@ -3434,14 +3584,6 @@ export const runBoundedReviewWorkflow = async (
                 : { contextStepResults: [...evidence.results] }),
         };
     }
-    const selectedCandidateId = semanticExecutionSteps
-        .filter((step) => step.stepId === 'generate')
-        .reverse()
-        .flatMap((step) => [...step.attempts].reverse())
-        .map(
-            (attempt) => readAs<ChatStepMetadata>(attempt.metadata)?.candidateId
-        )
-        .find((value): value is string => value !== undefined);
     if (selectedCandidateId !== undefined) {
         candidates.markSelected(selectedCandidateId);
     }

@@ -997,6 +997,345 @@ test('runBoundedReviewWorkflow executes engine-bounded refinement path without r
     assert.equal(refineSystemMessage.content.includes('unknown_module'), false);
 });
 
+test('runBoundedReviewWorkflow preserves an admitted draft when refinement cannot fit the remaining budget', async () => {
+    let generationCalls = 0;
+    const generationRuntime: GenerationRuntime = {
+        kind: 'test-runtime',
+        async generate() {
+            generationCalls += 1;
+            if (generationCalls === 1) {
+                return {
+                    text: 'initial evidence-backed answer',
+                    model: 'gpt-5-mini',
+                    usage: {
+                        promptTokens: 10,
+                        completionTokens: 10,
+                        totalTokens: 20,
+                    },
+                    provenance: 'Inferred' as const,
+                    citations: [],
+                };
+            }
+            if (generationCalls === 2) {
+                return {
+                    text: '{"reviewDecision":"revise","reviewReason":"Needs refinement.","revisionInstruction":"Clarify the answer."}',
+                    model: 'gpt-5-mini',
+                    usage: {
+                        promptTokens: 5,
+                        completionTokens: 5,
+                        totalTokens: 10,
+                    },
+                    provenance: 'Inferred' as const,
+                    citations: [],
+                };
+            }
+            throw new Error('optional refinement should not start');
+        },
+    };
+
+    const result = await runBoundedReviewWorkflowForTest({
+        generationRuntime,
+        generationRequest: {
+            model: 'gpt-5-mini',
+            messages: [{ role: 'user', content: 'Draft answer' }],
+        },
+        messagesWithHints: [{ role: 'user', content: 'Draft answer' }],
+        generationStartedAtMs: Date.now(),
+        workflowConfig: {
+            workflowName: 'message_reviewed',
+            maxIterations: 2,
+            maxDurationMs: 15000,
+        },
+        workflowPolicy: {
+            enablePlanning: false,
+            enableToolUse: false,
+            enableReplanning: false,
+            enableGeneration: true,
+            enableAssessment: true,
+            enableRevision: true,
+        },
+        captureUsage: (generationResult) => ({
+            model: generationResult.model ?? 'gpt-5-mini',
+            promptTokens: generationResult.usage?.promptTokens ?? 0,
+            completionTokens: generationResult.usage?.completionTokens ?? 0,
+            totalTokens: generationResult.usage?.totalTokens ?? 0,
+            estimatedCost: {
+                inputCostUsd: 0,
+                outputCostUsd: 0,
+                totalCostUsd: 0,
+            },
+        }),
+    });
+
+    assert.equal(result.outcome, 'generated');
+    assert.equal(
+        result.generationResult.text,
+        'initial evidence-backed answer'
+    );
+    assert.equal(generationCalls, 2);
+    const assessStep = result.workflowLineage.steps.find(
+        (step) => step.stepKind === 'assess'
+    );
+    assert.ok(assessStep);
+    assert.equal(assessStep.outcome.signals?.refinementSkippedForBudget, true);
+});
+
+test('runBoundedReviewWorkflow skips optional assessment when little budget remains after generation', async () => {
+    let generationCalls = 0;
+    const generationRuntime: GenerationRuntime = {
+        kind: 'test-runtime',
+        async generate() {
+            generationCalls += 1;
+            if (generationCalls > 1) {
+                throw new Error('optional assessment should not start');
+            }
+            await new Promise((resolve) => setTimeout(resolve, 5_000));
+            return {
+                text: 'initial evidence-backed answer',
+                model: 'gpt-5-mini',
+                usage: {
+                    promptTokens: 10,
+                    completionTokens: 10,
+                    totalTokens: 20,
+                },
+                provenance: 'Inferred' as const,
+                citations: [],
+            };
+        },
+    };
+
+    const result = await runBoundedReviewWorkflowForTest({
+        generationRuntime,
+        generationRequest: {
+            model: 'gpt-5-mini',
+            messages: [{ role: 'user', content: 'Draft answer' }],
+        },
+        messagesWithHints: [{ role: 'user', content: 'Draft answer' }],
+        generationStartedAtMs: Date.now(),
+        workflowConfig: {
+            workflowName: 'message_reviewed',
+            maxIterations: 2,
+            maxDurationMs: 10_000,
+        },
+        workflowPolicy: {
+            enablePlanning: false,
+            enableToolUse: false,
+            enableReplanning: false,
+            enableGeneration: true,
+            enableAssessment: true,
+            enableRevision: true,
+        },
+        captureUsage: (generationResult) => ({
+            model: generationResult.model ?? 'gpt-5-mini',
+            promptTokens: generationResult.usage?.promptTokens ?? 0,
+            completionTokens: generationResult.usage?.completionTokens ?? 0,
+            totalTokens: generationResult.usage?.totalTokens ?? 0,
+            estimatedCost: {
+                inputCostUsd: 0,
+                outputCostUsd: 0,
+                totalCostUsd: 0,
+            },
+        }),
+    });
+
+    assert.equal(result.outcome, 'generated');
+    assert.equal(
+        result.generationResult.text,
+        'initial evidence-backed answer'
+    );
+    assert.equal(generationCalls, 1);
+    assert.equal(
+        result.workflowLineage.steps.some((step) => step.stepKind === 'assess'),
+        false
+    );
+});
+
+test('runBoundedReviewWorkflow preserves an admitted draft when revision echoes source evidence', async () => {
+    let generationCalls = 0;
+    const generationRuntime: GenerationRuntime = {
+        kind: 'test-runtime',
+        async generate() {
+            generationCalls += 1;
+            if (generationCalls === 1) {
+                return {
+                    text: 'initial evidence-backed answer',
+                    model: 'gpt-5-mini',
+                    usage: {
+                        promptTokens: 10,
+                        completionTokens: 8,
+                        totalTokens: 18,
+                    },
+                    provenance: 'Retrieved' as const,
+                    citations: [],
+                };
+            }
+            if (generationCalls === 2) {
+                return {
+                    text: '{"reviewDecision":"revise","reviewReason":"The draft needs a clearer answer.","revisionInstruction":"Answer directly and keep the citations."}',
+                    model: 'gpt-5-mini',
+                    usage: {
+                        promptTokens: 5,
+                        completionTokens: 5,
+                        totalTokens: 10,
+                    },
+                    provenance: 'Inferred' as const,
+                    citations: [],
+                };
+            }
+            return {
+                text: 'TRUSTGRAPH SOURCE EVIDENCE\nRetrieved source text: one\n\nTRUSTGRAPH SOURCE EVIDENCE\nRetrieved source text: two',
+                model: 'gpt-5-mini',
+                usage: {
+                    promptTokens: 20,
+                    completionTokens: 20,
+                    totalTokens: 40,
+                },
+                provenance: 'Retrieved' as const,
+                citations: [],
+            };
+        },
+    };
+
+    const result = await runBoundedReviewWorkflowForTest({
+        generationRuntime,
+        generationRequest: {
+            model: 'gpt-5-mini',
+            messages: [{ role: 'user', content: 'Answer from the records.' }],
+        },
+        messagesWithHints: [
+            { role: 'user', content: 'Answer from the records.' },
+        ],
+        generationStartedAtMs: Date.now(),
+        workflowConfig: {
+            workflowName: 'message_reviewed',
+            maxIterations: 2,
+            maxDurationMs: 15000,
+        },
+        workflowPolicy: {
+            enablePlanning: false,
+            enableToolUse: false,
+            enableReplanning: false,
+            enableGeneration: true,
+            enableAssessment: true,
+            enableRevision: true,
+        },
+        captureUsage: (generationResult) => ({
+            model: generationResult.model ?? 'gpt-5-mini',
+            promptTokens: generationResult.usage?.promptTokens ?? 0,
+            completionTokens: generationResult.usage?.completionTokens ?? 0,
+            totalTokens: generationResult.usage?.totalTokens ?? 0,
+            estimatedCost: {
+                inputCostUsd: 0,
+                outputCostUsd: 0,
+                totalCostUsd: 0,
+            },
+        }),
+    });
+
+    assert.equal(result.outcome, 'generated');
+    if (result.outcome !== 'generated')
+        throw new Error('Expected generated result.');
+    assert.equal(
+        result.generationResult.text,
+        'initial evidence-backed answer'
+    );
+    assert.deepEqual(
+        result.responseCandidates?.map((candidate) => ({
+            stage: candidate.stage,
+            state: candidate.state,
+        })),
+        [{ stage: 'initial_generation', state: 'selected' }]
+    );
+    assert.equal(generationCalls, 3);
+});
+
+test('runBoundedReviewWorkflow does not preserve a draft rejected for evidence when revision fails', async () => {
+    let generationCalls = 0;
+    const generationRuntime: GenerationRuntime = {
+        kind: 'test-runtime',
+        async generate() {
+            generationCalls += 1;
+            if (generationCalls === 1) {
+                return {
+                    text: 'initial source-attributed answer',
+                    model: 'gpt-5-mini',
+                    usage: {
+                        promptTokens: 10,
+                        completionTokens: 10,
+                        totalTokens: 20,
+                    },
+                    provenance: 'Retrieved' as const,
+                    citations: [],
+                };
+            }
+            if (generationCalls === 2) {
+                return {
+                    text: JSON.stringify({
+                        reviewDecision: 'revise',
+                        reviewReason:
+                            'The source attribution needs correction.',
+                        revisionInstruction:
+                            'Remove claims not supported by the supplied source.',
+                        concerns: { evidence: 'needs_caution' },
+                    }),
+                    model: 'gpt-5-mini',
+                    usage: {
+                        promptTokens: 5,
+                        completionTokens: 5,
+                        totalTokens: 10,
+                    },
+                    provenance: 'Inferred' as const,
+                    citations: [],
+                };
+            }
+            throw new Error('revision provider failure');
+        },
+    };
+
+    const result = await runBoundedReviewWorkflowForTest({
+        generationRuntime,
+        generationRequest: {
+            model: 'gpt-5-mini',
+            messages: [{ role: 'user', content: 'Answer from the records.' }],
+        },
+        messagesWithHints: [
+            { role: 'user', content: 'Answer from the records.' },
+        ],
+        generationStartedAtMs: Date.now(),
+        workflowConfig: {
+            workflowName: 'message_reviewed',
+            maxIterations: 2,
+            maxDurationMs: 300_000,
+        },
+        workflowPolicy: {
+            enablePlanning: false,
+            enableToolUse: false,
+            enableReplanning: false,
+            enableGeneration: true,
+            enableAssessment: true,
+            enableRevision: true,
+        },
+        captureUsage: (generationResult) => ({
+            model: generationResult.model ?? 'gpt-5-mini',
+            promptTokens: generationResult.usage?.promptTokens ?? 0,
+            completionTokens: generationResult.usage?.completionTokens ?? 0,
+            totalTokens: generationResult.usage?.totalTokens ?? 0,
+            estimatedCost: {
+                inputCostUsd: 0,
+                outputCostUsd: 0,
+                totalCostUsd: 0,
+            },
+        }),
+    });
+
+    assert.equal(result.outcome, 'no_generation');
+    if (result.outcome !== 'no_generation') {
+        throw new Error('Expected no-generation result.');
+    }
+    assert.equal(result.fallbackGenerationAllowed, false);
+    assert.equal(generationCalls, 3);
+});
+
 test('runBoundedReviewWorkflow marks requested-but-blocked refinement without refinementApplied signals', async () => {
     let generationCalls = 0;
     const generationRuntime: GenerationRuntime = {

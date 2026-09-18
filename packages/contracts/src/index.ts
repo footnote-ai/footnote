@@ -107,6 +107,9 @@ export {
 } from './policy/index.js';
 export { PROJECT_CONTEXT_CANONICAL_REPOSITORY } from './policy/index.js';
 export {
+    DEFAULT_BACKEND_WORKFLOW_TIMEOUT_MS,
+    DEFAULT_BACKEND_REQUEST_TIMEOUT_MARGIN_MS,
+    DEFAULT_BACKEND_REQUEST_TIMEOUT_MS,
     formatExecutionTimelineSummary,
     buildContextPresentationSummary,
     formatGitHubContextSummary,

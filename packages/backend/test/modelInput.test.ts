@@ -8,7 +8,10 @@
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { buildModelInput } from '../src/services/workflowEngine/modelInput.js';
+import {
+    boundGenerationRequestToProfileInput,
+    buildModelInput,
+} from '../src/services/workflowEngine/modelInput.js';
 import type { ConversationContextEnvelope } from '../src/services/conversationContextService.js';
 
 const contextEnvelope: ConversationContextEnvelope = {
@@ -119,5 +122,83 @@ test('buildModelInput keeps evidence in the user channel and plan in a separate 
         manifestIndex >= 0 &&
             evidenceIndex >= 0 &&
             manifestIndex < evidenceIndex
+    );
+});
+
+test('buildModelInput prevents source-attributed claims after a requested context failure', () => {
+    const input = buildModelInput({
+        baseRequest: {
+            model: 'test-model',
+            messages: [{ role: 'user', content: 'What does the source say?' }],
+        },
+        context: {
+            messages: [{ role: 'user', content: 'What does the source say?' }],
+            envelope: contextEnvelope,
+        },
+        results: {
+            evidence: {
+                results: [],
+                failures: [
+                    {
+                        integrationName: 'trustgraph',
+                        requested: true,
+                        status: 'failed',
+                    },
+                ],
+            },
+        },
+        contextStepRequests: [
+            { integrationName: 'trustgraph', requested: true, eligible: true },
+        ],
+    });
+
+    const failureMessage = input.messages.find((message) =>
+        message.content.includes('Do not claim to have consulted that source')
+    );
+    assert.equal(failureMessage?.role, 'system');
+    assert.match(
+        failureMessage?.content ?? '',
+        /explain that it was unavailable for this response/u
+    );
+});
+
+test('boundGenerationRequestToProfileInput keeps highest-ranked evidence within the profile input window', () => {
+    const evidence = (rank: number): string =>
+        `TRUSTGRAPH SOURCE EVIDENCE\nProvenance: rank-${rank}\n${'evidence '.repeat(40)}`;
+    const bounded = boundGenerationRequestToProfileInput({
+        request: {
+            messages: [
+                { role: 'system', content: 'trusted policy' },
+                { role: 'user', content: 'question' },
+                { role: 'user', content: evidence(1) },
+                { role: 'user', content: evidence(2) },
+                { role: 'user', content: evidence(3) },
+            ],
+        },
+        maxInputTokens: 190,
+    });
+
+    assert.equal(bounded.evidenceProjection.trimmed, true);
+    assert.equal(bounded.evidenceProjection.retainedEvidenceCount, 2);
+    assert.equal(bounded.evidenceProjection.droppedEvidenceCount, 1);
+    assert.ok(
+        bounded.request.messages.some((message) =>
+            message.content.includes('Provenance: rank-1')
+        )
+    );
+    assert.ok(
+        bounded.request.messages.some((message) =>
+            message.content.includes('Provenance: rank-2')
+        )
+    );
+    assert.equal(
+        bounded.request.messages.some((message) =>
+            message.content.includes('Provenance: rank-3')
+        ),
+        false
+    );
+    assert.ok(
+        bounded.evidenceProjection.inputTokensAfter <=
+            bounded.evidenceProjection.inputTokensBefore
     );
 });

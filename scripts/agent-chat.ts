@@ -11,6 +11,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import dotenv from 'dotenv';
 
+import { DEFAULT_BACKEND_REQUEST_TIMEOUT_MS } from '@footnote/contracts/policy';
 import {
     PostChatRequestSchema,
     PostChatResponseSchema,
@@ -20,7 +21,7 @@ import {
 } from '@footnote/contracts/web';
 
 const DEFAULT_BASE_URL = 'http://localhost:3000';
-const DEFAULT_TIMEOUT_MS = 180_000;
+const DEFAULT_TIMEOUT_MS = DEFAULT_BACKEND_REQUEST_TIMEOUT_MS;
 const CHAT_PATH = '/api/chat';
 const LOOPBACK_HOSTNAMES: ReadonlySet<string> = new Set([
     'localhost',

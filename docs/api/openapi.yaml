@@ -4979,9 +4979,19 @@ components:
                         - required
                         - routePath
                     additionalProperties: false
+                publicContext:
+                    type: object
+                    description: Public context-source messaging is enabled only after backend readiness validation.
+                    properties:
+                        nycSept11Records:
+                            type: boolean
+                    required:
+                        - nycSept11Records
+                    additionalProperties: false
             required:
                 - turnstileSiteKey
                 - setup
+                - publicContext
             additionalProperties: false
 
         AuthenticatedPrincipal:
