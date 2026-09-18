@@ -119,6 +119,7 @@ Footnote did not invent transparency, provenance, human oversight, or responsibl
 - [W3C PROV](https://www.w3.org/TR/prov-overview/) supplies the language Footnote uses to trace where information came from and how it changed.
 - [Model Cards](https://research.google/pubs/model-cards-for-model-reporting/) and [Datasheets for Datasets](https://www.microsoft.com/en-us/research/publication/datasheets-for-datasets/) inform how Footnote records purpose, limits, and context.
 - The [Microsoft Guidelines for Human-AI Interaction](https://www.microsoft.com/en-us/research/publication/guidelines-for-human-ai-interaction/) shape how Footnote approaches correction and recovery.
+- Microsoft's [Humanist AI Code of Conduct](https://microsoft.ai/code-of-conduct/) is useful prior art on human control, pluralism, scope, delegation, and interruption at the model-governance layer. It is a comparison, not an endorsement or a Footnote dependency; Footnote's distinct emphasis is making surrounding policy, authority, provenance, execution, and evidence reconstructible.
 - The [NIST AI Risk Management Framework](https://www.nist.gov/itl/ai-risk-management-framework) and principles from the OECD, UNESCO, and the Council of Europe guide its treatment of risk, rights, and human control.
 
 Footnote applies this work to the full interaction: what entered, what acted, what rules applied, and what reached the user.
