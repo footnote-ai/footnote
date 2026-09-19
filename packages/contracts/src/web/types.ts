@@ -969,6 +969,9 @@ export type TraceCardChipData = {
     freshnessScore?: TraceAxisScore;
 };
 
+/** Presentation-only rendering target for trace-card PNG delivery. */
+export type TraceCardRenderVariant = 'canonical' | 'discord';
+
 /**
  * @api.operationId: postTraceCards
  * @api.path: POST /api/trace-cards
@@ -977,6 +980,8 @@ export type PostTraceCardRequest = {
     responseId?: string;
     temperament?: PartialResponseTemperament;
     chips?: TraceCardChipData;
+    /** Defaults to canonical so existing callers retain the full card. */
+    variant?: TraceCardRenderVariant;
 };
 
 /**
@@ -994,6 +999,8 @@ export type PostTraceCardResponse = {
  */
 export type PostTraceCardFromTraceRequest = {
     responseId: string;
+    /** Defaults to canonical so existing callers retain the full card. */
+    variant?: TraceCardRenderVariant;
 };
 
 /**

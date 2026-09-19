@@ -30,6 +30,11 @@ type TestServer = {
 
 const TRACE_TOKEN = 'trace-card-test-token';
 
+const readPngDimensions = (png: Buffer): { width: number; height: number } => ({
+    width: png.readUInt32BE(16),
+    height: png.readUInt32BE(20),
+});
+
 type TraceStoreFactory = (dbPath: string) => SqliteTraceStore;
 
 class DeletesTraceDuringCardWriteStore extends SqliteTraceStore {
@@ -674,6 +679,75 @@ test('POST /api/trace-cards/from-trace uses the shared projection final and targ
             }),
             'trace-card should not render from trace_target when values differ'
         );
+    } finally {
+        await server.close();
+        await server.cleanup();
+    }
+});
+
+test('POST /api/trace-cards/from-trace renders a Discord derivative without replacing the canonical SVG', async () => {
+    const server = await createTestServer();
+    const responseId = 'from_trace_discord_variant';
+
+    try {
+        await server.store.upsert({
+            responseId,
+            provenance: 'Retrieved',
+            safetyTier: 'Low',
+            tradeoffCount: 1,
+            chainHash: 'discord_variant_hash',
+            licenseContext: 'MIT',
+            modelVersion: 'gpt-5-mini',
+            staleAfter: new Date(Date.now() + 60000).toISOString(),
+            citations: [],
+            trace_target: {
+                tightness: 3,
+                rationale: 3,
+                attribution: 3,
+                caution: 3,
+                extent: 3,
+            },
+            trace_final: {
+                tightness: 4,
+                rationale: 3,
+                attribution: 5,
+                caution: 2,
+                extent: 4,
+            },
+            trace_final_reason_code: 'runtime_posture_adjustment',
+        });
+
+        const response = await fetch(
+            `${server.url}/api/trace-cards/from-trace`,
+            {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-Trace-Token': TRACE_TOKEN,
+                },
+                body: JSON.stringify({ responseId, variant: 'discord' }),
+            }
+        );
+
+        assert.equal(response.status, 200);
+        const payload = (await response.json()) as {
+            responseId: string;
+            pngBase64: string;
+        };
+        assert.equal(payload.responseId, responseId);
+        assert.deepEqual(
+            readPngDimensions(Buffer.from(payload.pngBase64, 'base64')),
+            { width: 860, height: 246 }
+        );
+
+        const storedSvg = await server.store.getTraceCardSvg(responseId);
+        assert.ok(storedSvg);
+        assert.match(
+            storedSvg,
+            /width="860" height="300" viewBox="0 0 860 300"/
+        );
+        assert.match(storedSvg, />Sources</);
+        assert.match(storedSvg, />Report</);
     } finally {
         await server.close();
         await server.cleanup();
