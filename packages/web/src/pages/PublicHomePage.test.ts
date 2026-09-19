@@ -15,28 +15,24 @@ const webDirectory = path.join(process.cwd(), 'packages', 'web');
 const webSourceDirectory = `${path.join(webDirectory, 'src')}${path.sep}`;
 const pagesDirectory = `${path.join(webSourceDirectory, 'pages')}${path.sep}`;
 
-test('public homepage keeps approved prepared-response content and destinations', async () => {
+test('public homepage keeps the approved hero, truthful handoff, and destinations', async () => {
     const source = await readFile(
         `${pagesDirectory}PublicHomePage.tsx`,
         'utf8'
     );
 
     assert.match(source, /<h1 id="homepage-title">/);
-    assert.match(source, /We care more about\s+giving/);
-    assert.match(source, /className="public-home__no-wrap"/);
-    assert.match(source, /className="public-home__intro-sentence"/);
-    assert.doesNotMatch(
+    assert.match(
         source,
-        /Footnote helps make AI answers easier to check/
+        /See how an answer was made, set your own rules,[\s\S]*?run Footnote your way\./
     );
-    assert.doesNotMatch(
-        source,
-        /Footnote gives you the tools to see what shaped/
-    );
-    assert.match(source, /This is a prepared example/);
+    assert.match(source, /AI that\s*<\/span>/);
+    assert.match(source, /<em>shows its work\.<\/em>/);
+    assert.doesNotMatch(source, /Prepared example · live chat starts here/);
     assert.match(source, /to="\/chat"/);
     assert.doesNotMatch(source, /ai\.jordanmakes\.dev\/ask/);
-    assert.match(source, /TraceFooterPlaceholder/);
+    assert.match(source, /canonical-response-footnote/);
+    assert.doesNotMatch(source, /TraceFooterPlaceholder/);
     assert.match(source, /ResponseCarousel/);
     assert.match(source, /items=\{landingScenarios\}/);
     assert.match(
@@ -44,55 +40,73 @@ test('public homepage keeps approved prepared-response content and destinations'
         /https:\/\/github\.com\/footnote-ai\/footnote\/releases/
     );
     assert.match(source, /href="\/wiki\/getting-started\/"/);
-    assert.match(source, /href="\/wiki\/philosophy\/"/);
-    assert.match(source, />\s*Download\s*</);
-    assert.match(source, />\s*Setup guide\s*</);
-    assert.match(source, />\s*Privacy and control\s*</);
-    assert.ok(
-        source.search(/>\s*Download\s*</) < source.search(/>\s*Setup guide\s*</)
+    assert.match(
+        source,
+        /documentationHref: '\/wiki\/architecture\/admin-settings-architecture\/'/
     );
-    assert.doesNotMatch(source, /Download Footnote/);
-    assert.doesNotMatch(source, /Quickstart/);
+    assert.match(source, />\s*Get started\s*</);
+    assert.match(source, />\s*Setup guide\s*</);
+    assert.match(source, />Run Footnote</);
+    assert.match(source, /documentationLabel: 'Philosophy'/);
+    assert.match(source, /Ask a question…/);
+    assert.match(source, /documentationHref: '\/wiki\/deployment\/'/);
+    assert.doesNotMatch(
+        source,
+        /Download Footnote|Quickstart|Privacy and control/
+    );
 });
 
-test('public homepage presents concepts as panels with local depth', async () => {
+test('public homepage presents plain-language blocks with useful documentation links', async () => {
     const source = await readFile(
         `${pagesDirectory}PublicHomePage.tsx`,
         'utf8'
     );
 
-    assert.match(source, /const PublicConceptList/);
     assert.match(source, /className="public-home__concepts"/);
-    for (const concept of ['origins', 'uncertainty', 'steps', 'limits']) {
+    for (const concept of [
+        'see-what-happened',
+        'your-rules',
+        'run-it-your-way',
+        'open-about-our-choices',
+    ]) {
         assert.match(source, new RegExp(`id: '${concept}'`));
     }
-    assert.match(source, />What to check</);
-    assert.doesNotMatch(
-        source,
-        /Around an answer, these words name what to check/
-    );
-    assert.match(source, /className="public-home__concept-header"/);
-    assert.match(source, /className="public-home__concept-body"/);
-    assert.match(source, /tabIndex=\{0\}/);
-    assert.match(source, /role="group"/);
-    assert.match(source, /handleConceptClick/);
-    assert.doesNotMatch(source, /<button/);
-    assert.doesNotMatch(source, /public-home__concept-toggle/);
-    assert.doesNotMatch(source, /aria-expanded=\{isActive\}/);
-    assert.match(source, /className="public-home__concept-detail"/);
+    assert.match(source, />How we do things</);
     assert.match(source, /href=\{concept\.documentationHref\}/);
-    assert.match(source, /target="_blank"/);
-    assert.match(source, /opens in a new tab/);
-    assert.match(source, /aria-hidden=\{!isActive\}/);
-    assert.match(source, /technicalLabel: 'provenance'/);
-    assert.doesNotMatch(source, /public-home__narrative-actions/);
-    assert.doesNotMatch(source, /How it works/);
-    assert.doesNotMatch(source, /<details/);
-    assert.doesNotMatch(
-        source,
-        /LOOK FOR|Good answers leave clues|See a little more/
-    );
+    assert.match(source, /See what happened/);
+    assert.match(source, /Your rules/);
+    assert.match(source, /Run it your way/);
+    assert.match(source, /Open about our choices/);
+    assert.match(source, /documentationLabel: 'How answers are explained'/);
+    assert.match(source, /documentationLabel: 'Configuration'/);
+    assert.match(source, /documentationLabel: 'Deployment'/);
+    assert.match(source, /documentationLabel: 'Philosophy'/);
+    assert.doesNotMatch(source, /Building for v1|What to check/);
 });
+
+test('public footer points at canonical security and dual-license documentation', async () => {
+    const [source, securitySource, philosophySource] = await Promise.all([
+        readFile(
+            `${webSourceDirectory}components${path.sep}PublicFooter.tsx`,
+            'utf8'
+        ),
+        readFile(path.join(process.cwd(), 'SECURITY.md'), 'utf8'),
+        readFile(path.join(process.cwd(), 'docs', 'Philosophy.md'), 'utf8'),
+    ]);
+
+    assert.match(
+        source,
+        /href="\/wiki\/philosophy\/#licensing-and-its-tension">\s*\{homepage \? 'Licensing'/
+    );
+    assert.match(source, /homepage \? 'Privacy' : 'Security & privacy'/);
+    assert.doesNotMatch(source, /href="\/wiki\/philosophy\/">Privacy</);
+    assert.match(
+        securitySource,
+        /security\*\*, \*\*privacy\*\*, or \*\*ethical-safety\*\* issue/
+    );
+    assert.match(philosophySource, /MIT and Hippocratic License terms/);
+});
+
 test('response carousel owns the preserved transition and accessible dot controls', async () => {
     const source = await readFile(
         `${webSourceDirectory}components${path.sep}ResponseCarousel.tsx`,
@@ -103,6 +117,8 @@ test('response carousel owns the preserved transition and accessible dot control
     assert.match(source, /aria-pressed/);
     assert.match(source, /ArrowLeft/);
     assert.match(source, /ArrowRight/);
+    assert.match(source, /tabIndex=\{0\}/);
+    assert.match(source, /role="group"/);
     assert.match(source, /showPreviousNextControls/);
     assert.match(source, /const activeIndex = normalizeInitialIndex/);
     assert.match(source, /items\[activeIndex\]/);
@@ -154,7 +170,8 @@ test('chat stays suggestion-free and falls back to an out-of-flow managed challe
     );
     assert.match(embedSource, /<Chat \/>/);
     assert.match(headerSource, /<Link to="\/account">\s*Sign in\s*<\/Link>/);
-    assert.match(headerSource, /<a href="\/wiki\/">\s*Wiki\s*<\/a>/);
+    assert.match(headerSource, /<a href="\/wiki\/">\s*Docs\s*<\/a>/);
+    assert.match(headerSource, /Footnote<sup>\[1\]<\/sup>/);
     assert.doesNotMatch(headerSource, /deepwiki\.com/);
     assert.doesNotMatch(headerSource, /Sign-in is not available yet/);
     assert.match(
@@ -192,29 +209,51 @@ test('route fallback is a flat, spinner-only loading state', async () => {
     assert.match(preloadSource, /:root\[data-theme='dark'\]/);
 });
 
-test('trace placeholder is empty and joined to the assistant response', async () => {
-    const [placeholderSource, stylesSource] = await Promise.all([
-        readFile(
-            `${webSourceDirectory}components/TraceFooterPlaceholder.tsx`,
-            'utf8'
-        ),
+test('homepage projects prepared metadata through the canonical footnote', async () => {
+    const [pageSource, stylesSource] = await Promise.all([
+        readFile(`${pagesDirectory}PublicHomePage.tsx`, 'utf8'),
         readFile(`${webSourceDirectory}styles/public-home.css`, 'utf8'),
     ]);
 
-    assert.match(placeholderSource, /aria-hidden="true"/);
-    assert.match(stylesSource, /\.trace-footer-placeholder/);
-    assert.match(stylesSource, /border-top: 0/);
-    assert.match(stylesSource, /border-bottom-right-radius: 0/);
-    assert.match(stylesSource, /border-bottom-left-radius: 0/);
+    assert.match(pageSource, /<CanonicalResponseFootnote/);
+    assert.match(
+        pageSource,
+        /metadata=\{[\s\S]*?scenario\.response\.metadata[\s\S]*?\}/
+    );
+    assert.match(pageSource, /trace: 'unavailable'/);
+    assert.match(pageSource, /report: 'unavailable'/);
+    assert.doesNotMatch(pageSource, /Prepared example · live chat starts here/);
+    assert.match(pageSource, /to="\/chat"/);
+    assert.doesNotMatch(pageSource, /prepared-landing|\/traces\/prepared/);
     assert.match(stylesSource, /\.public-home__scenario-dots/);
     assert.match(stylesSource, /\.public-home__scenario-dot--selected/);
+    assert.match(
+        stylesSource,
+        /\.public-home__response \.response-carousel__navigation--inline[\s\S]*?margin-top: 1\.05rem[\s\S]*?margin-bottom: 1\.1rem/
+    );
+    assert.match(
+        stylesSource,
+        /\.public-home \.canonical-response-footnote[\s\S]*?margin: 1\.25rem 0/
+    );
     assert.match(stylesSource, /opacity 180ms ease/);
     assert.match(stylesSource, /\.public-header nav[\s\S]*?flex-wrap: wrap/);
     assert.match(stylesSource, /\.public-footer[\s\S]*?padding: 2rem 0 3rem/);
     assert.match(stylesSource, /@media \(max-width: 280px\)/);
+    assert.match(stylesSource, /\.public-home__main > section \{/);
+    assert.doesNotMatch(stylesSource, /\.public-home section \{/);
     assert.match(
         stylesSource,
-        /\.public-message--person,[\s\S]*?max-width: 100%/
+        /\.public-home \.canonical-response-footnote[\s\S]*?width: 100%/
+    );
+    assert.doesNotMatch(
+        stylesSource,
+        /\.public-home \.canonical-response-footnote__summary-safety/
+    );
+    assert.match(stylesSource, /\.public-home__concept-art/);
+    assert.match(stylesSource, /grid-template-columns: 1\.9fr 1fr 1fr/);
+    assert.match(
+        stylesSource,
+        /\.public-home__concept-wrap--open-about-our-choices/
     );
     assert.match(
         stylesSource,
@@ -222,7 +261,11 @@ test('trace placeholder is empty and joined to the assistant response', async ()
     );
     assert.match(
         stylesSource,
-        /\.public-message--person[\s\S]*?margin-right: 0\.75rem/
+        /\.public-home__response > \.response-carousel__item-and-navigation[\s\S]*?width: 100%[\s\S]*?max-width: 100%/
+    );
+    assert.match(
+        stylesSource,
+        /\.public-home__response > \.response-carousel__item-and-navigation > \.public-message--person[\s\S]*?justify-self: end/
     );
 });
 

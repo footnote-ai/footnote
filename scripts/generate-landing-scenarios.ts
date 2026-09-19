@@ -36,7 +36,10 @@ const fixturesJsonPath = path.join(
     rootDir,
     'packages/web/src/data/landingScenarioFixtures.json'
 );
-const CAPTURE_REQUEST_TIMEOUT_MS = 60_000;
+// Grounded captures may spend time building the local index and completing the
+// reviewed workflow; keep the isolated capture boundary long enough to retain
+// truthful evidence instead of silently dropping a slow but valid response.
+const CAPTURE_REQUEST_TIMEOUT_MS = 180_000;
 
 const getEnv = (name: string): string | undefined => {
     const value = process.env[name]?.trim();

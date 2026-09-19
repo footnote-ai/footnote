@@ -13,6 +13,7 @@ type ResponseCarouselProps<T> = {
     getKey: (item: T, index: number) => string;
     getDotLabel: (item: T, index: number) => string;
     renderItem: (item: T, index: number) => ReactNode;
+    renderItemAfterNavigation?: (item: T, index: number) => ReactNode;
     ariaLabel: string;
     className?: string;
     dotsClassName?: string;
@@ -36,6 +37,7 @@ const ResponseCarousel = <T,>({
     getKey,
     getDotLabel,
     renderItem,
+    renderItemAfterNavigation,
     ariaLabel,
     className = 'public-home__response',
     dotsClassName = 'public-home__scenario-dots',
@@ -89,11 +91,60 @@ const ResponseCarousel = <T,>({
         }, 180);
     };
 
+    const renderNavigation = (inline: boolean): JSX.Element => (
+        <div
+            className={`response-carousel__navigation${inline ? ' response-carousel__navigation--inline' : ''}`}
+        >
+            {showPreviousNextControls && (
+                <button
+                    type="button"
+                    className="response-carousel__control"
+                    aria-label={previousLabel}
+                    disabled={isTransitioning || activeIndex === 0}
+                    onClick={() => selectIndex(activeIndex - 1)}
+                >
+                    Previous
+                </button>
+            )}
+            <div className={dotsClassName} aria-label={ariaLabel}>
+                {items.map((item, index) => {
+                    const isSelected = index === activeIndex;
+                    return (
+                        <button
+                            key={getKey(item, index)}
+                            type="button"
+                            className={`${dotClassName}${isSelected ? ` ${selectedDotClassName}` : ''}`}
+                            aria-label={getDotLabel(item, index)}
+                            aria-pressed={isSelected}
+                            disabled={isTransitioning}
+                            onClick={() => selectIndex(index)}
+                        />
+                    );
+                })}
+            </div>
+            {showPreviousNextControls && (
+                <button
+                    type="button"
+                    className="response-carousel__control"
+                    aria-label={nextLabel}
+                    disabled={
+                        isTransitioning || activeIndex === items.length - 1
+                    }
+                    onClick={() => selectIndex(activeIndex + 1)}
+                >
+                    Next
+                </button>
+            )}
+        </div>
+    );
+
     const selectedItem = items[activeIndex]!;
     return (
         <div
             className="response-carousel"
             aria-label={ariaLabel}
+            role="group"
+            tabIndex={0}
             onKeyDown={(event) => {
                 if (event.key === 'ArrowLeft') {
                     event.preventDefault();
@@ -108,50 +159,17 @@ const ResponseCarousel = <T,>({
             <div
                 className={`${className}${isTransitioning ? ` ${className}--transitioning` : ''}`}
             >
-                {renderItem(selectedItem, activeIndex)}
-            </div>
-            <div className="response-carousel__navigation">
-                {showPreviousNextControls && (
-                    <button
-                        type="button"
-                        className="response-carousel__control"
-                        aria-label={previousLabel}
-                        disabled={isTransitioning || activeIndex === 0}
-                        onClick={() => selectIndex(activeIndex - 1)}
-                    >
-                        Previous
-                    </button>
+                {renderItemAfterNavigation ? (
+                    <div className="response-carousel__item-and-navigation">
+                        {renderItem(selectedItem, activeIndex)}
+                        {renderNavigation(true)}
+                    </div>
+                ) : (
+                    renderItem(selectedItem, activeIndex)
                 )}
-                <div className={dotsClassName} aria-label={ariaLabel}>
-                    {items.map((item, index) => {
-                        const isSelected = index === activeIndex;
-                        return (
-                            <button
-                                key={getKey(item, index)}
-                                type="button"
-                                className={`${dotClassName}${isSelected ? ` ${selectedDotClassName}` : ''}`}
-                                aria-label={getDotLabel(item, index)}
-                                aria-pressed={isSelected}
-                                disabled={isTransitioning}
-                                onClick={() => selectIndex(index)}
-                            />
-                        );
-                    })}
-                </div>
-                {showPreviousNextControls && (
-                    <button
-                        type="button"
-                        className="response-carousel__control"
-                        aria-label={nextLabel}
-                        disabled={
-                            isTransitioning || activeIndex === items.length - 1
-                        }
-                        onClick={() => selectIndex(activeIndex + 1)}
-                    >
-                        Next
-                    </button>
-                )}
+                {renderItemAfterNavigation?.(selectedItem, activeIndex)}
             </div>
+            {!renderItemAfterNavigation && renderNavigation(false)}
         </div>
     );
 };

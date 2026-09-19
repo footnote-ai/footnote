@@ -33,6 +33,10 @@ export type LandingScenarioMetadata = Pick<
     | 'modelVersion'
     | 'staleAfter'
     | 'citations'
+    | 'provenanceAssessment'
+    | 'execution'
+    | 'workflow'
+    | 'steerabilityControls'
     | 'trace_target'
     | 'trace_final'
     | 'trace_final_reason_code'
@@ -88,21 +92,18 @@ const SCENARIO_ID_PATTERN = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
  */
 export const LANDING_SCENARIO_PROMPTS = [
     {
-        id: 'what-is-footnote',
-        question: 'What is Footnote?',
-    },
-    {
-        id: 'what-does-footnote-do-differently',
-        question: 'What does Footnote do differently from other AI tools?',
-    },
-    {
-        id: 'why-show-work-if-answer-can-be-wrong',
+        id: 'weekly-household-checklist',
         question:
-            'Why does showing the work matter if the answer can still be wrong?',
+            'What should I include in a simple weekly household checklist?',
     },
     {
-        id: 'what-should-people-know-about-ai-answer',
-        question: 'What should people be able to know about an AI answer?',
+        id: 'compare-commute-options',
+        question:
+            'How can I compare two commute options without relying on precise numerical claims?',
+    },
+    {
+        id: 'project-context-explainer',
+        question: "How does Footnote's project context integration work?",
     },
 ] as const satisfies readonly LandingScenarioPromptConfig[];
 
@@ -204,6 +205,22 @@ export const sanitizeLandingScenarioResponse = (
                 modelVersion: input.response.metadata.modelVersion,
                 staleAfter: input.response.metadata.staleAfter,
                 citations: input.response.metadata.citations,
+                ...(input.response.metadata.provenanceAssessment !==
+                    undefined && {
+                    provenanceAssessment:
+                        input.response.metadata.provenanceAssessment,
+                }),
+                ...(input.response.metadata.execution !== undefined && {
+                    execution: input.response.metadata.execution,
+                }),
+                ...(input.response.metadata.workflow !== undefined && {
+                    workflow: input.response.metadata.workflow,
+                }),
+                ...(input.response.metadata.steerabilityControls !==
+                    undefined && {
+                    steerabilityControls:
+                        input.response.metadata.steerabilityControls,
+                }),
                 trace_target: input.response.metadata.trace_target,
                 trace_final: input.response.metadata.trace_final,
                 trace_final_reason_code:

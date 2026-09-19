@@ -37,6 +37,10 @@ const REQUIRED_METADATA_FIELDS = [
 const ALLOWED_METADATA_FIELDS = new Set<string>([
     ...REQUIRED_METADATA_FIELDS,
     'trace_final_reason_code',
+    'provenanceAssessment',
+    'execution',
+    'workflow',
+    'steerabilityControls',
 ]);
 
 const SCENARIO_ID_PATTERN = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
@@ -108,7 +112,7 @@ const oldPromptFile = path.join(dataDirectory, 'examplePrompts.json');
 const publicHomePagePath = path.join(sourceRoot, 'pages', 'PublicHomePage.tsx');
 
 const landingScenarioFixtures =
-    landingScenarioFixturesJson as readonly LandingScenarioFixture[];
+    landingScenarioFixturesJson as unknown as readonly LandingScenarioFixture[];
 
 const runtimeUiSourceFiles = collectSourceFiles(sourceRoot).filter(
     (filePath) =>
@@ -117,15 +121,14 @@ const runtimeUiSourceFiles = collectSourceFiles(sourceRoot).filter(
         !filePath.endsWith('.test.tsx')
 );
 
-test('landing scenarios contain the selected four prompts in order', () => {
-    assert.equal(landingScenarios.length, 4);
+test('landing scenarios contain the selected ordinary-use prompts in order', () => {
+    assert.equal(landingScenarios.length, 3);
     assert.deepEqual(
         landingScenarios.map((scenario) => scenario.question),
         [
-            'What is Footnote?',
-            'What does Footnote do differently from other AI tools?',
-            'Why does showing the work matter if the answer can still be wrong?',
-            'What should people be able to know about an AI answer?',
+            'What should I include in a simple weekly household checklist?',
+            'How can I compare two commute options without relying on precise numerical claims?',
+            "How does Footnote's project context integration work?",
         ]
     );
 });

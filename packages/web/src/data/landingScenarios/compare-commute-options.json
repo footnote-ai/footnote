@@ -1,0 +1,820 @@
+{
+    "id": "compare-commute-options",
+    "question": "How can I compare two commute options without relying on precise numerical claims?",
+    "response": {
+        "action": "message",
+        "message": "If you want to compare two commute options without relying on exact numbers, shift the focus to qualitative and relative factors:\n\n- **Time, but loosely**: Compare in terms like \"shorter\" or \"longer,\" or rough buckets such as \"quick\" versus \"moderate.\" You can also test both once and note which one *felt* faster, even if the clock says otherwise.\n- **Reliability**: Consider how often each option is delayed or unpredictable. A slightly longer commute that's consistent can feel better than one that's usually quick but sometimes much worse.\n- **Comfort and effort**: Think about whether you get a seat, how much standing or walking is involved, and how crowded or stressful the trip feels. This is often what actually wears you down over time.\n- **Flexibility**: Compare how easily you can leave earlier or later, or adjust your route if plans change. One option might lock you into a schedule while the other gives you room to adapt.\n- **Cost, roughly**: Use categories instead of exact amounts, like \"about the same\" or \"noticeably more expensive.\" The question is whether the extra cost is worth the time or comfort it buys.\n- **Energy and end-of-day state**: Consider which commute leaves you feeling better for the rest of the day, not just which one gets you there first.\n\nA simple way to structure this: rate each option as \"better,\" \"worse,\" or \"about the same\" across the factors that matter most to you. That keeps the comparison aimed at what you actually care about, without pretending the precision is meaningful when it isn't.",
+        "modality": "text",
+        "metadata": {
+            "responseId": "prepared-landing-compare-commute-options",
+            "provenance": "Inferred",
+            "safetyTier": "Low",
+            "tradeoffCount": 0,
+            "chainHash": "2531c086d75bb268",
+            "licenseContext": "MIT + HL3",
+            "modelVersion": "deepseek-v4-flash-0731",
+            "staleAfter": "2026-12-15T06:33:51.058Z",
+            "citations": [],
+            "provenanceAssessment": {
+                "methodId": "deterministic_multi_signal_v1",
+                "methodLabel": "Deterministic multi-signal provenance classification (backend)",
+                "signals": {
+                    "citationsPresent": false,
+                    "retrievalRequested": false,
+                    "retrievalUsed": false,
+                    "retrievalToolExecuted": false,
+                    "workflowEvidence": true,
+                    "trustGraphEvidenceAvailable": false,
+                    "trustGraphEvidenceUsed": false,
+                    "assistantDeclaredSpeculative": false
+                },
+                "conflicts": [],
+                "limitations": []
+            },
+            "execution": [
+                {
+                    "kind": "evaluator",
+                    "status": "executed",
+                    "evaluator": {
+                        "authorityLevel": "observe",
+                        "mode": "observe_only",
+                        "provenance": "Inferred",
+                        "safetyDecision": {
+                            "action": "allow",
+                            "safetyTier": "Low",
+                            "ruleId": null
+                        }
+                    },
+                    "durationMs": 2
+                },
+                {
+                    "kind": "generation",
+                    "status": "executed",
+                    "originalProfileId": "ollama-ministral-3-14b",
+                    "effectiveProfileId": "openrouter-deepseek-v4-flash-0731",
+                    "profileId": "openrouter-deepseek-v4-flash-0731",
+                    "provider": "StreamLake",
+                    "model": "deepseek-v4-flash-0731",
+                    "upstreamAttribution": {
+                        "resolvedModel": "deepseek/deepseek-v4-flash-20260731",
+                        "inferenceProvider": "StreamLake",
+                        "routingAttempt": 1,
+                        "upstreamReportedCostUsd": 0.000217074
+                    },
+                    "finishReason": "stop",
+                    "completion": {
+                        "status": "completed",
+                        "visibleTextLength": 1543
+                    },
+                    "usage": {
+                        "promptTokens": 1881,
+                        "cachedInputTokens": 0,
+                        "completionTokens": 638,
+                        "totalTokens": 2519,
+                        "reasoningTokens": 309
+                    },
+                    "durationMs": 36789
+                }
+            ],
+            "workflow": {
+                "runId": "wf_mu3q59gc_eldca1",
+                "runStatus": "completed",
+                "workflowId": "reviewed-chat",
+                "workflowName": "message_reviewed",
+                "status": "completed",
+                "stepCount": 6,
+                "maxSteps": 8,
+                "maxDurationMs": 180000,
+                "effectiveLimits": [
+                    {
+                        "key": "maxWorkflowSteps",
+                        "state": "enforced",
+                        "value": 8,
+                        "stoppedRun": false
+                    },
+                    {
+                        "key": "maxToolCalls",
+                        "state": "enforced",
+                        "value": 3,
+                        "stoppedRun": false
+                    },
+                    {
+                        "key": "maxDeliberationCalls",
+                        "state": "enforced",
+                        "value": 4,
+                        "stoppedRun": false
+                    },
+                    {
+                        "key": "maxTokensTotal",
+                        "state": "enforced",
+                        "value": 512000,
+                        "stoppedRun": false
+                    },
+                    {
+                        "key": "maxDurationMs",
+                        "state": "enforced",
+                        "value": 180000,
+                        "stoppedRun": false
+                    }
+                ],
+                "limitStop": {
+                    "stoppedByLimit": false,
+                    "terminationReason": "goal_satisfied"
+                },
+                "terminationReason": "goal_satisfied",
+                "results": [
+                    {
+                        "resultId": "wf_mu3q59gc_eldca1:step_1:plan",
+                        "name": "plan",
+                        "status": "produced",
+                        "producedByStepId": "step_1",
+                        "producedByAttempt": 1
+                    },
+                    {
+                        "resultId": "wf_mu3q59gc_eldca1:step_2:evidence",
+                        "name": "evidence",
+                        "status": "produced",
+                        "producedByStepId": "step_2",
+                        "producedByAttempt": 1
+                    },
+                    {
+                        "resultId": "wf_mu3q59gc_eldca1:step_3:presentation",
+                        "name": "presentation",
+                        "status": "produced",
+                        "producedByStepId": "step_3",
+                        "producedByAttempt": 1
+                    },
+                    {
+                        "resultId": "wf_mu3q59gc_eldca1:step_4:draft",
+                        "name": "draft",
+                        "status": "produced",
+                        "producedByStepId": "step_4",
+                        "producedByAttempt": 1
+                    },
+                    {
+                        "resultId": "wf_mu3q59gc_eldca1:step_5:review",
+                        "name": "review",
+                        "status": "produced",
+                        "producedByStepId": "step_5",
+                        "producedByAttempt": 1
+                    },
+                    {
+                        "resultId": "wf_mu3q59gc_eldca1:evaluator_finding",
+                        "name": "evaluator_finding",
+                        "status": "produced",
+                        "producedByStepId": "step_evaluator",
+                        "producedByAttempt": 1
+                    }
+                ],
+                "steps": [
+                    {
+                        "stepId": "step_evaluator",
+                        "attempt": 1,
+                        "stepKind": "evaluator",
+                        "startedAt": "2026-09-16T06:33:14.266Z",
+                        "finishedAt": "2026-09-16T06:33:14.268Z",
+                        "durationMs": 2,
+                        "resultRefs": [
+                            {
+                                "resultId": "wf_mu3q59gc_eldca1:evaluator_finding",
+                                "name": "evaluator_finding"
+                            }
+                        ],
+                        "attempts": [
+                            {
+                                "attempt": 1,
+                                "status": "succeeded",
+                                "startedAt": "2026-09-16T06:33:14.266Z",
+                                "finishedAt": "2026-09-16T06:33:14.268Z",
+                                "durationMs": 2
+                            }
+                        ],
+                        "outcome": {
+                            "status": "executed",
+                            "summary": "Deterministic evaluator produced a bounded finding.",
+                            "signals": {
+                                "evaluatorMode": "observe_only",
+                                "evaluatorAuthorityLevel": "observe",
+                                "evaluatorAction": "allow",
+                                "evaluatorRuleId": null,
+                                "evaluatorSafetyTier": "Low"
+                            }
+                        }
+                    },
+                    {
+                        "stepId": "step_1",
+                        "attempt": 1,
+                        "stepKind": "plan",
+                        "startedAt": "2026-09-16T06:33:14.269Z",
+                        "finishedAt": "2026-09-16T06:33:19.133Z",
+                        "durationMs": 4864,
+                        "model": "deepseek/deepseek-v4-flash-20260731",
+                        "usage": {
+                            "promptTokens": 2082,
+                            "cachedInputTokens": 0,
+                            "completionTokens": 211,
+                            "totalTokens": 2293,
+                            "reasoningTokens": 0
+                        },
+                        "cost": {
+                            "inputCostUsd": 0,
+                            "outputCostUsd": 0,
+                            "totalCostUsd": 0
+                        },
+                        "resultRefs": [
+                            {
+                                "resultId": "wf_mu3q59gc_eldca1:step_1:plan",
+                                "name": "plan"
+                            }
+                        ],
+                        "attempts": [
+                            {
+                                "attempt": 1,
+                                "status": "succeeded",
+                                "startedAt": "2026-09-16T06:33:14.269Z",
+                                "finishedAt": "2026-09-16T06:33:19.133Z",
+                                "durationMs": 4864,
+                                "usage": {
+                                    "promptTokens": 2082,
+                                    "cachedInputTokens": 0,
+                                    "completionTokens": 211,
+                                    "totalTokens": 2293,
+                                    "reasoningTokens": 0
+                                },
+                                "cost": {
+                                    "inputCostUsd": 0,
+                                    "outputCostUsd": 0,
+                                    "totalCostUsd": 0
+                                }
+                            }
+                        ],
+                        "outcome": {
+                            "status": "executed",
+                            "summary": "Planner selected the next declared workflow outcome.",
+                            "signals": {
+                                "action": "message",
+                                "purpose": "chat_orchestrator_action_selection",
+                                "contractType": "structured",
+                                "applyOutcome": "applied",
+                                "structuredOutputOutcome": "strict_success",
+                                "upstreamProvider": "DeepInfra",
+                                "upstreamModel": "deepseek/deepseek-v4-flash-20260731"
+                            }
+                        }
+                    },
+                    {
+                        "stepId": "step_2",
+                        "parentStepId": "step_1",
+                        "attempt": 1,
+                        "stepKind": "tool",
+                        "startedAt": "2026-09-16T06:33:19.133Z",
+                        "finishedAt": "2026-09-16T06:33:19.133Z",
+                        "durationMs": 0,
+                        "inputRefs": [
+                            {
+                                "resultId": "wf_mu3q59gc_eldca1:step_1:plan",
+                                "name": "plan"
+                            }
+                        ],
+                        "resultRefs": [
+                            {
+                                "resultId": "wf_mu3q59gc_eldca1:step_2:evidence",
+                                "name": "evidence"
+                            }
+                        ],
+                        "attempts": [
+                            {
+                                "attempt": 1,
+                                "status": "succeeded",
+                                "startedAt": "2026-09-16T06:33:19.133Z",
+                                "finishedAt": "2026-09-16T06:33:19.133Z",
+                                "durationMs": 0
+                            }
+                        ],
+                        "outcome": {
+                            "status": "executed",
+                            "summary": "Context steps completed; failed integrations were retained as unavailable evidence.",
+                            "signals": {
+                                "contextStepCount": 0
+                            }
+                        }
+                    },
+                    {
+                        "stepId": "step_3",
+                        "parentStepId": "step_1",
+                        "attempt": 1,
+                        "stepKind": "presentation",
+                        "startedAt": "2026-09-16T06:33:19.133Z",
+                        "finishedAt": "2026-09-16T06:33:31.366Z",
+                        "durationMs": 12233,
+                        "model": "deepseek-v4-flash-0731",
+                        "usage": {
+                            "promptTokens": 1417,
+                            "cachedInputTokens": 1276,
+                            "completionTokens": 389,
+                            "totalTokens": 1806,
+                            "reasoningTokens": 12
+                        },
+                        "cost": {
+                            "inputCostUsd": 0,
+                            "outputCostUsd": 0,
+                            "totalCostUsd": 0
+                        },
+                        "inputRefs": [
+                            {
+                                "resultId": "wf_mu3q59gc_eldca1:step_1:plan",
+                                "name": "plan"
+                            },
+                            {
+                                "resultId": "wf_mu3q59gc_eldca1:step_2:evidence",
+                                "name": "evidence",
+                                "optional": true
+                            }
+                        ],
+                        "resultRefs": [
+                            {
+                                "resultId": "wf_mu3q59gc_eldca1:step_3:presentation",
+                                "name": "presentation"
+                            }
+                        ],
+                        "attempts": [
+                            {
+                                "attempt": 1,
+                                "status": "succeeded",
+                                "startedAt": "2026-09-16T06:33:19.133Z",
+                                "finishedAt": "2026-09-16T06:33:31.366Z",
+                                "durationMs": 12233,
+                                "requestedProvider": "openrouter",
+                                "requestedModel": "deepseek/deepseek-v4-flash-0731",
+                                "actualProvider": "OpenInference",
+                                "actualModel": "deepseek/deepseek-v4-flash-20260731",
+                                "capabilities": {
+                                    "reasoningEfforts": {
+                                        "none": "supported",
+                                        "low": "supported",
+                                        "medium": "unsupported",
+                                        "high": "unsupported",
+                                        "xhigh": "unsupported",
+                                        "max": "unsupported"
+                                    },
+                                    "verbosity": {
+                                        "low": "unsupported",
+                                        "medium": "unsupported",
+                                        "high": "unsupported"
+                                    },
+                                    "temperature": "unknown",
+                                    "topP": "unknown",
+                                    "outputLimit": "unknown",
+                                    "structuredOutput": "unknown",
+                                    "jsonMode": "unknown",
+                                    "nativeSearch": "unsupported"
+                                },
+                                "usage": {
+                                    "promptTokens": 1417,
+                                    "cachedInputTokens": 1276,
+                                    "completionTokens": 389,
+                                    "totalTokens": 1806,
+                                    "reasoningTokens": 12
+                                },
+                                "cost": {
+                                    "inputCostUsd": 0,
+                                    "outputCostUsd": 0,
+                                    "totalCostUsd": 0
+                                }
+                            }
+                        ],
+                        "outcome": {
+                            "status": "executed",
+                            "summary": "Generated a presentation candidate for authoritative wording.",
+                            "artifacts": [
+                                "candidate_29763471-24ea-49e5-b61f-9c1672c3ab2f"
+                            ],
+                            "signals": {
+                                "presentationOutcome": "candidate_generated",
+                                "presentationReasonCode": "candidate_generated",
+                                "presentationAttempted": true,
+                                "draftAttemptCount": 1,
+                                "draftProfileId": "openrouter-deepseek-v4-flash-0731"
+                            }
+                        }
+                    },
+                    {
+                        "stepId": "step_4",
+                        "parentStepId": "step_3",
+                        "attempt": 1,
+                        "stepKind": "generate",
+                        "startedAt": "2026-09-16T06:33:31.367Z",
+                        "finishedAt": "2026-09-16T06:33:45.239Z",
+                        "durationMs": 13872,
+                        "model": "deepseek-v4-flash-0731",
+                        "usage": {
+                            "promptTokens": 1881,
+                            "cachedInputTokens": 0,
+                            "completionTokens": 638,
+                            "totalTokens": 2519,
+                            "reasoningTokens": 309
+                        },
+                        "cost": {
+                            "inputCostUsd": 0,
+                            "outputCostUsd": 0,
+                            "totalCostUsd": 0
+                        },
+                        "inputRefs": [
+                            {
+                                "resultId": "wf_mu3q59gc_eldca1:step_1:plan",
+                                "name": "plan",
+                                "optional": true
+                            },
+                            {
+                                "resultId": "wf_mu3q59gc_eldca1:step_2:evidence",
+                                "name": "evidence",
+                                "optional": true
+                            },
+                            {
+                                "resultId": "wf_mu3q59gc_eldca1:step_3:presentation",
+                                "name": "presentation",
+                                "optional": true
+                            },
+                            {
+                                "name": "draft",
+                                "optional": true
+                            },
+                            {
+                                "name": "review",
+                                "optional": true
+                            },
+                            {
+                                "name": "revisionPlan",
+                                "optional": true
+                            }
+                        ],
+                        "resultRefs": [
+                            {
+                                "resultId": "wf_mu3q59gc_eldca1:step_4:draft",
+                                "name": "draft"
+                            }
+                        ],
+                        "attempts": [
+                            {
+                                "attempt": 1,
+                                "status": "succeeded",
+                                "startedAt": "2026-09-16T06:33:31.367Z",
+                                "finishedAt": "2026-09-16T06:33:45.239Z",
+                                "durationMs": 13872,
+                                "profileId": "openrouter-deepseek-v4-flash-0731",
+                                "requestedProvider": "openrouter",
+                                "requestedModel": "deepseek/deepseek-v4-flash-0731",
+                                "actualProvider": "StreamLake",
+                                "actualModel": "deepseek/deepseek-v4-flash-20260731",
+                                "settings": {
+                                    "requested": {
+                                        "maxOutputTokens": 128000,
+                                        "reasoningEffort": "medium",
+                                        "verbosity": "medium"
+                                    },
+                                    "applied": {
+                                        "maxOutputTokens": 128000,
+                                        "verbosity": "medium"
+                                    },
+                                    "ignored": [
+                                        {
+                                            "setting": "reasoningEffort",
+                                            "reasonCode": "reasoning_effort_not_supported"
+                                        }
+                                    ]
+                                },
+                                "capabilities": {
+                                    "reasoningEfforts": {
+                                        "none": "supported",
+                                        "low": "supported",
+                                        "medium": "unsupported",
+                                        "high": "unsupported",
+                                        "xhigh": "unsupported",
+                                        "max": "unsupported"
+                                    },
+                                    "verbosity": {
+                                        "low": "unsupported",
+                                        "medium": "unsupported",
+                                        "high": "unsupported"
+                                    },
+                                    "temperature": "unknown",
+                                    "topP": "unknown",
+                                    "outputLimit": "unknown",
+                                    "structuredOutput": "unknown",
+                                    "jsonMode": "unknown",
+                                    "nativeSearch": "unsupported"
+                                },
+                                "completion": {
+                                    "status": "completed",
+                                    "visibleTextLength": 1543
+                                },
+                                "usage": {
+                                    "promptTokens": 1881,
+                                    "cachedInputTokens": 0,
+                                    "completionTokens": 638,
+                                    "totalTokens": 2519,
+                                    "reasoningTokens": 309
+                                },
+                                "cost": {
+                                    "inputCostUsd": 0,
+                                    "outputCostUsd": 0,
+                                    "totalCostUsd": 0
+                                },
+                                "routingAttempts": [
+                                    {
+                                        "index": 0,
+                                        "profileId": "openrouter-deepseek-v4-flash-0731",
+                                        "requestedProvider": "openrouter",
+                                        "requestedModel": "deepseek/deepseek-v4-flash-0731",
+                                        "actualProvider": "StreamLake",
+                                        "actualModel": "deepseek/deepseek-v4-flash-20260731",
+                                        "status": "executed",
+                                        "finishReason": "stop",
+                                        "completion": {
+                                            "status": "completed",
+                                            "visibleTextLength": 1543
+                                        },
+                                        "usage": {
+                                            "promptTokens": 1881,
+                                            "cachedInputTokens": 0,
+                                            "completionTokens": 638,
+                                            "totalTokens": 2519,
+                                            "reasoningTokens": 309
+                                        },
+                                        "cost": {
+                                            "inputCostUsd": 0,
+                                            "outputCostUsd": 0,
+                                            "totalCostUsd": 0
+                                        },
+                                        "startedAt": "2026-09-16T06:33:31.367Z",
+                                        "finishedAt": "2026-09-16T06:33:45.237Z",
+                                        "durationMs": 13870,
+                                        "chooseOneUsed": false,
+                                        "selectionSource": "configured"
+                                    }
+                                ]
+                            }
+                        ],
+                        "outcome": {
+                            "status": "executed",
+                            "summary": "Generated initial draft response.",
+                            "artifacts": [
+                                "candidate_49e03fb5-3930-476b-bdbf-2b6328a9a8f4"
+                            ],
+                            "signals": {}
+                        }
+                    },
+                    {
+                        "stepId": "step_5",
+                        "parentStepId": "step_4",
+                        "attempt": 1,
+                        "stepKind": "assess",
+                        "startedAt": "2026-09-16T06:33:45.239Z",
+                        "finishedAt": "2026-09-16T06:33:51.056Z",
+                        "durationMs": 5817,
+                        "model": "deepseek-v4-flash-0731",
+                        "usage": {
+                            "promptTokens": 1844,
+                            "cachedInputTokens": 0,
+                            "completionTokens": 693,
+                            "totalTokens": 2537,
+                            "reasoningTokens": 541
+                        },
+                        "cost": {
+                            "inputCostUsd": 0,
+                            "outputCostUsd": 0,
+                            "totalCostUsd": 0
+                        },
+                        "inputRefs": [
+                            {
+                                "resultId": "wf_mu3q59gc_eldca1:step_4:draft",
+                                "name": "draft"
+                            },
+                            {
+                                "resultId": "wf_mu3q59gc_eldca1:step_2:evidence",
+                                "name": "evidence",
+                                "optional": true
+                            }
+                        ],
+                        "resultRefs": [
+                            {
+                                "resultId": "wf_mu3q59gc_eldca1:step_5:review",
+                                "name": "review"
+                            }
+                        ],
+                        "attempts": [
+                            {
+                                "attempt": 1,
+                                "status": "succeeded",
+                                "startedAt": "2026-09-16T06:33:45.239Z",
+                                "finishedAt": "2026-09-16T06:33:51.056Z",
+                                "durationMs": 5817,
+                                "profileId": "openrouter-deepseek-v4-flash-0731",
+                                "requestedProvider": "openrouter",
+                                "requestedModel": "deepseek/deepseek-v4-flash-0731",
+                                "actualProvider": "Wafer",
+                                "actualModel": "deepseek/deepseek-v4-flash-20260731",
+                                "settings": {
+                                    "requested": {
+                                        "maxOutputTokens": 512,
+                                        "reasoningEffort": "low",
+                                        "verbosity": "low"
+                                    },
+                                    "applied": {
+                                        "maxOutputTokens": 512,
+                                        "reasoningEffort": "low",
+                                        "verbosity": "low"
+                                    }
+                                },
+                                "capabilities": {
+                                    "reasoningEfforts": {
+                                        "none": "supported",
+                                        "low": "supported",
+                                        "medium": "unsupported",
+                                        "high": "unsupported",
+                                        "xhigh": "unsupported",
+                                        "max": "unsupported"
+                                    },
+                                    "verbosity": {
+                                        "low": "unsupported",
+                                        "medium": "unsupported",
+                                        "high": "unsupported"
+                                    },
+                                    "temperature": "unknown",
+                                    "topP": "unknown",
+                                    "outputLimit": "unknown",
+                                    "structuredOutput": "unknown",
+                                    "jsonMode": "unknown",
+                                    "nativeSearch": "unsupported"
+                                },
+                                "completion": {
+                                    "status": "completed",
+                                    "visibleTextLength": 397
+                                },
+                                "usage": {
+                                    "promptTokens": 1844,
+                                    "cachedInputTokens": 0,
+                                    "completionTokens": 693,
+                                    "totalTokens": 2537,
+                                    "reasoningTokens": 541
+                                },
+                                "cost": {
+                                    "inputCostUsd": 0,
+                                    "outputCostUsd": 0,
+                                    "totalCostUsd": 0
+                                },
+                                "routingAttempts": [
+                                    {
+                                        "index": 0,
+                                        "profileId": "openrouter-deepseek-v4-flash-0731",
+                                        "requestedProvider": "openrouter",
+                                        "requestedModel": "deepseek/deepseek-v4-flash-0731",
+                                        "actualProvider": "Wafer",
+                                        "actualModel": "deepseek/deepseek-v4-flash-20260731",
+                                        "status": "executed",
+                                        "finishReason": "stop",
+                                        "completion": {
+                                            "status": "completed",
+                                            "visibleTextLength": 397
+                                        },
+                                        "usage": {
+                                            "promptTokens": 1844,
+                                            "cachedInputTokens": 0,
+                                            "completionTokens": 693,
+                                            "totalTokens": 2537,
+                                            "reasoningTokens": 541
+                                        },
+                                        "cost": {
+                                            "inputCostUsd": 0,
+                                            "outputCostUsd": 0,
+                                            "totalCostUsd": 0
+                                        },
+                                        "startedAt": "2026-09-16T06:33:45.239Z",
+                                        "finishedAt": "2026-09-16T06:33:51.053Z",
+                                        "durationMs": 5814,
+                                        "chooseOneUsed": false,
+                                        "selectionSource": "configured"
+                                    }
+                                ]
+                            }
+                        ],
+                        "outcome": {
+                            "status": "executed",
+                            "summary": "Assessment evaluated draft quality and emitted a declared workflow outcome.",
+                            "signals": {
+                                "reviewDecision": "finalize",
+                                "reviewReason": "Draft fully answers the request with a clear qualitative framework and no unsupported claims.",
+                                "traceAlignment": "aligned",
+                                "traceAlignmentReason": "",
+                                "finalTemperamentTightness": 4,
+                                "finalTemperamentRationale": 3,
+                                "finalTemperamentAttribution": 3,
+                                "finalTemperamentCaution": 3,
+                                "finalTemperamentExtent": 3,
+                                "lengthConcern": "ok",
+                                "styleConcern": "ok",
+                                "evidenceConcern": "ok",
+                                "moduleHintCount": 0,
+                                "assessRoutingHintsCsv": "grounding.citation_strict",
+                                "routingHintApplied": "openai_first_logic"
+                            }
+                        }
+                    }
+                ]
+            },
+            "steerabilityControls": {
+                "version": "v1",
+                "controls": [
+                    {
+                        "controlId": "workflow_mode",
+                        "value": "grounded",
+                        "source": "runtime_config",
+                        "rationale": "Used requested workflow mode id from runtime configuration.",
+                        "mattered": true,
+                        "impactedTargets": [
+                            "workflow_execution",
+                            "execution_contract_selection",
+                            "review_loop_execution"
+                        ]
+                    },
+                    {
+                        "controlId": "evidence_strictness",
+                        "value": "strict",
+                        "source": "runtime_config",
+                        "rationale": "Workflow mode mapped evidence posture to \"strict\" and Execution Contract response mode \"quality_grounded\".",
+                        "mattered": true,
+                        "impactedTargets": ["execution_contract_selection"]
+                    },
+                    {
+                        "controlId": "review_intensity",
+                        "value": "moderate",
+                        "source": "runtime_config",
+                        "rationale": "Workflow mode review settings yielded intensity \"moderate\" (max deliberation calls: 4).",
+                        "mattered": true,
+                        "impactedTargets": ["review_loop_execution"]
+                    },
+                    {
+                        "controlId": "provider_preference",
+                        "value": "state:advisory_honored;advisory:ollama-ministral-3-14b;resolved:ollama-ministral-3-14b(ollama/ministral-3:14b)",
+                        "source": "planner_output",
+                        "rationale": "Planner advisory profile preference aligned with capability policy and was used for provider/model selection.",
+                        "mattered": true,
+                        "impactedTargets": ["model_profile_selection"]
+                    },
+                    {
+                        "controlId": "persona_tone_overlay",
+                        "value": "state:presentation_not_applied;persona:footnote;source:none",
+                        "source": "surface_profile",
+                        "rationale": "No persona overlay was applied; default persona prompt path remained active and execution-policy authority stayed unchanged.",
+                        "mattered": false,
+                        "impactedTargets": []
+                    },
+                    {
+                        "controlId": "tool_allowance",
+                        "value": "none_requested (web_search)",
+                        "source": "planner_output",
+                        "rationale": "Planner did not request tool execution for this response path.",
+                        "mattered": false,
+                        "impactedTargets": []
+                    }
+                ]
+            },
+            "trace_target": {
+                "tightness": 3,
+                "rationale": 3,
+                "attribution": 3,
+                "caution": 3,
+                "extent": 2
+            },
+            "trace_final": {
+                "tightness": 4,
+                "rationale": 3,
+                "attribution": 3,
+                "caution": 3,
+                "extent": 3
+            },
+            "trace_final_reason_code": "runtime_posture_adjustment",
+            "reviewRuntime": {
+                "label": "reviewed_no_revision"
+            },
+            "evaluator": {
+                "authorityLevel": "observe",
+                "mode": "observe_only",
+                "provenance": "Inferred",
+                "safetyDecision": {
+                    "action": "allow",
+                    "safetyTier": "Low",
+                    "ruleId": null
+                }
+            },
+            "totalDurationMs": 36792
+        }
+    },
+    "capture": {
+        "generatedAt": "2026-09-16T06:33:51.068Z",
+        "backendBaseUrl": "http://localhost:4317",
+        "workflowModeId": "grounded",
+        "capturedResponseId": "wGZMEt4u",
+        "capturedChainHash": "223ccb58af7ae6d6"
+    }
+}

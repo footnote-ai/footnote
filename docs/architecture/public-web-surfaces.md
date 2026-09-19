@@ -38,10 +38,17 @@ The homepage loads the ordered fixtures in
 notes stay out of the rendered scenario.
 
 A visitor can choose among prepared answers with the page's selector dots. The
-homepage renders the question and answer, followed by an empty trace-footer
-position. It does not use a captured response ID as proof that a durable trace
-is available. The page labels the content as prepared and points to `/chat` for
-live use.
+homepage presents the question on the right and the prepared answer on the
+left inside a chat-compatible shell, followed by the canonical response
+footnote using the fixture's captured metadata. The fixture's Trace and Report
+artifacts remain unavailable, so the rendered controls expose those states
+honestly rather than implying a durable live trace. The page labels the
+content as prepared and points to `/chat` for live use; the handoff is a link,
+not a second homepage chat implementation.
+
+The NYC September 11 announcement slot is present in the shell but remains
+hidden until the normal `/api/chat` source is enabled. The homepage does not
+claim archive retrieval or add a browser-selected target.
 
 ## Live chat
 
