@@ -6,29 +6,34 @@
  * @footnote-ethics: low - Public project links support access to governance and discussion resources.
  */
 
-const PublicFooter = (): JSX.Element => (
+type PublicFooterProps = {
+    /** Homepage presentation uses concise reference labels without changing destinations. */
+    homepage?: boolean;
+};
+
+const PublicFooter = ({ homepage = false }: PublicFooterProps): JSX.Element => (
     <footer className="public-footer">
-        <a
-            href="https://github.com/footnote-ai/footnote"
-            target="_blank"
-            rel="noreferrer"
-        >
-            Get in touch
-        </a>
-        <a
-            href="https://github.com/footnote-ai/footnote/discussions"
-            target="_blank"
-            rel="noreferrer"
-        >
-            Join the discussion
-        </a>
-        <a
-            href="https://github.com/footnote-ai/footnote/blob/main/docs/Philosophy.md"
-            target="_blank"
-            rel="noreferrer"
-        >
-            Philosophy
-        </a>
+        <div className="public-footer__inner">
+            <span className="public-footer__mark">
+                Footnote<sup>[1]</sup>
+            </span>
+            <nav className="public-footer__links" aria-label="Footer">
+                <a href="/wiki/">Docs</a>
+                <a
+                    href="https://github.com/footnote-ai/footnote"
+                    target="_blank"
+                    rel="noreferrer"
+                >
+                    GitHub
+                </a>
+                <a href="/wiki/philosophy/#licensing-and-its-tension">
+                    {homepage ? 'Licensing' : 'Licenses'}
+                </a>
+                <a href="/wiki/security/">
+                    {homepage ? 'Privacy' : 'Security & privacy'}
+                </a>
+            </nav>
+        </div>
     </footer>
 );
 

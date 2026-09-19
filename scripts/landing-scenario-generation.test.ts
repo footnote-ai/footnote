@@ -9,6 +9,12 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import type { ChatMessageActionResponse } from '@footnote/contracts/web';
+import type {
+    ExecutionEvent,
+    ProvenanceAssessment,
+    SteerabilityControls,
+    WorkflowRecord,
+} from '@footnote/contracts/policy';
 import {
     LANDING_SCENARIO_PROMPTS,
     assertScenarioId,
@@ -80,11 +86,87 @@ test('sanitizeLandingScenarioResponse rewrites prepared metadata', () => {
         input.response.metadata.modelVersion
     );
     assert.equal(hasOwn(sanitized, 'capture'), false);
-    assert.equal(hasOwn(sanitized.response.metadata, 'workflow'), false);
-    assert.equal(hasOwn(sanitized.response.metadata, 'execution'), false);
-    assert.equal(
-        hasOwn(sanitized.response.metadata, 'steerabilityControls'),
-        false
+    assert.deepEqual(
+        sanitized.response.metadata.provenanceAssessment,
+        input.response.metadata.provenanceAssessment
+    );
+    assert.deepEqual(
+        sanitized.response.metadata.execution,
+        input.response.metadata.execution
+    );
+    assert.deepEqual(
+        sanitized.response.metadata.workflow,
+        input.response.metadata.workflow
+    );
+    assert.deepEqual(
+        sanitized.response.metadata.steerabilityControls,
+        input.response.metadata.steerabilityControls
+    );
+});
+
+test('sanitizeLandingScenarioResponse preserves captured workflow metadata', () => {
+    const provenanceAssessment: ProvenanceAssessment = {
+        methodId: 'deterministic_multi_signal_v1',
+        methodLabel: 'Test provenance assessment',
+        signals: {
+            citationsPresent: false,
+            retrievalRequested: false,
+            retrievalUsed: false,
+            retrievalToolExecuted: false,
+            workflowEvidence: false,
+            trustGraphEvidenceAvailable: false,
+            trustGraphEvidenceUsed: false,
+            assistantDeclaredSpeculative: false,
+        },
+        conflicts: [],
+        limitations: [],
+    };
+    const execution: ExecutionEvent[] = [
+        {
+            kind: 'generation',
+            status: 'executed',
+        },
+    ];
+    const workflow: WorkflowRecord = {
+        workflowId: 'workflow-test',
+        workflowName: 'landing-test',
+        status: 'completed',
+        terminationReason: 'goal_satisfied',
+        stepCount: 0,
+        maxSteps: 1,
+        maxDurationMs: 1000,
+        steps: [],
+    };
+    const steerabilityControls: SteerabilityControls = {
+        version: 'v1',
+        controls: [],
+    };
+    const response = createMessageResponse('A prepared answer', {
+        provenanceAssessment,
+        execution,
+        workflow,
+        steerabilityControls,
+    });
+
+    const sanitized = sanitizeLandingScenarioResponse({
+        scenario: LANDING_SCENARIO_PROMPTS[0],
+        response,
+        capturedResponseId: 'AbCdEf12',
+        capturedChainHash: '0123456789abcdef',
+        capturedAt: '2026-06-11T00:34:07.189Z',
+        backendBaseUrl: 'http://localhost:3000',
+        workflowModeId: 'balanced',
+    });
+
+    assert.deepEqual(
+        sanitized.response.metadata.provenanceAssessment,
+        provenanceAssessment
+    );
+    assert.deepEqual(sanitized.response.metadata.execution, execution);
+    assert.deepEqual(sanitized.response.metadata.workflow, workflow);
+    assert.deepEqual(
+        sanitized.response.metadata.steerabilityControls,
+        steerabilityControls
     );
 });
 
@@ -157,12 +239,12 @@ test('buildChatRequest emits the landing capture payload shape', () => {
         modeId: 'balanced',
         trigger: { kind: 'submit' },
         latestUserInput:
-            'What does Footnote do differently from other AI tools?',
+            'How can I compare two commute options without relying on precise numerical claims?',
         conversation: [
             {
                 role: 'user',
                 content:
-                    'What does Footnote do differently from other AI tools?',
+                    'How can I compare two commute options without relying on precise numerical claims?',
             },
         ],
         capabilities: {

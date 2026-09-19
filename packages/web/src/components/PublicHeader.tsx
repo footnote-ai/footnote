@@ -9,12 +9,19 @@
 import { Link } from 'react-router-dom';
 import ThemeToggle from './ThemeToggle';
 
-const PublicHeader = (): JSX.Element => (
+type PublicHeaderProps = {
+    /** Homepage presentation omits the account link while retaining global controls. */
+    homepage?: boolean;
+};
+
+const PublicHeader = ({ homepage = false }: PublicHeaderProps): JSX.Element => (
     <header className="public-header">
         <Link className="public-header__mark" to="/">
-            FOOTNOTE
+            Footnote<sup>[1]</sup>
         </Link>
         <nav aria-label="Primary">
+            <Link to="/chat">Chat</Link>
+            <a href="/wiki/">Docs</a>
             <a
                 href="https://github.com/footnote-ai/footnote"
                 target="_blank"
@@ -22,8 +29,7 @@ const PublicHeader = (): JSX.Element => (
             >
                 GitHub
             </a>
-            <a href="/wiki/">Wiki</a>
-            <Link to="/account">Sign in</Link>
+            {!homepage && <Link to="/account">Sign in</Link>}
             <ThemeToggle />
         </nav>
     </header>

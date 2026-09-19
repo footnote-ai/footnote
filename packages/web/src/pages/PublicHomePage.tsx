@@ -6,18 +6,11 @@
  * @footnote-ethics: high - Prepared response state and public claims must not imply live execution or fabricated provenance.
  */
 
-import {
-    useRef,
-    useState,
-    type FocusEvent,
-    type MouseEvent,
-    type PointerEvent,
-} from 'react';
 import { Link } from 'react-router-dom';
+import CanonicalResponseFootnote from '@components/CanonicalResponseFootnote';
 import MarkdownResponse from '@components/MarkdownResponse';
 import PublicFooter from '@components/PublicFooter';
 import PublicHeader from '@components/PublicHeader';
-import TraceFooterPlaceholder from '@components/TraceFooterPlaceholder';
 import ResponseCarousel from '@components/ResponseCarousel';
 import { landingScenarios } from '../data/landingScenarios';
 
@@ -25,186 +18,111 @@ type PublicConcept = {
     id: string;
     label: string;
     description: string;
-    detailLead: string;
-    technicalLabel: string;
-    detailTail: string;
     documentationHref: string;
+    documentationLabel: string;
 };
 
 const publicConcepts: readonly PublicConcept[] = [
     {
-        id: 'origins',
-        label: 'Origins',
-        description: 'Where information came from.',
-        detailLead: 'Sources and context used to form the answer. See',
-        technicalLabel: 'provenance',
-        detailTail: '.',
+        id: 'see-what-happened',
+        label: 'See what happened',
+        description:
+            'Know where an answer came from, what Footnote did, and what it could not confirm.',
         documentationHref: '/wiki/architecture/canonical-response-footnote/',
+        documentationLabel: 'How answers are explained',
     },
     {
-        id: 'uncertainty',
-        label: 'Uncertainty',
-        description: 'What may be wrong or missing.',
-        detailLead: 'What could not be confirmed or remains unresolved. See',
-        technicalLabel: 'uncertainty',
-        detailTail: '.',
-        documentationHref: '/wiki/architecture/platform-experience-standard/',
+        id: 'your-rules',
+        label: 'Your rules',
+        description:
+            'Decide what Footnote may use, what it can do, and how it should behave.',
+        documentationHref: '/wiki/architecture/admin-settings-architecture/',
+        documentationLabel: 'Configuration',
     },
     {
-        id: 'steps',
-        label: 'Steps',
-        description: 'What the system did.',
-        detailLead:
-            'Searches, tools, and other work used to produce the answer. See',
-        technicalLabel: 'workflow',
-        detailTail: '.',
-        documentationHref: '/wiki/architecture/workflow/',
+        id: 'run-it-your-way',
+        label: 'Run it your way',
+        description:
+            'Use local or online models, on your computer or a server.',
+        documentationHref: '/wiki/deployment/',
+        documentationLabel: 'Deployment',
     },
     {
-        id: 'limits',
-        label: 'Limits',
-        description: 'What it could not do or check.',
-        detailLead: 'What could not be accessed, checked, or completed. See',
-        technicalLabel: 'limitations',
-        detailTail: '.',
-        documentationHref: '/wiki/architecture/platform-experience-standard/',
+        id: 'open-about-our-choices',
+        label: 'Open about our choices',
+        description:
+            'Our code, licensing, limits, AI use, and resource claims should be open to scrutiny.',
+        documentationHref: '/wiki/philosophy/',
+        documentationLabel: 'Philosophy',
     },
 ];
 
-const PublicConceptList = (): JSX.Element => {
-    const [activeConceptId, setActiveConceptId] = useState<string | null>(null);
-    const pointerActivationRef = useRef<string | null>(null);
-
-    const isMobileCardInteraction = (): boolean =>
-        typeof window !== 'undefined' &&
-        window.matchMedia('(hover: none), (pointer: coarse)').matches;
-
-    const handleConceptBlur = (event: FocusEvent<HTMLElement>): void => {
-        const nextTarget = event.relatedTarget;
-        if (
-            !(nextTarget instanceof HTMLElement) ||
-            !event.currentTarget.contains(nextTarget)
-        ) {
-            setActiveConceptId(null);
-        }
-    };
-
-    const handleConceptPointerDown = (
-        event: PointerEvent<HTMLDivElement>
-    ): void => {
-        pointerActivationRef.current = event.pointerType || 'mouse';
-    };
-
-    const handleConceptClick = (
-        conceptId: string,
-        event: MouseEvent<HTMLDivElement>
-    ): void => {
-        const target = event.target;
-        if (target instanceof HTMLElement && target.closest('a')) {
-            pointerActivationRef.current = null;
-            return;
-        }
-        if (
-            isMobileCardInteraction() ||
-            pointerActivationRef.current === 'touch'
-        ) {
-            setActiveConceptId((currentConceptId) =>
-                currentConceptId === conceptId ? null : conceptId
-            );
-        }
-        pointerActivationRef.current = null;
-    };
-
+const ConceptIllustration = ({ id }: { id: string }): JSX.Element => {
+    if (id === 'see-what-happened') {
+        return (
+            <svg viewBox="0 0 220 72" aria-hidden="true" focusable="false">
+                <circle cx="18" cy="36" r="3" />
+                <path d="M18 36C62 36 58 10 102 10s43 52 86 52" />
+                <path d="M18 36c40 0 52-17 84-17 39 0 45 34 86 34" />
+                <path d="M18 36c42 0 45 18 84 18 40 0 46-27 86-27" />
+                <path d="M18 36c40 0 51 25 84 25 43 0 43-47 86-47" />
+                <circle cx="102" cy="10" r="3" />
+                <circle cx="102" cy="54" r="3" />
+                <circle cx="188" cy="35" r="3" />
+            </svg>
+        );
+    }
+    if (id === 'your-rules') {
+        return (
+            <svg viewBox="0 0 180 72" aria-hidden="true" focusable="false">
+                <path d="M12 16h156M12 36h156M12 56h156" />
+                <circle cx="74" cy="16" r="5" />
+                <circle cx="120" cy="36" r="5" />
+                <circle cx="55" cy="56" r="5" />
+            </svg>
+        );
+    }
+    if (id === 'run-it-your-way') {
+        return (
+            <svg viewBox="0 0 200 72" aria-hidden="true" focusable="false">
+                <rect x="16" y="14" width="58" height="38" rx="3" />
+                <path d="M9 57h72M25 57v4h40v-4M101 34h26" />
+                <path d="M151 54h29a9 9 0 0 0 1-18 15 15 0 0 0-29-4 11 11 0 0 0-1 22Z" />
+                <circle cx="91" cy="34" r="1.5" />
+                <circle cx="97" cy="34" r="1.5" />
+            </svg>
+        );
+    }
     return (
-        <ul
-            className="public-home__concepts"
-            aria-label="What to check around an answer"
-        >
-            {publicConcepts.map((concept) => {
-                const isActive = activeConceptId === concept.id;
-                const popoverId = `public-home-concept-${concept.id}`;
+        <svg viewBox="0 0 100 72" aria-hidden="true" focusable="false">
+            <path d="m50 9 29 15-29 15-29-15z" />
+            <path d="m21 36 29 15 29-15M21 48l29 15 29-15" />
+        </svg>
+    );
+};
 
+const PublicConceptList = (): JSX.Element => {
+    return (
+        <ul className="public-home__concepts" aria-label="How Footnote works">
+            {publicConcepts.map((concept) => {
                 return (
                     <li
                         className={`public-home__concept-wrap public-home__concept-wrap--${concept.id}`}
-                        data-concept={concept.id}
                         key={concept.id}
-                        onBlur={handleConceptBlur}
-                        onFocus={() => {
-                            if (!pointerActivationRef.current) {
-                                setActiveConceptId(concept.id);
-                            }
-                        }}
-                        onMouseEnter={() => {
-                            if (!isMobileCardInteraction()) {
-                                setActiveConceptId(concept.id);
-                            }
-                        }}
-                        onMouseLeave={() => {
-                            if (!isMobileCardInteraction()) {
-                                setActiveConceptId(null);
-                            }
-                        }}
-                        data-active={isActive}
                     >
-                        <div
-                            className="public-home__concept"
-                            tabIndex={0}
-                            role="group"
-                            aria-label={concept.label}
-                            onClick={(event) =>
-                                handleConceptClick(concept.id, event)
-                            }
-                            onPointerDown={handleConceptPointerDown}
-                        >
-                            <div className="public-home__concept-header">
-                                <strong>{concept.label}</strong>
-                                <span
-                                    className="public-home__concept-indicator"
-                                    aria-hidden="true"
-                                >
-                                    <svg
-                                        viewBox="0 0 12 8"
-                                        focusable="false"
-                                        aria-hidden="true"
-                                    >
-                                        <path d="m1 1 5 5 5-5" />
-                                    </svg>
-                                </span>
+                        <article className="public-home__concept">
+                            <div className="public-home__concept-art">
+                                <ConceptIllustration id={concept.id} />
                             </div>
-                            <div className="public-home__concept-body">
-                                <p
-                                    className="public-home__concept-summary"
-                                    aria-hidden={isActive}
-                                >
-                                    {concept.description}
-                                </p>
-                                <div
-                                    id={popoverId}
-                                    className="public-home__concept-detail"
-                                    role="region"
-                                    aria-hidden={!isActive}
-                                    aria-label={`${concept.label} explanation`}
-                                >
-                                    <p className="public-home__concept-detail-copy">
-                                        {concept.detailLead}{' '}
-                                        <a
-                                            href={concept.documentationHref}
-                                            target="_blank"
-                                            rel="noreferrer"
-                                        >
-                                            {concept.technicalLabel}
-                                            <span aria-hidden="true"> ↗</span>
-                                            <span className="sr-only">
-                                                {' '}
-                                                (opens in a new tab)
-                                            </span>
-                                        </a>
-                                        {concept.detailTail}
-                                    </p>
-                                </div>
+                            <div className="public-home__concept-content">
+                                <h3>{concept.label}</h3>
+                                <p>{concept.description}</p>
+                                <a href={concept.documentationHref}>
+                                    {concept.documentationLabel}
+                                    <span aria-hidden="true"> →</span>
+                                </a>
                             </div>
-                        </div>
+                        </article>
                     </li>
                 );
             })}
@@ -213,72 +131,120 @@ const PublicConceptList = (): JSX.Element => {
 };
 
 const PublicHomePage = (): JSX.Element => {
+    // NYC source/readiness remains gated pending the approved retrieval rollout.
+    // Do not present a retrieval claim while PR #665 is still gated.
+    const nycRecordsEnabled = false;
+
     return (
         <div className="public-home">
-            <PublicHeader />
+            <svg
+                className="public-home__linework"
+                viewBox="0 0 1200 1800"
+                preserveAspectRatio="none"
+                aria-hidden="true"
+                focusable="false"
+            >
+                <path d="M-40 180C160 180 166 345 318 345S502 155 664 155s214 92 308 92 155-181 270-181" />
+                <path d="M-32 770c164 0 171-124 318-124 162 0 211 155 344 155 168 0 194-183 345-183 115 0 131 88 249 88" />
+                <path d="M600 1260v120" />
+                <path d="M-20 1570c228 0 280-106 495-106s245 92 426 92 174-126 320-126" />
+                <path d="M710 1650c112 0 138-58 219-101s137-25 231-139" />
+                <circle cx="318" cy="345" r="6" />
+                <circle cx="664" cy="155" r="6" />
+                <circle cx="972" cy="472" r="6" />
+                <circle cx="600" cy="1380" r="6" />
+                <circle cx="901" cy="1556" r="6" />
+            </svg>
+            <PublicHeader homepage />
             <main id="main-content" className="public-home__main">
                 <section aria-labelledby="homepage-title">
                     <header className="public-home__intro">
-                        <h1 id="homepage-title">AI that shows its work.</h1>
-                        <p>
-                            <span className="public-home__intro-sentence">
-                                Most chatbots rush to give you a polished
-                                answer,{' '}
-                                <span className="public-home__no-wrap">
-                                    even when they&apos;re wrong.
-                                </span>
+                        <h1 id="homepage-title">
+                            <span className="public-home__hero-title-line">
+                                AI that
                             </span>{' '}
-                            <span className="public-home__intro-sentence">
-                                We care more about giving you answers that are
-                                easy to check.
+                            <span className="public-home__hero-title-line">
+                                <em>shows its work.</em>
                             </span>
+                        </h1>
+                        <p>
+                            See how an answer was made, set your own rules, and
+                            run Footnote your way.
                         </p>
                     </header>
                     <div className="public-home__intro-rule" />
                     <div className="public-home__thread">
-                        <ResponseCarousel
-                            items={landingScenarios}
-                            ariaLabel="Pre-prepared answers"
-                            getKey={(scenario) => scenario.id}
-                            getDotLabel={(scenario, index) =>
-                                `Show prepared response ${index + 1}: ${scenario.question}`
-                            }
-                            renderItem={(scenario) => (
-                                <>
+                        <div className="public-home__chat-shell">
+                            <aside
+                                className="public-home__context-notice"
+                                hidden={!nycRecordsEnabled}
+                                aria-label="NYC September 11 records"
+                            >
+                                <strong>New: NYC September 11 records</strong>
+                                <span>
+                                    Ask about the response, cleanup,
+                                    environmental conditions, agencies,
+                                    residents, and recovery, with sources you
+                                    can inspect.
+                                </span>
+                                <Link to="/chat">Ask in chat →</Link>
+                            </aside>
+                            <ResponseCarousel
+                                items={landingScenarios}
+                                ariaLabel="Pre-prepared answers"
+                                getKey={(scenario) => scenario.id}
+                                getDotLabel={(scenario, index) =>
+                                    `Show prepared response ${index + 1}: ${scenario.question}`
+                                }
+                                renderItem={(scenario) => (
                                     <p className="public-message public-message--person">
                                         {scenario.question}
                                     </p>
-                                    <article className="public-message public-message--assistant">
-                                        <MarkdownResponse
-                                            markdown={scenario.response.message}
+                                )}
+                                renderItemAfterNavigation={(scenario) => (
+                                    <>
+                                        <article className="public-message public-message--assistant">
+                                            <MarkdownResponse
+                                                markdown={
+                                                    scenario.response.message
+                                                }
+                                            />
+                                        </article>
+                                        <CanonicalResponseFootnote
+                                            metadata={
+                                                scenario.response.metadata
+                                            }
+                                            artifacts={{
+                                                trace: 'unavailable',
+                                                report: 'unavailable',
+                                            }}
                                         />
-                                    </article>
-                                    <TraceFooterPlaceholder />
-                                </>
-                            )}
-                        />
-                        <p className="public-home__prepared">
-                            This is a prepared example —{' '}
-                            <Link to="/chat">Ask a question</Link>
-                        </p>
+                                    </>
+                                )}
+                            />
+                            <Link
+                                className="public-home__chat-handoff"
+                                to="/chat"
+                            >
+                                <span>Ask a question…</span>
+                                <span aria-hidden="true">→</span>
+                            </Link>
+                        </div>
                     </div>
                 </section>
                 <section
                     className="public-home__narrative"
                     aria-labelledby="narrative-title"
                 >
-                    <h2 id="narrative-title">What to check</h2>
+                    <h2 id="narrative-title">How we do things</h2>
                     <PublicConceptList />
                 </section>
                 <section
                     className="public-home__get-started"
                     aria-labelledby="get-started-title"
                 >
-                    <h2 id="get-started-title">Run it yourself</h2>
-                    <p>
-                        Footnote is open source and can run on your own
-                        computer.
-                    </p>
+                    <h2 id="get-started-title">Run Footnote</h2>
+                    <p>Open source. Your computer or a server.</p>
                     <div>
                         <a
                             className="public-home__download"
@@ -286,7 +252,7 @@ const PublicHomePage = (): JSX.Element => {
                             target="_blank"
                             rel="noreferrer"
                         >
-                            Download
+                            Get started
                         </a>
                         <a
                             className="public-home__documentation"
@@ -294,16 +260,10 @@ const PublicHomePage = (): JSX.Element => {
                         >
                             Setup guide
                         </a>
-                        <a
-                            className="public-home__documentation"
-                            href="/wiki/philosophy/"
-                        >
-                            Privacy and control
-                        </a>
                     </div>
                 </section>
             </main>
-            <PublicFooter />
+            <PublicFooter homepage />
         </div>
     );
 };
