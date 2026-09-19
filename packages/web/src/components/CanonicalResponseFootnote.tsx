@@ -510,15 +510,17 @@ const ControlsDrawerContent = ({
 
 const TraceDrawerContent = ({
     href,
+    reason,
     state,
 }: {
     href?: string;
+    reason?: string;
     state: ResponseFootnoteArtifactState;
 }): JSX.Element => (
     <div className="canonical-response-footnote__details-body">
         {state !== 'unavailable' && (
             <p>
-                <ActionStatus state={state} />
+                <ActionStatus state={state} reason={reason} />
             </p>
         )}
         <p>TRACE describes posture, not answer quality.</p>
@@ -527,15 +529,17 @@ const TraceDrawerContent = ({
 );
 
 const ReportDrawerContent = ({
+    reason,
     state,
 }: {
+    reason?: string;
     state: ResponseFootnoteArtifactState;
 }): JSX.Element => (
     <div className="canonical-response-footnote__details-body">
         {state !== 'unavailable' && (
             <>
                 <p>
-                    <ActionStatus state={state} />
+                    <ActionStatus state={state} reason={reason} />
                 </p>
                 {state === 'available' && (
                     <p>The report action is enabled for this response.</p>
@@ -1091,6 +1095,7 @@ const CanonicalResponseFootnote = ({
                                 ? traceHref
                                 : undefined
                         }
+                        reason={projection.actions.trace.reason}
                         state={projection.actions.trace.state}
                     />
                 </DisclosureDrawer>
@@ -1101,6 +1106,7 @@ const CanonicalResponseFootnote = ({
                     onClose={() => setActiveDrawer(null)}
                 >
                     <ReportDrawerContent
+                        reason={projection.actions.report.reason}
                         state={projection.actions.report.state}
                     />
                 </DisclosureDrawer>

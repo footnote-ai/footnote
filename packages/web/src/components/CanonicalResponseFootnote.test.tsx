@@ -289,6 +289,10 @@ test('rendered live fixture keeps unknown Trace action honest and Report disable
         markup,
         /href="\/traces\/response-footnote-fixture-complete"/
     );
+    assert.match(
+        markup,
+        /Trace availability is not confirmed by the chat response\./
+    );
     assert.doesNotMatch(markup, /Unavailable on web/);
 });
 
