@@ -848,14 +848,17 @@ const SummaryItem = ({
     value: ReactNode;
     state: 'recorded' | 'partial' | 'unavailable';
     className?: string;
-}): JSX.Element => (
-    <div
-        className={`canonical-response-footnote__summary-item${className ? ` ${className}` : ''}`}
-    >
-        <span>{label}</span>
-        <strong data-state={state}>{value}</strong>
-    </div>
-);
+}): JSX.Element => {
+    const summaryClassName = className
+        ? `canonical-response-footnote__summary-item ${className}`
+        : 'canonical-response-footnote__summary-item';
+    return (
+        <div className={summaryClassName}>
+            <span>{label}</span>
+            <strong data-state={state}>{value}</strong>
+        </div>
+    );
+};
 
 const CanonicalResponseFootnote = ({
     metadata,
