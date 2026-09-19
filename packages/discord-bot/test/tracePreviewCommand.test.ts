@@ -89,5 +89,6 @@ test('trace-preview replies with only backend PNG attachment', async () => {
             evidenceScore: 4,
             freshnessScore: 5,
         },
+        variant: 'discord',
     });
 });

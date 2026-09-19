@@ -396,7 +396,10 @@ test('/chat renders the shared basic output fixture', async () => {
         };
         assert.equal(payload.content, basicOutputFixture.response.message);
         assert.deepEqual(seenTraceCardRequests, [
-            { responseId: basicOutputFixture.response.metadata.responseId },
+            {
+                responseId: basicOutputFixture.response.metadata.responseId,
+                variant: 'discord',
+            },
         ]);
 
         const serializedComponents = JSON.parse(
@@ -409,7 +412,9 @@ test('/chat renders the shared basic output fixture', async () => {
                 (row) => row.components?.map((button) => button.custom_id) ?? []
             ),
             [
-                `details:${basicOutputFixture.response.metadata.responseId}`,
+                `sources:${basicOutputFixture.response.metadata.responseId}`,
+                `controls:${basicOutputFixture.response.metadata.responseId}`,
+                `trace:${basicOutputFixture.response.metadata.responseId}`,
                 `report_issue:${basicOutputFixture.response.metadata.responseId}`,
             ]
         );

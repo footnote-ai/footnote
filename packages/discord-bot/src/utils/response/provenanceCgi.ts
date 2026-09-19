@@ -7,10 +7,14 @@
  */
 import { ActionRowBuilder, ButtonBuilder, ButtonStyle } from 'discord.js';
 
-export type ProvenanceAction = 'details' | 'report_issue';
+export type ProvenanceAction =
+    'details' | 'sources' | 'controls' | 'trace' | 'report_issue';
 
 const PROVENANCE_ACTIONS = new Set<ProvenanceAction>([
     'details',
+    'sources',
+    'controls',
+    'trace',
     'report_issue',
 ]);
 const UNKNOWN_RESPONSE_ID_FALLBACK = 'unknown_response_id';
@@ -64,14 +68,26 @@ export function buildProvenanceActionRow(
 ): ActionRowBuilder<ButtonBuilder> {
     return new ActionRowBuilder<ButtonBuilder>().addComponents(
         new ButtonBuilder()
-            .setCustomId(buildProvenanceActionCustomId('details', responseId))
+            .setCustomId(buildProvenanceActionCustomId('sources', responseId))
             .setStyle(ButtonStyle.Secondary)
-            .setEmoji('\u{1F50D}'),
+            .setEmoji('\u{1F4D6}')
+            .setLabel('Sources'),
+        new ButtonBuilder()
+            .setCustomId(buildProvenanceActionCustomId('controls', responseId))
+            .setStyle(ButtonStyle.Secondary)
+            .setEmoji('\u{1F39B}\u{FE0F}')
+            .setLabel('Controls'),
+        new ButtonBuilder()
+            .setCustomId(buildProvenanceActionCustomId('trace', responseId))
+            .setStyle(ButtonStyle.Secondary)
+            .setEmoji('\u{1F4C4}')
+            .setLabel('Trace'),
         new ButtonBuilder()
             .setCustomId(
                 buildProvenanceActionCustomId('report_issue', responseId)
             )
             .setStyle(ButtonStyle.Secondary)
             .setEmoji('\u{1F6A9}')
+            .setLabel('Report')
     );
 }

@@ -152,6 +152,7 @@ const command: Command = {
                         interaction.options.getInteger('freshness_score', true)
                     ),
                 },
+                variant: 'discord',
             });
             const pngBuffer = Buffer.from(traceCard.pngBase64, 'base64');
 

@@ -1,5 +1,5 @@
 /**
- * @description: Handles provenance-related button actions including details lookup and incident report launch.
+ * @description: Handles response-bound provenance buttons for sources, controls, trace details, and incident reports.
  * @footnote-scope: core
  * @footnote-module: ProvenanceButtonHandlers
  * @footnote-risk: high - Bad metadata parsing can hide trace details or crash details rendering.
@@ -196,9 +196,8 @@ function formatSummarySection(
         `- License Context: \`${formatMarkdownValue(payload.licenseContext)}\``
     );
     if (payload.steerabilityControls) {
-        const controls = payload.steerabilityControls.controls;
         lines.push(
-            `- Recorded Controls: \`${formatMarkdownValue(controls.length > 0 ? controls.map((control) => `${control.controlId}=${control.value} (${control.source}; ${control.mattered ? 'mattered' : 'did not matter'})`).join('; ') : 'none recorded', 420)}\``
+            `- Recorded Controls: \`${formatMarkdownValue(payload.steerabilityControls.controls.map((control) => `${control.controlId}=${control.value} (${control.source}; ${control.mattered ? 'mattered' : 'did not matter'})`).join('; '), 420)}\``
         );
     } else {
         lines.push('- Recorded Controls: unavailable');
@@ -282,18 +281,26 @@ function formatSourcesSection(
     payload: ResponseMetadata | DetailsFallbackPayload
 ): string {
     if (!('provenance' in payload)) {
-        return ['**Sources**', '- Source metadata unavailable'].join('\n');
-    }
-
-    if (!payload.citations.length) {
-        const groundingEvidenceSummary = summarizeGroundingEvidence(payload);
         return [
             '**Sources**',
-            `- ${groundingEvidenceSummary.explanation}`,
+            '- Sources unavailable: `unavailable`',
+            '- Response metadata is unavailable.',
+            '- No recorded citations.',
         ].join('\n');
     }
 
-    const lines = ['**Sources**'];
+    const groundingEvidenceSummary = summarizeGroundingEvidence(payload);
+    const lines = [
+        '**Sources**',
+        `- ${groundingEvidenceSummary.label}: \`${payload.citations.length}\``,
+        `- ${groundingEvidenceSummary.explanation}`,
+    ];
+
+    if (!payload.citations.length) {
+        lines.push('- No recorded citations.');
+        return lines.join('\n');
+    }
+
     const citationCount = Math.min(
         payload.citations.length,
         DETAILS_CITATION_LIMIT
@@ -580,7 +587,85 @@ function formatDetailsPayloadForDiscord(
 }
 
 /**
- * @description: Routes provenance button interactions for details lookup and incident report actions.
+ * Composes the Trace button's ephemeral message without duplicating Sources.
+ * Sources now has its own button, while the remaining recorded trace context
+ * keeps the existing summary, TRACE, execution, and viewer sections.
+ */
+function formatTraceActionPayloadForDiscord(
+    payload: ResponseMetadata | DetailsFallbackPayload
+): string {
+    const traceViewerSection = formatTraceViewerSection(payload);
+    const maxExecutionLength = Math.max(
+        DETAILS_MIN_EXECUTION_SECTION_LENGTH,
+        DISCORD_MESSAGE_MAX_LENGTH -
+            traceViewerSection.length -
+            DETAILS_SECTION_SEPARATOR.length
+    );
+    const tail = [
+        formatExecutionSection(payload, maxExecutionLength),
+        traceViewerSection,
+    ].join(DETAILS_SECTION_SEPARATOR);
+
+    if (tail.length >= DISCORD_MESSAGE_MAX_LENGTH) {
+        return truncateBlockToLength(tail, DISCORD_MESSAGE_MAX_LENGTH);
+    }
+
+    const head = truncateBlockToLength(
+        [formatSummarySection(payload), formatTraceSection(payload)].join(
+            DETAILS_SECTION_SEPARATOR
+        ),
+        DISCORD_MESSAGE_MAX_LENGTH -
+            tail.length -
+            DETAILS_SECTION_SEPARATOR.length
+    );
+    return [head, tail].join(DETAILS_SECTION_SEPARATOR);
+}
+
+/**
+ * Keeps the Controls button present while its Discord-specific drawer content
+ * is still being implemented.
+ */
+function formatControlsStubForDiscord(): string {
+    return [
+        '**Controls**',
+        '- Controls are not yet available in Discord.',
+    ].join('\n');
+}
+
+/**
+ * Loads and validates response metadata for an ephemeral provenance action.
+ * A fallback payload keeps each button fail-open when the trace is stale or
+ * temporarily unavailable.
+ */
+async function loadDetailsPayload(
+    responseId: string
+): Promise<ResponseMetadata | DetailsFallbackPayload> {
+    let metadata: ResponseMetadata | null = null;
+    try {
+        const traceResponse = await botApi.getTrace(responseId);
+        metadata = extractMetadataFromTraceResponse(traceResponse.data);
+        if (!metadata) {
+            logger.warn(
+                'Trace payload did not contain valid response metadata; using fallback details payload.',
+                {
+                    responseId,
+                    reason: 'metadata_extraction_failed',
+                }
+            );
+        }
+    } catch (error) {
+        logger.warn('Failed to load provenance metadata for action', {
+            responseId,
+            reason: 'metadata_unavailable',
+            error,
+        });
+    }
+
+    return buildDetailsPayload(responseId, metadata);
+}
+
+/**
+ * @description: Routes provenance button interactions for source, control, trace, and incident report actions.
  * @footnote-scope: core
  * @footnote-module: HandleProvenanceButtonInteraction
  * @footnote-risk: high - Incorrect routing or reply handling can hide trace details or break report workflows.
@@ -596,50 +681,31 @@ export async function handleProvenanceButtonInteraction(
         return false;
     }
 
-    if (provenanceAction.action === 'details') {
-        await interaction.deferReply({
-            flags: [EPHEMERAL_FLAG],
-        });
-        let metadata: ResponseMetadata | null = null;
-        try {
-            const traceResponse = await botApi.getTrace(
-                provenanceAction.responseId
-            );
-            metadata = extractMetadataFromTraceResponse(traceResponse.data);
-            if (!metadata) {
-                logger.warn(
-                    'Trace payload did not contain valid response metadata; using fallback details payload.',
-                    {
-                        responseId: provenanceAction.responseId,
-                        reason: 'metadata_extraction_failed',
-                    }
-                );
-            }
-        } catch (error) {
-            logger.warn(
-                'Failed to load provenance metadata for details action',
-                {
-                    responseId: provenanceAction.responseId,
-                    reason: 'metadata_unavailable',
-                    error,
-                }
-            );
-        }
-
-        const detailsPayload = buildDetailsPayload(
-            provenanceAction.responseId,
-            metadata
-        );
-        await interaction.editReply({
-            content: formatDetailsPayloadForDiscord(detailsPayload),
-        });
-        return true;
-    }
-
     if (provenanceAction.action === 'report_issue') {
         await handleIncidentReportButton(interaction);
         return true;
     }
 
-    return false;
+    await interaction.deferReply({
+        flags: [EPHEMERAL_FLAG],
+    });
+
+    if (provenanceAction.action === 'controls') {
+        await interaction.editReply({
+            content: formatControlsStubForDiscord(),
+        });
+        return true;
+    }
+
+    const detailsPayload = await loadDetailsPayload(
+        provenanceAction.responseId
+    );
+    const content =
+        provenanceAction.action === 'sources'
+            ? formatSourcesSection(detailsPayload)
+            : provenanceAction.action === 'trace'
+              ? formatTraceActionPayloadForDiscord(detailsPayload)
+              : formatDetailsPayloadForDiscord(detailsPayload);
+    await interaction.editReply({ content });
+    return true;
 }

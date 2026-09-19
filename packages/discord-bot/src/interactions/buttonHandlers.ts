@@ -32,7 +32,13 @@ const loadRetry = createLoadOnce(async () =>
     )
 );
 
-const provenancePrefixes = ['details:', 'report_issue:'] as const;
+const provenancePrefixes = [
+    'details:',
+    'sources:',
+    'controls:',
+    'trace:',
+    'report_issue:',
+] as const;
 const variationPrefix = 'image:variation:';
 const retryPrefix = 'image:retry:';
 const incidentPrefixes = [
