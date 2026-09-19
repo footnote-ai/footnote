@@ -45,13 +45,16 @@ const axisPathCount = (markup: string, axis: string): number =>
     );
 
 const axisFilledBarCount = (markup: string, axis: string): number => {
-    const barMatch = markup.match(
-        new RegExp(
-            `<div[^>]*class="canonical-response-footnote__bar canonical-response-footnote__axis--${axis}"[\\s\\S]*?<\\/div>`,
-            'm'
-        )
+    const barStart = markup.indexOf(
+        `class="canonical-response-footnote__bar canonical-response-footnote__axis--${axis}"`
     );
-    return barMatch ? count(barMatch[0], /class="is-filled"/g) : 0;
+    const descriptionStart = markup.indexOf(
+        'class="canonical-response-footnote__axis-description"',
+        barStart
+    );
+    return barStart >= 0 && descriptionStart > barStart
+        ? count(markup.slice(barStart, descriptionStart), /class="is-filled"/g)
+        : 0;
 };
 
 test('rendered complete fixture keeps wheel filled levels equal to final bars', () => {
@@ -131,6 +134,14 @@ test('rendered complete fixture keeps wheel filled levels equal to final bars', 
         /role="img"[\s\S]*canonical-response-footnote__wheel-hit-area/
     );
     assert.equal(
+        count(
+            markup,
+            /<button[^>]*class="canonical-response-footnote__axis-row/g
+        ),
+        5,
+        'each axis row remains a native keyboard button'
+    );
+    assert.equal(
         count(markup, /class="canonical-response-footnote__axis-row/g),
         5,
         'each TRACE wedge has one linked axis row'
@@ -194,6 +205,10 @@ test('rendered enabled actions point to their shared drawers', () => {
     assert.equal(
         count(markup, /class="canonical-response-footnote__drawer"/g),
         4
+    );
+    assert.doesNotMatch(
+        markup,
+        /class="canonical-response-footnote__drawer"[^>]*role="region"/
     );
 });
 

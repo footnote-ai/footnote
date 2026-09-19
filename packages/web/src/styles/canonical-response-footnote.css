@@ -75,7 +75,6 @@
 .canonical-response-footnote__summary-item > span::before { display: block; width: var(--canonical-bar-icon-size); height: var(--canonical-bar-icon-size); flex: 0 0 auto; content: ''; background-position: center; background-repeat: no-repeat; background-size: contain; }
 .canonical-response-footnote__summary > .canonical-response-footnote__summary-item:first-child > span::before { background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Cpath d='M8 3h11l6 6v20H8zM19 3v7h6M12 17h9M12 22h9' fill='none' stroke='%232b2a27' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5'/%3E%3C/svg%3E"); }
 .canonical-response-footnote__summary > .canonical-response-footnote__summary-item:last-child > span::before { background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Cpath d='M16 5v21M10 29h12M7 9h18M3 9l5 13H3zM29 9l-5 13h5zM11 5a5 5 0 0 1 10 0' fill='none' stroke='%232b2a27' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5'/%3E%3C/svg%3E"); }
-.canonical-response-footnote__summary-safety::before { display: block; width: var(--canonical-bar-icon-size); height: var(--canonical-bar-icon-size); flex: 0 0 auto; content: ''; background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Cpath d='M16 3 27 7v8c0 7-4.5 11.5-11 14C9.5 26.5 5 22 5 15V7zM10.5 15.5l3.5 3.5 7-8' fill='none' stroke='%232b2a27' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5'/%3E%3C/svg%3E") center/contain no-repeat; }
 .canonical-response-footnote__summary-item > strong { width: fit-content; margin-left: 0; font-family: var(--fn-font-body); font-size: 0.9rem; font-weight: 500; line-height: 1.2; }
 .canonical-response-footnote__summary-item > strong[data-state='unavailable'] { color: var(--canonical-footnote-muted); }
 .canonical-response-footnote__summary > .canonical-response-footnote__summary-item:first-child > strong { padding: 0.18rem 0.65rem; border-radius: var(--fn-radius-md); background: color-mix(in srgb, var(--fn-brand-highlight) 78%, transparent); }
@@ -123,9 +122,8 @@
 .canonical-response-footnote__wheel path.canonical-response-footnote__wheel-missing { fill: var(--canonical-axis-missing); }
 
 .canonical-response-footnote__axis-list { position: relative; z-index: 2; display: grid; gap: 0.2rem; min-width: 0; }
-.canonical-response-footnote__axis-row { display: grid; grid-template-columns: minmax(7rem, 9rem) minmax(8rem, 12rem) minmax(9rem, 1fr); gap: 0.8rem; min-height: 2.75rem; padding: 0.18rem 0.6rem; border-radius: var(--fn-radius-md); align-items: center; cursor: pointer; outline: none; }
-.canonical-response-footnote__axis-row--active { background: color-mix(in srgb, var(--canonical-axis-tightness) 12%, transparent); }
-.canonical-response-footnote__axis-row--active { box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--canonical-footnote-focus) 20%, transparent); }
+.canonical-response-footnote__axis-row { display: grid; width: 100%; grid-template-columns: minmax(7rem, 9rem) minmax(8rem, 12rem) minmax(9rem, 1fr); gap: 0.8rem; min-height: 2.75rem; padding: 0.18rem 0.6rem; border: 0; border-radius: var(--fn-radius-md); align-items: center; background: transparent; color: inherit; cursor: pointer; font: inherit; text-align: left; outline: none; }
+.canonical-response-footnote__axis-row--active { background: color-mix(in srgb, var(--canonical-axis-tightness) 12%, transparent); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--canonical-footnote-focus) 20%, transparent); }
 .canonical-response-footnote__axis-row:focus-visible { outline: 2px solid var(--canonical-footnote-focus); outline-offset: -2px; }
 .canonical-response-footnote__axis-label { min-width: 0; font-family: var(--fn-font-body); font-size: clamp(1rem, 1.8vw, 1.35rem); font-weight: 500; }
 .canonical-response-footnote__axis-description { min-width: 0; overflow: hidden; color: var(--canonical-axis-description); font-family: var(--fn-font-body); font-size: clamp(0.9rem, 1.55vw, 1.2rem); line-height: 1.15; text-overflow: ellipsis; white-space: nowrap; }
@@ -228,8 +226,7 @@
         padding: 0.12rem 0.3rem;
     }
     .canonical-response-footnote__axis-label { font-size: 0.72rem; }
-    .canonical-response-footnote__axis-description { font-size: 0.66rem; line-height: 1.1; }
-    .canonical-response-footnote__axis-description { white-space: normal; }
+.canonical-response-footnote__axis-description { font-size: 0.66rem; line-height: 1.1; white-space: normal; }
     .canonical-response-footnote__bar {
         gap: 0.18rem;
     }

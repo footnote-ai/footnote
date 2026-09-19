@@ -594,7 +594,6 @@ const DisclosureDrawer = ({
     <section
         className="canonical-response-footnote__drawer"
         id={drawerId}
-        role="region"
         aria-labelledby={`${drawerId}-title`}
         hidden={!open}
     >
@@ -744,13 +743,16 @@ const AxisRow = ({
 }): JSX.Element => {
     const final = axis.final;
     const axisKey = axis.key as AxisKey;
+    const axisClassName = axisColorClass(
+        WHEEL_AXIS_CLASS_NAMES.indexOf(axis.key)
+    );
+    const axisValueLabel = final === null ? 'unavailable' : `${final} of 5`;
     return (
-        <div
+        <button
+            type="button"
             ref={rowRef}
-            className={`canonical-response-footnote__axis-row ${axisColorClass(WHEEL_AXIS_CLASS_NAMES.indexOf(axis.key))}${isActive ? ' canonical-response-footnote__axis-row--active' : ''}`}
+            className={`canonical-response-footnote__axis-row ${axisClassName}${isActive ? ' canonical-response-footnote__axis-row--active' : ''}`}
             data-axis-key={axisKey}
-            tabIndex={0}
-            role="button"
             aria-pressed={isActive}
             onPointerEnter={() => activateAxis(axisKey)}
             onPointerLeave={resetAxis}
@@ -766,10 +768,10 @@ const AxisRow = ({
             <strong className="canonical-response-footnote__axis-label">
                 {axis.label}
             </strong>
-            <div
-                className={`canonical-response-footnote__bar ${axisColorClass(WHEEL_AXIS_CLASS_NAMES.indexOf(axis.key))}`}
+            <span
+                className={`canonical-response-footnote__bar ${axisClassName}`}
                 role="img"
-                aria-label={`${axis.label}: ${final === null ? 'unavailable' : `${final} of 5`}`}
+                aria-label={`${axis.label}: ${axisValueLabel}`}
             >
                 {Array.from({ length: WHEEL_BAND_COUNT }, (_, index) => (
                     <span
@@ -781,7 +783,7 @@ const AxisRow = ({
                         }
                     />
                 ))}
-            </div>
+            </span>
             <span className="canonical-response-footnote__axis-description">
                 {TRACE_AXIS_DISPLAY_DESCRIPTIONS[axisKey]}
             </span>
@@ -792,7 +794,7 @@ const AxisRow = ({
                 {' · '}
                 {final === null ? 'Final unavailable' : `Final ${final}`}
             </span>
-        </div>
+        </button>
     );
 };
 
