@@ -121,6 +121,15 @@ test('rendered complete fixture keeps wheel filled levels equal to final bars', 
         5,
         'each TRACE wedge exposes one keyboard and pointer target'
     );
+    const wheelMarkup = markup.match(
+        /<svg[^>]*canonical-response-footnote__wheel[\s\S]*?<\/svg>/
+    )?.[0];
+    assert.ok(wheelMarkup);
+    assert.match(wheelMarkup, /role="group"/);
+    assert.doesNotMatch(
+        wheelMarkup,
+        /role="img"[\s\S]*canonical-response-footnote__wheel-hit-area/
+    );
     assert.equal(
         count(markup, /class="canonical-response-footnote__axis-row/g),
         5,
@@ -248,7 +257,8 @@ test('rendered prepared fixture exposes sources and controls but no Trace href',
     assert.doesNotMatch(markup, /href="\/traces\//);
     assert.match(markup, /Report/);
     assert.match(markup, /disabled/);
-    assert.doesNotMatch(markup, /canonical-response-footnote__action-status/);
+    assert.match(markup, /canonical-response-footnote__action-status/);
+    assert.match(markup, /Reporting is not available on this surface\./);
 });
 
 test('rendered live fixture keeps unknown Trace action honest and Report disabled', () => {
@@ -265,6 +275,22 @@ test('rendered live fixture keeps unknown Trace action honest and Report disable
         /href="\/traces\/response-footnote-fixture-complete"/
     );
     assert.doesNotMatch(markup, /Unavailable on web/);
+});
+
+test('rendered unavailable actions expose their projected reasons', () => {
+    const nullMetadataMarkup = render(null, 'unavailable', 'unavailable');
+    assert.match(nullMetadataMarkup, /Response metadata is unavailable\./);
+    assert.match(
+        nullMetadataMarkup,
+        /No controls were recorded for this response\./
+    );
+
+    const partialMarkup = render(
+        toFootnote(fixture.partial),
+        'unavailable',
+        'unavailable'
+    );
+    assert.match(partialMarkup, /Reporting is not available on this surface\./);
 });
 
 test('rendered ineligible response provenance is omitted', () => {
@@ -317,7 +343,8 @@ test('rendered null metadata is unavailable and generated ids remain unique', ()
     assert.match(first, /data-state="unavailable"/);
     assert.match(first, /<span>Trace<\/span>/);
     assert.match(first, /<span>Report<\/span>/);
-    assert.doesNotMatch(first, /canonical-response-footnote__action-status/);
+    assert.match(first, /canonical-response-footnote__action-status/);
+    assert.match(first, /No controls were recorded for this response\./);
 });
 
 test('canonical stylesheet declares neutral missing token and narrow layout rules', async () => {
@@ -340,6 +367,14 @@ test('canonical stylesheet declares neutral missing token and narrow layout rule
     assert.match(styles, /@container \(max-width: 820px\)/);
     assert.match(styles, /@container \(max-width: 560px\)/);
     assert.match(styles, /wheel-background/);
+    assert.match(
+        styles,
+        /data-active-axis='rationale'\][^\n]*circle:not\(\.canonical-response-footnote__connector-source\)/
+    );
+    assert.match(
+        styles,
+        /data-active-axis='rationale'\][^\n]*canonical-response-footnote__connector-source \{ stroke: var\(--canonical-axis-rationale\)/
+    );
     assert.match(
         styles,
         /canonical-response-footnote__drawer \{[^}]*grid-column: 1 \/ -1/

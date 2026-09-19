@@ -392,7 +392,7 @@ const renderWheel = (
         <svg
             className="canonical-response-footnote__wheel"
             viewBox={`0 0 ${SVG_SIZE} ${SVG_SIZE}`}
-            role="img"
+            role="group"
             aria-labelledby={`${titleId} ${descriptionId}`}
             data-active-axis={activeAxisKey}
         >
@@ -430,17 +430,17 @@ const formatArtifactState = (state: ResponseFootnoteArtifactState): string => {
 const ActionStatus = ({
     state,
     reason,
-    unavailableLabel,
 }: {
     state: ResponseFootnoteArtifactState;
     reason?: string;
-    unavailableLabel?: string;
 }): JSX.Element => (
     <span className="canonical-response-footnote__action-status">
-        {state === 'unavailable' && unavailableLabel
-            ? unavailableLabel
+        {state === 'unavailable' && reason
+            ? reason
             : formatArtifactState(state)}
-        {reason && <span className="sr-only">{reason}</span>}
+        {reason && state !== 'unavailable' && (
+            <span className="sr-only">{reason}</span>
+        )}
     </span>
 );
 
@@ -551,6 +551,7 @@ const DrawerButton = ({
     icon,
     label,
     onClick,
+    reason,
     state,
 }: {
     active: boolean;
@@ -558,6 +559,7 @@ const DrawerButton = ({
     icon: SummaryIconName;
     label: string;
     onClick: () => void;
+    reason?: string;
     state: ResponseFootnoteArtifactState;
 }): JSX.Element => (
     <button
@@ -570,6 +572,9 @@ const DrawerButton = ({
     >
         <SummaryIcon name={icon} />
         <span>{label}</span>
+        {state === 'unavailable' && (
+            <ActionStatus state={state} reason={reason} />
+        )}
     </button>
 );
 
@@ -1025,6 +1030,7 @@ const CanonicalResponseFootnote = ({
                         icon="sources"
                         label="Sources"
                         onClick={() => toggleDrawer('sources')}
+                        reason={projection.actions.sources.reason}
                         state={projection.actions.sources.state}
                     />
                     <DrawerButton
@@ -1033,6 +1039,7 @@ const CanonicalResponseFootnote = ({
                         icon="controls"
                         label="Controls"
                         onClick={() => toggleDrawer('controls')}
+                        reason={projection.actions.controls.reason}
                         state={projection.actions.controls.state}
                     />
                     <DrawerButton
@@ -1041,6 +1048,7 @@ const CanonicalResponseFootnote = ({
                         icon="trace"
                         label="Trace"
                         onClick={() => toggleDrawer('trace')}
+                        reason={projection.actions.trace.reason}
                         state={projection.actions.trace.state}
                     />
                     <DrawerButton
@@ -1049,6 +1057,7 @@ const CanonicalResponseFootnote = ({
                         icon="report"
                         label="Report"
                         onClick={() => toggleDrawer('report')}
+                        reason={projection.actions.report.reason}
                         state={projection.actions.report.state}
                     />
                 </div>

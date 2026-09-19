@@ -104,13 +104,17 @@
 .canonical-response-footnote__wheel-hit-area--active { fill: color-mix(in srgb, var(--canonical-footnote-focus) 5%, transparent); }
 .canonical-response-footnote__wheel-anchor { fill: transparent; pointer-events: none; }
 .canonical-response-footnote__connector[data-active-axis='rationale'] path { stroke: var(--canonical-axis-rationale); }
-.canonical-response-footnote__connector[data-active-axis='rationale'] circle { fill: var(--canonical-axis-rationale); }
+.canonical-response-footnote__connector[data-active-axis='rationale'] circle:not(.canonical-response-footnote__connector-source) { fill: var(--canonical-axis-rationale); }
+.canonical-response-footnote__connector[data-active-axis='rationale'] .canonical-response-footnote__connector-source { stroke: var(--canonical-axis-rationale); }
 .canonical-response-footnote__connector[data-active-axis='attribution'] path { stroke: var(--canonical-axis-attribution); }
-.canonical-response-footnote__connector[data-active-axis='attribution'] circle { fill: var(--canonical-axis-attribution); }
+.canonical-response-footnote__connector[data-active-axis='attribution'] circle:not(.canonical-response-footnote__connector-source) { fill: var(--canonical-axis-attribution); }
+.canonical-response-footnote__connector[data-active-axis='attribution'] .canonical-response-footnote__connector-source { stroke: var(--canonical-axis-attribution); }
 .canonical-response-footnote__connector[data-active-axis='caution'] path { stroke: var(--canonical-axis-caution); }
-.canonical-response-footnote__connector[data-active-axis='caution'] circle { fill: var(--canonical-axis-caution); }
+.canonical-response-footnote__connector[data-active-axis='caution'] circle:not(.canonical-response-footnote__connector-source) { fill: var(--canonical-axis-caution); }
+.canonical-response-footnote__connector[data-active-axis='caution'] .canonical-response-footnote__connector-source { stroke: var(--canonical-axis-caution); }
 .canonical-response-footnote__connector[data-active-axis='extent'] path { stroke: var(--canonical-axis-extent); }
-.canonical-response-footnote__connector[data-active-axis='extent'] circle { fill: var(--canonical-axis-extent); }
+.canonical-response-footnote__connector[data-active-axis='extent'] circle:not(.canonical-response-footnote__connector-source) { fill: var(--canonical-axis-extent); }
+.canonical-response-footnote__connector[data-active-axis='extent'] .canonical-response-footnote__connector-source { stroke: var(--canonical-axis-extent); }
 .canonical-response-footnote__axis--tightness { fill: var(--canonical-axis-tightness); }
 .canonical-response-footnote__axis--rationale { fill: var(--canonical-axis-rationale); }
 .canonical-response-footnote__axis--attribution { fill: var(--canonical-axis-attribution); }
