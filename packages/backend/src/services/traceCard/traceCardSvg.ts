@@ -7,12 +7,17 @@
  */
 import {
     RESPONSE_FOOTNOTE_SAFETY_LABELS,
+    TRACE_TEMPERAMENT_AXIS_DISPLAY_DESCRIPTIONS,
     type PartialResponseTemperament,
+    type ResponseFootnoteArtifactState,
     type ResponseTemperament,
     type ResponseFootnoteRenderProjection,
     type TraceAxisScore,
 } from '@footnote/contracts/policy';
-import type { TraceCardChipData } from '@footnote/contracts/web';
+import type {
+    TraceCardChipData,
+    TraceCardRenderVariant,
+} from '@footnote/contracts/web';
 
 type TraceAxisKey = keyof ResponseTemperament;
 type NormalizedTemperament = Partial<Record<TraceAxisKey, TraceAxisScore>>;
@@ -31,6 +36,8 @@ export type TraceCardRenderInput = {
     projection?: ResponseFootnoteRenderProjection;
     temperament?: PartialResponseTemperament;
     chips?: Partial<TraceCardChipData>;
+    /** Presentation-only output variant; canonical is the stable default. */
+    variant?: TraceCardRenderVariant;
     width?: number;
     height?: number;
 };
@@ -58,9 +65,11 @@ const TICK_FILLED = '#8FA3BE';
 const MISSING_FILL = '#EF4444';
 const CANONICAL_PAPER = '#1C1B1A';
 const CANONICAL_INK = '#E3E0D7';
-const CANONICAL_MUTED = '#D5D0C6';
 const CANONICAL_RULE = '#3F3C35';
-const CANONICAL_MISSING_FILL = CANONICAL_RULE;
+const CANONICAL_BODY_FONT = 'Libre Baskerville';
+const CANONICAL_TRACE_CARD_WIDTH = 860;
+const CANONICAL_TRACE_CARD_HEIGHT = 300;
+const DISCORD_TRACE_CARD_HEIGHT = 246;
 
 // Wheel geometry must stay pinned exactly to preserve the existing visual baseline.
 const WHEEL_LEFT = 1;
@@ -251,67 +260,66 @@ const escapeXml = (value: string): string =>
 const truncateSvgText = (value: string, maxLength: number): string =>
     value.length <= maxLength ? value : `${value.slice(0, maxLength - 1)}…`;
 
-const wrapSvgText = (value: string, maxLineLength: number): string[] => {
-    const lines: string[] = [];
-    let line = '';
-
-    for (const word of value.split(' ')) {
-        const candidate = line.length === 0 ? word : `${line} ${word}`;
-        if (line.length > 0 && candidate.length > maxLineLength) {
-            lines.push(line);
-            line = word;
-        } else {
-            line = candidate;
-        }
-    }
-
-    if (line.length > 0) {
-        lines.push(line);
-    }
-
-    return lines;
-};
-
 const renderCanonicalTraceCardSvg = (
-    projection: ResponseFootnoteRenderProjection
+    projection: ResponseFootnoteRenderProjection,
+    variant: TraceCardRenderVariant
 ): string => {
-    const width = 860;
-    const height = 470;
-    const centerX = 150;
-    const centerY = 244;
-    const outerRadius = 128;
-    const innerRadius = (6 / 19) * outerRadius;
+    // Variants alter layout only; all values come from the same projection.
+    const width = CANONICAL_TRACE_CARD_WIDTH;
+    const height =
+        variant === 'discord'
+            ? DISCORD_TRACE_CARD_HEIGHT
+            : CANONICAL_TRACE_CARD_HEIGHT;
+    const summaryHeight = 56;
+    const traceBottom = 246;
+    const centerX = 145;
+    const centerY = 151;
+    const outerRadius = 88;
     const bandCount = 5;
-    const bandThickness = (outerRadius - innerRadius) / bandCount;
+    const bandThickness = outerRadius / bandCount;
     const bandGap = (0.8 / 19) * outerRadius;
-    const sliceAngle = (Math.PI * 2) / projection.trace.axes.length;
+    const sliceAngle = (Math.PI * 2) / 5;
     const baseStartAngle = (-3 * Math.PI) / 4;
     const sliceGapAngle = 1.2 / 19;
-    const axisColors = ['#38B4C3', '#D48B9E', '#F2C34E', '#DC995D', '#91B396'];
+    const axisColors: Record<TraceAxisKey, string> = {
+        tightness: '#3BB4C3',
+        rationale: '#D48B9E',
+        attribution: '#F2C34E',
+        caution: '#DC995D',
+        extent: '#91B396',
+    };
+    const visualOrder: TraceAxisKey[] = [
+        'tightness',
+        'rationale',
+        'attribution',
+        'caution',
+        'extent',
+    ];
     const wheelLayers: string[] = [];
     const axisLayers: string[] = [];
+    const separatorLayers: string[] = [];
+    const axesByKey = new Map(
+        projection.trace.axes.map((axis) => [axis.key as TraceAxisKey, axis])
+    );
 
-    projection.trace.axes.forEach((axis, index) => {
+    visualOrder.forEach((axisKey, index) => {
+        const axis = axesByKey.get(axisKey);
+        if (!axis) return;
         const startAngle =
             baseStartAngle + index * sliceAngle + sliceGapAngle / 2;
         const endAngle =
             baseStartAngle + (index + 1) * sliceAngle - sliceGapAngle / 2;
         const score = axis.final;
-        if (score === null) {
-            wheelLayers.push(
-                `<path d="${sectorPath(centerX, centerY, outerRadius, startAngle, endAngle)}" fill="${CANONICAL_MISSING_FILL}" fill-opacity="0.22" stroke="${CANONICAL_MISSING_FILL}" stroke-dasharray="3 3" />`
-            );
-            return;
-        }
-
-        const scoreProgress = score / bandCount;
         for (let bandIndex = 0; bandIndex < bandCount; bandIndex += 1) {
+            const bandInner =
+                bandIndex === 0 ? 0 : bandIndex * bandThickness + bandGap / 2;
+            const bandOuter = (bandIndex + 1) * bandThickness - bandGap / 2;
+            wheelLayers.push(
+                `<path class="canonical-response-footnote__wheel-background" data-axis="${axis.key}" data-band="${bandIndex + 1}" d="${bandInner === 0 ? sectorPath(centerX, centerY, bandOuter, startAngle, endAngle) : ringSectorPath(centerX, centerY, bandInner, bandOuter, startAngle, endAngle)}" fill="${axisColors[axisKey]}" fill-opacity="0.16" />`
+            );
+            const scoreProgress = score === null ? 0 : score / bandCount;
             const bandStart = bandIndex / bandCount;
             const bandEnd = (bandIndex + 1) / bandCount;
-            const bandInner =
-                innerRadius + bandIndex * bandThickness + bandGap / 2;
-            const bandOuter =
-                innerRadius + (bandIndex + 1) * bandThickness - bandGap / 2;
             if (scoreProgress <= bandStart) continue;
             const fillFraction = clamp(
                 (scoreProgress - bandStart) / (bandEnd - bandStart),
@@ -320,66 +328,172 @@ const renderCanonicalTraceCardSvg = (
             );
             const filledOuter =
                 bandInner + (bandOuter - bandInner) * fillFraction;
+            if (filledOuter <= bandInner) continue;
+            const filledPath =
+                bandInner === 0
+                    ? sectorPath(
+                          centerX,
+                          centerY,
+                          filledOuter,
+                          startAngle,
+                          endAngle
+                      )
+                    : ringSectorPath(
+                          centerX,
+                          centerY,
+                          bandInner,
+                          filledOuter,
+                          startAngle,
+                          endAngle
+                      );
             wheelLayers.push(
-                `<path d="${ringSectorPath(centerX, centerY, bandInner, filledOuter, startAngle, endAngle)}" fill="${axisColors[index]}" />`
+                `<path class="canonical-response-footnote__axis--${axisKey}" data-axis="${axis.key}" data-band="${bandIndex + 1}" d="${filledPath}" fill="${axisColors[axisKey]}" />`
             );
         }
+
+        const separatorStart = polarPoint(
+            centerX,
+            centerY,
+            0,
+            baseStartAngle + index * sliceAngle
+        );
+        const separatorEnd = polarPoint(
+            centerX,
+            centerY,
+            outerRadius,
+            baseStartAngle + index * sliceAngle
+        );
+        separatorLayers.push(
+            `<line class="canonical-response-footnote__wheel-separator" x1="${toSvgNumber(separatorStart.x)}" y1="${toSvgNumber(separatorStart.y)}" x2="${toSvgNumber(separatorEnd.x)}" y2="${toSvgNumber(separatorEnd.y)}" />`
+        );
     });
 
     projection.trace.axes.forEach((axis, index) => {
-        const y = 112 + index * 57;
+        const rowCenter = 91 + index * 34;
         const score = axis.final;
-        const descriptionLines = wrapSvgText(axis.description, 28);
+        const axisKey = axis.key as TraceAxisKey;
         axisLayers.push(
-            `<text x="338" y="${y}" fill="${CANONICAL_INK}" font-family="sans-serif" font-size="20" font-weight="600">${escapeXml(axis.label)}</text>`,
-            ...descriptionLines.map(
-                (line, lineIndex) =>
-                    `<text x="338" y="${y + 21 + lineIndex * 13}" fill="${CANONICAL_MUTED}" font-family="sans-serif" font-size="12">${escapeXml(line)}</text>`
-            )
+            `<text x="290" y="${rowCenter + 5}" fill="${CANONICAL_INK}" font-family="${CANONICAL_BODY_FONT}" font-size="16">${escapeXml(axis.label)}</text>`,
+            `<text x="590" y="${rowCenter + 4}" fill="#8EAFD9" font-family="${CANONICAL_BODY_FONT}" font-size="12">${escapeXml(TRACE_TEMPERAMENT_AXIS_DISPLAY_DESCRIPTIONS[axisKey])}</text>`
         );
         for (let tick = 0; tick < 5; tick += 1) {
             const filled = score !== null && tick < score;
             axisLayers.push(
-                `<rect data-axis="${axis.key}" data-tick="${tick + 1}" x="${545 + tick * 32}" y="${y - 17}" width="28" height="14" rx="3" fill="${filled ? axisColors[index] : CANONICAL_RULE}" fill-opacity="${filled ? '0.9' : '0.7'}" />`
+                `<rect data-axis="${axis.key}" data-tick="${tick + 1}" x="${410 + tick * 30}" y="${rowCenter - 7}" width="24" height="12" rx="2" fill="${filled ? axisColors[axisKey] : CANONICAL_RULE}" fill-opacity="${filled ? '0.9' : '0.7'}" />`
             );
         }
-        axisLayers.push(
-            `<text x="730" y="${y - 3}" fill="${CANONICAL_MUTED}" font-family="monospace" font-size="10">${escapeXml(score === null ? 'Final unavailable' : `Final ${score}/5`)}</text>`,
-            `<text x="730" y="${y + 16}" fill="${CANONICAL_MUTED}" font-family="monospace" font-size="10">${escapeXml(axis.target === null ? 'Target unavailable' : `Target ${axis.target}/5`)}</text>`
-        );
     });
 
     const sourceLabel =
         projection.summary.sources.count === null
             ? 'Unavailable'
             : `${projection.summary.sources.count} source${projection.summary.sources.count === 1 ? '' : 's'}`;
-    const sensitivityLabel = `${RESPONSE_FOOTNOTE_SAFETY_LABELS.sensitivity}: ${projection.summary.safety.sensitivityTier ?? 'Unavailable'}`;
-    const evaluator = projection.summary.safety.evaluator;
-    const evaluatorLabel =
-        evaluator.state === 'recorded'
-            ? `${RESPONSE_FOOTNOTE_SAFETY_LABELS.evaluator}: ${evaluator.authority ?? 'Unavailable'} / ${evaluator.action ?? 'Unavailable'} / ${RESPONSE_FOOTNOTE_SAFETY_LABELS.evaluatorTier} ${evaluator.safetyTier ?? 'Unavailable'}`
-            : `${RESPONSE_FOOTNOTE_SAFETY_LABELS.evaluator}: Unavailable`;
     const licenseLabel = truncateSvgText(
         projection.summary.license.value ?? 'Unavailable',
-        30
+        18
     );
     const title = 'TRACE posture card';
-    const description =
-        'TRACE describes posture, not answer quality. Final values fill the wheel and bars; targets remain separate.';
+    const description = 'TRACE describes posture, not answer quality.';
+    const summaryIconPath = {
+        evidence: 'M8 3h11l6 6v20H8zM19 3v7h6M12 17h9M12 22h9',
+        safety: 'M16 3 27 7v8c0 7-4.5 11.5-11 14C9.5 26.5 5 22 5 15V7zM10.5 15.5l3.5 3.5 7-8',
+        licensing:
+            'M16 5v21M10 29h12M7 9h18M3 9l5 13H3zM29 9l-5 13h5zM11 5a5 5 0 0 1 10 0',
+    };
+    const summaryValue = (value: string): string => truncateSvgText(value, 24);
+    const renderSummaryItem = (
+        x: number,
+        label: string,
+        value: string,
+        iconPath: string,
+        pillFill: string | null,
+        valueX: number
+    ): string =>
+        `<g transform="translate(${x} 0)"><svg x="22" y="16" width="24" height="24" viewBox="0 0 32 32" aria-hidden="true"><path d="${iconPath}" fill="none" stroke="${CANONICAL_INK}" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" /></svg><text x="58" y="34" fill="${CANONICAL_INK}" font-family="${CANONICAL_BODY_FONT}" font-size="15">${escapeXml(label)}</text>${pillFill ? `<rect x="${valueX - 9}" y="18" width="${Math.max(58, value.length * 8 + 18)}" height="24" rx="5" fill="${pillFill}" fill-opacity="0.82" />` : ''}<text x="${valueX}" y="34" fill="${CANONICAL_INK}" font-family="${CANONICAL_BODY_FONT}" font-size="14">${escapeXml(summaryValue(value))}</text></g>`;
+
+    const actionIconPaths = {
+        sources:
+            'M4 7c4-3 8-3 12 0v21c-4-3-8-3-12 0zM28 7c-4-3-8-3-12 0v21c4-3 8-3 12 0z',
+        controls: 'M4 8h24M4 16h24M4 24h24M10 5v6M22 13v6M14 21v6',
+        trace: 'M8 3h11l6 6v20H8zM19 3v7h6M12 17h9M12 22h9',
+        report: 'M7 28V5M7 6c7-5 12 4 19-1v15c-7 5-12-4-19 1',
+    };
+    const renderActionItem = (
+        x: number,
+        label: string,
+        iconPath: string,
+        state: ResponseFootnoteArtifactState
+    ): string =>
+        `<g opacity="${state === 'unavailable' ? '0.52' : '1'}"><svg x="${x + 34}" y="258" width="24" height="24" viewBox="0 0 32 32" aria-hidden="true"><path d="${iconPath}" fill="none" stroke="${CANONICAL_INK}" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" />${label === 'Controls' ? `<circle cx="10" cy="8" r="2.5" fill="none" stroke="${CANONICAL_INK}" stroke-width="1.5" /><circle cx="22" cy="16" r="2.5" fill="none" stroke="${CANONICAL_INK}" stroke-width="1.5" /><circle cx="14" cy="24" r="2.5" fill="none" stroke="${CANONICAL_INK}" stroke-width="1.5" />` : ''}</svg><text x="${x + 70}" y="275" fill="${CANONICAL_INK}" font-family="${CANONICAL_BODY_FONT}" font-size="14">${escapeXml(label)}</text></g>`;
+
+    const actionFooter =
+        variant === 'canonical'
+            ? [
+                  `<line x1="0" y1="${traceBottom}" x2="860" y2="${traceBottom}" stroke="${CANONICAL_RULE}" />`,
+                  renderActionItem(
+                      0,
+                      'Sources',
+                      actionIconPaths.sources,
+                      projection.actions.sources.state
+                  ),
+                  renderActionItem(
+                      215,
+                      'Controls',
+                      actionIconPaths.controls,
+                      projection.actions.controls.state
+                  ),
+                  renderActionItem(
+                      430,
+                      'Trace',
+                      actionIconPaths.trace,
+                      projection.actions.trace.state
+                  ),
+                  renderActionItem(
+                      645,
+                      'Report',
+                      actionIconPaths.report,
+                      projection.actions.report.state
+                  ),
+              ]
+            : [];
 
     return [
         `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}" role="img" aria-label="${title}">`,
         `<title>${title}</title>`,
         `<desc>${escapeXml(description)}</desc>`,
-        `<rect width="860" height="470" rx="18" fill="${CANONICAL_PAPER}" />`,
-        `<text x="32" y="42" fill="${CANONICAL_INK}" font-family="sans-serif" font-size="18" font-weight="600">Evidence</text><text x="32" y="69" fill="${CANONICAL_MUTED}" font-family="sans-serif" font-size="18">${escapeXml(sourceLabel)}</text>`,
-        `<text x="270" y="42" fill="${CANONICAL_INK}" font-family="sans-serif" font-size="18" font-weight="600">Safety attention</text><text x="270" y="67" fill="${CANONICAL_MUTED}" font-family="sans-serif" font-size="14">${escapeXml(sensitivityLabel)}</text><text x="270" y="86" fill="${CANONICAL_MUTED}" font-family="monospace" font-size="10">${escapeXml(evaluatorLabel)}</text>`,
-        `<text x="570" y="42" fill="${CANONICAL_INK}" font-family="sans-serif" font-size="18" font-weight="600">Licensing</text><text x="570" y="69" fill="${CANONICAL_MUTED}" font-family="sans-serif" font-size="18">${escapeXml(licenseLabel)}</text>`,
-        `<line x1="24" y1="100" x2="836" y2="100" stroke="${CANONICAL_RULE}" />`,
+        `<rect width="860" height="300" rx="14" fill="${CANONICAL_PAPER}" />`,
+        renderSummaryItem(
+            0,
+            'Evidence',
+            sourceLabel,
+            summaryIconPath.evidence,
+            '#C9A44A',
+            147
+        ),
+        renderSummaryItem(
+            286,
+            RESPONSE_FOOTNOTE_SAFETY_LABELS.sensitivity,
+            projection.summary.safety.sensitivityTier ?? 'Unavailable',
+            summaryIconPath.safety,
+            '#91B396',
+            159
+        ),
+        renderSummaryItem(
+            573,
+            'Licensing',
+            licenseLabel,
+            summaryIconPath.licensing,
+            null,
+            140
+        ),
+        `<line x1="0" y1="${summaryHeight}" x2="860" y2="${summaryHeight}" stroke="${CANONICAL_RULE}" />`,
+        `<line x1="286" y1="0" x2="286" y2="56" stroke="${CANONICAL_RULE}" />`,
+        `<line x1="573" y1="0" x2="573" y2="56" stroke="${CANONICAL_RULE}" />`,
         ...wheelLayers,
-        `<circle cx="${centerX}" cy="${centerY}" r="${outerRadius}" fill="none" stroke="${CANONICAL_RULE}" stroke-width="1.5" />`,
+        ...separatorLayers,
+        `<circle class="canonical-response-footnote__wheel-outline" cx="${centerX}" cy="${centerY}" r="${outerRadius}" fill="none" stroke="${CANONICAL_RULE}" stroke-width="1.2" />`,
         ...axisLayers,
-        `<text x="32" y="445" fill="${CANONICAL_MUTED}" font-family="sans-serif" font-size="12">${escapeXml(description)}</text>`,
+        ...actionFooter,
         '</svg>',
     ].join('');
 };
@@ -389,7 +503,10 @@ const renderCanonicalTraceCardSvg = (
  */
 export const renderTraceCardSvg = (input: TraceCardRenderInput): string => {
     if (input.projection) {
-        return renderCanonicalTraceCardSvg(input.projection);
+        return renderCanonicalTraceCardSvg(
+            input.projection,
+            input.variant ?? 'canonical'
+        );
     }
     const width = Math.max(
         REQUIRED_WIDTH,

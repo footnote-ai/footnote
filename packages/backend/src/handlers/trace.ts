@@ -20,6 +20,7 @@ import {
 import type { SimpleRateLimiter } from '../services/rateLimiter.js';
 import { mirrorTraceMetadata } from '../services/traceStore.js';
 import { renderTraceCardPng } from '../services/traceCard/traceCardRaster.js';
+import { renderTraceCardSvg } from '../services/traceCard/traceCardSvg.js';
 import { logger } from '../utils/logger.js';
 import { type TraceStore } from '../storage/traces/traceStore.js';
 import { resolveClientIp } from '../http/clientIp.js';
@@ -665,10 +666,18 @@ const createTraceHandlers = ({
                     : null;
             const responseId =
                 providedResponseId ?? createPreviewTraceCardResponseId();
-            const { svg, png } = renderTraceCardPng({
+            const renderInput = {
                 temperament: parsedPayload.data.temperament,
                 chips: parsedPayload.data.chips,
+                variant: parsedPayload.data.variant,
+            } as const;
+            const canonicalSvg = renderTraceCardSvg({
+                ...renderInput,
+                variant: 'canonical',
             });
+            // The requested variant only changes the transient delivery PNG;
+            // persisted trace-card assets remain canonical and full-length.
+            const { png } = renderTraceCardPng(renderInput);
 
             const now = Date.now();
             const ninetyDaysMs = 90 * 24 * 60 * 60 * 1000;
@@ -699,7 +708,7 @@ const createTraceHandlers = ({
             const createdPlaceholder =
                 await writeAccess.store.upsertTraceCardSvgWithPlaceholder(
                     responseId,
-                    svg,
+                    canonicalSvg,
                     syntheticTrace
                 );
             if (createdPlaceholder) {
@@ -793,14 +802,25 @@ const createTraceHandlers = ({
                 return;
             }
 
-            const { svg, png } = renderTraceCardPng({
-                projection: projectResponseFootnote({
-                    metadata,
-                    artifacts: { trace: 'available', report: 'unavailable' },
-                }),
+            const projection = projectResponseFootnote({
+                metadata,
+                artifacts: { trace: 'available', report: 'unavailable' },
+            });
+            const canonicalSvg = renderTraceCardSvg({
+                projection,
+                variant: 'canonical',
+            });
+            // Discord receives a shortened presentation derivative while the
+            // durable asset remains the shared canonical representation.
+            const { png } = renderTraceCardPng({
+                projection,
+                variant: parsedPayload.data.variant,
             });
 
-            await writeAccess.store.upsertTraceCardSvg(responseId, svg);
+            await writeAccess.store.upsertTraceCardSvg(
+                responseId,
+                canonicalSvg
+            );
 
             sendJson(res, 200, {
                 responseId,

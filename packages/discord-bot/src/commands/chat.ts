@@ -364,6 +364,7 @@ const chatCommand: ChatCommandWithProfiles = {
                 try {
                     const traceCard = await botApi.postTraceCardFromTrace({
                         responseId: metadata.responseId,
+                        variant: 'discord',
                     });
                     files.push(
                         new AttachmentBuilder(

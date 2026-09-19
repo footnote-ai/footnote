@@ -1202,6 +1202,7 @@ export class MessageProcessor {
         try {
             const traceCard = await botApi.postTraceCardFromTrace({
                 responseId: metadata.responseId,
+                variant: 'discord',
             });
             files.push({
                 filename: 'trace-card.png',

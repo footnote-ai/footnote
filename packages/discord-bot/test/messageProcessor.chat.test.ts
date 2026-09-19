@@ -393,7 +393,10 @@ test('prepareProvenanceCgiPayload and sendPreparedProvenanceCgi send image plus 
         components: unknown[];
     }> = [];
     const capture = {
-        traceCardRequest: null as { responseId: string } | null,
+        traceCardRequest: null as {
+            responseId: string;
+            variant?: 'canonical' | 'discord';
+        } | null,
     };
 
     botApi.postTraceCardFromTrace = (async (request) => {
@@ -455,6 +458,7 @@ test('prepareProvenanceCgiPayload and sendPreparedProvenanceCgi send image plus 
     }
     const traceCardRequest = capture.traceCardRequest;
     assert.equal(traceCardRequest.responseId, 'resp_123');
+    assert.equal(traceCardRequest.variant, 'discord');
     assert.equal(sentCalls.length, 1);
     assert.equal(sentCalls[0].files.length, 1);
     assert.equal(sentCalls[0].files[0].filename, 'trace-card.png');
@@ -465,7 +469,12 @@ test('prepareProvenanceCgiPayload and sendPreparedProvenanceCgi send image plus 
         .toJSON()
         .components.map((component) => component.custom_id)
         .filter((value): value is string => typeof value === 'string');
-    assert.deepEqual(customIds, ['details:resp_123', 'report_issue:resp_123']);
+    assert.deepEqual(customIds, [
+        'sources:resp_123',
+        'controls:resp_123',
+        'trace:resp_123',
+        'report_issue:resp_123',
+    ]);
 });
 
 test('prepareProvenanceCgiPayload falls back to buttons-only when trace-card generation fails', async () => {
@@ -525,7 +534,12 @@ test('prepareProvenanceCgiPayload falls back to buttons-only when trace-card gen
         .toJSON()
         .components.map((component) => component.custom_id)
         .filter((value): value is string => typeof value === 'string');
-    assert.deepEqual(customIds, ['details:resp_123', 'report_issue:resp_123']);
+    assert.deepEqual(customIds, [
+        'sources:resp_123',
+        'controls:resp_123',
+        'trace:resp_123',
+        'report_issue:resp_123',
+    ]);
 });
 
 test('sendPreparedProvenanceCgi delegates attachment delivery to ResponseHandler', async () => {

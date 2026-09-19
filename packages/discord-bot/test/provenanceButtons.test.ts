@@ -34,6 +34,113 @@ function createDetailsInteraction(
     };
 }
 
+function createActionInteraction(
+    action: 'sources' | 'controls' | 'trace',
+    responseId: string,
+    editReplyPayloads: unknown[],
+    deferReplyPayloads: unknown[]
+): TestInteraction {
+    return {
+        customId: `${action}:${responseId}`,
+        deferReply: async (payload: unknown) => {
+            deferReplyPayloads.push(payload);
+        },
+        editReply: async (payload: unknown) => {
+            editReplyPayloads.push(payload);
+        },
+    };
+}
+
+const actionMetadata = {
+    responseId: 'resp_split_actions',
+    provenance: 'Retrieved' as const,
+    safetyTier: 'Low' as const,
+    tradeoffCount: 1,
+    chainHash: 'hash_split_actions',
+    licenseContext: 'MIT',
+    modelVersion: 'gpt-5-mini',
+    staleAfter: new Date(Date.now() + 60000).toISOString(),
+    citations: [
+        {
+            title: 'Primary source',
+            url: 'https://example.com/source',
+            snippet: 'Evidence',
+        },
+    ],
+    trace_target: {
+        tightness: 4,
+        rationale: 4,
+        attribution: 4,
+        caution: 3,
+        extent: 4,
+    },
+    trace_final: {
+        tightness: 4,
+        rationale: 4,
+        attribution: 4,
+        caution: 3,
+        extent: 4,
+    },
+    displayIntegrity: { status: 'complete' as const, unavailableFields: [] },
+};
+
+test('split provenance buttons create drawer-equivalent ephemeral messages', async () => {
+    const originalGetTrace = botApi.getTrace;
+    let getTraceCalls = 0;
+    botApi.getTrace = (async () => {
+        getTraceCalls += 1;
+        return { status: 200, data: actionMetadata };
+    }) as typeof botApi.getTrace;
+
+    try {
+        const renderAction = async (
+            action: 'sources' | 'controls' | 'trace'
+        ): Promise<string> => {
+            const deferReplyPayloads: unknown[] = [];
+            const editReplyPayloads: unknown[] = [];
+            await handleProvenanceButtonInteraction(
+                createActionInteraction(
+                    action,
+                    actionMetadata.responseId,
+                    editReplyPayloads,
+                    deferReplyPayloads
+                ) as unknown as ButtonInteraction
+            );
+            assert.equal(deferReplyPayloads.length, 1);
+            assert.equal(editReplyPayloads.length, 1);
+            return String(
+                (editReplyPayloads[0] as { content?: string }).content
+            );
+        };
+
+        const sources = await renderAction('sources');
+        assert.match(sources, /^\*\*Sources\*\*/);
+        assert.match(sources, /Sources available: `1`/);
+        assert.match(sources, /This trace includes 1 source you can inspect/);
+        assert.match(
+            sources,
+            /\[Primary source\]\(https:\/\/example\.com\/source\)/
+        );
+        assert.doesNotMatch(sources, /\*\*TRACE\*\*/);
+
+        const trace = await renderAction('trace');
+        assert.match(trace, /\*\*Summary\*\*/);
+        assert.match(trace, /\*\*TRACE\*\*/);
+        assert.match(trace, /\*\*Execution\*\*/);
+        assert.match(trace, /\*\*Trace Viewer\*\*/);
+        assert.doesNotMatch(trace, /\*\*Sources\*\*/);
+
+        const controls = await renderAction('controls');
+        assert.equal(
+            controls,
+            '**Controls**\n- Controls are not yet available in Discord.'
+        );
+        assert.equal(getTraceCalls, 2);
+    } finally {
+        botApi.getTrace = originalGetTrace;
+    }
+});
+
 test('details action renders markdown sections with execution table and trace viewer link', async () => {
     const originalGetTrace = botApi.getTrace;
     const deferReplyPayloads: unknown[] = [];

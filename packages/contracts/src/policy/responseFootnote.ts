@@ -189,6 +189,18 @@ export const TRACE_TEMPERAMENT_AXIS_DESCRIPTIONS: Record<
     extent: 'Offers breadth and coverage.',
 };
 
+/** Short, one-line labels shared by the web and static Discord presentations. */
+export const TRACE_TEMPERAMENT_AXIS_DISPLAY_DESCRIPTIONS: Record<
+    TraceTemperamentAxisKey,
+    string
+> = {
+    tightness: 'Space efficiency',
+    rationale: 'Reasoning level',
+    attribution: 'Connects to sources',
+    caution: 'Care attention',
+    extent: 'Breadth and coverage',
+};
+
 const UNAVAILABLE_RESPONSE_REASON = 'Response metadata is unavailable.';
 const UNAVAILABLE_CONTROLS_REASON =
     'No controls were recorded for this response.';

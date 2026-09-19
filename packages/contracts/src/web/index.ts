@@ -102,6 +102,7 @@ export type {
     PostTraceCardResponse,
     GetTraceCardSvgResponse,
     TraceCardChipData,
+    TraceCardRenderVariant,
 } from './types.js';
 
 /**

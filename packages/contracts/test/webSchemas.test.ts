@@ -1968,6 +1968,7 @@ test('PostTraceCardRequestSchema accepts valid trace-card payloads', () => {
             evidenceScore: 4,
             freshnessScore: 5,
         },
+        variant: 'discord',
     });
 
     assert.equal(parsed.success, true);
@@ -2079,6 +2080,7 @@ test('PostTraceCardFromTrace schemas require responseId and parse response envel
     assert.equal(
         PostTraceCardFromTraceRequestSchema.safeParse({
             responseId: 'resp_trace_1',
+            variant: 'discord',
         }).success,
         true
     );

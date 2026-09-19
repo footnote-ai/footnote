@@ -2452,6 +2452,7 @@ export const PostTraceCardRequestSchema = z
         responseId: z.string().min(1).optional(),
         temperament: PartialResponseTemperamentSchema.optional(),
         chips: TraceCardChipDataSchema.optional(),
+        variant: z.enum(['canonical', 'discord']).optional(),
     })
     .strict();
 
@@ -2473,6 +2474,7 @@ export const PostTraceCardResponseSchema = z
 export const PostTraceCardFromTraceRequestSchema = z
     .object({
         responseId: z.string().min(1),
+        variant: z.enum(['canonical', 'discord']).optional(),
     })
     .strict();
 

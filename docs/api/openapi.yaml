@@ -783,7 +783,8 @@ paths:
             summary: Generate and store a trace-card
             description: |
                 Generate a trace-card from TRACE temperament and score metadata, persist the canonical SVG asset,
-                and return a PNG payload for Discord-style inline display.
+                and return a PNG payload for inline display. The optional variant changes presentation only;
+                canonical is the default and remains the durable SVG representation.
                 TraceToken required.
             tags:
                 - Traces
@@ -825,7 +826,8 @@ paths:
             summary: Generate and store a trace-card from an existing trace
             description: |
                 Load stored trace metadata by response id, use stored final TRACE posture and optional chip scores,
-                regenerate/store the canonical SVG asset, and return a PNG payload for inline display.
+                regenerate/store the canonical SVG asset, and return a PNG payload for inline display. The optional
+                variant may request a Discord-sized derivative without replacing the canonical stored SVG.
                 TraceToken required.
             tags:
                 - Traces
@@ -4831,6 +4833,12 @@ components:
                     additionalProperties: false
                 chips:
                     $ref: '#/components/schemas/TraceCardChips'
+                variant:
+                    type: string
+                    enum:
+                        - canonical
+                        - discord
+                    default: canonical
             additionalProperties: false
 
         TraceCardResponse:
@@ -4839,6 +4847,12 @@ components:
                 responseId:
                     type: string
                     minLength: 1
+                variant:
+                    type: string
+                    enum:
+                        - canonical
+                        - discord
+                    default: canonical
                 pngBase64:
                     type: string
                     minLength: 1

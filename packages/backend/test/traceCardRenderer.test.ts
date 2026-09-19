@@ -7,11 +7,15 @@
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { Resvg } from '@resvg/resvg-js';
 import type { ResponseFootnote } from '@footnote/contracts/policy';
 import { projectResponseFootnote } from '@footnote/contracts/policy';
 import fixture from '../../contracts/test/fixtures/response-footnote.json' with { type: 'json' };
 
-import { renderTraceCardPng } from '../src/services/traceCard/traceCardRaster.js';
+import {
+    createTraceCardRasterOptions,
+    renderTraceCardPng,
+} from '../src/services/traceCard/traceCardRaster.js';
 import { renderTraceCardSvg } from '../src/services/traceCard/traceCardSvg.js';
 
 /**
@@ -121,6 +125,19 @@ test('renderTraceCardPng returns PNG bytes with expected signature and dimension
     assert.equal(dimensions.height, requestedHeight);
 });
 
+test('renderTraceCardPng supplies fonts when system fonts are unavailable', () => {
+    const projection = projectResponseFootnote({
+        metadata: fixtureFootnote,
+        artifacts: { trace: 'available', report: 'unavailable' },
+    });
+    const { svg, png } = renderTraceCardPng({ projection });
+    const expectedPng = Buffer.from(
+        new Resvg(svg, createTraceCardRasterOptions()).render().asPng()
+    );
+
+    assert.deepEqual(png, expectedPng);
+});
+
 test('renderTraceCardSvg uses the shared response projection for semantic PNG cards', () => {
     const projection = projectResponseFootnote({
         metadata: fixtureFootnote,
@@ -129,22 +146,38 @@ test('renderTraceCardSvg uses the shared response projection for semantic PNG ca
     const { svg, png } = renderTraceCardPng({ projection });
 
     assert.match(svg, /width="860"/);
-    assert.match(svg, /height="470"/);
+    assert.match(svg, /height="300"/);
     assert.match(svg, /Evidence/);
-    assert.match(svg, /Recorded fixture license/);
-    assert.match(svg, /Sensitivity: Low/);
-    assert.match(svg, /Evaluator: observe \/ allow \/ Evaluator tier Low/);
-    assert.match(svg, /Efficient use of space and/);
-    assert.match(svg, /attention\./);
-    assert.match(svg, /Separates sourced and/);
-    assert.match(svg, /inferred content\./);
-    assert.match(svg, /Final 5\/5/);
-    assert.match(svg, /Target 4\/5/);
+    assert.match(svg, /Recorded fixture …/);
+    assert.match(svg, /Sensitivity/);
+    for (const description of [
+        'Space efficiency',
+        'Reasoning level',
+        'Connects to sources',
+        'Care attention',
+        'Breadth and coverage',
+    ]) {
+        assert.match(svg, new RegExp(description));
+    }
+    assert.equal(
+        countMatches(svg, /canonical-response-footnote__wheel-background/g),
+        25
+    );
+    assert.equal(
+        countMatches(svg, /canonical-response-footnote__wheel-separator/g),
+        5
+    );
+    assert.doesNotMatch(svg, /Final 5\/5/);
+    assert.doesNotMatch(svg, /Target 4\/5/);
     assert.match(svg, /TRACE describes posture, not answer quality\./);
     assert.doesNotMatch(svg, /trace-icon-evidence/);
     assert.doesNotMatch(svg, /Freshness/);
     assert.equal(readPngDimensions(png).width, 860);
-    assert.equal(readPngDimensions(png).height, 470);
+    assert.equal(readPngDimensions(png).height, 300);
+
+    for (const action of ['Sources', 'Controls', 'Trace', 'Report']) {
+        assert.match(svg, new RegExp(`>${action}<`));
+    }
 
     for (const [axis, score] of Object.entries({
         tightness: 4,
@@ -165,32 +198,41 @@ test('renderTraceCardSvg uses the shared response projection for semantic PNG ca
     }
 });
 
-test('semantic card keeps sensitivity and evaluator records distinct', () => {
+test('Discord trace-card variant keeps the shared body and omits the graphical action footer', () => {
     const projection = projectResponseFootnote({
         metadata: fixtureFootnote,
         artifacts: { trace: 'available', report: 'unavailable' },
     });
-    const divergent = {
-        ...projection,
-        summary: {
-            ...projection.summary,
-            safety: {
-                ...projection.summary.safety,
-                sensitivityTier: 'Low' as const,
-                evaluator: {
-                    state: 'recorded' as const,
-                    authority: 'enforce' as const,
-                    action: 'block' as const,
-                    safetyTier: 'High' as const,
-                },
-            },
-        },
-    };
-    const svg = renderTraceCardSvg({ projection: divergent });
+    const canonical = renderTraceCardSvg({ projection });
+    const discord = renderTraceCardSvg({ projection, variant: 'discord' });
+    const { png } = renderTraceCardPng({
+        projection,
+        variant: 'discord',
+    });
 
-    assert.match(svg, /Sensitivity: Low/);
-    assert.match(svg, /Evaluator: enforce \/ block \/ Evaluator tier High/);
+    assert.match(canonical, /width="860" height="300" viewBox="0 0 860 300"/);
+    assert.match(discord, /width="860" height="246" viewBox="0 0 860 246"/);
+    assert.match(discord, /Evidence/);
+    assert.match(discord, /Sensitivity/);
+    assert.match(discord, /Space efficiency/);
+    assert.match(discord, /Breadth and coverage/);
+    assert.equal(
+        countMatches(discord, /canonical-response-footnote__wheel-background/g),
+        countMatches(
+            canonical,
+            /canonical-response-footnote__wheel-background/g
+        )
+    );
+    assert.equal(
+        countMatches(discord, /data-axis="[a-z]+" data-tick="[1-5]"/g),
+        countMatches(canonical, /data-axis="[a-z]+" data-tick="[1-5]"/g)
+    );
+    for (const action of ['Sources', 'Controls', 'Trace', 'Report']) {
+        assert.doesNotMatch(discord, new RegExp(`>${action}<`));
+    }
+    assert.deepEqual(readPngDimensions(png), { width: 860, height: 246 });
 });
+
 test('semantic card keeps missing final axes neutral and visibly unavailable', () => {
     const projection = projectResponseFootnote({
         metadata: fixture.partial as ResponseFootnote,
@@ -198,8 +240,25 @@ test('semantic card keeps missing final axes neutral and visibly unavailable', (
     });
     const svg = renderTraceCardSvg({ projection });
 
-    assert.equal(countMatches(svg, /fill="#3F3C35" fill-opacity="0.22"/g), 4);
-    assert.match(svg, /Final unavailable/);
-    assert.match(svg, /Sensitivity: Medium/);
-    assert.match(svg, /Evaluator: Unavailable/);
+    assert.equal(
+        countMatches(
+            svg,
+            /class="canonical-response-footnote__wheel-background"/g
+        ),
+        25
+    );
+    assert.equal(
+        countMatches(
+            svg,
+            /class="canonical-response-footnote__axis--tightness"/g
+        ),
+        3
+    );
+    assert.equal(
+        countMatches(
+            svg,
+            /class="canonical-response-footnote__axis--(rationale|attribution|caution|extent)"/g
+        ),
+        0
+    );
 });
