@@ -45,13 +45,16 @@ const axisPathCount = (markup: string, axis: string): number =>
     );
 
 const axisFilledBarCount = (markup: string, axis: string): number => {
-    const barMatch = markup.match(
-        new RegExp(
-            `<div[^>]*class="canonical-response-footnote__bar canonical-response-footnote__axis--${axis}"[\\s\\S]*?<\\/div>`,
-            'm'
-        )
+    const barStart = markup.indexOf(
+        `class="canonical-response-footnote__bar canonical-response-footnote__axis--${axis}"`
     );
-    return barMatch ? count(barMatch[0], /class="is-filled"/g) : 0;
+    const descriptionStart = markup.indexOf(
+        'class="canonical-response-footnote__axis-description"',
+        barStart
+    );
+    return barStart >= 0 && descriptionStart > barStart
+        ? count(markup.slice(barStart, descriptionStart), /class="is-filled"/g)
+        : 0;
 };
 
 test('rendered complete fixture keeps wheel filled levels equal to final bars', () => {
@@ -72,17 +75,86 @@ test('rendered complete fixture keeps wheel filled levels equal to final bars', 
         assert.equal(axisPathCount(markup, axis), score);
         assert.equal(axisFilledBarCount(markup, axis), score);
     }
+    assert.equal(
+        count(markup, /canonical-response-footnote__wheel-background/g),
+        25,
+        'each axis keeps five pale unfilled levels behind its recorded fill'
+    );
+    assert.equal(
+        count(markup, /canonical-response-footnote__wheel-separator/g),
+        5,
+        'the wheel keeps a separator for each visual wedge'
+    );
     assert.match(markup, /TRACE describes posture, not answer quality/);
-    assert.match(markup, /<summary>Sources<\/summary>/);
-    assert.match(markup, /<summary>Controls<\/summary>/);
+    assert.match(markup, /<span>Sources<\/span>/);
+    assert.match(markup, /<span>Controls<\/span>/);
     assert.match(
         markup,
-        /canonical-response-footnote__summary-safety[\s\S]*Sensitivity[\s\S]*Evaluator/
+        /canonical-response-footnote__summary-safety[\s\S]*Sensitivity/
+    );
+    const summaryMarkup = markup.split(
+        'class="canonical-response-footnote__trace"'
+    )[0];
+    assert.doesNotMatch(
+        summaryMarkup,
+        /Evaluator/,
+        'evaluator diagnostics stay in the details disclosure'
+    );
+    assert.match(markup, /class="canonical-response-footnote__axis-label"/);
+    assert.match(
+        markup,
+        /class="canonical-response-footnote__axis-description"/
+    );
+    for (const description of [
+        'Space efficiency',
+        'Reasoning level',
+        'Connects to sources',
+        'Care attention',
+        'Breadth and coverage',
+    ]) {
+        assert.match(markup, new RegExp(description));
+    }
+    assert.doesNotMatch(
+        markup,
+        /data-active-axis=/,
+        'the TRACE wheel starts neutral until an axis is hovered or selected'
+    );
+    assert.equal(
+        count(markup, /class="canonical-response-footnote__wheel-hit-area/g),
+        5,
+        'each TRACE wedge exposes one keyboard and pointer target'
+    );
+    const wheelMarkup = markup.match(
+        /<svg[^>]*canonical-response-footnote__wheel[\s\S]*?<\/svg>/
+    )?.[0];
+    assert.ok(wheelMarkup);
+    assert.match(wheelMarkup, /role="group"/);
+    assert.doesNotMatch(
+        wheelMarkup,
+        /role="img"[\s\S]*canonical-response-footnote__wheel-hit-area/
+    );
+    assert.equal(
+        count(
+            markup,
+            /<button[^>]*class="canonical-response-footnote__axis-row/g
+        ),
+        5,
+        'each axis row remains a native keyboard button'
+    );
+    assert.equal(
+        count(markup, /class="canonical-response-footnote__axis-row/g),
+        5,
+        'each TRACE wedge has one linked axis row'
+    );
+    assert.match(
+        markup,
+        /M 120 120 L [\d.-]+ [\d.-]+ A/,
+        'the first radial band must begin at the wheel center'
     );
     assert.equal(
         count(markup, /canonical-response-footnote__summary-item/g),
-        5,
-        'three conceptual summary regions keep safety records nested instead of orphaning Licensing'
+        3,
+        'the glanceable summary keeps one primary fact per conceptual region'
     );
     assert.match(markup, /<h4>Workflow<\/h4>/);
     assert.match(markup, /Classification: Retrieved/);
@@ -94,6 +166,14 @@ test('rendered complete fixture keeps wheel filled levels equal to final bars', 
     assert.match(markup, /Limitations: none recorded/);
     assert.match(markup, /Sensitivity: Low/);
     assert.match(markup, /Evaluator: observe \/ allow \/ Evaluator tier Low/);
+    assert.equal(
+        count(
+            markup,
+            /class="canonical-response-footnote__details-secondary"/g
+        ),
+        0,
+        'details must not create a separate visual band'
+    );
 });
 
 test('rendered final score of one fills exactly one wheel level and bar', () => {
@@ -107,6 +187,29 @@ test('rendered final score of one fills exactly one wheel level and bar', () => 
 
     assert.equal(axisPathCount(markup, 'tightness'), 1);
     assert.equal(axisFilledBarCount(markup, 'tightness'), 1);
+});
+
+test('rendered enabled actions point to their shared drawers', () => {
+    const markup = render(
+        toFootnote(fixture.complete),
+        'available',
+        'available'
+    );
+
+    for (const action of ['sources', 'controls', 'trace', 'report']) {
+        assert.match(
+            markup,
+            new RegExp(`aria-controls="[^"]+-${action}-drawer"`)
+        );
+    }
+    assert.equal(
+        count(markup, /class="canonical-response-footnote__drawer"/g),
+        4
+    );
+    assert.doesNotMatch(
+        markup,
+        /class="canonical-response-footnote__drawer"[^>]*role="region"/
+    );
 });
 
 test('rendered partial fixture keeps missing and target-only axes unavailable', () => {
@@ -124,9 +227,8 @@ test('rendered partial fixture keeps missing and target-only axes unavailable', 
     assert.equal(axisFilledBarCount(markup, 'caution'), 0);
     assert.match(markup, /Caution unavailable/);
     assert.match(markup, /Target 2 · Final unavailable/);
-    assert.match(markup, /canonical-response-footnote__wheel-missing/);
+    assert.match(markup, /<title>Caution unavailable<\/title>/);
     assert.match(markup, /Workflow details unavailable/);
-    assert.match(markup, /Controls unavailable/);
 });
 
 test('rendered safety summary keeps sensitivity separate from divergent evaluator facts', () => {
@@ -138,10 +240,10 @@ test('rendered safety summary keeps sensitivity separate from divergent evaluato
 
     assert.match(markup, /Sensitivity: Low/);
     assert.match(markup, /Evaluator: enforce \/ block \/ Evaluator tier High/);
-    assert.match(
-        markup,
-        /<span>Evaluator<\/span><strong[^>]*>enforce \/ block \/ Evaluator tier High/
-    );
+    const summaryMarkup = markup.split(
+        'class="canonical-response-footnote__trace"'
+    )[0];
+    assert.doesNotMatch(summaryMarkup, /Evaluator/);
 });
 
 test('rendered safety summary marks a missing evaluator unavailable', () => {
@@ -153,6 +255,10 @@ test('rendered safety summary marks a missing evaluator unavailable', () => {
 
     assert.match(markup, /Sensitivity: Medium/);
     assert.match(markup, /Evaluator: Unavailable/);
+    const summaryMarkup = markup.split(
+        'class="canonical-response-footnote__trace"'
+    )[0];
+    assert.doesNotMatch(summaryMarkup, /Evaluator/);
 });
 test('rendered prepared fixture exposes sources and controls but no Trace href', () => {
     const markup = render(
@@ -166,18 +272,55 @@ test('rendered prepared fixture exposes sources and controls but no Trace href',
     assert.doesNotMatch(markup, /href="\/traces\//);
     assert.match(markup, /Report/);
     assert.match(markup, /disabled/);
+    assert.match(markup, /canonical-response-footnote__action-status/);
+    assert.match(markup, /Reporting is not available on this surface\./);
 });
 
-test('rendered live fixture keeps unknown Trace link honest and Report disabled', () => {
+test('rendered live fixture keeps unknown Trace action honest and Report disabled', () => {
     const markup = render(
         toFootnote(fixture.complete),
         'unknown',
         'unavailable'
     );
 
-    assert.match(markup, /href="\/traces\/response-footnote-fixture-complete"/);
-    assert.match(markup, /Availability unconfirmed/);
-    assert.match(markup, /Unavailable on web/);
+    assert.match(markup, /<span>Trace<\/span>/);
+    assert.match(markup, /aria-expanded="false"/);
+    assert.doesNotMatch(
+        markup,
+        /href="\/traces\/response-footnote-fixture-complete"/
+    );
+    assert.match(
+        markup,
+        /Trace availability is not confirmed by the chat response\./
+    );
+    assert.doesNotMatch(markup, /Unavailable on web/);
+});
+
+test('rendered unavailable actions expose their projected reasons', () => {
+    const nullMetadataMarkup = render(null, 'unavailable', 'unavailable');
+    assert.match(nullMetadataMarkup, /Response metadata is unavailable\./);
+    assert.match(
+        nullMetadataMarkup,
+        /No controls were recorded for this response\./
+    );
+
+    const partialMarkup = render(
+        toFootnote(fixture.partial),
+        'unavailable',
+        'unavailable'
+    );
+    assert.match(partialMarkup, /Reporting is not available on this surface\./);
+});
+
+test('rendered ineligible response provenance is omitted', () => {
+    const markup = render(
+        toFootnote(fixture.complete),
+        'available',
+        'available',
+        false
+    );
+
+    assert.equal(markup, '');
 });
 
 test('rendered citations link only safe http(s) URLs and retain unsafe text', () => {
@@ -214,22 +357,13 @@ test('rendered null metadata is unavailable and generated ids remain unique', ()
     );
     const ids = [...first.matchAll(/id="([^"]+)"/g)].map((match) => match[1]);
 
-    assert.equal(ids.length, 4);
+    assert.ok(ids.length > 4);
     assert.equal(new Set(ids).size, ids.length);
     assert.match(first, /data-state="unavailable"/);
-    assert.match(first, /Trace.*Unavailable/);
-    assert.match(first, /Report.*Unavailable/);
-});
-
-test('rendered ineligible response provenance is omitted', () => {
-    const markup = render(
-        toFootnote(fixture.complete),
-        'available',
-        'available',
-        false
-    );
-
-    assert.equal(markup, '');
+    assert.match(first, /<span>Trace<\/span>/);
+    assert.match(first, /<span>Report<\/span>/);
+    assert.match(first, /canonical-response-footnote__action-status/);
+    assert.match(first, /No controls were recorded for this response\./);
 });
 
 test('canonical stylesheet declares neutral missing token and narrow layout rules', async () => {
@@ -247,6 +381,26 @@ test('canonical stylesheet declares neutral missing token and narrow layout rule
         styles,
         /--canonical-axis-missing:\s*var\(--fn-color-stone-300\)/
     );
-    assert.match(styles, /@media \(max-width: 480px\)/);
-    assert.match(styles, /@media \(max-width: 700px\)/);
+    assert.match(styles, /@container \(max-width: 420px\)/);
+    assert.match(styles, /container-type: inline-size/);
+    assert.match(styles, /@container \(max-width: 820px\)/);
+    assert.match(styles, /@container \(max-width: 560px\)/);
+    assert.match(styles, /wheel-background/);
+    assert.match(
+        styles,
+        /data-active-axis='rationale'\][^\n]*circle:not\(\.canonical-response-footnote__connector-source\)/
+    );
+    assert.match(
+        styles,
+        /data-active-axis='rationale'\][^\n]*canonical-response-footnote__connector-source \{ stroke: var\(--canonical-axis-rationale\)/
+    );
+    assert.match(
+        styles,
+        /canonical-response-footnote__drawer \{[^}]*grid-column: 1 \/ -1/
+    );
+    assert.doesNotMatch(
+        styles,
+        /canonical-response-footnote__axis-row:first-child/,
+        'the first axis must not receive a default highlight'
+    );
 });
