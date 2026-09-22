@@ -11,7 +11,6 @@ from __future__ import annotations
 import argparse
 import importlib
 import json
-import os
 import platform
 import subprocess
 import statistics
@@ -19,7 +18,7 @@ import sys
 import time
 from dataclasses import asdict, dataclass
 from pathlib import Path
-from typing import Any, Callable, Iterable, Sequence
+from typing import Any, Callable, Sequence
 
 
 DEFAULT_MODEL_ID = "AlexWortega/openjev"
@@ -139,31 +138,91 @@ def load_cross_encoder(args: argparse.Namespace) -> tuple[Any, Any]:
     return model, torch
 
 
-def benchmark_cross_encoder(args: argparse.Namespace) -> dict[str, object]:
+def runtime_preflight(args: argparse.Namespace) -> dict[str, str] | None:
     if not args.revision:
         return {
             "status": "blocked",
             "reason": "--revision is required so model provenance is explicit.",
         }
-    if not args.allow_cpu:
-        try:
-            import torch
-        except ImportError:
-            return {"status": "unavailable", "reason": "torch is not installed."}
-        if not bool(torch.cuda.is_available()):
-            return {
-                "status": "blocked",
-                "reason": "CUDA is unavailable; pass --allow-cpu only for an intentional CPU experiment.",
-            }
+    if args.allow_cpu:
+        return None
+    try:
+        import torch
+    except ImportError:
+        return {"status": "unavailable", "reason": "torch is not installed."}
+    if bool(torch.cuda.is_available()):
+        return None
+    return {
+        "status": "blocked",
+        "reason": "CUDA is unavailable; pass --allow-cpu only for an intentional CPU experiment.",
+    }
+
+
+def start_generator_process(args: argparse.Namespace) -> subprocess.Popen[str] | None:
+    if not args.generator_command:
+        return None
+    return subprocess.Popen(args.generator_command, shell=False, text=True)
+
+
+def collect_measurements(
+    model: Any, torch_module: Any, args: argparse.Namespace
+) -> list[BatchMeasurement]:
+    measurements: list[BatchMeasurement] = []
+    premise = "Which synthetic context candidate is relevant to this bounded decision?"
+    for candidate_length in args.candidate_lengths:
+        for candidate_count in args.candidate_counts:
+            candidates = build_candidates(candidate_count, candidate_length)
+            pairs = [(premise, candidate) for candidate in candidates]
+            operations: tuple[tuple[str, Callable[[], object]], ...] = (
+                ("predict", lambda pairs=pairs: model.predict(pairs)),
+                (
+                    "predict_hypotheses",
+                    lambda candidates=candidates: model.predict_hypotheses(
+                        premise, candidates
+                    ),
+                ),
+                (
+                    "rerank",
+                    lambda candidates=candidates: model.rerank(premise, candidates),
+                ),
+            )
+            measurements.extend(
+                invoke_measurement(
+                    operation,
+                    candidate_count,
+                    candidate_length,
+                    torch_module,
+                    callback,
+                )
+                for operation, callback in operations
+            )
+    return measurements
+
+
+def summarize_measurements(
+    measurements: list[BatchMeasurement],
+) -> dict[str, object]:
+    completed_latencies = [
+        item.latency_ms
+        for item in measurements
+        if item.status == "completed" and item.latency_ms is not None
+    ]
+    return {
+        "p50": statistics.median(completed_latencies)
+        if completed_latencies
+        else None,
+        "max": max(completed_latencies) if completed_latencies else None,
+    }
+
+
+def benchmark_cross_encoder(args: argparse.Namespace) -> dict[str, object]:
+    preflight = runtime_preflight(args)
+    if preflight is not None:
+        return preflight
 
     generator_process: subprocess.Popen[str] | None = None
     try:
-        if args.generator_command:
-            generator_process = subprocess.Popen(
-                args.generator_command,
-                shell=True,
-                text=True,
-            )
+        generator_process = start_generator_process(args)
         load_started = time.perf_counter()
         model, torch_module = load_cross_encoder(args)
         load_latency_ms = (time.perf_counter() - load_started) * 1000
@@ -176,58 +235,13 @@ def benchmark_cross_encoder(args: argparse.Namespace) -> dict[str, object]:
         }
 
     idle_vram_mb, _ = vram_snapshot(torch_module)
-    measurements: list[BatchMeasurement] = []
-    premise = "Which synthetic context candidate is relevant to this bounded decision?"
-    for candidate_length in args.candidate_lengths:
-        for candidate_count in args.candidate_counts:
-            candidates = build_candidates(candidate_count, candidate_length)
-            pairs = [(premise, candidate) for candidate in candidates]
-            measurements.append(
-                invoke_measurement(
-                    "predict",
-                    candidate_count,
-                    candidate_length,
-                    torch_module,
-                    lambda pairs=pairs: model.predict(pairs),
-                )
-            )
-            measurements.append(
-                invoke_measurement(
-                    "predict_hypotheses",
-                    candidate_count,
-                    candidate_length,
-                    torch_module,
-                    lambda candidates=candidates: model.predict_hypotheses(
-                        premise, candidates
-                    ),
-                )
-            )
-            measurements.append(
-                invoke_measurement(
-                    "rerank",
-                    candidate_count,
-                    candidate_length,
-                    torch_module,
-                    lambda candidates=candidates: model.rerank(premise, candidates),
-                )
-            )
-
-    completed_latencies = [
-        item.latency_ms
-        for item in measurements
-        if item.status == "completed" and item.latency_ms is not None
-    ]
+    measurements = collect_measurements(model, torch_module, args)
     result = {
         "status": "completed",
         "model_load_latency_ms": load_latency_ms,
         "idle_vram_mb": idle_vram_mb,
         "measurements": [asdict(item) for item in measurements],
-        "latency_summary_ms": {
-            "p50": statistics.median(completed_latencies)
-            if completed_latencies
-            else None,
-            "max": max(completed_latencies) if completed_latencies else None,
-        },
+        "latency_summary_ms": summarize_measurements(measurements),
         "generator_pid": generator_process.pid if generator_process else None,
     }
     if generator_process:
@@ -312,19 +326,32 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     )
     parser.add_argument(
         "--generator-command",
-        help="Optional long-running generator command to start before loading OpenJEV.",
+        nargs=argparse.REMAINDER,
+        help="Optional generator command and arguments to start before loading OpenJEV.",
     )
     parser.add_argument("--output", type=Path)
     return parser.parse_args(argv)
+
+
+def safe_output_path(output: Path | None) -> Path | None:
+    if output is None:
+        return None
+    resolved = output.expanduser().resolve()
+    try:
+        resolved.relative_to(Path.cwd().resolve())
+    except ValueError as error:
+        raise ValueError("--output must remain within the current working directory") from error
+    return resolved
 
 
 def main(argv: Sequence[str] | None = None) -> int:
     args = parse_args(argv)
     report = build_report(args)
     rendered = json.dumps(report, indent=2, sort_keys=True) + "\n"
-    if args.output is not None:
-        args.output.parent.mkdir(parents=True, exist_ok=True)
-        args.output.write_text(rendered, encoding="utf-8")
+    output = safe_output_path(args.output)
+    if output is not None:
+        output.parent.mkdir(parents=True, exist_ok=True)
+        output.write_text(rendered, encoding="utf-8")
     print(rendered, end="")
     return 0
 

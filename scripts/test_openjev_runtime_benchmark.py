@@ -7,6 +7,7 @@
 """
 
 import unittest
+from pathlib import Path
 
 from openjev_runtime_benchmark import (
     DEFAULT_COUNTS,
@@ -14,6 +15,7 @@ from openjev_runtime_benchmark import (
     build_candidates,
     build_report,
     parse_args,
+    safe_output_path,
 )
 
 
@@ -32,6 +34,16 @@ class OpenJevRuntimeBenchmarkTests(unittest.TestCase):
         self.assertEqual(report["benchmark"], "openjev_runtime_718")
         self.assertIn(report["status"], {"blocked", "unavailable"})
         self.assertEqual(report["coexistence"]["status"], "not_requested")
+
+    def test_generator_command_is_parsed_without_shell_recomposition(self) -> None:
+        args = parse_args(["--generator-command", "python", "generator.py", "--port", "9000"])
+
+        self.assertEqual(args.generator_command, ["python", "generator.py", "--port", "9000"])
+
+    def test_output_path_must_remain_inside_working_directory(self) -> None:
+        self.assertIsNotNone(safe_output_path(Path("artifacts/result.json")))
+        with self.assertRaises(ValueError):
+            safe_output_path(Path("../outside-result.json"))
 
 
 if __name__ == "__main__":

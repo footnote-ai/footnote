@@ -52,8 +52,8 @@ OpenJEV loads:
 python scripts/openjev_runtime_benchmark.py `
   --revision <revision> `
   --openjev-code-path <path-to-openjev-source> `
-  --generator-command "<generator startup command>" `
-  --output artifacts/openjev-runtime-718/<coexistence-run-id>.json
+  --output artifacts/openjev-runtime-718/<coexistence-run-id>.json `
+  --generator-command python <generator script> --<generator-arg> <value>
 ```
 
 The harness records the command and process id, then terminates that process
