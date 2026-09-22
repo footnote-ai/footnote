@@ -282,6 +282,11 @@ def build_report(args: argparse.Namespace) -> dict[str, object]:
         result = report["result"]
         if isinstance(result, dict):
             report["status"] = result.get("status", "unknown")
+            if args.generator_command:
+                report["coexistence"]["generator_process"] = {
+                    "pid": result.get("generator_pid"),
+                    "status": result.get("generator_status", "not_started"),
+                }
     return report
 
 
