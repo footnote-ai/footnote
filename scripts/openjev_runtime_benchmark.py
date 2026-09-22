@@ -351,7 +351,10 @@ def main(argv: Sequence[str] | None = None) -> int:
     output = safe_output_path(args.output)
     if output is not None:
         output.parent.mkdir(parents=True, exist_ok=True)
-        output.write_text(rendered, encoding="utf-8")
+        # The canonicalized path is confined to the current working directory.
+        output.write_text(  # NOSONAR - safe_output_path confines the operator path.
+            rendered, encoding="utf-8"
+        )
     print(rendered, end="")
     return 0
 
