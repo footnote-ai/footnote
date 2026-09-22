@@ -43,6 +43,7 @@
         "responses:compare": "pnpm exec tsx scripts/responses-compare.ts",
         "eval:planner": "pnpm exec tsx scripts/planner-comparison.mts",
         "eval:context-selection": "pnpm exec tsx scripts/context-selection-benchmark.ts",
+        "eval:context-answer-quality": "pnpm exec tsx scripts/context-selection-answer-quality.ts",
         "check-annotation-schema": "pnpm exec tsx scripts/check-annotation-schema.ts",
         "validate-footnote-tags": "pnpm exec tsx scripts/validate-footnote-tags.ts",
         "validate-env": "pnpm exec tsx scripts/validate-env.ts",
