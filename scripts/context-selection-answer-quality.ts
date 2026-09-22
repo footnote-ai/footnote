@@ -33,7 +33,7 @@ export type AnswerQualityCaseMetric = {
     distractingMessageCount: number;
     contextWasConfusing: boolean;
     selectedMessageCount: number;
-    estimatedContextTokens: number;
+    estimatedContextUnits: number;
     retrievalLatencyMs: number | null;
     generationStatus: 'not_run';
     generationLatencyMs: null;
@@ -48,7 +48,7 @@ export type AnswerQualityMethodMetric = {
     contextConfusionRate: number;
     averageDistractingMessageCount: number;
     averageSelectedMessageCount: number;
-    averageContextTokens: number;
+    averageContextUnits: number;
     retrievalP95LatencyMs: number | null;
     generationP95LatencyMs: null;
     generationCostUsd: null;
@@ -204,7 +204,7 @@ const evaluateCase = (
         distractingMessageCount,
         contextWasConfusing: !answerCorrect && distractingMessageCount > 0,
         selectedMessageCount: selected.size,
-        estimatedContextTokens: estimateContextTokens(entry, result.messageIds),
+        estimatedContextUnits: estimateContextTokens(entry, result.messageIds),
         retrievalLatencyMs,
         generationStatus: 'not_run',
         generationLatencyMs: null,
@@ -237,8 +237,8 @@ const aggregateMethod = (
         averageSelectedMessageCount: average(
             cases.map((metric) => metric.selectedMessageCount)
         ),
-        averageContextTokens: average(
-            cases.map((metric) => metric.estimatedContextTokens)
+        averageContextUnits: average(
+            cases.map((metric) => metric.estimatedContextUnits)
         ),
         retrievalP95LatencyMs: percentile(latencyValues, 95),
         generationP95LatencyMs: null,
@@ -294,11 +294,11 @@ const writeReport = (report: AnswerQualityReport): void => {
         '',
         'This is a deterministic context-support proxy; no final answer generation was run.',
         '',
-        '| Method | Answer correctness | Reference resolution | Confusion rate | Avg messages | Avg tokens | Retrieval p95 ms |',
+        '| Method | Answer correctness | Reference resolution | Confusion rate | Avg messages | Avg context units | Retrieval p95 ms |',
         '| --- | ---: | ---: | ---: | ---: | ---: | ---: |',
         ...report.methods.map(
             (metric) =>
-                `| ${metric.method} | ${format(metric.answerCorrectnessRate)} | ${format(metric.referenceResolutionRate)} | ${format(metric.contextConfusionRate)} | ${format(metric.averageSelectedMessageCount)} | ${format(metric.averageContextTokens)} | ${format(metric.retrievalP95LatencyMs)} |`
+                `| ${metric.method} | ${format(metric.answerCorrectnessRate)} | ${format(metric.referenceResolutionRate)} | ${format(metric.contextConfusionRate)} | ${format(metric.averageSelectedMessageCount)} | ${format(metric.averageContextUnits)} | ${format(metric.retrievalP95LatencyMs)} |`
         ),
         '',
         'Generation latency and cost are `n/a`; provider-path evidence is intentionally not invented.',
