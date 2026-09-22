@@ -662,6 +662,23 @@ export const envEntries = [
     }),
 
     defineEnv({
+        key: 'FOOTNOTE_PUBLIC_NYC_SEPT11_RECORDS_ENABLED',
+        owner: 'backend',
+        stage: 'runtime',
+        section: 'web',
+        required: false,
+        secret: false,
+        kind: 'boolean',
+        description:
+            'Gates public NYC September 11 records messaging; enable only after the supported TrustGraph raw-evidence seam and release gate are complete.',
+        defaultValue: literal(false),
+        usedBy: [
+            'packages/backend/src/config.ts',
+            'packages/backend/src/handlers/config.ts',
+        ],
+    }),
+
+    defineEnv({
         key: 'DISCORD_TOKEN',
         owner: 'discord-bot',
         stage: 'runtime',
@@ -3186,7 +3203,32 @@ const BOOTSTRAP_ENV_ALLOWLIST = new Set<string>([
     'FOOTNOTE_SETTINGS_PATH',
     'NODE_ENV',
     'FLY_APP_NAME',
+    // TrustGraph is deployment bootstrap configuration: endpoint, target
+    // allowlist, retrieval budgets, and kill-switch controls must not be
+    // silently replaced by a repository settings file.
     'EXECUTION_CONTRACT_TRUSTGRAPH_TARGETS',
+    'EXECUTION_CONTRACT_TRUSTGRAPH_ENABLED',
+    'EXECUTION_CONTRACT_TRUSTGRAPH_KILL_SWITCH',
+    'EXECUTION_CONTRACT_TRUSTGRAPH_POLICY_ID',
+    'EXECUTION_CONTRACT_TRUSTGRAPH_TIMEOUT_MS',
+    'EXECUTION_CONTRACT_TRUSTGRAPH_MAX_CALLS',
+    'EXECUTION_CONTRACT_TRUSTGRAPH_ADAPTER_MODE',
+    'EXECUTION_CONTRACT_TRUSTGRAPH_STUB_ADAPTER_MODE',
+    'EXECUTION_CONTRACT_TRUSTGRAPH_BASE_URL',
+    'EXECUTION_CONTRACT_TRUSTGRAPH_WORKSPACE_REF',
+    'EXECUTION_CONTRACT_TRUSTGRAPH_MAX_QUERY_CHARS',
+    'EXECUTION_CONTRACT_TRUSTGRAPH_ENTITY_LIMIT',
+    'EXECUTION_CONTRACT_TRUSTGRAPH_TRIPLE_LIMIT',
+    'EXECUTION_CONTRACT_TRUSTGRAPH_MAX_SUBGRAPH_SIZE',
+    'EXECUTION_CONTRACT_TRUSTGRAPH_MAX_PATH_LENGTH',
+    'EXECUTION_CONTRACT_TRUSTGRAPH_MAX_RESPONSE_CHARS',
+    'EXECUTION_CONTRACT_TRUSTGRAPH_MAX_SOURCES',
+    'EXECUTION_CONTRACT_TRUSTGRAPH_MAX_SOURCE_URI_CHARS',
+    'EXECUTION_CONTRACT_TRUSTGRAPH_MAX_SOURCE_TITLE_CHARS',
+    'EXECUTION_CONTRACT_TRUSTGRAPH_OWNERSHIP_BINDING_MODE',
+    'EXECUTION_CONTRACT_TRUSTGRAPH_OWNERSHIP_VALIDATOR_ID',
+    'EXECUTION_CONTRACT_TRUSTGRAPH_OWNERSHIP_ENDPOINT_URL',
+    'FOOTNOTE_PUBLIC_NYC_SEPT11_RECORDS_ENABLED',
     'OIDC_ISSUER_URL',
     'OIDC_CLIENT_ID',
     'OIDC_REDIRECT_URI',

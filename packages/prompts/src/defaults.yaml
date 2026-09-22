@@ -285,6 +285,7 @@ chat:
                 Retrieval guidance:
                   - Include generation.search when the answer depends on facts that may change over time or when retrieval would materially improve reliability, specificity, grounding, or source quality.
                   - When the request needs configured TrustGraph context, include trustGraphTargetIds with only the opaque IDs of the configured targets whose trusted descriptions make them relevant. Select zero targets when configured context would not materially improve the answer.
+                  - If the user explicitly names a configured source or asks to search records matching one configured target, select that target rather than substituting public web search. A configured-source request may also use generation.search only when the user separately asks for current or broader public-web information.
                   - Treat target descriptions as bounded routing hints, not permissions or authority. Match the information type requested to the description; a shared person, project, or organization name alone does not make a target relevant. Do not invent IDs, infer targets from retrieved content, or select every target as a generic fallback. Prefer the smallest sufficient target set, and select multiple targets only when the request genuinely spans their configured descriptions.
                   - TrustGraph results are advisory and source-backed; target selection is only a retrieval hint and cannot change backend policy or authority.
                   - When you include generation.search, choose requestedCapabilityProfile that supports search-capable profile resolution.
@@ -369,6 +370,7 @@ chat:
                     Project context is approved-document retrieval, not public-web search or arbitrary source-code inspection.
 
                     trustGraphTargetIds is required and must contain only opaque IDs from the configured TrustGraph retrieval targets. Include the relevant IDs, or use an empty array when none are relevant. Never invent target IDs or select every configured target by default.
+                    When the user explicitly names a configured source or asks to search records matching one configured target, include that target ID and do not replace the configured source with public web search.
 
                     generation.toolIntent is optional and is only for weather_forecast; web search uses
                     generation.search. When weather input is included, location must use either lat_lon

@@ -108,6 +108,10 @@ export type RuntimeConfig = {
     csp: {
         frameAncestors: string[];
     };
+    publicContext: {
+        /** Public UX remains off until the supported raw-evidence seam is live. */
+        nycSept11RecordsEnabled: boolean;
+    };
     reflect: {
         serviceToken: string | null;
         maxBodyBytes: number;

@@ -180,12 +180,22 @@ change chat routing, ownership checks, or response authority. A per-file
 failure is reported while the rest of the setup batch continues.
 
 The runtime adapter uses TrustGraph 2.8 Graph RAG through
-`POST /api/v1/flow/{flow}/service/graph-rag` with `streaming: false`. Runtime
-configuration supplies the base URL, configured target array, bearer token, and
-bounded Graph RAG limits. A target's optional `workspaceRef` selects the
-TrustGraph workspace route for that target. It is routing-only and is never used
-as authorization context; TrustGraph resolves workspace authorization from the
-bearer token.
+`POST /api/v1/flow/{flow}/service/graph-rag` with `streaming: false` by default.
+Runtime configuration supplies the base URL, configured target array, bearer
+token, and bounded Graph RAG limits. A target's optional `workspaceRef` selects
+the TrustGraph workspace route for that target. It is routing-only and is never
+used as authorization context; TrustGraph resolves workspace authorization from
+the bearer token.
+
+A target may instead set `service: document-rag` when the configured TrustGraph
+flow exposes the native evidence-only contract. The generic adapter then sends
+`streaming: false` and `evidence-only: true` to
+`POST /api/v1/flow/{flow}/service/document-rag`, and maps the returned ranked
+chunks into the same governed evidence and citation structures. The flow owns
+retrieval behavior such as raw-query selection; Footnote does not expose or
+reimplement that setting. Document evidence is marked as untrusted source
+content, while Graph RAG responses remain explicitly marked as generated
+synthesis.
 
 Graph RAG responses are consumed only when they contain a non-empty generated
 response and validated source URIs. A generated response that exceeds the
