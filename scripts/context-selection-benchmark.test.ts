@@ -109,7 +109,10 @@ test('lexical graph expansion remains bounded and includes reply ancestry', () =
 test('report includes per-category metrics for every completed baseline', () => {
     const report = runBenchmark();
 
-    assert.equal(report.categoryMetrics.length, 14 * 9);
+    assert.equal(
+        report.categoryMetrics.length,
+        Object.keys(report.benchmark.categoryCounts).length * 9
+    );
     assert.ok(
         report.categoryMetrics.some(
             (metric) =>

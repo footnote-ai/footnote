@@ -13,12 +13,13 @@ evaluation remains unavailable without an approved local/provider path**.
 
 ## Design
 
-The harness selects one representative synthetic case from each of the 14
+The harness selects one representative synthetic case from each of the 20
 corpus categories and evaluates identical context packs from:
 
 - the current 24-message window;
 - BM25; and
-- the bounded BM25 + deterministic graph hybrid.
+- the bounded BM25 + deterministic graph hybrid;
+- the same graph hybrid with a 10-message budget.
 
 Each case has hand-authored synthetic answer facts. The proxy reports whether
 all facts are present in the selected context, whether all labeled necessary
@@ -28,16 +29,20 @@ retrieval latency. It does **not** generate an answer.
 
 ## Results
 
-| Method                 | Answer correctness | Reference resolution | Confusion rate | Avg messages | Avg tokens | Retrieval p95 ms |
-| ---------------------- | -----------------: | -------------------: | -------------: | -----------: | ---------: | ---------------: |
-| Current window         |              0.571 |                0.357 |          0.071 |       24.000 |    442.000 |            0.067 |
-| BM25                   |              0.857 |                0.857 |          0.000 |       24.000 |    440.429 |            0.866 |
-| BM25 + graph expansion |              0.929 |                0.929 |          0.000 |       14.643 |    267.071 |            0.411 |
+| Method                  | Answer correctness | Reference resolution | Confusion rate | Avg messages | Avg context units | Retrieval p95 ms |
+| ----------------------- | -----------------: | -------------------: | -------------: | -----------: | ---------: | ---------------: |
+| Current window          |              0.500 |                0.300 |          0.200 |       24.000 |    442.400 |            0.040 |
+| BM25                    |              0.900 |                0.900 |          0.000 |       24.000 |    441.850 |            0.665 |
+| BM25 + graph expansion  |              0.950 |                0.950 |          0.000 |       15.050 |    275.950 |            0.318 |
+| BM25 + graph, budget 10 |              0.900 |                0.900 |          0.000 |       10.000 |    182.850 |            0.256 |
 
-The graph hybrid improved this proxy's support score over BM25 while selecting
-about 39% fewer messages and estimated tokens. This is evidence that context
-selection can improve a downstream support proxy without semantic judgment.
-It is not evidence of final answer correctness.
+The full graph hybrid improved this proxy's support score over BM25 while
+selecting about 37% fewer messages and estimated context units. The 10-message
+graph budget matched BM25's proxy score while using about 59% fewer context
+units.
+This is evidence that context selection can improve a downstream support
+proxy without semantic judgment. It is not evidence of final answer
+correctness.
 
 ## Missing generation evidence
 

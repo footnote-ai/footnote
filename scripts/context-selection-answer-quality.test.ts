@@ -16,17 +16,22 @@ import {
 test('uses one representative synthetic case from every corpus category', () => {
     const subset = buildAnswerQualitySubset();
 
-    assert.equal(subset.length, 14);
-    assert.equal(new Set(subset.map((entry) => entry.category)).size, 14);
+    assert.equal(subset.length, 20);
+    assert.equal(new Set(subset.map((entry) => entry.category)).size, 20);
 });
 
 test('reports bounded context-support outcomes without inventing generation results', () => {
     const report = runAnswerQualityEvaluation();
 
-    assert.equal(report.benchmark.subsetCaseCount, 14);
+    assert.equal(report.benchmark.subsetCaseCount, 20);
     assert.deepEqual(
         report.methods.map((metric) => metric.method),
-        ['current_window', 'bm25', 'bm25_graph_expansion']
+        [
+            'current_window',
+            'bm25',
+            'bm25_graph_expansion',
+            'bm25_graph_budget_10',
+        ]
     );
     assert.ok(
         report.cases.every((metric) => metric.generationStatus === 'not_run')
