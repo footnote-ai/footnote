@@ -1,0 +1,11 @@
+{
+    "name": "footnote-baml-assess-725-harness",
+    "private": true,
+    "type": "module",
+    "devDependencies": {
+        "@boundaryml/baml": "0.226.2"
+    },
+    "scripts": {
+        "generate": "baml-cli generate"
+    }
+}

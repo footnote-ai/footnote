@@ -1,0 +1,111 @@
+<!--
+@description: Evidence record for the isolated BAML assess-contract prototype.
+@footnote-scope: test
+@footnote-module: BamlAssessPrototypeReport
+@footnote-risk: medium - Prototype results can influence typed-output architecture decisions.
+@footnote-ethics: high - The harness must not move routing, cost, provenance, or workflow authority into BAML.
+-->
+
+# BAML assess-contract prototype (#725)
+
+Status: **prototype complete; production adoption not recommended from this
+slice alone**.
+
+Run date: 2026-09-22
+
+Base: `origin/main` at `6fa7416ae8ff5e8d052dac67a2ae10eb074d6d58`
+
+BAML: `@boundaryml/baml 0.226.2`
+
+Raw artifact: `artifacts/baml-assess-725/probe-results.json`
+
+## What was prototyped
+
+The isolated harness expresses the current `ReviewDecision` shape as one BAML
+function and generates a TypeScript client. It exercises generated parsing,
+typed output, request rendering, and pre-aborted cancellation without a
+provider call. The BAML client/runtime is not installed in the Footnote
+workspace and the production assess path is unchanged.
+
+The prototype preserves the existing fields, including TRACE alignment,
+temperament, module hints, concerns, and routing hints. It does not model
+Footnote workflow admission, routing chains, retries/fallbacks, cost
+accounting, usage authority, cancellation ownership, or canonical TRACE.
+
+## Failure and contract comparison
+
+| Fixture                    | Current Footnote parser                     | BAML 0.226.2 result                          | Finding                                                                  |
+| -------------------------- | ------------------------------------------- | -------------------------------------------- | ------------------------------------------------------------------------ |
+| Valid finalize/revise      | typed result                                | typed result                                 | parity for basic shape                                                   |
+| Malformed JSON             | `invalid_json`                              | generic `BamlError`                          | failure taxonomy is not preserved automatically                          |
+| Non-object JSON            | `non_json_object`                           | generic `BamlError`                          | mapping layer still required                                             |
+| Unexpected enum            | `schema_invalid` with issue path/code       | generic `BamlError`                          | BAML validates the enum but does not provide Footnote's result envelope  |
+| Missing revise instruction | `schema_invalid` via conditional refinement | **parsed** as `revise` with null instruction | current contract semantics are not expressible by this direct type alone |
+| Refusal text               | `non_json_object`                           | generic `BamlError`                          | refusal classification still needs an adapter/policy boundary            |
+| Markdown-fenced JSON       | current parser rejects non-object wrapper   | parsed                                       | BAML is more permissive, so adoption could change behavior               |
+| Unexpected extra field     | passthrough then normalized away            | parsed then omitted                          | similar visible result, different parser semantics                       |
+| Pre-aborted cancellation   | outside parser; workflow-owned              | `BamlAbortError`                             | BAML exposes a cancellation mechanism, but ownership remains Footnote's  |
+
+The BAML parser's permissiveness is not automatically a compatibility win. In
+particular, accepting an incomplete `revise` decision would weaken the current
+bounded workflow contract unless Footnote retains a post-parse validation and
+normalization layer.
+
+## Request rendering
+
+The generated request builder produced a synthetic OpenAI Responses request
+with model `gpt-5-mini`, a system prompt containing BAML's rendered schema, and
+the synthetic draft/context. The raw artifact records the request body and
+header names only; it does not retain header values. This confirms that BAML
+can render a typed prompt/schema pair, but it also shows that prompt text and
+provider transport details are coupled to generated clients.
+
+No usage, provider response metadata, cost, attempt identity, routing-chain
+fallback, or Footnote TRACE facts were observed because no provider call was
+made. Those facts therefore remain unresolved and must not be delegated to
+BAML by inference.
+
+## Complexity accounting
+
+Measured line counts for this prototype run:
+
+| Layer                                         | Lines | Interpretation                                                           |
+| --------------------------------------------- | ----: | ------------------------------------------------------------------------ |
+| Current `reviewDecision.ts`                   |   401 | hand-maintained prompt, schema, normalizer, parser, and failure envelope |
+| Current parser tests                          |   153 | existing hand-maintained compatibility coverage                          |
+| BAML source (`types`, `functions`, `clients`) |    51 | hand-maintained typed function/prompt/client declarations                |
+| Prototype probe and manifest                  |   114 | hand-maintained harness/tooling                                          |
+| Generated TypeScript client                   | 1,273 | generated dependency/build surface; not hand-maintained                  |
+
+The BAML source is shorter than the current contract file, but the generated
+client and runtime dependency are substantial. No current Footnote source can
+be deleted safely: the existing parser is still needed for conditional
+validation, Footnote-specific failure taxonomy, normalization, routing, and
+provenance mapping.
+
+## Recommendation for #725
+
+The prototype proves that BAML can co-locate a prompt and a basic typed output,
+generate TypeScript types, parse some malformed/fenced output, render a request,
+and surface cancellation. It does **not** prove deletion or meaningful
+simplification of the Footnote assess machinery. The negative result is
+successful evidence for the next gate:
+
+- keep production assess unchanged;
+- do not migrate planner or remove `reviewDecision.ts`;
+- proceed to #726 only with a narrow provider-path comparison;
+- compare BAML's transport/parser behavior against Footnote's OpenAI,
+  OpenRouter/OpenAI-compatible, local, fallback, refusal, and failure paths;
+- require Footnote-owned post-parse validation if the provider comparison ever
+  supports adoption.
+
+## Reproduction
+
+```text
+pnpm --config.enable-global-virtual-store=false dlx --package=@boundaryml/baml@0.226.2 baml-cli generate
+node <pinned-tsx>/dist/cli.mjs probe.ts
+```
+
+The generation command writes ignored `baml_client/` output. The raw probe
+artifact is committed separately from generated code so the experiment remains
+reviewable without making generated files a new Footnote source of truth.
