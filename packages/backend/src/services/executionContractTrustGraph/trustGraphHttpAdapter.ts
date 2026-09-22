@@ -15,6 +15,7 @@ import type {
     Budget,
     EvidenceBundle,
     ScopeTuple,
+    EvidenceItem,
     TrustGraphEvidenceAdapter,
     TrustGraphTargetConfig,
 } from './trustGraphEvidenceTypes.js';
@@ -51,8 +52,23 @@ type GraphRagSource = {
     title?: string;
 };
 
+type DocumentRagEvidence = {
+    chunkId: string;
+    text: string;
+    textTruncated: boolean;
+    rank: number;
+    score?: number;
+    pageId?: string;
+    pageNumber?: number;
+    documentId?: string;
+    sourceTitle?: string;
+    sourceUri: string;
+};
+
 const GRAPH_RAG_ADAPTER_VERSION = 'trustgraph-graph-rag-v1';
+const DOCUMENT_RAG_ADAPTER_VERSION = 'trustgraph-document-rag-evidence-v1';
 const GRAPH_RAG_SOURCE_REF_PREFIX = 'trustgraph://graph-rag/collection/';
+const DOCUMENT_RAG_SOURCE_REF_PREFIX = 'trustgraph://document-rag/collection/';
 // TrustGraph 2.8's native client sends these bounded reranking controls. Keep
 // them explicit so the HTTP adapter uses the same retrieval path across 2.8
 // deployments instead of relying on server-side defaults.
@@ -422,6 +438,128 @@ const buildEndpointUrl = (baseUrlInput: string, flowInput: string): string => {
     return `${baseUrl}/api/v1/flow/${flow}/service/graph-rag`;
 };
 
+const buildDocumentRagEndpointUrl = (
+    baseUrlInput: string,
+    flowInput: string
+): string => {
+    const baseUrl = baseUrlInput.trim().replace(/\/+$/u, '');
+    const flow = encodeURIComponent(flowInput.trim());
+    return `${baseUrl}/api/v1/flow/${flow}/service/document-rag`;
+};
+
+const isPositiveSafeInteger = (value: unknown): value is number =>
+    typeof value === 'number' && Number.isSafeInteger(value) && value > 0;
+
+const appendPageReference = (sourceUri: string, pageNumber?: number): string =>
+    pageNumber === undefined
+        ? sourceUri
+        : `${sourceUri}${sourceUri.includes('#') ? '&' : '#'}page=${pageNumber}`;
+
+const parseDocumentRagPayload = (
+    payload: unknown,
+    limits: TrustGraphGraphRagLimits
+): {
+    evidence: DocumentRagEvidence[];
+    originalEvidenceCount: number;
+    evidenceTruncated: boolean;
+} => {
+    if (!isRecord(payload) || payload.message_type !== 'evidence') {
+        throw new Error('trustgraph_document_rag_invalid_evidence_payload');
+    }
+    if (payload.response !== undefined && payload.response !== null) {
+        throw new Error(
+            'trustgraph_document_rag_synthesis_in_evidence_payload'
+        );
+    }
+    if (!Array.isArray(payload.evidence)) {
+        throw new Error('trustgraph_document_rag_invalid_evidence');
+    }
+
+    const originalEvidenceCount = payload.evidence.length;
+    const retainedEvidence = payload.evidence.slice(0, limits.maxSources);
+    const evidence = retainedEvidence.map((candidate): DocumentRagEvidence => {
+        if (!isRecord(candidate)) {
+            throw new Error('trustgraph_document_rag_invalid_evidence_item');
+        }
+        const chunkId = candidate['chunk-id'];
+        const text = candidate.text;
+        const rank = candidate.rank;
+        const sourceUri = candidate['source-uri'];
+        if (
+            !isNonEmptyString(chunkId) ||
+            !isNonEmptyString(text) ||
+            !isPositiveSafeInteger(rank) ||
+            !isNonEmptyString(sourceUri)
+        ) {
+            throw new Error('trustgraph_document_rag_invalid_evidence_item');
+        }
+        const normalizedText = text.trim();
+        if (hasUnsafeResponseControlCharacters(normalizedText)) {
+            throw new Error(
+                'trustgraph_document_rag_invalid_evidence_control_characters'
+            );
+        }
+        const boundedText = truncateResponse(
+            normalizedText,
+            limits.maxResponseChars
+        );
+        const normalizedSourceUri = sourceUri.trim();
+        if (
+            normalizedSourceUri.length > limits.maxSourceUriChars ||
+            hasControlCharacters(normalizedSourceUri)
+        ) {
+            throw new Error('trustgraph_document_rag_source_uri_too_large');
+        }
+        const score = candidate.score;
+        if (
+            score !== undefined &&
+            (typeof score !== 'number' || !Number.isFinite(score))
+        ) {
+            throw new Error('trustgraph_document_rag_invalid_evidence_score');
+        }
+        const pageId = candidate['page-id'];
+        if (pageId !== undefined && !isNonEmptyString(pageId)) {
+            throw new Error('trustgraph_document_rag_invalid_page_id');
+        }
+        const pageNumber = candidate['page-number'];
+        if (pageNumber !== undefined && !isPositiveSafeInteger(pageNumber)) {
+            throw new Error('trustgraph_document_rag_invalid_page_number');
+        }
+        const documentId = candidate['document-id'];
+        if (documentId !== undefined && !isNonEmptyString(documentId)) {
+            throw new Error('trustgraph_document_rag_invalid_document_id');
+        }
+        const normalizedDocumentId =
+            documentId === undefined ? undefined : documentId.trim();
+        const sourceTitle =
+            normalizedDocumentId === undefined
+                ? undefined
+                : `${normalizedDocumentId}${
+                      pageNumber === undefined ? '' : ` · page ${pageNumber}`
+                  }`.slice(0, limits.maxSourceTitleChars);
+        return {
+            chunkId: chunkId.trim(),
+            text: boundedText.response,
+            textTruncated: boundedText.truncated,
+            rank,
+            ...(score !== undefined && { score }),
+            ...(pageId !== undefined && { pageId: pageId.trim() }),
+            ...(pageNumber !== undefined && { pageNumber }),
+            ...(normalizedDocumentId !== undefined && {
+                documentId: normalizedDocumentId,
+                sourceTitle,
+            }),
+            sourceUri: normalizedSourceUri,
+        };
+    });
+
+    return {
+        evidence,
+        originalEvidenceCount,
+        evidenceTruncated: originalEvidenceCount > evidence.length,
+    };
+};
+
 const buildProvenancePathRefs = (input: {
     target: TrustGraphTargetConfig;
     sources: GraphRagSource[];
@@ -440,55 +578,111 @@ const toEvidenceBundle = (input: {
     queryIntent: string;
     scopeTuple: ScopeTuple;
     partialTargetFailureIds?: string[];
-    results: Array<{
-        target: TrustGraphTargetConfig;
-        response: string;
-        sources: GraphRagSource[];
-        sourceTruncated: boolean;
-        responseTruncated: boolean;
-    }>;
+    results: TargetResult[];
 }): EvidenceBundle => {
-    const items = input.results.map((result) => ({
-        evidenceId: `trustgraph_graph_rag_evidence_${randomUUID()}`,
-        claimText: result.response,
-        sourceRef: `${GRAPH_RAG_SOURCE_REF_PREFIX}${encodeURIComponent(result.target.collection)}`,
-        provenancePathRef: buildProvenancePathRefs(result),
-        retrievalReason: result.sourceTruncated
-            ? 'trustgraph_graph_rag_source_backed_sources_truncated'
-            : result.responseTruncated
-              ? 'trustgraph_graph_rag_source_backed_response_truncated'
-              : 'trustgraph_graph_rag_source_backed_response',
-        // Graph RAG does not expose a Footnote confidence score. Keep this
-        // neutral and outside backend policy rather than treating ranking as confidence.
-        confidenceScore: 0,
-        confidenceMethodId: 'trustgraph_graph_rag_confidence_not_provided',
-        retrievedAt: new Date().toISOString(),
-        collectionScope: result.target.collection,
-        adapterVersion: GRAPH_RAG_ADAPTER_VERSION,
-        targetId: result.target.id,
-    }));
+    const items: EvidenceItem[] = input.results.flatMap(
+        (result): EvidenceItem[] => {
+            if (result.kind === 'document') {
+                return result.evidence.map((evidence) => ({
+                    evidenceId: `trustgraph_document_rag_evidence_${randomUUID()}`,
+                    claimText: evidence.text,
+                    sourceRef: appendPageReference(
+                        evidence.sourceUri,
+                        evidence.pageNumber
+                    ),
+                    provenancePathRef: [
+                        `target:${result.target.id}`,
+                        `chunk:${evidence.chunkId}`,
+                        ...(evidence.documentId !== undefined
+                            ? [`document:${evidence.documentId}`]
+                            : []),
+                        ...(evidence.pageId !== undefined
+                            ? [`page:${evidence.pageId}`]
+                            : []),
+                        ...(evidence.pageNumber !== undefined
+                            ? [`page-number:${evidence.pageNumber}`]
+                            : []),
+                        evidence.sourceUri,
+                    ],
+                    retrievalReason: result.evidenceTruncated
+                        ? 'trustgraph_document_rag_evidence_truncated'
+                        : evidence.textTruncated
+                          ? 'trustgraph_document_rag_evidence_text_truncated'
+                          : 'trustgraph_document_rag_source_evidence',
+                    confidenceScore: 0,
+                    confidenceMethodId:
+                        'trustgraph_document_rag_rank_not_confidence',
+                    retrievedAt: new Date().toISOString(),
+                    collectionScope: result.target.collection,
+                    adapterVersion: DOCUMENT_RAG_ADAPTER_VERSION,
+                    targetId: result.target.id,
+                    evidenceKind: 'source' as const,
+                    ...(evidence.sourceTitle !== undefined && {
+                        sourceTitle: evidence.sourceTitle,
+                    }),
+                }));
+            }
+            return [
+                {
+                    evidenceId: `trustgraph_graph_rag_evidence_${randomUUID()}`,
+                    claimText: result.response,
+                    sourceRef: `${GRAPH_RAG_SOURCE_REF_PREFIX}${encodeURIComponent(result.target.collection)}`,
+                    provenancePathRef: buildProvenancePathRefs(result),
+                    retrievalReason: result.sourceTruncated
+                        ? 'trustgraph_graph_rag_source_backed_sources_truncated'
+                        : result.responseTruncated
+                          ? 'trustgraph_graph_rag_source_backed_response_truncated'
+                          : 'trustgraph_graph_rag_source_backed_response',
+                    // Graph RAG does not expose a Footnote confidence score. Keep
+                    // this neutral and outside backend policy rather than treating
+                    // ranking as confidence.
+                    confidenceScore: 0,
+                    confidenceMethodId:
+                        'trustgraph_graph_rag_confidence_not_provided',
+                    retrievedAt: new Date().toISOString(),
+                    collectionScope: result.target.collection,
+                    adapterVersion: GRAPH_RAG_ADAPTER_VERSION,
+                    targetId: result.target.id,
+                    evidenceKind: 'generated' as const,
+                },
+            ];
+        }
+    );
+    const usesDocumentEvidence = input.results.some(
+        (result) => result.kind === 'document'
+    );
+    const adapterVersion = usesDocumentEvidence
+        ? DOCUMENT_RAG_ADAPTER_VERSION
+        : GRAPH_RAG_ADAPTER_VERSION;
 
     return {
-        bundleId: `trustgraph_graph_rag_${randomUUID()}`,
+        bundleId: `trustgraph_evidence_${randomUUID()}`,
         queryIntent: input.queryIntent,
         items,
         coverageEstimate: {
             evaluationUnit: 'source',
             scoreRange: '0..1',
             value: 0,
-            computationBasis: ['trustgraph_graph_rag_source_count_only'],
+            computationBasis: [
+                usesDocumentEvidence
+                    ? 'trustgraph_document_rag_evidence_count_only'
+                    : 'trustgraph_graph_rag_source_count_only',
+            ],
             comparableAcrossVersions: false,
-            adapterVersion: GRAPH_RAG_ADAPTER_VERSION,
+            adapterVersion,
         },
         conflictSignals: [],
         traceRefs: [
-            ...input.results.map(
-                (result) =>
-                    `${GRAPH_RAG_SOURCE_REF_PREFIX}${encodeURIComponent(result.target.collection)}/target/${encodeURIComponent(result.target.id)}/flow/${encodeURIComponent(result.target.flow)}`
-            ),
+            ...input.results.map((result) => {
+                const sourceRefPrefix =
+                    result.kind === 'document'
+                        ? DOCUMENT_RAG_SOURCE_REF_PREFIX
+                        : GRAPH_RAG_SOURCE_REF_PREFIX;
+                return `${sourceRefPrefix}${encodeURIComponent(result.target.collection)}/target/${encodeURIComponent(result.target.id)}/flow/${encodeURIComponent(result.target.flow)}`;
+            }),
         ],
         scopeTuple: input.scopeTuple,
-        adapterVersion: GRAPH_RAG_ADAPTER_VERSION,
+        adapterVersion,
         ...(input.partialTargetFailureIds !== undefined &&
             input.partialTargetFailureIds.length > 0 && {
                 partialTargetFailureIds: input.partialTargetFailureIds,
@@ -497,6 +691,7 @@ const toEvidenceBundle = (input: {
 };
 
 type GraphRagTargetResult = {
+    kind: 'graph';
     target: TrustGraphTargetConfig;
     response: string;
     sources: GraphRagSource[];
@@ -505,6 +700,16 @@ type GraphRagTargetResult = {
     originalResponseChars: number;
     responseTruncated: boolean;
 };
+
+type DocumentRagTargetResult = {
+    kind: 'document';
+    target: TrustGraphTargetConfig;
+    evidence: DocumentRagEvidence[];
+    originalEvidenceCount: number;
+    evidenceTruncated: boolean;
+};
+
+type TargetResult = GraphRagTargetResult | DocumentRagTargetResult;
 
 const applyAggregateResponseLimit = (
     results: readonly GraphRagTargetResult[],
@@ -568,11 +773,21 @@ export class HttpTrustGraphEvidenceAdapter implements TrustGraphEvidenceAdapter 
             ) {
                 throw new Error('trustgraph_graph_rag_invalid_target');
             }
+            if (
+                target.service !== undefined &&
+                target.service !== 'graph-rag' &&
+                target.service !== 'document-rag'
+            ) {
+                throw new Error('trustgraph_graph_rag_invalid_target_service');
+            }
             return {
                 id: target.id.trim(),
                 flow: target.flow.trim(),
                 collection: target.collection.trim(),
                 description: target.description.trim(),
+                ...(target.service !== undefined && {
+                    service: target.service,
+                }),
                 ...(target.workspaceRef === null
                     ? { workspaceRef: null }
                     : isNonEmptyString(target.workspaceRef)
@@ -592,43 +807,60 @@ export class HttpTrustGraphEvidenceAdapter implements TrustGraphEvidenceAdapter 
         target: TrustGraphTargetConfig;
         query: string;
         abortSignal?: AbortSignal;
-    }): Promise<GraphRagTargetResult> {
+    }): Promise<TargetResult> {
         const workspaceRef =
             input.target.workspaceRef !== undefined
                 ? isNonEmptyString(input.target.workspaceRef)
                     ? input.target.workspaceRef.trim()
                     : undefined
                 : this.workspaceRef;
+        const service = input.target.service ?? 'graph-rag';
         const response = await fetch(
-            buildEndpointUrl(this.baseUrl, input.target.flow),
+            service === 'document-rag'
+                ? buildDocumentRagEndpointUrl(this.baseUrl, input.target.flow)
+                : buildEndpointUrl(this.baseUrl, input.target.flow),
             {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
                     Authorization: `Bearer ${this.apiToken}`,
                 },
-                body: JSON.stringify({
-                    ...(workspaceRef !== undefined && {
-                        workspace: workspaceRef,
-                    }),
-                    query: input.query,
-                    collection: input.target.collection,
-                    'entity-limit': this.limits.entityLimit,
-                    'triple-limit': this.limits.tripleLimit,
-                    'max-subgraph-size': this.limits.maxSubgraphSize,
-                    'max-path-length': this.limits.maxPathLength,
-                    'edge-score-limit': GRAPH_RAG_EDGE_SCORE_LIMIT,
-                    'edge-limit': GRAPH_RAG_EDGE_LIMIT,
-                    'max-reranker-input': GRAPH_RAG_MAX_RERANKER_INPUT,
-                    streaming: false,
-                }),
+                body: JSON.stringify(
+                    service === 'document-rag'
+                        ? {
+                              ...(workspaceRef !== undefined && {
+                                  workspace: workspaceRef,
+                              }),
+                              query: input.query,
+                              collection: input.target.collection,
+                              'doc-limit': this.limits.maxSources,
+                              streaming: false,
+                              'evidence-only': true,
+                          }
+                        : {
+                              ...(workspaceRef !== undefined && {
+                                  workspace: workspaceRef,
+                              }),
+                              query: input.query,
+                              collection: input.target.collection,
+                              'entity-limit': this.limits.entityLimit,
+                              'triple-limit': this.limits.tripleLimit,
+                              'max-subgraph-size': this.limits.maxSubgraphSize,
+                              'max-path-length': this.limits.maxPathLength,
+                              'edge-score-limit': GRAPH_RAG_EDGE_SCORE_LIMIT,
+                              'edge-limit': GRAPH_RAG_EDGE_LIMIT,
+                              'max-reranker-input':
+                                  GRAPH_RAG_MAX_RERANKER_INPUT,
+                              streaming: false,
+                          }
+                ),
                 signal: input.abortSignal,
             }
         );
 
         if (!response.ok) {
             throw new Error(
-                `trustgraph_graph_rag_http_status_${response.status}`
+                `trustgraph_${service}_http_status_${response.status}`
             );
         }
 
@@ -637,10 +869,20 @@ export class HttpTrustGraphEvidenceAdapter implements TrustGraphEvidenceAdapter 
         try {
             payload = JSON.parse(responseText) as unknown;
         } catch {
-            throw new Error('trustgraph_graph_rag_invalid_json');
+            throw new Error(`trustgraph_${service}_invalid_json`);
         }
-        const parsed = parseGraphRagPayload(payload, this.limits);
-        return { target: input.target, ...parsed };
+        if (service === 'document-rag') {
+            return {
+                kind: 'document',
+                target: input.target,
+                ...parseDocumentRagPayload(payload, this.limits),
+            };
+        }
+        return {
+            kind: 'graph',
+            target: input.target,
+            ...parseGraphRagPayload(payload, this.limits),
+        };
     }
 
     public async getEvidenceBundle(input: {
@@ -719,7 +961,7 @@ export class HttpTrustGraphEvidenceAdapter implements TrustGraphEvidenceAdapter 
                 })()
             )
         );
-        const successful: GraphRagTargetResult[] = [];
+        const successful: TargetResult[] = [];
         const failures: Array<{
             target: TrustGraphTargetConfig;
             error: unknown;
@@ -742,39 +984,60 @@ export class HttpTrustGraphEvidenceAdapter implements TrustGraphEvidenceAdapter 
         }
 
         let remainingSources = this.limits.maxSources;
-        const results: GraphRagTargetResult[] = [];
+        const results: TargetResult[] = [];
         for (const [index, result] of successful.entries()) {
             if (remainingSources === 0) {
                 break;
             }
             const remainingTargets = successful.length - index;
-            const sourceCount = Math.max(
+            const itemCount = Math.max(
                 1,
                 Math.floor(remainingSources / remainingTargets)
             );
-            const sources = result.sources.slice(0, sourceCount);
-            results.push({
-                ...result,
-                sources,
-                sourceTruncated:
-                    result.sourceTruncated ||
-                    sources.length < result.sources.length,
-            });
-            remainingSources -= sources.length;
+            if (result.kind === 'document') {
+                const evidence = result.evidence.slice(0, itemCount);
+                results.push({
+                    ...result,
+                    evidence,
+                    evidenceTruncated:
+                        result.evidenceTruncated ||
+                        evidence.length < result.evidence.length,
+                });
+                remainingSources -= evidence.length;
+            } else {
+                const sources = result.sources.slice(0, itemCount);
+                results.push({
+                    ...result,
+                    sources,
+                    sourceTruncated:
+                        result.sourceTruncated ||
+                        sources.length < result.sources.length,
+                });
+                remainingSources -= sources.length;
+            }
         }
 
-        const boundedResults = applyAggregateResponseLimit(
-            results,
+        const graphResults = results.filter(
+            (result): result is GraphRagTargetResult => result.kind === 'graph'
+        );
+        const boundedGraphResults = applyAggregateResponseLimit(
+            graphResults,
             this.limits.maxResponseChars
         );
+        let graphIndex = 0;
+        const boundedResults: TargetResult[] = results.map((result) =>
+            result.kind === 'graph'
+                ? (boundedGraphResults[graphIndex++] ?? result)
+                : result
+        );
         for (const result of boundedResults) {
-            if (result.sourceTruncated) {
+            if (result.kind === 'graph' && result.sourceTruncated) {
                 logTargetSourcesTruncated(result.target, {
                     originalSourceCount: result.originalSourceCount,
                     retainedSourceCount: result.sources.length,
                 });
             }
-            if (result.responseTruncated) {
+            if (result.kind === 'graph' && result.responseTruncated) {
                 logTargetResponseTruncated(result.target, {
                     originalResponseChars: result.originalResponseChars,
                     retainedResponseChars: result.response.length,

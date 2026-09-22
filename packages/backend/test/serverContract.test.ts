@@ -307,10 +307,17 @@ test('backend server contract baseline routes and transport behavior stay stable
                     required?: boolean;
                     routePath?: string;
                 };
+                publicContext?: {
+                    nycSept11Records?: boolean;
+                };
             };
             assert.equal(typeof payload.turnstileSiteKey, 'string');
             assert.equal(typeof payload.setup?.required, 'boolean');
             assert.equal(payload.setup?.routePath, '/setup');
+            assert.equal(
+                typeof payload.publicContext?.nycSept11Records,
+                'boolean'
+            );
         }
     );
 

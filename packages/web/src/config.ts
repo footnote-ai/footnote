@@ -22,6 +22,9 @@ const DEFAULT_CONFIG: RuntimeConfig = {
         required: false,
         routePath: '/setup',
     },
+    publicContext: {
+        nycSept11Records: false,
+    },
 };
 
 let cachedConfig: RuntimeConfig | null = null;
@@ -42,6 +45,9 @@ const normalizeConfig = (payload: unknown): RuntimeConfig => {
             required?: unknown;
             routePath?: unknown;
         };
+        publicContext?: {
+            nycSept11Records?: unknown;
+        };
     };
     return {
         turnstileSiteKey:
@@ -51,6 +57,9 @@ const normalizeConfig = (payload: unknown): RuntimeConfig => {
         setup: {
             required: raw.setup?.required === true,
             routePath: raw.setup?.routePath === '/setup' ? '/setup' : '/setup',
+        },
+        publicContext: {
+            nycSept11Records: raw.publicContext?.nycSept11Records === true,
         },
     };
 };

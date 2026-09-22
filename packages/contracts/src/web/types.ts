@@ -1097,6 +1097,9 @@ export type GetRuntimeConfigResponse = {
         required: boolean;
         routePath: '/setup';
     };
+    publicContext: {
+        nycSept11Records: boolean;
+    };
 };
 
 /**

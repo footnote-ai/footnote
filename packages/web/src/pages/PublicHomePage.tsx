@@ -6,12 +6,15 @@
  * @footnote-ethics: high - Prepared response state and public claims must not imply live execution or fabricated provenance.
  */
 
+import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import CanonicalResponseFootnote from '@components/CanonicalResponseFootnote';
 import MarkdownResponse from '@components/MarkdownResponse';
+import PublicContextNotice from '@components/PublicContextNotice';
 import PublicFooter from '@components/PublicFooter';
 import PublicHeader from '@components/PublicHeader';
 import ResponseCarousel from '@components/ResponseCarousel';
+import { loadRuntimeConfig } from '../config';
 import { landingScenarios } from '../data/landingScenarios';
 
 type PublicConcept = {
@@ -131,9 +134,13 @@ const PublicConceptList = (): JSX.Element => {
 };
 
 const PublicHomePage = (): JSX.Element => {
-    // NYC source/readiness remains gated pending the approved retrieval rollout.
-    // Do not present a retrieval claim while PR #665 is still gated.
-    const nycRecordsEnabled = false;
+    const [showNycContext, setShowNycContext] = useState(false);
+
+    useEffect(() => {
+        void loadRuntimeConfig().then((config) => {
+            setShowNycContext(config.publicContext.nycSept11Records);
+        });
+    }, []);
 
     return (
         <div className="public-home">
@@ -175,20 +182,11 @@ const PublicHomePage = (): JSX.Element => {
                     <div className="public-home__intro-rule" />
                     <div className="public-home__thread">
                         <div className="public-home__chat-shell">
-                            <aside
-                                className="public-home__context-notice"
-                                hidden={!nycRecordsEnabled}
-                                aria-label="NYC September 11 records"
-                            >
-                                <strong>New: NYC September 11 records</strong>
-                                <span>
-                                    Ask about the response, cleanup,
-                                    environmental conditions, agencies,
-                                    residents, and recovery, with sources you
-                                    can inspect.
-                                </span>
-                                <Link to="/chat">Ask in chat →</Link>
-                            </aside>
+                            {showNycContext && (
+                                <div className="public-home__context-notice">
+                                    <PublicContextNotice variant="announcement" />
+                                </div>
+                            )}
                             <ResponseCarousel
                                 items={landingScenarios}
                                 ariaLabel="Pre-prepared answers"
