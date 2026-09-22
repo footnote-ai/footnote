@@ -716,7 +716,7 @@ export const selectContext = (
                 retrievalDepth: 0,
                 branchExpansions: 0,
                 latencyMs: null,
-                reason: 'OpenJEV requires an explicitly provisioned external runtime/model; this CPU-only checkout does not download or invoke it.',
+                reason: 'OpenJEV is not configured or invoked by this benchmark harness.',
             };
             break;
     }
@@ -952,6 +952,14 @@ const METHODS: ContextSelectionMethod[] = [
     'openjev',
 ];
 
+/**
+ * @description: Executes each context-selection method over the supplied corpus.
+ * Produces case-level and aggregate metrics for benchmark comparison.
+ * @footnote-scope: utility
+ * @footnote-module: ContextSelectionBenchmark
+ * @footnote-risk: medium - Incorrect aggregate metrics could support a false architecture decision.
+ * @footnote-ethics: high - Results influence context handling while synthetic fixtures avoid private transcript use.
+ */
 export const runBenchmark = (
     corpus: ContextBenchmarkCase[] = buildBenchmarkCorpus()
 ): BenchmarkReport => {
@@ -977,7 +985,7 @@ export const runBenchmark = (
                 'All fixtures are synthetic; no private production transcript is committed.',
                 'The hash embedding is a dependency-free lexical feature proxy, not a neural embedding model.',
                 'No cross-encoder is configured in the current Footnote checkout.',
-                'OpenJEV was not invoked because this environment has no transformers runtime or GPU; the harness records that gate as unavailable.',
+                'OpenJEV is not configured or invoked by this benchmark harness; the harness records it as unavailable.',
                 'Latency is local JavaScript harness time, not Discord or provider end-to-end latency.',
             ],
         },
