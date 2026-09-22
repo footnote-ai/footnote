@@ -56,6 +56,22 @@ test('public homepage keeps the approved hero, truthful handoff, and destination
     );
 });
 
+test('public homepage gates the archive announcement on backend readiness', async () => {
+    const source = await readFile(
+        `${pagesDirectory}PublicHomePage.tsx`,
+        'utf8'
+    );
+
+    assert.match(source, /loadRuntimeConfig/);
+    assert.match(
+        source,
+        /setShowNycContext\(config\.publicContext\.nycSept11Records\)/
+    );
+    assert.match(source, /showNycContext &&/);
+    assert.match(source, /<PublicContextNotice variant="announcement" \/>/);
+    assert.doesNotMatch(source, /nycRecordsEnabled\s*=\s*(?:true|false)/);
+});
+
 test('public homepage presents plain-language blocks with useful documentation links', async () => {
     const source = await readFile(
         `${pagesDirectory}PublicHomePage.tsx`,
