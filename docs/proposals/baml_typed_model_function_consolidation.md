@@ -471,7 +471,10 @@ Prototype steps:
 5. execute against representative supported providers,
 6. map the typed BAML output back into the existing Footnote review result,
 7. preserve the current routing chain and attempt provenance,
-8. compare failure taxonomy with the current implementation.
+8. compare failure taxonomy with the current implementation,
+9. compare normalized valid values after `normalizeReviewDecision`, including
+   optional-field and boundary cases, or explicitly keep normalization in a
+   Footnote-owned adapter after BAML parsing.
 
 The prototype should answer:
 
@@ -569,6 +572,23 @@ empty, malformed, refusal, incomplete, and runtime failure. Do not collapse
 distinction available.
 
 The goal is not merely to obtain a typed return value. It is to make failures more legible than they are today.
+
+The prototype must also document the ownership and mapping for each result:
+
+| Stage or result                        | Footnote-owned meaning                                              | Workflow consequence                                                                 |
+| -------------------------------------- | ------------------------------------------------------------------- | ------------------------------------------------------------------------------------ |
+| transport failure                      | The provider call could not be completed                            | Keep attempt and routing failure details; apply existing fallback rules              |
+| refusal or incomplete output           | The provider returned a refusal or stopped before a usable result   | Preserve the existing refusal/incomplete classification and attempt lineage          |
+| empty, malformed, or non-object output | The response cannot be treated as a structured object               | Preserve parser-specific detail before any workflow-level mapping                    |
+| schema-invalid output                  | The object shape or primitive values violate the declared contract  | Keep it distinct from syntax failure and apply current validation behavior           |
+| domain-invalid output                  | The typed object violates a cross-field or range rule               | Keep Footnote semantic validation and its classification                             |
+| runtime error                          | The wrapper or provider integration failed outside the model output | Preserve the runtime error and provenance rather than converting it to a parse error |
+
+The matrix should include end-to-end fixtures showing how these results move
+from `reviewDecision.ts` into `reviewedChatWorkflow.ts`. In particular, it
+must record where `empty_output`, `non_json_object`, `invalid_json`, and
+`schema_invalid` are retained or intentionally mapped to the workflow's
+`malformed` outcome.
 
 ---
 
@@ -720,7 +740,12 @@ Compare a current typed call with the BAML-backed equivalent and verify that Foo
 - the rendered request when debugging is enabled,
 - attempt/failure history,
 - usage/cost,
-- cancellation reason.
+- cancellation reason,
+- normalized `ReviewDecision` values after `normalizeReviewDecision`,
+- `reasonCode` and `structuredOutputOutcome`,
+- `upstreamProvider` and `upstreamModel`,
+- `purpose`, `contractType`, and `applyOutcome` where the operation produces
+  them.
 
 ### Experiment D: planner migration dry run
 

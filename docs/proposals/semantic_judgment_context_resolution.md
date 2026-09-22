@@ -522,6 +522,14 @@ That means:
 - do not bypass retrieval or safety policy,
 - do not convert model confidence into policy confidence.
 
+The first benchmark integration must therefore have a shadow phase. It may
+record what the selector would have chosen, but it must not change
+`buildModelInput`, authorize an action, or remove deterministic context. An
+active-selection phase is a separate, explicit gate after the benchmark and
+human review. If a judgment is unavailable, fails, or is uncertain, the
+resolver must keep the complete deterministic context for that turn rather
+than partially applying a selection.
+
 The existing `EvaluatorAuthorityLevel` vocabulary (`observe | influence | enforce`) should not be reused casually. The architecture audit found that `observe` versus `influence` is currently largely declarative. Before JEV findings use those labels, the semantics should become real:
 
 ```text
@@ -778,7 +786,8 @@ A plausible sequence is:
 4. define `ContextResolutionResult`,
 5. build deterministic conversation graph seeds,
 6. add bounded semantic branch expansion,
-7. project only the selected context into `buildModelInput`,
+7. after an explicit active-selection gate, project only the selected context
+   into `buildModelInput`; the initial implementation remains shadow-only,
 8. add privacy/locality routing constraints,
 9. add compact workflow and TRACE summaries,
 10. keep judgment results observational until benchmark thresholds and governance rules are approved.
@@ -830,7 +839,11 @@ If those conditions are not met, keep the deterministic graph ideas that prove u
 - What content lifecycle owns downloaded Discord attachments?
 - Which attachment types can be inspected safely without sandboxing or additional malware controls?
 - How should edited/deleted messages affect historical context identity?
-- Should historical semantic-neighbor indexes be per-channel, per-thread, per-user, or deployment-wide?
+- Before any historical expansion is implemented, define and enforce
+  object-level authorization for `semantic-neighbor` and `retrieval-hit`
+  candidates. The index scope (channel, thread, user, or deployment) remains a
+  decision, but unauthorized nodes must be excluded from context, model input,
+  and trace output regardless of that choice.
 - How should local/cloud calibration differences affect routing thresholds?
 - What is the smallest useful canonical detail for reconstructing a selection decision without retaining duplicate private text?
 
