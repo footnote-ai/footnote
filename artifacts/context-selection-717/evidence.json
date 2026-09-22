@@ -1,6 +1,6 @@
 {
   "issue": 717,
-  "generatedAt": "2026-09-22T21:56:01.825Z",
+  "generatedAt": "2026-09-22T22:41:43.848Z",
   "corpus": {
     "caseCount": 100,
     "categoryCounts": {
@@ -39,7 +39,7 @@
       "averageEstimatedInputTokens": 55.3,
       "averageBranchExpansionCount": 0,
       "averageExpansionDepth": null,
-      "p95LatencyMs": 0.003199999999992542,
+      "p95LatencyMs": 0.0030999999999892225,
       "budget": 3
     },
     {
@@ -53,7 +53,7 @@
       "averageEstimatedInputTokens": 92.05,
       "averageBranchExpansionCount": 0,
       "averageExpansionDepth": null,
-      "p95LatencyMs": 0.0004000000000132786,
+      "p95LatencyMs": 0.0004999999999881766,
       "budget": 5
     },
     {
@@ -67,7 +67,7 @@
       "averageEstimatedInputTokens": 147.55,
       "averageBranchExpansionCount": 0,
       "averageExpansionDepth": null,
-      "p95LatencyMs": 0.0004999999999881766,
+      "p95LatencyMs": 0.0004000000000132786,
       "budget": 8
     },
     {
@@ -81,7 +81,7 @@
       "averageEstimatedInputTokens": 184.15,
       "averageBranchExpansionCount": 0,
       "averageExpansionDepth": null,
-      "p95LatencyMs": 0.0004000000000132786,
+      "p95LatencyMs": 0.0011000000000080945,
       "budget": 10
     },
     {
@@ -95,7 +95,7 @@
       "averageEstimatedInputTokens": 276.65,
       "averageBranchExpansionCount": 0,
       "averageExpansionDepth": null,
-      "p95LatencyMs": 0.0006000000000199179,
+      "p95LatencyMs": 0.0021000000000128694,
       "budget": 15
     },
     {
@@ -109,7 +109,7 @@
       "averageEstimatedInputTokens": 369.05,
       "averageBranchExpansionCount": 0,
       "averageExpansionDepth": null,
-      "p95LatencyMs": 0.0005000000000165983,
+      "p95LatencyMs": 0.0012000000000114142,
       "budget": 20
     },
     {
@@ -123,7 +123,7 @@
       "averageEstimatedInputTokens": 442.4,
       "averageBranchExpansionCount": 0,
       "averageExpansionDepth": null,
-      "p95LatencyMs": 0.0012000000000114142,
+      "p95LatencyMs": 0.0006000000000199179,
       "budget": 24
     },
     {
@@ -137,7 +137,7 @@
       "averageEstimatedInputTokens": 53.35,
       "averageBranchExpansionCount": 0,
       "averageExpansionDepth": null,
-      "p95LatencyMs": 0.3744000000000085,
+      "p95LatencyMs": 0.393100000000004,
       "budget": 3
     },
     {
@@ -151,7 +151,7 @@
       "averageEstimatedInputTokens": 90.35,
       "averageBranchExpansionCount": 0,
       "averageExpansionDepth": null,
-      "p95LatencyMs": 0.1584999999999468,
+      "p95LatencyMs": 0.1810000000000116,
       "budget": 5
     },
     {
@@ -165,7 +165,7 @@
       "averageEstimatedInputTokens": 145.85,
       "averageBranchExpansionCount": 0,
       "averageExpansionDepth": null,
-      "p95LatencyMs": 0.12160000000000082,
+      "p95LatencyMs": 0.16559999999998354,
       "budget": 8
     },
     {
@@ -179,7 +179,7 @@
       "averageEstimatedInputTokens": 182.85,
       "averageBranchExpansionCount": 0,
       "averageExpansionDepth": null,
-      "p95LatencyMs": 0.08670000000000755,
+      "p95LatencyMs": 0.08370000000002165,
       "budget": 10
     },
     {
@@ -193,7 +193,7 @@
       "averageEstimatedInputTokens": 275.35,
       "averageBranchExpansionCount": 0,
       "averageExpansionDepth": null,
-      "p95LatencyMs": 0.08809999999999718,
+      "p95LatencyMs": 0.08940000000001191,
       "budget": 15
     },
     {
@@ -207,7 +207,7 @@
       "averageEstimatedInputTokens": 367.85,
       "averageBranchExpansionCount": 0,
       "averageExpansionDepth": null,
-      "p95LatencyMs": 0.08390000000002829,
+      "p95LatencyMs": 0.08020000000001914,
       "budget": 20
     },
     {
@@ -221,7 +221,7 @@
       "averageEstimatedInputTokens": 441.85,
       "averageBranchExpansionCount": 0,
       "averageExpansionDepth": null,
-      "p95LatencyMs": 0.08289999999999509,
+      "p95LatencyMs": 0.09449999999998226,
       "budget": 24
     },
     {
@@ -235,7 +235,7 @@
       "averageEstimatedInputTokens": 53.35,
       "averageBranchExpansionCount": 0,
       "averageExpansionDepth": null,
-      "p95LatencyMs": 0.12559999999996307,
+      "p95LatencyMs": 0.11240000000003647,
       "budget": 3
     },
     {
@@ -249,7 +249,7 @@
       "averageEstimatedInputTokens": 90.35,
       "averageBranchExpansionCount": 0,
       "averageExpansionDepth": null,
-      "p95LatencyMs": 0.084699999999998,
+      "p95LatencyMs": 0.08400000000000318,
       "budget": 5
     },
     {
@@ -263,7 +263,7 @@
       "averageEstimatedInputTokens": 145.85,
       "averageBranchExpansionCount": 0,
       "averageExpansionDepth": null,
-      "p95LatencyMs": 0.07859999999999445,
+      "p95LatencyMs": 0.07850000000001955,
       "budget": 8
     },
     {
@@ -277,7 +277,7 @@
       "averageEstimatedInputTokens": 182.85,
       "averageBranchExpansionCount": 0,
       "averageExpansionDepth": null,
-      "p95LatencyMs": 0.0858000000000061,
+      "p95LatencyMs": 0.07840000000004466,
       "budget": 10
     },
     {
@@ -291,7 +291,7 @@
       "averageEstimatedInputTokens": 275.35,
       "averageBranchExpansionCount": 0,
       "averageExpansionDepth": null,
-      "p95LatencyMs": 0.08730000000002747,
+      "p95LatencyMs": 0.08530000000001792,
       "budget": 15
     },
     {
@@ -305,7 +305,7 @@
       "averageEstimatedInputTokens": 367.85,
       "averageBranchExpansionCount": 0,
       "averageExpansionDepth": null,
-      "p95LatencyMs": 0.080600000000004,
+      "p95LatencyMs": 0.07780000000002474,
       "budget": 20
     },
     {
@@ -319,7 +319,7 @@
       "averageEstimatedInputTokens": 441.85,
       "averageBranchExpansionCount": 0,
       "averageExpansionDepth": null,
-      "p95LatencyMs": 0.083500000000015,
+      "p95LatencyMs": 0.0817000000000121,
       "budget": 24
     },
     {
@@ -333,7 +333,7 @@
       "averageEstimatedInputTokens": 53.35,
       "averageBranchExpansionCount": 0,
       "averageExpansionDepth": 0,
-      "p95LatencyMs": 0.1623000000000161,
+      "p95LatencyMs": 0.16870000000000118,
       "budget": 3
     },
     {
@@ -347,7 +347,7 @@
       "averageEstimatedInputTokens": 90.35,
       "averageBranchExpansionCount": 0,
       "averageExpansionDepth": 0,
-      "p95LatencyMs": 0.08099999999996044,
+      "p95LatencyMs": 0.09489999999999554,
       "budget": 5
     },
     {
@@ -361,7 +361,7 @@
       "averageEstimatedInputTokens": 145.85,
       "averageBranchExpansionCount": 0,
       "averageExpansionDepth": 0,
-      "p95LatencyMs": 0.09529999999995198,
+      "p95LatencyMs": 0.14370000000002392,
       "budget": 8
     },
     {
@@ -375,7 +375,7 @@
       "averageEstimatedInputTokens": 182.85,
       "averageBranchExpansionCount": 0,
       "averageExpansionDepth": 0,
-      "p95LatencyMs": 0.08830000000000382,
+      "p95LatencyMs": 0.09519999999997708,
       "budget": 10
     },
     {
@@ -389,7 +389,7 @@
       "averageEstimatedInputTokens": 265.75,
       "averageBranchExpansionCount": 2.5,
       "averageExpansionDepth": 1,
-      "p95LatencyMs": 0.14549999999997,
+      "p95LatencyMs": 0.09080000000000155,
       "budget": 15
     },
     {
@@ -403,7 +403,7 @@
       "averageEstimatedInputTokens": 275.95,
       "averageBranchExpansionCount": 3.05,
       "averageExpansionDepth": 1,
-      "p95LatencyMs": 0.09609999999997854,
+      "p95LatencyMs": 0.0835999999999899,
       "budget": 20
     },
     {
@@ -417,7 +417,7 @@
       "averageEstimatedInputTokens": 275.95,
       "averageBranchExpansionCount": 3.05,
       "averageExpansionDepth": 1,
-      "p95LatencyMs": 0.17470000000002983,
+      "p95LatencyMs": 0.09199999999998454,
       "budget": 24
     }
   ],
@@ -433,7 +433,7 @@
       "averageEstimatedInputTokens": 441.85,
       "averageBranchExpansionCount": 0,
       "averageExpansionDepth": null,
-      "p95LatencyMs": 0.09210000000001628,
+      "p95LatencyMs": 0.08240000000000691,
       "edges": []
     },
     {
@@ -447,7 +447,7 @@
       "averageEstimatedInputTokens": 441.85,
       "averageBranchExpansionCount": 0,
       "averageExpansionDepth": null,
-      "p95LatencyMs": 0.08850000000001046,
+      "p95LatencyMs": 0.07900000000000773,
       "edges": [
         "reply"
       ]
@@ -551,7 +551,7 @@
         "averageEstimatedInputTokens": 53.35,
         "averageBranchExpansionCount": 0,
         "averageExpansionDepth": null,
-        "p95LatencyMs": 0.09950000000003456,
+        "p95LatencyMs": 0.1028999999999769,
         "budget": 3,
         "seedCount": 3,
         "maxDepth": null
@@ -583,7 +583,7 @@
         "averageEstimatedInputTokens": 90.35,
         "averageBranchExpansionCount": 0,
         "averageExpansionDepth": null,
-        "p95LatencyMs": 0.08449999999993452,
+        "p95LatencyMs": 0.08120000000002392,
         "budget": 5,
         "seedCount": 5,
         "maxDepth": null
@@ -615,7 +615,7 @@
         "averageEstimatedInputTokens": 145.85,
         "averageBranchExpansionCount": 0,
         "averageExpansionDepth": null,
-        "p95LatencyMs": 0.09600000000000364,
+        "p95LatencyMs": 0.13900000000001,
         "budget": 8,
         "seedCount": 8,
         "maxDepth": null
@@ -647,7 +647,7 @@
         "averageEstimatedInputTokens": 182.85,
         "averageBranchExpansionCount": 0,
         "averageExpansionDepth": null,
-        "p95LatencyMs": 0.09739999999999327,
+        "p95LatencyMs": 0.07880000000000109,
         "budget": 10,
         "seedCount": 10,
         "maxDepth": null
@@ -679,7 +679,7 @@
         "averageEstimatedInputTokens": 275.35,
         "averageBranchExpansionCount": 0,
         "averageExpansionDepth": null,
-        "p95LatencyMs": 0.08230000000003201,
+        "p95LatencyMs": 0.0784000000001015,
         "budget": 15,
         "seedCount": 15,
         "maxDepth": null
@@ -702,6 +702,38 @@
       }
     ]
   },
+  "pairedComparisons": [
+    {
+      "baseline": "bm25",
+      "challenger": "bm25_graph_expansion",
+      "metric": "necessary_recall",
+      "pairedCaseCount": 95,
+      "challengerBetterCases": 5,
+      "equalCases": 90,
+      "baselineBetterCases": 0,
+      "meanDifference": 0.02631578947368421,
+      "bootstrap95Ci": [
+        0.005263157894736842,
+        0.05263157894736842
+      ],
+      "bootstrapSamples": 5000
+    },
+    {
+      "baseline": "bm25",
+      "challenger": "bm25_graph_expansion",
+      "metric": "useful_precision",
+      "pairedCaseCount": 100,
+      "challengerBetterCases": 95,
+      "equalCases": 5,
+      "baselineBetterCases": 0,
+      "meanDifference": 0.053082309847015764,
+      "bootstrap95Ci": [
+        0.046385100193923744,
+        0.059963639301874656
+      ],
+      "bootstrapSamples": 5000
+    }
+  ],
   "limitations": [
     "No neural embedding, reranker, OpenJEV, or generated answer call is made.",
     "The deterministic support proxy remains the downstream answerability check; provider-backed generation is a separate blocked gate."

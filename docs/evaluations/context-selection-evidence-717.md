@@ -54,6 +54,24 @@ reached 0.967 with 4.9 average messages. At budgets 8, 10, and 15 recursive
 expansion retained 0.967 recall with 6.4–6.6 average messages. This is a
 small synthetic result; it does not justify a production graph engine.
 
+## Paired BM25 comparison
+
+The same cases were scored by plain BM25 and by BM25 plus bounded graph
+expansion. The comparison counts how often the graph version did better on an
+individual case, then uses a deterministic paired bootstrap to estimate the
+uncertainty around the average difference.
+
+| Measure                  | Cases | Graph better | Equal | BM25 better | Mean difference | Bootstrap 95% CI |
+| ------------------------ | ----: | -----------: | ----: | ----------: | --------------: | ---------------- |
+| Required-message recall  |    95 |            5 |    90 |           0 |          +0.026 | [+0.005, +0.053] |
+| Useful-message precision |   100 |           95 |     5 |           0 |          +0.053 | [+0.046, +0.060] |
+
+The graph version improved recall on only five paired cases, but did not lose
+recall on any paired case. Its larger and more consistent gain was selecting
+useful messages: it improved precision on 95 cases and tied BM25 on five.
+This is still evidence about these synthetic fixtures, not proof of production
+Discord behavior.
+
 ## Downstream support proxy
 
 The deterministic support proxy now covers all 20 categories and includes a

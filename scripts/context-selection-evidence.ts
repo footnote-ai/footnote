@@ -56,6 +56,19 @@ type BranchPruningRow = EvidenceAggregate & {
     maxDepth: number | null;
 };
 
+type PairedComparison = {
+    baseline: ContextSelectionMethod;
+    challenger: ContextSelectionMethod;
+    metric: 'necessary_recall' | 'useful_precision';
+    pairedCaseCount: number;
+    challengerBetterCases: number;
+    equalCases: number;
+    baselineBetterCases: number;
+    meanDifference: number | null;
+    bootstrap95Ci: [number, number] | null;
+    bootstrapSamples: number;
+};
+
 type EvidenceReport = {
     issue: 717;
     generatedAt: string;
@@ -70,6 +83,7 @@ type EvidenceReport = {
         comparison: string;
         rows: BranchPruningRow[];
     };
+    pairedComparisons: PairedComparison[];
     limitations: string[];
 };
 
@@ -77,6 +91,48 @@ const average = (values: number[]): number | null =>
     values.length === 0
         ? null
         : values.reduce((total, value) => total + value, 0) / values.length;
+
+const percentile = (values: number[], percentage: number): number | null => {
+    if (values.length === 0) {
+        return null;
+    }
+    const sorted = [...values].sort((left, right) => left - right);
+    const index = Math.min(
+        sorted.length - 1,
+        Math.max(0, Math.ceil((percentage / 100) * sorted.length) - 1)
+    );
+    return sorted[index] ?? null;
+};
+
+const createRandom = (seed: number): (() => number) => {
+    let state = seed >>> 0;
+    return () => {
+        state = (1664525 * state + 1013904223) >>> 0;
+        return state / 0x100000000;
+    };
+};
+
+const pairedBootstrapInterval = (
+    differences: number[],
+    samples: number,
+    seed: number
+): [number, number] | null => {
+    if (differences.length === 0) {
+        return null;
+    }
+    const random = createRandom(seed);
+    const estimates: number[] = [];
+    for (let sample = 0; sample < samples; sample += 1) {
+        let total = 0;
+        for (let index = 0; index < differences.length; index += 1) {
+            const selected =
+                differences[Math.floor(random() * differences.length)];
+            total += selected ?? 0;
+        }
+        estimates.push(total / differences.length);
+    }
+    return [percentile(estimates, 2.5) ?? 0, percentile(estimates, 97.5) ?? 0];
+};
 
 const summarize = (
     label: string,
@@ -226,6 +282,62 @@ const runBranchPruning = (
     });
 };
 
+const runPairedComparison = (
+    corpus: ContextBenchmarkCase[],
+    metric: PairedComparison['metric']
+): PairedComparison => {
+    const differences: number[] = [];
+    let challengerBetterCases = 0;
+    let equalCases = 0;
+    let baselineBetterCases = 0;
+    for (const entry of corpus) {
+        const baseline = buildCaseMetric(
+            entry,
+            selectContextAtBudget('bm25', entry, 24)
+        );
+        const challenger = buildCaseMetric(
+            entry,
+            selectContextAtBudget('bm25_graph_expansion', entry, 24)
+        );
+        const baselineValue =
+            metric === 'necessary_recall'
+                ? baseline.necessaryRecall
+                : baseline.usefulContextPrecision;
+        const challengerValue =
+            metric === 'necessary_recall'
+                ? challenger.necessaryRecall
+                : challenger.usefulContextPrecision;
+        if (baselineValue === null || challengerValue === null) {
+            continue;
+        }
+        const difference = challengerValue - baselineValue;
+        differences.push(difference);
+        if (difference > 0) {
+            challengerBetterCases += 1;
+        } else if (difference < 0) {
+            baselineBetterCases += 1;
+        } else {
+            equalCases += 1;
+        }
+    }
+    return {
+        baseline: 'bm25',
+        challenger: 'bm25_graph_expansion',
+        metric,
+        pairedCaseCount: differences.length,
+        challengerBetterCases,
+        equalCases,
+        baselineBetterCases,
+        meanDifference: average(differences),
+        bootstrap95Ci: pairedBootstrapInterval(
+            differences,
+            5000,
+            metric === 'necessary_recall' ? 717 : 718
+        ),
+        bootstrapSamples: 5000,
+    };
+};
+
 const format = (value: number | null): string =>
     value === null ? 'n/a' : value.toFixed(3);
 
@@ -262,6 +374,17 @@ const writeSummary = (report: EvidenceReport): void => {
         ...report.branchPruning.rows.map(
             (row) =>
                 `| ${row.label} | ${row.budget} | ${format(row.necessaryMessageRecall)} | ${format(row.usefulContextPrecision)} | ${format(row.distractingContextRate)} | ${format(row.averageFinalMessageCount)} | ${format(row.averageBranchExpansionCount)} | ${format(row.averageExpansionDepth)} |`
+        ),
+        '',
+        '## Paired BM25 comparison',
+        '',
+        'These rows compare both methods on the same fixture cases. A positive difference means graph expansion did better than BM25. The interval comes from a deterministic paired bootstrap, which repeatedly resamples the same case-level differences.',
+        '',
+        '| Metric | Paired cases | Graph better | Equal | BM25 better | Mean difference | Bootstrap 95% CI |',
+        '| --- | ---: | ---: | ---: | ---: | ---: | --- |',
+        ...report.pairedComparisons.map(
+            (comparison) =>
+                `| ${comparison.metric} | ${comparison.pairedCaseCount} | ${comparison.challengerBetterCases} | ${comparison.equalCases} | ${comparison.baselineBetterCases} | ${format(comparison.meanDifference)} | ${comparison.bootstrap95Ci === null ? 'n/a' : `[${format(comparison.bootstrap95Ci[0])}, ${format(comparison.bootstrap95Ci[1])}]`} |`
         ),
         '',
         '## Interpretation guardrails',
@@ -304,6 +427,10 @@ const main = (): void => {
                 'top-N BM25 versus three-seed bounded recursive graph expansion',
             rows: runBranchPruning(corpus),
         },
+        pairedComparisons: [
+            runPairedComparison(corpus, 'necessary_recall'),
+            runPairedComparison(corpus, 'useful_precision'),
+        ],
         limitations: [
             'No neural embedding, reranker, OpenJEV, or generated answer call is made.',
             'The deterministic support proxy remains the downstream answerability check; provider-backed generation is a separate blocked gate.',

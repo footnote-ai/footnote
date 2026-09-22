@@ -121,6 +121,14 @@ benchmark result. The ablation shows adjacent and same-author edges improved
 precision/message reduction more clearly than reply-only expansion in this
 corpus; no edge is being promoted to a production contract.
 
+The paired comparison uses the same cases for BM25 and the graph hybrid. For
+required-message recall, graph expansion was better on 5 of 95 comparable cases,
+tied on 90, and lost on none; the average improvement was `+0.026` with a
+paired-bootstrap 95% interval of `[+0.005, +0.053]`. For useful-message
+precision, graph expansion was better on 95 of 100 cases, tied on 5, and lost
+on none; the average improvement was `+0.053`, with interval `[+0.046,
++0.060]`. These are fixture-level comparisons, not production estimates.
+
 ## Downstream support proxy
 
 A bounded 20-case support proxy compared the current window, BM25, and the

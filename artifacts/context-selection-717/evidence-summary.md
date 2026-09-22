@@ -1,6 +1,6 @@
 # Context-selection evidence expansion (#717)
 
-Generated: 2026-09-22T21:56:01.825Z
+Generated: 2026-09-22T22:41:43.848Z
 Corpus: 100 synthetic cases
 Category counts: {"trigger_only":5,"immediate_predecessor":5,"several_turns_back":5,"old_relevant_history":5,"reply_ancestry":5,"one_relevant_branch":5,"simultaneous_conversations":5,"topic_switch":5,"pronoun_reference":5,"same_author_continuation":5,"paraphrased_reference":5,"scattered_context":5,"irrelevant_high_similarity":5,"historical_context_not_recovered":5,"coreference_ambiguous":5,"semantic_paraphrase":5,"misleading_overlap_hard":5,"topic_resumption":5,"speaker_sensitive":5,"negative_historical_match":5}
 
@@ -11,31 +11,31 @@ Category counts: {"trigger_only":5,"immediate_predecessor":5,"several_turns_back
 | current_window | 3 | 0.167 | 0.083 | 0.000 | 3.000 | 55.300 | 0.003 |
 | current_window | 5 | 0.233 | 0.070 | 0.000 | 5.000 | 92.050 | 0.000 |
 | current_window | 8 | 0.233 | 0.050 | 0.006 | 8.000 | 147.550 | 0.000 |
-| current_window | 10 | 0.333 | 0.055 | 0.015 | 10.000 | 184.150 | 0.000 |
-| current_window | 15 | 0.367 | 0.043 | 0.013 | 15.000 | 276.650 | 0.001 |
+| current_window | 10 | 0.333 | 0.055 | 0.015 | 10.000 | 184.150 | 0.001 |
+| current_window | 15 | 0.367 | 0.043 | 0.013 | 15.000 | 276.650 | 0.002 |
 | current_window | 20 | 0.400 | 0.035 | 0.025 | 20.000 | 369.050 | 0.001 |
 | current_window | 24 | 0.500 | 0.035 | 0.023 | 24.000 | 442.400 | 0.001 |
-| bm25 | 3 | 0.933 | 0.467 | 0.133 | 3.000 | 53.350 | 0.374 |
-| bm25 | 5 | 0.933 | 0.280 | 0.080 | 5.000 | 90.350 | 0.158 |
-| bm25 | 8 | 0.933 | 0.175 | 0.050 | 8.000 | 145.850 | 0.122 |
-| bm25 | 10 | 0.933 | 0.145 | 0.040 | 10.000 | 182.850 | 0.087 |
-| bm25 | 15 | 0.933 | 0.100 | 0.027 | 15.000 | 275.350 | 0.088 |
-| bm25 | 20 | 0.933 | 0.075 | 0.027 | 20.000 | 367.850 | 0.084 |
-| bm25 | 24 | 0.933 | 0.063 | 0.027 | 24.000 | 441.850 | 0.083 |
-| bm25_reply_expansion | 3 | 0.933 | 0.467 | 0.133 | 3.000 | 53.350 | 0.126 |
-| bm25_reply_expansion | 5 | 0.933 | 0.280 | 0.080 | 5.000 | 90.350 | 0.085 |
+| bm25 | 3 | 0.933 | 0.467 | 0.133 | 3.000 | 53.350 | 0.393 |
+| bm25 | 5 | 0.933 | 0.280 | 0.080 | 5.000 | 90.350 | 0.181 |
+| bm25 | 8 | 0.933 | 0.175 | 0.050 | 8.000 | 145.850 | 0.166 |
+| bm25 | 10 | 0.933 | 0.145 | 0.040 | 10.000 | 182.850 | 0.084 |
+| bm25 | 15 | 0.933 | 0.100 | 0.027 | 15.000 | 275.350 | 0.089 |
+| bm25 | 20 | 0.933 | 0.075 | 0.027 | 20.000 | 367.850 | 0.080 |
+| bm25 | 24 | 0.933 | 0.063 | 0.027 | 24.000 | 441.850 | 0.094 |
+| bm25_reply_expansion | 3 | 0.933 | 0.467 | 0.133 | 3.000 | 53.350 | 0.112 |
+| bm25_reply_expansion | 5 | 0.933 | 0.280 | 0.080 | 5.000 | 90.350 | 0.084 |
 | bm25_reply_expansion | 8 | 0.933 | 0.175 | 0.050 | 8.000 | 145.850 | 0.079 |
-| bm25_reply_expansion | 10 | 0.933 | 0.145 | 0.040 | 10.000 | 182.850 | 0.086 |
-| bm25_reply_expansion | 15 | 0.933 | 0.100 | 0.027 | 15.000 | 275.350 | 0.087 |
-| bm25_reply_expansion | 20 | 0.933 | 0.075 | 0.027 | 20.000 | 367.850 | 0.081 |
-| bm25_reply_expansion | 24 | 0.933 | 0.063 | 0.027 | 24.000 | 441.850 | 0.084 |
-| bm25_graph_expansion | 3 | 0.933 | 0.467 | 0.133 | 3.000 | 53.350 | 0.162 |
-| bm25_graph_expansion | 5 | 0.933 | 0.280 | 0.080 | 5.000 | 90.350 | 0.081 |
-| bm25_graph_expansion | 8 | 0.933 | 0.175 | 0.050 | 8.000 | 145.850 | 0.095 |
-| bm25_graph_expansion | 10 | 0.933 | 0.145 | 0.040 | 10.000 | 182.850 | 0.088 |
-| bm25_graph_expansion | 15 | 0.967 | 0.117 | 0.027 | 14.500 | 265.750 | 0.145 |
-| bm25_graph_expansion | 20 | 0.967 | 0.116 | 0.025 | 15.050 | 275.950 | 0.096 |
-| bm25_graph_expansion | 24 | 0.967 | 0.116 | 0.025 | 15.050 | 275.950 | 0.175 |
+| bm25_reply_expansion | 10 | 0.933 | 0.145 | 0.040 | 10.000 | 182.850 | 0.078 |
+| bm25_reply_expansion | 15 | 0.933 | 0.100 | 0.027 | 15.000 | 275.350 | 0.085 |
+| bm25_reply_expansion | 20 | 0.933 | 0.075 | 0.027 | 20.000 | 367.850 | 0.078 |
+| bm25_reply_expansion | 24 | 0.933 | 0.063 | 0.027 | 24.000 | 441.850 | 0.082 |
+| bm25_graph_expansion | 3 | 0.933 | 0.467 | 0.133 | 3.000 | 53.350 | 0.169 |
+| bm25_graph_expansion | 5 | 0.933 | 0.280 | 0.080 | 5.000 | 90.350 | 0.095 |
+| bm25_graph_expansion | 8 | 0.933 | 0.175 | 0.050 | 8.000 | 145.850 | 0.144 |
+| bm25_graph_expansion | 10 | 0.933 | 0.145 | 0.040 | 10.000 | 182.850 | 0.095 |
+| bm25_graph_expansion | 15 | 0.967 | 0.117 | 0.027 | 14.500 | 265.750 | 0.091 |
+| bm25_graph_expansion | 20 | 0.967 | 0.116 | 0.025 | 15.050 | 275.950 | 0.084 |
+| bm25_graph_expansion | 24 | 0.967 | 0.116 | 0.025 | 15.050 | 275.950 | 0.092 |
 
 ## Deterministic-edge ablations
 
@@ -63,6 +63,15 @@ Category counts: {"trigger_only":5,"immediate_predecessor":5,"several_turns_back
 | recursive_graph_10 | 10 | 0.967 | 0.267 | 0.056 | 6.550 | 3.550 | 1.000 |
 | top_n_bm25_15 | 15 | 0.933 | 0.100 | 0.027 | 15.000 | 0.000 | n/a |
 | recursive_graph_15 | 15 | 0.967 | 0.267 | 0.056 | 6.550 | 3.550 | 1.000 |
+
+## Paired BM25 comparison
+
+These rows compare both methods on the same fixture cases. A positive difference means graph expansion did better than BM25. The interval comes from a deterministic paired bootstrap, which repeatedly resamples the same case-level differences.
+
+| Metric | Paired cases | Graph better | Equal | BM25 better | Mean difference | Bootstrap 95% CI |
+| --- | ---: | ---: | ---: | ---: | ---: | --- |
+| necessary_recall | 95 | 5 | 90 | 0 | 0.026 | [0.005, 0.053] |
+| useful_precision | 100 | 95 | 5 | 0 | 0.053 | [0.046, 0.060] |
 
 ## Interpretation guardrails
 
