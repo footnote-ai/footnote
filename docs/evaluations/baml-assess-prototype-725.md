@@ -51,6 +51,15 @@ particular, accepting an incomplete `revise` decision would weaken the current
 bounded workflow contract unless Footnote retains a post-parse validation and
 normalization layer.
 
+The follow-on offline matrix in
+`docs/evaluations/baml-assess-semantic-equivalence-726.md` adds BAML block
+assertions for the conditional `revise` and `misaligned` rules. Those
+assertions reject the tested invalid cases, but optional `null` values produce
+assertion-evaluation errors rather than the current Footnote failure envelope.
+The matrix also finds permissive coercion of a numeric `reviewReason`, an
+out-of-range temperament axis, and a malformed nested concern object. These
+are semantic differences, not cleanup opportunities.
+
 ## Request rendering
 
 The generated request builder produced a synthetic OpenAI Responses request
