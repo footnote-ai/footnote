@@ -68,6 +68,59 @@ test('TrustGraph target configuration accepts an explicit bounded target set', (
     ]);
 });
 
+test('TrustGraph target configuration preserves the NYC records target as operator-owned data', () => {
+    const config = buildExecutionContractTrustGraphSection(
+        {
+            EXECUTION_CONTRACT_TRUSTGRAPH_ENABLED: 'true',
+            EXECUTION_CONTRACT_TRUSTGRAPH_TARGETS: JSON.stringify([
+                {
+                    id: 'nyc-sept11',
+                    flow: 'sept11-retrieval-deepseek-0731-hybrid-bge-small-raw',
+                    collection: 'sept11-tranche-0-retrieval',
+                    description:
+                        'NYC September 11 records: primary-source municipal records concerning response, cleanup, environmental conditions, inspections, agencies, residents, and recovery work.',
+                    workspaceRef: 'sept11',
+                    service: 'document-rag',
+                },
+            ]),
+        },
+        () => undefined
+    );
+
+    assert.deepEqual(config.adapter.targets, [
+        {
+            id: 'nyc-sept11',
+            flow: 'sept11-retrieval-deepseek-0731-hybrid-bge-small-raw',
+            collection: 'sept11-tranche-0-retrieval',
+            description:
+                'NYC September 11 records: primary-source municipal records concerning response, cleanup, environmental conditions, inspections, agencies, residents, and recovery work.',
+            workspaceRef: 'sept11',
+            service: 'document-rag',
+        },
+    ]);
+});
+
+test('TrustGraph target configuration rejects an unsupported service', () => {
+    assert.throws(
+        () =>
+            buildExecutionContractTrustGraphSection(
+                {
+                    EXECUTION_CONTRACT_TRUSTGRAPH_ENABLED: 'true',
+                    EXECUTION_CONTRACT_TRUSTGRAPH_TARGETS: JSON.stringify([
+                        {
+                            id: 'invalid-service',
+                            flow: 'flow-a',
+                            collection: 'collection-a',
+                            description: 'Invalid service target.',
+                            service: 'local-rag',
+                        },
+                    ]),
+                },
+                () => undefined
+            ),
+        /execution_contract_trustgraph_invalid_targets_invalid_service_0/
+    );
+});
 test('TrustGraph target configuration rejects duplicate identities', () => {
     assert.throws(
         () =>
