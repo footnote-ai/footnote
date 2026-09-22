@@ -1,0 +1,119 @@
+{
+    "results": [
+        {
+            "name": "valid_finalize",
+            "status": "parsed",
+            "parsed": {
+                "reviewDecision": "finalize",
+                "reviewReason": "The draft is complete.",
+                "revisionInstruction": null,
+                "traceAlignment": null,
+                "traceAlignmentReason": null,
+                "finalTemperament": null,
+                "moduleHints": null,
+                "concerns": null,
+                "routingHints": null
+            }
+        },
+        {
+            "name": "valid_revise",
+            "status": "parsed",
+            "parsed": {
+                "reviewDecision": "revise",
+                "reviewReason": "The citation needs tightening.",
+                "revisionInstruction": "Name the source before stating the conclusion.",
+                "traceAlignment": null,
+                "traceAlignmentReason": null,
+                "finalTemperament": null,
+                "moduleHints": null,
+                "concerns": null,
+                "routingHints": null
+            }
+        },
+        {
+            "name": "malformed_json",
+            "status": "failed",
+            "error": "BamlError: Failed to coerce value: ParsingError { scope: [], reason: \"Failed while parsing required fields: missing=1, unparsed=0\", causes: [ParsingError { scope: [], reason: \"Missing required field: reviewReason\", causes: [] }] }"
+        },
+        {
+            "name": "markdown_fenced_json",
+            "status": "parsed",
+            "parsed": {
+                "reviewDecision": "finalize",
+                "reviewReason": "The draft is complete.",
+                "revisionInstruction": null,
+                "traceAlignment": null,
+                "traceAlignmentReason": null,
+                "finalTemperament": null,
+                "moduleHints": null,
+                "concerns": null,
+                "routingHints": null
+            }
+        },
+        {
+            "name": "non_object_json",
+            "status": "failed",
+            "error": "BamlError: Failed to coerce value: ParsingError { scope: [], reason: \"Failed while parsing required fields: missing=2, unparsed=0\", causes: [ParsingError { scope: [], reason: \"Missing required field: reviewDecision\", causes: [] }, ParsingError { scope: [], reason: \"Missing required field: reviewReason\", causes: [] }] }"
+        },
+        {
+            "name": "schema_invalid_enum",
+            "status": "failed",
+            "error": "BamlError: Failed to coerce value: ParsingError { scope: [], reason: \"Failed while parsing required fields: missing=0, unparsed=1\", causes: [ParsingError { scope: [], reason: \"Failed to parse field reviewDecision: reviewDecision: Failed to find any (\\\"finalize\\\" @stream.done | \\\"revise\\\" @stream.done) in 2 items\\n  - reviewDecision: Expected (\\\"finalize\\\" @stream.done | \\\"revise\\\" @stream.done), got String(\\\"maybe\\\", Complete).\\n  - reviewDecision: Expected (\\\"finalize\\\" @stream.done | \\\"revise\\\" @stream.done), got String(\\\"maybe\\\", Complete).\", causes: [ParsingError { scope: [\"reviewDecision\"], reason: \"Failed to find any (\\\"finalize\\\" @stream.done | \\\"revise\\\" @stream.done) in 2 items\", causes: [ParsingError { scope: [\"reviewDecision\"], reason: \"Expected (\\\"finalize\\\" @stream.done | \\\"revise\\\" @stream.done), got String(\\\"maybe\\\", Complete).\", causes: [] }, ParsingError { scope: [\"reviewDecision\"], reason: \"Expected (\\\"finalize\\\" @stream.done | \\\"revise\\\" @stream.done), got String(\\\"maybe\\\", Complete).\", causes: [] }] }] }] }"
+        },
+        {
+            "name": "incomplete_revise",
+            "status": "parsed",
+            "parsed": {
+                "reviewDecision": "revise",
+                "reviewReason": "Needs more work.",
+                "revisionInstruction": null,
+                "traceAlignment": null,
+                "traceAlignmentReason": null,
+                "finalTemperament": null,
+                "moduleHints": null,
+                "concerns": null,
+                "routingHints": null
+            }
+        },
+        {
+            "name": "refusal",
+            "status": "failed",
+            "error": "BamlError: Failed to coerce value: ParsingError { scope: [], reason: \"Failed while parsing required fields: missing=2, unparsed=0\", causes: [ParsingError { scope: [], reason: \"Missing required field: reviewDecision\", causes: [] }, ParsingError { scope: [], reason: \"Missing required field: reviewReason\", causes: [] }] }"
+        },
+        {
+            "name": "unexpected_extra_field",
+            "status": "parsed",
+            "parsed": {
+                "reviewDecision": "finalize",
+                "reviewReason": "The draft is complete.",
+                "revisionInstruction": null,
+                "traceAlignment": null,
+                "traceAlignmentReason": null,
+                "finalTemperament": null,
+                "moduleHints": null,
+                "concerns": null,
+                "routingHints": null
+            }
+        }
+    ],
+    "cancellation": "BamlAbortError",
+    "request": {
+        "url": "https://api.openai.com/v1/responses",
+        "method": "POST",
+        "headerNames": ["content-type", "authorization", "baml-original-url"],
+        "body": {
+            "model": "gpt-5-mini",
+            "input": [
+                {
+                    "role": "system",
+                    "content": [
+                        {
+                            "type": "input_text",
+                            "text": "Return plain JSON only.\nSchema:\nAnswer in JSON using this schema:\n{\n  reviewDecision: \"finalize\" or \"revise\",\n  reviewReason: string,\n  revisionInstruction: string or null,\n  traceAlignment: \"aligned\" or \"misaligned\" or null,\n  traceAlignmentReason: string or null,\n  finalTemperament: {\n    tightness: int or null,\n    rationale: int or null,\n    attribution: int or null,\n    caution: int or null,\n    extent: int or null,\n  } or null,\n  moduleHints: string[] or null,\n  concerns: {\n    length: \"too_long\" or \"ok\" or null,\n    style: \"too_stiff\" or \"ok\" or null,\n    evidence: \"needs_caution\" or \"ok\" or null,\n  } or null,\n  routingHints: string[] or null,\n}\nChoose \\\"finalize\\\" when the draft is complete, accurate, and ready.\nChoose \\\"revise\\\" only when one additional revision would materially improve quality.\nProvide concise fields and keep revisionInstruction specific and short.\nDo not include markdown or extra keys.\n\nDraft:\nThe draft answer.\n\nReview context:\nCheck factual grounding and concise style."
+                        }
+                    ]
+                }
+            ]
+        }
+    }
+}
