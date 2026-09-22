@@ -111,6 +111,15 @@ Footnote side still owns or would need to own:
 The BAML source is shorter, but the matrix shows that cosmetic source-line
 reduction is not semantic duplication removal. #727 remains unresolved.
 
+### Why not keep both?
+
+Adding BAML without deleting anything would leave Footnote maintaining the old
+schema, parser, validator, failure classifier, and provider compatibility code
+alongside BAML and its generated client. That would increase the number of
+places a contract change can drift. The experiment only counts as a win if the
+typed BAML layer lets Footnote remove enough duplicated work while preserving
+the policy-sensitive distinctions above.
+
 ## Maintenance-surface and contract-change audit
 
 The report records measured line counts from this checkout and a modeled

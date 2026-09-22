@@ -3,6 +3,22 @@
 This directory is an isolated, non-production prototype. It is not included
 in a Footnote package and does not change the backend assess path.
 
+## What this experiment asks
+
+BAML puts an LLM function, its prompt, and its expected typed output in one
+place, then generates TypeScript client code. This experiment checks whether
+that removes duplicated Footnote maintenance or only adds another layer.
+
+For example, the prototype can parse an object with `tightness: 6` because the
+field is numeric. Footnote's current contract rejects that value because its
+allowed range is smaller. A successful BAML parse is therefore not enough:
+Footnote may still need its own semantic validation and failure classification.
+
+The prototype can prove typed parsing, request rendering, and local
+cancellation behavior. It does not prove provider compatibility, retries,
+cost recording, attempt lineage, or TRACE parity because it does not call a
+provider. Those remain Footnote-owned questions.
+
 ## Pinned toolchain
 
 - BAML CLI and generated runtime: `@boundaryml/baml 0.226.2`
