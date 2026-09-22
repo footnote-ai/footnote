@@ -13,7 +13,8 @@ slice alone**.
 
 Run date: 2026-09-22
 
-Base: `origin/main` at the experiment's starting revision
+Base: `origin/main` at `6fa7416ae8ff5e8d052dac67a2ae10eb074d6d58` (the
+experiment starting revision; current `origin/main` has since advanced)
 
 BAML: `@boundaryml/baml 0.226.2`
 
