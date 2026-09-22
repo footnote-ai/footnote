@@ -7,7 +7,18 @@
 
 ## Overview
 
-Footnote should evaluate BAML as a **replacement and consolidation layer for its existing typed model-function machinery**, not merely as another adapter behind the current abstractions.
+This proposal asks whether BAML can make Footnote's typed model calls easier to
+maintain. It is an experiment plan, not a decision to move production work to
+BAML.
+
+BAML is a tool for declaring an LLM function, its prompt, and its expected
+typed output together, then generating TypeScript client code. That may remove
+some duplicated contract plumbing, but it may also accept output that Footnote
+currently rejects. The experiment must measure both sides.
+
+Footnote should evaluate BAML as a **possible replacement and consolidation
+layer for existing typed model-function machinery**, not merely as another
+adapter behind the current abstractions.
 
 The deeper architecture audit found that Footnote has already built many of the concepts BAML provides, but in fragmented form. Planner and assessment operations each maintain multiple representations of the same contract across prompt text, JSON Schema, Zod or allowlist validation, parsing, normalization, transport compatibility, and failure classification. Provider-specific structured-output behavior is also mixed into abstractions that appear more capability-driven than they really are.
 
@@ -21,7 +32,62 @@ The proposal is:
 
 > Determine whether BAML can replace enough duplicated prompt/schema/parse machinery to make Footnote materially simpler and safer, while leaving Footnote-specific execution policy, cost authority, provenance, and workflow admission in Footnote.
 
-The preferred target, if experiments succeed, is a **moderate consolidation** of the typed-step cluster: planner, assess, and future structured model functions declared in BAML; generation, routing policy, cost accounting, workflow admission, and canonical trace remain backend-owned.
+One possible later outcome, if experiments succeed, is a **moderate
+consolidation** of the typed-step cluster: planner, assess, and future
+structured model functions declared in BAML; generation, routing policy, cost
+accounting, workflow admission, and canonical trace remain backend-owned.
+
+## In plain language
+
+### The question
+
+Today, one model output can be described in several places: the prompt, a JSON
+schema, runtime validation, parsing and cleanup code, provider handling, and
+failure classification. BAML may let Footnote describe some of that once and
+generate part of the client. The experiment succeeds only if Footnote can then
+delete enough duplicated code without losing important behavior.
+
+### A concrete warning
+
+Suppose a model returns:
+
+```json
+{ "tightness": 6 }
+```
+
+The TypeScript shape may say that `tightness` is a number, so a permissive BAML
+parse can succeed. Footnote's current contract also checks the allowed range
+and rejects this value. A successful BAML parse therefore does not prove that
+the output is valid for Footnote. Footnote may still need a semantic validator
+and its existing failure categories.
+
+### What the experiment must answer
+
+1. Which duplicated prompt, schema, parser, and adapter code can actually be
+   removed?
+2. Does BAML preserve distinctions Footnote uses, such as malformed JSON,
+   refusal, incomplete output, unsupported transport, and provider failure?
+3. Can Footnote keep its own retry, cost, cancellation, provenance, and
+   operator-override behavior?
+4. Does the smaller maintenance surface justify the new dependency and build
+   step?
+
+If BAML only adds a generated client while Footnote keeps nearly all of its
+current validation and failure machinery, that is a useful negative result.
+
+## Terms used in this proposal
+
+- **Typed model function:** a model call with a declared input and output
+  shape, rather than an unstructured text response.
+- **Schema:** the rules describing which fields, types, and values are valid.
+- **Failure taxonomy:** Footnote's distinctions between kinds of failure, such
+  as malformed output, refusal, transport failure, and incomplete generation.
+- **Generated client:** source code produced from the BAML declaration; it is
+  still a build and dependency surface even though developers do not edit it
+  by hand.
+- **Footnote-owned semantics:** execution policy, retries, cost, cancellation,
+  provenance, and workflow decisions that must remain understandable and
+  controlled by Footnote.
 
 This proposal is adjacent to, but independent from, [Semantic Judgment and
 Context Resolution](./semantic_judgment_context_resolution.md). BAML is a

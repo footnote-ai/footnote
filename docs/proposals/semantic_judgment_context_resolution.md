@@ -7,15 +7,20 @@
 
 ## Overview
 
-Footnote should evaluate a new backend-owned **semantic judgment** capability for bounded classification tasks that do not fit the existing `GenerationRuntime.generate(text) -> text` model.
+This proposal asks whether Footnote needs a separate way to answer small,
+bounded questions about context. It is an experiment plan, not a decision to
+add a new runtime or to run JEV in production.
 
-JEV-style models are the motivating implementation family. Open-weight models such as `AlexWortega/openjev` make small local classifiers practical, while hosted or larger models may be useful when a judgment needs substantially more context or higher measured accuracy. The capability should not be defined around one model, provider, API, or deployment location.
+JEV-style models are the motivating implementation family. They may be useful
+for comparing text, but simpler methods may be good enough. The benchmark must
+decide that question.
 
 The first problem this proposal should address is **conversation context resolution**.
 
 Footnote currently selects Discord conversation context primarily by recency. A flat recent-message window is cheap and predictable, but it cannot distinguish the active sub-conversation from unrelated room chatter, recover old-but-relevant messages, recursively follow conversational prerequisites, or decide which attachments and metadata deserve deeper inspection. The deeper architecture audit found this to be a concrete weakness rather than a speculative feature gap.
 
-The proposed direction is to treat context selection as a bounded graph-resolution problem:
+One possible later design is to treat context selection as a bounded set of
+conversation links, rather than as a permanent database-wide graph:
 
 ```text
 trigger
@@ -39,15 +44,66 @@ generator
 
 JEV is one possible semantic assessor inside that process. It does not own the context graph, policy, authority, or final model input.
 
-The short version is:
-
-> Footnote should gain a first-class judgment runtime for bounded semantic questions, and use it first to determine which conversation and attachment context is actually worth showing to the generator.
+The short version is: first measure whether a small semantic model solves hard
+context cases that text search and simple conversation links cannot solve. Only
+if the measurements justify it should Footnote consider a first-class judgment
+runtime.
 
 This proposal is adjacent to, but independent from, [BAML for typed
 model-function consolidation](./baml_typed_model_function_consolidation.md).
 BAML may help declare typed generative functions; it is not a prerequisite for
 this judgment-runtime experiment, and a native classifier should not be forced
 through BAML for uniformity.
+
+## In plain language
+
+### The problem
+
+Footnote usually gives the model a recent block of Discord messages. That is
+predictable, but the block can miss an older message that explains “that one,”
+or include many unrelated messages from another conversation.
+
+### A small example
+
+```text
+10:01 Alex: I prefer the smaller local model.
+10:02 Sam: What about the 35B one?
+10:03 Alex: Probably too large for my GPU.
+...
+11:20 Jordan: What model did Alex say was too large?
+```
+
+The current recent window might no longer contain the 10:03 message. Text
+search may find it when words overlap. Reply and same-thread links may add
+supporting messages. A JEV-style model might help when the question uses very
+different wording, but that is only a hypothesis until tested.
+
+### What the experiment must answer
+
+1. Do simple methods find the messages an answer needs?
+2. Do they select too much unrelated context?
+3. Does a small semantic model improve difficult cases enough to justify its
+   setup, latency, privacy review, and hardware cost?
+
+### What this proposal does not decide
+
+It does not decide whether JEV should run in the bot, whether private content
+may leave a deployment, or whether a judgment may block an action. Initial
+judgments are evidence only: they must fail open and must not become policy
+authority by accident.
+
+## Terms used in this proposal
+
+- **Recall:** of all messages an answer needed, how many the selector found.
+- **Precision:** of the messages selected, how many were useful.
+- **BM25:** a traditional text-search ranking method that works well when the
+  query and message share words or phrases.
+- **JEV-style model:** a small model that compares text and estimates bounded
+  relationships such as supports, contradicts, or unrelated.
+- **Context pack:** the bounded set of messages and other evidence sent to the
+  generator for one turn.
+- **Judgment runtime:** a possible future Footnote boundary for bounded
+  comparisons; it is not being implemented by this proposal.
 
 ---
 
