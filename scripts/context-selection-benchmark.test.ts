@@ -122,6 +122,21 @@ test('report includes per-category metrics for every completed baseline', () => 
     );
 });
 
+test('reports Wilson intervals for available aggregate proportions', () => {
+    const report = runBenchmark();
+    const bm25 = report.methods.find((metric) => metric.method === 'bm25');
+
+    assert.ok(bm25);
+    assert.deepEqual(
+        bm25.necessaryMessageRecall95Ci,
+        [0.8816364734751868, 0.9633885392651903]
+    );
+    assert.deepEqual(
+        bm25.usefulContextPrecision95Ci,
+        [0.05349721294878286, 0.07290113210024202]
+    );
+});
+
 test('unavailable model methods fail open without selecting context', () => {
     const [entry] = buildBenchmarkCorpus();
     assert.ok(entry);

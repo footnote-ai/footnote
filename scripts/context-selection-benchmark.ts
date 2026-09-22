@@ -1504,6 +1504,11 @@ export const runBenchmark = (
 const formatMetric = (value: number | null): string =>
     value === null ? 'n/a' : value.toFixed(3);
 
+const formatInterval = (interval: [number, number] | null): string =>
+    interval === null
+        ? 'n/a'
+        : `[${interval[0].toFixed(3)}, ${interval[1].toFixed(3)}]`;
+
 const writeReport = (report: BenchmarkReport): void => {
     const outputDirectory = path.resolve('artifacts/context-selection-717');
     fs.mkdirSync(outputDirectory, { recursive: true });
@@ -1518,16 +1523,16 @@ const writeReport = (report: BenchmarkReport): void => {
         `Generated: ${report.benchmark.generatedAt}`,
         `Corpus: ${report.benchmark.caseCount} synthetic cases / ${report.benchmark.messageCount} messages`,
         '',
-        '| Method | Necessary recall | Useful precision | Distracting rate | Avg messages | Avg tokens | Avg candidates | Avg depth | Avg branches | p95 ms | Unavailable |',
-        '| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |',
+        '| Method | Necessary recall | Recall 95% CI | Useful precision | Precision 95% CI | Distracting rate | Avg messages | Avg context units | Avg candidates | Avg depth | Avg branches | p95 ms | Unavailable |',
+        '| --- | ---: | --- | ---: | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |',
         ...report.methods.map(
             (metric) =>
-                `| ${metric.method} | ${formatMetric(metric.necessaryMessageRecall)} | ${formatMetric(metric.usefulContextPrecision)} | ${formatMetric(metric.distractingContextRate)} | ${formatMetric(metric.averageFinalMessageCount)} | ${formatMetric(metric.averageEstimatedInputTokens)} | ${formatMetric(metric.averageCandidateCount)} | ${formatMetric(metric.averageRetrievalDepth)} | ${formatMetric(metric.averageBranchExpansionCount)} | ${formatMetric(metric.p95LatencyMs)} | ${metric.unavailableCases} |`
+                `| ${metric.method} | ${formatMetric(metric.necessaryMessageRecall)} | ${formatInterval(metric.necessaryMessageRecall95Ci)} | ${formatMetric(metric.usefulContextPrecision)} | ${formatInterval(metric.usefulContextPrecision95Ci)} | ${formatMetric(metric.distractingContextRate)} | ${formatMetric(metric.averageFinalMessageCount)} | ${formatMetric(metric.averageEstimatedInputTokens)} | ${formatMetric(metric.averageCandidateCount)} | ${formatMetric(metric.averageRetrievalDepth)} | ${formatMetric(metric.averageBranchExpansionCount)} | ${formatMetric(metric.p95LatencyMs)} | ${metric.unavailableCases} |`
         ),
         '',
         '## By category',
         '',
-        '| Category | Method | Necessary recall | Useful precision | Distracting rate | Avg messages | Avg tokens | p95 ms |',
+        '| Category | Method | Necessary recall | Useful precision | Distracting rate | Avg messages | Avg context units | p95 ms |',
         '| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: |',
         ...report.categoryMetrics.map(
             (metric) =>

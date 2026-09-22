@@ -64,15 +64,19 @@ It must not be described as evidence from a neural embedding model.
 
 The generated summary recorded these aggregate values:
 
-| Method                        | Necessary recall | Useful precision | Distracting rate | Avg messages | Avg tokens | p95 local ms |
-| ----------------------------- | ---------------: | ---------------: | ---------------: | -----------: | ---------: | -----------: |
-| Current window                |            0.500 |            0.035 |            0.023 |       24.000 |    442.400 |        0.005 |
-| Recency + reply expansion     |            0.567 |            0.039 |            0.023 |       24.100 |    444.300 |        0.023 |
-| Recency + author continuation |            0.600 |            0.041 |            0.023 |       24.150 |    444.800 |        0.026 |
-| BM25                          |            0.933 |            0.063 |            0.027 |       24.000 |    441.850 |        0.376 |
-| BM25 + reply expansion        |            0.967 |            0.064 |            0.027 |       24.050 |    442.750 |        0.208 |
-| BM25 + graph expansion        |            0.967 |            0.116 |            0.025 |       15.050 |    275.950 |        0.115 |
-| Hash embedding proxy          |            0.800 |            0.056 |            0.019 |       24.000 |    440.900 |        0.459 |
+| Method                        | Necessary recall | Recall 95% CI  | Useful precision | Precision 95% CI | Distracting rate | Avg messages | Avg units |
+| ----------------------------- | ---------------: | -------------- | ---------------: | ---------------- | ---------------: | -----------: | --------: |
+| Current window                |            0.500 | [0.421, 0.579] |            0.035 | [0.029, 0.044]   |            0.023 |       24.000 |     442.4 |
+| Recency + reply expansion     |            0.567 | [0.487, 0.643] |            0.039 | [0.032, 0.048]   |            0.023 |       24.100 |     444.3 |
+| Recency + author continuation |            0.600 | [0.520, 0.675] |            0.041 | [0.034, 0.050]   |            0.023 |       24.150 |     444.8 |
+| BM25                          |            0.933 | [0.882, 0.963] |            0.063 | [0.053, 0.073]   |            0.027 |       24.000 |     441.9 |
+| BM25 + reply expansion        |            0.967 | [0.924, 0.986] |            0.064 | [0.055, 0.075]   |            0.027 |       24.050 |     442.8 |
+| BM25 + graph expansion        |            0.967 | [0.924, 0.986] |            0.116 | [0.101, 0.133]   |            0.025 |       15.050 |     276.0 |
+| Hash embedding proxy          |            0.800 | [0.729, 0.856] |            0.056 | [0.048, 0.066]   |            0.019 |       24.000 |     440.9 |
+
+The intervals are Wilson 95% intervals over the aggregate required-message
+and selected-message counts. They describe this synthetic fixture sample;
+they are not confidence intervals for production Discord traffic.
 
 The artifact also records candidate count, retrieval depth, estimated input
 tokens, historical-distance recovery, branch expansion count, and local
