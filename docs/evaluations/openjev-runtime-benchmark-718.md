@@ -34,7 +34,10 @@ python scripts/openjev_runtime_benchmark.py `
 
 Defaults cover the required 10, 40, and 80 candidate batches and 32, 128, and
 512-word candidate lengths. The harness records model load time, idle and
-per-process peak VRAM, latency, completion/error status, and the exact request.
+per-process peak VRAM, grouped p50/p95 latency by operation and workload shape,
+completion/error status, and the exact request. It also records the harness
+revision, OpenJEV checkout revision, accelerator model, and total VRAM when
+available.
 It exercises `predict`, `predict_hypotheses`, and `rerank` where the provisioned
 OpenJEV API exposes them.
 

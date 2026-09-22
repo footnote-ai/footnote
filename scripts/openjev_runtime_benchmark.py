@@ -48,13 +48,19 @@ def parse_int_list(value: str) -> tuple[int, ...]:
 
 
 def build_candidates(count: int, length_words: int) -> list[str]:
+    if length_words < 2:
+        raise ValueError("candidate length must include the candidate label and index")
     sentence = (
         "The synthetic context candidate records a bounded provenance decision "
         "for the local benchmark and must not become an instruction. "
     )
     words = sentence.split()
-    repeated = (words * ((length_words + len(words) - 1) // len(words)))[:length_words]
-    return [f"candidate {index}: {' '.join(repeated)}" for index in range(count)]
+    payload_length = length_words - 2
+    repeated = (words * ((payload_length + len(words) - 1) // len(words)))[
+        :payload_length
+    ]
+    payload = " ".join(repeated)
+    return [f"candidate {index}: {payload}".rstrip() for index in range(count)]
 
 
 def vram_snapshot(torch_module: Any) -> tuple[float | None, float | None]:
@@ -120,6 +126,22 @@ def invoke_measurement(
     )
 
 
+def unavailable_measurement(
+    operation: str, candidate_count: int, candidate_length_words: int, reason: str
+) -> BatchMeasurement:
+    return BatchMeasurement(
+        operation=operation,
+        candidate_count=candidate_count,
+        candidate_length_words=candidate_length_words,
+        latency_ms=None,
+        vram_before_mb=None,
+        vram_peak_mb=None,
+        vram_after_mb=None,
+        status="unavailable",
+        error=reason,
+    )
+
+
 def load_cross_encoder(args: argparse.Namespace) -> tuple[Any, Any]:
     code_path = Path(args.openjev_code_path).resolve()
     sys.path.insert(0, str(code_path))
@@ -173,46 +195,129 @@ def collect_measurements(
         for candidate_count in args.candidate_counts:
             candidates = build_candidates(candidate_count, candidate_length)
             pairs = [(premise, candidate) for candidate in candidates]
-            operations: tuple[tuple[str, Callable[[], object]], ...] = (
-                ("predict", lambda pairs=pairs: model.predict(pairs)),
+            operations: tuple[tuple[str, Callable[[], object] | None, str], ...] = (
+                (
+                    "predict",
+                    (lambda pairs=pairs: model.predict(pairs))
+                    if callable(getattr(model, "predict", None))
+                    else None,
+                    "model.predict is not callable",
+                ),
                 (
                     "predict_hypotheses",
-                    lambda candidates=candidates: model.predict_hypotheses(
-                        premise, candidates
-                    ),
+                    (
+                        lambda candidates=candidates: model.predict_hypotheses(
+                            premise, candidates
+                        )
+                    )
+                    if callable(getattr(model, "predict_hypotheses", None))
+                    else None,
+                    "model.predict_hypotheses is not callable",
                 ),
                 (
                     "rerank",
-                    lambda candidates=candidates: model.rerank(premise, candidates),
+                    (
+                        lambda candidates=candidates: model.rerank(premise, candidates)
+                    )
+                    if callable(getattr(model, "rerank", None))
+                    else None,
+                    "model.rerank is not callable",
                 ),
             )
-            measurements.extend(
-                invoke_measurement(
-                    operation,
-                    candidate_count,
-                    candidate_length,
-                    torch_module,
-                    callback,
+            for operation, callback, unavailable_reason in operations:
+                measurements.append(
+                    invoke_measurement(
+                        operation,
+                        candidate_count,
+                        candidate_length,
+                        torch_module,
+                        callback,
+                    )
+                    if callback is not None
+                    else unavailable_measurement(
+                        operation,
+                        candidate_count,
+                        candidate_length,
+                        unavailable_reason,
+                    )
                 )
-                for operation, callback in operations
-            )
     return measurements
 
 
 def summarize_measurements(
     measurements: list[BatchMeasurement],
 ) -> dict[str, object]:
-    completed_latencies = [
-        item.latency_ms
-        for item in measurements
-        if item.status == "completed" and item.latency_ms is not None
-    ]
+    grouped: dict[tuple[str, int, int], list[float]] = {}
+    for item in measurements:
+        if item.status == "completed" and item.latency_ms is not None:
+            grouped.setdefault(
+                (item.operation, item.candidate_count, item.candidate_length_words), []
+            ).append(item.latency_ms)
+
+    workloads: list[dict[str, object]] = []
+    for operation, candidate_count, candidate_length_words in sorted(
+        {
+            (item.operation, item.candidate_count, item.candidate_length_words)
+            for item in measurements
+        }
+    ):
+        latencies = grouped.get((operation, candidate_count, candidate_length_words), [])
+        workloads.append(
+            {
+                "operation": operation,
+                "candidate_count": candidate_count,
+                "candidate_length_words": candidate_length_words,
+                "p50": statistics.median(latencies) if latencies else None,
+                "p95": percentile(latencies, 0.95),
+                "sample_count": len(latencies),
+            }
+        )
+
+    statuses = [item.status for item in measurements]
+    if statuses and all(status == "completed" for status in statuses):
+        status = "completed"
+    elif statuses and not any(status == "completed" for status in statuses):
+        status = "error" if any(item.status == "error" for item in measurements) else "unavailable"
+    else:
+        status = "partial"
     return {
-        "p50": statistics.median(completed_latencies)
-        if completed_latencies
-        else None,
-        "max": max(completed_latencies) if completed_latencies else None,
+        "status": status,
+        "workloads": workloads,
     }
+
+
+def percentile(values: list[float], quantile: float) -> float | None:
+    if not values:
+        return None
+    ordered = sorted(values)
+    position = (len(ordered) - 1) * quantile
+    lower = int(position)
+    upper = min(lower + 1, len(ordered) - 1)
+    weight = position - lower
+    return ordered[lower] + (ordered[upper] - ordered[lower]) * weight
+
+
+def git_revision(path: Path) -> str | None:
+    try:
+        result = subprocess.run(
+            ["git", "rev-parse", "HEAD"],
+            cwd=path,
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+    except (OSError, subprocess.CalledProcessError):
+        return None
+    return result.stdout.strip() or None
+
+
+def accelerator_details(torch_module: Any) -> tuple[str | None, float | None]:
+    if not bool(torch_module.cuda.is_available()):
+        return None, None
+    properties = torch_module.cuda.get_device_properties(
+        torch_module.cuda.current_device()
+    )
+    return properties.name, properties.total_memory / (1024 * 1024)
 
 
 def benchmark_cross_encoder(args: argparse.Namespace) -> dict[str, object]:
@@ -222,43 +327,49 @@ def benchmark_cross_encoder(args: argparse.Namespace) -> dict[str, object]:
 
     generator_process: subprocess.Popen[str] | None = None
     try:
-        generator_process = start_generator_process(args)
-        load_started = time.perf_counter()
-        model, torch_module = load_cross_encoder(args)
-        load_latency_ms = (time.perf_counter() - load_started) * 1000
-    except Exception as error:  # noqa: BLE001 - benchmark records setup failures.
-        stop_generator_process(generator_process)
-        return {
-            "status": "unavailable",
-            "reason": f"{type(error).__name__}: {error}",
+        try:
+            generator_process = start_generator_process(args)
+            load_started = time.perf_counter()
+            model, torch_module = load_cross_encoder(args)
+            load_latency_ms = (time.perf_counter() - load_started) * 1000
+        except Exception as error:  # noqa: BLE001 - benchmark records setup failures.
+            return {
+                "status": "unavailable",
+                "reason": f"{type(error).__name__}: {error}",
+                "generator_pid": generator_process.pid if generator_process else None,
+            }
+
+        idle_vram_mb, _ = vram_snapshot(torch_module)
+        measurements = collect_measurements(model, torch_module, args)
+        latency_summary = summarize_measurements(measurements)
+        result = {
+            "status": latency_summary["status"],
+            "model_load_latency_ms": load_latency_ms,
+            "idle_vram_mb": idle_vram_mb,
+            "measurements": [asdict(item) for item in measurements],
+            "latency_summary_ms": latency_summary,
             "generator_pid": generator_process.pid if generator_process else None,
         }
-
-    idle_vram_mb, _ = vram_snapshot(torch_module)
-    measurements = collect_measurements(model, torch_module, args)
-    result = {
-        "status": "completed",
-        "model_load_latency_ms": load_latency_ms,
-        "idle_vram_mb": idle_vram_mb,
-        "measurements": [asdict(item) for item in measurements],
-        "latency_summary_ms": summarize_measurements(measurements),
-        "generator_pid": generator_process.pid if generator_process else None,
-    }
-    if generator_process:
-        result["generator_status"] = "started"
-    stop_generator_process(generator_process)
-    return result
+        if generator_process:
+            result["generator_status"] = "started"
+        return result
+    finally:
+        stop_generator_process(generator_process)
 
 
 def build_report(args: argparse.Namespace) -> dict[str, object]:
+    openjev_code_path = Path(args.openjev_code_path).resolve()
     try:
         import torch
 
         torch_version: str | None = getattr(torch, "__version__", None)
         cuda_available = bool(torch.cuda.is_available())
+        accelerator_model, total_vram_mb = accelerator_details(torch)
     except ImportError:
         torch_version = None
         cuda_available = False
+        accelerator_model = None
+        total_vram_mb = None
 
     report: dict[str, object] = {
         "benchmark": "openjev_runtime_718",
@@ -269,6 +380,10 @@ def build_report(args: argparse.Namespace) -> dict[str, object]:
             "hostname": platform.node(),
             "torch": torch_version,
             "cuda_available": cuda_available,
+            "accelerator_model": accelerator_model,
+            "total_vram_mb": total_vram_mb,
+            "harness_revision": git_revision(Path.cwd()),
+            "openjev_checkout_revision": git_revision(openjev_code_path),
         },
         "request": {
             "model_id": args.model_id,
