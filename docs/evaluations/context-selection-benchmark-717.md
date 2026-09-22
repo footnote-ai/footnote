@@ -108,6 +108,17 @@ hard enough to establish robust distractor resistance. The next corpus pass
 should add more genuinely paraphrased and ambiguous cases rather than tuning
 the selector to these fixtures.
 
+## Downstream support proxy
+
+A bounded 14-case support proxy compared the current window, BM25, and the
+bounded graph hybrid using hand-authored synthetic answer facts. The graph
+hybrid reached `0.929` answer-fact support and `0.929` necessary-reference
+resolution versus BM25 at `0.857` / `0.857`, while selecting `14.643`
+messages and `267.071` estimated tokens versus BM25's `24` and `440.429`.
+This is not generated-answer evidence: generation latency, cost, and provider
+usage remain unavailable and are explicitly null in
+`artifacts/context-selection-717/answer-quality.json`.
+
 ## OpenJEV verification
 
 The current upstream `AlexWortega/openjev` repository documents the
