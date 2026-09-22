@@ -1,6 +1,6 @@
 {
   "issue": 717,
-  "generatedAt": "2026-09-22T22:41:43.848Z",
+  "generatedAt": "2026-09-22T22:52:50.879Z",
   "corpus": {
     "caseCount": 100,
     "categoryCounts": {
@@ -39,7 +39,7 @@
       "averageEstimatedInputTokens": 55.3,
       "averageBranchExpansionCount": 0,
       "averageExpansionDepth": null,
-      "p95LatencyMs": 0.0030999999999892225,
+      "p95LatencyMs": 0.003100000000017644,
       "budget": 3
     },
     {
@@ -53,7 +53,7 @@
       "averageEstimatedInputTokens": 92.05,
       "averageBranchExpansionCount": 0,
       "averageExpansionDepth": null,
-      "p95LatencyMs": 0.0004999999999881766,
+      "p95LatencyMs": 0.0004000000000132786,
       "budget": 5
     },
     {
@@ -67,7 +67,7 @@
       "averageEstimatedInputTokens": 147.55,
       "averageBranchExpansionCount": 0,
       "averageExpansionDepth": null,
-      "p95LatencyMs": 0.0004000000000132786,
+      "p95LatencyMs": 0.0004999999999881766,
       "budget": 8
     },
     {
@@ -81,7 +81,7 @@
       "averageEstimatedInputTokens": 184.15,
       "averageBranchExpansionCount": 0,
       "averageExpansionDepth": null,
-      "p95LatencyMs": 0.0011000000000080945,
+      "p95LatencyMs": 0.0005999999999914962,
       "budget": 10
     },
     {
@@ -95,7 +95,7 @@
       "averageEstimatedInputTokens": 276.65,
       "averageBranchExpansionCount": 0,
       "averageExpansionDepth": null,
-      "p95LatencyMs": 0.0021000000000128694,
+      "p95LatencyMs": 0.0006000000000199179,
       "budget": 15
     },
     {
@@ -109,7 +109,7 @@
       "averageEstimatedInputTokens": 369.05,
       "averageBranchExpansionCount": 0,
       "averageExpansionDepth": null,
-      "p95LatencyMs": 0.0012000000000114142,
+      "p95LatencyMs": 0.0005000000000165983,
       "budget": 20
     },
     {
@@ -123,7 +123,7 @@
       "averageEstimatedInputTokens": 442.4,
       "averageBranchExpansionCount": 0,
       "averageExpansionDepth": null,
-      "p95LatencyMs": 0.0006000000000199179,
+      "p95LatencyMs": 0.0012000000000114142,
       "budget": 24
     },
     {
@@ -137,7 +137,7 @@
       "averageEstimatedInputTokens": 53.35,
       "averageBranchExpansionCount": 0,
       "averageExpansionDepth": null,
-      "p95LatencyMs": 0.393100000000004,
+      "p95LatencyMs": 0.3678999999999917,
       "budget": 3
     },
     {
@@ -151,7 +151,7 @@
       "averageEstimatedInputTokens": 90.35,
       "averageBranchExpansionCount": 0,
       "averageExpansionDepth": null,
-      "p95LatencyMs": 0.1810000000000116,
+      "p95LatencyMs": 0.1665999999999883,
       "budget": 5
     },
     {
@@ -165,7 +165,7 @@
       "averageEstimatedInputTokens": 145.85,
       "averageBranchExpansionCount": 0,
       "averageExpansionDepth": null,
-      "p95LatencyMs": 0.16559999999998354,
+      "p95LatencyMs": 0.10110000000000241,
       "budget": 8
     },
     {
@@ -179,7 +179,7 @@
       "averageEstimatedInputTokens": 182.85,
       "averageBranchExpansionCount": 0,
       "averageExpansionDepth": null,
-      "p95LatencyMs": 0.08370000000002165,
+      "p95LatencyMs": 0.09350000000000591,
       "budget": 10
     },
     {
@@ -193,7 +193,7 @@
       "averageEstimatedInputTokens": 275.35,
       "averageBranchExpansionCount": 0,
       "averageExpansionDepth": null,
-      "p95LatencyMs": 0.08940000000001191,
+      "p95LatencyMs": 0.09550000000001546,
       "budget": 15
     },
     {
@@ -207,7 +207,7 @@
       "averageEstimatedInputTokens": 367.85,
       "averageBranchExpansionCount": 0,
       "averageExpansionDepth": null,
-      "p95LatencyMs": 0.08020000000001914,
+      "p95LatencyMs": 0.08589999999998099,
       "budget": 20
     },
     {
@@ -221,7 +221,7 @@
       "averageEstimatedInputTokens": 441.85,
       "averageBranchExpansionCount": 0,
       "averageExpansionDepth": null,
-      "p95LatencyMs": 0.09449999999998226,
+      "p95LatencyMs": 0.08260000000001355,
       "budget": 24
     },
     {
@@ -235,7 +235,7 @@
       "averageEstimatedInputTokens": 53.35,
       "averageBranchExpansionCount": 0,
       "averageExpansionDepth": null,
-      "p95LatencyMs": 0.11240000000003647,
+      "p95LatencyMs": 0.17950000000001864,
       "budget": 3
     },
     {
@@ -249,7 +249,7 @@
       "averageEstimatedInputTokens": 90.35,
       "averageBranchExpansionCount": 0,
       "averageExpansionDepth": null,
-      "p95LatencyMs": 0.08400000000000318,
+      "p95LatencyMs": 0.09070000000002665,
       "budget": 5
     },
     {
@@ -263,7 +263,7 @@
       "averageEstimatedInputTokens": 145.85,
       "averageBranchExpansionCount": 0,
       "averageExpansionDepth": null,
-      "p95LatencyMs": 0.07850000000001955,
+      "p95LatencyMs": 0.07890000000003283,
       "budget": 8
     },
     {
@@ -277,7 +277,7 @@
       "averageEstimatedInputTokens": 182.85,
       "averageBranchExpansionCount": 0,
       "averageExpansionDepth": null,
-      "p95LatencyMs": 0.07840000000004466,
+      "p95LatencyMs": 0.10349999999999682,
       "budget": 10
     },
     {
@@ -291,7 +291,7 @@
       "averageEstimatedInputTokens": 275.35,
       "averageBranchExpansionCount": 0,
       "averageExpansionDepth": null,
-      "p95LatencyMs": 0.08530000000001792,
+      "p95LatencyMs": 0.09010000000000673,
       "budget": 15
     },
     {
@@ -305,7 +305,7 @@
       "averageEstimatedInputTokens": 367.85,
       "averageBranchExpansionCount": 0,
       "averageExpansionDepth": null,
-      "p95LatencyMs": 0.07780000000002474,
+      "p95LatencyMs": 0.07999999999998408,
       "budget": 20
     },
     {
@@ -319,7 +319,7 @@
       "averageEstimatedInputTokens": 441.85,
       "averageBranchExpansionCount": 0,
       "averageExpansionDepth": null,
-      "p95LatencyMs": 0.0817000000000121,
+      "p95LatencyMs": 0.07980000000003429,
       "budget": 24
     },
     {
@@ -333,7 +333,7 @@
       "averageEstimatedInputTokens": 53.35,
       "averageBranchExpansionCount": 0,
       "averageExpansionDepth": 0,
-      "p95LatencyMs": 0.16870000000000118,
+      "p95LatencyMs": 0.1605000000000132,
       "budget": 3
     },
     {
@@ -347,7 +347,7 @@
       "averageEstimatedInputTokens": 90.35,
       "averageBranchExpansionCount": 0,
       "averageExpansionDepth": 0,
-      "p95LatencyMs": 0.09489999999999554,
+      "p95LatencyMs": 0.08150000000000546,
       "budget": 5
     },
     {
@@ -361,7 +361,7 @@
       "averageEstimatedInputTokens": 145.85,
       "averageBranchExpansionCount": 0,
       "averageExpansionDepth": 0,
-      "p95LatencyMs": 0.14370000000002392,
+      "p95LatencyMs": 0.09840000000002647,
       "budget": 8
     },
     {
@@ -375,7 +375,7 @@
       "averageEstimatedInputTokens": 182.85,
       "averageBranchExpansionCount": 0,
       "averageExpansionDepth": 0,
-      "p95LatencyMs": 0.09519999999997708,
+      "p95LatencyMs": 0.10939999999999372,
       "budget": 10
     },
     {
@@ -389,7 +389,7 @@
       "averageEstimatedInputTokens": 265.75,
       "averageBranchExpansionCount": 2.5,
       "averageExpansionDepth": 1,
-      "p95LatencyMs": 0.09080000000000155,
+      "p95LatencyMs": 0.09290000000004284,
       "budget": 15
     },
     {
@@ -403,7 +403,7 @@
       "averageEstimatedInputTokens": 275.95,
       "averageBranchExpansionCount": 3.05,
       "averageExpansionDepth": 1,
-      "p95LatencyMs": 0.0835999999999899,
+      "p95LatencyMs": 0.10750000000001592,
       "budget": 20
     },
     {
@@ -417,7 +417,7 @@
       "averageEstimatedInputTokens": 275.95,
       "averageBranchExpansionCount": 3.05,
       "averageExpansionDepth": 1,
-      "p95LatencyMs": 0.09199999999998454,
+      "p95LatencyMs": 0.10009999999999764,
       "budget": 24
     }
   ],
@@ -433,7 +433,7 @@
       "averageEstimatedInputTokens": 441.85,
       "averageBranchExpansionCount": 0,
       "averageExpansionDepth": null,
-      "p95LatencyMs": 0.08240000000000691,
+      "p95LatencyMs": 0.11000000000001364,
       "edges": []
     },
     {
@@ -447,7 +447,7 @@
       "averageEstimatedInputTokens": 441.85,
       "averageBranchExpansionCount": 0,
       "averageExpansionDepth": null,
-      "p95LatencyMs": 0.07900000000000773,
+      "p95LatencyMs": 0.08070000000003574,
       "edges": [
         "reply"
       ]
@@ -551,7 +551,7 @@
         "averageEstimatedInputTokens": 53.35,
         "averageBranchExpansionCount": 0,
         "averageExpansionDepth": null,
-        "p95LatencyMs": 0.1028999999999769,
+        "p95LatencyMs": 0.08999999999997499,
         "budget": 3,
         "seedCount": 3,
         "maxDepth": null
@@ -583,7 +583,7 @@
         "averageEstimatedInputTokens": 90.35,
         "averageBranchExpansionCount": 0,
         "averageExpansionDepth": null,
-        "p95LatencyMs": 0.08120000000002392,
+        "p95LatencyMs": 0.09019999999998163,
         "budget": 5,
         "seedCount": 5,
         "maxDepth": null
@@ -615,7 +615,7 @@
         "averageEstimatedInputTokens": 145.85,
         "averageBranchExpansionCount": 0,
         "averageExpansionDepth": null,
-        "p95LatencyMs": 0.13900000000001,
+        "p95LatencyMs": 0.0969000000000051,
         "budget": 8,
         "seedCount": 8,
         "maxDepth": null
@@ -647,7 +647,7 @@
         "averageEstimatedInputTokens": 182.85,
         "averageBranchExpansionCount": 0,
         "averageExpansionDepth": null,
-        "p95LatencyMs": 0.07880000000000109,
+        "p95LatencyMs": 0.08199999999999363,
         "budget": 10,
         "seedCount": 10,
         "maxDepth": null
@@ -679,7 +679,7 @@
         "averageEstimatedInputTokens": 275.35,
         "averageBranchExpansionCount": 0,
         "averageExpansionDepth": null,
-        "p95LatencyMs": 0.0784000000001015,
+        "p95LatencyMs": 0.08920000000000528,
         "budget": 15,
         "seedCount": 15,
         "maxDepth": null

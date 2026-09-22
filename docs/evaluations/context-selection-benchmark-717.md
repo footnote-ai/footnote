@@ -18,6 +18,21 @@ Base: `origin/main` at `6fa7416ae8ff5e8d052dac67a2ae10eb074d6d58`
 Artifact: `artifacts/context-selection-717/results.json`
 Summary artifact: `artifacts/context-selection-717/summary.md`
 
+## Plain-language result
+
+The current method sends the most recent 24 messages. BM25 is a traditional
+text-search ranking method: it finds messages that share useful words with the
+trigger. The graph hybrid starts with those search results, then follows simple
+conversation links such as adjacency and same-author continuation. In this
+synthetic benchmark, the graph hybrid found the most required information,
+selected about 15 messages instead of 24, and included a larger share of useful
+messages. It is the strongest cheap baseline so far, not a production decision.
+
+**Recall** means “of the messages the answer needed, how many did the method
+find?” **Useful precision** means “of the messages it selected, how many were
+useful?” A confidence interval is a range showing uncertainty on this fixture
+sample; it does not predict performance on real Discord traffic.
+
 ## Corpus
 
 The committed harness builds 100 synthetic, structurally faithful Discord
