@@ -14,7 +14,10 @@ import { performance } from 'node:perf_hooks';
 export type ContextSelectionMethod =
     | 'current_window'
     | 'recency_reply_expansion'
+    | 'recency_author_continuation'
     | 'bm25'
+    | 'bm25_reply_expansion'
+    | 'bm25_graph_expansion'
     | 'hash_embedding_proxy'
     | 'existing_cross_encoder'
     | 'openjev';
@@ -39,6 +42,7 @@ export type ContextBenchmarkCase = {
         | 'topic_switch'
         | 'pronoun_reference'
         | 'same_author_continuation'
+        | 'paraphrased_reference'
         | 'scattered_context'
         | 'irrelevant_high_similarity'
         | 'historical_context_not_recovered';
@@ -105,6 +109,18 @@ export type AggregateMetric = {
     p95LatencyMs: number | null;
 };
 
+export type CategoryAggregateMetric = {
+    category: ContextBenchmarkCase['category'];
+    method: ContextSelectionMethod;
+    caseCount: number;
+    necessaryMessageRecall: number | null;
+    usefulContextPrecision: number | null;
+    distractingContextRate: number | null;
+    averageFinalMessageCount: number | null;
+    averageEstimatedInputTokens: number | null;
+    p95LatencyMs: number | null;
+};
+
 export type BenchmarkReport = {
     benchmark: {
         issue: 717;
@@ -117,6 +133,7 @@ export type BenchmarkReport = {
         limitations: string[];
     };
     methods: AggregateMetric[];
+    categoryMetrics: CategoryAggregateMetric[];
     cases: CaseMetric[];
 };
 
@@ -136,6 +153,7 @@ const SCENARIOS: Array<ContextBenchmarkCase['category']> = [
     'topic_switch',
     'pronoun_reference',
     'same_author_continuation',
+    'paraphrased_reference',
     'scattered_context',
     'irrelevant_high_similarity',
     'historical_context_not_recovered',
@@ -349,20 +367,39 @@ const buildScenario = (
             replaceMessage(
                 messages,
                 caseNumber,
-                36,
+                14,
                 'I will keep the local generator loaded while the benchmark runs.',
                 'alex'
             );
             replaceMessage(
                 messages,
                 caseNumber,
-                37,
+                15,
                 'That means the assessor must be loaded on demand.',
+                'alex'
+            );
+            replaceMessage(
+                messages,
+                caseNumber,
+                16,
+                'The assessor should load only after the generator benchmark finishes.',
                 'alex'
             );
             latestUserInput =
                 'Given my previous note, when should the assessor load?';
-            necessary(36, 37);
+            necessary(14, 15, 16);
+            break;
+        case 'paraphrased_reference':
+            replaceMessage(
+                messages,
+                caseNumber,
+                7,
+                'The deployment can return to its prior release using marker amber-17.'
+            );
+            latestUserInput =
+                'Which token returns the blue-green release to its previous version?';
+            necessary(7);
+            useful(8);
             break;
         case 'scattered_context':
             replaceMessage(
@@ -545,6 +582,47 @@ const selectRecencyWithReplyExpansion = (
     };
 };
 
+const selectRecencyWithAuthorContinuation = (
+    entry: ContextBenchmarkCase
+): SelectionResult => {
+    const selected = new Set(
+        entry.messages.slice(-CONTEXT_WINDOW_SIZE).map((message) => message.id)
+    );
+    let branchExpansions = 0;
+    let expanded = true;
+
+    while (expanded) {
+        expanded = false;
+        for (const [index, message] of entry.messages.entries()) {
+            if (!selected.has(message.id)) {
+                continue;
+            }
+            const predecessor = entry.messages[index - 1];
+            if (
+                predecessor !== undefined &&
+                predecessor.authorId === message.authorId &&
+                !selected.has(predecessor.id)
+            ) {
+                selected.add(predecessor.id);
+                branchExpansions += 1;
+                expanded = true;
+            }
+        }
+    }
+
+    return {
+        method: 'recency_author_continuation',
+        status: 'completed',
+        messageIds: entry.messages
+            .filter((message) => selected.has(message.id))
+            .map((message) => message.id),
+        candidateCount: entry.messages.length,
+        retrievalDepth: CONTEXT_WINDOW_SIZE,
+        branchExpansions,
+        latencyMs: null,
+    };
+};
+
 const scoreBm25 = (entry: ContextBenchmarkCase): Map<string, number> => {
     const queryTokens = tokenize(entry.latestUserInput);
     const documents = entry.messages.map((message) => tokenize(message.text));
@@ -671,6 +749,128 @@ const selectScored = (
     };
 };
 
+const selectBm25WithReplyExpansion = (
+    entry: ContextBenchmarkCase
+): SelectionResult => {
+    const selected = new Set(
+        selectTopMessageIds(
+            entry.messages,
+            scoreBm25(entry),
+            CONTEXT_WINDOW_SIZE
+        )
+    );
+    const byId = new Map(
+        entry.messages.map((message) => [message.id, message])
+    );
+    const pending = entry.messages
+        .filter(
+            (message) =>
+                selected.has(message.id) && message.replyToId !== undefined
+        )
+        .map((message) => message.replyToId as string);
+    if (entry.triggerReplyToId !== undefined) {
+        pending.push(entry.triggerReplyToId);
+    }
+
+    let branchExpansions = 0;
+    while (pending.length > 0) {
+        const currentId = pending.pop();
+        if (currentId === undefined || selected.has(currentId)) {
+            continue;
+        }
+        const current = byId.get(currentId);
+        if (current === undefined) {
+            continue;
+        }
+        selected.add(current.id);
+        branchExpansions += 1;
+        if (current.replyToId !== undefined) {
+            pending.push(current.replyToId);
+        }
+    }
+
+    return {
+        method: 'bm25_reply_expansion',
+        status: 'completed',
+        messageIds: entry.messages
+            .filter((message) => selected.has(message.id))
+            .map((message) => message.id),
+        candidateCount: entry.messages.length,
+        retrievalDepth: entry.messages.length,
+        branchExpansions,
+        latencyMs: null,
+    };
+};
+
+const selectBm25WithGraphExpansion = (
+    entry: ContextBenchmarkCase
+): SelectionResult => {
+    const graphSeedCount = 12;
+    const selected = new Set(
+        selectTopMessageIds(entry.messages, scoreBm25(entry), graphSeedCount)
+    );
+    const byId = new Map(
+        entry.messages.map((message, index) => [message.id, { message, index }])
+    );
+    const pending: string[] = [];
+    for (const messageId of selected) {
+        const indexed = byId.get(messageId);
+        if (indexed === undefined) {
+            continue;
+        }
+        if (indexed.message.replyToId !== undefined) {
+            pending.push(indexed.message.replyToId);
+        }
+        const predecessor = entry.messages[indexed.index - 1];
+        const successor = entry.messages[indexed.index + 1];
+        if (predecessor !== undefined) {
+            pending.push(predecessor.id);
+        }
+        if (successor !== undefined) {
+            pending.push(successor.id);
+        }
+        if (entry.triggerReplyToId !== undefined) {
+            pending.push(entry.triggerReplyToId);
+        }
+    }
+
+    let branchExpansions = 0;
+    while (pending.length > 0 && selected.size < CONTEXT_WINDOW_SIZE) {
+        const currentId = pending.shift();
+        if (currentId === undefined || selected.has(currentId)) {
+            continue;
+        }
+        const indexed = byId.get(currentId);
+        if (indexed === undefined) {
+            continue;
+        }
+        selected.add(currentId);
+        branchExpansions += 1;
+        if (indexed.message.replyToId !== undefined) {
+            pending.push(indexed.message.replyToId);
+        }
+        const predecessor = entry.messages[indexed.index - 1];
+        if (
+            predecessor !== undefined &&
+            predecessor.authorId === indexed.message.authorId
+        ) {
+            pending.push(predecessor.id);
+        }
+    }
+
+    return {
+        method: 'bm25_graph_expansion',
+        status: 'completed',
+        messageIds: entry.messages
+            .filter((message) => selected.has(message.id))
+            .map((message) => message.id),
+        candidateCount: entry.messages.length,
+        retrievalDepth: entry.messages.length,
+        branchExpansions,
+        latencyMs: null,
+    };
+};
+
 /**
  * Selects a bounded context pack. Model-backed methods are intentionally
  * unavailable by default; missing judgment infrastructure must fail open to
@@ -689,8 +889,17 @@ export const selectContext = (
         case 'recency_reply_expansion':
             result = selectRecencyWithReplyExpansion(entry);
             break;
+        case 'recency_author_continuation':
+            result = selectRecencyWithAuthorContinuation(entry);
+            break;
         case 'bm25':
             result = selectScored(method, entry);
+            break;
+        case 'bm25_reply_expansion':
+            result = selectBm25WithReplyExpansion(entry);
+            break;
+        case 'bm25_graph_expansion':
+            result = selectBm25WithGraphExpansion(entry);
             break;
         case 'hash_embedding_proxy':
             result = selectScored(method, entry);
@@ -943,10 +1152,38 @@ const aggregateMetrics = (
     };
 };
 
+const aggregateCategoryMetrics = (
+    cases: CaseMetric[]
+): CategoryAggregateMetric[] =>
+    METHODS.flatMap((method) =>
+        SCENARIOS.map((category) => {
+            const categoryCases = cases.filter(
+                (metric) =>
+                    metric.method === method && metric.category === category
+            );
+            const aggregate = aggregateMetrics(method, categoryCases);
+            return {
+                category,
+                method,
+                caseCount: categoryCases.length,
+                necessaryMessageRecall: aggregate.necessaryMessageRecall,
+                usefulContextPrecision: aggregate.usefulContextPrecision,
+                distractingContextRate: aggregate.distractingContextRate,
+                averageFinalMessageCount: aggregate.averageFinalMessageCount,
+                averageEstimatedInputTokens:
+                    aggregate.averageEstimatedInputTokens,
+                p95LatencyMs: aggregate.p95LatencyMs,
+            };
+        })
+    );
+
 const METHODS: ContextSelectionMethod[] = [
     'current_window',
     'recency_reply_expansion',
+    'recency_author_continuation',
     'bm25',
+    'bm25_reply_expansion',
+    'bm25_graph_expansion',
     'hash_embedding_proxy',
     'existing_cross_encoder',
     'openjev',
@@ -995,6 +1232,7 @@ export const runBenchmark = (
                 cases.filter((metric) => metric.method === method)
             )
         ),
+        categoryMetrics: aggregateCategoryMetrics(cases),
         cases,
     };
 };
@@ -1016,11 +1254,20 @@ const writeReport = (report: BenchmarkReport): void => {
         `Generated: ${report.benchmark.generatedAt}`,
         `Corpus: ${report.benchmark.caseCount} synthetic cases / ${report.benchmark.messageCount} messages`,
         '',
-        '| Method | Necessary recall | Useful precision | Distracting rate | Avg messages | p95 ms | Unavailable |',
-        '| --- | ---: | ---: | ---: | ---: | ---: | ---: |',
+        '| Method | Necessary recall | Useful precision | Distracting rate | Avg messages | Avg tokens | Avg candidates | Avg depth | Avg branches | p95 ms | Unavailable |',
+        '| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |',
         ...report.methods.map(
             (metric) =>
-                `| ${metric.method} | ${formatMetric(metric.necessaryMessageRecall)} | ${formatMetric(metric.usefulContextPrecision)} | ${formatMetric(metric.distractingContextRate)} | ${formatMetric(metric.averageFinalMessageCount)} | ${formatMetric(metric.p95LatencyMs)} | ${metric.unavailableCases} |`
+                `| ${metric.method} | ${formatMetric(metric.necessaryMessageRecall)} | ${formatMetric(metric.usefulContextPrecision)} | ${formatMetric(metric.distractingContextRate)} | ${formatMetric(metric.averageFinalMessageCount)} | ${formatMetric(metric.averageEstimatedInputTokens)} | ${formatMetric(metric.averageCandidateCount)} | ${formatMetric(metric.averageRetrievalDepth)} | ${formatMetric(metric.averageBranchExpansionCount)} | ${formatMetric(metric.p95LatencyMs)} | ${metric.unavailableCases} |`
+        ),
+        '',
+        '## By category',
+        '',
+        '| Category | Method | Necessary recall | Useful precision | Distracting rate | Avg messages | Avg tokens | p95 ms |',
+        '| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: |',
+        ...report.categoryMetrics.map(
+            (metric) =>
+                `| ${metric.category} | ${metric.method} | ${formatMetric(metric.necessaryMessageRecall)} | ${formatMetric(metric.usefulContextPrecision)} | ${formatMetric(metric.distractingContextRate)} | ${formatMetric(metric.averageFinalMessageCount)} | ${formatMetric(metric.averageEstimatedInputTokens)} | ${formatMetric(metric.p95LatencyMs)} |`
         ),
         '',
         '## Interpretation',

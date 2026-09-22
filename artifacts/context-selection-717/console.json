@@ -1,43 +1,61 @@
 {
-  "issue": 717,
-  "cases": 100,
-  "host": "DESKTOP",
-  "methods": [
-    {
-      "method": "current_window",
-      "recall": 0.6470588235294118,
-      "precision": 0.04791666666666667,
-      "unavailable": 0
-    },
-    {
-      "method": "recency_reply_expansion",
-      "recall": 0.7516339869281046,
-      "precision": 0.05422185430463576,
-      "unavailable": 0
-    },
-    {
-      "method": "bm25",
-      "recall": 0.8954248366013072,
-      "precision": 0.06375,
-      "unavailable": 0
-    },
-    {
-      "method": "hash_embedding_proxy",
-      "recall": 0.7973856209150327,
-      "precision": 0.0575,
-      "unavailable": 0
-    },
-    {
-      "method": "existing_cross_encoder",
-      "recall": null,
-      "precision": null,
-      "unavailable": 100
-    },
-    {
-      "method": "openjev",
-      "recall": null,
-      "precision": null,
-      "unavailable": 100
-    }
-  ]
+    "issue": 717,
+    "cases": 100,
+    "host": "DESKTOP",
+    "methods": [
+        {
+            "method": "current_window",
+            "recall": 0.5483870967741935,
+            "precision": 0.04125,
+            "unavailable": 0
+        },
+        {
+            "method": "recency_reply_expansion",
+            "recall": 0.6387096774193548,
+            "precision": 0.0468102734051367,
+            "unavailable": 0
+        },
+        {
+            "method": "recency_author_continuation",
+            "recall": 0.6838709677419355,
+            "precision": 0.04956629491945477,
+            "unavailable": 0
+        },
+        {
+            "method": "bm25",
+            "recall": 0.9096774193548387,
+            "precision": 0.06458333333333334,
+            "unavailable": 0
+        },
+        {
+            "method": "bm25_reply_expansion",
+            "recall": 0.9548387096774194,
+            "precision": 0.06730369754881595,
+            "unavailable": 0
+        },
+        {
+            "method": "bm25_graph_expansion",
+            "recall": 0.9548387096774194,
+            "precision": 0.12525667351129363,
+            "unavailable": 0
+        },
+        {
+            "method": "hash_embedding_proxy",
+            "recall": 0.8193548387096774,
+            "precision": 0.05875,
+            "unavailable": 0
+        },
+        {
+            "method": "existing_cross_encoder",
+            "recall": null,
+            "precision": null,
+            "unavailable": 100
+        },
+        {
+            "method": "openjev",
+            "recall": null,
+            "precision": null,
+            "unavailable": 100
+        }
+    ]
 }

@@ -11,6 +11,7 @@ import assert from 'node:assert/strict';
 
 import {
     buildBenchmarkCorpus,
+    runBenchmark,
     selectContext,
     type ContextSelectionMethod,
 } from './context-selection-benchmark.js';
@@ -58,6 +59,64 @@ test('deterministic reply expansion adds the reply ancestry without remote judgm
         )
     );
     assert.ok(result.branchExpansions > 0);
+});
+
+test('BM25 reply expansion combines lexical seeds with deterministic ancestry', () => {
+    const entry = buildBenchmarkCorpus().find(
+        (candidate) => candidate.category === 'reply_ancestry'
+    );
+    assert.ok(entry);
+
+    const result = selectContext('bm25_reply_expansion', entry);
+
+    assert.equal(result.status, 'completed');
+    assert.ok(result.messageIds.length >= 24);
+    assert.ok(result.branchExpansions > 0);
+    assert.ok(
+        entry.necessaryMessageIds.every((messageId) =>
+            result.messageIds.includes(messageId)
+        )
+    );
+});
+
+test('same-author continuation recovers the preceding message in a continuation chain', () => {
+    const entry = buildBenchmarkCorpus().find(
+        (candidate) => candidate.category === 'same_author_continuation'
+    );
+    assert.ok(entry);
+
+    const result = selectContext('recency_author_continuation', entry);
+
+    assert.equal(result.status, 'completed');
+    assert.ok(result.branchExpansions > 0);
+    assert.ok(result.messageIds.includes(entry.necessaryMessageIds[0] ?? ''));
+});
+
+test('lexical graph expansion remains bounded and includes reply ancestry', () => {
+    const entry = buildBenchmarkCorpus().find(
+        (candidate) => candidate.category === 'reply_ancestry'
+    );
+    assert.ok(entry);
+
+    const result = selectContext('bm25_graph_expansion', entry);
+
+    assert.equal(result.status, 'completed');
+    assert.ok(result.messageIds.length <= 24);
+    assert.ok(result.branchExpansions > 0);
+    assert.ok(result.messageIds.includes(entry.necessaryMessageIds[0] ?? ''));
+});
+
+test('report includes per-category metrics for every completed baseline', () => {
+    const report = runBenchmark();
+
+    assert.equal(report.categoryMetrics.length, 14 * 9);
+    assert.ok(
+        report.categoryMetrics.some(
+            (metric) =>
+                metric.category === 'same_author_continuation' &&
+                metric.method === 'recency_author_continuation'
+        )
+    );
 });
 
 test('unavailable model methods fail open without selecting context', () => {
