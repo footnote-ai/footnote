@@ -14,7 +14,7 @@ test('records text and unresolved provider-path cases without collapsing them', 
     const report = runSemanticEquivalenceMatrix();
 
     assert.equal(report.toolchain.baml, '0.226.2');
-    assert.equal(report.rows.length, 23);
+    assert.equal(report.rows.length, 33);
     assert.ok(
         report.rows.some(
             (row) =>
@@ -23,6 +23,10 @@ test('records text and unresolved provider-path cases without collapsing them', 
                 row.bamlParseResult === 'error'
         )
     );
+    assert.equal(report.parserStrictness.strictModeLocated, false);
+    assert.ok(report.maintenanceSurface.bamlPrototype.generatedClientLines > 0);
+    assert.equal(report.contractChangeErgonomics.currentUpdatePointCount, 6);
+    assert.equal(report.contractChangeErgonomics.bamlUpdatePointCount, 5);
     assert.ok(
         report.rows.every((row) =>
             row.kind === 'provider_failure'
@@ -48,6 +52,23 @@ test('records BAML assertion coverage for conditional ReviewDecision rules', () 
                 row.case === 'misaligned_without_reason_or_temperament' &&
                 row.currentFootnoteClassification === 'schema_invalid' &&
                 row.bamlParseResult === 'error'
+        )
+    );
+    assert.ok(
+        report.rows.some(
+            (row) =>
+                row.case === 'numeric_string_temperament' &&
+                row.bamlParseResult === 'success' &&
+                row.layeredFootnoteClassification === 'success' &&
+                row.layeredClassificationMatchesCurrent === false
+        )
+    );
+    assert.ok(
+        report.rows.some(
+            (row) =>
+                row.case === 'negative_temperament_axis' &&
+                row.layeredFootnoteClassification === 'schema_invalid' &&
+                row.layeredClassificationMatchesCurrent === true
         )
     );
 });

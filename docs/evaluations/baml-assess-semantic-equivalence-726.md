@@ -20,7 +20,8 @@ The matrix feeds identical synthetic output fixtures to:
 
 It covers success, optional fields, maximum shape, empty/malformed/invalid
 JSON, invalid enums and primitives, unexpected structure, incomplete objects,
-refusals, fenced JSON, conditional `ReviewDecision` rules, and explicit
+refusals, fenced/prose/multiple-object recovery, null/number coercion, enum
+casing, nested shape errors, conditional `ReviewDecision` rules, and explicit
 provider-failure rows. Provider-failure rows are intentionally `not_run`; a
 text parser cannot prove transport, finish-reason, retry, usage, cost, or
 attempt-lineage behavior.
@@ -44,12 +45,17 @@ Raw matrix: `artifacts/baml-assess-725/semantic-equivalence.json`.
 | misaligned without reason/temperament                      | `schema_invalid`                          | `BamlError` from assertion evaluation | conditional rule is not cleanly represented | Optional null handling produced an evaluation error.                     |
 | misaligned without temperament                             | `schema_invalid`                          | `BamlError` from assertion evaluation | conditional rule is not cleanly represented | The error is not Footnote's bounded failure envelope.                    |
 | invalid temperament axis                                   | `schema_invalid`                          | success with `tightness: 6`           | range validation lost                       | BAML primitive type alone does not preserve 1–5 bounds.                  |
+| numeric string temperament                                 | `schema_invalid`                          | success with `tightness: 3`           | primitive coercion and original lexeme lost | A post-parse validator sees `3`, not the rejected string input.          |
+| negative temperament axis                                  | `schema_invalid`                          | success with `tightness: -1`          | range validation recoverable                | A Footnote-owned validator can still reject the parsed number.           |
 | invalid nested concern enum                                | `schema_invalid`                          | success with concerns omitted         | nested validation/recovery differs          | BAML accepted a malformed nested object instead of preserving the issue. |
+| fenced/prose/multiple JSON                                 | `non_json_object` / `invalid_json`        | success                               | extra recovery                              | BAML's forgiving parser changes the current compatibility boundary.      |
+| null optional revise field                                 | `schema_invalid`                          | generic `BamlError` from assertion    | assertion evaluation error                  | Null handling is not a Footnote-equivalent conditional failure envelope. |
 | unsupported/incomplete/transport/runtime provider failures | outside parser                            | `not_run`                             | unresolved                                  | Requires live provider-path fixtures and Footnote attempt metadata.      |
 
-The detailed artifact records 23 rows, including the exact BAML error detail
-where available and the parsed value for permissive recoveries. Four provider
-rows remain explicitly unresolved rather than being counted as parser parity.
+The detailed artifact records 33 rows, including exact BAML error detail where
+available, the parsed value for permissive recoveries, and a second
+Footnote-parser pass over successful BAML values. Four provider rows remain
+explicitly unresolved rather than being counted as parser parity.
 
 ## Conditional validation investigation
 
@@ -60,24 +66,35 @@ The prototype adds three BAML block assertions:
 - `temperament_when_misaligned`.
 
 Current BAML documentation supports block `@@assert` expressions that can
-reference fields on `this`, including cross-field conditions. The experiment
-confirmed that assertions can reject the tested conditional-invalid inputs,
-but optional `null` values caused assertion-evaluation errors rather than a
-clean Footnote-equivalent validation result. The generated client still emits
-generic BAML errors, not `ReviewDecisionParseFailure` values. BAML also did
-not preserve Footnote's primitive range or nested-enum behavior in these
-fixtures.
+reference fields on `this`, including cross-field conditions, and `@check`
+expressions that preserve values while exposing non-throwing check results.
+The experiment confirmed that assertions can reject the tested
+conditional-invalid inputs, but optional `null` values caused
+assertion-evaluation errors rather than a clean Footnote-equivalent validation
+result. The generated client still emits generic BAML errors, not
+`ReviewDecisionParseFailure` values. BAML also did not preserve Footnote's
+primitive range, primitive-type, or nested-enum behavior in these fixtures.
+
+The official error-handling documentation describes the parser as forgiving,
+including recovery from minor formatting or thought-token noise. The current
+documentation and the pinned `0.226.2` TypeScript runtime expose assertions,
+checks, and generic `BamlValidationError`/`BamlError` boundaries, but no
+parser-wide strict/coercion switch was located. Field assertions can reject a
+coerced value such as `6` or `-1`; they cannot recover that the original input
+was the string `"3"`, or that a fenced/prose wrapper was rejected by Footnote.
 
 References checked on 2026-09-22:
 
 - <https://docs.boundaryml.com/guide/baml-advanced/checks-and-asserts>
 - <https://docs.boundaryml.com/ref/attributes/jinja-in-attributes>
 - <https://docs.boundaryml.com/guide/baml-basics/error-handling>
+- <https://docs.boundaryml.com/ref/baml_client/errors/overview>
 
-This means “BAML parse + Footnote semantic validator” is technically possible
-but is not yet shown to remove substantial independently maintained semantics;
-the assertion experiment instead exposed additional compatibility behavior to
-specify and test.
+This means “BAML parse + Footnote semantic validator” is technically possible.
+The layered probe demonstrates a split result: a Footnote validator recovers
+the negative-range failure, but cannot recover information BAML already
+coerced, omitted, or recovered. The experiment therefore has not shown that
+the layered stack removes substantial independently maintained semantics.
 
 ## Remaining custom surface
 
@@ -93,6 +110,29 @@ Footnote side still owns or would need to own:
 
 The BAML source is shorter, but the matrix shows that cosmetic source-line
 reduction is not semantic duplication removal. #727 remains unresolved.
+
+## Maintenance-surface and contract-change audit
+
+The report records measured line counts from this checkout and a modeled
+contract-change exercise. They are maintenance indicators, not a claim that
+all lines are equally complex:
+
+| Concern                                                 | Current Footnote |                     BAML + Footnote prototype |
+| ------------------------------------------------------- | ---------------: | --------------------------------------------: |
+| Hand-maintained contract/parser file                    |        383 lines |                         BAML source: 68 lines |
+| Compatibility tests                                     |        132 lines |     Equivalence/adapter tests remain required |
+| Generated code                                          |             none |                        1,077 TypeScript lines |
+| Modeled independent semantic update points              |                6 | 5, plus regeneration and provider integration |
+| Failure taxonomy, normalization, conditional validation |   Footnote-owned |                   Footnote-owned; not deleted |
+
+The modeled change adds a `reviewConfidence` integer constrained to `1..5`
+and required only for `revise`. The current path updates the contract/schema,
+structured-output schema, prompt, normalizer/conditional validation,
+failure-classification assertions, and compatibility fixtures. The BAML path
+updates the BAML class/assertion, regenerates the client, updates the
+Footnote adapter/semantic validator and failure mapping, checks any provider
+schema integration, and updates fixtures. This is a change in declaration
+location, not proof that the policy-sensitive update burden disappeared.
 
 ## Reproduction
 

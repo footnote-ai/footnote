@@ -36,6 +36,9 @@ export type EquivalenceRow = {
     bamlParsedValue: Record<string, unknown> | null;
     informationLost: boolean | null;
     extraRecoveryPerformed: boolean;
+    layeredFootnoteClassification:
+        'success' | ReviewDecisionParseFailureReason | 'not_run';
+    layeredClassificationMatchesCurrent: boolean | null;
     policySignificance: string;
 };
 
@@ -50,8 +53,110 @@ export type EquivalenceReport = {
         assertions: string[];
         finding: string;
     };
+    parserStrictness: {
+        documentedCapabilities: string[];
+        strictModeLocated: boolean;
+        finding: string;
+    };
+    maintenanceSurface: {
+        currentFootnote: {
+            contractFileLines: number;
+            compatibilityTestLines: number;
+            independentlyMaintainedSemanticLocations: number;
+        };
+        bamlPrototype: {
+            bamlSourceLines: number;
+            generatedClientLines: number;
+            adapterAndSemanticValidationLinesRetained: number;
+            independentlyMaintainedSemanticLocations: number;
+        };
+        finding: string;
+    };
+    contractChangeErgonomics: {
+        scenario: string;
+        currentUpdatePoints: string[];
+        bamlUpdatePoints: string[];
+        currentUpdatePointCount: number;
+        bamlUpdatePointCount: number;
+        generatedArtifacts: string[];
+        finding: string;
+    };
     rows: EquivalenceRow[];
 };
+
+const countLines = (relativePath: string): number => {
+    const filePath = path.resolve(relativePath);
+    return fs.readFileSync(filePath, 'utf8').split(/\r?\n/).length - 1;
+};
+
+const countTypeScriptLines = (relativeDirectory: string): number => {
+    const directoryPath = path.resolve(relativeDirectory);
+    return fs
+        .readdirSync(directoryPath, { withFileTypes: true })
+        .filter((entry) => entry.isFile() && entry.name.endsWith('.ts'))
+        .reduce(
+            (total, entry) =>
+                total + countLines(path.join(relativeDirectory, entry.name)),
+            0
+        );
+};
+
+const bamlSourceLines = [
+    'experiments/baml-assess-725/baml_src/types.baml',
+    'experiments/baml-assess-725/baml_src/functions.baml',
+    'experiments/baml-assess-725/baml_src/clients.baml',
+    'experiments/baml-assess-725/baml_src/generators.baml',
+].reduce((total, filePath) => total + countLines(filePath), 0);
+
+const maintenanceSurface: EquivalenceReport['maintenanceSurface'] = {
+    currentFootnote: {
+        contractFileLines: countLines(
+            'packages/backend/src/services/workflowEngine/reviewDecision.ts'
+        ),
+        compatibilityTestLines: countLines(
+            'packages/backend/test/workflowEngine/review-decision.test.ts'
+        ),
+        independentlyMaintainedSemanticLocations: 8,
+    },
+    bamlPrototype: {
+        bamlSourceLines,
+        generatedClientLines: countTypeScriptLines(
+            'experiments/baml-assess-725/baml_client'
+        ),
+        adapterAndSemanticValidationLinesRetained: countLines(
+            'packages/backend/src/services/workflowEngine/reviewDecision.ts'
+        ),
+        independentlyMaintainedSemanticLocations: 7,
+    },
+    finding:
+        'The prototype co-locates the typed declaration and prompt, but it did not demonstrate deletion of the Footnote parser, semantic validator, normalizer, failure classifier, or compatibility tests. The lower modeled location count is therefore authoring consolidation, not proven semantic-code deletion.',
+};
+
+const contractChangeErgonomics: EquivalenceReport['contractChangeErgonomics'] =
+    {
+        scenario:
+            'Hypothetical reviewConfidence integer constrained to 1..5 and required only when reviewDecision is revise; the change was modeled without modifying production files.',
+        currentUpdatePoints: [
+            'ReviewDecision TypeScript contract/schema',
+            'native structured-output JSON schema',
+            'default prompt contract text',
+            'normalizer and conditional semantic validation',
+            'failure-classification assertions',
+            'parser compatibility fixtures',
+        ],
+        bamlUpdatePoints: [
+            'BAML class field and conditional @@assert',
+            'generated TypeScript client regeneration',
+            'Footnote adapter/semantic validator and failure mapping',
+            'provider structured-output integration if transport schema changes',
+            'equivalence and compatibility fixtures',
+        ],
+        currentUpdatePointCount: 6,
+        bamlUpdatePointCount: 5,
+        generatedArtifacts: ['baml_client/*.ts'],
+        finding:
+            'BAML reduces declaration duplication only if the Footnote-owned semantic validator and failure mapping are already factored as reusable layers. In this prototype they are not removed; the simulated change still crosses nearly the same policy boundaries, plus code generation and provider integration.',
+    };
 
 const validFinalize = JSON.stringify({
     reviewDecision: 'finalize',
@@ -246,6 +351,98 @@ const fixtures: EquivalenceFixture[] = [
         policySignificance: 'Nested concern enums must not silently widen.',
     },
     {
+        name: 'null_required_decision',
+        kind: 'text_output',
+        output: JSON.stringify({
+            reviewDecision: null,
+            reviewReason: 'The draft is complete.',
+        }),
+        policySignificance:
+            'Null in a required decision field must remain schema-invalid.',
+    },
+    {
+        name: 'null_optional_revision_instruction',
+        kind: 'text_output',
+        output: JSON.stringify({
+            reviewDecision: 'revise',
+            reviewReason: 'Needs one correction.',
+            revisionInstruction: null,
+        }),
+        policySignificance:
+            'Null optional fields must still obey conditional revise semantics.',
+    },
+    {
+        name: 'numeric_string_temperament',
+        kind: 'text_output',
+        output: JSON.stringify({
+            reviewDecision: 'finalize',
+            reviewReason: 'The draft is complete.',
+            finalTemperament: { tightness: '3' },
+        }),
+        policySignificance:
+            'Numeric strings must not silently become bounded numeric axes.',
+    },
+    {
+        name: 'negative_temperament_axis',
+        kind: 'text_output',
+        output: JSON.stringify({
+            reviewDecision: 'finalize',
+            reviewReason: 'The draft is complete.',
+            finalTemperament: { tightness: -1 },
+        }),
+        policySignificance:
+            'Temperament lower bounds remain policy-significant.',
+    },
+    {
+        name: 'enum_casing_variant',
+        kind: 'text_output',
+        output: JSON.stringify({
+            reviewDecision: 'FINALIZE',
+            reviewReason: 'The draft is complete.',
+        }),
+        policySignificance:
+            'Enum casing must not silently widen decision states.',
+    },
+    {
+        name: 'malformed_nested_array',
+        kind: 'text_output',
+        output: JSON.stringify({
+            reviewDecision: 'finalize',
+            reviewReason: 'The draft is complete.',
+            concerns: [],
+        }),
+        policySignificance:
+            'Nested shape errors must remain distinguishable from omission.',
+    },
+    {
+        name: 'prose_before_json',
+        kind: 'text_output',
+        output: `Here is the decision:\n${validFinalize}`,
+        policySignificance:
+            'Leading prose is a compatibility boundary, not a valid object.',
+    },
+    {
+        name: 'prose_after_json',
+        kind: 'text_output',
+        output: `${validFinalize}\nThis is the end.`,
+        policySignificance:
+            'Trailing prose must not be hidden by a permissive parser.',
+    },
+    {
+        name: 'multiple_json_objects',
+        kind: 'text_output',
+        output: `${validFinalize}${validFinalize}`,
+        policySignificance:
+            'Multiple objects must not be collapsed into one policy decision.',
+    },
+    {
+        name: 'valid_object_after_garbage',
+        kind: 'text_output',
+        output: `garbage ${validFinalize}`,
+        policySignificance:
+            'Recovery after leading garbage changes parser compatibility semantics.',
+    },
+    {
         name: 'unsupported_structured_output',
         kind: 'provider_failure',
         policySignificance:
@@ -327,6 +524,8 @@ const compareFixture = (fixture: EquivalenceFixture): EquivalenceRow => {
             bamlParsedValue: null,
             informationLost: null,
             extraRecoveryPerformed: false,
+            layeredFootnoteClassification: 'not_run',
+            layeredClassificationMatchesCurrent: null,
             policySignificance: fixture.policySignificance,
         };
     }
@@ -335,6 +534,9 @@ const compareFixture = (fixture: EquivalenceFixture): EquivalenceRow => {
     const baml = parseWithBaml(fixture.output);
     const currentSucceeded = current.classification === 'success';
     const bamlSucceeded = baml.bamlParseResult === 'success';
+    const layered = baml.bamlParsedValue
+        ? classifyCurrentParser(JSON.stringify(baml.bamlParsedValue))
+        : { classification: 'not_run' as const };
     return {
         case: fixture.name,
         kind: fixture.kind,
@@ -344,6 +546,10 @@ const compareFixture = (fixture: EquivalenceFixture): EquivalenceRow => {
             currentSucceeded !== bamlSucceeded ||
             (!currentSucceeded && baml.bamlErrorType !== null),
         extraRecoveryPerformed: !currentSucceeded && bamlSucceeded,
+        layeredFootnoteClassification: layered.classification,
+        layeredClassificationMatchesCurrent: bamlSucceeded
+            ? layered.classification === current.classification
+            : null,
         policySignificance: fixture.policySignificance,
     };
 };
@@ -368,6 +574,19 @@ export const runSemanticEquivalenceMatrix = (): EquivalenceReport => ({
         finding:
             'BAML block assertions reject the tested conditional-invalid fixtures, but optional null values cause assertion-evaluation errors rather than a clean Footnote-equivalent validation result. The generated TypeScript surface still exposes generic errors rather than Footnote review-decision failure envelopes.',
     },
+    parserStrictness: {
+        documentedCapabilities: [
+            'BAML @@assert and @assert provide strict value and cross-field validation.',
+            'BAML @check preserves values while exposing non-throwing check results.',
+            'The parser is documented as forgiving and can recover minor formatting or thought-token noise.',
+            'BamlValidationError exposes a generic parse/validation failure boundary.',
+        ],
+        strictModeLocated: false,
+        finding:
+            'Current official documentation and the pinned 0.226.2 TypeScript runtime expose assertions/checks and parser recovery, but no parser-wide strict/coercion switch was located. Field assertions can enforce ranges after coercion; they cannot recover the original primitive type or rejected wrapper once parsing has normalized it.',
+    },
+    maintenanceSurface,
+    contractChangeErgonomics,
     rows: fixtures.map(compareFixture),
 });
 

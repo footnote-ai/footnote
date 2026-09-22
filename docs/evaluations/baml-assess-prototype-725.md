@@ -13,7 +13,7 @@ slice alone**.
 
 Run date: 2026-09-22
 
-Base: `origin/main` at `6fa7416ae8ff5e8d052dac67a2ae10eb074d6d58`
+Base: `origin/main` at the experiment's starting revision
 
 BAML: `@boundaryml/baml 0.226.2`
 
@@ -78,19 +78,20 @@ BAML by inference.
 
 Measured line counts for this prototype run:
 
-| Layer                                         | Lines | Interpretation                                                           |
-| --------------------------------------------- | ----: | ------------------------------------------------------------------------ |
-| Current `reviewDecision.ts`                   |   401 | hand-maintained prompt, schema, normalizer, parser, and failure envelope |
-| Current parser tests                          |   153 | existing hand-maintained compatibility coverage                          |
-| BAML source (`types`, `functions`, `clients`) |    51 | hand-maintained typed function/prompt/client declarations                |
-| Prototype probe and manifest                  |   114 | hand-maintained harness/tooling                                          |
-| Generated TypeScript client                   | 1,273 | generated dependency/build surface; not hand-maintained                  |
+| Layer                                                       | Lines | Interpretation                                                           |
+| ----------------------------------------------------------- | ----: | ------------------------------------------------------------------------ |
+| Current `reviewDecision.ts`                                 |   401 | hand-maintained prompt, schema, normalizer, parser, and failure envelope |
+| Current parser tests                                        |   153 | existing hand-maintained compatibility coverage                          |
+| BAML source (`types`, `functions`, `clients`, `generators`) |    76 | hand-maintained typed function/prompt/client declarations                |
+| Prototype probe and manifest                                |   114 | hand-maintained harness/tooling                                          |
+| Generated TypeScript client                                 | 1,273 | generated dependency/build surface; not hand-maintained                  |
 
 The BAML source is shorter than the current contract file, but the generated
-client and runtime dependency are substantial. No current Footnote source can
-be deleted safely: the existing parser is still needed for conditional
-validation, Footnote-specific failure taxonomy, normalization, routing, and
-provenance mapping.
+client and runtime dependency are substantial. The follow-on 33-row matrix
+also shows that the existing parser or an equivalent Footnote-owned layer is
+still needed for conditional validation, Footnote-specific failure taxonomy,
+normalization, routing, and provenance mapping. No current Footnote source can
+be deleted safely from this evidence.
 
 ## Recommendation for #725
 
