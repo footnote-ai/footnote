@@ -15,6 +15,7 @@ from openjev_runtime_benchmark import (
     build_candidates,
     build_report,
     collect_measurements,
+    accelerator_backend,
     parse_args,
     safe_output_path,
     summarize_measurements,
@@ -70,13 +71,28 @@ class OpenJevRuntimeBenchmarkTests(unittest.TestCase):
         hypotheses = next(item for item in measurements if item.operation == "predict_hypotheses")
         self.assertEqual(hypotheses.status, "unavailable")
 
-    def test_report_is_blocked_without_revision_and_target_cuda(self) -> None:
+    def test_report_is_blocked_without_revision_and_supported_accelerator(self) -> None:
         args = parse_args([])
         report = build_report(args)
 
         self.assertEqual(report["benchmark"], "openjev_runtime_718")
         self.assertIn(report["status"], {"blocked", "unavailable"})
         self.assertEqual(report["coexistence"]["status"], "not_requested")
+
+    def test_rocm_uses_the_same_torch_device_api(self) -> None:
+        class FakeCuda:
+            @staticmethod
+            def is_available() -> bool:
+                return True
+
+        class FakeVersion:
+            hip = "7.2.1"
+
+        class FakeTorch:
+            cuda = FakeCuda()
+            version = FakeVersion()
+
+        self.assertEqual(accelerator_backend(FakeTorch()), "rocm")
 
     def test_generator_command_is_parsed_without_shell_recomposition(self) -> None:
         args = parse_args(["--generator-command", "python", "generator.py", "--port", "9000"])

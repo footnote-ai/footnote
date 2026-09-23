@@ -176,7 +176,10 @@ def runtime_preflight(args: argparse.Namespace) -> dict[str, str] | None:
         return None
     return {
         "status": "blocked",
-        "reason": "CUDA is unavailable; pass --allow-cpu only for an intentional CPU experiment.",
+        "reason": (
+            "PyTorch cannot see a supported accelerator (CUDA or ROCm/HIP); "
+            "pass --allow-cpu only for an intentional CPU experiment."
+        ),
     }
 
 
@@ -320,6 +323,16 @@ def accelerator_details(torch_module: Any) -> tuple[str | None, float | None]:
     return properties.name, properties.total_memory / (1024 * 1024)
 
 
+def accelerator_backend(torch_module: Any) -> str | None:
+    """Reports the backend exposed through PyTorch's CUDA-compatible API."""
+    hip_version = getattr(getattr(torch_module, "version", None), "hip", None)
+    if hip_version:
+        return "rocm"
+    if bool(torch_module.cuda.is_available()):
+        return "cuda"
+    return None
+
+
 def benchmark_cross_encoder(args: argparse.Namespace) -> dict[str, object]:
     preflight = runtime_preflight(args)
     if preflight is not None:
@@ -364,10 +377,18 @@ def build_report(args: argparse.Namespace) -> dict[str, object]:
 
         torch_version: str | None = getattr(torch, "__version__", None)
         cuda_available = bool(torch.cuda.is_available())
+        torch_hip_version: str | None = getattr(
+            getattr(torch, "version", None), "hip", None
+        )
+        accelerator_available = cuda_available
+        backend = accelerator_backend(torch)
         accelerator_model, total_vram_mb = accelerator_details(torch)
     except ImportError:
         torch_version = None
         cuda_available = False
+        torch_hip_version = None
+        accelerator_available = False
+        backend = None
         accelerator_model = None
         total_vram_mb = None
 
@@ -380,6 +401,9 @@ def build_report(args: argparse.Namespace) -> dict[str, object]:
             "hostname": platform.node(),
             "torch": torch_version,
             "cuda_available": cuda_available,
+            "accelerator_available": accelerator_available,
+            "accelerator_backend": backend,
+            "torch_hip_version": torch_hip_version,
             "accelerator_model": accelerator_model,
             "total_vram_mb": total_vram_mb,
             "harness_revision": git_revision(Path.cwd()),
