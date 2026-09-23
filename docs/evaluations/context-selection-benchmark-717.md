@@ -8,8 +8,8 @@
 
 # Context-selection benchmark (#717)
 
-Status: **hardened cheap-baseline expansion complete; OpenJEV runtime gate
-remains unavailable on this machine**.
+Status: **hardened cheap-baseline expansion complete; hosted/reference semantic
+backends are the next evaluation path**.
 
 Run date: 2026-09-22
 
@@ -60,17 +60,17 @@ harness does not call production context selection or change production input.
 
 ## Compared methods
 
-| Method                                  | Result in this slice                                              |
-| --------------------------------------- | ----------------------------------------------------------------- |
-| Current 24-message window               | Completed; fail-open baseline                                     |
-| Recency plus reply expansion            | Completed                                                         |
-| Recency plus same-author continuation   | Completed                                                         |
-| BM25-style lexical retrieval            | Completed                                                         |
-| BM25 plus reply expansion               | Completed                                                         |
-| BM25 plus deterministic graph expansion | Completed; 12 lexical seeds, bounded to 24 selected messages      |
-| Dependency-free hash embedding proxy    | Completed; not a neural embedding                                 |
-| Existing cross-encoder/reranker         | Explicitly unavailable; no configured dependency in Footnote      |
-| OpenJEV                                 | Explicitly unavailable; not configured or invoked by this harness |
+| Method                                  | Result in this slice                                                   |
+| --------------------------------------- | ---------------------------------------------------------------------- |
+| Current 24-message window               | Completed; fail-open baseline                                          |
+| Recency plus reply expansion            | Completed                                                              |
+| Recency plus same-author continuation   | Completed                                                              |
+| BM25-style lexical retrieval            | Completed                                                              |
+| BM25 plus reply expansion               | Completed                                                              |
+| BM25 plus deterministic graph expansion | Completed; 12 lexical seeds, bounded to 24 selected messages           |
+| Dependency-free hash embedding proxy    | Completed; not a neural embedding                                      |
+| Existing cross-encoder/reranker         | Explicitly unavailable; no configured dependency in Footnote           |
+| OpenJEV/local model                     | Explicitly unavailable; local deployment is tracked separately in #718 |
 
 The hash embedding is included only as a reproducible local comparison point.
 It must not be described as evidence from a neural embedding model.
@@ -157,15 +157,15 @@ not tokenizer measurements. This is not generated-answer evidence:
 generation latency, cost, and provider usage remain unavailable and are
 explicitly null in `artifacts/context-selection-717/answer-quality.json`.
 
-## OpenJEV verification
+## Model-backed follow-up
 
 The current upstream `AlexWortega/openjev` repository documents the
 `qwen3.5-0.8b-nli-v2s-long` checkpoint, three-way contradiction/entailment/
 neutral classification, `predict_hypotheses`, `rerank`, and shared-prefix
 batching. The model card also documents the 4B path and an SGLang serving path.
-The exact checkpoint and batching formulation must be pinned when the runtime
-gate is rerun; this report does not infer conversational relevance from generic
-NLI claims.
+The exact checkpoint and batching formulation must be pinned when the local
+deployment benchmark is rerun; this report does not infer conversational
+relevance from generic NLI claims.
 
 Primary references checked on 2026-09-22:
 
@@ -173,9 +173,10 @@ Primary references checked on 2026-09-22:
 - <https://huggingface.co/AlexWortega/openjev/tree/main>
 
 This machine has Python 3.13.5, CPU-only PyTorch, no `transformers` package,
-and no CUDA device. Downloading model weights or sending private transcript
-content to a hosted provider was therefore not appropriate. The OpenJEV row
-is an external/runtime prerequisite, not a benchmark failure.
+and no configured local accelerator runtime. Downloading model weights or
+sending private transcript content to a hosted provider was therefore not
+appropriate for this offline slice. The local OpenJEV row is a separate
+deployment prerequisite, not a failure of this context-selection benchmark.
 
 ## Interpretation and gate
 
@@ -185,12 +186,14 @@ matches BM25-plus-reply recall while selecting about 39% fewer messages and
 lowering the measured distracting rate. That is a meaningful null hypothesis
 for any future semantic selector. The result does **not** establish production
 quality because the corpus remains synthetic, pronoun performance is weak, and
-OpenJEV has not been run.
+no hosted or local semantic backend has been run.
 
-Recommendation for #717: keep the experiment open for the pinned OpenJEV
-0.8B/current-small-model run and blinded downstream answer-quality comparison.
-Do not advance to #719/#720 based on this slice alone. #718 is the next
-independent gate for local runtime feasibility.
+Recommendation for #717: keep the experiment open for a provider-neutral,
+flat comparison using sanitized fixtures and hosted/reference semantic
+backends, followed by the same corpus on local OpenJEV when #718 produces real
+measurements. Do not advance to production context selection based on this
+slice alone. #718 is an independent local-runtime gate and must not block the
+first semantic-value experiment.
 
 ## Provisional value gate for a future semantic selector
 
