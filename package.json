@@ -46,6 +46,7 @@
         "eval:context-answer-quality": "pnpm exec tsx scripts/context-selection-answer-quality.ts",
         "eval:context-selection-evidence": "pnpm exec tsx scripts/context-selection-evidence.ts",
         "eval:context-selection-replay": "pnpm exec tsx scripts/context-selection-chat-replay.ts",
+        "eval:context-selection-hosted": "pnpm exec tsx scripts/context-selection-hosted.ts",
         "check-annotation-schema": "pnpm exec tsx scripts/check-annotation-schema.ts",
         "validate-footnote-tags": "pnpm exec tsx scripts/validate-footnote-tags.ts",
         "validate-env": "pnpm exec tsx scripts/validate-env.ts",

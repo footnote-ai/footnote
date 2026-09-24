@@ -22,6 +22,7 @@ export type ContextSelectionMethod =
     | 'bm25_graph_expansion'
     | 'hash_embedding_proxy'
     | 'existing_cross_encoder'
+    | 'hosted_zero_shot'
     | 'openjev';
 
 export type BenchmarkMessage = {
@@ -1132,6 +1133,18 @@ export const selectContext = (
                 reason: 'No cross-encoder or reranker dependency is configured in Footnote.',
             };
             break;
+        case 'hosted_zero_shot':
+            result = {
+                method,
+                status: 'unavailable',
+                messageIds: [],
+                candidateCount: entry.messages.length,
+                retrievalDepth: 0,
+                branchExpansions: 0,
+                latencyMs: null,
+                reason: 'Hosted zero-shot selection is only run by its explicit benchmark adapter.',
+            };
+            break;
         case 'openjev':
             result = {
                 method,
@@ -1189,6 +1202,7 @@ export const selectContextAtBudget = (
             result = selectScored(method, entry, budget);
             break;
         case 'existing_cross_encoder':
+        case 'hosted_zero_shot':
         case 'openjev':
             result = selectContext(method, entry);
             break;
