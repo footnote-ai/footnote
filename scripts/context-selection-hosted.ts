@@ -77,6 +77,44 @@ export type HostedSelectionOptions = {
     fetchImpl?: typeof fetch;
 };
 
+/** Reads a previously completed hosted run without contacting the provider. */
+export const readHostedSelectionRecords = (
+    filePath: string
+): HostedSelectionRecord[] => {
+    const records: HostedSelectionRecord[] = [];
+    const lines = fs
+        .readFileSync(filePath, 'utf8')
+        .split(/\r?\n/gu)
+        .filter((line) => line.trim().length > 0);
+
+    for (const [index, line] of lines.entries()) {
+        let value: unknown;
+        try {
+            value = JSON.parse(line) as unknown;
+        } catch (error) {
+            throw new Error(
+                `Invalid hosted selection JSON on line ${index + 1}: ${error instanceof Error ? error.message : String(error)}`
+            );
+        }
+        if (!isRecord(value) || typeof value.caseId !== 'string') {
+            throw new Error(
+                `Hosted selection line ${index + 1} is missing a caseId.`
+            );
+        }
+        const selection = isRecord(value.selection) ? value.selection : null;
+        if (
+            selection?.method !== 'hosted_zero_shot' ||
+            !Array.isArray(selection.messageIds)
+        ) {
+            throw new Error(
+                `Hosted selection line ${index + 1} is not a hosted selector record.`
+            );
+        }
+        records.push(value as unknown as HostedSelectionRecord);
+    }
+    return records;
+};
+
 type JsonRecord = Record<string, unknown>;
 
 type HostedFailureCategory = 'transport' | 'http' | 'response' | 'parse';
@@ -473,6 +511,7 @@ type CliArguments = {
     outputDirectory: string;
     replay: boolean;
     replayBaseUrl: string;
+    selectionFile?: string;
 };
 
 const readArguments = (args: readonly string[]): CliArguments => {
@@ -490,6 +529,7 @@ const readArguments = (args: readonly string[]): CliArguments => {
     );
     let replay = false;
     let replayBaseUrl = process.env.BACKEND_BASE_URL ?? 'http://localhost:3000';
+    let selectionFile: string | undefined;
 
     for (let index = 0; index < args.length; index += 1) {
         const argument = args[index];
@@ -522,6 +562,9 @@ const readArguments = (args: readonly string[]): CliArguments => {
         } else if (argument === '--replay-base-url' && value !== undefined) {
             replayBaseUrl = value;
             index += 1;
+        } else if (argument === '--selection-file' && value !== undefined) {
+            selectionFile = path.resolve(value);
+            index += 1;
         } else {
             throw new Error(`Unknown or incomplete argument: ${argument}`);
         }
@@ -535,6 +578,9 @@ const readArguments = (args: readonly string[]): CliArguments => {
     if (!Number.isFinite(timeoutMs) || timeoutMs <= 0) {
         throw new Error('--timeout-ms must be positive.');
     }
+    if (selectionFile !== undefined && !replay) {
+        throw new Error('--selection-file requires --replay.');
+    }
     return {
         caseId,
         limit,
@@ -545,6 +591,7 @@ const readArguments = (args: readonly string[]): CliArguments => {
         outputDirectory,
         replay,
         replayBaseUrl,
+        selectionFile,
     };
 };
 
@@ -650,6 +697,7 @@ Options:
   --output-dir <path>            Local artifact directory.
   --replay                       Also use the existing /api/chat replay client.
   --replay-base-url <url>        Footnote backend URL.
+  --selection-file <path>        Replay frozen hosted-selection.jsonl records without new provider calls (requires --replay).
 `);
 };
 
@@ -657,27 +705,55 @@ const runCli = async (): Promise<void> => {
     dotenv.config({ quiet: true });
     const args = readArguments(process.argv.slice(2));
     const apiKey = process.env.OPENROUTER_API_KEY;
-    if (!apiKey) throw new Error('OPENROUTER_API_KEY is required.');
+    if (!args.selectionFile && !apiKey) {
+        throw new Error('OPENROUTER_API_KEY is required for a new hosted run.');
+    }
     if (args.replay && !process.env.AGENT_API_TOKEN) {
         throw new Error('AGENT_API_TOKEN is required when --replay is used.');
     }
     const corpus = buildBenchmarkCorpus();
-    const cases = args.caseId
-        ? corpus.filter((entry) => entry.id === args.caseId)
-        : corpus.slice(0, args.limit);
+    const frozenRecords = args.selectionFile
+        ? readHostedSelectionRecords(args.selectionFile)
+        : null;
+    const recordsToReplay = frozenRecords
+        ? frozenRecords.filter((record) =>
+              args.caseId
+                  ? record.caseId === args.caseId
+                  : corpus
+                        .slice(0, args.limit)
+                        .some((entry) => entry.id === record.caseId)
+          )
+        : null;
+    const cases = recordsToReplay
+        ? recordsToReplay.map((record) => {
+              const entry = corpus.find(
+                  (candidate) => candidate.id === record.caseId
+              );
+              if (entry === undefined) {
+                  throw new Error(
+                      `Frozen hosted selection references unknown case: ${record.caseId}`
+                  );
+              }
+              return entry;
+          })
+        : args.caseId
+          ? corpus.filter((entry) => entry.id === args.caseId)
+          : corpus.slice(0, args.limit);
     if (cases.length === 0)
         throw new Error(`Benchmark case not found: ${args.caseId}`);
     fs.mkdirSync(args.outputDirectory, { recursive: true });
     const records: HostedSelectionRecord[] = [];
     const replayRecords: ContextReplayRecord[] = [];
     for (const entry of cases) {
-        const record = await runOpenRouterSelection(entry, {
-            apiKey,
-            model: args.model,
-            baseUrl: args.baseUrl,
-            budget: args.budget,
-            timeoutMs: args.timeoutMs,
-        });
+        const record =
+            frozenRecords?.find((candidate) => candidate.caseId === entry.id) ??
+            (await runOpenRouterSelection(entry, {
+                apiKey: apiKey!,
+                model: args.model,
+                baseUrl: args.baseUrl,
+                budget: args.budget,
+                timeoutMs: args.timeoutMs,
+            }));
         records.push(record);
         if (args.replay) {
             replayRecords.push(

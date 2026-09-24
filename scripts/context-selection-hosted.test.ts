@@ -6,10 +6,16 @@
  * @footnote-ethics: low - Fixtures are synthetic and remain inside mocked requests.
  */
 import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
 import test from 'node:test';
 
 import { buildBenchmarkCorpus } from './context-selection-benchmark.js';
-import { runOpenRouterSelection } from './context-selection-hosted.js';
+import {
+    readHostedSelectionRecords,
+    runOpenRouterSelection,
+} from './context-selection-hosted.js';
 
 test('maps hosted zero-shot labels into a bounded SelectionResult', async () => {
     const entry = buildBenchmarkCorpus()[0];
@@ -97,4 +103,34 @@ test('keeps provider failures separate from unavailable selection', async () => 
     assert.equal(result.selection.messageIds.length, 0);
     assert.equal(result.error?.category, 'http');
     assert.match(result.error?.message ?? '', /rate limited/u);
+});
+
+test('reads frozen hosted records without changing their selection', () => {
+    const directory = fs.mkdtempSync(
+        path.join(os.tmpdir(), 'footnote-hosted-selection-')
+    );
+    const filePath = path.join(directory, 'hosted-selection.jsonl');
+    fs.writeFileSync(
+        filePath,
+        `${JSON.stringify({
+            schemaVersion: 1,
+            caseId: 'context-selection-001',
+            selection: {
+                method: 'hosted_zero_shot',
+                status: 'completed',
+                messageIds: ['context-selection-001-message-001'],
+            },
+        })}\n`,
+        'utf8'
+    );
+
+    try {
+        const records = readHostedSelectionRecords(filePath);
+        assert.equal(records.length, 1);
+        assert.deepEqual(records[0]?.selection.messageIds, [
+            'context-selection-001-message-001',
+        ]);
+    } finally {
+        fs.rmSync(directory, { recursive: true, force: true });
+    }
 });
