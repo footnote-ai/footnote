@@ -23,6 +23,9 @@ export type ContextSelectionMethod =
     | 'hash_embedding_proxy'
     | 'existing_cross_encoder'
     | 'hosted_zero_shot'
+    | 'bm25_graph_semantic_prune'
+    | 'semantic_structural_closure'
+    | 'semantic_plus_bm25_top3'
     | 'openjev';
 
 export type BenchmarkMessage = {
@@ -1134,6 +1137,9 @@ export const selectContext = (
             };
             break;
         case 'hosted_zero_shot':
+        case 'bm25_graph_semantic_prune':
+        case 'semantic_structural_closure':
+        case 'semantic_plus_bm25_top3':
             result = {
                 method,
                 status: 'unavailable',
@@ -1142,7 +1148,7 @@ export const selectContext = (
                 retrievalDepth: 0,
                 branchExpansions: 0,
                 latencyMs: null,
-                reason: 'Hosted zero-shot selection is only run by its explicit benchmark adapter.',
+                reason: 'This benchmark-only hybrid is only run by its explicit offline or replay adapter.',
             };
             break;
         case 'openjev':
@@ -1203,6 +1209,9 @@ export const selectContextAtBudget = (
             break;
         case 'existing_cross_encoder':
         case 'hosted_zero_shot':
+        case 'bm25_graph_semantic_prune':
+        case 'semantic_structural_closure':
+        case 'semantic_plus_bm25_top3':
         case 'openjev':
             result = selectContext(method, entry);
             break;

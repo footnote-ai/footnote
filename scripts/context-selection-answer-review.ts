@@ -450,6 +450,7 @@ type CliArguments = {
     currentReplay: string;
     graphReplay: string;
     hostedReplay: string;
+    hybridReplay?: string;
     outputDirectory: string;
     limit: number;
     caseId?: string;
@@ -490,6 +491,9 @@ const readArguments = (args: readonly string[]): CliArguments => {
             index += 1;
         } else if (argument === '--hosted-replay' && value !== undefined) {
             values.hostedReplay = path.resolve(value);
+            index += 1;
+        } else if (argument === '--hybrid-replay' && value !== undefined) {
+            values.hybridReplay = path.resolve(value);
             index += 1;
         } else if (argument === '--output-dir' && value !== undefined) {
             values.outputDirectory = path.resolve(value);
@@ -552,20 +556,31 @@ const main = async (): Promise<void> => {
     const hosted = readJsonLines(args.hostedReplay).filter(
         (record) => record.selector.method === 'hosted_zero_shot'
     );
-    const byMethod = new Map<string, Map<string, ContextReplayRecord>>([
-        [
-            'current_window',
-            new Map(current.map((record) => [record.caseId, record])),
-        ],
-        [
-            'bm25_graph_expansion',
-            new Map(graph.map((record) => [record.caseId, record])),
-        ],
-        [
-            'hosted_zero_shot',
-            new Map(hosted.map((record) => [record.caseId, record])),
-        ],
-    ]);
+    const methods: Array<[string, ContextReplayRecord[]]> =
+        args.hybridReplay === undefined
+            ? [
+                  ['current_window', current],
+                  ['bm25_graph_expansion', graph],
+                  ['hosted_zero_shot', hosted],
+              ]
+            : [
+                  ['bm25_graph_expansion', graph],
+                  ['hosted_zero_shot', hosted],
+                  [
+                      'semantic_plus_bm25_top3',
+                      readJsonLines(args.hybridReplay).filter(
+                          (record) =>
+                              record.selector.method ===
+                              'semantic_plus_bm25_top3'
+                      ),
+                  ],
+              ];
+    const byMethod = new Map<string, Map<string, ContextReplayRecord>>(
+        methods.map(([method, records]) => [
+            method,
+            new Map(records.map((record) => [record.caseId, record])),
+        ])
+    );
     const cases = buildBenchmarkCorpus()
         .filter((entry) =>
             args.caseId === undefined ? true : entry.id === args.caseId
@@ -578,7 +593,9 @@ const main = async (): Promise<void> => {
     for (const entry of cases) {
         const answers = buildBlindedAnswers(
             entry.id,
-            [...byMethod.entries()].flatMap(([method, recordsByCase]) => {
+            methods.flatMap(([method]) => {
+                const recordsByCase = byMethod.get(method);
+                if (recordsByCase === undefined) return [];
                 const responseText = recordsByCase.get(entry.id)?.chat
                     .responseText;
                 return responseText === null || responseText === undefined
