@@ -69,6 +69,15 @@ export type AnswerQualityReport = {
     cases: AnswerQualityCaseMetric[];
 };
 
+/** Synthetic answer checks used for replay comparison, not general judging. */
+export type GeneratedAnswerSupport = {
+    answerCorrect: boolean;
+    expectedFactsFound: number;
+    expectedFactCount: number;
+    /** Possible lexical overlap with a labeled distractor, not proof of leakage. */
+    distractorOverlapDetected: boolean;
+};
+
 const METHODS: AnswerQualityMethod[] = [
     'current_window',
     'bm25',
@@ -165,6 +174,49 @@ const factsSupportedByContext = (
             return fact.every((token) => tokens.has(token));
         })
     );
+
+const factsSupportedByAnswer = (
+    entry: ContextBenchmarkCase,
+    facts: readonly string[][],
+    answer: string
+): GeneratedAnswerSupport => {
+    const answerTokens = new Set(tokenize(answer));
+    const found = facts.filter((fact) =>
+        fact.every((token) => answerTokens.has(token))
+    ).length;
+    return {
+        answerCorrect: found === facts.length,
+        expectedFactsFound: found,
+        expectedFactCount: facts.length,
+        distractorOverlapDetected: entry.distractingMessageIds.some(
+            (messageId) => {
+                const message = entry.messages.find(
+                    (candidate) => candidate.id === messageId
+                );
+                if (message === undefined) {
+                    return false;
+                }
+                const distinctiveTokens = [
+                    ...new Set(tokenize(message.text)),
+                ].filter((token) => token.length >= 4);
+                const overlapCount = distinctiveTokens.filter((token) =>
+                    answerTokens.has(token)
+                ).length;
+                return overlapCount >= 2;
+            }
+        ),
+    };
+};
+
+/**
+ * Applies the existing synthetic fact proxy to a generated answer.
+ * This is evidence for fixture comparison only, not a general answer judge.
+ */
+export const evaluateGeneratedAnswer = (
+    entry: ContextBenchmarkCase,
+    answer: string
+): GeneratedAnswerSupport =>
+    factsSupportedByAnswer(entry, REFERENCE_FACTS[entry.category], answer);
 
 const estimateContextTokens = (
     entry: ContextBenchmarkCase,

@@ -11,6 +11,8 @@ import os from 'node:os';
 import path from 'node:path';
 import { performance } from 'node:perf_hooks';
 
+import type { ChatTriggerKind } from '@footnote/contracts/web';
+
 export type ContextSelectionMethod =
     | 'current_window'
     | 'recency_reply_expansion'
@@ -25,6 +27,9 @@ export type ContextSelectionMethod =
 export type BenchmarkMessage = {
     id: string;
     authorId: string;
+    authorName?: string;
+    createdAt?: string;
+    role?: 'user' | 'assistant';
     text: string;
     replyToId?: string;
 };
@@ -53,6 +58,8 @@ export type ContextBenchmarkCase = {
         | 'speaker_sensitive'
         | 'negative_historical_match';
     latestUserInput: string;
+    triggerKind?: ChatTriggerKind;
+    triggerMessageId?: string;
     triggerReplyToId?: string;
     messages: BenchmarkMessage[];
     necessaryMessageIds: string[];
@@ -626,6 +633,8 @@ const buildScenario = (
         id: `context-selection-${caseNumber.toString().padStart(3, '0')}`,
         category,
         latestUserInput,
+        triggerKind: 'direct',
+        triggerMessageId: `case-${caseNumber}-trigger`,
         ...(triggerReplyToId === undefined ? {} : { triggerReplyToId }),
         messages,
         necessaryMessageIds,
