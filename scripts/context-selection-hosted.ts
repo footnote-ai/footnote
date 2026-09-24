@@ -79,7 +79,19 @@ export type HostedSelectionOptions = {
 
 type JsonRecord = Record<string, unknown>;
 
-class HostedResponseError extends Error {}
+type HostedFailureCategory = 'transport' | 'http' | 'response' | 'parse';
+
+class HostedError extends Error {
+    public readonly category: Exclude<HostedFailureCategory, 'transport'>;
+
+    public constructor(
+        category: Exclude<HostedFailureCategory, 'transport'>,
+        message: string
+    ) {
+        super(message);
+        this.category = category;
+    }
+}
 
 const isRecord = (value: unknown): value is JsonRecord =>
     typeof value === 'object' && value !== null && !Array.isArray(value);
@@ -104,13 +116,20 @@ const responseMessage = (value: unknown): string => {
 
 const parseResponseContent = (content: string): unknown => {
     const trimmed = content.trim();
-    const withoutFence = trimmed
-        .replace(/^```(?:json)?\s*/u, '')
-        .replace(/\s*```$/u, '');
+    let withoutFence = trimmed;
+    if (trimmed.startsWith('```')) {
+        const firstLineEnd = trimmed.indexOf('\n');
+        withoutFence =
+            firstLineEnd < 0 ? '' : trimmed.slice(firstLineEnd + 1).trim();
+        if (withoutFence.endsWith('```')) {
+            withoutFence = withoutFence.slice(0, -3).trim();
+        }
+    }
     const start = withoutFence.indexOf('{');
     const end = withoutFence.lastIndexOf('}');
     if (start < 0 || end <= start) {
-        throw new HostedResponseError(
+        throw new HostedError(
+            'parse',
             'Hosted selector response did not contain a JSON object.'
         );
     }
@@ -156,7 +175,8 @@ const classifyCandidates = (
     budget: number
 ): HostedCandidateScore[] => {
     if (!isRecord(value) || !Array.isArray(value.candidates)) {
-        throw new HostedResponseError(
+        throw new HostedError(
+            'parse',
             'Hosted selector response is missing candidates.'
         );
     }
@@ -165,7 +185,8 @@ const classifyCandidates = (
     const candidates = value.candidates.map(
         (candidate): HostedCandidateScore => {
             if (!isRecord(candidate)) {
-                throw new HostedResponseError(
+                throw new HostedError(
+                    'parse',
                     'Hosted selector returned an invalid candidate.'
                 );
             }
@@ -183,7 +204,8 @@ const classifyCandidates = (
                 confidence < 0 ||
                 confidence > 1
             ) {
-                throw new HostedResponseError(
+                throw new HostedError(
+                    'parse',
                     'Hosted selector returned an invalid or duplicate candidate score.'
                 );
             }
@@ -198,7 +220,8 @@ const classifyCandidates = (
         }
     );
     if (seenIds.size !== entry.messages.length) {
-        throw new HostedResponseError(
+        throw new HostedError(
+            'parse',
             `Hosted selector scored ${seenIds.size} of ${entry.messages.length} candidates.`
         );
     }
@@ -239,17 +262,29 @@ const classifyCandidates = (
     }));
 };
 
-const makeRecord = (
-    entry: ContextBenchmarkCase,
-    selection: SelectionResult,
-    options: HostedSelectionOptions,
-    returnedModel: string | null,
-    candidates: HostedCandidateScore[],
-    usage: HostedSelectionRecord['usage'],
-    costUsd: number | null,
-    responseContent: string | null,
-    error: HostedSelectionRecord['error']
-): HostedSelectionRecord => ({
+type HostedRecordInput = {
+    entry: ContextBenchmarkCase;
+    selection: SelectionResult;
+    options: HostedSelectionOptions;
+    returnedModel: string | null;
+    candidates: HostedCandidateScore[];
+    usage: HostedSelectionRecord['usage'];
+    costUsd: number | null;
+    responseContent: string | null;
+    error: HostedSelectionRecord['error'];
+};
+
+const makeRecord = ({
+    entry,
+    selection,
+    options,
+    returnedModel,
+    candidates,
+    usage,
+    costUsd,
+    responseContent,
+    error,
+}: HostedRecordInput): HostedSelectionRecord => ({
     schemaVersion: 1,
     caseId: entry.id,
     category: entry.category,
@@ -271,6 +306,55 @@ const makeRecord = (
     error,
 });
 
+type HostedResponseData = {
+    returnedModel: string | null;
+    candidates: HostedCandidateScore[];
+    usage: HostedSelectionRecord['usage'];
+    costUsd: number | null;
+    responseContent: string;
+};
+
+const parseHostedResponse = (
+    body: unknown,
+    entry: ContextBenchmarkCase,
+    budget: number
+): HostedResponseData => {
+    if (!isRecord(body) || !Array.isArray(body.choices)) {
+        throw new HostedError(
+            'parse',
+            'Hosted selector response is missing choices.'
+        );
+    }
+    const choice = isRecord(body.choices[0]) ? body.choices[0] : null;
+    const message = choice && isRecord(choice.message) ? choice.message : null;
+    const responseContent = stringValue(message?.content);
+    if (responseContent === null) {
+        throw new HostedError(
+            'parse',
+            'Hosted selector response is missing message content.'
+        );
+    }
+    const candidates = classifyCandidates(
+        entry,
+        parseResponseContent(responseContent),
+        budget
+    );
+    const usageValue = isRecord(body.usage) ? body.usage : null;
+    return {
+        returnedModel: stringValue(body.model),
+        candidates,
+        usage: usageValue
+            ? {
+                  promptTokens: numberValue(usageValue.prompt_tokens),
+                  completionTokens: numberValue(usageValue.completion_tokens),
+                  totalTokens: numberValue(usageValue.total_tokens),
+              }
+            : null,
+        costUsd: numberValue(usageValue?.cost),
+        responseContent,
+    };
+};
+
 /** Runs one synthetic benchmark case through a hosted zero-shot selector. */
 export const runOpenRouterSelection = async (
     entry: ContextBenchmarkCase,
@@ -285,7 +369,6 @@ export const runOpenRouterSelection = async (
     const baseUrl = options.baseUrl ?? DEFAULT_BASE_URL;
     const url = new URL('/api/v1/chat/completions', baseUrl).toString();
     const fetchImpl = options.fetchImpl ?? fetch;
-    let rawContent: string | null = null;
 
     try {
         const response = await fetchImpl(url, {
@@ -316,35 +399,21 @@ export const runOpenRouterSelection = async (
             rawBody.trim().length > 0 ? (JSON.parse(rawBody) as unknown) : null;
         if (!response.ok) {
             const duration = performance.now() - startedAt;
-            return makeRecord(
+            const message = responseMessage(body);
+            return makeRecord({
                 entry,
-                emptySelection(entry, duration, responseMessage(body)),
+                selection: emptySelection(entry, duration, message),
                 options,
-                null,
-                [],
-                null,
-                null,
-                null,
-                { category: 'http', message: responseMessage(body) }
-            );
+                returnedModel: null,
+                candidates: [],
+                usage: null,
+                costUsd: null,
+                responseContent: null,
+                error: { category: 'http', message },
+            });
         }
-        if (!isRecord(body) || !Array.isArray(body.choices)) {
-            throw new HostedResponseError(
-                'Hosted selector response is missing choices.'
-            );
-        }
-        const choice = isRecord(body.choices[0]) ? body.choices[0] : null;
-        const message =
-            choice && isRecord(choice.message) ? choice.message : null;
-        rawContent = stringValue(message?.content);
-        if (rawContent === null) {
-            throw new HostedResponseError(
-                'Hosted selector response is missing message content.'
-            );
-        }
-        const parsedContent = parseResponseContent(rawContent);
-        const candidates = classifyCandidates(entry, parsedContent, budget);
-        const selectedIds = candidates
+        const hostedResponse = parseHostedResponse(body, entry, budget);
+        const selectedIds = hostedResponse.candidates
             .filter((candidate) => candidate.selected)
             .sort((left, right) => (left.rank ?? 0) - (right.rank ?? 0))
             .map((candidate) => candidate.messageId);
@@ -358,45 +427,37 @@ export const runOpenRouterSelection = async (
             branchExpansions: 0,
             latencyMs: duration,
         };
-        const usageValue = isRecord(body.usage) ? body.usage : null;
-        const usage = usageValue
-            ? {
-                  promptTokens: numberValue(usageValue.prompt_tokens),
-                  completionTokens: numberValue(usageValue.completion_tokens),
-                  totalTokens: numberValue(usageValue.total_tokens),
-              }
-            : null;
-        return makeRecord(
+        return makeRecord({
             entry,
             selection,
             options,
-            stringValue(body.model),
-            candidates,
-            usage,
-            numberValue(usageValue?.cost),
-            rawContent,
-            null
-        );
+            returnedModel: hostedResponse.returnedModel,
+            candidates: hostedResponse.candidates,
+            usage: hostedResponse.usage,
+            costUsd: hostedResponse.costUsd,
+            responseContent: hostedResponse.responseContent,
+            error: null,
+        });
     } catch (error) {
         const duration = performance.now() - startedAt;
-        const category =
+        const category: HostedFailureCategory =
             error instanceof SyntaxError
                 ? 'response'
-                : error instanceof HostedResponseError
-                  ? 'parse'
+                : error instanceof HostedError
+                  ? error.category
                   : 'transport';
         const message = error instanceof Error ? error.message : String(error);
-        return makeRecord(
+        return makeRecord({
             entry,
-            emptySelection(entry, duration, message),
+            selection: emptySelection(entry, duration, message),
             options,
-            null,
-            [],
-            null,
-            null,
-            rawContent,
-            { category, message }
-        );
+            returnedModel: null,
+            candidates: [],
+            usage: null,
+            costUsd: null,
+            responseContent: null,
+            error: { category, message },
+        });
     } finally {
         clearTimeout(timeoutHandle);
     }
@@ -515,7 +576,7 @@ const writeSummary = (
     const categoryRows = [
         ...new Set(completedMetrics.map((metric) => metric.category)),
     ]
-        .sort()
+        .sort((left, right) => left.localeCompare(right))
         .map((category) => {
             const categoryMetrics = completedMetrics.filter(
                 (metric) => metric.category === category
@@ -533,7 +594,7 @@ const writeSummary = (
         '',
         '| Cases | Selector success | Recall | Useful precision | Distracting rate | Avg messages | Avg units | Selector p95 ms | Cost USD | /api/chat replay |',
         '| ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |',
-        `| ${records.length} | ${successful.length}/${records.length} | ${average(completedMetrics.map((metric) => metric.necessaryRecall))} | ${average(completedMetrics.map((metric) => metric.usefulContextPrecision))} | ${average(completedMetrics.map((metric) => metric.distractingContextRate))} | ${average(completedMetrics.map((metric) => metric.finalMessageCount))} | ${average(completedMetrics.map((metric) => metric.estimatedInputTokens))} | ${p95(records.map((record) => record.latencyMs).filter((value): value is number => value !== null))} | ${totalCost.toFixed(6)} | ${replayRecords.length === 0 ? 'not run' : `${replayRecords.filter((record) => record.chat.status === 'completed').length}/${replayRecords.length}`} |`,
+        `| ${records.length} | ${successful.length}/${records.length} | ${average(completedMetrics.map((metric) => metric.necessaryRecall))} | ${average(completedMetrics.map((metric) => metric.usefulContextPrecision))} | ${average(completedMetrics.map((metric) => metric.distractingContextRate))} | ${average(completedMetrics.map((metric) => metric.finalMessageCount))} | ${average(completedMetrics.map((metric) => metric.estimatedInputTokens))} | ${p95(records.map((record) => record.latencyMs).filter((value): value is number => value !== null))} | ${totalCost.toFixed(6)} | ${replayStatus(replayRecords)} |`,
         '',
         '## Scenario breakdown',
         '',
@@ -550,6 +611,11 @@ const writeSummary = (
         'utf8'
     );
 };
+
+const replayStatus = (records: readonly ContextReplayRecord[]): string =>
+    records.length === 0
+        ? 'not run'
+        : `${records.filter((record) => record.chat.status === 'completed').length}/${records.length}`;
 
 const average = (values: readonly (number | null)[]): string => {
     const present = values.filter((value): value is number => value !== null);
