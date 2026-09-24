@@ -17,6 +17,7 @@ from openjev_runtime_benchmark import (
     collect_measurements,
     accelerator_backend,
     parse_args,
+    resolve_model_source,
     safe_output_path,
     summarize_measurements,
 )
@@ -103,6 +104,11 @@ class OpenJevRuntimeBenchmarkTests(unittest.TestCase):
         self.assertIsNotNone(safe_output_path(Path("artifacts/result.json")))
         with self.assertRaises(ValueError):
             safe_output_path(Path("../outside-result.json"))
+
+    def test_local_model_path_is_used_without_hub_access(self) -> None:
+        args = parse_args(["--model-id", str(Path.cwd()), "--revision", "local-test"])
+
+        self.assertEqual(resolve_model_source(args), Path.cwd().resolve())
 
 
 if __name__ == "__main__":

@@ -142,6 +142,27 @@ def unavailable_measurement(
     )
 
 
+def resolve_model_source(args: argparse.Namespace) -> Path:
+    """Use a local checkout directly or download the pinned Hub revision."""
+    local_path = Path(args.model_id).expanduser()
+    if local_path.is_dir():
+        return local_path.resolve()
+
+    try:
+        from huggingface_hub import snapshot_download
+    except ImportError as error:
+        raise RuntimeError(
+            "huggingface_hub is required when --model-id is a Hub repository"
+        ) from error
+
+    snapshot = snapshot_download(
+        repo_id=args.model_id,
+        revision=args.revision,
+        allow_patterns=[f"{args.subfolder}/*", "code/*"],
+    )
+    return Path(snapshot).resolve()
+
+
 def load_cross_encoder(args: argparse.Namespace) -> tuple[Any, Any]:
     code_path = Path(args.openjev_code_path).resolve()
     sys.path.insert(0, str(code_path))
@@ -152,11 +173,8 @@ def load_cross_encoder(args: argparse.Namespace) -> tuple[Any, Any]:
         raise RuntimeError("torch is required for the transformers cross-encoder path") from error
 
     constructor = module.OpenJevCrossEncoder
-    model = constructor(
-        args.model_id,
-        subfolder=args.subfolder,
-        revision=args.revision,
-    )
+    model_source = resolve_model_source(args)
+    model = constructor(str(model_source), subfolder=args.subfolder)
     return model, torch
 
 
