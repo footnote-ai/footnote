@@ -108,7 +108,7 @@ const CATEGORIES: BenchmarkCategory[] = [
     'negative_historical_match',
 ];
 
-const REFERENCE_FACTS: Record<BenchmarkCategory, readonly string[][]> = {
+export const REFERENCE_FACTS: Record<BenchmarkCategory, readonly string[][]> = {
     trigger_only: [],
     immediate_predecessor: [['database', 'url'], ['staging']],
     several_turns_back: [['canary'], ['ten', 'minutes']],
