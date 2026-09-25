@@ -1,38 +1,169 @@
 {
-    "benchmark": "baml_assess_parser_replay",
-    "rows": [
-        {
-            "fixture": "ready_finalize",
-            "current": {
-                "status": "success",
-                "classification": "success"
-            },
-            "baml": {
-                "status": "success",
-                "classification": "success"
-            }
-        },
-        {
-            "fixture": "missing_caveat",
-            "current": {
-                "status": "success",
-                "classification": "success"
-            },
-            "baml": {
-                "status": "success",
-                "classification": "success"
-            }
-        },
-        {
-            "fixture": "bounded_revision",
-            "current": {
-                "status": "success",
-                "classification": "success"
-            },
-            "baml": {
-                "status": "success",
-                "classification": "success"
-            }
+  "benchmark": "baml_assess_parser_replay",
+  "rows": [
+    {
+      "fixture": "ready_finalize",
+      "comparison": "semantically_equivalent_optional_representation",
+      "current": {
+        "status": "success",
+        "classification": "success",
+        "decision": {
+          "reviewDecision": "finalize",
+          "reviewReason": "The draft is accurate, concise, and includes the required provenance detail.",
+          "traceAlignment": "aligned",
+          "finalTemperament": {
+            "tightness": 3,
+            "rationale": 3,
+            "attribution": 3,
+            "caution": 3,
+            "extent": 3
+          },
+          "moduleHints": [],
+          "concerns": {
+            "length": "ok",
+            "style": "ok",
+            "evidence": "ok"
+          },
+          "routingHints": []
         }
-    ]
+      },
+      "baml": {
+        "status": "success",
+        "classification": "success",
+        "decision": {
+          "reviewDecision": "finalize",
+          "reviewReason": "The draft is accurate, concise, and includes the required provenance detail.",
+          "revisionInstruction": null,
+          "traceAlignment": "aligned",
+          "traceAlignmentReason": null,
+          "finalTemperament": {
+            "tightness": 3,
+            "rationale": 3,
+            "attribution": 3,
+            "caution": 3,
+            "extent": 3
+          },
+          "moduleHints": [],
+          "concerns": {
+            "length": "ok",
+            "style": "ok",
+            "evidence": "ok"
+          },
+          "routingHints": []
+        }
+      }
+    },
+    {
+      "fixture": "missing_caveat",
+      "comparison": "structurally_equivalent",
+      "current": {
+        "status": "success",
+        "classification": "success",
+        "decision": {
+          "reviewDecision": "revise",
+          "reviewReason": "The draft makes an unwarranted generalization about production latency based on insufficient data.",
+          "revisionInstruction": "Revise the statement to clarify that the benchmark shows low latency on one active workstation and does not guarantee production performance.",
+          "traceAlignment": "misaligned",
+          "traceAlignmentReason": "The draft asserts a general production guarantee while the context explicitly states the measurements do not establish such guarantees.",
+          "finalTemperament": {
+            "tightness": 3,
+            "rationale": 3,
+            "attribution": 3,
+            "caution": 4,
+            "extent": 3
+          },
+          "moduleHints": [],
+          "concerns": {
+            "length": "ok",
+            "style": "ok",
+            "evidence": "needs_caution"
+          },
+          "routingHints": [
+            "logic.precision_up"
+          ]
+        }
+      },
+      "baml": {
+        "status": "success",
+        "classification": "success",
+        "decision": {
+          "reviewDecision": "revise",
+          "reviewReason": "The draft makes an unwarranted generalization about production latency based on insufficient data.",
+          "revisionInstruction": "Revise the statement to clarify that the benchmark shows low latency on one active workstation and does not guarantee production performance.",
+          "traceAlignment": "misaligned",
+          "traceAlignmentReason": "The draft asserts a general production guarantee while the context explicitly states the measurements do not establish such guarantees.",
+          "finalTemperament": {
+            "tightness": 3,
+            "rationale": 3,
+            "attribution": 3,
+            "caution": 4,
+            "extent": 3
+          },
+          "moduleHints": [],
+          "concerns": {
+            "length": "ok",
+            "style": "ok",
+            "evidence": "needs_caution"
+          },
+          "routingHints": [
+            "logic.precision_up"
+          ]
+        }
+      }
+    },
+    {
+      "fixture": "bounded_revision",
+      "comparison": "structurally_equivalent",
+      "current": {
+        "status": "success",
+        "classification": "success",
+        "decision": {
+          "reviewDecision": "finalize",
+          "reviewReason": "The draft is concise and the context provides sufficient guidance to ensure accurate framing without adding unsupported claims.",
+          "revisionInstruction": "",
+          "traceAlignment": "aligned",
+          "traceAlignmentReason": "",
+          "finalTemperament": {
+            "tightness": 2,
+            "rationale": 2,
+            "attribution": 1,
+            "caution": 1,
+            "extent": 1
+          },
+          "moduleHints": [],
+          "concerns": {
+            "length": "ok",
+            "style": "ok",
+            "evidence": "ok"
+          },
+          "routingHints": []
+        }
+      },
+      "baml": {
+        "status": "success",
+        "classification": "success",
+        "decision": {
+          "reviewDecision": "finalize",
+          "reviewReason": "The draft is concise and the context provides sufficient guidance to ensure accurate framing without adding unsupported claims.",
+          "revisionInstruction": "",
+          "traceAlignment": "aligned",
+          "traceAlignmentReason": "",
+          "finalTemperament": {
+            "tightness": 2,
+            "rationale": 2,
+            "attribution": 1,
+            "caution": 1,
+            "extent": 1
+          },
+          "moduleHints": [],
+          "concerns": {
+            "length": "ok",
+            "style": "ok",
+            "evidence": "ok"
+          },
+          "routingHints": []
+        }
+      }
+    }
+  ]
 }

@@ -28,8 +28,24 @@ type LiveArtifact = {
 
 type ReplayRow = {
     fixture: string;
-    current: { status: string; classification: string };
-    baml: { status: string; classification: string };
+    comparison: string;
+    current: { status: string; classification: string; decision?: unknown };
+    baml: { status: string; classification: string; decision?: unknown };
+};
+
+const omitAbsentFields = (value: unknown): unknown => {
+    if (Array.isArray(value)) {
+        return value.map(omitAbsentFields);
+    }
+    if (typeof value !== 'object' || value === null) {
+        return value;
+    }
+
+    return Object.fromEntries(
+        Object.entries(value)
+            .filter(([, field]) => field !== null && field !== undefined)
+            .map(([key, field]) => [key, omitAbsentFields(field)])
+    );
 };
 
 const artifact = JSON.parse(
@@ -48,23 +64,41 @@ for (const row of artifact.rows) {
     const currentClassification = current.isOk()
         ? 'success'
         : current.error.reason;
+    const currentDecision = current.isOk() ? current.value : undefined;
 
     try {
-        b.parse.Assess(row.current.rawText);
+        const bamlDecision = b.parse.Assess(row.current.rawText);
+        const structurallyEquivalent =
+            JSON.stringify(currentDecision) === JSON.stringify(bamlDecision);
+        const semanticallyEquivalent =
+            JSON.stringify(omitAbsentFields(currentDecision)) ===
+            JSON.stringify(omitAbsentFields(bamlDecision));
         rows.push({
             fixture: row.fixture,
+            comparison: structurallyEquivalent
+                ? 'structurally_equivalent'
+                : semanticallyEquivalent
+                  ? 'semantically_equivalent_optional_representation'
+                  : 'meaningfully_different',
             current: {
                 status: 'success',
                 classification: currentClassification,
+                decision: currentDecision,
             },
-            baml: { status: 'success', classification: 'success' },
+            baml: {
+                status: 'success',
+                classification: 'success',
+                decision: bamlDecision,
+            },
         });
     } catch (error) {
         rows.push({
             fixture: row.fixture,
+            comparison: 'one_path_failed',
             current: {
                 status: 'success',
                 classification: currentClassification,
+                decision: currentDecision,
             },
             baml: {
                 status: 'error',

@@ -8,8 +8,8 @@
 
 # BAML assess semantic-equivalence matrix (#726)
 
-Status: **local Ollama comparison complete; cloud provider-path comparison
-remains unresolved**.
+Status: **modular-boundary experiment complete; BAML adoption not justified
+for the current assess path**.
 
 ## Scope and toolchain
 
@@ -66,6 +66,77 @@ Raw artifacts:
 
 The local run used the existing machine-local Ollama service and added no
 runtime dependency to Footnote.
+
+## Modular BAML API
+
+The pinned generated TypeScript client does expose both modular operations:
+
+- `b.parse.Assess(rawOutput)` parses an already-obtained model response;
+- `b.request.Assess(draft, reviewContext, options)` builds a request without
+  sending it.
+
+The request method returns BAML's `HTTPRequest` object. In the local probe it
+contained:
+
+- `POST http://localhost:11434/v1/chat/completions`;
+- provider headers and a BAML request id;
+- an OpenAI-compatible body containing the model, temperature, messages, and
+  BAML's schema text inside the prompt.
+
+The body is visible through `HTTPRequest.toString()`, not as a plain
+serializable object. This is important: the result is a provider-bound HTTP
+request, not a small provider-neutral `GenerationRequest` value. Mapping it
+back into Footnote would require extracting prompt material while deciding
+which URL, headers, model fields, and response-format behavior to discard.
+
+Probe artifact: `artifacts/baml-assess-725/request-probe.json`.
+
+## Parser-only comparison with identical raw output
+
+The parser replay used the exact raw response captured from the Footnote path
+in the local Ollama run. No second model call was made. Each string was sent
+to the current Footnote parser and to `b.parse.Assess`:
+
+| Fixture            | Footnote parser | BAML `.parse` | Result                                                                                     |
+| ------------------ | --------------- | ------------- | ------------------------------------------------------------------------------------------ |
+| `ready_finalize`   | success         | success       | Semantically equivalent; Footnote omitted some optional fields while BAML returned `null`. |
+| `missing_caveat`   | success         | success       | Structurally equivalent.                                                                   |
+| `bounded_revision` | success         | success       | Structurally equivalent.                                                                   |
+
+This changes the interpretation of the earlier `bounded_revision` live
+failure. The exact Footnote response is accepted by BAML `.parse`, so the
+failure was not caused by an inherent inability to parse that response. It
+occurred in the generated-client path while validating a different model
+response, where an optional value caused the BAML assertion expression to
+evaluate `length` on `none`. The captured generated-client response was not
+available as raw text, so the precise omitted field cannot be named more
+specifically.
+
+The parser-only result is positive but narrow. It shows that BAML can parse
+these three already-valid outputs. It does not preserve Footnote's distinct
+failure reasons, and the existing 33-row matrix still shows permissive
+recovery for prose/fenced JSON, primitive coercion, malformed nested data, and
+enum casing.
+
+## Focused malformed-input matrix
+
+The full machine-readable matrix remains at
+`artifacts/baml-assess-725/semantic-equivalence.json`. The most decision-
+relevant cases are:
+
+| Input                         | Footnote parser   | BAML `.parse`         | Desired contract              | Difference                                                |
+| ----------------------------- | ----------------- | --------------------- | ----------------------------- | --------------------------------------------------------- |
+| Leading or trailing prose     | `non_json_object` | success               | Reject non-object output      | BAML recovers extra text.                                 |
+| Fenced JSON                   | `non_json_object` | success               | Reject wrapped output         | BAML changes the compatibility boundary.                  |
+| Wrong primitive type          | `schema_invalid`  | success with coercion | Reject invalid type           | Original type information is lost.                        |
+| Numeric string temperament    | `schema_invalid`  | success with coercion | Reject invalid type           | A later validator sees a number, not the rejected string. |
+| Invalid enum casing           | `schema_invalid`  | success               | Reject unknown enum           | BAML silently widens accepted values.                     |
+| Malformed nested concern data | `schema_invalid`  | success with omission | Preserve nested failure       | Invalid data can become indistinguishable from omission.  |
+| Incomplete `revise` decision  | `schema_invalid`  | assertion error       | Return bounded schema failure | Error is generic and optional-null handling is brittle.   |
+| Multiple JSON objects         | `invalid_json`    | success               | Reject ambiguous output       | BAML selects one recoverable value.                       |
+
+The desired contract in this table comes from current Footnote parser tests and
+normalization rules, not from whichever parser accepts more input.
 
 ## Cloud provider attempt
 
@@ -202,6 +273,28 @@ does not replace Footnote's assess runtime semantics. No clearly removable
 Footnote parser, validator, provider adapter, or failure classifier has been
 demonstrated yet.
 
+## Final boundary decision for #727
+
+**Not justified for BAML adoption in the current assess path.**
+
+The modular parser is usable as an experiment, and the exact captured outputs
+mostly parse equivalently. That is not enough to justify the added toolchain:
+
+- strict type, range, nested, and conditional validation still belongs in
+  Footnote;
+- Footnote's failure taxonomy still cannot be recovered from generic BAML
+  errors or tolerant recovery;
+- `b.request.Assess` produces a provider-bound HTTP request rather than a
+  small provider-independent prompt/schema value;
+- the prototype has not deleted the current parser, validator, normalizer,
+  compatibility tests, or provider logic;
+- generated client code and regeneration remain new maintenance surface.
+
+The result is therefore not a narrow adoption candidate. Keep the prototype as
+evidence, but do not migrate planner, presentation, prompt overrides, or
+production assess code. A new BAML experiment would need a materially smaller
+and safer boundary than the one tested here.
+
 ### Why not keep both?
 
 Adding BAML without deleting anything would leave Footnote maintaining the old
@@ -242,6 +335,7 @@ pnpm exec tsx --test experiments/baml-assess-725/offline-equivalence.test.ts
 pnpm exec tsx experiments/baml-assess-725/offline-equivalence.ts
 pnpm exec tsx experiments/baml-assess-725/live-provider-compare.ts --local-ollama
 pnpm exec tsx experiments/baml-assess-725/parser-replay.ts
+pnpm exec tsx experiments/baml-assess-725/request-probe.ts
 ```
 
 The `--local-ollama` comparison uses the local Ollama model named above and

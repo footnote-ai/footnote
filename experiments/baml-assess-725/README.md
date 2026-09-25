@@ -70,3 +70,27 @@ provider credit and is not required to reproduce the local result.
 The command is evaluation-only. It does not change routing, retries, cost
 recording, cancellation ownership, attempt lineage, or TRACE behavior. Live
 provider calls are not part of normal CI.
+
+## Modular parser/request probe
+
+The pinned generated client also exposes:
+
+```text
+b.parse.Assess(rawOutput)
+b.request.Assess(draft, reviewContext, options)
+```
+
+The parser replay uses the exact raw output captured by Footnote and makes no
+model call. The request probe builds, but does not send, a BAML `HTTPRequest`.
+Its result is provider-bound (`url`, headers, model, messages, and BAML schema
+text), so it is not a drop-in replacement for Footnote's provider-neutral
+`GenerationRequest`.
+
+```text
+pnpm exec tsx experiments/baml-assess-725/parser-replay.ts
+pnpm exec tsx experiments/baml-assess-725/request-probe.ts
+```
+
+The report concludes that this modular boundary is not enough to justify BAML
+adoption: Footnote would still need its current validation, failure mapping,
+routing, retry, cost, cancellation, and provenance machinery.
