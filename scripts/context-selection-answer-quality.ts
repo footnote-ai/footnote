@@ -13,16 +13,19 @@ import { performance } from 'node:perf_hooks';
 import {
     buildBenchmarkCorpus,
     selectContext,
+    selectContextAtBudget,
     type ContextBenchmarkCase,
     type ContextSelectionMethod,
 } from './context-selection-benchmark.js';
 
 type BenchmarkCategory = ContextBenchmarkCase['category'];
 
-export type AnswerQualityMethod = Extract<
-    ContextSelectionMethod,
-    'current_window' | 'bm25' | 'bm25_graph_expansion'
->;
+export type AnswerQualityMethod =
+    | Extract<
+          ContextSelectionMethod,
+          'current_window' | 'bm25' | 'bm25_graph_expansion'
+      >
+    | 'bm25_graph_budget_10';
 
 export type AnswerQualityCaseMetric = {
     caseId: string;
@@ -66,10 +69,20 @@ export type AnswerQualityReport = {
     cases: AnswerQualityCaseMetric[];
 };
 
+/** Synthetic answer checks used for replay comparison, not general judging. */
+export type GeneratedAnswerSupport = {
+    answerCorrect: boolean;
+    expectedFactsFound: number;
+    expectedFactCount: number;
+    /** Possible lexical overlap with a labeled distractor, not proof of leakage. */
+    distractorOverlapDetected: boolean;
+};
+
 const METHODS: AnswerQualityMethod[] = [
     'current_window',
     'bm25',
     'bm25_graph_expansion',
+    'bm25_graph_budget_10',
 ];
 
 const CATEGORIES: BenchmarkCategory[] = [
@@ -87,9 +100,15 @@ const CATEGORIES: BenchmarkCategory[] = [
     'scattered_context',
     'irrelevant_high_similarity',
     'historical_context_not_recovered',
+    'coreference_ambiguous',
+    'semantic_paraphrase',
+    'misleading_overlap_hard',
+    'topic_resumption',
+    'speaker_sensitive',
+    'negative_historical_match',
 ];
 
-const REFERENCE_FACTS: Record<BenchmarkCategory, readonly string[][]> = {
+export const REFERENCE_FACTS: Record<BenchmarkCategory, readonly string[][]> = {
     trigger_only: [],
     immediate_predecessor: [['database', 'url'], ['staging']],
     several_turns_back: [['canary'], ['ten', 'minutes']],
@@ -107,6 +126,18 @@ const REFERENCE_FACTS: Record<BenchmarkCategory, readonly string[][]> = {
     scattered_context: [['signed', 'manifest'], ['lockfile']],
     irrelevant_high_similarity: [['canonical', 'trace']],
     historical_context_not_recovered: [['fresh', 'owner', 'assignment']],
+    coreference_ambiguous: [['cedar'], ['easier', 'operate']],
+    semantic_paraphrase: [['on-device'], ['private', 'prompts']],
+    misleading_overlap_hard: [
+        ['archive', 'project'],
+        ['redwood', 'worker'],
+    ],
+    topic_resumption: [['seven', 'days'], ['retention']],
+    speaker_sensitive: [['seven', 'days']],
+    negative_historical_match: [
+        ['current', 'image', 'worker'],
+        ['redwood', 'queue'],
+    ],
 };
 
 const TOKEN_ESTIMATE_DIVISOR = 4;
@@ -144,6 +175,49 @@ const factsSupportedByContext = (
         })
     );
 
+const factsSupportedByAnswer = (
+    entry: ContextBenchmarkCase,
+    facts: readonly string[][],
+    answer: string
+): GeneratedAnswerSupport => {
+    const answerTokens = new Set(tokenize(answer));
+    const found = facts.filter((fact) =>
+        fact.every((token) => answerTokens.has(token))
+    ).length;
+    return {
+        answerCorrect: found === facts.length,
+        expectedFactsFound: found,
+        expectedFactCount: facts.length,
+        distractorOverlapDetected: entry.distractingMessageIds.some(
+            (messageId) => {
+                const message = entry.messages.find(
+                    (candidate) => candidate.id === messageId
+                );
+                if (message === undefined) {
+                    return false;
+                }
+                const distinctiveTokens = [
+                    ...new Set(tokenize(message.text)),
+                ].filter((token) => token.length >= 4);
+                const overlapCount = distinctiveTokens.filter((token) =>
+                    answerTokens.has(token)
+                ).length;
+                return overlapCount >= 2;
+            }
+        ),
+    };
+};
+
+/**
+ * Applies the existing synthetic fact proxy to a generated answer.
+ * This is evidence for fixture comparison only, not a general answer judge.
+ */
+export const evaluateGeneratedAnswer = (
+    entry: ContextBenchmarkCase,
+    answer: string
+): GeneratedAnswerSupport =>
+    factsSupportedByAnswer(entry, REFERENCE_FACTS[entry.category], answer);
+
 const estimateContextTokens = (
     entry: ContextBenchmarkCase,
     selectedIds: readonly string[]
@@ -177,7 +251,10 @@ const evaluateCase = (
     method: AnswerQualityMethod
 ): AnswerQualityCaseMetric => {
     const selectionStartedAt = performance.now();
-    const result = selectContext(method, entry);
+    const result =
+        method === 'bm25_graph_budget_10'
+            ? selectContextAtBudget('bm25_graph_expansion', entry, 10)
+            : selectContext(method, entry);
     const retrievalLatencyMs =
         result.latencyMs ?? performance.now() - selectionStartedAt;
     const selected = new Set(result.messageIds);

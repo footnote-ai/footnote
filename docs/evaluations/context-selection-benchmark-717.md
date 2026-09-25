@@ -8,8 +8,8 @@
 
 # Context-selection benchmark (#717)
 
-Status: **cheap-baseline expansion complete; OpenJEV runtime gate remains
-unavailable on this machine**.
+Status: **context-selection evidence complete; no production semantic selector
+is justified by the available evidence**.
 
 Run date: 2026-09-22
 
@@ -17,6 +17,21 @@ Base: `origin/main` at `6fa7416ae8ff5e8d052dac67a2ae10eb074d6d58`
 
 Artifact: `artifacts/context-selection-717/results.json`
 Summary artifact: `artifacts/context-selection-717/summary.md`
+
+## Plain-language result
+
+The current method sends the most recent 24 messages. BM25 is a traditional
+text-search ranking method: it finds messages that share useful words with the
+trigger. The graph hybrid starts with those search results, then follows simple
+conversation links such as adjacency and same-author continuation. In this
+synthetic benchmark, the graph hybrid found the most required information,
+selected about 15 messages instead of 24, and included a larger share of useful
+messages. It is the strongest cheap baseline so far, not a production decision.
+
+**Recall** means “of the messages the answer needed, how many did the method
+find?” **Useful precision** means “of the messages it selected, how many were
+useful?” A confidence interval is a range showing uncertainty on this fixture
+sample; it does not predict performance on real Discord traffic.
 
 ## Corpus
 
@@ -29,11 +44,15 @@ turns. It does not copy production or private transcripts. Each turn contains
 - distracting; or
 - irrelevant by omission from the first three sets.
 
-The cases cover trigger-only turns, immediate and distant context, old relevant
-history, reply ancestry, one relevant branch among chatter, simultaneous
-conversations, topic switches, pronoun resolution, same-author continuation,
-scattered context, high-similarity distractors, and historical context that
-should not be recovered.
+The 20 repeated categories cover trigger-only turns, immediate and distant
+context, old relevant history, reply ancestry, one relevant branch among
+chatter, simultaneous conversations, topic switches, pronoun resolution,
+same-author continuation, scattered context, high-similarity distractors,
+historical context that should not be recovered, ambiguous coreference,
+semantic paraphrase, harder misleading overlap, topic resumption,
+speaker-sensitive retrieval, and negative historical matches. Each category has
+five cases. The new categories are synthetic approximations of observed Discord
+shapes, not private transcript excerpts.
 
 The current backend behavior is modeled as the Discord 24-message non-system
 window in `packages/backend/src/services/conversationContextService.ts`. The
@@ -41,17 +60,17 @@ harness does not call production context selection or change production input.
 
 ## Compared methods
 
-| Method                                  | Result in this slice                                              |
-| --------------------------------------- | ----------------------------------------------------------------- |
-| Current 24-message window               | Completed; fail-open baseline                                     |
-| Recency plus reply expansion            | Completed                                                         |
-| Recency plus same-author continuation   | Completed                                                         |
-| BM25-style lexical retrieval            | Completed                                                         |
-| BM25 plus reply expansion               | Completed                                                         |
-| BM25 plus deterministic graph expansion | Completed; 12 lexical seeds, bounded to 24 selected messages      |
-| Dependency-free hash embedding proxy    | Completed; not a neural embedding                                 |
-| Existing cross-encoder/reranker         | Explicitly unavailable; no configured dependency in Footnote      |
-| OpenJEV                                 | Explicitly unavailable; not configured or invoked by this harness |
+| Method                                  | Result in this slice                                                               |
+| --------------------------------------- | ---------------------------------------------------------------------------------- |
+| Current 24-message window               | Completed; fail-open baseline                                                      |
+| Recency plus reply expansion            | Completed                                                                          |
+| Recency plus same-author continuation   | Completed                                                                          |
+| BM25-style lexical retrieval            | Completed                                                                          |
+| BM25 plus reply expansion               | Completed                                                                          |
+| BM25 plus deterministic graph expansion | Completed; 12 lexical seeds, bounded to 24 selected messages                       |
+| Dependency-free hash embedding proxy    | Completed; not a neural embedding                                                  |
+| Existing cross-encoder/reranker         | Explicitly unavailable; no configured dependency in Footnote                       |
+| OpenJEV/local model                     | Not invoked by this offline harness; AMD feasibility is tracked separately in #718 |
 
 The hash embedding is included only as a reproducible local comparison point.
 It must not be described as evidence from a neural embedding model.
@@ -60,15 +79,19 @@ It must not be described as evidence from a neural embedding model.
 
 The generated summary recorded these aggregate values:
 
-| Method                        | Necessary recall | Useful precision | Distracting rate | Avg messages | Avg tokens | p95 local ms |
-| ----------------------------- | ---------------: | ---------------: | ---------------: | -----------: | ---------: | -----------: |
-| Current window                |            0.548 |            0.041 |            0.020 |       24.000 |    442.070 |        0.004 |
-| Recency + reply expansion     |            0.639 |            0.047 |            0.020 |       24.140 |    444.730 |        0.035 |
-| Recency + author continuation |            0.684 |            0.050 |            0.020 |       24.210 |    445.430 |        0.026 |
-| BM25                          |            0.910 |            0.065 |            0.023 |       24.000 |    440.530 |        0.483 |
-| BM25 + reply expansion        |            0.955 |            0.067 |            0.023 |       24.070 |    441.790 |        0.215 |
-| BM25 + graph expansion        |            0.955 |            0.125 |            0.014 |       14.610 |    266.570 |        0.186 |
-| Hash embedding proxy          |            0.819 |            0.059 |            0.015 |       24.000 |    440.100 |        0.462 |
+| Method                        | Necessary recall | Recall 95% CI  | Useful precision | Precision 95% CI | Distracting rate | Avg messages | Avg units |
+| ----------------------------- | ---------------: | -------------- | ---------------: | ---------------- | ---------------: | -----------: | --------: |
+| Current window                |            0.500 | [0.421, 0.579] |            0.035 | [0.029, 0.044]   |            0.023 |       24.000 |     442.4 |
+| Recency + reply expansion     |            0.567 | [0.487, 0.643] |            0.039 | [0.032, 0.048]   |            0.023 |       24.100 |     444.3 |
+| Recency + author continuation |            0.600 | [0.520, 0.675] |            0.041 | [0.034, 0.050]   |            0.023 |       24.150 |     444.8 |
+| BM25                          |            0.933 | [0.882, 0.963] |            0.063 | [0.053, 0.073]   |            0.027 |       24.000 |     441.9 |
+| BM25 + reply expansion        |            0.967 | [0.924, 0.986] |            0.064 | [0.055, 0.075]   |            0.027 |       24.050 |     442.8 |
+| BM25 + graph expansion        |            0.967 | [0.924, 0.986] |            0.116 | [0.101, 0.133]   |            0.025 |       15.050 |     276.0 |
+| Hash embedding proxy          |            0.800 | [0.729, 0.856] |            0.056 | [0.048, 0.066]   |            0.019 |       24.000 |     440.9 |
+
+The intervals are Wilson 95% intervals over the aggregate required-message
+and selected-message counts. They describe this synthetic fixture sample;
+they are not confidence intervals for production Discord traffic.
 
 The artifact also records candidate count, retrieval depth, estimated input
 tokens, historical-distance recovery, branch expansion count, and local
@@ -77,56 +100,70 @@ quality scores.
 
 ## Category audit
 
-The corpus now includes direct overlap, paraphrased reference, pronoun,
-reply, same-author, branch, simultaneous-conversation, topic-switch,
-scattered-context, misleading-overlap, and historical non-recovery cases.
-The table compares the current window, pure BM25, and the bounded lexical
-graph hybrid. Values are necessary-message recall; `n/a` means the category
-has no necessary message.
+The refreshed corpus contains five cases in each of 20 categories. The full
+case-level and category-level matrix is in `results.json`; selected recall
+highlights are:
 
-| Category                         | Current |  BM25 | BM25 + graph | Hybrid avg messages |
-| -------------------------------- | ------: | ----: | -----------: | ------------------: |
-| trigger-only                     |     n/a |   n/a |          n/a |                13.0 |
-| immediate predecessor            |   1.000 | 1.000 |        1.000 |                13.0 |
-| several turns back               |   1.000 | 1.000 |        1.000 |                13.0 |
-| old relevant history             |   0.000 | 1.000 |        1.000 |                17.0 |
-| reply ancestry                   |   0.500 | 0.500 |        1.000 |                14.0 |
-| one relevant branch              |   0.500 | 1.000 |        1.000 |                15.0 |
-| simultaneous conversations       |   0.500 | 1.000 |        1.000 |                16.0 |
-| topic switch                     |   1.000 | 1.000 |        1.000 |                15.0 |
-| pronoun reference                |   0.500 | 0.500 |        0.500 |                13.0 |
-| same-author continuation         |   0.333 | 1.000 |        1.000 |                15.0 |
-| paraphrased reference            |   0.000 | 1.000 |        1.000 |                15.0 |
-| scattered context                |   0.667 | 1.000 |        1.000 |                17.0 |
-| irrelevant high similarity       |   0.000 | 1.000 |        1.000 |                15.0 |
-| historical context not recovered |   1.000 | 1.000 |        1.000 |                14.0 |
+| Category                  | Current |  BM25 | BM25 + graph |
+| ------------------------- | ------: | ----: | -----------: |
+| old relevant history      |   0.000 | 1.000 |        1.000 |
+| reply ancestry            |   0.500 | 0.500 |        1.000 |
+| pronoun reference         |   0.500 | 0.500 |        0.500 |
+| coreference ambiguous     |   0.500 | 1.000 |        1.000 |
+| semantic paraphrase       |   0.000 | 1.000 |        1.000 |
+| misleading overlap hard   |   0.000 | 1.000 |        1.000 |
+| topic resumption          |   0.500 | 1.000 |        1.000 |
+| speaker sensitive         |   0.000 | 1.000 |        1.000 |
+| negative historical match |   1.000 | 1.000 |        1.000 |
 
-The category rows are repeated synthetic cases, not independent production
-estimates. BM25 and the graph hybrid still perform well on lexicalized cases;
-pronoun resolution remains weak, and the misleading-overlap case is not yet
-hard enough to establish robust distractor resistance. The next corpus pass
-should add more genuinely paraphrased and ambiguous cases rather than tuning
-the selector to these fixtures.
+The new cases expose weak lexical/context behavior in coreference, speaker
+selection, and the current-window baseline. BM25 still performs strongly on
+these synthetic cases. That does not prove semantic judgment is unnecessary;
+it shows the level a semantic method would need to beat. The fixtures remain
+synthetic approximations, not independent production estimates.
+
+## Budget, ablation, and branch-pruning evidence
+
+`artifacts/context-selection-717/evidence.json` and
+`evidence-summary.md` record budgets 3/5/8/10/15/20/24, deterministic-edge
+ablations, and a bounded three-seed recursive expansion comparison. On this
+run, BM25 retained 0.933 necessary recall even at budget 3; the full graph
+reached 0.967 recall at budgets 15–24 while selecting about 15 messages.
+The recursive three-seed graph reached 0.967 recall at budget 5 versus 0.933
+for top-five BM25, but selected fewer messages and remains a synthetic
+benchmark result. The ablation shows adjacent and same-author edges improved
+precision/message reduction more clearly than reply-only expansion in this
+corpus; no edge is being promoted to a production contract.
+
+The paired comparison uses the same cases for BM25 and the graph hybrid. For
+required-message recall, graph expansion was better on 5 of 95 comparable cases,
+tied on 90, and lost on none; the average improvement was `+0.026` with a
+paired-bootstrap 95% interval of `[+0.005, +0.053]`. For useful-message
+precision, graph expansion was better on 95 of 100 cases, tied on 5, and lost
+on none; the average improvement was `+0.053`, with interval `[+0.046,
++0.060]`. These are fixture-level comparisons, not production estimates.
 
 ## Downstream support proxy
 
-A bounded 14-case support proxy compared the current window, BM25, and the
+A bounded 20-case support proxy compared the current window, BM25, and the
 bounded graph hybrid using hand-authored synthetic answer facts. The graph
-hybrid reached `0.929` answer-fact support and `0.929` necessary-reference
-resolution versus BM25 at `0.857` / `0.857`, while selecting `14.643`
-messages and `267.071` estimated tokens versus BM25's `24` and `440.429`.
-This is not generated-answer evidence: generation latency, cost, and provider
-usage remain unavailable and are explicitly null in
-`artifacts/context-selection-717/answer-quality.json`.
+hybrid reached `0.950` answer-fact support and `0.950` necessary-reference
+resolution versus BM25 at `0.900` / `0.900`, while selecting `15.050`
+messages and `275.950` estimated context units versus BM25's `24` and
+`441.850`. The 10-message graph budget matched BM25's `0.900` support scores
+at `182.850` estimated context units. These are local context-size proxies,
+not tokenizer measurements. This is not generated-answer evidence:
+generation latency, cost, and provider usage remain unavailable and are
+explicitly null in `artifacts/context-selection-717/answer-quality.json`.
 
-## OpenJEV verification
+## Model-backed follow-up
 
 The current upstream `AlexWortega/openjev` repository documents the
 `qwen3.5-0.8b-nli-v2s-long` checkpoint, three-way contradiction/entailment/
 neutral classification, `predict_hypotheses`, `rerank`, and shared-prefix
 batching. The model card also documents the 4B path and an SGLang serving path.
-The exact checkpoint and batching formulation must be pinned when the runtime
-gate is rerun; this report does not infer conversational relevance from generic
+The exact checkpoint and batching formulation must be pinned for any future
+comparison; this report does not infer conversational relevance from generic
 NLI claims.
 
 Primary references checked on 2026-09-22:
@@ -134,25 +171,44 @@ Primary references checked on 2026-09-22:
 - <https://huggingface.co/AlexWortega/openjev/blob/main/README.md>
 - <https://huggingface.co/AlexWortega/openjev/tree/main>
 
-This machine has Python 3.13.5, CPU-only PyTorch, no `transformers` package,
-and no CUDA device. Downloading model weights or sending private transcript
-content to a hosted provider was therefore not appropriate. The OpenJEV row
-is an external/runtime prerequisite, not a benchmark failure.
+The offline harness did not invoke OpenJEV. #718 later showed that the model
+can run on the target RX 7800 XT under WSL2 with ROCm, but did not produce a
+simple TypeScript-native path or a production server. #722's bounded hosted
+comparison did not show better answer quality than BM25 plus deterministic
+expansion. No Python sidecar, SGLang service, or production context selector
+was added.
 
 ## Interpretation and gate
 
 On this synthetic corpus, cheap lexical retrieval plus deterministic
 relationships is the strongest tested baseline: the bounded graph hybrid
 matches BM25-plus-reply recall while selecting about 39% fewer messages and
-lowering the measured distracting rate. That is a meaningful null hypothesis
-for any future semantic selector. The result does **not** establish production
-quality because the corpus remains synthetic, pronoun performance is weak, and
-OpenJEV has not been run.
+lowering the measured distracting rate. #722 did not show a downstream answer
+quality improvement over that baseline, and #718 found no simple TypeScript-
+native OpenJEV path. The result does not establish production quality because
+the corpus remains synthetic and pronoun performance is weak. It does support
+keeping the simpler baseline and not adding a production semantic selector,
+context graph, or `JudgmentRuntime` from this evidence.
 
-Recommendation for #717: keep the experiment open for the pinned OpenJEV
-0.8B/current-small-model run and blinded downstream answer-quality comparison.
-Do not advance to #719/#720 based on this slice alone. #718 is the next
-independent gate for local runtime feasibility.
+## Concrete reconsideration triggers
+
+This gate is recorded before OpenJEV execution to reduce hindsight bias. A
+semantic selector would need to demonstrate a material advantage over the
+best cheap hybrid, not merely a small aggregate recall increase. Evidence that
+would justify reopening the architecture question includes one or more of:
+
+- materially higher necessary-message recall at equal or smaller context size;
+- materially higher useful precision on coreference, paraphrase, and
+  simultaneous-conversation categories;
+- consistent recovery of lexically weak references that BM25 misses;
+- better branch pruning without increasing distracting selections;
+- substantially fewer context units for equivalent downstream support; or
+- useful attachment/context relevance decisions that deterministic retrieval
+  cannot provide.
+
+The eventual comparison must report uncertainty and category-level results.
+No threshold is sufficient by aggregate recall alone, and no production
+default should change from this benchmark.
 
 ## Reproduction
 

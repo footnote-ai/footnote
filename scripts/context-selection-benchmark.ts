@@ -11,6 +11,8 @@ import os from 'node:os';
 import path from 'node:path';
 import { performance } from 'node:perf_hooks';
 
+import type { ChatTriggerKind } from '@footnote/contracts/web';
+
 export type ContextSelectionMethod =
     | 'current_window'
     | 'recency_reply_expansion'
@@ -20,11 +22,18 @@ export type ContextSelectionMethod =
     | 'bm25_graph_expansion'
     | 'hash_embedding_proxy'
     | 'existing_cross_encoder'
+    | 'hosted_zero_shot'
+    | 'bm25_graph_semantic_prune'
+    | 'semantic_structural_closure'
+    | 'semantic_plus_bm25_top3'
     | 'openjev';
 
 export type BenchmarkMessage = {
     id: string;
     authorId: string;
+    authorName?: string;
+    createdAt?: string;
+    role?: 'user' | 'assistant';
     text: string;
     replyToId?: string;
 };
@@ -45,8 +54,16 @@ export type ContextBenchmarkCase = {
         | 'paraphrased_reference'
         | 'scattered_context'
         | 'irrelevant_high_similarity'
-        | 'historical_context_not_recovered';
+        | 'historical_context_not_recovered'
+        | 'coreference_ambiguous'
+        | 'semantic_paraphrase'
+        | 'misleading_overlap_hard'
+        | 'topic_resumption'
+        | 'speaker_sensitive'
+        | 'negative_historical_match';
     latestUserInput: string;
+    triggerKind?: ChatTriggerKind;
+    triggerMessageId?: string;
     triggerReplyToId?: string;
     messages: BenchmarkMessage[];
     necessaryMessageIds: string[];
@@ -61,6 +78,7 @@ export type SelectionResult = {
     candidateCount: number;
     retrievalDepth: number;
     branchExpansions: number;
+    expansionDepth?: number;
     latencyMs: number | null;
     reason?: string;
 };
@@ -121,6 +139,16 @@ export type CategoryAggregateMetric = {
     p95LatencyMs: number | null;
 };
 
+export type ContextGraphEdge =
+    'reply' | 'adjacent' | 'same_author' | 'trigger_reply';
+
+export type GraphExpansionOptions = {
+    budget: number;
+    seedCount?: number;
+    maxDepth?: number;
+    edges?: readonly ContextGraphEdge[];
+};
+
 export type BenchmarkReport = {
     benchmark: {
         issue: 717;
@@ -130,6 +158,8 @@ export type BenchmarkReport = {
         messageCount: number;
         contextWindowSize: 24;
         tokenEstimate: 'ceil(utf8_characters / 4)';
+        categoryCounts: Record<string, number>;
+        fixtureProvenance: string;
         limitations: string[];
     };
     methods: AggregateMetric[];
@@ -157,6 +187,12 @@ const SCENARIOS: Array<ContextBenchmarkCase['category']> = [
     'scattered_context',
     'irrelevant_high_similarity',
     'historical_context_not_recovered',
+    'coreference_ambiguous',
+    'semantic_paraphrase',
+    'misleading_overlap_hard',
+    'topic_resumption',
+    'speaker_sensitive',
+    'negative_historical_match',
 ];
 
 const createMessage = (
@@ -466,12 +502,143 @@ const buildScenario = (
             necessary(39);
             distracting(0);
             break;
+        case 'coreference_ambiguous':
+            replaceMessage(
+                messages,
+                caseNumber,
+                4,
+                'Alex compared the cedar worker, which handles documents, with the redwood worker for images.',
+                'alex'
+            );
+            replaceMessage(
+                messages,
+                caseNumber,
+                12,
+                'Jordan said the redwood worker is slower but safer for the archive queue.',
+                'jordan'
+            );
+            replaceMessage(
+                messages,
+                caseNumber,
+                31,
+                'I meant the cedar worker when I said that one was easier to operate.',
+                'alex'
+            );
+            latestUserInput = 'Which one did Alex say was easier to operate?';
+            necessary(4, 31);
+            distracting(12);
+            break;
+        case 'semantic_paraphrase':
+            replaceMessage(
+                messages,
+                caseNumber,
+                6,
+                'I favor keeping inference on-device because private prompts stay inside our deployment boundary.',
+                'alex'
+            );
+            latestUserInput = 'Why did Alex favor the local option?';
+            necessary(6);
+            useful(7);
+            break;
+        case 'misleading_overlap_hard':
+            replaceMessage(
+                messages,
+                caseNumber,
+                5,
+                'For the archive project, the redwood worker handles the image queue and the cedar worker handles documents.',
+                'alex'
+            );
+            replaceMessage(
+                messages,
+                caseNumber,
+                27,
+                'The redwood worker image queue is healthy in the unrelated thumbnail project.',
+                'sam'
+            );
+            replaceMessage(
+                messages,
+                caseNumber,
+                33,
+                'The archive image worker is not the thumbnail worker even though both mention the same queue.',
+                'sam'
+            );
+            latestUserInput =
+                'Which worker handles images for the archive project?';
+            necessary(5);
+            distracting(27, 33);
+            break;
+        case 'topic_resumption':
+            replaceMessage(
+                messages,
+                caseNumber,
+                4,
+                'We agreed that the audit export remains available for seven days.',
+                'alex'
+            );
+            replaceMessage(
+                messages,
+                caseNumber,
+                20,
+                'The unrelated image worker needs a cache warmup before launch.',
+                'sam'
+            );
+            replaceMessage(
+                messages,
+                caseNumber,
+                35,
+                'Back to the earlier choice: I still prefer the shorter retention period.',
+                'alex'
+            );
+            latestUserInput = 'Does that still apply to the export?';
+            necessary(4, 35);
+            distracting(20);
+            break;
+        case 'speaker_sensitive':
+            replaceMessage(
+                messages,
+                caseNumber,
+                8,
+                'I recommend keeping the audit export for seven days.',
+                'alex'
+            );
+            replaceMessage(
+                messages,
+                caseNumber,
+                19,
+                'I recommend keeping the audit export for thirty days.',
+                'jordan'
+            );
+            latestUserInput = 'What did Alex recommend for the audit export?';
+            necessary(8);
+            distracting(19);
+            break;
+        case 'negative_historical_match':
+            replaceMessage(
+                messages,
+                caseNumber,
+                1,
+                'The old image worker used the cedar queue before that project was retired.',
+                'alex'
+            );
+            replaceMessage(
+                messages,
+                caseNumber,
+                38,
+                'The current image worker uses the redwood queue after the migration.',
+                'alex'
+            );
+            latestUserInput = 'Which queue does the current image worker use?';
+            necessary(38);
+            distracting(1);
+            break;
     }
 
     return {
         id: `context-selection-${caseNumber.toString().padStart(3, '0')}`,
         category,
         latestUserInput,
+        triggerKind: 'direct',
+        triggerMessageId: `case-${caseNumber}-trigger`,
         ...(triggerReplyToId === undefined ? {} : { triggerReplyToId }),
         messages,
         necessaryMessageIds,
@@ -514,23 +681,27 @@ const selectTopMessageIds = (
         .slice(0, Math.min(limit, messages.length))
         .map(({ message }) => message.id);
 
-const selectCurrentWindow = (entry: ContextBenchmarkCase): SelectionResult => ({
+const selectCurrentWindow = (
+    entry: ContextBenchmarkCase,
+    budget = CONTEXT_WINDOW_SIZE
+): SelectionResult => ({
     method: 'current_window',
     status: 'completed',
-    messageIds: entry.messages
-        .slice(-CONTEXT_WINDOW_SIZE)
-        .map((message) => message.id),
+    messageIds: entry.messages.slice(-budget).map((message) => message.id),
     candidateCount: entry.messages.length,
-    retrievalDepth: CONTEXT_WINDOW_SIZE,
+    retrievalDepth: budget,
     branchExpansions: 0,
     latencyMs: null,
 });
 
 const selectRecencyWithReplyExpansion = (
-    entry: ContextBenchmarkCase
+    entry: ContextBenchmarkCase,
+    budget?: number
 ): SelectionResult => {
     const selected = new Set(
-        entry.messages.slice(-CONTEXT_WINDOW_SIZE).map((message) => message.id)
+        entry.messages
+            .slice(-(budget ?? CONTEXT_WINDOW_SIZE))
+            .map((message) => message.id)
     );
     const byId = new Map(
         entry.messages.map((message) => [message.id, message])
@@ -556,7 +727,11 @@ const selectRecencyWithReplyExpansion = (
             continue;
         }
         const current = byId.get(currentId);
-        if (current === undefined || selected.has(currentId)) {
+        if (
+            current === undefined ||
+            selected.has(currentId) ||
+            (budget !== undefined && selected.size >= budget)
+        ) {
             continue;
         }
         selected.add(current.id);
@@ -576,17 +751,20 @@ const selectRecencyWithReplyExpansion = (
             .filter((message) => selected.has(message.id))
             .map((message) => message.id),
         candidateCount: entry.messages.length,
-        retrievalDepth: CONTEXT_WINDOW_SIZE,
+        retrievalDepth: budget ?? CONTEXT_WINDOW_SIZE,
         branchExpansions,
         latencyMs: null,
     };
 };
 
 const selectRecencyWithAuthorContinuation = (
-    entry: ContextBenchmarkCase
+    entry: ContextBenchmarkCase,
+    budget?: number
 ): SelectionResult => {
     const selected = new Set(
-        entry.messages.slice(-CONTEXT_WINDOW_SIZE).map((message) => message.id)
+        entry.messages
+            .slice(-(budget ?? CONTEXT_WINDOW_SIZE))
+            .map((message) => message.id)
     );
     let branchExpansions = 0;
     let expanded = true;
@@ -598,6 +776,9 @@ const selectRecencyWithAuthorContinuation = (
                 continue;
             }
             const predecessor = entry.messages[index - 1];
+            if (budget !== undefined && selected.size >= budget) {
+                break;
+            }
             if (
                 predecessor !== undefined &&
                 predecessor.authorId === message.authorId &&
@@ -617,7 +798,7 @@ const selectRecencyWithAuthorContinuation = (
             .filter((message) => selected.has(message.id))
             .map((message) => message.id),
         candidateCount: entry.messages.length,
-        retrievalDepth: CONTEXT_WINDOW_SIZE,
+        retrievalDepth: budget ?? CONTEXT_WINDOW_SIZE,
         branchExpansions,
         latencyMs: null,
     };
@@ -719,7 +900,8 @@ const cosineSimilarity = (left: number[], right: number[]): number => {
 
 const selectScored = (
     method: 'bm25' | 'hash_embedding_proxy',
-    entry: ContextBenchmarkCase
+    entry: ContextBenchmarkCase,
+    budget = CONTEXT_WINDOW_SIZE
 ): SelectionResult => {
     const queryVector = createHashEmbedding(entry.latestUserInput);
     const scores =
@@ -737,11 +919,7 @@ const selectScored = (
     return {
         method,
         status: 'completed',
-        messageIds: selectTopMessageIds(
-            entry.messages,
-            scores,
-            CONTEXT_WINDOW_SIZE
-        ),
+        messageIds: selectTopMessageIds(entry.messages, scores, budget),
         candidateCount: entry.messages.length,
         retrievalDepth: entry.messages.length,
         branchExpansions: 0,
@@ -750,13 +928,14 @@ const selectScored = (
 };
 
 const selectBm25WithReplyExpansion = (
-    entry: ContextBenchmarkCase
+    entry: ContextBenchmarkCase,
+    budget?: number
 ): SelectionResult => {
     const selected = new Set(
         selectTopMessageIds(
             entry.messages,
             scoreBm25(entry),
-            CONTEXT_WINDOW_SIZE
+            budget ?? CONTEXT_WINDOW_SIZE
         )
     );
     const byId = new Map(
@@ -773,7 +952,10 @@ const selectBm25WithReplyExpansion = (
     }
 
     let branchExpansions = 0;
-    while (pending.length > 0) {
+    while (
+        pending.length > 0 &&
+        (budget === undefined || selected.size < budget)
+    ) {
         const currentId = pending.pop();
         if (currentId === undefined || selected.has(currentId)) {
             continue;
@@ -802,59 +984,89 @@ const selectBm25WithReplyExpansion = (
     };
 };
 
-const selectBm25WithGraphExpansion = (
-    entry: ContextBenchmarkCase
+export const selectBm25GraphExpansionWithEdges = (
+    entry: ContextBenchmarkCase,
+    options: GraphExpansionOptions
 ): SelectionResult => {
-    const graphSeedCount = 12;
+    const graphSeedCount = Math.min(options.seedCount ?? 12, options.budget);
+    const edges = new Set<ContextGraphEdge>(
+        options.edges ?? ['reply', 'adjacent', 'same_author', 'trigger_reply']
+    );
     const selected = new Set(
         selectTopMessageIds(entry.messages, scoreBm25(entry), graphSeedCount)
     );
     const byId = new Map(
         entry.messages.map((message, index) => [message.id, { message, index }])
     );
-    const pending: string[] = [];
+    const pending: Array<{ id: string; depth: number }> = [];
+    const enqueue = (id: string, depth: number): void => {
+        pending.push({ id, depth });
+    };
     for (const messageId of selected) {
         const indexed = byId.get(messageId);
         if (indexed === undefined) {
             continue;
         }
-        if (indexed.message.replyToId !== undefined) {
-            pending.push(indexed.message.replyToId);
+        if (edges.has('reply') && indexed.message.replyToId !== undefined) {
+            enqueue(indexed.message.replyToId, 1);
         }
         const predecessor = entry.messages[indexed.index - 1];
         const successor = entry.messages[indexed.index + 1];
-        if (predecessor !== undefined) {
-            pending.push(predecessor.id);
+        if (edges.has('adjacent') && predecessor !== undefined) {
+            enqueue(predecessor.id, 1);
         }
-        if (successor !== undefined) {
-            pending.push(successor.id);
+        if (edges.has('adjacent') && successor !== undefined) {
+            enqueue(successor.id, 1);
         }
-        if (entry.triggerReplyToId !== undefined) {
-            pending.push(entry.triggerReplyToId);
+        if (
+            edges.has('same_author') &&
+            predecessor !== undefined &&
+            predecessor.authorId === indexed.message.authorId
+        ) {
+            enqueue(predecessor.id, 1);
+        }
+        if (
+            edges.has('trigger_reply') &&
+            entry.triggerReplyToId !== undefined
+        ) {
+            enqueue(entry.triggerReplyToId, 1);
         }
     }
 
     let branchExpansions = 0;
-    while (pending.length > 0 && selected.size < CONTEXT_WINDOW_SIZE) {
-        const currentId = pending.shift();
-        if (currentId === undefined || selected.has(currentId)) {
+    let expansionDepth = 0;
+    while (pending.length > 0 && selected.size < options.budget) {
+        const current = pending.shift();
+        if (current === undefined || selected.has(current.id)) {
             continue;
         }
-        const indexed = byId.get(currentId);
+        const indexed = byId.get(current.id);
         if (indexed === undefined) {
             continue;
         }
-        selected.add(currentId);
+        selected.add(current.id);
         branchExpansions += 1;
-        if (indexed.message.replyToId !== undefined) {
-            pending.push(indexed.message.replyToId);
+        expansionDepth = Math.max(expansionDepth, current.depth);
+        if (
+            current.depth < (options.maxDepth ?? Number.POSITIVE_INFINITY) &&
+            edges.has('reply') &&
+            indexed.message.replyToId !== undefined
+        ) {
+            enqueue(indexed.message.replyToId, current.depth + 1);
         }
         const predecessor = entry.messages[indexed.index - 1];
         if (
+            edges.has('same_author') &&
             predecessor !== undefined &&
             predecessor.authorId === indexed.message.authorId
         ) {
-            pending.push(predecessor.id);
+            enqueue(predecessor.id, current.depth + 1);
+        }
+        if (
+            edges.has('trigger_reply') &&
+            entry.triggerReplyToId !== undefined
+        ) {
+            enqueue(entry.triggerReplyToId, current.depth + 1);
         }
     }
 
@@ -867,9 +1079,17 @@ const selectBm25WithGraphExpansion = (
         candidateCount: entry.messages.length,
         retrievalDepth: entry.messages.length,
         branchExpansions,
+        expansionDepth,
         latencyMs: null,
     };
 };
+
+const selectBm25WithGraphExpansion = (
+    entry: ContextBenchmarkCase
+): SelectionResult =>
+    selectBm25GraphExpansionWithEdges(entry, {
+        budget: CONTEXT_WINDOW_SIZE,
+    });
 
 /**
  * Selects a bounded context pack. Model-backed methods are intentionally
@@ -916,6 +1136,21 @@ export const selectContext = (
                 reason: 'No cross-encoder or reranker dependency is configured in Footnote.',
             };
             break;
+        case 'hosted_zero_shot':
+        case 'bm25_graph_semantic_prune':
+        case 'semantic_structural_closure':
+        case 'semantic_plus_bm25_top3':
+            result = {
+                method,
+                status: 'unavailable',
+                messageIds: [],
+                candidateCount: entry.messages.length,
+                retrievalDepth: 0,
+                branchExpansions: 0,
+                latencyMs: null,
+                reason: 'This benchmark-only hybrid is only run by its explicit offline or replay adapter.',
+            };
+            break;
         case 'openjev':
             result = {
                 method,
@@ -930,6 +1165,57 @@ export const selectContext = (
             break;
     }
 
+    if (result.status === 'completed') {
+        result.latencyMs = performance.now() - startedAt;
+    }
+    return result;
+};
+
+/**
+ * Runs the deterministic methods with an explicit message budget for offline
+ * cost curves. This is benchmark-only and does not alter production context.
+ */
+export const selectContextAtBudget = (
+    method: ContextSelectionMethod,
+    entry: ContextBenchmarkCase,
+    budget: number
+): SelectionResult => {
+    if (!Number.isInteger(budget) || budget <= 0) {
+        throw new Error(`Context budget must be a positive integer: ${budget}`);
+    }
+    const startedAt = performance.now();
+    let result: SelectionResult;
+    switch (method) {
+        case 'current_window':
+            result = selectCurrentWindow(entry, budget);
+            break;
+        case 'recency_reply_expansion':
+            result = selectRecencyWithReplyExpansion(entry, budget);
+            break;
+        case 'recency_author_continuation':
+            result = selectRecencyWithAuthorContinuation(entry, budget);
+            break;
+        case 'bm25':
+            result = selectScored(method, entry, budget);
+            break;
+        case 'bm25_reply_expansion':
+            result = selectBm25WithReplyExpansion(entry, budget);
+            break;
+        case 'bm25_graph_expansion':
+            result = selectBm25GraphExpansionWithEdges(entry, { budget });
+            break;
+        case 'hash_embedding_proxy':
+            result = selectScored(method, entry, budget);
+            break;
+        case 'existing_cross_encoder':
+        case 'hosted_zero_shot':
+        case 'bm25_graph_semantic_prune':
+        case 'semantic_structural_closure':
+        case 'semantic_plus_bm25_top3':
+        case 'openjev':
+            result = selectContext(method, entry);
+            break;
+    }
     if (result.status === 'completed') {
         result.latencyMs = performance.now() - startedAt;
     }
@@ -987,7 +1273,7 @@ const percentile = (
     return sorted[index] ?? null;
 };
 
-const buildCaseMetric = (
+export const buildCaseMetric = (
     entry: ContextBenchmarkCase,
     result: SelectionResult
 ): CaseMetric => {
@@ -1074,7 +1360,7 @@ const buildCaseMetric = (
     };
 };
 
-const aggregateMetrics = (
+export const aggregateMetrics = (
     method: ContextSelectionMethod,
     metrics: CaseMetric[]
 ): AggregateMetric => {
@@ -1218,11 +1504,21 @@ export const runBenchmark = (
             ),
             contextWindowSize: CONTEXT_WINDOW_SIZE,
             tokenEstimate: 'ceil(utf8_characters / 4)',
+            categoryCounts: Object.fromEntries(
+                SCENARIOS.map((category) => [
+                    category,
+                    corpus.filter((entry) => entry.category === category)
+                        .length,
+                ])
+            ),
+            fixtureProvenance:
+                'synthetic_structurally_faithful_discord_shapes; no private transcripts',
             limitations: [
                 'All fixtures are synthetic; no private production transcript is committed.',
                 'The hash embedding is a dependency-free lexical feature proxy, not a neural embedding model.',
                 'No cross-encoder is configured in the current Footnote checkout.',
                 'OpenJEV is not configured or invoked by this benchmark harness; the harness records it as unavailable.',
+                'The hardened categories are synthetic approximations of observed Discord shapes, not private transcript excerpts.',
                 'Latency is local JavaScript harness time, not Discord or provider end-to-end latency.',
             ],
         },
@@ -1240,6 +1536,11 @@ export const runBenchmark = (
 const formatMetric = (value: number | null): string =>
     value === null ? 'n/a' : value.toFixed(3);
 
+const formatInterval = (interval: [number, number] | null): string =>
+    interval === null
+        ? 'n/a'
+        : `[${interval[0].toFixed(3)}, ${interval[1].toFixed(3)}]`;
+
 const writeReport = (report: BenchmarkReport): void => {
     const outputDirectory = path.resolve('artifacts/context-selection-717');
     fs.mkdirSync(outputDirectory, { recursive: true });
@@ -1254,16 +1555,16 @@ const writeReport = (report: BenchmarkReport): void => {
         `Generated: ${report.benchmark.generatedAt}`,
         `Corpus: ${report.benchmark.caseCount} synthetic cases / ${report.benchmark.messageCount} messages`,
         '',
-        '| Method | Necessary recall | Useful precision | Distracting rate | Avg messages | Avg tokens | Avg candidates | Avg depth | Avg branches | p95 ms | Unavailable |',
-        '| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |',
+        '| Method | Necessary recall | Recall 95% CI | Useful precision | Precision 95% CI | Distracting rate | Avg messages | Avg context units | Avg candidates | Avg depth | Avg branches | p95 ms | Unavailable |',
+        '| --- | ---: | --- | ---: | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |',
         ...report.methods.map(
             (metric) =>
-                `| ${metric.method} | ${formatMetric(metric.necessaryMessageRecall)} | ${formatMetric(metric.usefulContextPrecision)} | ${formatMetric(metric.distractingContextRate)} | ${formatMetric(metric.averageFinalMessageCount)} | ${formatMetric(metric.averageEstimatedInputTokens)} | ${formatMetric(metric.averageCandidateCount)} | ${formatMetric(metric.averageRetrievalDepth)} | ${formatMetric(metric.averageBranchExpansionCount)} | ${formatMetric(metric.p95LatencyMs)} | ${metric.unavailableCases} |`
+                `| ${metric.method} | ${formatMetric(metric.necessaryMessageRecall)} | ${formatInterval(metric.necessaryMessageRecall95Ci)} | ${formatMetric(metric.usefulContextPrecision)} | ${formatInterval(metric.usefulContextPrecision95Ci)} | ${formatMetric(metric.distractingContextRate)} | ${formatMetric(metric.averageFinalMessageCount)} | ${formatMetric(metric.averageEstimatedInputTokens)} | ${formatMetric(metric.averageCandidateCount)} | ${formatMetric(metric.averageRetrievalDepth)} | ${formatMetric(metric.averageBranchExpansionCount)} | ${formatMetric(metric.p95LatencyMs)} | ${metric.unavailableCases} |`
         ),
         '',
         '## By category',
         '',
-        '| Category | Method | Necessary recall | Useful precision | Distracting rate | Avg messages | Avg tokens | p95 ms |',
+        '| Category | Method | Necessary recall | Useful precision | Distracting rate | Avg messages | Avg context units | p95 ms |',
         '| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: |',
         ...report.categoryMetrics.map(
             (metric) =>

@@ -109,13 +109,31 @@ test('lexical graph expansion remains bounded and includes reply ancestry', () =
 test('report includes per-category metrics for every completed baseline', () => {
     const report = runBenchmark();
 
-    assert.equal(report.categoryMetrics.length, 14 * 9);
+    assert.equal(
+        report.categoryMetrics.length,
+        Object.keys(report.benchmark.categoryCounts).length * 9
+    );
     assert.ok(
         report.categoryMetrics.some(
             (metric) =>
                 metric.category === 'same_author_continuation' &&
                 metric.method === 'recency_author_continuation'
         )
+    );
+});
+
+test('reports Wilson intervals for available aggregate proportions', () => {
+    const report = runBenchmark();
+    const bm25 = report.methods.find((metric) => metric.method === 'bm25');
+
+    assert.ok(bm25);
+    assert.deepEqual(
+        bm25.necessaryMessageRecall95Ci,
+        [0.8816364734751868, 0.9633885392651903]
+    );
+    assert.deepEqual(
+        bm25.usefulContextPrecision95Ci,
+        [0.05349721294878286, 0.07290113210024202]
     );
 });
 
