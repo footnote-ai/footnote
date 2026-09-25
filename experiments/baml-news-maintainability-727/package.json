@@ -1,0 +1,11 @@
+{
+    "name": "footnote-baml-news-maintainability-727",
+    "private": true,
+    "type": "module",
+    "devDependencies": {
+        "@boundaryml/baml": "0.226.2"
+    },
+    "scripts": {
+        "generate": "baml-cli generate --from baml_src"
+    }
+}
