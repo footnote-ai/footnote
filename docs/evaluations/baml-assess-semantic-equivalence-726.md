@@ -11,7 +11,8 @@
 Status: **modular-boundary experiment complete; BAML adoption not justified
 for the current assess path**.
 
-Evaluation base: `68e1825ac442e5099a7fa2b74418c2d774816ed0`.
+Experiment base: `68e1825ac442e5099a7fa2b74418c2d774816ed0`.
+Stack base for PR #742: `9b4bc0ee4de430bda19473df26e5a8acad3a8c11` (PR #737 head).
 The machine-readable evidence is from the pinned `0.226.2` prototype run;
 production files were not changed.
 

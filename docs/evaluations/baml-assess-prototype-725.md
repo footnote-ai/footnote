@@ -13,8 +13,9 @@ slice alone**.
 
 Run date: 2026-09-25
 
-Base: `68e1825ac442e5099a7fa2b74418c2d774816ed0` (the exact checkout used
-for this corrected evaluation)
+Experiment base: `68e1825ac442e5099a7fa2b74418c2d774816ed0` (the exact checkout used for this corrected evaluation)
+
+Stack base for PR #742: `9b4bc0ee4de430bda19473df26e5a8acad3a8c11` (PR #737 head)
 
 BAML: `@boundaryml/baml 0.226.2`
 
