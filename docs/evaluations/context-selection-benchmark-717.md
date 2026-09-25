@@ -8,8 +8,8 @@
 
 # Context-selection benchmark (#717)
 
-Status: **hardened cheap-baseline expansion complete; hosted/reference semantic
-backends are the next evaluation path**.
+Status: **context-selection evidence complete; no production semantic selector
+is justified by the available evidence**.
 
 Run date: 2026-09-22
 
@@ -60,17 +60,17 @@ harness does not call production context selection or change production input.
 
 ## Compared methods
 
-| Method                                  | Result in this slice                                                   |
-| --------------------------------------- | ---------------------------------------------------------------------- |
-| Current 24-message window               | Completed; fail-open baseline                                          |
-| Recency plus reply expansion            | Completed                                                              |
-| Recency plus same-author continuation   | Completed                                                              |
-| BM25-style lexical retrieval            | Completed                                                              |
-| BM25 plus reply expansion               | Completed                                                              |
-| BM25 plus deterministic graph expansion | Completed; 12 lexical seeds, bounded to 24 selected messages           |
-| Dependency-free hash embedding proxy    | Completed; not a neural embedding                                      |
-| Existing cross-encoder/reranker         | Explicitly unavailable; no configured dependency in Footnote           |
-| OpenJEV/local model                     | Explicitly unavailable; local deployment is tracked separately in #718 |
+| Method                                  | Result in this slice                                                               |
+| --------------------------------------- | ---------------------------------------------------------------------------------- |
+| Current 24-message window               | Completed; fail-open baseline                                                      |
+| Recency plus reply expansion            | Completed                                                                          |
+| Recency plus same-author continuation   | Completed                                                                          |
+| BM25-style lexical retrieval            | Completed                                                                          |
+| BM25 plus reply expansion               | Completed                                                                          |
+| BM25 plus deterministic graph expansion | Completed; 12 lexical seeds, bounded to 24 selected messages                       |
+| Dependency-free hash embedding proxy    | Completed; not a neural embedding                                                  |
+| Existing cross-encoder/reranker         | Explicitly unavailable; no configured dependency in Footnote                       |
+| OpenJEV/local model                     | Not invoked by this offline harness; AMD feasibility is tracked separately in #718 |
 
 The hash embedding is included only as a reproducible local comparison point.
 It must not be described as evidence from a neural embedding model.
@@ -118,10 +118,9 @@ highlights are:
 
 The new cases expose weak lexical/context behavior in coreference, speaker
 selection, and the current-window baseline. BM25 still performs strongly on
-these synthetic cases, so they are not evidence that semantic judgment is
-unnecessary; they identify the cases where OpenJEV must be compared honestly.
-The fixtures remain synthetic approximations, not independent production
-estimates.
+these synthetic cases. That does not prove semantic judgment is unnecessary;
+it shows the level a semantic method would need to beat. The fixtures remain
+synthetic approximations, not independent production estimates.
 
 ## Budget, ablation, and branch-pruning evidence
 
@@ -163,39 +162,35 @@ The current upstream `AlexWortega/openjev` repository documents the
 `qwen3.5-0.8b-nli-v2s-long` checkpoint, three-way contradiction/entailment/
 neutral classification, `predict_hypotheses`, `rerank`, and shared-prefix
 batching. The model card also documents the 4B path and an SGLang serving path.
-The exact checkpoint and batching formulation must be pinned when the local
-deployment benchmark is rerun; this report does not infer conversational
-relevance from generic NLI claims.
+The exact checkpoint and batching formulation must be pinned for any future
+comparison; this report does not infer conversational relevance from generic
+NLI claims.
 
 Primary references checked on 2026-09-22:
 
 - <https://huggingface.co/AlexWortega/openjev/blob/main/README.md>
 - <https://huggingface.co/AlexWortega/openjev/tree/main>
 
-This machine has Python 3.13.5, CPU-only PyTorch, no `transformers` package,
-and no configured local accelerator runtime. Downloading model weights or
-sending private transcript content to a hosted provider was therefore not
-appropriate for this offline slice. The local OpenJEV row is a separate
-deployment prerequisite, not a failure of this context-selection benchmark.
+The offline harness did not invoke OpenJEV. #718 later showed that the model
+can run on the target RX 7800 XT under WSL2 with ROCm, but did not produce a
+simple TypeScript-native path or a production server. #722's bounded hosted
+comparison did not show better answer quality than BM25 plus deterministic
+expansion. No Python sidecar, SGLang service, or production context selector
+was added.
 
 ## Interpretation and gate
 
 On this synthetic corpus, cheap lexical retrieval plus deterministic
 relationships is the strongest tested baseline: the bounded graph hybrid
 matches BM25-plus-reply recall while selecting about 39% fewer messages and
-lowering the measured distracting rate. That is a meaningful null hypothesis
-for any future semantic selector. The result does **not** establish production
-quality because the corpus remains synthetic, pronoun performance is weak, and
-no hosted or local semantic backend has been run.
+lowering the measured distracting rate. #722 did not show a downstream answer
+quality improvement over that baseline, and #718 found no simple TypeScript-
+native OpenJEV path. The result does not establish production quality because
+the corpus remains synthetic and pronoun performance is weak. It does support
+keeping the simpler baseline and not adding a production semantic selector,
+context graph, or `JudgmentRuntime` from this evidence.
 
-Recommendation for #717: keep the experiment open for a provider-neutral,
-flat comparison using sanitized fixtures and hosted/reference semantic
-backends, followed by the same corpus on local OpenJEV when #718 produces real
-measurements. Do not advance to production context selection based on this
-slice alone. #718 is an independent local-runtime gate and must not block the
-first semantic-value experiment.
-
-## Provisional value gate for a future semantic selector
+## Concrete reconsideration triggers
 
 This gate is recorded before OpenJEV execution to reduce hindsight bias. A
 semantic selector would need to demonstrate a material advantage over the
@@ -212,8 +207,8 @@ would justify reopening the architecture question includes one or more of:
   cannot provide.
 
 The eventual comparison must report uncertainty and category-level results.
-No threshold is declared sufficient by aggregate recall alone, and no
-production default should change from this benchmark.
+No threshold is sufficient by aggregate recall alone, and no production
+default should change from this benchmark.
 
 ## Reproduction
 

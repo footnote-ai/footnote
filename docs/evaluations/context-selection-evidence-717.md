@@ -8,7 +8,8 @@
 
 # Context-selection evidence expansion (#717)
 
-Status: **offline cheap-baseline evidence expanded; OpenJEV remains unrun**.
+Status: **cheap-baseline evidence complete; production semantic integration is
+not justified**.
 
 The harness evaluates 100 synthetic cases across 20 categories, five cases per
 category. New categories target ambiguous coreference, weak semantic
@@ -52,7 +53,8 @@ Bounded recursive expansion used three lexical seeds and maximum depth two.
 At budget five, top-five BM25 reached 0.933 recall while recursive expansion
 reached 0.967 with 4.9 average messages. At budgets 8, 10, and 15 recursive
 expansion retained 0.967 recall with 6.4–6.6 average messages. This is a
-small synthetic result; it does not justify a production graph engine.
+small synthetic result; it does not justify a production graph engine or
+judgment runtime.
 
 ## Paired BM25 comparison
 
@@ -84,8 +86,13 @@ The deterministic support proxy now covers all 20 categories and includes a
 | BM25 + graph            |       0.950 |                0.950 |         15.1 |     276.0 |
 | BM25 + graph, budget 10 |       0.900 |                0.900 |         10.0 |     182.9 |
 
-No generated answer call was made. Provider usage, generation latency, and
-generation cost remain unavailable.
+No generated answer call was made in this local proxy. #722's bounded hosted
+comparison did not show an answer-quality improvement over BM25 plus
+deterministic expansion. Provider usage, generation latency, and generation
+cost remain unavailable here.
+
+The artifacts are retained for evaluation and regression reproduction. They do
+not approve a production context graph, semantic router, or `JudgmentRuntime`.
 
 ## Artifacts and reproduction
 
