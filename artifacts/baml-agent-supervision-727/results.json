@@ -1,0 +1,74 @@
+{
+    "experiment": "baml-agent-supervision-727",
+    "baseSha": "44b69c9796306df1fddaf2c4f404e74ebcd56fb8",
+    "harnessSha": "3427069a72a2440496852c04c7c2220a35d5fd2e",
+    "representativeFunction": "/news structured result path",
+    "bamlVersion": "0.226.2",
+    "taskThreads": {
+        "nativeA": {
+            "threadId": "01a0d8d4-96c4-7643-a1dd-146bcea1bea8",
+            "status": "partial_blocked",
+            "worktree": "bench/native-a"
+        },
+        "nativeB": {
+            "threadId": "01a0d8d4-9a65-7e63-b873-5e78b7345807",
+            "status": "partial_blocked",
+            "worktree": "bench/native-b"
+        },
+        "nativeC": {
+            "threadId": "01a0d8d4-9f51-7af3-a795-876cdc36fff8",
+            "status": "completed",
+            "worktree": "bench/native-c"
+        },
+        "nativeD": {
+            "threadId": "01a0d8d4-a338-75a0-93ce-cfda8c9a2595",
+            "status": "completed",
+            "worktree": "bench/native-d"
+        },
+        "bamlA": {
+            "threadId": "01a0d8d4-a796-7330-bad6-0e0db50d3c45",
+            "status": "partial_blocked",
+            "worktree": "bench/baml-a"
+        },
+        "bamlB": {
+            "threadId": "01a0d8d4-abac-7620-a3bf-b67d4e649e55",
+            "status": "partial_blocked_tool_caught",
+            "worktree": "bench/baml-b"
+        },
+        "bamlC": {
+            "threadId": "01a0d8d4-afa4-78d0-9af6-e708a6fcbd16",
+            "status": "partial_blocked",
+            "worktree": "bench/baml-c"
+        },
+        "bamlD": {
+            "threadId": "01a0d8d4-b390-78c0-9c88-eac53ef372dd",
+            "status": "blocked_no_completed_change",
+            "worktree": "bench/baml-d"
+        }
+    },
+    "handoff": {
+        "native": {
+            "threadId": "01a0d8e7-1c25-7d81-9995-97c94d6b3c4a",
+            "agent1Base": "8bc0924cb83e91f5387d7dcf1776b4b8a97dd23b",
+            "status": "completed_blocked_checks"
+        },
+        "baml": {
+            "threadId": "01a0d8e7-20fb-7630-9d24-01c3f0b5133a",
+            "agent1Base": "2fe7b99f8228d3e015cc5bfb1470aad5c57fe2c3",
+            "status": "completed_blocked_checks"
+        }
+    },
+    "commandEvidence": [
+        "pnpm ... baml-cli --version => 0.226.2",
+        "baml check clean fixture => exit 0",
+        "baml generate clean fixture => exit 0, 14 generated files ignored",
+        "baml test --list clean fixture => exit 0, 0 tests",
+        "baml check BAML bounded-choice diff => exit 1, lowercase enum names and invalid test form"
+    ],
+    "limitations": [
+        "No live provider calls",
+        "No reliable Codex token/context telemetry",
+        "Fresh worktrees lacked a usable pnpm/node_modules path",
+        "Advertised agent/describe commands absent from pinned CLI"
+    ]
+}
