@@ -111,7 +111,9 @@ const parseResponse = (value: unknown): SystemOneResponse => {
     const usage = value.usage;
     if (
         !isRecord(usage) ||
+        typeof usage.input_tokens !== 'number' ||
         !Number.isInteger(usage.input_tokens) ||
+        typeof usage.output_tokens !== 'number' ||
         !Number.isInteger(usage.output_tokens)
     ) {
         throw new JevRequestError(
