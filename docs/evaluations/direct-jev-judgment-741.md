@@ -10,7 +10,7 @@
 
 Status: **adapter and replay path complete; hosted Jev unavailable in this checkout**.
 
-Base: `68e1825ac442e5099a7fa2b74418c2d774816ed0`
+Base: `9ce1beb13916a0020331983a4f25915c0cd5f08f` (PR #739 head; exact base for this stacked branch).
 
 Branch: `experiment/direct-jev-judgment-final`
 
