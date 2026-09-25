@@ -189,11 +189,33 @@ machine, or that a permanent sidecar is worthwhile.
 
 ## Exact remaining blocker
 
-The RX 7800 XT reference benchmark is no longer blocked. Remaining runtime
-work is narrower: run the OpenJEV SGLang `/classify` server or another stable
-HTTP server on the same AMD setup, exercise the TypeScript client, and measure
-overlapping generator requests. Those results are needed before treating an
-HTTP model server as a realistic Footnote integration option.
+The RX 7800 XT reference benchmark is no longer blocked. A temporary Python
+reference server also accepted the documented `/classify` request shape, and
+the existing TypeScript client completed all 10/40/80 candidate batches at 32,
+128, and 512 words. This server was an experiment only. It was not SGLang and
+it is not part of Footnote.
+
+The warm TypeScript-to-HTTP measurements were:
+
+| Candidates | 32 words | 128 words | 512 words |
+| ---------: | -------: | --------: | --------: |
+|         10 |   0.15 s |    0.54 s |    1.09 s |
+|         40 |   0.36 s |    1.98 s |    4.74 s |
+|         80 |   0.63 s |    2.01 s |    6.11 s |
+
+These are one request per workload after the model was warm. They measure the
+HTTP client and reference server together, not a production server's stable
+latency distribution. A concurrent test also kept `reap48-fixed:latest`
+resident in Ollama while the TypeScript client sent the 32-word batches. The
+generator completed a 256-token request during the same interval, and neither
+process reported an out-of-memory error. The test did not collect total device
+telemetry or test multiple simultaneous requests.
+
+The remaining runtime work is narrower: run the OpenJEV SGLang `/classify`
+server, or another supported server, on the same AMD setup and repeat the
+measurements with server-side model identity, memory telemetry, cancellation,
+and concurrent load. Those results are needed before treating an HTTP model
+server as a realistic Footnote integration option.
 
 ## Interpretation
 
