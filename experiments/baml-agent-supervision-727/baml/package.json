@@ -1,0 +1,14 @@
+{
+  "name": "footnote-baml-agent-supervision-727",
+  "private": true,
+  "type": "module",
+  "devDependencies": {
+    "@boundaryml/baml": "0.226.2"
+  },
+  "scripts": {
+    "generate": "baml-cli generate --from baml_src",
+    "check": "baml-cli check --from baml_src",
+    "fmt": "baml-cli fmt --from baml_src",
+    "test": "baml-cli test --from baml_src"
+  }
+}
