@@ -35,8 +35,8 @@ That makes Python a **benchmark/server dependency**, not a Footnote dependency:
 
 - Footnote remains TypeScript.
 - No Python package or root-level Python toolchain was added.
-- A future Footnote integration should call a separately managed model server
-  over HTTP rather than importing Python into the backend.
+- The temporary HTTP bridge was benchmark scaffolding only. It is not a
+  proposed Footnote sidecar or a reason to add a second application runtime.
 
 The benchmark accepts a local model directory, or downloads the requested
 Hugging Face revision into a local snapshot before loading it. The model
@@ -101,15 +101,50 @@ that an aborted HTTP request cancels GPU work. The benchmark uses an HTTP
 timeout; a future wrapper would need to add health, loaded-model identity, and
 server-side cancellation semantics if Footnote needs them.
 
+## TypeScript-native feasibility
+
+The exact OpenJEV checkpoint does not currently have a clean TypeScript path.
+Transformers.js supports text classification in general, but its documented
+model-loading path expects ONNX weights. The OpenJEV checkpoint used here
+contains PyTorch safetensors and custom Python model code, not a ready-to-use
+Transformers.js ONNX model. The model's three-score output is therefore not
+available from Transformers.js without conversion and compatibility work.
+
+The underlying Qwen3.5 family now has JavaScript support for some generation
+paths, but that does not prove support for this custom sequence-classification
+checkpoint or its NLI head. The exact requirement is a numeric
+contradiction/entailment/neutral result, not generated text that must be parsed
+back into a label.
+
+ONNX Runtime Node has prebuilt Windows DirectML and WebGPU paths, and Linux
+CUDA paths. Its standard Node distribution does not provide the ROCm path used
+by the successful WSL benchmark. AMD execution providers exist, but using them
+would require custom ONNX Runtime and provider builds. That is a separate
+machine-learning toolchain, not a small Footnote dependency.
+
+| Path                                     | Classifier scores                  | TypeScript-native | AMD path                                | Complexity        | Disposition                             |
+| ---------------------------------------- | ---------------------------------- | ----------------- | --------------------------------------- | ----------------- | --------------------------------------- |
+| Python + Transformers reference          | Yes                                | No                | Proven through WSL2/ROCm                | High for Footnote | Benchmark evidence only                 |
+| Transformers.js with this checkpoint     | Not currently                      | Yes in principle  | WebGPU/DirectML only after conversion   | High              | Do not pursue now                       |
+| ONNX Runtime Node with converted OpenJEV | Possible in principle              | Yes               | Windows DirectML or custom AMD provider | High              | Conversion and head validation required |
+| Existing Ollama path                     | No direct classifier head evidence | Yes over HTTP     | Proven generator path, not OpenJEV      | High if adapted   | Do not force it                         |
+| Different ONNX text classifier           | Likely                             | Yes               | Depends on model/runtime                | Unknown           | Separate future experiment              |
+
+The useful conclusion is narrower than “AMD is unsupported.” AMD execution is
+proven. The missing piece is a small, upstream-supported TypeScript runtime for
+this exact classifier. Converting weights, maintaining a custom classifier
+head, or building an AMD ONNX provider would turn this into a model deployment
+project. This workstream should stop before taking on that cost.
+
 ## AMD runtime options
 
-| Path                        | Current assessment                                                                                                                                                                                                                                                                                     |
-| --------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| Native Windows PyTorch/ROCm | Not the first path to recommend. AMD's current Windows matrix does not list the RX 7800 XT, and the full ROCm stack is not supported on Windows.                                                                                                                                                       |
-| Native Linux + ROCm         | Cleanest reference environment. AMD's current Linux matrix lists the RX 7800 XT and supported PyTorch/ROCm combinations.                                                                                                                                                                               |
-| WSL2 + ROCDXG/ROCm          | Best path on this Windows desktop. This path was validated on the RX 7800 XT with `/dev/dxg`, ROCm 7.2, and ROCDXG 1.2.2.                                                                                                                                                                              |
-| SGLang `/classify`          | Best candidate for a TypeScript client because OpenJEV documents this server boundary. AMD support is still a candidate to validate, not a completed result.                                                                                                                                           |
-| llama.cpp or Ollama         | Not the primary path. Those projects can use AMD backends in general, but OpenJEV is a custom three-score sequence classifier and does not currently provide an official GGUF/Ollama execution path. Prompting a text generator and reparsing prose would lose the model's intended classifier output. |
+| Path                           | Current assessment                                                                                                                                                                                                                                                                                              |
+| ------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Native Windows PyTorch/ROCm    | Not the first path to recommend. AMD's current Windows matrix does not list the RX 7800 XT, and the full ROCm stack is not supported on Windows.                                                                                                                                                                |
+| Native Linux + ROCm            | Cleanest reference environment. AMD's current Linux matrix lists the RX 7800 XT and supported PyTorch/ROCm combinations.                                                                                                                                                                                        |
+| WSL2 + ROCDXG/ROCm             | Best path on this Windows desktop. This path was validated on the RX 7800 XT with `/dev/dxg`, ROCm 7.2, and ROCDXG 1.2.2.                                                                                                                                                                                       |
+| SGLang or another model server | Intentionally not pursued. It would preserve TypeScript at the client boundary but add the second runtime this investigation is trying to avoid.                                                                                                                                                                |
+| llama.cpp or Ollama            | Not a fit for this checkpoint. Those projects can use AMD backends in general, but OpenJEV is a custom three-score sequence classifier and does not currently provide an official GGUF/Ollama execution path. Prompting a text generator and reparsing prose would lose the model's intended classifier output. |
 
 Primary references:
 
@@ -118,7 +153,9 @@ Primary references:
 - [AMD Windows Radeon compatibility](https://rocm.docs.amd.com/projects/radeon-ryzen/en/latest/docs/compatibility/compatibilityrad/windows/windows_compatibility.html)
 - [AMD WSL ROCm guide](https://rocm.docs.amd.com/projects/radeon-ryzen/en/latest/docs/install/installrad/wsl/howto_wsl.html)
 - [ROCm/librocdxg compatibility](https://github.com/ROCm/librocdxg/)
-- [AMD SGLang serving notes](https://rocm.docs.amd.com/projects/ai-ecosystem/en/latest/inference/sglang.html)
+- [Transformers.js supported tasks and models](https://github.com/huggingface/transformers.js)
+- [Transformers.js model requirements](https://huggingface.co/docs/transformers.js/pipelines)
+- [ONNX Runtime Node.js bindings and execution providers](https://onnxruntime.ai/docs/get-started/with-javascript/node.html)
 - [PyTorch installation selector](https://pytorch.org/get-started/locally/)
 
 ## Generator coexistence
@@ -141,12 +178,15 @@ before loading OpenJEV. The HTTP path can test the same server arrangement from
 TypeScript. Neither harness infers cross-process GPU memory or generator health
 from process existence alone.
 
-One coexistence run kept Ollama's existing `reap48-fixed:latest` model loaded.
-Ollama reported that model as 9.8 GB and 100% GPU resident. OpenJEV then loaded
-and completed the 10/40/80-candidate, 32-word run without an out-of-memory
-failure. OpenJEV's per-process peak was 2.66 GB, and its model-load time in
-that run was 15.9 seconds. These are separate process measurements, not a full
-GPU accounting report, and overlapping generation requests were not tested.
+One exploratory coexistence run kept Ollama's existing `reap48-fixed:latest`
+model loaded. Ollama reported that model as 9.8 GB and 100% GPU resident.
+OpenJEV then loaded and completed the 10/40/80-candidate, 32-word run without
+an out-of-memory failure. OpenJEV's per-process peak was 2.66 GB, and its
+model-load time in that run was 15.9 seconds. A later small HTTP check also
+overlapped a 256-token generator request without an observed out-of-memory
+failure. The desktop was used for other work during these tests, so these are
+exploratory workstation observations, not controlled concurrency or production
+capacity measurements.
 
 Use synthetic inputs only. Never send private conversation or attachment
 content to a newly provisioned model/provider without explicit authorization.
@@ -160,10 +200,10 @@ Transformers 5.17.0 and OpenJEV's checked-out `modeling_openjev.py` on Python
 3.12.3. PyTorch was `2.9.1+rocm7.2.0.git7e1940d4`, with HIP
 `7.2.26015-fc0010cf6a`. The harness reported 16,176.99 MB total device memory.
 
-The table shows one measurement per workload, so these are early capacity
-measurements rather than stable p50/p95 production numbers. Larger candidate
-batches often amortized fixed model overhead; do not treat one row as a
-repeated-load latency distribution.
+The table shows one measurement per workload on an actively used workstation.
+These are rough capacity observations, not stable p50/p95 production numbers.
+Larger candidate batches often amortized fixed model overhead; do not treat
+one row as a repeated-load latency distribution.
 
 | Operation | Candidates | Words each | Latency | Peak process VRAM |
 | --------- | ---------: | ---------: | ------: | ----------------: |
@@ -211,11 +251,12 @@ generator completed a 256-token request during the same interval, and neither
 process reported an out-of-memory error. The test did not collect total device
 telemetry or test multiple simultaneous requests.
 
-The remaining runtime work is narrower: run the OpenJEV SGLang `/classify`
-server, or another supported server, on the same AMD setup and repeat the
-measurements with server-side model identity, memory telemetry, cancellation,
-and concurrent load. Those results are needed before treating an HTTP model
-server as a realistic Footnote integration option.
+The local hardware question is answered: the RX 7800 XT can run the model.
+The remaining integration question is whether a TypeScript-native runtime can
+preserve the classifier head without a large conversion or native-build
+project. No clean path was found in this investigation. The temporary Python
+HTTP bridge remains reference scaffolding and should not become a Footnote
+service.
 
 ## Interpretation
 
