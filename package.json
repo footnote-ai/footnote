@@ -42,6 +42,7 @@
         "context:repo:load": "pnpm exec tsx scripts/load-repository-context.ts",
         "responses:compare": "pnpm exec tsx scripts/responses-compare.ts",
         "eval:planner": "pnpm exec tsx scripts/planner-comparison.mts",
+        "eval:direct-jev": "pnpm exec tsx scripts/direct-jev-benchmark.ts",
         "eval:context-selection": "pnpm exec tsx scripts/context-selection-benchmark.ts",
         "eval:context-answer-quality": "pnpm exec tsx scripts/context-selection-answer-quality.ts",
         "eval:context-selection-evidence": "pnpm exec tsx scripts/context-selection-evidence.ts",
