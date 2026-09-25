@@ -1,0 +1,51 @@
+{
+  "api": "b.request.Assess",
+  "client": "LocalOllama",
+  "ownKeys": [],
+  "prototypeKeys": [
+    "body",
+    "headers",
+    "id",
+    "method",
+    "toString",
+    "url",
+    "constructor"
+  ],
+  "serialized": "{}",
+  "requestString": "HTTPRequest(url=http://localhost:11434/v1/chat/completions, method=POST, headers={\n  \"baml-original-url\": \"http://localhost:11434/v1\",\n  \"content-type\": \"application/json\"\n}, body={\n  \"model\": \"reap48-fixed:latest\",\n  \"temperature\": 0,\n  \"messages\": [\n    {\n      \"role\": \"user\",\n      \"content\": \"Return plain JSON only.\\nSchema:\\nAnswer in JSON using this schema:\\n{\\n  reviewDecision: \\\"finalize\\\" or \\\"revise\\\",\\n  reviewReason: string,\\n  revisionInstruction: string or null,\\n  traceAlignment: \\\"aligned\\\" or \\\"misaligned\\\" or null,\\n  traceAlignmentReason: string or null,\\n  finalTemperament: {\\n    tightness: int or null,\\n    rationale: int or null,\\n    attribution: int or null,\\n    caution: int or null,\\n    extent: int or null,\\n  } or null,\\n  moduleHints: string[] or null,\\n  concerns: {\\n    length: \\\"too_long\\\" or \\\"ok\\\" or null,\\n    style: \\\"too_stiff\\\" or \\\"ok\\\" or null,\\n    evidence: \\\"needs_caution\\\" or \\\"ok\\\" or null,\\n  } or null,\\n  routingHints: string[] or null,\\n}\\nChoose \\\\\\\"finalize\\\\\\\" when the draft is complete, accurate, and ready.\\nChoose \\\\\\\"revise\\\\\\\" only when one additional revision would materially improve quality.\\nProvide concise fields and keep revisionInstruction specific and short.\\nDo not include markdown or extra keys.\\n\\nDraft:\\nThe draft is accurate.\\n\\nReview context:\\nThe draft is ready.\"\n    }\n  ]\n})",
+  "request": {
+    "method": "POST",
+    "url": "http://localhost:11434/v1/chat/completions",
+    "headers": {
+      "baml-original-url": "http://localhost:11434/v1",
+      "content-type": "application/json"
+    },
+    "body": {},
+    "id": "breq_01m3b45a36ee9t8tyer0gpqqm1",
+    "bodyPrototypeKeys": [
+      "json",
+      "raw",
+      "text",
+      "constructor"
+    ],
+    "bodyOwnKeys": [],
+    "bodyString": "[object Object]",
+    "bodyDescriptors": {
+      "json": {
+        "writable": true,
+        "enumerable": true,
+        "configurable": true
+      },
+      "raw": {
+        "writable": true,
+        "enumerable": true,
+        "configurable": true
+      },
+      "text": {
+        "writable": true,
+        "enumerable": true,
+        "configurable": true
+      }
+    }
+  }
+}

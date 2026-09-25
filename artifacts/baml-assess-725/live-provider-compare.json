@@ -1,0 +1,57 @@
+{
+    "benchmark": "baml_assess_live_provider_compare",
+    "provider": "openai",
+    "model": "gpt-5-mini",
+    "fixtureCount": 3,
+    "rows": [
+        {
+            "fixture": "ready_finalize",
+            "current": {
+                "status": "error",
+                "latencyMs": 10812.5947,
+                "errorName": "GenerationRuntimeError",
+                "errorMessage": "You have no credits remaining. Add credits to continue using the API at https://platform.openai.com/settings/organization/billing/."
+            },
+            "baml": {
+                "status": "error",
+                "latencyMs": 2770.242399999999,
+                "provider": "openai-responses",
+                "errorName": "BamlClientHttpError",
+                "errorMessage": "BamlError: BamlClientError: BamlClientHttpError: Request failed with status code: 429 Too Many Requests. {\"error\":{\"message\":\"You have no credits remaining. Add credits to continue using the API at https://platform.openai.com/settings/organization/billing/.\",\"type\":\"insufficient_quota\",\"param\":null,\"code\":\"credit_balance_exhausted\"}}"
+            }
+        },
+        {
+            "fixture": "missing_caveat",
+            "current": {
+                "status": "error",
+                "latencyMs": 10651.024700000002,
+                "errorName": "GenerationRuntimeError",
+                "errorMessage": "You have no credits remaining. Add credits to continue using the API at https://platform.openai.com/settings/organization/billing/."
+            },
+            "baml": {
+                "status": "error",
+                "latencyMs": 711.7848999999987,
+                "provider": "openai-responses",
+                "errorName": "BamlClientHttpError",
+                "errorMessage": "BamlError: BamlClientError: BamlClientHttpError: Request failed with status code: 429 Too Many Requests. {\"error\":{\"message\":\"You have no credits remaining. Add credits to continue using the API at https://platform.openai.com/settings/organization/billing/.\",\"type\":\"insufficient_quota\",\"param\":null,\"code\":\"credit_balance_exhausted\"}}"
+            }
+        },
+        {
+            "fixture": "bounded_revision",
+            "current": {
+                "status": "error",
+                "latencyMs": 9169.992299999998,
+                "errorName": "GenerationRuntimeError",
+                "errorMessage": "You have no credits remaining. Add credits to continue using the API at https://platform.openai.com/settings/organization/billing/."
+            },
+            "baml": {
+                "status": "error",
+                "latencyMs": 551.7913000000044,
+                "provider": "openai-responses",
+                "errorName": "BamlClientHttpError",
+                "errorMessage": "BamlError: BamlClientError: BamlClientHttpError: Request failed with status code: 429 Too Many Requests. {\"error\":{\"message\":\"You have no credits remaining. Add credits to continue using the API at https://platform.openai.com/settings/organization/billing/.\",\"type\":\"insufficient_quota\",\"param\":null,\"code\":\"credit_balance_exhausted\"}}"
+            }
+        }
+    ],
+    "note": "Synthetic live calls only. Footnote routing, retries, cost authority, cancellation ownership, and TRACE persistence were not delegated to BAML."
+}

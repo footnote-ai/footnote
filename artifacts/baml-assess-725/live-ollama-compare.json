@@ -1,0 +1,187 @@
+{
+    "benchmark": "baml_assess_live_provider_compare",
+    "provider": "ollama",
+    "model": "reap48-fixed:latest",
+    "baseUrl": "http://localhost:11434",
+    "fixtureCount": 3,
+    "rows": [
+        {
+            "fixture": "ready_finalize",
+            "current": {
+                "status": "success",
+                "latencyMs": 13637.299,
+                "decision": {
+                    "reviewDecision": "finalize",
+                    "reviewReason": "The draft is accurate, concise, and includes the required provenance detail.",
+                    "traceAlignment": "aligned",
+                    "finalTemperament": {
+                        "tightness": 3,
+                        "rationale": 3,
+                        "attribution": 3,
+                        "caution": 3,
+                        "extent": 3
+                    },
+                    "moduleHints": [],
+                    "concerns": {
+                        "length": "ok",
+                        "style": "ok",
+                        "evidence": "ok"
+                    },
+                    "routingHints": []
+                },
+                "classification": "success",
+                "rawText": "{\"reviewDecision\":\"finalize\",\"reviewReason\":\"The draft is accurate, concise, and includes the required provenance detail.\",\"revisionInstruction\":null,\"traceAlignment\":\"aligned\",\"traceAlignmentReason\":null,\"finalTemperament\":{\"tightness\":3,\"rationale\":3,\"attribution\":3,\"caution\":3,\"extent\":3},\"moduleHints\":[],\"concerns\":{\"length\":\"ok\",\"style\":\"ok\",\"evidence\":\"ok\"},\"routingHints\":[]}",
+                "model": "reap48-fixed:latest",
+                "usage": {
+                    "inputTokens": 412,
+                    "outputTokens": 166
+                }
+            },
+            "baml": {
+                "status": "success",
+                "latencyMs": 19455.3654,
+                "decision": {
+                    "reviewDecision": "finalize",
+                    "reviewReason": "The draft is accurate, concise, and includes all required provenance details.",
+                    "revisionInstruction": null,
+                    "traceAlignment": "aligned",
+                    "traceAlignmentReason": "Draft content aligns with the provided review context.",
+                    "finalTemperament": null,
+                    "moduleHints": null,
+                    "concerns": {
+                        "length": "ok",
+                        "style": "ok",
+                        "evidence": "ok"
+                    },
+                    "routingHints": null
+                },
+                "classification": "success",
+                "provider": "openai-generic",
+                "usage": {
+                    "inputTokens": 307,
+                    "outputTokens": 1580
+                }
+            }
+        },
+        {
+            "fixture": "missing_caveat",
+            "current": {
+                "status": "success",
+                "latencyMs": 3430.6653000000006,
+                "decision": {
+                    "reviewDecision": "revise",
+                    "reviewReason": "The draft makes an unwarranted generalization about production latency based on insufficient data.",
+                    "revisionInstruction": "Revise the statement to clarify that the benchmark shows low latency on one active workstation and does not guarantee production performance.",
+                    "traceAlignment": "misaligned",
+                    "traceAlignmentReason": "The draft asserts a general production guarantee while the context explicitly states the measurements do not establish such guarantees.",
+                    "finalTemperament": {
+                        "tightness": 3,
+                        "rationale": 3,
+                        "attribution": 3,
+                        "caution": 4,
+                        "extent": 3
+                    },
+                    "moduleHints": [],
+                    "concerns": {
+                        "length": "ok",
+                        "style": "ok",
+                        "evidence": "needs_caution"
+                    },
+                    "routingHints": ["logic.precision_up"]
+                },
+                "classification": "success",
+                "rawText": "{\"reviewDecision\":\"revise\",\"reviewReason\":\"The draft makes an unwarranted generalization about production latency based on insufficient data.\",\"revisionInstruction\":\"Revise the statement to clarify that the benchmark shows low latency on one active workstation and does not guarantee production performance.\",\"traceAlignment\":\"misaligned\",\"traceAlignmentReason\":\"The draft asserts a general production guarantee while the context explicitly states the measurements do not establish such guarantees.\",\"finalTemperament\":{\"tightness\":3,\"rationale\":3,\"attribution\":3,\"caution\":4,\"extent\":3},\"moduleHints\":[],\"concerns\":{\"length\":\"ok\",\"style\":\"ok\",\"evidence\":\"needs_caution\"},\"routingHints\":[\"logic.precision_up\"]}",
+                "model": "reap48-fixed:latest",
+                "usage": {
+                    "inputTokens": 413,
+                    "outputTokens": 223
+                }
+            },
+            "baml": {
+                "status": "success",
+                "latencyMs": 25296.5262,
+                "decision": {
+                    "reviewDecision": "revise",
+                    "reviewReason": "The draft claims production latency is safe based on a single workstation benchmark, which does not establish production guarantees.",
+                    "revisionInstruction": "Clarify that the benchmark reflects single-workstation performance and does not guarantee production latency.",
+                    "traceAlignment": "misaligned",
+                    "traceAlignmentReason": "The draft asserts production latency is safe, contradicting the context which states single-workstation measurements do not establish production guarantees.",
+                    "finalTemperament": {
+                        "tightness": 2,
+                        "rationale": 2,
+                        "attribution": 2,
+                        "caution": 4,
+                        "extent": 2
+                    },
+                    "moduleHints": [
+                        "benchmark limitations",
+                        "workstation vs production metrics",
+                        "cautious phrasing"
+                    ],
+                    "concerns": {
+                        "length": "ok",
+                        "style": "ok",
+                        "evidence": "needs_caution"
+                    },
+                    "routingHints": [
+                        "distinguish single workstation results from production guarantees",
+                        "add cautionary language regarding latency"
+                    ]
+                },
+                "classification": "success",
+                "provider": "openai-generic",
+                "usage": {
+                    "inputTokens": 308,
+                    "outputTokens": 2065
+                }
+            }
+        },
+        {
+            "fixture": "bounded_revision",
+            "current": {
+                "status": "success",
+                "latencyMs": 2690.575499999999,
+                "decision": {
+                    "reviewDecision": "finalize",
+                    "reviewReason": "The draft is concise and the context provides sufficient guidance to ensure accurate framing without adding unsupported claims.",
+                    "revisionInstruction": "",
+                    "traceAlignment": "aligned",
+                    "traceAlignmentReason": "",
+                    "finalTemperament": {
+                        "tightness": 2,
+                        "rationale": 2,
+                        "attribution": 1,
+                        "caution": 1,
+                        "extent": 1
+                    },
+                    "moduleHints": [],
+                    "concerns": {
+                        "length": "ok",
+                        "style": "ok",
+                        "evidence": "ok"
+                    },
+                    "routingHints": []
+                },
+                "classification": "success",
+                "rawText": "{\"reviewDecision\":\"finalize\",\"reviewReason\":\"The draft is concise and the context provides sufficient guidance to ensure accurate framing without adding unsupported claims.\",\"revisionInstruction\":\"\",\"traceAlignment\":\"aligned\",\"traceAlignmentReason\":\"\",\"finalTemperament\":{\"tightness\":2,\"rationale\":2,\"attribution\":1,\"caution\":1,\"extent\":1},\"moduleHints\":[],\"concerns\":{\"length\":\"ok\",\"style\":\"ok\",\"evidence\":\"ok\"},\"routingHints\":[]}",
+                "model": "reap48-fixed:latest",
+                "usage": {
+                    "inputTokens": 412,
+                    "outputTokens": 168
+                }
+            },
+            "baml": {
+                "status": "error",
+                "latencyMs": 22784.259099999996,
+                "provider": "openai-generic",
+                "usage": {
+                    "inputTokens": 307,
+                    "outputTokens": 1861
+                },
+                "errorName": "BamlValidationError",
+                "errorMessage": "BamlValidationError: Failed to parse LLM response: Failed to coerce value: ParsingError { scope: [], reason: \"Failed to evaluate constraints: invalid operation: cannot calculate length of value of type none (in <string>:1)\", causes: [] }"
+            }
+        }
+    ],
+    "note": "Synthetic live calls only. Footnote routing, retries, cost authority, cancellation ownership, and TRACE persistence were not delegated to BAML."
+}
