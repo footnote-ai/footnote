@@ -78,11 +78,11 @@ confirms that result.
 
 ## Limits
 
-- `pnpm --version` and fixture `pnpm exec` probes produced no output within ten
-  seconds because the installed pnpm package does not match the repository pin.
-- Repository `pnpm format:write` and `pnpm review --changed-only` remained
-  blocked by the pnpm mismatch and a Windows `EPERM` opening the prewarmed
-  Prettier file.
+- The initial delegated checkout's `pnpm --version` and fixture `pnpm exec`
+  probes produced no output within ten seconds because its installed pnpm
+  package did not match the repository pin. The coordinator's final branch
+  validation did run `pnpm format:write` and `pnpm review --changed-only`
+  successfully.
 - Codex lists a saved Footnote project at
   `C:\Users\Jordan\Desktop\footnote`, not this isolated clone. The fresh task
   threads therefore used explicit isolated copies; no reliable token or timing
