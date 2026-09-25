@@ -89,6 +89,33 @@ confirms that result.
 - Generated code is an operational observation, not a primary maintainability
   score. It was generated locally and is not part of a production migration.
 
+## Fresh Codex task observations
+
+Three fresh `gpt-6-luna` high-reasoning threads were started against isolated
+copies of the current fixture:
+
+- `01a0d98a-7ad7-7250-9c10-4fef9d8750b2` — contract change. The agent added an
+  optional `coverageNote`, updated the prompt and parser assertion, and ran
+  formatting, checking, tests, generation, and diff checks successfully. It
+  reported no first-pass mistake.
+- `01a0d98a-7ffa-7442-9605-da18fc2aa52e` — drift diagnosis. The agent changed
+  `NewsResult.summary` from `string` to `int` while leaving the fixture stale.
+  `baml check` accepted the type change, but the offline parser test failed
+  with `Expected int, got String("Overall")`. `baml generate` did not catch the
+  stale fixture. The agent identified the mismatch and began restoring it, but
+  the session stopped while awaiting approval; no clean final rerun is claimed.
+- `01a0d98a-840c-7582-9a10-9d6cb855c197` — handoff. A fresh agent found the
+  tracked BAML source, added an optional `publisherUrl`, and ran `describe`,
+  `fmt`, `check`, `test --list`, `test`, and `generate` successfully. It did
+  not edit generated code. It also reported a warning that the BAML skill was
+  not installed in that checkout, so the handoff did not automatically receive
+  the skill until an explicit `baml agent install` is run.
+
+These observations show that the current CLI gives useful, early feedback and
+that a fresh agent can find the BAML source. They do not show fewer total
+supervision rounds than #744: one drift task stopped before a clean rerun, the
+handoff had no installed skill, and no native control task was rerun.
+
 ## Recommendation
 
 Keep #744's mixed agent-supervision result and keep production unchanged. The
