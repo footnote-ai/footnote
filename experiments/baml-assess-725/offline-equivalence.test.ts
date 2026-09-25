@@ -26,7 +26,7 @@ test('records text and unresolved provider-path cases without collapsing them', 
     assert.equal(report.parserStrictness.strictModeLocated, false);
     assert.ok(report.maintenanceSurface.bamlPrototype.generatedClientLines > 0);
     assert.equal(report.contractChangeErgonomics.currentUpdatePointCount, 6);
-    assert.equal(report.contractChangeErgonomics.bamlUpdatePointCount, 5);
+    assert.equal(report.contractChangeErgonomics.bamlUpdatePointCount, 6);
     assert.ok(
         report.rows.every((row) =>
             row.kind === 'provider_failure'

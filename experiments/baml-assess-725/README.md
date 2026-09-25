@@ -26,12 +26,18 @@ Footnote-owned questions.
 - generator version: `0.226.2` in `baml_src/generators.baml`
 - BAML source: `baml_src/types.baml`, `baml_src/functions.baml`, and
   `baml_src/clients.baml`
+- the experiment lockfile records the package integrity and platform-runtime
+  pins; no BAML dependency was added to the Footnote workspace
+
+The official TypeScript client, modular `.parse`/`.request` API, assertion
+behavior, and `generate --from` command were checked on 2026-09-25. Sources
+are listed in the semantic-equivalence report.
 
 The generated `baml_client/` directory is intentionally ignored. Regenerate it
 from the pinned source instead of treating generated files as the contract:
 
 ```text
-pnpm --config.enable-global-virtual-store=false dlx --package=@boundaryml/baml@0.226.2 baml-cli generate
+pnpm --config.enable-global-virtual-store=false dlx --package=@boundaryml/baml@0.226.2 baml-cli generate --from experiments/baml-assess-725/baml_src
 ```
 
 Run `probe.ts` with the repository's pinned `tsx` binary or an equivalent

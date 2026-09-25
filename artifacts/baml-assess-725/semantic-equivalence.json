@@ -52,14 +52,15 @@
       "generated TypeScript client regeneration",
       "Footnote adapter/semantic validator and failure mapping",
       "provider structured-output integration if transport schema changes",
+      "prompt-override compatibility: render outside BAML or add a second contract seam",
       "equivalence and compatibility fixtures"
     ],
     "currentUpdatePointCount": 6,
-    "bamlUpdatePointCount": 5,
+    "bamlUpdatePointCount": 6,
     "generatedArtifacts": [
       "baml_client/*.ts"
     ],
-    "finding": "BAML reduces declaration duplication only if the Footnote-owned semantic validator and failure mapping are already factored as reusable layers. In this prototype they are not removed; the simulated change still crosses nearly the same policy boundaries, plus code generation and provider integration."
+    "finding": "BAML reduces declaration duplication only if the Footnote-owned semantic validator, failure mapping, and prompt-override boundary are already factored as reusable layers. In this prototype they are not removed; the simulated change crosses the same policy boundaries, plus code generation, provider integration, and override compatibility."
   },
   "rows": [
     {
