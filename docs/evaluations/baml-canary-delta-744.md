@@ -2,48 +2,98 @@
 
 ## Result
 
-The Canary experiment did not run. This checkout has no baml or baml-cli executable, the existing fixture's pinned BAML package is not present in the prewarmed dependency tree, and the installed pnpm package does not match the repository pin. I did not install anything or run an installer.
+The current Canary toolchain ran successfully in an isolated port of the
+`/news` fixture. The original #744 fixture did not compile unchanged: Canary
+reports removed client-block syntax, removed hash-string syntax, and a moved
+generator configuration. The port keeps the same model-facing shape and adds a
+real offline parser test.
 
-The GitHub API request for issue #744 failed with a network permission error, and the web cache had no copy of the issue. The only local /news fixture is the checked-in #727 fixture at experiments/baml-agent-supervision-727/baml/baml_src/news.baml; this report records that fixture by path and SHA-256. Treating it as #744's exact requested delta remains unverified.
+This is a toolchain delta, not a new supervision-cost result. The requested
+three fresh Luna/high Codex passes and handoff were not run, so this report does
+not claim that Canary changes #744's mixed conclusion.
 
 ## Fixture and version facts
 
-- Checkout: experiment/baml-canary-agent-followup, clean at start, base a3afefaf2c6e873d5cc0939435fef3c5c7b8e281.
-- Node: v24.16.0.
-- Repository package manager pin: pnpm@11.21.0.
-- Installed pnpm package: 11.17.0.
-- Fixture package pin: @boundaryml/baml@0.226.2.
-- node_modules/.bin has no BAML executable; node_modules/.pnpm has no BAML package; there is no root node_modules/@boundaryml.
-- Current Canary guidance advertises the baml binary, baml agent install, and baml describe/run/test/fmt. The pinned fixture uses baml-cli and the older 0.226.2 syntax. The current BAML skill documents Canary syntax changes, including backtick prompts with interpolation expressions and name/type/comma class fields. These docs do not establish that the old fixture compiles under Canary.
+- Checkout: `experiment/baml-canary-agent-followup`, base
+  `a3afefaf2c6e873d5cc0939435fef3c5c7b8e281`.
+- Node: `v24.16.0`.
+- Repository package manager pin: `pnpm@11.21.0`.
+- Installed pnpm package: `11.17.0`.
+- Historical fixture package pin: `@boundaryml/baml@0.226.2`.
+- Current launcher: BAML wrapper `0.2.5`.
+- Current toolchain: BAML `0.20.1 (canary)`.
+- The installed BAML skill SHA-256 was
+  `76503C6C9FD2C02779FACC219668A961B90E831260E8EDB3879E3AACECF14329`.
+
+The official current workflow uses the `baml` launcher, Canary, `baml agent
+install`, and `baml describe`. The current skill is describe-first and tells
+agents to use the CLI as the language reference. The old fixture uses the
+older `baml-cli` layout and syntax.
 
 Official references:
 
 - [BAML Canary README](https://github.com/BoundaryML/baml/blob/canary/README.md)
-- [BAML agent skill and Canary CLI loop](https://github.com/BoundaryML/baml-skill/blob/main/README.md)
+- [BAML current get-started guide](https://github.com/BoundaryML/baml/blob/canary/typescript2/app-developer-docs/content/baml/get-started.mdx)
+- [BAML agent skill](https://github.com/BoundaryML/baml-skill/blob/main/README.md)
 
 ## Commands and results
 
-- Get-Command baml,baml-cli -ErrorAction SilentlyContinue: neither command found.
-- pnpm --version: no output within 10 seconds; stopped with Ctrl-C. Installed pnpm package metadata reports 11.17.0, while this repository requires 11.21.0.
-- pnpm --dir experiments/baml-agent-supervision-727/baml exec baml-cli --version: no output within 10 seconds; stopped with Ctrl-C.
-- pnpm --dir experiments/baml-agent-supervision-727/baml exec baml-cli --help: no output within 10 seconds; stopped with Ctrl-C.
-- node node_modules/prettier/bin/prettier.cjs --write ...: blocked by EPERM opening the prewarmed Prettier file under node_modules/.pnpm/prettier@3.9.6.
-- gh issue view 744 --repo footnote-ai/footnote --json number,title,body,url,comments: blocked by network permissions (connectex, socket access forbidden).
-- baml agent install, baml describe, baml check, baml generate, and baml test --list: not run because the Canary executable is absent; installing it would violate the no-installer instruction.
-- No live provider calls, credentials, production code, or deployment were used.
+- `baml agent install`: passed in the historical fixture directory and the
+  current port. It installed the `baml-core` skill for Codex/OpenCode and
+  Claude Code.
+- `baml describe GenerateNewsResponse`: passed in the current port and showed
+  the function signature, prompt, and `NewsResult` dependency.
+- `baml fmt baml_src/news.baml`: passed in the current port.
+- `baml check`: passed in the current port.
+- `baml generate`: passed in the current port and generated 69 ignored files.
+- `baml test --list`: discovered
+  `root::parse a valid news result` in the current port.
+- `baml test`: passed one offline parser test in the current port.
 
-The new results JSON parsed successfully. The formatter and repository review could not run because of the package-manager mismatch and filesystem EPERM; no BAML check or test ran.
+The historical fixture produced these current-Canary errors:
 
-The prior #727 report records a separate successful run with its then-available 0.226.2 CLI. Those historical checks do not validate this checkout or the current Canary toolchain.
+- `client<llm>` blocks were removed and must become client values.
+- `generator target` must move into `baml.toml`.
+- `#"..."#` prompt strings were removed and must become quoted/backtick
+  strings.
 
-## Comparison to the #727 baseline
+The current port uses the documented replacement syntax, including
+`ctx.output_format()`, and keeps a representative valid-result parser test.
+No live provider call was made.
 
-The checked-in #727 evaluation reports that BAML 0.226.2 passed a clean fixture check and generation, while test listing found zero tests. Its bounded-choice check caught lowercase enum names and an invalid test form. That run also found agent and describe commands unsupported. Current Canary guidance advertises those agent-facing commands and a different CLI/language loop, but this checkout cannot verify that the test gap or cross-layer drift improved. A comparison to #744-specific behavior is unavailable until the issue body can be read.
+## What this changes from #744
 
-## Delegation
+The current toolchain supplies the missing agent-facing commands and can run a
+real BAML test once the fixture is migrated. That is useful evidence about the
+paved road. It also adds migration work before an older Footnote BAML fixture
+can use that road. The port does not show fewer correction rounds, better
+handoff behavior, or lower human review cost because no fresh Codex task passes
+were available in this isolated checkout.
 
-Codex lists a saved footnote project at C:\Users\Jordan\Desktop\footnote; it does not list repo2. Creating app tasks would target that different checkout or require a Git worktree. I therefore created no delegated tasks and report no agent timings. The requested three fresh Luna/high passes did not run.
+The pinned #744 result remains valid for `@boundaryml/baml@0.226.2`: it found
+local prompt/type navigation and concrete checks, but did not establish a
+material reduction in total supervision cost. This report neither reverses nor
+confirms that result.
+
+## Limits
+
+- `pnpm --version` and fixture `pnpm exec` probes produced no output within ten
+  seconds because the installed pnpm package does not match the repository pin.
+- Repository `pnpm format:write` and `pnpm review --changed-only` remained
+  blocked by the pnpm mismatch and a Windows `EPERM` opening the prewarmed
+  Prettier file.
+- Codex lists a saved Footnote project at
+  `C:\Users\Jordan\Desktop\footnote`, not this isolated clone. Creating app
+  tasks there would target the wrong checkout, so no fresh Codex task timings
+  are claimed.
+- Generated code is an operational observation, not a primary maintainability
+  score. It was generated locally and is not part of a production migration.
 
 ## Recommendation
 
-Keep the #727 /news fixture and Footnote's strict schema, normalization, runtime, usage, failure, provenance, and TRACE ownership. Do not infer Canary compatibility from the current docs or migrate production. Rerun the three requested passes only after the exact #744 delta is available and a compatible Canary CLI plus pnpm 11.21.0 are already present in repo2.
+Keep #744's mixed agent-supervision result and keep production unchanged. The
+current Canary workflow is materially more agent-oriented than the pinned
+toolchain, but the evidence is incomplete until three fresh task passes and a
+handoff run against this current fixture are performed. A selective BAML
+boundary for ordinary typed functions remains plausible; this report does not
+justify default adoption or a production migration.
