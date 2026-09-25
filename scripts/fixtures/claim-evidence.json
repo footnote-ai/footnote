@@ -1,0 +1,16 @@
+{
+  "workload": "claim_evidence",
+  "state": {
+    "claim": "The September 11 records source identifies the archive as a primary source.",
+    "evidence": "The source description labels the collection as archival records from the City of New York."
+  },
+  "question": {
+    "type": "noul",
+    "instructions": "Does the evidence support the claim?",
+    "criteria": {
+      "true": "The evidence supports the claim as written.",
+      "false": "The evidence does not support the claim as written."
+    }
+  },
+  "expected": "supported"
+}
