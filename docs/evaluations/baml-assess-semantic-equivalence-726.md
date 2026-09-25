@@ -8,8 +8,8 @@
 
 # BAML assess semantic-equivalence matrix (#726)
 
-Status: **offline text matrix complete; live provider-path comparison remains
-unresolved**.
+Status: **local Ollama comparison complete; cloud provider-path comparison
+remains unresolved**.
 
 ## Scope and toolchain
 
@@ -28,7 +28,46 @@ attempt-lineage behavior.
 
 Raw matrix: `artifacts/baml-assess-725/semantic-equivalence.json`.
 
-## Live provider attempt
+## Local Ollama comparison
+
+The same three synthetic fixtures were sent through both paths using the
+already-installed local Ollama model `reap48-fixed:latest`:
+
+- existing Footnote runtime: `ollama/reap48-fixed:latest`, with Footnote's
+  normal runtime request construction and current parser;
+- BAML prototype: BAML `0.226.2`, using its `openai-generic` client pointed at
+  Ollama's local `/v1` endpoint.
+
+This answers the narrower question “can both paths return typed assess values
+when cloud-provider quota is removed?” It does **not** prove that their
+prompts, runtime metadata, or policy behavior are equivalent.
+
+| Fixture            | Footnote path       | BAML path             | Comparison                                                                 |
+| ------------------ | ------------------- | --------------------- | -------------------------------------------------------------------------- |
+| `ready_finalize`   | `finalize`          | `finalize`            | Same decision, but optional fields were populated differently.             |
+| `missing_caveat`   | `revise`            | `revise`              | Same decision, but trace alignment and guidance fields differed.           |
+| `bounded_revision` | success: `finalize` | `BamlValidationError` | BAML failed while evaluating a conditional assertion on an optional value. |
+
+The first two calls show that BAML can produce typed values from this local
+model, but they are not structurally equivalent to the current Footnote
+results. The third call is a policy-relevant failure: the existing path
+returned a decision while BAML returned an assertion-evaluation error.
+
+The local run also replayed each captured Footnote JSON string through both
+parsers. All three replayed strings parsed successfully in both parsers. That
+smaller result is positive parser compatibility evidence, but it does not fix
+the live-output differences or prove that BAML will preserve model omissions,
+normalization, and conditional validation.
+
+Raw artifacts:
+
+- `artifacts/baml-assess-725/live-ollama-compare.json`
+- `artifacts/baml-assess-725/local-parser-replay.json`
+
+The local run used the existing machine-local Ollama service and added no
+runtime dependency to Footnote.
+
+## Cloud provider attempt
 
 The live comparison harness ran three synthetic assess inputs through both
 paths:
@@ -143,6 +182,26 @@ Footnote side still owns or would need to own:
 The BAML source is shorter, but the matrix shows that cosmetic source-line
 reduction is not semantic duplication removal. #727 remains unresolved.
 
+## Adapter burden and client ownership
+
+The local run did not require a custom transport adapter for BAML: its
+`openai-generic` client called Ollama directly. That is also the problem for
+production adoption. BAML owned a second provider client rather than using
+Footnote's runtime boundary. Preserving current behavior would still require
+Footnote-owned wrappers or coordination for:
+
+- routing and provider/model identity;
+- attempt records, retry lineage, and cancellation;
+- usage and cost authority;
+- translation into Footnote's failure taxonomy;
+- trace and provenance metadata;
+- strict and conditional semantic validation.
+
+The prototype therefore replaces some declaration and parse authoring, but it
+does not replace Footnote's assess runtime semantics. No clearly removable
+Footnote parser, validator, provider adapter, or failure classifier has been
+demonstrated yet.
+
 ### Why not keep both?
 
 Adding BAML without deleting anything would leave Footnote maintaining the old
@@ -181,10 +240,11 @@ location, not proof that the policy-sensitive update burden disappeared.
 pnpm --config.enable-global-virtual-store=false dlx --package=@boundaryml/baml@0.226.2 baml-cli generate --from experiments/baml-assess-725
 pnpm exec tsx --test experiments/baml-assess-725/offline-equivalence.test.ts
 pnpm exec tsx experiments/baml-assess-725/offline-equivalence.ts
-pnpm exec tsx experiments/baml-assess-725/live-provider-compare.ts
+pnpm exec tsx experiments/baml-assess-725/live-provider-compare.ts --local-ollama
+pnpm exec tsx experiments/baml-assess-725/parser-replay.ts
 ```
 
-The live command requires an existing `OPENAI_API_KEY` with provider credit.
-It uses three synthetic fixtures and does not run in normal CI. Keep the live
-comparison separate from Footnote production routing and do not treat a
-provider error as a semantic comparison result.
+The `--local-ollama` comparison uses the local Ollama model named above and
+does not run in normal CI. Without that flag, the same harness runs the older
+cloud comparison and requires an existing `OPENAI_API_KEY` with provider
+credit. Keep both comparisons separate from Footnote production routing.

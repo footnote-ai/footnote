@@ -6,7 +6,6 @@
  * @footnote-ethics: high - Synthetic fixtures avoid sending private conversation content to the provider.
  */
 import { Collector, setLogLevel } from '@boundaryml/baml';
-import assert from 'node:assert/strict';
 import { performance } from 'node:perf_hooks';
 
 import { b } from './baml_client/index.js';
@@ -46,7 +45,13 @@ type PathResult = {
     usage?: UsageSummary;
     errorName?: string;
     errorMessage?: string;
+    rawText?: string;
 };
+
+const LOCAL_OLLAMA_MODEL = 'reap48-fixed:latest';
+const LOCAL_OLLAMA_BASE_URL = 'http://localhost:11434';
+const CLOUD_MODEL = 'gpt-5-mini';
+const USE_LOCAL_OLLAMA = process.argv.includes('--local-ollama');
 
 const FIXTURES: readonly Fixture[] = [
     {
@@ -94,6 +99,7 @@ const parseCurrentResult = (result: GenerationResult): PathResult => {
         ...(parsed.isOk()
             ? { decision: parsed.value, classification: 'success' }
             : { classification: parsed.error.reason }),
+        rawText: result.text,
         model: result.model,
         provider: result.upstreamAttribution?.inferenceProvider,
         ...(result.usage === undefined
@@ -108,13 +114,20 @@ const parseCurrentResult = (result: GenerationResult): PathResult => {
 };
 
 const runCurrentPath = async (fixture: Fixture): Promise<PathResult> => {
+    const model = USE_LOCAL_OLLAMA ? LOCAL_OLLAMA_MODEL : CLOUD_MODEL;
     const runtime = createVoltAgentRuntime({
-        defaultModel: 'gpt-5-mini',
+        defaultModel: model,
         logger: silentLogger,
+        ...(USE_LOCAL_OLLAMA && {
+            ollama: {
+                baseUrl: LOCAL_OLLAMA_BASE_URL,
+                localInferenceEnabled: true,
+            },
+        }),
     });
     const request: GenerationRequest = {
-        provider: 'openai',
-        model: 'gpt-5-mini',
+        provider: USE_LOCAL_OLLAMA ? 'ollama' : 'openai',
+        model,
         messages: [
             { role: 'system', content: DEFAULT_REVIEW_DECISION_PROMPT },
             {
@@ -162,7 +175,10 @@ const runBamlPath = async (fixture: Fixture): Promise<PathResult> => {
         const decision: BamlReviewDecision = await b.Assess(
             fixture.draft,
             fixture.reviewContext,
-            { collector }
+            {
+                collector,
+                client: USE_LOCAL_OLLAMA ? 'LocalOllama' : 'CustomGPT5Mini',
+            }
         );
         const call = collector.last?.calls.at(-1);
         return {
@@ -185,10 +201,13 @@ const runBamlPath = async (fixture: Fixture): Promise<PathResult> => {
 };
 
 const main = async (): Promise<void> => {
-    assert.ok(
-        process.env.OPENAI_API_KEY,
-        'OPENAI_API_KEY must be set for the live provider comparison'
-    );
+    if (!USE_LOCAL_OLLAMA) {
+        if (!process.env.OPENAI_API_KEY) {
+            throw new Error(
+                'OPENAI_API_KEY must be set for the cloud provider comparison'
+            );
+        }
+    }
     setLogLevel('error');
 
     const rows: Array<{
@@ -208,8 +227,9 @@ const main = async (): Promise<void> => {
         JSON.stringify(
             {
                 benchmark: 'baml_assess_live_provider_compare',
-                provider: 'openai',
-                model: 'gpt-5-mini',
+                provider: USE_LOCAL_OLLAMA ? 'ollama' : 'openai',
+                model: USE_LOCAL_OLLAMA ? LOCAL_OLLAMA_MODEL : CLOUD_MODEL,
+                ...(USE_LOCAL_OLLAMA && { baseUrl: LOCAL_OLLAMA_BASE_URL }),
                 fixtureCount: FIXTURES.length,
                 rows,
                 note: 'Synthetic live calls only. Footnote routing, retries, cost authority, cancellation ownership, and TRACE persistence were not delegated to BAML.',

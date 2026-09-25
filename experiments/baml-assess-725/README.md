@@ -15,9 +15,10 @@ allowed range is smaller. A successful BAML parse is therefore not enough:
 Footnote may still need its own semantic validation and failure classification.
 
 The prototype can prove typed parsing, request rendering, and local
-cancellation behavior. It does not prove provider compatibility, retries,
-cost recording, attempt lineage, or TRACE parity because it does not call a
-provider. Those remain Footnote-owned questions.
+cancellation behavior. The local comparison below exercises one already
+installed Ollama model, but it does not prove cloud-provider compatibility,
+retries, cost recording, attempt lineage, or TRACE parity. Those remain
+Footnote-owned questions.
 
 ## Pinned toolchain
 
@@ -45,15 +46,26 @@ The checked-in raw result is
 ## Live provider comparison
 
 `live-provider-compare.ts` runs three synthetic assess inputs through the
-current Footnote runtime and the BAML prototype. Both use `openai/gpt-5-mini`
-for this experiment. The current runtime keeps Footnote's structured-output
-schema and parser; BAML uses its generated client and collector.
+current Footnote runtime and the BAML prototype. Both use the already-installed
+local Ollama model `reap48-fixed:latest`. The current runtime keeps Footnote's
+structured-output schema and parser; BAML uses its generated client and
+collector through Ollama's OpenAI-compatible `/v1` endpoint.
 
-Run it only when an existing `OPENAI_API_KEY` has provider credit:
+Run it while the local Ollama service is available:
 
 ```text
-pnpm exec tsx experiments/baml-assess-725/live-provider-compare.ts
+pnpm exec tsx experiments/baml-assess-725/live-provider-compare.ts --local-ollama
 ```
+
+The saved local artifact is
+`artifacts/baml-assess-725/live-ollama-compare.json`. It records fixture-level
+success, typed decisions, parser errors, latency, and usage where the runtime
+reports it. `parser-replay.ts` feeds the exact captured Footnote JSON strings
+through both parsers without making another model call.
+
+Without `--local-ollama`, the same harness runs the preserved cloud comparison
+using `openai/gpt-5-mini`. It requires an existing `OPENAI_API_KEY` with
+provider credit and is not required to reproduce the local result.
 
 The command is evaluation-only. It does not change routing, retries, cost
 recording, cancellation ownership, attempt lineage, or TRACE behavior. Live

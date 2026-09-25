@@ -1,0 +1,38 @@
+{
+    "benchmark": "baml_assess_parser_replay",
+    "rows": [
+        {
+            "fixture": "ready_finalize",
+            "current": {
+                "status": "success",
+                "classification": "success"
+            },
+            "baml": {
+                "status": "success",
+                "classification": "success"
+            }
+        },
+        {
+            "fixture": "missing_caveat",
+            "current": {
+                "status": "success",
+                "classification": "success"
+            },
+            "baml": {
+                "status": "success",
+                "classification": "success"
+            }
+        },
+        {
+            "fixture": "bounded_revision",
+            "current": {
+                "status": "success",
+                "classification": "success"
+            },
+            "baml": {
+                "status": "success",
+                "classification": "success"
+            }
+        }
+    ]
+}
