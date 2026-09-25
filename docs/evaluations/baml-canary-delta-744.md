@@ -8,8 +8,9 @@ reports removed client-block syntax, removed hash-string syntax, and a moved
 generator configuration. The port keeps the same model-facing shape and adds a
 real offline parser test.
 
-This is a toolchain delta, not a new supervision-cost result. The requested
-three fresh Luna/high Codex passes and handoff were not run, so this report does
+This is a toolchain delta, not a complete new supervision-cost result. Three
+fresh Luna/high Codex observations were started below, but the drift task did
+not reach a clean rerun and there was no native control, so this report does
 not claim that Canary changes #744's mixed conclusion.
 
 ## Fixture and version facts
