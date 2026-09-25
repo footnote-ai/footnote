@@ -115,7 +115,9 @@ const selectionState = (entry: ContextBenchmarkCase): JsonValue => ({
         id: message.id,
         authorId: message.authorId,
         text: message.text,
-        ...(message.replyToId === undefined ? {} : { replyToId: message.replyToId }),
+        ...(message.replyToId === undefined
+            ? {}
+            : { replyToId: message.replyToId }),
     })),
 });
 
@@ -184,7 +186,8 @@ const runHosted = async (
                 {
                     type: 'noul' as const,
                     instructions: {
-                        question: 'Is this candidate useful for answering the trigger?',
+                        question:
+                            'Is this candidate useful for answering the trigger?',
                         candidateId: message.id,
                     },
                     criteria: {
@@ -243,18 +246,26 @@ const runHosted = async (
             if (response.provider) providers.add(response.provider);
             servedModels.add(response.model);
         } catch (error) {
-            const jevError = error instanceof JevRequestError
-                ? error
-                : new JevRequestError('network', 'Unexpected Jev error.');
-            errors.push({ caseId: entry.id, kind: jevError.kind, message: jevError.message });
+            const jevError =
+                error instanceof JevRequestError
+                    ? error
+                    : new JevRequestError('network', 'Unexpected Jev error.');
+            errors.push({
+                caseId: entry.id,
+                kind: jevError.kind,
+                message: jevError.message,
+            });
             break;
         }
     }
     const aggregate = aggregateMetrics('openjev', caseMetrics);
     return {
-        status: errors.length === 0
-            ? 'completed'
-            : cases.length === 0 ? 'error' : 'partial',
+        status:
+            errors.length === 0
+                ? 'completed'
+                : cases.length === 0
+                  ? 'error'
+                  : 'partial',
         requestedModel: JEV_MODEL,
         threshold,
         thresholdStatus: 'exploratory',
@@ -282,7 +293,8 @@ const runHosted = async (
             inputTokens,
             outputTokens,
             costUsd: allCostsReported ? costUsd : null,
-            averageLatencyMs: cases.length === 0 ? null : latencyTotal / cases.length,
+            averageLatencyMs:
+                cases.length === 0 ? null : latencyTotal / cases.length,
         },
         errors,
         cases,
@@ -300,8 +312,15 @@ const runClaimEvidence = async (
     };
     if (!apiKey?.trim()) {
         const response = await decisions(
-            { state: claimFixture.state, questions: { support: claimFixture.question } },
-            { apiKey: 'replay-only', model: JEV_MODEL, fetch: createReplayFetch(replay) }
+            {
+                state: claimFixture.state,
+                questions: { support: claimFixture.question },
+            },
+            {
+                apiKey: 'replay-only',
+                model: JEV_MODEL,
+                fetch: createReplayFetch(replay),
+            }
         );
         return {
             status: 'replay_only',
@@ -349,19 +368,24 @@ const runClaimEvidence = async (
             outputTokens: null,
             costUsd: null,
             latencyMs: performance.now() - started,
-            note: error instanceof JevRequestError
-                ? `${error.kind}: ${error.message}`
-                : 'Hosted claim/evidence judgment failed.',
+            note:
+                error instanceof JevRequestError
+                    ? `${error.kind}: ${error.message}`
+                    : 'Hosted claim/evidence judgment failed.',
         };
     }
 };
 
 export const buildReport = async (): Promise<BenchmarkOutput> => {
     const corpus = buildBenchmarkCorpus();
-    const baseline = (['current_window', 'bm25_graph_expansion', 'openjev'] as const).map(
-        (method) => aggregateMetrics(
+    const baseline = (
+        ['current_window', 'bm25_graph_expansion', 'openjev'] as const
+    ).map((method) =>
+        aggregateMetrics(
             method,
-            corpus.map((entry) => buildCaseMetric(entry, selectContext(method, entry)))
+            corpus.map((entry) =>
+                buildCaseMetric(entry, selectContext(method, entry))
+            )
         )
     );
     const threshold = Number(process.env.OPENROUTER_JEV_THRESHOLD ?? '0.5');
@@ -379,9 +403,11 @@ export const buildReport = async (): Promise<BenchmarkOutput> => {
         integration: {
             endpoint: 'POST https://openrouter.ai/api/alpha/decisions',
             model: JEV_MODEL,
-            requestResponse: 'state + named noul questions; typed answer probabilities, provider/model/id, input/output tokens, and USD usage cost.',
+            requestResponse:
+                'state + named noul questions; typed answer probabilities, provider/model/id, input/output tokens, and USD usage cost.',
             threshold: `Exploratory noul threshold ${threshold}; not policy confidence and not split-tuned.`,
-            cancellation: 'Client AbortSignal and timeout abort the HTTP request. OpenRouter documentation does not specify Decisions API billing/refund or provider cancellation behavior after abort.',
+            cancellation:
+                'Client AbortSignal and timeout abort the HTTP request. OpenRouter documentation does not specify Decisions API billing/refund or provider cancellation behavior after abort.',
         },
         baseline,
         hostedJev: await runHosted(
@@ -404,6 +430,7 @@ export const buildReport = async (): Promise<BenchmarkOutput> => {
 };
 
 if (process.argv[1]?.endsWith('direct-jev-benchmark.ts')) {
-    const report = await buildReport();
-    console.log(JSON.stringify(report, null, 2));
+    void buildReport().then((report) => {
+        console.log(JSON.stringify(report, null, 2));
+    });
 }
