@@ -216,7 +216,7 @@ const runHosted = async (
                 .filter(([, probability]) => probability >= threshold)
                 .map(([id]) => id);
             const selection: SelectionResult = {
-                method: 'openjev',
+                method: 'hosted_jev',
                 status: 'completed',
                 messageIds: selectedMessageIds,
                 candidateCount: entry.messages.length,
@@ -258,7 +258,7 @@ const runHosted = async (
             break;
         }
     }
-    const aggregate = aggregateMetrics('openjev', caseMetrics);
+    const aggregate = aggregateMetrics('hosted_jev', caseMetrics);
     return {
         status:
             errors.length === 0

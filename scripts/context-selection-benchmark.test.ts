@@ -143,6 +143,7 @@ test('unavailable model methods fail open without selecting context', () => {
 
     const unavailableMethods: ContextSelectionMethod[] = [
         'existing_cross_encoder',
+        'hosted_jev',
         'openjev',
     ];
     for (const method of unavailableMethods) {
