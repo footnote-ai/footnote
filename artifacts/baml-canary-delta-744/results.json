@@ -1,0 +1,63 @@
+{
+  "experiment": "baml-canary-delta-744",
+  "baseSha": "a3afefaf2c6e873d5cc0939435fef3c5c7b8e281",
+  "branch": "experiment/baml-canary-agent-followup",
+  "fixture": {
+    "path": "experiments/baml-agent-supervision-727/baml/baml_src/news.baml",
+    "sha256": "717FBD7FE6D139217348700A4DA2C4EAE679022DFBABA904A754DA8156A154C1",
+    "fixturePackageVersion": "@boundaryml/baml@0.226.2",
+    "exactIssue744DeltaVerified": false
+  },
+  "environment": {
+    "node": "v24.16.0",
+    "repositoryPnpmPin": "11.21.0",
+    "installedPnpmPackage": "11.17.0",
+    "bamlBinary": "absent",
+    "bamlCliBinary": "absent",
+    "installedBamlPackage": false
+  },
+  "commands": [
+    {
+      "command": "Get-Command baml,baml-cli -ErrorAction SilentlyContinue",
+      "result": "neither executable found"
+    },
+    {
+      "command": "pnpm --version",
+      "result": "no output within 10 seconds; stopped with Ctrl-C"
+    },
+    {
+      "command": "pnpm --dir experiments/baml-agent-supervision-727/baml exec baml-cli --version",
+      "result": "no output within 10 seconds; stopped with Ctrl-C"
+    },
+    {
+      "command": "pnpm --dir experiments/baml-agent-supervision-727/baml exec baml-cli --help",
+      "result": "no output within 10 seconds; stopped with Ctrl-C"
+    },
+    {
+      "command": "node node_modules/prettier/bin/prettier.cjs --write docs/evaluations/baml-canary-delta-744.md artifacts/baml-canary-delta-744/results.json experiments/baml-canary-delta-744/README.md",
+      "result": "blocked: EPERM opening prewarmed prettier@3.9.6 under node_modules/.pnpm"
+    },
+    {
+      "command": "gh issue view 744 --repo footnote-ai/footnote --json number,title,body,url,comments",
+      "result": "blocked: network socket access forbidden"
+    }
+  ],
+  "notRun": [
+    "baml agent install",
+    "baml describe",
+    "baml check",
+    "baml generate",
+    "baml test --list",
+    "pnpm format:write",
+    "pnpm review --changed-only"
+  ],
+  "delegation": {
+    "status": "not_run",
+    "reason": "repo2 is not a saved Codex project; the registered footnote project points to C:\\Users\\Jordan\\Desktop\\footnote, and a task there would violate the requested checkout/worktree boundary",
+    "freshLunaHighPasses": 0,
+    "timings": null
+  },
+  "productionMigration": false,
+  "liveProviderCalls": false,
+  "recommendation": "Keep production unchanged; rerun only when the exact #744 delta and compatible Canary CLI/pnpm are available in repo2."
+}
