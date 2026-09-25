@@ -28,6 +28,38 @@ attempt-lineage behavior.
 
 Raw matrix: `artifacts/baml-assess-725/semantic-equivalence.json`.
 
+## Live provider attempt
+
+The live comparison harness ran three synthetic assess inputs through both
+paths:
+
+- existing Footnote runtime: provider `openai`, model `gpt-5-mini`, using the
+  current native structured-output schema and parser;
+- BAML prototype: the pinned `@boundaryml/baml 0.226.2` client using its
+  `openai-responses` client and the same model.
+
+The provider rejected all six requests with HTTP 429
+`insufficient_quota` (`You have no credits remaining`). This is a real provider
+availability result, not a parser result. The run produced no successful model
+output, token usage, cost, or successful latency comparison.
+
+The failure wrappers differed:
+
+| Path                      | Observed failure                                                                         | What this proves                                                                                                           |
+| ------------------------- | ---------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------- |
+| Existing Footnote runtime | `GenerationRuntimeError` with the provider message                                       | The current runtime reaches the provider and exposes a provider/runtime error to Footnote.                                 |
+| BAML prototype            | `BamlClientHttpError` wrapped in `BamlError`, with `openai-responses` collector metadata | BAML reaches the provider, but exposes its own error boundary and does not produce Footnote's attempt or failure envelope. |
+
+This does not establish behavioral equivalence. It does establish that the
+prototype uses a separate provider client rather than reusing Footnote's
+routing/runtime path. A funded repeat would still need the same fixture set,
+successful outputs, usage/cost facts, refusal or incomplete-response cases,
+and comparison of retry and attempt records.
+
+Raw sanitized artifact: `artifacts/baml-assess-725/live-provider-compare.json`.
+The artifact contains synthetic inputs and provider error messages only. The
+run did not include private conversation content.
+
 ## Difference matrix
 
 | Case                                                       | Footnote                                  | BAML                                  | Recovery or loss                            | Policy significance                                                      |
@@ -149,4 +181,10 @@ location, not proof that the policy-sensitive update burden disappeared.
 pnpm --config.enable-global-virtual-store=false dlx --package=@boundaryml/baml@0.226.2 baml-cli generate --from experiments/baml-assess-725
 pnpm exec tsx --test experiments/baml-assess-725/offline-equivalence.test.ts
 pnpm exec tsx experiments/baml-assess-725/offline-equivalence.ts
+pnpm exec tsx experiments/baml-assess-725/live-provider-compare.ts
 ```
+
+The live command requires an existing `OPENAI_API_KEY` with provider credit.
+It uses three synthetic fixtures and does not run in normal CI. Keep the live
+comparison separate from Footnote production routing and do not treat a
+provider error as a semantic comparison result.

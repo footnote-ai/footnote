@@ -41,3 +41,20 @@ artifacts.
 
 The checked-in raw result is
 `artifacts/baml-assess-725/probe-results.json`.
+
+## Live provider comparison
+
+`live-provider-compare.ts` runs three synthetic assess inputs through the
+current Footnote runtime and the BAML prototype. Both use `openai/gpt-5-mini`
+for this experiment. The current runtime keeps Footnote's structured-output
+schema and parser; BAML uses its generated client and collector.
+
+Run it only when an existing `OPENAI_API_KEY` has provider credit:
+
+```text
+pnpm exec tsx experiments/baml-assess-725/live-provider-compare.ts
+```
+
+The command is evaluation-only. It does not change routing, retries, cost
+recording, cancellation ownership, attempt lineage, or TRACE behavior. Live
+provider calls are not part of normal CI.
