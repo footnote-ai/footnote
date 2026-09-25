@@ -109,6 +109,8 @@ class OpenJevRuntimeBenchmarkTests(unittest.TestCase):
         args = parse_args(["--model-id", str(Path.cwd()), "--revision", "local-test"])
 
         self.assertEqual(resolve_model_source(args), Path.cwd().resolve())
+        report = build_report(args)
+        self.assertEqual(report["request"]["revision_status"], "unverified_local")
 
 
 if __name__ == "__main__":

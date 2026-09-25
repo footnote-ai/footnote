@@ -351,6 +351,15 @@ def accelerator_backend(torch_module: Any) -> str | None:
     return None
 
 
+def model_revision_status(args: argparse.Namespace) -> str:
+    """Keep local model paths distinct from verified Hub revisions."""
+    return (
+        "unverified_local"
+        if Path(args.model_id).expanduser().is_dir()
+        else "hub_revision_requested"
+    )
+
+
 def benchmark_cross_encoder(args: argparse.Namespace) -> dict[str, object]:
     preflight = runtime_preflight(args)
     if preflight is not None:
@@ -430,6 +439,7 @@ def build_report(args: argparse.Namespace) -> dict[str, object]:
         "request": {
             "model_id": args.model_id,
             "revision": args.revision,
+            "revision_status": model_revision_status(args),
             "subfolder": args.subfolder,
             "candidate_counts": args.candidate_counts,
             "candidate_lengths_words": args.candidate_lengths,
