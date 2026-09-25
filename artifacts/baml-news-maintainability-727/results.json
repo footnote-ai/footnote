@@ -1,0 +1,172 @@
+{
+    "toolchain": {
+        "baml": "0.226.2",
+        "generatedClient": "typescript"
+    },
+    "fixtures": [
+        {
+            "name": "valid",
+            "footnote": "success",
+            "baml": "success",
+            "footnoteMessage": null,
+            "bamlMessage": null,
+            "footnoteValue": {
+                "news": [
+                    {
+                        "title": "Policy update",
+                        "summary": "A concise summary.",
+                        "url": "https://example.com/news-1",
+                        "source": "Example News",
+                        "timestamp": "2026-03-18T23:48:53.000Z",
+                        "thumbnail": null,
+                        "image": null
+                    }
+                ],
+                "summary": "One synthetic result."
+            },
+            "bamlValue": {
+                "news": [
+                    {
+                        "title": "Policy update",
+                        "summary": "A concise summary.",
+                        "url": "https://example.com/news-1",
+                        "source": "Example News",
+                        "timestamp": "2026-03-18 23:48:53Z",
+                        "thumbnail": null
+                    }
+                ],
+                "summary": "One synthetic result."
+            }
+        },
+        {
+            "name": "malformed-json",
+            "footnote": "error",
+            "baml": "error",
+            "footnoteMessage": "Internal text task did not return a JSON object. Unexpected token '}', \"{\"news\": [}\" is not valid JSON",
+            "bamlMessage": "BamlError: Failed to coerce value: ParsingError { scope: [], reason: \"Failed while parsing required fields: missing=1, unparsed=0\", causes: [ParsingError { scope: [], reason: \"Missing required field: summary\", causes: [] }] }",
+            "footnoteValue": null,
+            "bamlValue": null
+        },
+        {
+            "name": "schema-invalid",
+            "footnote": "error",
+            "baml": "success",
+            "footnoteMessage": "Internal news task returned invalid structured output: result.news.0.title Too small: expected string to have >=1 characters",
+            "bamlMessage": null,
+            "footnoteValue": null,
+            "bamlValue": {
+                "news": [
+                    {
+                        "title": "",
+                        "summary": "Missing required title.",
+                        "url": "not-a-url",
+                        "source": "Example News",
+                        "timestamp": null,
+                        "thumbnail": null
+                    }
+                ],
+                "summary": "Invalid item."
+            }
+        },
+        {
+            "name": "optional-nulls",
+            "footnote": "success",
+            "baml": "success",
+            "footnoteMessage": null,
+            "bamlMessage": null,
+            "footnoteValue": {
+                "news": [
+                    {
+                        "title": "Policy update",
+                        "summary": "A concise summary.",
+                        "url": "https://example.com/news-1",
+                        "source": "Example News",
+                        "thumbnail": null,
+                        "image": null
+                    }
+                ],
+                "summary": "Optional values are null."
+            },
+            "bamlValue": {
+                "news": [
+                    {
+                        "title": "Policy update",
+                        "summary": "A concise summary.",
+                        "url": "https://example.com/news-1",
+                        "source": "Example News",
+                        "timestamp": null,
+                        "thumbnail": null
+                    }
+                ],
+                "summary": "Optional values are null."
+            }
+        },
+        {
+            "name": "timestamp-normalization",
+            "footnote": "success",
+            "baml": "success",
+            "footnoteMessage": null,
+            "bamlMessage": null,
+            "footnoteValue": {
+                "news": [
+                    {
+                        "title": "Policy update",
+                        "summary": "A concise summary.",
+                        "url": "https://example.com/news-1",
+                        "source": "Example News",
+                        "thumbnail": null,
+                        "image": null
+                    }
+                ],
+                "summary": "Date-only timestamp."
+            },
+            "bamlValue": {
+                "news": [
+                    {
+                        "title": "Policy update",
+                        "summary": "A concise summary.",
+                        "url": "https://example.com/news-1",
+                        "source": "Example News",
+                        "timestamp": "2026-03-18",
+                        "thumbnail": null
+                    }
+                ],
+                "summary": "Date-only timestamp."
+            }
+        },
+        {
+            "name": "fenced-json",
+            "footnote": "success",
+            "baml": "success",
+            "footnoteMessage": null,
+            "bamlMessage": null,
+            "footnoteValue": {
+                "news": [
+                    {
+                        "title": "Policy update",
+                        "summary": "A concise summary.",
+                        "url": "https://example.com/news-1",
+                        "source": "Example News",
+                        "timestamp": "2026-03-18T23:48:53.000Z",
+                        "thumbnail": null,
+                        "image": null
+                    }
+                ],
+                "summary": "One synthetic result."
+            },
+            "bamlValue": {
+                "news": [
+                    {
+                        "title": "Policy update",
+                        "summary": "A concise summary.",
+                        "url": "https://example.com/news-1",
+                        "source": "Example News",
+                        "timestamp": "2026-03-18 23:48:53Z",
+                        "thumbnail": null
+                    }
+                ],
+                "summary": "One synthetic result."
+            }
+        }
+    ]
+}
