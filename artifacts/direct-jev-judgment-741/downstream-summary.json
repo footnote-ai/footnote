@@ -1,0 +1,59 @@
+{
+  "benchmark": "direct_openrouter_jev_downstream_741",
+  "selector": {
+    "provider": "openrouter",
+    "requestedModel": "typesafe/jev-1.13",
+    "servedModel": "typesafe/jev-1.13-20260917",
+    "frozenCases": 20,
+    "notRunCases": 2,
+    "actions": {
+      "message": 17,
+      "ignore": 1,
+      "not_run": 2
+    },
+    "averageSelectedMessages": 1.5,
+    "selectorLatencyMs": {
+      "p50": 198.6956,
+      "p95": 287.8258
+    }
+  },
+  "comparison": {
+    "method": "bm25_graph_expansion",
+    "averageSelectedMessages": 15.05,
+    "selectorLatencyMsAverage": 0.454
+  },
+  "blindedReview": {
+    "rubric": "context-answer-review-v1",
+    "calls": 20,
+    "reviewerCostUsd": 0.198074,
+    "hostedJev": {
+      "reviewedMessages": 17,
+      "sufficient": 14,
+      "averageRequiredFactCoverage": 0.918,
+      "unsupportedClaimAnswers": 5,
+      "distractorContaminationAnswers": 0
+    },
+    "bm25Graph": {
+      "reviewedMessages": 7,
+      "sufficient": 6,
+      "averageRequiredFactCoverage": 0.829,
+      "unsupportedClaimAnswers": 0,
+      "distractorContaminationAnswers": 1
+    },
+    "pairedMessageCases": {
+      "bothSufficient": 2,
+      "bm25Only": 3,
+      "jevOnly": 1,
+      "neither": 0
+    }
+  },
+  "answerReplay": {
+    "hostedJevMessageCalls": 17,
+    "latencyMs": {
+      "p50": 37971,
+      "p95": 77670
+    },
+    "recordedBackendCostUsd": 0.002591955856
+  },
+  "interpretation": "Jev strongly compresses context, but this small downstream replay does not establish better answer quality than BM25 plus deterministic expansion."
+}
