@@ -11,10 +11,11 @@
 Status: **prototype complete; production adoption not recommended from this
 slice alone**.
 
-Run date: 2026-09-22
+Run date: 2026-09-25
 
-Base: `origin/main` at `6fa7416ae8ff5e8d052dac67a2ae10eb074d6d58` (the
-experiment starting revision; current `origin/main` has since advanced)
+Experiment base: `68e1825ac442e5099a7fa2b74418c2d774816ed0` (the exact checkout used for this corrected evaluation)
+
+Stack base for PR #742: `9b4bc0ee4de430bda19473df26e5a8acad3a8c11` (PR #737 head)
 
 BAML: `@boundaryml/baml 0.226.2`
 
@@ -32,6 +33,25 @@ The prototype preserves the existing fields, including TRACE alignment,
 temperament, module hints, concerns, and routing hints. It does not model
 Footnote workflow admission, routing chains, retries/fallbacks, cost
 accounting, usage authority, cancellation ownership, or canonical TRACE.
+
+## Concrete ownership seams
+
+The experiment keeps one typed BAML function, `Assess`, but the current
+runtime has more than one contract owner. The observed before/after ownership
+shapes are:
+
+| Concern | Current Footnote owner | BAML prototype owner | Result |
+| --- | --- | --- | --- |
+| Typed shape, strict ranges, conditional fields, normalization | `reviewDecision.ts` | BAML class plus the same Footnote validator | No deletion demonstrated |
+| Default prompt, review modules, and `reviewDecisionPrompt` override | `composeAssessPrompt` and prompt registry | Static BAML function prompt | Override requires external rendering or a second seam |
+| Provider/model selection, retries, attempt lineage, usage, cost, cancellation, TRACE | reviewed workflow and agent runtime | BAML generated client/provider request | Must remain Footnote-owned |
+| Error envelope used by workflow admission | `ReviewDecisionParseFailure` and typed-output validation | generic BAML errors | Mapping layer remains required |
+
+The override finding is concrete: `reviewDecisionPrompt` is passed as the
+`basePromptOverride` to `composeAssessPrompt`, while the BAML `Assess` function
+declares its prompt in `functions.baml`. Replacing the parser alone would
+either render the caller's override outside BAML or create another BAML prompt
+contract. Neither is a deletion of the current seam.
 
 ## Failure and contract comparison
 
@@ -85,7 +105,7 @@ Measured line counts for this prototype run:
 | Current parser tests                                        |   153 | existing hand-maintained compatibility coverage                          |
 | BAML source (`types`, `functions`, `clients`, `generators`) |    76 | hand-maintained typed function/prompt/client declarations                |
 | Prototype probe and manifest                                |   114 | hand-maintained harness/tooling                                          |
-| Generated TypeScript client                                 | 1,273 | generated dependency/build surface; not hand-maintained                  |
+| Generated TypeScript client                                 | 1,261 | generated dependency/build surface; not hand-maintained                  |
 
 The BAML source is shorter than the current contract file, but the generated
 client and runtime dependency are substantial. The follow-on 33-row matrix
@@ -94,9 +114,14 @@ still needed for conditional validation, Footnote-specific failure taxonomy,
 normalization, routing, and provenance mapping. No current Footnote source can
 be deleted safely from this evidence.
 
+This is a maintainability comparison, not a production migration: the
+hypothetical BAML-plus-Footnote stack retains the 401-line contract/parser file
+and 153-line compatibility test while adding 76 lines of BAML declarations,
+1,261 generated TypeScript lines, regeneration, and adapter/tooling upkeep.
+
 ## Recommendation for #725
 
-The prototype proves that BAML can co-locate a prompt and a basic typed output,
+This prototype shows that BAML can co-locate a prompt and a basic typed output,
 generate TypeScript types, parse some malformed/fenced output, render a request,
 and surface cancellation. It does **not** prove deletion or meaningful
 simplification of the Footnote assess machinery. The negative result is
@@ -113,7 +138,7 @@ successful evidence for the next gate:
 ## Reproduction
 
 ```text
-pnpm --config.enable-global-virtual-store=false dlx --package=@boundaryml/baml@0.226.2 baml-cli generate
+pnpm --config.enable-global-virtual-store=false dlx --package=@boundaryml/baml@0.226.2 baml-cli generate --from experiments/baml-assess-725/baml_src
 node <pinned-tsx>/dist/cli.mjs probe.ts
 ```
 

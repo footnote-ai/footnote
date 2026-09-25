@@ -11,6 +11,11 @@
 Status: **modular-boundary experiment complete; BAML adoption not justified
 for the current assess path**.
 
+Experiment base: `68e1825ac442e5099a7fa2b74418c2d774816ed0`.
+Stack base for PR #742: `9b4bc0ee4de430bda19473df26e5a8acad3a8c11` (PR #737 head).
+The machine-readable evidence is from the pinned `0.226.2` prototype run;
+production files were not changed.
+
 ## Scope and toolchain
 
 The matrix feeds identical synthetic output fixtures to:
@@ -155,7 +160,7 @@ output, token usage, cost, or successful latency comparison.
 
 The failure wrappers differed:
 
-| Path                      | Observed failure                                                                         | What this proves                                                                                                           |
+| Path                      | Observed failure                                                                         | What this shows                                                                                                           |
 | ------------------------- | ---------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------- |
 | Existing Footnote runtime | `GenerationRuntimeError` with the provider message                                       | The current runtime reaches the provider and exposes a provider/runtime error to Footnote.                                 |
 | BAML prototype            | `BamlClientHttpError` wrapped in `BamlError`, with `openai-responses` collector metadata | BAML reaches the provider, but exposes its own error boundary and does not produce Footnote's attempt or failure envelope. |
@@ -225,12 +230,14 @@ parser-wide strict/coercion switch was located. Field assertions can reject a
 coerced value such as `6` or `-1`; they cannot recover that the original input
 was the string `"3"`, or that a fenced/prose wrapper was rejected by Footnote.
 
-References checked on 2026-09-22:
+References checked on 2026-09-25:
 
 - <https://docs.boundaryml.com/guide/baml-advanced/checks-and-asserts>
 - <https://docs.boundaryml.com/ref/attributes/jinja-in-attributes>
 - <https://docs.boundaryml.com/guide/baml-basics/error-handling>
 - <https://docs.boundaryml.com/ref/baml_client/errors/overview>
+- <https://docs.boundaryml.com/ref/baml-cli/generate>
+- <https://docs.boundaryml.com/ref/baml_client/client>
 
 This means “BAML parse + Footnote semantic validator” is technically possible.
 The layered probe demonstrates a split result: a Footnote validator recovers
@@ -254,6 +261,14 @@ The BAML source is shorter, but the matrix shows that cosmetic source-line
 reduction is not semantic duplication removal. #727 remains unresolved.
 
 ## Adapter burden and client ownership
+
+Prompt overrides are part of the ownership boundary. The current workflow
+passes `reviewDecisionPrompt` into `composeAssessPrompt` as the caller's base
+override, after which the registry adds sanitized module fragments. The BAML
+function instead owns a static prompt body. A production adapter would need to
+render the override before calling BAML or add a second prompt parameter and
+contract. That is an additional maintenance seam, not an equivalent one-line
+replacement.
 
 The local run did not require a custom transport adapter for BAML: its
 `openai-generic` client called Ollama directly. That is also the problem for
@@ -312,10 +327,10 @@ all lines are equally complex:
 
 | Concern                                                 | Current Footnote |                     BAML + Footnote prototype |
 | ------------------------------------------------------- | ---------------: | --------------------------------------------: |
-| Hand-maintained contract/parser file                    |        383 lines |                         BAML source: 68 lines |
-| Compatibility tests                                     |        132 lines |     Equivalence/adapter tests remain required |
-| Generated code                                          |             none |                        1,077 TypeScript lines |
-| Modeled independent semantic update points              |                6 | 5, plus regeneration and provider integration |
+| Hand-maintained contract/parser file                    |        401 lines |                         BAML source: 76 lines |
+| Compatibility tests                                     |        153 lines |     Equivalence/adapter tests remain required |
+| Generated code                                          |             none |                       1,261 TypeScript lines |
+| Modeled independent semantic update points              |                6 | 6, plus regeneration and provider integration |
 | Failure taxonomy, normalization, conditional validation |   Footnote-owned |                   Footnote-owned; not deleted |
 
 The modeled change adds a `reviewConfidence` integer constrained to `1..5`
@@ -324,8 +339,9 @@ structured-output schema, prompt, normalizer/conditional validation,
 failure-classification assertions, and compatibility fixtures. The BAML path
 updates the BAML class/assertion, regenerates the client, updates the
 Footnote adapter/semantic validator and failure mapping, checks any provider
-schema integration, and updates fixtures. This is a change in declaration
-location, not proof that the policy-sensitive update burden disappeared.
+schema integration, preserves prompt-override compatibility, and updates
+fixtures. This is a change in declaration location, not proof that the
+policy-sensitive update burden disappeared.
 
 ## Reproduction
 
