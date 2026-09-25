@@ -142,6 +142,15 @@ const emptyMetrics = (): HostedReport['metrics'] => ({
     averageLatencyMs: null,
 });
 
+const hostedStatus = (
+    errorCount: number,
+    completedCaseCount: number
+): HostedReport['status'] => {
+    if (errorCount === 0) return 'completed';
+    if (completedCaseCount === 0) return 'error';
+    return 'partial';
+};
+
 const runHosted = async (
     corpus: ContextBenchmarkCase[],
     apiKey: string | undefined,
@@ -260,12 +269,7 @@ const runHosted = async (
     }
     const aggregate = aggregateMetrics('hosted_jev', caseMetrics);
     return {
-        status:
-            errors.length === 0
-                ? 'completed'
-                : cases.length === 0
-                  ? 'error'
-                  : 'partial',
+        status: hostedStatus(errors.length, cases.length),
         requestedModel: JEV_MODEL,
         threshold,
         thresholdStatus: 'exploratory',
