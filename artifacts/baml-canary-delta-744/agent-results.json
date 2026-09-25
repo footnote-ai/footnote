@@ -1,0 +1,39 @@
+{
+    "experiment": "baml-canary-delta-744",
+    "toolchain": {
+        "wrapper": "0.2.5",
+        "channel": "canary",
+        "version": "0.20.1",
+        "skillInstalledByCoordinator": true,
+        "skillSha256": "76503C6C9FD2C02779FACC219668A961B90E831260E8EDB3879E3AACECF14329"
+    },
+    "agents": [
+        {
+            "threadId": "01a0d98a-7ad7-7250-9c10-4fef9d8750b2",
+            "model": "gpt-6-luna",
+            "reasoning": "high",
+            "task": "optional coverageNote contract change",
+            "status": "completed",
+            "result": "Source, prompt, parser assertion, fmt, check, test, generate, and diff check passed; no first-pass mistake reported."
+        },
+        {
+            "threadId": "01a0d98a-7ffa-7442-9605-da18fc2aa52e",
+            "model": "gpt-6-luna",
+            "reasoning": "high",
+            "task": "deliberate summary type drift",
+            "status": "partial",
+            "result": "check accepted the changed type; the offline parser test caught stale string data; generate did not catch it; restoration was started but no clean rerun was completed before approval wait."
+        },
+        {
+            "threadId": "01a0d98a-840c-7582-9a10-9d6cb855c197",
+            "model": "gpt-6-luna",
+            "reasoning": "high",
+            "task": "fresh-agent publisherUrl handoff",
+            "status": "completed_observation",
+            "result": "Fresh agent found tracked BAML source, changed prompt/type/test, describe/fmt/check/test-list/test/generate passed, and generated output was not edited. Skill was not installed in that checkout."
+        }
+    ],
+    "generatedFiles": 69,
+    "liveProviderCalls": false,
+    "productionMigration": false
+}
