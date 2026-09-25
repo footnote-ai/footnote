@@ -1,0 +1,2187 @@
+{
+  "generatedAt": "2026-09-25T20:05:45.475Z",
+  "threshold": 0.5,
+  "metadata": {
+    "endpoint": "https://openrouter.ai/api/alpha/decisions",
+    "model": "typesafe/jev-1.13",
+    "resolvedModel": "typesafe/jev-1.13-20260917",
+    "provider": "TypeSafe",
+    "usage": [
+      {
+        "input_tokens": 3655,
+        "output_tokens": 914,
+        "cost": 0.00015351
+      },
+      {
+        "input_tokens": 3652,
+        "output_tokens": 914,
+        "cost": 0.000153384
+      },
+      {
+        "input_tokens": 3649,
+        "output_tokens": 914,
+        "cost": 0.000153258
+      },
+      {
+        "input_tokens": 3656,
+        "output_tokens": 914,
+        "cost": 0.000153552
+      },
+      {
+        "input_tokens": 3663,
+        "output_tokens": 914,
+        "cost": 0.000153846
+      },
+      {
+        "input_tokens": 3665,
+        "output_tokens": 914,
+        "cost": 0.00015393
+      },
+      {
+        "input_tokens": 3650,
+        "output_tokens": 914,
+        "cost": 0.0001533
+      },
+      {
+        "input_tokens": 3656,
+        "output_tokens": 914,
+        "cost": 0.000153552
+      },
+      {
+        "input_tokens": 3642,
+        "output_tokens": 914,
+        "cost": 0.000152964
+      },
+      {
+        "input_tokens": 3683,
+        "output_tokens": 954,
+        "cost": 0.000154686
+      },
+      {
+        "input_tokens": 3695,
+        "output_tokens": 954,
+        "cost": 0.00015519
+      },
+      {
+        "input_tokens": 3675,
+        "output_tokens": 954,
+        "cost": 0.00015435
+      },
+      {
+        "input_tokens": 3681,
+        "output_tokens": 954,
+        "cost": 0.000154602
+      },
+      {
+        "input_tokens": 3689,
+        "output_tokens": 954,
+        "cost": 0.000154938
+      },
+      {
+        "input_tokens": 3694,
+        "output_tokens": 954,
+        "cost": 0.000155148
+      },
+      {
+        "input_tokens": 3691,
+        "output_tokens": 954,
+        "cost": 0.000155022
+      },
+      {
+        "input_tokens": 3694,
+        "output_tokens": 954,
+        "cost": 0.000155148
+      },
+      {
+        "input_tokens": 3680,
+        "output_tokens": 954,
+        "cost": 0.00015456
+      },
+      {
+        "input_tokens": 3682,
+        "output_tokens": 954,
+        "cost": 0.000154644
+      },
+      {
+        "input_tokens": 3687,
+        "output_tokens": 954,
+        "cost": 0.000154854
+      },
+      {
+        "input_tokens": 3695,
+        "output_tokens": 954,
+        "cost": 0.00015519
+      },
+      {
+        "input_tokens": 3692,
+        "output_tokens": 954,
+        "cost": 0.000155064
+      },
+      {
+        "input_tokens": 3689,
+        "output_tokens": 954,
+        "cost": 0.000154938
+      },
+      {
+        "input_tokens": 3696,
+        "output_tokens": 954,
+        "cost": 0.000155232
+      },
+      {
+        "input_tokens": 3704,
+        "output_tokens": 954,
+        "cost": 0.000155568
+      },
+      {
+        "input_tokens": 3706,
+        "output_tokens": 954,
+        "cost": 0.000155652
+      },
+      {
+        "input_tokens": 3690,
+        "output_tokens": 954,
+        "cost": 0.00015498
+      },
+      {
+        "input_tokens": 3696,
+        "output_tokens": 954,
+        "cost": 0.000155232
+      },
+      {
+        "input_tokens": 3682,
+        "output_tokens": 954,
+        "cost": 0.000154644
+      },
+      {
+        "input_tokens": 3683,
+        "output_tokens": 954,
+        "cost": 0.000154686
+      },
+      {
+        "input_tokens": 3695,
+        "output_tokens": 954,
+        "cost": 0.00015519
+      },
+      {
+        "input_tokens": 3675,
+        "output_tokens": 954,
+        "cost": 0.00015435
+      },
+      {
+        "input_tokens": 3681,
+        "output_tokens": 954,
+        "cost": 0.000154602
+      },
+      {
+        "input_tokens": 3689,
+        "output_tokens": 954,
+        "cost": 0.000154938
+      },
+      {
+        "input_tokens": 3694,
+        "output_tokens": 954,
+        "cost": 0.000155148
+      },
+      {
+        "input_tokens": 3691,
+        "output_tokens": 954,
+        "cost": 0.000155022
+      },
+      {
+        "input_tokens": 3694,
+        "output_tokens": 954,
+        "cost": 0.000155148
+      },
+      {
+        "input_tokens": 3680,
+        "output_tokens": 954,
+        "cost": 0.00015456
+      },
+      {
+        "input_tokens": 3682,
+        "output_tokens": 954,
+        "cost": 0.000154644
+      },
+      {
+        "input_tokens": 3687,
+        "output_tokens": 954,
+        "cost": 0.000154854
+      },
+      {
+        "input_tokens": 3695,
+        "output_tokens": 954,
+        "cost": 0.00015519
+      },
+      {
+        "input_tokens": 3692,
+        "output_tokens": 954,
+        "cost": 0.000155064
+      },
+      {
+        "input_tokens": 3689,
+        "output_tokens": 954,
+        "cost": 0.000154938
+      },
+      {
+        "input_tokens": 3696,
+        "output_tokens": 954,
+        "cost": 0.000155232
+      },
+      {
+        "input_tokens": 3704,
+        "output_tokens": 954,
+        "cost": 0.000155568
+      },
+      {
+        "input_tokens": 3706,
+        "output_tokens": 954,
+        "cost": 0.000155652
+      },
+      {
+        "input_tokens": 3690,
+        "output_tokens": 954,
+        "cost": 0.00015498
+      },
+      {
+        "input_tokens": 3696,
+        "output_tokens": 954,
+        "cost": 0.000155232
+      },
+      {
+        "input_tokens": 3682,
+        "output_tokens": 954,
+        "cost": 0.000154644
+      },
+      {
+        "input_tokens": 3683,
+        "output_tokens": 954,
+        "cost": 0.000154686
+      },
+      {
+        "input_tokens": 3695,
+        "output_tokens": 954,
+        "cost": 0.00015519
+      },
+      {
+        "input_tokens": 3675,
+        "output_tokens": 954,
+        "cost": 0.00015435
+      },
+      {
+        "input_tokens": 3681,
+        "output_tokens": 954,
+        "cost": 0.000154602
+      },
+      {
+        "input_tokens": 3689,
+        "output_tokens": 954,
+        "cost": 0.000154938
+      },
+      {
+        "input_tokens": 3694,
+        "output_tokens": 954,
+        "cost": 0.000155148
+      },
+      {
+        "input_tokens": 3691,
+        "output_tokens": 954,
+        "cost": 0.000155022
+      },
+      {
+        "input_tokens": 3694,
+        "output_tokens": 954,
+        "cost": 0.000155148
+      },
+      {
+        "input_tokens": 3680,
+        "output_tokens": 954,
+        "cost": 0.00015456
+      },
+      {
+        "input_tokens": 3682,
+        "output_tokens": 954,
+        "cost": 0.000154644
+      },
+      {
+        "input_tokens": 3687,
+        "output_tokens": 954,
+        "cost": 0.000154854
+      },
+      {
+        "input_tokens": 3695,
+        "output_tokens": 954,
+        "cost": 0.00015519
+      },
+      {
+        "input_tokens": 3692,
+        "output_tokens": 954,
+        "cost": 0.000155064
+      },
+      {
+        "input_tokens": 3689,
+        "output_tokens": 954,
+        "cost": 0.000154938
+      },
+      {
+        "input_tokens": 3696,
+        "output_tokens": 954,
+        "cost": 0.000155232
+      },
+      {
+        "input_tokens": 3704,
+        "output_tokens": 954,
+        "cost": 0.000155568
+      },
+      {
+        "input_tokens": 3706,
+        "output_tokens": 954,
+        "cost": 0.000155652
+      },
+      {
+        "input_tokens": 3690,
+        "output_tokens": 954,
+        "cost": 0.00015498
+      },
+      {
+        "input_tokens": 3696,
+        "output_tokens": 954,
+        "cost": 0.000155232
+      },
+      {
+        "input_tokens": 3682,
+        "output_tokens": 954,
+        "cost": 0.000154644
+      },
+      {
+        "input_tokens": 3683,
+        "output_tokens": 954,
+        "cost": 0.000154686
+      },
+      {
+        "input_tokens": 3695,
+        "output_tokens": 954,
+        "cost": 0.00015519
+      },
+      {
+        "input_tokens": 3675,
+        "output_tokens": 954,
+        "cost": 0.00015435
+      },
+      {
+        "input_tokens": 3681,
+        "output_tokens": 954,
+        "cost": 0.000154602
+      },
+      {
+        "input_tokens": 3689,
+        "output_tokens": 954,
+        "cost": 0.000154938
+      },
+      {
+        "input_tokens": 3694,
+        "output_tokens": 954,
+        "cost": 0.000155148
+      },
+      {
+        "input_tokens": 3691,
+        "output_tokens": 954,
+        "cost": 0.000155022
+      },
+      {
+        "input_tokens": 3694,
+        "output_tokens": 954,
+        "cost": 0.000155148
+      },
+      {
+        "input_tokens": 3680,
+        "output_tokens": 954,
+        "cost": 0.00015456
+      },
+      {
+        "input_tokens": 3682,
+        "output_tokens": 954,
+        "cost": 0.000154644
+      },
+      {
+        "input_tokens": 3687,
+        "output_tokens": 954,
+        "cost": 0.000154854
+      },
+      {
+        "input_tokens": 3695,
+        "output_tokens": 954,
+        "cost": 0.00015519
+      },
+      {
+        "input_tokens": 3692,
+        "output_tokens": 954,
+        "cost": 0.000155064
+      },
+      {
+        "input_tokens": 3689,
+        "output_tokens": 954,
+        "cost": 0.000154938
+      },
+      {
+        "input_tokens": 3696,
+        "output_tokens": 954,
+        "cost": 0.000155232
+      },
+      {
+        "input_tokens": 3704,
+        "output_tokens": 954,
+        "cost": 0.000155568
+      },
+      {
+        "input_tokens": 3706,
+        "output_tokens": 954,
+        "cost": 0.000155652
+      },
+      {
+        "input_tokens": 3690,
+        "output_tokens": 954,
+        "cost": 0.00015498
+      },
+      {
+        "input_tokens": 3696,
+        "output_tokens": 954,
+        "cost": 0.000155232
+      },
+      {
+        "input_tokens": 3682,
+        "output_tokens": 954,
+        "cost": 0.000154644
+      },
+      {
+        "input_tokens": 3683,
+        "output_tokens": 954,
+        "cost": 0.000154686
+      },
+      {
+        "input_tokens": 3695,
+        "output_tokens": 954,
+        "cost": 0.00015519
+      },
+      {
+        "input_tokens": 3675,
+        "output_tokens": 954,
+        "cost": 0.00015435
+      },
+      {
+        "input_tokens": 3681,
+        "output_tokens": 954,
+        "cost": 0.000154602
+      },
+      {
+        "input_tokens": 3689,
+        "output_tokens": 954,
+        "cost": 0.000154938
+      },
+      {
+        "input_tokens": 3694,
+        "output_tokens": 954,
+        "cost": 0.000155148
+      },
+      {
+        "input_tokens": 3691,
+        "output_tokens": 954,
+        "cost": 0.000155022
+      },
+      {
+        "input_tokens": 3694,
+        "output_tokens": 954,
+        "cost": 0.000155148
+      },
+      {
+        "input_tokens": 3680,
+        "output_tokens": 954,
+        "cost": 0.00015456
+      },
+      {
+        "input_tokens": 3682,
+        "output_tokens": 954,
+        "cost": 0.000154644
+      },
+      {
+        "input_tokens": 3727,
+        "output_tokens": 994,
+        "cost": 0.000156534
+      },
+      {
+        "input_tokens": 327,
+        "output_tokens": 21,
+        "cost": 0.000013734
+      },
+      {
+        "input_tokens": 327,
+        "output_tokens": 21,
+        "cost": 0.000013734
+      },
+      {
+        "input_tokens": 327,
+        "output_tokens": 21,
+        "cost": 0.000013734
+      },
+      {
+        "input_tokens": 335,
+        "output_tokens": 21,
+        "cost": 0.00001407
+      },
+      {
+        "input_tokens": 336,
+        "output_tokens": 21,
+        "cost": 0.000014112
+      },
+      {
+        "input_tokens": 322,
+        "output_tokens": 21,
+        "cost": 0.000013524
+      },
+      {
+        "input_tokens": 336,
+        "output_tokens": 21,
+        "cost": 0.000014112
+      },
+      {
+        "input_tokens": 329,
+        "output_tokens": 21,
+        "cost": 0.000013818
+      }
+    ]
+  },
+  "frozenBaselines": [
+    {
+      "method": "current_window",
+      "completedCases": 100,
+      "unavailableCases": 0,
+      "necessaryMessageRecall": 0.5,
+      "necessaryMessageRecall95Ci": [
+        0.4209887046908502,
+        0.5790112953091499
+      ],
+      "usefulContextPrecision": 0.035416666666666666,
+      "usefulContextPrecision95Ci": [
+        0.0287330626265993,
+        0.04358517997307948
+      ],
+      "distractingContextRate": 0.022916666666666665,
+      "averageFinalMessageCount": 24,
+      "averageEstimatedInputTokens": 442.4,
+      "averageCandidateCount": 40,
+      "averageRetrievalDepth": 24,
+      "historicalDistanceRecovery": 0,
+      "averageBranchExpansionCount": 0,
+      "p50LatencyMs": 0.0006999999999948159,
+      "p95LatencyMs": 0.0049999999999954525
+    },
+    {
+      "method": "bm25_graph_expansion",
+      "completedCases": 100,
+      "unavailableCases": 0,
+      "necessaryMessageRecall": 0.9666666666666667,
+      "necessaryMessageRecall95Ci": [
+        0.9243471574929044,
+        0.9856797793044249
+      ],
+      "usefulContextPrecision": 0.11627906976744186,
+      "usefulContextPrecision95Ci": [
+        0.10105163107349258,
+        0.1334604608518626
+      ],
+      "distractingContextRate": 0.025336134453781512,
+      "averageFinalMessageCount": 15.05,
+      "averageEstimatedInputTokens": 275.95,
+      "averageCandidateCount": 40,
+      "averageRetrievalDepth": 40,
+      "historicalDistanceRecovery": 0.9285714285714286,
+      "averageBranchExpansionCount": 3.05,
+      "p50LatencyMs": 0.0852000000000146,
+      "p95LatencyMs": 0.10599999999999454
+    }
+  ],
+  "contextSelection": {
+    "name": "context_selection",
+    "summary": {
+      "completedCases": 100,
+      "failedCases": 0,
+      "necessaryRecall": 0.7466666666666667,
+      "usefulPrecision": 0.9032258064516129,
+      "distractingRate": 0,
+      "averageSelectedCount": 1.24,
+      "averageScore": 0.056739999999999985,
+      "nearThresholdRate": 0.009750000000000005,
+      "averageLatencyMs": 190.402649
+    },
+    "metrics": [
+      {
+        "caseId": "context-selection-001",
+        "category": "trigger_only",
+        "necessaryRecoveredCount": 0,
+        "necessaryCount": 0,
+        "usefulSelectedCount": 0,
+        "distractingSelectedCount": 0,
+        "necessaryRecall": null,
+        "usefulPrecision": null,
+        "distractingRate": 0,
+        "selectedCount": 0,
+        "averageScore": 0.02000000000000001,
+        "nearThresholdRate": 0,
+        "latencyMs": 430.9043
+      },
+      {
+        "caseId": "context-selection-002",
+        "category": "immediate_predecessor",
+        "necessaryRecoveredCount": 1,
+        "necessaryCount": 1,
+        "usefulSelectedCount": 1,
+        "distractingSelectedCount": 0,
+        "necessaryRecall": 1,
+        "usefulPrecision": 1,
+        "distractingRate": 0,
+        "selectedCount": 1,
+        "averageScore": 0.038250000000000006,
+        "nearThresholdRate": 0,
+        "latencyMs": 213.76459999999997
+      },
+      {
+        "caseId": "context-selection-003",
+        "category": "several_turns_back",
+        "necessaryRecoveredCount": 1,
+        "necessaryCount": 2,
+        "usefulSelectedCount": 1,
+        "distractingSelectedCount": 0,
+        "necessaryRecall": 0.5,
+        "usefulPrecision": 1,
+        "distractingRate": 0,
+        "selectedCount": 1,
+        "averageScore": 0.05699999999999998,
+        "nearThresholdRate": 0.025,
+        "latencyMs": 157.7033
+      },
+      {
+        "caseId": "context-selection-004",
+        "category": "old_relevant_history",
+        "necessaryRecoveredCount": 0,
+        "necessaryCount": 1,
+        "usefulSelectedCount": 0,
+        "distractingSelectedCount": 0,
+        "necessaryRecall": 0,
+        "usefulPrecision": null,
+        "distractingRate": 0,
+        "selectedCount": 0,
+        "averageScore": 0.028500000000000015,
+        "nearThresholdRate": 0,
+        "latencyMs": 180.0475
+      },
+      {
+        "caseId": "context-selection-005",
+        "category": "reply_ancestry",
+        "necessaryRecoveredCount": 1,
+        "necessaryCount": 2,
+        "usefulSelectedCount": 1,
+        "distractingSelectedCount": 0,
+        "necessaryRecall": 0.5,
+        "usefulPrecision": 1,
+        "distractingRate": 0,
+        "selectedCount": 1,
+        "averageScore": 0.061750000000000006,
+        "nearThresholdRate": 0.025,
+        "latencyMs": 174.42640000000006
+      },
+      {
+        "caseId": "context-selection-006",
+        "category": "one_relevant_branch",
+        "necessaryRecoveredCount": 2,
+        "necessaryCount": 2,
+        "usefulSelectedCount": 2,
+        "distractingSelectedCount": 0,
+        "necessaryRecall": 1,
+        "usefulPrecision": 1,
+        "distractingRate": 0,
+        "selectedCount": 2,
+        "averageScore": 0.05674999999999998,
+        "nearThresholdRate": 0.025,
+        "latencyMs": 166.51310000000012
+      },
+      {
+        "caseId": "context-selection-007",
+        "category": "simultaneous_conversations",
+        "necessaryRecoveredCount": 2,
+        "necessaryCount": 2,
+        "usefulSelectedCount": 2,
+        "distractingSelectedCount": 0,
+        "necessaryRecall": 1,
+        "usefulPrecision": 0.6666666666666666,
+        "distractingRate": 0,
+        "selectedCount": 3,
+        "averageScore": 0.08149999999999999,
+        "nearThresholdRate": 0.025,
+        "latencyMs": 210.56989999999996
+      },
+      {
+        "caseId": "context-selection-008",
+        "category": "topic_switch",
+        "necessaryRecoveredCount": 0,
+        "necessaryCount": 1,
+        "usefulSelectedCount": 0,
+        "distractingSelectedCount": 0,
+        "necessaryRecall": 0,
+        "usefulPrecision": null,
+        "distractingRate": 0,
+        "selectedCount": 0,
+        "averageScore": 0.02325000000000001,
+        "nearThresholdRate": 0,
+        "latencyMs": 187.8554999999999
+      },
+      {
+        "caseId": "context-selection-009",
+        "category": "pronoun_reference",
+        "necessaryRecoveredCount": 1,
+        "necessaryCount": 2,
+        "usefulSelectedCount": 1,
+        "distractingSelectedCount": 0,
+        "necessaryRecall": 0.5,
+        "usefulPrecision": 1,
+        "distractingRate": 0,
+        "selectedCount": 1,
+        "averageScore": 0.05850000000000001,
+        "nearThresholdRate": 0.05,
+        "latencyMs": 171.4579000000001
+      },
+      {
+        "caseId": "context-selection-010",
+        "category": "same_author_continuation",
+        "necessaryRecoveredCount": 3,
+        "necessaryCount": 3,
+        "usefulSelectedCount": 3,
+        "distractingSelectedCount": 0,
+        "necessaryRecall": 1,
+        "usefulPrecision": 1,
+        "distractingRate": 0,
+        "selectedCount": 3,
+        "averageScore": 0.09399999999999994,
+        "nearThresholdRate": 0,
+        "latencyMs": 162.1679999999999
+      },
+      {
+        "caseId": "context-selection-011",
+        "category": "paraphrased_reference",
+        "necessaryRecoveredCount": 1,
+        "necessaryCount": 1,
+        "usefulSelectedCount": 1,
+        "distractingSelectedCount": 0,
+        "necessaryRecall": 1,
+        "usefulPrecision": 1,
+        "distractingRate": 0,
+        "selectedCount": 1,
+        "averageScore": 0.04400000000000002,
+        "nearThresholdRate": 0,
+        "latencyMs": 177.3157000000001
+      },
+      {
+        "caseId": "context-selection-012",
+        "category": "scattered_context",
+        "necessaryRecoveredCount": 2,
+        "necessaryCount": 3,
+        "usefulSelectedCount": 2,
+        "distractingSelectedCount": 0,
+        "necessaryRecall": 0.6666666666666666,
+        "usefulPrecision": 0.6666666666666666,
+        "distractingRate": 0,
+        "selectedCount": 3,
+        "averageScore": 0.10224999999999998,
+        "nearThresholdRate": 0,
+        "latencyMs": 173.2545
+      },
+      {
+        "caseId": "context-selection-013",
+        "category": "irrelevant_high_similarity",
+        "necessaryRecoveredCount": 1,
+        "necessaryCount": 1,
+        "usefulSelectedCount": 1,
+        "distractingSelectedCount": 0,
+        "necessaryRecall": 1,
+        "usefulPrecision": 1,
+        "distractingRate": 0,
+        "selectedCount": 1,
+        "averageScore": 0.06374999999999999,
+        "nearThresholdRate": 0.025,
+        "latencyMs": 155.98489999999993
+      },
+      {
+        "caseId": "context-selection-014",
+        "category": "historical_context_not_recovered",
+        "necessaryRecoveredCount": 1,
+        "necessaryCount": 1,
+        "usefulSelectedCount": 1,
+        "distractingSelectedCount": 0,
+        "necessaryRecall": 1,
+        "usefulPrecision": 1,
+        "distractingRate": 0,
+        "selectedCount": 1,
+        "averageScore": 0.05025000000000002,
+        "nearThresholdRate": 0,
+        "latencyMs": 174.06439999999975
+      },
+      {
+        "caseId": "context-selection-015",
+        "category": "coreference_ambiguous",
+        "necessaryRecoveredCount": 1,
+        "necessaryCount": 2,
+        "usefulSelectedCount": 1,
+        "distractingSelectedCount": 0,
+        "necessaryRecall": 0.5,
+        "usefulPrecision": 1,
+        "distractingRate": 0,
+        "selectedCount": 1,
+        "averageScore": 0.05674999999999999,
+        "nearThresholdRate": 0,
+        "latencyMs": 197.3708999999999
+      },
+      {
+        "caseId": "context-selection-016",
+        "category": "semantic_paraphrase",
+        "necessaryRecoveredCount": 1,
+        "necessaryCount": 1,
+        "usefulSelectedCount": 1,
+        "distractingSelectedCount": 0,
+        "necessaryRecall": 1,
+        "usefulPrecision": 1,
+        "distractingRate": 0,
+        "selectedCount": 1,
+        "averageScore": 0.04675000000000002,
+        "nearThresholdRate": 0,
+        "latencyMs": 187.77300000000014
+      },
+      {
+        "caseId": "context-selection-017",
+        "category": "misleading_overlap_hard",
+        "necessaryRecoveredCount": 1,
+        "necessaryCount": 1,
+        "usefulSelectedCount": 1,
+        "distractingSelectedCount": 0,
+        "necessaryRecall": 1,
+        "usefulPrecision": 1,
+        "distractingRate": 0,
+        "selectedCount": 1,
+        "averageScore": 0.07225000000000001,
+        "nearThresholdRate": 0.025,
+        "latencyMs": 202.2168999999999
+      },
+      {
+        "caseId": "context-selection-018",
+        "category": "topic_resumption",
+        "necessaryRecoveredCount": 1,
+        "necessaryCount": 2,
+        "usefulSelectedCount": 1,
+        "distractingSelectedCount": 0,
+        "necessaryRecall": 0.5,
+        "usefulPrecision": 1,
+        "distractingRate": 0,
+        "selectedCount": 1,
+        "averageScore": 0.07050000000000001,
+        "nearThresholdRate": 0,
+        "latencyMs": 219.7529000000004
+      },
+      {
+        "caseId": "context-selection-019",
+        "category": "speaker_sensitive",
+        "necessaryRecoveredCount": 1,
+        "necessaryCount": 1,
+        "usefulSelectedCount": 1,
+        "distractingSelectedCount": 0,
+        "necessaryRecall": 1,
+        "usefulPrecision": 1,
+        "distractingRate": 0,
+        "selectedCount": 1,
+        "averageScore": 0.05699999999999998,
+        "nearThresholdRate": 0,
+        "latencyMs": 147.76629999999977
+      },
+      {
+        "caseId": "context-selection-020",
+        "category": "negative_historical_match",
+        "necessaryRecoveredCount": 1,
+        "necessaryCount": 1,
+        "usefulSelectedCount": 1,
+        "distractingSelectedCount": 0,
+        "necessaryRecall": 1,
+        "usefulPrecision": 1,
+        "distractingRate": 0,
+        "selectedCount": 1,
+        "averageScore": 0.05650000000000001,
+        "nearThresholdRate": 0.025,
+        "latencyMs": 162.47299999999996
+      },
+      {
+        "caseId": "context-selection-021",
+        "category": "trigger_only",
+        "necessaryRecoveredCount": 0,
+        "necessaryCount": 0,
+        "usefulSelectedCount": 0,
+        "distractingSelectedCount": 0,
+        "necessaryRecall": null,
+        "usefulPrecision": null,
+        "distractingRate": 0,
+        "selectedCount": 0,
+        "averageScore": 0.02000000000000001,
+        "nearThresholdRate": 0,
+        "latencyMs": 190.04379999999946
+      },
+      {
+        "caseId": "context-selection-022",
+        "category": "immediate_predecessor",
+        "necessaryRecoveredCount": 1,
+        "necessaryCount": 1,
+        "usefulSelectedCount": 1,
+        "distractingSelectedCount": 0,
+        "necessaryRecall": 1,
+        "usefulPrecision": 1,
+        "distractingRate": 0,
+        "selectedCount": 1,
+        "averageScore": 0.038250000000000006,
+        "nearThresholdRate": 0,
+        "latencyMs": 175.8665000000001
+      },
+      {
+        "caseId": "context-selection-023",
+        "category": "several_turns_back",
+        "necessaryRecoveredCount": 1,
+        "necessaryCount": 2,
+        "usefulSelectedCount": 1,
+        "distractingSelectedCount": 0,
+        "necessaryRecall": 0.5,
+        "usefulPrecision": 1,
+        "distractingRate": 0,
+        "selectedCount": 1,
+        "averageScore": 0.059749999999999984,
+        "nearThresholdRate": 0.025,
+        "latencyMs": 153.19820000000072
+      },
+      {
+        "caseId": "context-selection-024",
+        "category": "old_relevant_history",
+        "necessaryRecoveredCount": 0,
+        "necessaryCount": 1,
+        "usefulSelectedCount": 0,
+        "distractingSelectedCount": 0,
+        "necessaryRecall": 0,
+        "usefulPrecision": null,
+        "distractingRate": 0,
+        "selectedCount": 0,
+        "averageScore": 0.027750000000000014,
+        "nearThresholdRate": 0,
+        "latencyMs": 177.5619999999999
+      },
+      {
+        "caseId": "context-selection-025",
+        "category": "reply_ancestry",
+        "necessaryRecoveredCount": 1,
+        "necessaryCount": 2,
+        "usefulSelectedCount": 1,
+        "distractingSelectedCount": 0,
+        "necessaryRecall": 0.5,
+        "usefulPrecision": 1,
+        "distractingRate": 0,
+        "selectedCount": 1,
+        "averageScore": 0.06150000000000002,
+        "nearThresholdRate": 0.025,
+        "latencyMs": 156.90710000000036
+      },
+      {
+        "caseId": "context-selection-026",
+        "category": "one_relevant_branch",
+        "necessaryRecoveredCount": 2,
+        "necessaryCount": 2,
+        "usefulSelectedCount": 2,
+        "distractingSelectedCount": 0,
+        "necessaryRecall": 1,
+        "usefulPrecision": 1,
+        "distractingRate": 0,
+        "selectedCount": 2,
+        "averageScore": 0.05799999999999996,
+        "nearThresholdRate": 0.025,
+        "latencyMs": 168.0538000000006
+      },
+      {
+        "caseId": "context-selection-027",
+        "category": "simultaneous_conversations",
+        "necessaryRecoveredCount": 2,
+        "necessaryCount": 2,
+        "usefulSelectedCount": 2,
+        "distractingSelectedCount": 0,
+        "necessaryRecall": 1,
+        "usefulPrecision": 0.6666666666666666,
+        "distractingRate": 0,
+        "selectedCount": 3,
+        "averageScore": 0.087,
+        "nearThresholdRate": 0,
+        "latencyMs": 171.59509999999955
+      },
+      {
+        "caseId": "context-selection-028",
+        "category": "topic_switch",
+        "necessaryRecoveredCount": 0,
+        "necessaryCount": 1,
+        "usefulSelectedCount": 0,
+        "distractingSelectedCount": 0,
+        "necessaryRecall": 0,
+        "usefulPrecision": null,
+        "distractingRate": 0,
+        "selectedCount": 0,
+        "averageScore": 0.02300000000000001,
+        "nearThresholdRate": 0,
+        "latencyMs": 196.22900000000027
+      },
+      {
+        "caseId": "context-selection-029",
+        "category": "pronoun_reference",
+        "necessaryRecoveredCount": 1,
+        "necessaryCount": 2,
+        "usefulSelectedCount": 1,
+        "distractingSelectedCount": 0,
+        "necessaryRecall": 0.5,
+        "usefulPrecision": 1,
+        "distractingRate": 0,
+        "selectedCount": 1,
+        "averageScore": 0.06050000000000001,
+        "nearThresholdRate": 0.05,
+        "latencyMs": 188.13540000000012
+      },
+      {
+        "caseId": "context-selection-030",
+        "category": "same_author_continuation",
+        "necessaryRecoveredCount": 3,
+        "necessaryCount": 3,
+        "usefulSelectedCount": 3,
+        "distractingSelectedCount": 0,
+        "necessaryRecall": 1,
+        "usefulPrecision": 1,
+        "distractingRate": 0,
+        "selectedCount": 3,
+        "averageScore": 0.09374999999999994,
+        "nearThresholdRate": 0,
+        "latencyMs": 188.0050000000001
+      },
+      {
+        "caseId": "context-selection-031",
+        "category": "paraphrased_reference",
+        "necessaryRecoveredCount": 1,
+        "necessaryCount": 1,
+        "usefulSelectedCount": 1,
+        "distractingSelectedCount": 0,
+        "necessaryRecall": 1,
+        "usefulPrecision": 1,
+        "distractingRate": 0,
+        "selectedCount": 1,
+        "averageScore": 0.04500000000000002,
+        "nearThresholdRate": 0,
+        "latencyMs": 167.25890000000072
+      },
+      {
+        "caseId": "context-selection-032",
+        "category": "scattered_context",
+        "necessaryRecoveredCount": 2,
+        "necessaryCount": 3,
+        "usefulSelectedCount": 2,
+        "distractingSelectedCount": 0,
+        "necessaryRecall": 0.6666666666666666,
+        "usefulPrecision": 0.6666666666666666,
+        "distractingRate": 0,
+        "selectedCount": 3,
+        "averageScore": 0.10174999999999997,
+        "nearThresholdRate": 0.025,
+        "latencyMs": 184.9899000000005
+      },
+      {
+        "caseId": "context-selection-033",
+        "category": "irrelevant_high_similarity",
+        "necessaryRecoveredCount": 1,
+        "necessaryCount": 1,
+        "usefulSelectedCount": 1,
+        "distractingSelectedCount": 0,
+        "necessaryRecall": 1,
+        "usefulPrecision": 1,
+        "distractingRate": 0,
+        "selectedCount": 1,
+        "averageScore": 0.06599999999999999,
+        "nearThresholdRate": 0,
+        "latencyMs": 158.32610000000022
+      },
+      {
+        "caseId": "context-selection-034",
+        "category": "historical_context_not_recovered",
+        "necessaryRecoveredCount": 1,
+        "necessaryCount": 1,
+        "usefulSelectedCount": 1,
+        "distractingSelectedCount": 0,
+        "necessaryRecall": 1,
+        "usefulPrecision": 0.5,
+        "distractingRate": 0,
+        "selectedCount": 2,
+        "averageScore": 0.06350000000000001,
+        "nearThresholdRate": 0,
+        "latencyMs": 184.6207999999997
+      },
+      {
+        "caseId": "context-selection-035",
+        "category": "coreference_ambiguous",
+        "necessaryRecoveredCount": 1,
+        "necessaryCount": 2,
+        "usefulSelectedCount": 1,
+        "distractingSelectedCount": 0,
+        "necessaryRecall": 0.5,
+        "usefulPrecision": 1,
+        "distractingRate": 0,
+        "selectedCount": 1,
+        "averageScore": 0.05624999999999999,
+        "nearThresholdRate": 0,
+        "latencyMs": 165.29869999999937
+      },
+      {
+        "caseId": "context-selection-036",
+        "category": "semantic_paraphrase",
+        "necessaryRecoveredCount": 1,
+        "necessaryCount": 1,
+        "usefulSelectedCount": 1,
+        "distractingSelectedCount": 0,
+        "necessaryRecall": 1,
+        "usefulPrecision": 1,
+        "distractingRate": 0,
+        "selectedCount": 1,
+        "averageScore": 0.04925000000000002,
+        "nearThresholdRate": 0,
+        "latencyMs": 183.21870000000035
+      },
+      {
+        "caseId": "context-selection-037",
+        "category": "misleading_overlap_hard",
+        "necessaryRecoveredCount": 1,
+        "necessaryCount": 1,
+        "usefulSelectedCount": 1,
+        "distractingSelectedCount": 0,
+        "necessaryRecall": 1,
+        "usefulPrecision": 1,
+        "distractingRate": 0,
+        "selectedCount": 1,
+        "averageScore": 0.06974999999999998,
+        "nearThresholdRate": 0.025,
+        "latencyMs": 180.82570000000032
+      },
+      {
+        "caseId": "context-selection-038",
+        "category": "topic_resumption",
+        "necessaryRecoveredCount": 1,
+        "necessaryCount": 2,
+        "usefulSelectedCount": 1,
+        "distractingSelectedCount": 0,
+        "necessaryRecall": 0.5,
+        "usefulPrecision": 0.5,
+        "distractingRate": 0,
+        "selectedCount": 2,
+        "averageScore": 0.07875000000000001,
+        "nearThresholdRate": 0.05,
+        "latencyMs": 229.65339999999924
+      },
+      {
+        "caseId": "context-selection-039",
+        "category": "speaker_sensitive",
+        "necessaryRecoveredCount": 1,
+        "necessaryCount": 1,
+        "usefulSelectedCount": 1,
+        "distractingSelectedCount": 0,
+        "necessaryRecall": 1,
+        "usefulPrecision": 1,
+        "distractingRate": 0,
+        "selectedCount": 1,
+        "averageScore": 0.05524999999999999,
+        "nearThresholdRate": 0,
+        "latencyMs": 204.4949999999999
+      },
+      {
+        "caseId": "context-selection-040",
+        "category": "negative_historical_match",
+        "necessaryRecoveredCount": 1,
+        "necessaryCount": 1,
+        "usefulSelectedCount": 1,
+        "distractingSelectedCount": 0,
+        "necessaryRecall": 1,
+        "usefulPrecision": 1,
+        "distractingRate": 0,
+        "selectedCount": 1,
+        "averageScore": 0.053750000000000006,
+        "nearThresholdRate": 0,
+        "latencyMs": 202.4983000000002
+      },
+      {
+        "caseId": "context-selection-041",
+        "category": "trigger_only",
+        "necessaryRecoveredCount": 0,
+        "necessaryCount": 0,
+        "usefulSelectedCount": 0,
+        "distractingSelectedCount": 0,
+        "necessaryRecall": null,
+        "usefulPrecision": null,
+        "distractingRate": 0,
+        "selectedCount": 0,
+        "averageScore": 0.02000000000000001,
+        "nearThresholdRate": 0,
+        "latencyMs": 199.58929999999964
+      },
+      {
+        "caseId": "context-selection-042",
+        "category": "immediate_predecessor",
+        "necessaryRecoveredCount": 1,
+        "necessaryCount": 1,
+        "usefulSelectedCount": 1,
+        "distractingSelectedCount": 0,
+        "necessaryRecall": 1,
+        "usefulPrecision": 1,
+        "distractingRate": 0,
+        "selectedCount": 1,
+        "averageScore": 0.03875000000000001,
+        "nearThresholdRate": 0,
+        "latencyMs": 183.46330000000034
+      },
+      {
+        "caseId": "context-selection-043",
+        "category": "several_turns_back",
+        "necessaryRecoveredCount": 2,
+        "necessaryCount": 2,
+        "usefulSelectedCount": 2,
+        "distractingSelectedCount": 0,
+        "necessaryRecall": 1,
+        "usefulPrecision": 1,
+        "distractingRate": 0,
+        "selectedCount": 2,
+        "averageScore": 0.059999999999999984,
+        "nearThresholdRate": 0.025,
+        "latencyMs": 192.61169999999947
+      },
+      {
+        "caseId": "context-selection-044",
+        "category": "old_relevant_history",
+        "necessaryRecoveredCount": 0,
+        "necessaryCount": 1,
+        "usefulSelectedCount": 0,
+        "distractingSelectedCount": 0,
+        "necessaryRecall": 0,
+        "usefulPrecision": null,
+        "distractingRate": 0,
+        "selectedCount": 0,
+        "averageScore": 0.029000000000000015,
+        "nearThresholdRate": 0,
+        "latencyMs": 188.66680000000088
+      },
+      {
+        "caseId": "context-selection-045",
+        "category": "reply_ancestry",
+        "necessaryRecoveredCount": 1,
+        "necessaryCount": 2,
+        "usefulSelectedCount": 1,
+        "distractingSelectedCount": 0,
+        "necessaryRecall": 0.5,
+        "usefulPrecision": 1,
+        "distractingRate": 0,
+        "selectedCount": 1,
+        "averageScore": 0.06350000000000001,
+        "nearThresholdRate": 0.025,
+        "latencyMs": 234.03230000000076
+      },
+      {
+        "caseId": "context-selection-046",
+        "category": "one_relevant_branch",
+        "necessaryRecoveredCount": 2,
+        "necessaryCount": 2,
+        "usefulSelectedCount": 2,
+        "distractingSelectedCount": 0,
+        "necessaryRecall": 1,
+        "usefulPrecision": 1,
+        "distractingRate": 0,
+        "selectedCount": 2,
+        "averageScore": 0.059249999999999955,
+        "nearThresholdRate": 0.025,
+        "latencyMs": 367.10669999999845
+      },
+      {
+        "caseId": "context-selection-047",
+        "category": "simultaneous_conversations",
+        "necessaryRecoveredCount": 2,
+        "necessaryCount": 2,
+        "usefulSelectedCount": 2,
+        "distractingSelectedCount": 0,
+        "necessaryRecall": 1,
+        "usefulPrecision": 0.6666666666666666,
+        "distractingRate": 0,
+        "selectedCount": 3,
+        "averageScore": 0.08574999999999997,
+        "nearThresholdRate": 0,
+        "latencyMs": 169.35140000000138
+      },
+      {
+        "caseId": "context-selection-048",
+        "category": "topic_switch",
+        "necessaryRecoveredCount": 0,
+        "necessaryCount": 1,
+        "usefulSelectedCount": 0,
+        "distractingSelectedCount": 0,
+        "necessaryRecall": 0,
+        "usefulPrecision": null,
+        "distractingRate": 0,
+        "selectedCount": 0,
+        "averageScore": 0.02250000000000001,
+        "nearThresholdRate": 0,
+        "latencyMs": 155.05040000000008
+      },
+      {
+        "caseId": "context-selection-049",
+        "category": "pronoun_reference",
+        "necessaryRecoveredCount": 1,
+        "necessaryCount": 2,
+        "usefulSelectedCount": 1,
+        "distractingSelectedCount": 0,
+        "necessaryRecall": 0.5,
+        "usefulPrecision": 1,
+        "distractingRate": 0,
+        "selectedCount": 1,
+        "averageScore": 0.05725,
+        "nearThresholdRate": 0.05,
+        "latencyMs": 163.61399999999958
+      },
+      {
+        "caseId": "context-selection-050",
+        "category": "same_author_continuation",
+        "necessaryRecoveredCount": 3,
+        "necessaryCount": 3,
+        "usefulSelectedCount": 3,
+        "distractingSelectedCount": 0,
+        "necessaryRecall": 1,
+        "usefulPrecision": 1,
+        "distractingRate": 0,
+        "selectedCount": 3,
+        "averageScore": 0.09249999999999992,
+        "nearThresholdRate": 0,
+        "latencyMs": 180.01029999999992
+      },
+      {
+        "caseId": "context-selection-051",
+        "category": "paraphrased_reference",
+        "necessaryRecoveredCount": 1,
+        "necessaryCount": 1,
+        "usefulSelectedCount": 1,
+        "distractingSelectedCount": 0,
+        "necessaryRecall": 1,
+        "usefulPrecision": 1,
+        "distractingRate": 0,
+        "selectedCount": 1,
+        "averageScore": 0.04300000000000002,
+        "nearThresholdRate": 0,
+        "latencyMs": 177.4948999999997
+      },
+      {
+        "caseId": "context-selection-052",
+        "category": "scattered_context",
+        "necessaryRecoveredCount": 2,
+        "necessaryCount": 3,
+        "usefulSelectedCount": 2,
+        "distractingSelectedCount": 0,
+        "necessaryRecall": 0.6666666666666666,
+        "usefulPrecision": 0.6666666666666666,
+        "distractingRate": 0,
+        "selectedCount": 3,
+        "averageScore": 0.098,
+        "nearThresholdRate": 0.025,
+        "latencyMs": 197.8101999999999
+      },
+      {
+        "caseId": "context-selection-053",
+        "category": "irrelevant_high_similarity",
+        "necessaryRecoveredCount": 1,
+        "necessaryCount": 1,
+        "usefulSelectedCount": 1,
+        "distractingSelectedCount": 0,
+        "necessaryRecall": 1,
+        "usefulPrecision": 1,
+        "distractingRate": 0,
+        "selectedCount": 1,
+        "averageScore": 0.059999999999999984,
+        "nearThresholdRate": 0,
+        "latencyMs": 289.33670000000166
+      },
+      {
+        "caseId": "context-selection-054",
+        "category": "historical_context_not_recovered",
+        "necessaryRecoveredCount": 1,
+        "necessaryCount": 1,
+        "usefulSelectedCount": 1,
+        "distractingSelectedCount": 0,
+        "necessaryRecall": 1,
+        "usefulPrecision": 1,
+        "distractingRate": 0,
+        "selectedCount": 1,
+        "averageScore": 0.04800000000000002,
+        "nearThresholdRate": 0,
+        "latencyMs": 194.0005000000001
+      },
+      {
+        "caseId": "context-selection-055",
+        "category": "coreference_ambiguous",
+        "necessaryRecoveredCount": 1,
+        "necessaryCount": 2,
+        "usefulSelectedCount": 1,
+        "distractingSelectedCount": 0,
+        "necessaryRecall": 0.5,
+        "usefulPrecision": 1,
+        "distractingRate": 0,
+        "selectedCount": 1,
+        "averageScore": 0.05475000000000001,
+        "nearThresholdRate": 0,
+        "latencyMs": 176.23270000000048
+      },
+      {
+        "caseId": "context-selection-056",
+        "category": "semantic_paraphrase",
+        "necessaryRecoveredCount": 1,
+        "necessaryCount": 1,
+        "usefulSelectedCount": 1,
+        "distractingSelectedCount": 0,
+        "necessaryRecall": 1,
+        "usefulPrecision": 1,
+        "distractingRate": 0,
+        "selectedCount": 1,
+        "averageScore": 0.04725000000000002,
+        "nearThresholdRate": 0,
+        "latencyMs": 174.36210000000028
+      },
+      {
+        "caseId": "context-selection-057",
+        "category": "misleading_overlap_hard",
+        "necessaryRecoveredCount": 1,
+        "necessaryCount": 1,
+        "usefulSelectedCount": 1,
+        "distractingSelectedCount": 0,
+        "necessaryRecall": 1,
+        "usefulPrecision": 1,
+        "distractingRate": 0,
+        "selectedCount": 1,
+        "averageScore": 0.0745,
+        "nearThresholdRate": 0.025,
+        "latencyMs": 186.5728999999992
+      },
+      {
+        "caseId": "context-selection-058",
+        "category": "topic_resumption",
+        "necessaryRecoveredCount": 1,
+        "necessaryCount": 2,
+        "usefulSelectedCount": 1,
+        "distractingSelectedCount": 0,
+        "necessaryRecall": 0.5,
+        "usefulPrecision": 1,
+        "distractingRate": 0,
+        "selectedCount": 1,
+        "averageScore": 0.07,
+        "nearThresholdRate": 0.025,
+        "latencyMs": 175.6856000000007
+      },
+      {
+        "caseId": "context-selection-059",
+        "category": "speaker_sensitive",
+        "necessaryRecoveredCount": 1,
+        "necessaryCount": 1,
+        "usefulSelectedCount": 1,
+        "distractingSelectedCount": 0,
+        "necessaryRecall": 1,
+        "usefulPrecision": 1,
+        "distractingRate": 0,
+        "selectedCount": 1,
+        "averageScore": 0.05899999999999996,
+        "nearThresholdRate": 0.025,
+        "latencyMs": 144.992400000001
+      },
+      {
+        "caseId": "context-selection-060",
+        "category": "negative_historical_match",
+        "necessaryRecoveredCount": 1,
+        "necessaryCount": 1,
+        "usefulSelectedCount": 1,
+        "distractingSelectedCount": 0,
+        "necessaryRecall": 1,
+        "usefulPrecision": 1,
+        "distractingRate": 0,
+        "selectedCount": 1,
+        "averageScore": 0.04800000000000001,
+        "nearThresholdRate": 0,
+        "latencyMs": 188.55169999999998
+      },
+      {
+        "caseId": "context-selection-061",
+        "category": "trigger_only",
+        "necessaryRecoveredCount": 0,
+        "necessaryCount": 0,
+        "usefulSelectedCount": 0,
+        "distractingSelectedCount": 0,
+        "necessaryRecall": null,
+        "usefulPrecision": null,
+        "distractingRate": 0,
+        "selectedCount": 0,
+        "averageScore": 0.02000000000000001,
+        "nearThresholdRate": 0,
+        "latencyMs": 217.58770000000004
+      },
+      {
+        "caseId": "context-selection-062",
+        "category": "immediate_predecessor",
+        "necessaryRecoveredCount": 1,
+        "necessaryCount": 1,
+        "usefulSelectedCount": 1,
+        "distractingSelectedCount": 0,
+        "necessaryRecall": 1,
+        "usefulPrecision": 1,
+        "distractingRate": 0,
+        "selectedCount": 1,
+        "averageScore": 0.03750000000000001,
+        "nearThresholdRate": 0,
+        "latencyMs": 169.30220000000008
+      },
+      {
+        "caseId": "context-selection-063",
+        "category": "several_turns_back",
+        "necessaryRecoveredCount": 1,
+        "necessaryCount": 2,
+        "usefulSelectedCount": 1,
+        "distractingSelectedCount": 0,
+        "necessaryRecall": 0.5,
+        "usefulPrecision": 1,
+        "distractingRate": 0,
+        "selectedCount": 1,
+        "averageScore": 0.05924999999999999,
+        "nearThresholdRate": 0.025,
+        "latencyMs": 170.45270000000164
+      },
+      {
+        "caseId": "context-selection-064",
+        "category": "old_relevant_history",
+        "necessaryRecoveredCount": 0,
+        "necessaryCount": 1,
+        "usefulSelectedCount": 0,
+        "distractingSelectedCount": 0,
+        "necessaryRecall": 0,
+        "usefulPrecision": null,
+        "distractingRate": 0,
+        "selectedCount": 0,
+        "averageScore": 0.028000000000000014,
+        "nearThresholdRate": 0,
+        "latencyMs": 170.27590000000055
+      },
+      {
+        "caseId": "context-selection-065",
+        "category": "reply_ancestry",
+        "necessaryRecoveredCount": 1,
+        "necessaryCount": 2,
+        "usefulSelectedCount": 1,
+        "distractingSelectedCount": 0,
+        "necessaryRecall": 0.5,
+        "usefulPrecision": 1,
+        "distractingRate": 0,
+        "selectedCount": 1,
+        "averageScore": 0.06200000000000002,
+        "nearThresholdRate": 0.025,
+        "latencyMs": 200.44480000000112
+      },
+      {
+        "caseId": "context-selection-066",
+        "category": "one_relevant_branch",
+        "necessaryRecoveredCount": 2,
+        "necessaryCount": 2,
+        "usefulSelectedCount": 2,
+        "distractingSelectedCount": 0,
+        "necessaryRecall": 1,
+        "usefulPrecision": 1,
+        "distractingRate": 0,
+        "selectedCount": 2,
+        "averageScore": 0.06024999999999995,
+        "nearThresholdRate": 0.025,
+        "latencyMs": 188.48500000000058
+      },
+      {
+        "caseId": "context-selection-067",
+        "category": "simultaneous_conversations",
+        "necessaryRecoveredCount": 2,
+        "necessaryCount": 2,
+        "usefulSelectedCount": 2,
+        "distractingSelectedCount": 0,
+        "necessaryRecall": 1,
+        "usefulPrecision": 0.6666666666666666,
+        "distractingRate": 0,
+        "selectedCount": 3,
+        "averageScore": 0.08499999999999999,
+        "nearThresholdRate": 0,
+        "latencyMs": 203.7550999999985
+      },
+      {
+        "caseId": "context-selection-068",
+        "category": "topic_switch",
+        "necessaryRecoveredCount": 0,
+        "necessaryCount": 1,
+        "usefulSelectedCount": 0,
+        "distractingSelectedCount": 0,
+        "necessaryRecall": 0,
+        "usefulPrecision": null,
+        "distractingRate": 0,
+        "selectedCount": 0,
+        "averageScore": 0.02300000000000001,
+        "nearThresholdRate": 0,
+        "latencyMs": 311.9456000000009
+      },
+      {
+        "caseId": "context-selection-069",
+        "category": "pronoun_reference",
+        "necessaryRecoveredCount": 1,
+        "necessaryCount": 2,
+        "usefulSelectedCount": 1,
+        "distractingSelectedCount": 0,
+        "necessaryRecall": 0.5,
+        "usefulPrecision": 1,
+        "distractingRate": 0,
+        "selectedCount": 1,
+        "averageScore": 0.06325,
+        "nearThresholdRate": 0.025,
+        "latencyMs": 205.54639999999927
+      },
+      {
+        "caseId": "context-selection-070",
+        "category": "same_author_continuation",
+        "necessaryRecoveredCount": 3,
+        "necessaryCount": 3,
+        "usefulSelectedCount": 3,
+        "distractingSelectedCount": 0,
+        "necessaryRecall": 1,
+        "usefulPrecision": 1,
+        "distractingRate": 0,
+        "selectedCount": 3,
+        "averageScore": 0.09324999999999994,
+        "nearThresholdRate": 0,
+        "latencyMs": 197.9913000000015
+      },
+      {
+        "caseId": "context-selection-071",
+        "category": "paraphrased_reference",
+        "necessaryRecoveredCount": 1,
+        "necessaryCount": 1,
+        "usefulSelectedCount": 1,
+        "distractingSelectedCount": 0,
+        "necessaryRecall": 1,
+        "usefulPrecision": 1,
+        "distractingRate": 0,
+        "selectedCount": 1,
+        "averageScore": 0.04400000000000002,
+        "nearThresholdRate": 0,
+        "latencyMs": 204.48859999999877
+      },
+      {
+        "caseId": "context-selection-072",
+        "category": "scattered_context",
+        "necessaryRecoveredCount": 2,
+        "necessaryCount": 3,
+        "usefulSelectedCount": 2,
+        "distractingSelectedCount": 0,
+        "necessaryRecall": 0.6666666666666666,
+        "usefulPrecision": 0.6666666666666666,
+        "distractingRate": 0,
+        "selectedCount": 3,
+        "averageScore": 0.09724999999999999,
+        "nearThresholdRate": 0,
+        "latencyMs": 163.84859999999935
+      },
+      {
+        "caseId": "context-selection-073",
+        "category": "irrelevant_high_similarity",
+        "necessaryRecoveredCount": 1,
+        "necessaryCount": 1,
+        "usefulSelectedCount": 1,
+        "distractingSelectedCount": 0,
+        "necessaryRecall": 1,
+        "usefulPrecision": 1,
+        "distractingRate": 0,
+        "selectedCount": 1,
+        "averageScore": 0.061249999999999985,
+        "nearThresholdRate": 0,
+        "latencyMs": 174.6803
+      },
+      {
+        "caseId": "context-selection-074",
+        "category": "historical_context_not_recovered",
+        "necessaryRecoveredCount": 1,
+        "necessaryCount": 1,
+        "usefulSelectedCount": 1,
+        "distractingSelectedCount": 0,
+        "necessaryRecall": 1,
+        "usefulPrecision": 1,
+        "distractingRate": 0,
+        "selectedCount": 1,
+        "averageScore": 0.04625000000000001,
+        "nearThresholdRate": 0,
+        "latencyMs": 203.41179999999986
+      },
+      {
+        "caseId": "context-selection-075",
+        "category": "coreference_ambiguous",
+        "necessaryRecoveredCount": 1,
+        "necessaryCount": 2,
+        "usefulSelectedCount": 1,
+        "distractingSelectedCount": 0,
+        "necessaryRecall": 0.5,
+        "usefulPrecision": 1,
+        "distractingRate": 0,
+        "selectedCount": 1,
+        "averageScore": 0.053250000000000006,
+        "nearThresholdRate": 0,
+        "latencyMs": 171.3197
+      },
+      {
+        "caseId": "context-selection-076",
+        "category": "semantic_paraphrase",
+        "necessaryRecoveredCount": 1,
+        "necessaryCount": 1,
+        "usefulSelectedCount": 1,
+        "distractingSelectedCount": 0,
+        "necessaryRecall": 1,
+        "usefulPrecision": 1,
+        "distractingRate": 0,
+        "selectedCount": 1,
+        "averageScore": 0.04675000000000002,
+        "nearThresholdRate": 0,
+        "latencyMs": 204.95559999999932
+      },
+      {
+        "caseId": "context-selection-077",
+        "category": "misleading_overlap_hard",
+        "necessaryRecoveredCount": 1,
+        "necessaryCount": 1,
+        "usefulSelectedCount": 1,
+        "distractingSelectedCount": 0,
+        "necessaryRecall": 1,
+        "usefulPrecision": 1,
+        "distractingRate": 0,
+        "selectedCount": 1,
+        "averageScore": 0.07324999999999998,
+        "nearThresholdRate": 0,
+        "latencyMs": 177.16979999999967
+      },
+      {
+        "caseId": "context-selection-078",
+        "category": "topic_resumption",
+        "necessaryRecoveredCount": 1,
+        "necessaryCount": 2,
+        "usefulSelectedCount": 1,
+        "distractingSelectedCount": 0,
+        "necessaryRecall": 0.5,
+        "usefulPrecision": 1,
+        "distractingRate": 0,
+        "selectedCount": 1,
+        "averageScore": 0.06925,
+        "nearThresholdRate": 0.025,
+        "latencyMs": 193.45379999999932
+      },
+      {
+        "caseId": "context-selection-079",
+        "category": "speaker_sensitive",
+        "necessaryRecoveredCount": 1,
+        "necessaryCount": 1,
+        "usefulSelectedCount": 1,
+        "distractingSelectedCount": 0,
+        "necessaryRecall": 1,
+        "usefulPrecision": 1,
+        "distractingRate": 0,
+        "selectedCount": 1,
+        "averageScore": 0.05449999999999999,
+        "nearThresholdRate": 0,
+        "latencyMs": 148.9948000000004
+      },
+      {
+        "caseId": "context-selection-080",
+        "category": "negative_historical_match",
+        "necessaryRecoveredCount": 1,
+        "necessaryCount": 1,
+        "usefulSelectedCount": 1,
+        "distractingSelectedCount": 0,
+        "necessaryRecall": 1,
+        "usefulPrecision": 1,
+        "distractingRate": 0,
+        "selectedCount": 1,
+        "averageScore": 0.04725000000000001,
+        "nearThresholdRate": 0,
+        "latencyMs": 192.29520000000048
+      },
+      {
+        "caseId": "context-selection-081",
+        "category": "trigger_only",
+        "necessaryRecoveredCount": 0,
+        "necessaryCount": 0,
+        "usefulSelectedCount": 0,
+        "distractingSelectedCount": 0,
+        "necessaryRecall": null,
+        "usefulPrecision": null,
+        "distractingRate": 0,
+        "selectedCount": 0,
+        "averageScore": 0.01975000000000001,
+        "nearThresholdRate": 0,
+        "latencyMs": 187.25580000000082
+      },
+      {
+        "caseId": "context-selection-082",
+        "category": "immediate_predecessor",
+        "necessaryRecoveredCount": 1,
+        "necessaryCount": 1,
+        "usefulSelectedCount": 1,
+        "distractingSelectedCount": 0,
+        "necessaryRecall": 1,
+        "usefulPrecision": 1,
+        "distractingRate": 0,
+        "selectedCount": 1,
+        "averageScore": 0.03650000000000001,
+        "nearThresholdRate": 0,
+        "latencyMs": 194.01519999999982
+      },
+      {
+        "caseId": "context-selection-083",
+        "category": "several_turns_back",
+        "necessaryRecoveredCount": 2,
+        "necessaryCount": 2,
+        "usefulSelectedCount": 2,
+        "distractingSelectedCount": 0,
+        "necessaryRecall": 1,
+        "usefulPrecision": 1,
+        "distractingRate": 0,
+        "selectedCount": 2,
+        "averageScore": 0.05849999999999998,
+        "nearThresholdRate": 0.025,
+        "latencyMs": 148.38860000000022
+      },
+      {
+        "caseId": "context-selection-084",
+        "category": "old_relevant_history",
+        "necessaryRecoveredCount": 0,
+        "necessaryCount": 1,
+        "usefulSelectedCount": 0,
+        "distractingSelectedCount": 0,
+        "necessaryRecall": 0,
+        "usefulPrecision": null,
+        "distractingRate": 0,
+        "selectedCount": 0,
+        "averageScore": 0.027500000000000014,
+        "nearThresholdRate": 0,
+        "latencyMs": 204.70299999999952
+      },
+      {
+        "caseId": "context-selection-085",
+        "category": "reply_ancestry",
+        "necessaryRecoveredCount": 1,
+        "necessaryCount": 2,
+        "usefulSelectedCount": 1,
+        "distractingSelectedCount": 0,
+        "necessaryRecall": 0.5,
+        "usefulPrecision": 1,
+        "distractingRate": 0,
+        "selectedCount": 1,
+        "averageScore": 0.06075000000000001,
+        "nearThresholdRate": 0.025,
+        "latencyMs": 155.0096999999987
+      },
+      {
+        "caseId": "context-selection-086",
+        "category": "one_relevant_branch",
+        "necessaryRecoveredCount": 2,
+        "necessaryCount": 2,
+        "usefulSelectedCount": 2,
+        "distractingSelectedCount": 0,
+        "necessaryRecall": 1,
+        "usefulPrecision": 1,
+        "distractingRate": 0,
+        "selectedCount": 2,
+        "averageScore": 0.05874999999999998,
+        "nearThresholdRate": 0.025,
+        "latencyMs": 180.76319999999942
+      },
+      {
+        "caseId": "context-selection-087",
+        "category": "simultaneous_conversations",
+        "necessaryRecoveredCount": 2,
+        "necessaryCount": 2,
+        "usefulSelectedCount": 2,
+        "distractingSelectedCount": 0,
+        "necessaryRecall": 1,
+        "usefulPrecision": 0.6666666666666666,
+        "distractingRate": 0,
+        "selectedCount": 3,
+        "averageScore": 0.08249999999999999,
+        "nearThresholdRate": 0,
+        "latencyMs": 201.91670000000158
+      },
+      {
+        "caseId": "context-selection-088",
+        "category": "topic_switch",
+        "necessaryRecoveredCount": 0,
+        "necessaryCount": 1,
+        "usefulSelectedCount": 0,
+        "distractingSelectedCount": 0,
+        "necessaryRecall": 0,
+        "usefulPrecision": null,
+        "distractingRate": 0,
+        "selectedCount": 0,
+        "averageScore": 0.02350000000000001,
+        "nearThresholdRate": 0,
+        "latencyMs": 217.449099999998
+      },
+      {
+        "caseId": "context-selection-089",
+        "category": "pronoun_reference",
+        "necessaryRecoveredCount": 1,
+        "necessaryCount": 2,
+        "usefulSelectedCount": 1,
+        "distractingSelectedCount": 0,
+        "necessaryRecall": 0.5,
+        "usefulPrecision": 1,
+        "distractingRate": 0,
+        "selectedCount": 1,
+        "averageScore": 0.05825,
+        "nearThresholdRate": 0.05,
+        "latencyMs": 212.60989999999947
+      },
+      {
+        "caseId": "context-selection-090",
+        "category": "same_author_continuation",
+        "necessaryRecoveredCount": 3,
+        "necessaryCount": 3,
+        "usefulSelectedCount": 3,
+        "distractingSelectedCount": 0,
+        "necessaryRecall": 1,
+        "usefulPrecision": 1,
+        "distractingRate": 0,
+        "selectedCount": 3,
+        "averageScore": 0.09249999999999993,
+        "nearThresholdRate": 0,
+        "latencyMs": 195.92569999999978
+      },
+      {
+        "caseId": "context-selection-091",
+        "category": "paraphrased_reference",
+        "necessaryRecoveredCount": 1,
+        "necessaryCount": 1,
+        "usefulSelectedCount": 1,
+        "distractingSelectedCount": 0,
+        "necessaryRecall": 1,
+        "usefulPrecision": 1,
+        "distractingRate": 0,
+        "selectedCount": 1,
+        "averageScore": 0.04275000000000002,
+        "nearThresholdRate": 0,
+        "latencyMs": 177.09699999999793
+      },
+      {
+        "caseId": "context-selection-092",
+        "category": "scattered_context",
+        "necessaryRecoveredCount": 2,
+        "necessaryCount": 3,
+        "usefulSelectedCount": 2,
+        "distractingSelectedCount": 0,
+        "necessaryRecall": 0.6666666666666666,
+        "usefulPrecision": 0.6666666666666666,
+        "distractingRate": 0,
+        "selectedCount": 3,
+        "averageScore": 0.09849999999999999,
+        "nearThresholdRate": 0.025,
+        "latencyMs": 168.87419999999838
+      },
+      {
+        "caseId": "context-selection-093",
+        "category": "irrelevant_high_similarity",
+        "necessaryRecoveredCount": 1,
+        "necessaryCount": 1,
+        "usefulSelectedCount": 1,
+        "distractingSelectedCount": 0,
+        "necessaryRecall": 1,
+        "usefulPrecision": 1,
+        "distractingRate": 0,
+        "selectedCount": 1,
+        "averageScore": 0.062249999999999986,
+        "nearThresholdRate": 0,
+        "latencyMs": 205.78900000000067
+      },
+      {
+        "caseId": "context-selection-094",
+        "category": "historical_context_not_recovered",
+        "necessaryRecoveredCount": 1,
+        "necessaryCount": 1,
+        "usefulSelectedCount": 1,
+        "distractingSelectedCount": 0,
+        "necessaryRecall": 1,
+        "usefulPrecision": 1,
+        "distractingRate": 0,
+        "selectedCount": 1,
+        "averageScore": 0.051750000000000004,
+        "nearThresholdRate": 0,
+        "latencyMs": 156.4248000000007
+      },
+      {
+        "caseId": "context-selection-095",
+        "category": "coreference_ambiguous",
+        "necessaryRecoveredCount": 1,
+        "necessaryCount": 2,
+        "usefulSelectedCount": 1,
+        "distractingSelectedCount": 0,
+        "necessaryRecall": 0.5,
+        "usefulPrecision": 1,
+        "distractingRate": 0,
+        "selectedCount": 1,
+        "averageScore": 0.052250000000000005,
+        "nearThresholdRate": 0,
+        "latencyMs": 198.24499999999898
+      },
+      {
+        "caseId": "context-selection-096",
+        "category": "semantic_paraphrase",
+        "necessaryRecoveredCount": 1,
+        "necessaryCount": 1,
+        "usefulSelectedCount": 1,
+        "distractingSelectedCount": 0,
+        "necessaryRecall": 1,
+        "usefulPrecision": 1,
+        "distractingRate": 0,
+        "selectedCount": 1,
+        "averageScore": 0.04450000000000002,
+        "nearThresholdRate": 0,
+        "latencyMs": 162.54309999999896
+      },
+      {
+        "caseId": "context-selection-097",
+        "category": "misleading_overlap_hard",
+        "necessaryRecoveredCount": 1,
+        "necessaryCount": 1,
+        "usefulSelectedCount": 1,
+        "distractingSelectedCount": 0,
+        "necessaryRecall": 1,
+        "usefulPrecision": 1,
+        "distractingRate": 0,
+        "selectedCount": 1,
+        "averageScore": 0.073,
+        "nearThresholdRate": 0.025,
+        "latencyMs": 201.6804000000011
+      },
+      {
+        "caseId": "context-selection-098",
+        "category": "topic_resumption",
+        "necessaryRecoveredCount": 1,
+        "necessaryCount": 2,
+        "usefulSelectedCount": 1,
+        "distractingSelectedCount": 0,
+        "necessaryRecall": 0.5,
+        "usefulPrecision": 1,
+        "distractingRate": 0,
+        "selectedCount": 1,
+        "averageScore": 0.066,
+        "nearThresholdRate": 0,
+        "latencyMs": 198.3241999999991
+      },
+      {
+        "caseId": "context-selection-099",
+        "category": "speaker_sensitive",
+        "necessaryRecoveredCount": 1,
+        "necessaryCount": 1,
+        "usefulSelectedCount": 1,
+        "distractingSelectedCount": 0,
+        "necessaryRecall": 1,
+        "usefulPrecision": 1,
+        "distractingRate": 0,
+        "selectedCount": 1,
+        "averageScore": 0.053000000000000005,
+        "nearThresholdRate": 0,
+        "latencyMs": 206.08220000000074
+      },
+      {
+        "caseId": "context-selection-100",
+        "category": "negative_historical_match",
+        "necessaryRecoveredCount": 1,
+        "necessaryCount": 1,
+        "usefulSelectedCount": 1,
+        "distractingSelectedCount": 0,
+        "necessaryRecall": 1,
+        "usefulPrecision": 1,
+        "distractingRate": 0,
+        "selectedCount": 1,
+        "averageScore": 0.04775000000000001,
+        "nearThresholdRate": 0,
+        "latencyMs": 178.0629000000008
+      }
+    ]
+  },
+  "claimSupport": {
+    "name": "claim_support",
+    "summary": {
+      "completedCases": 8,
+      "failedCases": 0,
+      "accuracy": 0.875,
+      "averageScore": 0.52125,
+      "abstainRateAtHalf": 0.125,
+      "averageLatencyMs": 187.18182500000012
+    },
+    "metrics": [
+      {
+        "caseId": "claim-support-001",
+        "score": 0.96,
+        "predicted": true,
+        "expected": true,
+        "latencyMs": 148.63580000000002
+      },
+      {
+        "caseId": "claim-support-002",
+        "score": 0.02,
+        "predicted": false,
+        "expected": false,
+        "latencyMs": 182.9861000000019
+      },
+      {
+        "caseId": "claim-support-003",
+        "score": 0.83,
+        "predicted": true,
+        "expected": true,
+        "latencyMs": 165.60689999999886
+      },
+      {
+        "caseId": "claim-support-004",
+        "score": 0.02,
+        "predicted": false,
+        "expected": false,
+        "latencyMs": 186.0694999999978
+      },
+      {
+        "caseId": "claim-support-005",
+        "score": 0.96,
+        "predicted": true,
+        "expected": true,
+        "latencyMs": 159.08009999999922
+      },
+      {
+        "caseId": "claim-support-006",
+        "score": 0.5,
+        "predicted": true,
+        "expected": false,
+        "latencyMs": 201.53320000000167
+      },
+      {
+        "caseId": "claim-support-007",
+        "score": 0.85,
+        "predicted": true,
+        "expected": true,
+        "latencyMs": 187.22119999999995
+      },
+      {
+        "caseId": "claim-support-008",
+        "score": 0.03,
+        "predicted": false,
+        "expected": false,
+        "latencyMs": 266.32180000000153
+      }
+    ]
+  }
+}

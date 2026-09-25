@@ -1,0 +1,50 @@
+[
+    {
+        "id": "claim-support-001",
+        "claim": "The service accepts JSON arrays as state.",
+        "evidence": "The API reference lists string, object, or array as the accepted state shapes.",
+        "supported": true
+    },
+    {
+        "id": "claim-support-002",
+        "claim": "The service returns generated prose for every question.",
+        "evidence": "The introduction says Jev returns structured results directly and does not generate text.",
+        "supported": false
+    },
+    {
+        "id": "claim-support-003",
+        "claim": "Choice answers include a probability for every supplied option.",
+        "evidence": "The API reference defines Choice answers with a probabilities map covering the options.",
+        "supported": true
+    },
+    {
+        "id": "claim-support-004",
+        "claim": "Noul answers return a free-form explanation field.",
+        "evidence": "The Noul response is a number from 0 to 1 representing the probability that the answer is yes.",
+        "supported": false
+    },
+    {
+        "id": "claim-support-005",
+        "claim": "Questions in one request are evaluated independently against the same state.",
+        "evidence": "The primitives guide says each question sees the same state, is evaluated independently, and returns a typed answer.",
+        "supported": true
+    },
+    {
+        "id": "claim-support-006",
+        "claim": "The model should perform arithmetic instead of application code.",
+        "evidence": "The model limitations recommend keeping arithmetic in code.",
+        "supported": false
+    },
+    {
+        "id": "claim-support-007",
+        "claim": "The JavaScript SDK exposes a per-call cancellation signal.",
+        "evidence": "The RequestOptions reference documents an AbortSignal for the request and pending retries.",
+        "supported": true
+    },
+    {
+        "id": "claim-support-008",
+        "claim": "The model's confidence is a universal policy threshold.",
+        "evidence": "The confidence guide says threshold values depend on the domain and the consequences of errors.",
+        "supported": false
+    }
+]

@@ -1,0 +1,89 @@
+{
+    "source": "PR #739 artifacts/context-selection-717/results.json",
+    "benchmark": {
+        "issue": 717,
+        "generatedAt": "2026-09-22T21:55:59.335Z",
+        "corpus": "synthetic_structurally_faithful",
+        "caseCount": 100,
+        "messageCount": 4000,
+        "contextWindowSize": 24,
+        "tokenEstimate": "ceil(utf8_characters / 4)",
+        "categoryCounts": {
+            "trigger_only": 5,
+            "immediate_predecessor": 5,
+            "several_turns_back": 5,
+            "old_relevant_history": 5,
+            "reply_ancestry": 5,
+            "one_relevant_branch": 5,
+            "simultaneous_conversations": 5,
+            "topic_switch": 5,
+            "pronoun_reference": 5,
+            "same_author_continuation": 5,
+            "paraphrased_reference": 5,
+            "scattered_context": 5,
+            "irrelevant_high_similarity": 5,
+            "historical_context_not_recovered": 5,
+            "coreference_ambiguous": 5,
+            "semantic_paraphrase": 5,
+            "misleading_overlap_hard": 5,
+            "topic_resumption": 5,
+            "speaker_sensitive": 5,
+            "negative_historical_match": 5
+        },
+        "fixtureProvenance": "synthetic_structurally_faithful_discord_shapes; no private transcripts",
+        "limitations": [
+            "All fixtures are synthetic; no private production transcript is committed.",
+            "The hash embedding is a dependency-free lexical feature proxy, not a neural embedding model.",
+            "No cross-encoder is configured in the current Footnote checkout.",
+            "OpenJEV is not configured or invoked by this benchmark harness; the harness records it as unavailable.",
+            "The hardened categories are synthetic approximations of observed Discord shapes, not private transcript excerpts.",
+            "Latency is local JavaScript harness time, not Discord or provider end-to-end latency."
+        ]
+    },
+    "methods": [
+        {
+            "method": "current_window",
+            "completedCases": 100,
+            "unavailableCases": 0,
+            "necessaryMessageRecall": 0.5,
+            "necessaryMessageRecall95Ci": [
+                0.4209887046908502, 0.5790112953091499
+            ],
+            "usefulContextPrecision": 0.035416666666666666,
+            "usefulContextPrecision95Ci": [
+                0.0287330626265993, 0.04358517997307948
+            ],
+            "distractingContextRate": 0.022916666666666665,
+            "averageFinalMessageCount": 24,
+            "averageEstimatedInputTokens": 442.4,
+            "averageCandidateCount": 40,
+            "averageRetrievalDepth": 24,
+            "historicalDistanceRecovery": 0,
+            "averageBranchExpansionCount": 0,
+            "p50LatencyMs": 0.0006999999999948159,
+            "p95LatencyMs": 0.0049999999999954525
+        },
+        {
+            "method": "bm25_graph_expansion",
+            "completedCases": 100,
+            "unavailableCases": 0,
+            "necessaryMessageRecall": 0.9666666666666667,
+            "necessaryMessageRecall95Ci": [
+                0.9243471574929044, 0.9856797793044249
+            ],
+            "usefulContextPrecision": 0.11627906976744186,
+            "usefulContextPrecision95Ci": [
+                0.10105163107349258, 0.1334604608518626
+            ],
+            "distractingContextRate": 0.025336134453781512,
+            "averageFinalMessageCount": 15.05,
+            "averageEstimatedInputTokens": 275.95,
+            "averageCandidateCount": 40,
+            "averageRetrievalDepth": 40,
+            "historicalDistanceRecovery": 0.9285714285714286,
+            "averageBranchExpansionCount": 3.05,
+            "p50LatencyMs": 0.0852000000000146,
+            "p95LatencyMs": 0.10599999999999454
+        }
+    ]
+}
