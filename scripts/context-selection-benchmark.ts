@@ -26,6 +26,7 @@ export type ContextSelectionMethod =
     | 'bm25_graph_semantic_prune'
     | 'semantic_structural_closure'
     | 'semantic_plus_bm25_top3'
+    | 'hosted_jev'
     | 'openjev';
 
 export type BenchmarkMessage = {
@@ -1151,6 +1152,18 @@ export const selectContext = (
                 reason: 'This benchmark-only hybrid is only run by its explicit offline or replay adapter.',
             };
             break;
+        case 'hosted_jev':
+            result = {
+                method,
+                status: 'unavailable',
+                messageIds: [],
+                candidateCount: entry.messages.length,
+                retrievalDepth: 0,
+                branchExpansions: 0,
+                latencyMs: null,
+                reason: 'Hosted Jev is invoked only by the direct OpenRouter benchmark adapter.',
+            };
+            break;
         case 'openjev':
             result = {
                 method,
@@ -1212,6 +1225,7 @@ export const selectContextAtBudget = (
         case 'bm25_graph_semantic_prune':
         case 'semantic_structural_closure':
         case 'semantic_plus_bm25_top3':
+        case 'hosted_jev':
         case 'openjev':
             result = selectContext(method, entry);
             break;

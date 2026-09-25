@@ -1,5 +1,5 @@
 /**
- * @description: Runs the frozen #717 baseline beside an optional hosted TypeSafe Jev judgment.
+ * @description: Runs the frozen #717 context workload through OpenRouter Jev.
  * @footnote-scope: test
  * @footnote-module: DirectJevBenchmark
  * @footnote-risk: medium - Results can influence later judgment architecture decisions.
@@ -14,44 +14,49 @@ import {
     buildBenchmarkCorpus,
     buildCaseMetric,
     selectContext,
+    type AggregateMetric,
     type ContextBenchmarkCase,
+    type SelectionResult,
 } from './context-selection-benchmark.js';
 import {
     createReplayFetch,
-    JEV_LATEST_ALIAS,
+    decisions,
+    JEV_MODEL,
     JevRequestError,
-    systemOne,
+    type DecisionsResponse,
     type JsonValue,
-    type SystemOneResponse,
 } from './direct-jev-adapter.js';
 
 type HostedCase = {
     caseId: string;
     category: ContextBenchmarkCase['category'];
-    selectedCount: number;
-    necessaryRecall: number;
-    usefulPrecision: number;
-    distractingRate: number;
+    selectedMessageIds: string[];
+    probabilities: Record<string, number>;
     latencyMs: number;
     inputTokens: number;
     outputTokens: number;
+    costUsd: number | null;
+    requestId: string | null;
+    provider: string | null;
     model: string;
 };
 
 type HostedReport = {
-    status: 'completed' | 'blocked' | 'error';
+    status: 'completed' | 'partial' | 'blocked' | 'error';
     requestedModel: string;
     threshold: number;
+    thresholdStatus: 'exploratory';
+    callsAttempted: number;
+    callsCompleted: number;
     casesCompleted: number;
     casesAttempted: number;
-    metrics: {
-        necessaryRecall: number | null;
-        usefulPrecision: number | null;
-        distractingRate: number | null;
-        averageSelectedCount: number | null;
-        p95LatencyMs: number | null;
+    providers: string[];
+    servedModels: string[];
+    metrics: Omit<AggregateMetric, 'method' | 'unavailableCases'> & {
         inputTokens: number;
         outputTokens: number;
+        costUsd: number | null;
+        averageLatencyMs: number | null;
     };
     errors: Array<{ caseId?: string; kind: string; message: string }>;
     cases: HostedCase[];
@@ -62,13 +67,17 @@ type ClaimEvidenceReport = {
     status: 'hosted' | 'replay_only' | 'blocked';
     answerProbability: number | null;
     model: string | null;
+    provider: string | null;
+    requestId: string | null;
     inputTokens: number | null;
     outputTokens: number | null;
+    costUsd: number | null;
+    latencyMs: number | null;
     note: string;
 };
 
 type BenchmarkOutput = {
-    benchmark: 'direct_typesafe_jev_741';
+    benchmark: 'direct_openrouter_jev_741';
     corpus: {
         issue: 717;
         caseCount: number;
@@ -76,21 +85,19 @@ type BenchmarkOutput = {
     };
     integration: {
         endpoint: string;
-        sdkReference: string;
-        alias: string;
-        modelPinning: string;
+        model: string;
+        requestResponse: string;
         threshold: string;
+        cancellation: string;
     };
-    baseline: ReturnType<typeof aggregateMetrics>;
+    baseline: ReturnType<typeof aggregateMetrics>[];
     hostedJev: HostedReport;
     claimEvidence: ClaimEvidenceReport;
     limitations: string[];
 };
 
 const fixturePath = path.join('scripts', 'fixtures', 'claim-evidence.json');
-const claimFixture = JSON.parse(
-    fs.readFileSync(fixturePath, 'utf8')
-) as {
+const claimFixture = JSON.parse(fs.readFileSync(fixturePath, 'utf8')) as {
     state: Record<string, JsonValue>;
     question: {
         type: 'noul';
@@ -114,51 +121,73 @@ const selectionState = (entry: ContextBenchmarkCase): JsonValue => ({
     })),
 });
 
-const p95 = (values: number[]): number | null => {
-    if (values.length === 0) return null;
-    const sorted = [...values].sort((left, right) => left - right);
-    return sorted[Math.min(sorted.length - 1, Math.ceil(sorted.length * 0.95) - 1)] ?? null;
-};
+const emptyMetrics = (): HostedReport['metrics'] => ({
+    completedCases: 0,
+    necessaryMessageRecall: null,
+    necessaryMessageRecall95Ci: null,
+    usefulContextPrecision: null,
+    usefulContextPrecision95Ci: null,
+    distractingContextRate: null,
+    averageFinalMessageCount: null,
+    averageEstimatedInputTokens: null,
+    averageCandidateCount: null,
+    averageRetrievalDepth: null,
+    historicalDistanceRecovery: null,
+    averageBranchExpansionCount: null,
+    p50LatencyMs: null,
+    p95LatencyMs: null,
+    inputTokens: 0,
+    outputTokens: 0,
+    costUsd: null,
+    averageLatencyMs: null,
+});
 
-const average = (values: number[]): number | null =>
-    values.length === 0
-        ? null
-        : values.reduce((total, value) => total + value, 0) / values.length;
+const hostedStatus = (
+    errorCount: number,
+    completedCaseCount: number
+): HostedReport['status'] => {
+    if (errorCount === 0) return 'completed';
+    if (completedCaseCount === 0) return 'error';
+    return 'partial';
+};
 
 const runHosted = async (
     corpus: ContextBenchmarkCase[],
     apiKey: string | undefined,
-    model: string,
     threshold: number,
-    baseUrl: string | undefined,
     timeoutMs: number
 ): Promise<HostedReport> => {
     if (!apiKey?.trim()) {
         return {
             status: 'blocked',
-            requestedModel: model,
+            requestedModel: JEV_MODEL,
             threshold,
+            thresholdStatus: 'exploratory',
+            callsAttempted: 0,
+            callsCompleted: 0,
             casesCompleted: 0,
             casesAttempted: 0,
-            metrics: {
-                necessaryRecall: null,
-                usefulPrecision: null,
-                distractingRate: null,
-                averageSelectedCount: null,
-                p95LatencyMs: null,
-                inputTokens: 0,
-                outputTokens: 0,
-            },
+            providers: [],
+            servedModels: [],
+            metrics: emptyMetrics(),
             errors: [],
             cases: [],
-            reason: 'TYPESAFE_API_KEY is absent; hosted Jev was not invoked.',
+            reason: 'OPENROUTER_API_KEY is absent; hosted Jev was not invoked.',
         };
     }
 
     const cases: HostedCase[] = [];
+    const caseMetrics = [];
     const errors: HostedReport['errors'] = [];
+    const providers = new Set<string>();
+    const servedModels = new Set<string>();
     let inputTokens = 0;
     let outputTokens = 0;
+    let costUsd = 0;
+    let allCostsReported = true;
+    let latencyTotal = 0;
+    let callsAttempted = 0;
+    let callsCompleted = 0;
     for (const entry of corpus) {
         const questions = Object.fromEntries(
             entry.messages.map((message) => [
@@ -166,7 +195,8 @@ const runHosted = async (
                 {
                     type: 'noul' as const,
                     instructions: {
-                        question: 'Is this candidate useful for answering the trigger?',
+                        question:
+                            'Is this candidate useful for answering the trigger?',
                         candidateId: message.id,
                     },
                     criteria: {
@@ -177,65 +207,98 @@ const runHosted = async (
             ])
         );
         const started = performance.now();
+        callsAttempted += 1;
         try {
-            const response = await systemOne(
-                { state: selectionState(entry), questions, model },
-                { apiKey, baseUrl, timeoutMs }
+            const response = await decisions(
+                { state: selectionState(entry), questions, model: JEV_MODEL },
+                { apiKey, timeoutMs }
             );
-            const selectedIds = entry.messages
-                .filter(
-                    (message) =>
-                        (response.answers[candidateKey(message.id)]?.noul ?? 0) >=
-                        threshold
-                )
-                .map((message) => message.id);
-            const selected = new Set(selectedIds);
-            const necessary = entry.necessaryMessageIds;
-            const useful = entry.usefulMessageIds;
-            const distracting = entry.distractingMessageIds;
+            callsCompleted += 1;
+            const latencyMs = performance.now() - started;
+            const probabilities = Object.fromEntries(
+                entry.messages.map((message) => [
+                    message.id,
+                    response.answers[candidateKey(message.id)]?.noul ?? 0,
+                ])
+            );
+            const selectedMessageIds = Object.entries(probabilities)
+                .filter(([, probability]) => probability >= threshold)
+                .map(([id]) => id);
+            const selection: SelectionResult = {
+                method: 'hosted_jev',
+                status: 'completed',
+                messageIds: selectedMessageIds,
+                candidateCount: entry.messages.length,
+                retrievalDepth: entry.messages.length,
+                branchExpansions: 0,
+                latencyMs,
+            };
+            caseMetrics.push(buildCaseMetric(entry, selection));
             cases.push({
                 caseId: entry.id,
                 category: entry.category,
-                selectedCount: selected.size,
-                necessaryRecall:
-                    necessary.filter((id) => selected.has(id)).length /
-                    Math.max(1, necessary.length),
-                usefulPrecision:
-                    useful.filter((id) => selected.has(id)).length /
-                    Math.max(1, selected.size),
-                distractingRate:
-                    distracting.filter((id) => selected.has(id)).length /
-                    Math.max(1, selected.size),
-                latencyMs: performance.now() - started,
+                selectedMessageIds,
+                probabilities,
+                latencyMs,
                 inputTokens: response.usage.input_tokens,
                 outputTokens: response.usage.output_tokens,
+                costUsd: response.usage.cost ?? null,
+                requestId: response.id ?? null,
+                provider: response.provider ?? null,
                 model: response.model,
             });
             inputTokens += response.usage.input_tokens;
             outputTokens += response.usage.output_tokens;
+            latencyTotal += latencyMs;
+            if (response.usage.cost === undefined) allCostsReported = false;
+            else costUsd += response.usage.cost;
+            if (response.provider) providers.add(response.provider);
+            servedModels.add(response.model);
         } catch (error) {
             const jevError =
                 error instanceof JevRequestError
                     ? error
                     : new JevRequestError('network', 'Unexpected Jev error.');
-            errors.push({ caseId: entry.id, kind: jevError.kind, message: jevError.message });
+            errors.push({
+                caseId: entry.id,
+                kind: jevError.kind,
+                message: jevError.message,
+            });
             break;
         }
     }
+    const aggregate = aggregateMetrics('hosted_jev', caseMetrics);
     return {
-        status: errors.length > 0 && cases.length === 0 ? 'error' : 'completed',
-        requestedModel: model,
+        status: hostedStatus(errors.length, cases.length),
+        requestedModel: JEV_MODEL,
         threshold,
+        thresholdStatus: 'exploratory',
+        callsAttempted,
+        callsCompleted,
         casesCompleted: cases.length,
-        casesAttempted: cases.length + errors.length,
+        casesAttempted: callsAttempted,
+        providers: [...providers],
+        servedModels: [...servedModels],
         metrics: {
-            necessaryRecall: average(cases.map((item) => item.necessaryRecall)),
-            usefulPrecision: average(cases.map((item) => item.usefulPrecision)),
-            distractingRate: average(cases.map((item) => item.distractingRate)),
-            averageSelectedCount: average(cases.map((item) => item.selectedCount)),
-            p95LatencyMs: p95(cases.map((item) => item.latencyMs)),
+            completedCases: aggregate.completedCases,
+            necessaryMessageRecall: aggregate.necessaryMessageRecall,
+            necessaryMessageRecall95Ci: aggregate.necessaryMessageRecall95Ci,
+            usefulContextPrecision: aggregate.usefulContextPrecision,
+            usefulContextPrecision95Ci: aggregate.usefulContextPrecision95Ci,
+            distractingContextRate: aggregate.distractingContextRate,
+            averageFinalMessageCount: aggregate.averageFinalMessageCount,
+            averageEstimatedInputTokens: aggregate.averageEstimatedInputTokens,
+            averageCandidateCount: aggregate.averageCandidateCount,
+            averageRetrievalDepth: aggregate.averageRetrievalDepth,
+            historicalDistanceRecovery: aggregate.historicalDistanceRecovery,
+            averageBranchExpansionCount: aggregate.averageBranchExpansionCount,
+            p50LatencyMs: aggregate.p50LatencyMs,
+            p95LatencyMs: aggregate.p95LatencyMs,
             inputTokens,
             outputTokens,
+            costUsd: allCostsReported ? costUsd : null,
+            averageLatencyMs:
+                cases.length === 0 ? null : latencyTotal / cases.length,
         },
         errors,
         cases,
@@ -244,47 +307,58 @@ const runHosted = async (
 
 const runClaimEvidence = async (
     apiKey: string | undefined,
-    model: string,
-    baseUrl: string | undefined,
     timeoutMs: number
 ): Promise<ClaimEvidenceReport> => {
-    const replay: SystemOneResponse = {
+    const replay: DecisionsResponse = {
         model: 'replay:claim-evidence',
         answers: { support: { type: 'noul', noul: 0.82 } },
-        usage: { input_tokens: 0, output_tokens: 0 },
+        usage: { input_tokens: 0, output_tokens: 0, cost: 0 },
     };
     if (!apiKey?.trim()) {
-        const response = await systemOne(
+        const response = await decisions(
             {
                 state: claimFixture.state,
                 questions: { support: claimFixture.question },
             },
-            { apiKey: 'replay-only', model, fetch: createReplayFetch(replay) }
+            {
+                apiKey: 'replay-only',
+                model: JEV_MODEL,
+                fetch: createReplayFetch(replay),
+            }
         );
         return {
             status: 'replay_only',
             answerProbability: response.answers.support?.noul ?? null,
             model: response.model,
+            provider: null,
+            requestId: null,
             inputTokens: response.usage.input_tokens,
             outputTokens: response.usage.output_tokens,
+            costUsd: response.usage.cost ?? null,
+            latencyMs: 0,
             note: 'Deterministic adapter replay only; no hosted claim/evidence result.',
         };
     }
+    const started = performance.now();
     try {
-        const response = await systemOne(
+        const response = await decisions(
             {
                 state: claimFixture.state,
                 questions: { support: claimFixture.question },
-                model,
+                model: JEV_MODEL,
             },
-            { apiKey, baseUrl, timeoutMs }
+            { apiKey, timeoutMs }
         );
         return {
             status: 'hosted',
             answerProbability: response.answers.support?.noul ?? null,
             model: response.model,
+            provider: response.provider ?? null,
+            requestId: response.id ?? null,
             inputTokens: response.usage.input_tokens,
             outputTokens: response.usage.output_tokens,
+            costUsd: response.usage.cost ?? null,
+            latencyMs: performance.now() - started,
             note: 'One hosted claim/evidence judgment; advisory only.',
         };
     } catch (error) {
@@ -292,8 +366,12 @@ const runClaimEvidence = async (
             status: 'blocked',
             answerProbability: null,
             model: null,
+            provider: null,
+            requestId: null,
             inputTokens: null,
             outputTokens: null,
+            costUsd: null,
+            latencyMs: performance.now() - started,
             note:
                 error instanceof JevRequestError
                     ? `${error.kind}: ${error.message}`
@@ -304,55 +382,59 @@ const runClaimEvidence = async (
 
 export const buildReport = async (): Promise<BenchmarkOutput> => {
     const corpus = buildBenchmarkCorpus();
-    const baseline = aggregateMetrics(
-        'bm25_graph_expansion',
-        corpus.map((entry) =>
-            buildCaseMetric(entry, selectContext('bm25_graph_expansion', entry))
+    const baseline = (
+        ['current_window', 'bm25_graph_expansion', 'openjev'] as const
+    ).map((method) =>
+        aggregateMetrics(
+            method,
+            corpus.map((entry) =>
+                buildCaseMetric(entry, selectContext(method, entry))
+            )
         )
     );
-    const model = process.env.TYPESAFE_JEV_MODEL?.trim() || JEV_LATEST_ALIAS;
-    const threshold = Number(process.env.TYPESAFE_JEV_THRESHOLD ?? '0.5');
-    const timeoutMs = Number(process.env.TYPESAFE_JEV_TIMEOUT_MS ?? '10000');
-    const apiKey = process.env.TYPESAFE_API_KEY;
+    const threshold = Number(process.env.OPENROUTER_JEV_THRESHOLD ?? '0.5');
+    if (!Number.isFinite(threshold) || threshold < 0 || threshold > 1) {
+        throw new Error('OPENROUTER_JEV_THRESHOLD must be between 0 and 1.');
+    }
+    const timeoutMs = Number(process.env.OPENROUTER_JEV_TIMEOUT_MS ?? '10000');
     return {
-        benchmark: 'direct_typesafe_jev_741',
+        benchmark: 'direct_openrouter_jev_741',
         corpus: {
             issue: 717,
             caseCount: corpus.length,
             provenance: 'Frozen synthetic #717 corpus; no private transcripts.',
         },
         integration: {
-            endpoint: 'POST https://api.typesafe.ai/v1/systemone',
-            sdkReference: '@typesafe-ai/sdk (official reference; direct fetch used here)',
-            alias: JEV_LATEST_ALIAS,
-            modelPinning:
-                'Use TYPESAFE_JEV_MODEL after GET /v1/models; jev-latest moves, while the response model is recorded.',
-            threshold: `Exploratory noul threshold ${threshold}; not policy confidence.`,
+            endpoint: 'POST https://openrouter.ai/api/alpha/decisions',
+            model: JEV_MODEL,
+            requestResponse:
+                'state + named noul questions; typed answer probabilities, provider/model/id, input/output tokens, and USD usage cost.',
+            threshold: `Exploratory noul threshold ${threshold}; not policy confidence and not split-tuned.`,
+            cancellation:
+                'Client AbortSignal and timeout abort the HTTP request. OpenRouter documentation does not specify Decisions API billing/refund or provider cancellation behavior after abort.',
         },
         baseline,
         hostedJev: await runHosted(
             corpus,
-            apiKey,
-            model,
+            process.env.OPENROUTER_API_KEY,
             threshold,
-            process.env.TYPESAFE_BASE_URL,
             timeoutMs
         ),
         claimEvidence: await runClaimEvidence(
-            apiKey,
-            model,
-            process.env.TYPESAFE_BASE_URL,
+            process.env.OPENROUTER_API_KEY,
             timeoutMs
         ),
         limitations: [
-            'Hosted Jev is a typed relevance judgment, not a generic generative selector.',
-            'The corpus is synthetic and the deterministic baseline is replayable evidence, not production traffic.',
-            'No production runtime seam, routing, provenance, policy, or workflow behavior changes are made.',
+            'Jev probabilities are an advisory relevance signal and do not authorize or route production behavior.',
+            'The frozen generic selector (openjev) remains unavailable in #717; only deterministic current-window and BM25 plus graph expansion are directly comparable here.',
+            'The corpus is synthetic and not production traffic; the exploratory threshold was fixed before evaluation and was not tuned on a split.',
+            'No production runtime seam, routing, provenance, policy, workflow, or JudgmentRuntime behavior changes are made.',
         ],
     };
 };
 
 if (process.argv[1]?.endsWith('direct-jev-benchmark.ts')) {
-    const report = await buildReport();
-    console.log(JSON.stringify(report, null, 2));
+    void buildReport().then((report) => {
+        console.log(JSON.stringify(report, null, 2));
+    });
 }
