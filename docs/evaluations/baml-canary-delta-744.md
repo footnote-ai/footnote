@@ -66,9 +66,9 @@ No live provider call was made.
 The current toolchain supplies the missing agent-facing commands and can run a
 real BAML test once the fixture is migrated. That is useful evidence about the
 paved road. It also adds migration work before an older Footnote BAML fixture
-can use that road. The port does not show fewer correction rounds, better
-handoff behavior, or lower human review cost because no fresh Codex task passes
-were available in this isolated checkout.
+can use that road. The fresh task observations below show source navigation and
+early feedback, but do not show fewer correction rounds, better handoff
+behavior, or lower human review cost.
 
 The pinned #744 result remains valid for `@boundaryml/baml@0.226.2`: it found
 local prompt/type navigation and concrete checks, but did not establish a
@@ -83,9 +83,9 @@ confirms that result.
   blocked by the pnpm mismatch and a Windows `EPERM` opening the prewarmed
   Prettier file.
 - Codex lists a saved Footnote project at
-  `C:\Users\Jordan\Desktop\footnote`, not this isolated clone. Creating app
-  tasks there would target the wrong checkout, so no fresh Codex task timings
-  are claimed.
+  `C:\Users\Jordan\Desktop\footnote`, not this isolated clone. The fresh task
+  threads therefore used explicit isolated copies; no reliable token or timing
+  telemetry is claimed.
 - Generated code is an operational observation, not a primary maintainability
   score. It was generated locally and is not part of a production migration.
 
@@ -120,7 +120,7 @@ handoff had no installed skill, and no native control task was rerun.
 
 Keep #744's mixed agent-supervision result and keep production unchanged. The
 current Canary workflow is materially more agent-oriented than the pinned
-toolchain, but the evidence is incomplete until three fresh task passes and a
-handoff run against this current fixture are performed. A selective BAML
+toolchain, but the evidence is still incomplete until the drift task has a
+clean rerun and a comparable native control is available. A selective BAML
 boundary for ordinary typed functions remains plausible; this report does not
 justify default adoption or a production migration.
