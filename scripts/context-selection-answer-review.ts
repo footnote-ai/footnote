@@ -450,6 +450,7 @@ type CliArguments = {
     currentReplay: string;
     graphReplay: string;
     hostedReplay: string;
+    hostedMethod: 'hosted_zero_shot' | 'hosted_jev';
     hybridReplay?: string;
     outputDirectory: string;
     limit: number;
@@ -474,6 +475,7 @@ const readArguments = (args: readonly string[]): CliArguments => {
             root,
             '.footnote-dev/context-selection-717-replay/hosted-frozen-balanced-20260924/replay.jsonl'
         ),
+        hostedMethod: 'hosted_zero_shot',
         outputDirectory: path.join(
             root,
             '.footnote-dev/context-selection-717-replay/blinded-review-20260924'
@@ -483,30 +485,43 @@ const readArguments = (args: readonly string[]): CliArguments => {
     for (let index = 0; index < args.length; index += 1) {
         const argument = args[index];
         const value = args[index + 1];
-        if (argument === '--current-replay' && value !== undefined) {
-            values.currentReplay = path.resolve(value);
-            index += 1;
-        } else if (argument === '--graph-replay' && value !== undefined) {
-            values.graphReplay = path.resolve(value);
-            index += 1;
-        } else if (argument === '--hosted-replay' && value !== undefined) {
-            values.hostedReplay = path.resolve(value);
-            index += 1;
-        } else if (argument === '--hybrid-replay' && value !== undefined) {
-            values.hybridReplay = path.resolve(value);
-            index += 1;
-        } else if (argument === '--output-dir' && value !== undefined) {
-            values.outputDirectory = path.resolve(value);
-            index += 1;
-        } else if (argument === '--limit' && value !== undefined) {
-            values.limit = Number(value);
-            index += 1;
-        } else if (argument === '--case-id' && value !== undefined) {
-            values.caseId = value;
-            index += 1;
-        } else {
+        if (value === undefined) {
             throw new Error(`Unknown or incomplete argument: ${argument}`);
         }
+        switch (argument) {
+            case '--current-replay':
+                values.currentReplay = path.resolve(value);
+                break;
+            case '--graph-replay':
+                values.graphReplay = path.resolve(value);
+                break;
+            case '--hosted-replay':
+                values.hostedReplay = path.resolve(value);
+                break;
+            case '--hosted-method':
+                if (value !== 'hosted_zero_shot' && value !== 'hosted_jev') {
+                    throw new Error(
+                        '--hosted-method must be hosted_zero_shot or hosted_jev.'
+                    );
+                }
+                values.hostedMethod = value;
+                break;
+            case '--hybrid-replay':
+                values.hybridReplay = path.resolve(value);
+                break;
+            case '--output-dir':
+                values.outputDirectory = path.resolve(value);
+                break;
+            case '--limit':
+                values.limit = Number(value);
+                break;
+            case '--case-id':
+                values.caseId = value;
+                break;
+            default:
+                throw new Error(`Unknown or incomplete argument: ${argument}`);
+        }
+        index += 1;
     }
     if (!Number.isSafeInteger(values.limit) || values.limit <= 0) {
         throw new Error('--limit must be a positive integer.');
@@ -554,18 +569,19 @@ const main = async (): Promise<void> => {
         (record) => record.selector.method === 'bm25_graph_expansion'
     );
     const hosted = readJsonLines(args.hostedReplay).filter(
-        (record) => record.selector.method === 'hosted_zero_shot'
+        (record) => record.selector.method === args.hostedMethod
     );
+    const hostedMethod = args.hostedMethod;
     const methods: Array<[string, ContextReplayRecord[]]> =
         args.hybridReplay === undefined
             ? [
                   ['current_window', current],
                   ['bm25_graph_expansion', graph],
-                  ['hosted_zero_shot', hosted],
+                  [hostedMethod, hosted],
               ]
             : [
                   ['bm25_graph_expansion', graph],
-                  ['hosted_zero_shot', hosted],
+                  [hostedMethod, hosted],
                   [
                       'semantic_plus_bm25_top3',
                       readJsonLines(args.hybridReplay).filter(

@@ -12,6 +12,7 @@ import { fileURLToPath } from 'node:url';
 import dotenv from 'dotenv';
 import {
     buildBenchmarkCorpus,
+    type ContextSelectionMethod,
     type SelectionResult,
 } from './context-selection-benchmark.js';
 import {
@@ -43,6 +44,10 @@ const readArguments = (args: readonly string[]) => {
         return index < 0 ? fallback : (args[index + 1] ?? fallback);
     };
     return {
+        method: value(
+            '--method',
+            'semantic_plus_bm25_top3'
+        ) as ContextSelectionMethod,
         selectionFile: path.resolve(
             value(
                 '--selection-file',
@@ -95,7 +100,7 @@ const main = async (): Promise<void> => {
     ];
     const frozen = new Map(
         readJsonLines(args.selectionFile)
-            .filter((record) => record.method === 'semantic_plus_bm25_top3')
+            .filter((record) => record.method === args.method)
             .map((record) => [record.caseId, record])
     );
     const records: ContextReplayRecord[] = [];
