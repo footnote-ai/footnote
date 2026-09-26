@@ -36,9 +36,8 @@ export const hashAuthenticatedPrincipal = (
 /**
  * Builds the administrator policy seam for the current account-only stage.
  *
- * OIDC admission proves identity, while this explicit policy grants temporary
- * administrator access to every admitted account session. Later account work
- * can replace this decision without changing the account identity shape.
+ * OIDC admission proves identity, while the session carries the separate
+ * administrator decision made during account sign-in.
  */
 export const createAdminAuthorizationService = ({
     accountAuthService,
@@ -48,6 +47,10 @@ export const createAdminAuthorizationService = ({
     authorizeAccountSession: (sessionId) => {
         const session = accountAuthService.getSession(sessionId);
         if (!session) {
+            return null;
+        }
+
+        if (!session.isAdministrator) {
             return null;
         }
 

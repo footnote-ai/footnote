@@ -236,6 +236,7 @@ export type {
     SupportedVerbosity,
 } from './providers.js';
 export { supportedReasoningEfforts } from './providers.js';
+export { buildExternalIdentityKey } from './identity.js';
 export {
     intersectModelCapabilityFacts,
     modelCapabilitySupportStates,

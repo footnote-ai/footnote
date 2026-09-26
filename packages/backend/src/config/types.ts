@@ -64,6 +64,7 @@ export type RuntimeConfig = {
               clientSecret: string;
               redirectUri: string;
               secureCookies: boolean;
+              administratorIdentityKeys: string[];
           };
     openai: {
         apiKey: string | null;

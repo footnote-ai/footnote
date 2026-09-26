@@ -18,6 +18,11 @@ export const OIDC_KEYS = [
     'OIDC_REDIRECT_URI',
 ] as const;
 
+export const MANAGED_OIDC_KEYS = [
+    ...OIDC_KEYS,
+    'OIDC_ADMIN_IDENTITIES',
+] as const;
+
 export const AUTH_SECRET_NAMES = [
     'AUTHELIA_SESSION_SECRET',
     'AUTHELIA_STORAGE_ENCRYPTION_KEY',

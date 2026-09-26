@@ -74,12 +74,34 @@ class FakeRunner implements CommandRunner {
 
     async run(spec: CommandSpec): Promise<CommandResult> {
         this.calls.push(spec);
-        return this.responses.shift() ?? { code: 0, stdout: '', stderr: '' };
+        return this.responseFor(spec);
     }
 
     async runInteractive(spec: CommandSpec): Promise<CommandResult> {
         this.calls.push(spec);
-        return this.responses.shift() ?? { code: 0, stdout: '', stderr: '' };
+        return this.responseFor(spec);
+    }
+
+    private responseFor(spec: CommandSpec): CommandResult {
+        const response = this.responses.shift() ?? {
+            code: 0,
+            stdout: '',
+            stderr: '',
+        };
+        if (
+            response.stdout === 'BINDING_OUTPUT' &&
+            spec.command === 'fly' &&
+            spec.args[0] === 'ssh'
+        ) {
+            const subject = spec.args
+                .at(-1)
+                ?.match(/--identifier ([^\s]+)/)?.[1];
+            return {
+                ...response,
+                stdout: `Added User Opaque Identifier:\n\tService: openid\n\tSector: \n\tUsername: admin\n\tIdentifier: ${subject}\n`,
+            };
+        }
+        return response;
     }
 }
 
@@ -88,6 +110,23 @@ const promptFrom = (answers: string[]): Prompt => ({
         return answers.shift() ?? '';
     },
 });
+
+const freshProvisionResponses = (bindingOutput: string): CommandResult[] => [
+    { code: 1, stdout: '', stderr: 'not found' },
+    { code: 0, stdout: 'NAME\n', stderr: '' },
+    { code: 0, stdout: 'Digest: $argon2id$password-hash\n', stderr: '' },
+    {
+        code: 0,
+        stdout: 'Random Password: client-secret-value\nDigest: $argon2id$client-hash\n',
+        stderr: '',
+    },
+    { code: 0, stdout: '', stderr: '' },
+    { code: 0, stdout: '', stderr: '' },
+    { code: 0, stdout: '', stderr: '' },
+    { code: 0, stdout: '', stderr: '' },
+    { code: 0, stdout: '', stderr: '' },
+    { code: 0, stdout: bindingOutput, stderr: '' },
+];
 
 test('derives Fly defaults from server.toml and renders provider-neutral OIDC settings', () => {
     assert.deepEqual(
@@ -346,22 +385,7 @@ test('does not save existing-profile state before Fly resources exist', async ()
 test('provisions, validates, probes, and stores only sanitized state', async () => {
     const root = await createTempRoot();
     const serverConfigPath = await writeServerConfig(root);
-    const runner = new FakeRunner([
-        { code: 1, stdout: '', stderr: 'not found' },
-        { code: 0, stdout: 'NAME\n', stderr: '' },
-        { code: 0, stdout: 'Digest: $argon2id$password-hash\n', stderr: '' },
-        {
-            code: 0,
-            stdout: 'Random Password: client-secret-value\nDigest: $argon2id$client-hash\n',
-            stderr: '',
-        },
-        { code: 0, stdout: '', stderr: '' },
-        { code: 0, stdout: '', stderr: '' },
-        { code: 0, stdout: '', stderr: '' },
-        { code: 0, stdout: '', stderr: '' },
-        { code: 0, stdout: '', stderr: '' },
-        { code: 0, stdout: '', stderr: '' },
-    ]);
+    const runner = new FakeRunner(freshProvisionResponses('BINDING_OUTPUT'));
     await provisionAuthelia({
         mode: 'authelia',
         repositoryRoot: root,
@@ -433,6 +457,30 @@ test('provisions, validates, probes, and stores only sanitized state', async () 
     assert.ok(
         secretImport?.stdin?.includes('OIDC_CLIENT_SECRET=client-secret-value')
     );
+    const bindingCommand = runner.calls.find(
+        (call) =>
+            call.command === 'fly' &&
+            call.args[0] === 'ssh' &&
+            call.args.includes('console')
+    );
+    const bindingCommandText = bindingCommand?.args.at(-1) ?? '';
+    const administratorSubject = bindingCommandText.match(
+        /--identifier ([^\s]+)/
+    )?.[1];
+    assert.match(
+        bindingCommandText,
+        /authelia storage user identifiers add admin --identifier [^\s]+ --service openid --config \/config\/configuration\.yml --sqlite\.path \/data\/authelia\.sqlite3/
+    );
+    assert.match(
+        administratorSubject ?? '',
+        /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
+    );
+    assert.equal(
+        secretImport?.stdin?.includes(
+            `OIDC_ADMIN_IDENTITIES=https://footnote-auth.fly.dev|${administratorSubject}`
+        ),
+        true
+    );
     assert.equal(
         runner.calls.some((call) => call.args.includes('client-secret-value')),
         false
@@ -440,6 +488,40 @@ test('provisions, validates, probes, and stores only sanitized state', async () 
     assert.equal(
         runner.calls.some((call) => call.args.includes(AUTHELIA_IMAGE)),
         true
+    );
+
+    const migrationRunner = new FakeRunner([
+        {
+            code: 0,
+            stdout: 'Name: footnote-auth',
+            stderr: '',
+        },
+        {
+            code: 0,
+            stdout: 'NAME\nAUTHELIA_SESSION_SECRET\nAUTHELIA_STORAGE_ENCRYPTION_KEY\nAUTHELIA_IDENTITY_VALIDATION_RESET_PASSWORD_JWT_SECRET\nAUTHELIA_IDENTITY_PROVIDERS_OIDC_HMAC_SECRET\nAUTHELIA_IDENTITY_PROVIDERS_OIDC_ISSUER_PRIVATE_KEY\nAUTHELIA_OIDC_CLIENT_SECRET\n',
+            stderr: '',
+        },
+        {
+            code: 0,
+            stdout: 'NAME\nOIDC_ISSUER_URL\nOIDC_CLIENT_ID\nOIDC_CLIENT_SECRET\nOIDC_REDIRECT_URI\n',
+            stderr: '',
+        },
+    ]);
+    await assert.rejects(
+        provisionAuthelia({
+            mode: 'authelia',
+            repositoryRoot: root,
+            serverConfigPath,
+            prompt: promptFrom(['']),
+            runner: migrationRunner,
+            fetcher: async () => ({
+                status: 200,
+                json: async () => ({
+                    issuer: 'https://footnote-auth.fly.dev',
+                }),
+            }),
+        }),
+        /OIDC_ADMIN_IDENTITIES/
     );
 
     const rerunRunner = new FakeRunner([
@@ -455,7 +537,7 @@ test('provisions, validates, probes, and stores only sanitized state', async () 
         },
         {
             code: 0,
-            stdout: 'NAME\nOIDC_ISSUER_URL\nOIDC_CLIENT_ID\nOIDC_CLIENT_SECRET\nOIDC_REDIRECT_URI\n',
+            stdout: 'NAME\nOIDC_ISSUER_URL\nOIDC_CLIENT_ID\nOIDC_CLIENT_SECRET\nOIDC_REDIRECT_URI\nOIDC_ADMIN_IDENTITIES\n',
             stderr: '',
         },
         { code: 0, stdout: '', stderr: '' },
@@ -473,6 +555,47 @@ test('provisions, validates, probes, and stores only sanitized state', async () 
     });
     assert.equal(
         rerunRunner.calls.some((call) => call.command === 'docker'),
+        false
+    );
+});
+
+test('does not install the administrator allowlist when Authelia binding is not confirmed', async () => {
+    const root = await createTempRoot();
+    const serverConfigPath = await writeServerConfig(root);
+    const runner = new FakeRunner(
+        freshProvisionResponses(
+            'Added User Opaque Identifier:\n\tService: openid\n\tSector: \n\tUsername: admin\n\tIdentifier: 00000000-0000-4000-8000-000000000000\n'
+        )
+    );
+
+    await assert.rejects(
+        provisionAuthelia({
+            mode: 'authelia',
+            repositoryRoot: root,
+            serverConfigPath,
+            prompt: promptFrom([
+                '',
+                'admin',
+                'Administrator',
+                'admin@example.com',
+            ]),
+            runner,
+            fetcher: async () => ({
+                status: 200,
+                json: async () => ({ issuer: 'https://footnote-auth.fly.dev' }),
+            }),
+        }),
+        /did not confirm the expected administrator OpenID identifier/
+    );
+    assert.equal(
+        runner.calls.some(
+            (call) =>
+                call.command === 'fly' &&
+                call.args.includes('secrets') &&
+                call.args.includes('import') &&
+                call.args.includes('--app') &&
+                call.args[call.args.indexOf('--app') + 1] === 'footnote'
+        ),
         false
     );
 });

@@ -58,9 +58,10 @@ It does not add:
 - Anonymous requests are denied when account sign-in is configured.
 - Setup-session auth requires `x-setup-csrf` for non-GET calls.
 - Account-session auth requires `x-auth-csrf` for non-GET calls.
-- The temporary administrator policy is explicit and separate from the account
-  identity model: every identity admitted by the configured provider is
-  currently eligible for administrator access.
+- Administrator access is explicit and separate from the account identity
+  model. OIDC sessions receive administrator access only when their normalized
+  `issuer|subject` pair appears in `OIDC_ADMIN_IDENTITIES`; other admitted
+  identities remain regular users.
 
 This keeps backend startup fail-open while leaving the admin API disabled by
 default unless explicitly configured.

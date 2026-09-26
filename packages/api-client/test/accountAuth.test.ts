@@ -25,6 +25,7 @@ test('getAuthSession requests a no-store validated session response', async () =
             subject: 'account-123',
             displayName: 'Example Operator',
         },
+        isAdministrator: true,
         expiresAt: '2026-07-23T12:00:00.000Z',
         csrfToken: 'csrf-token',
     };

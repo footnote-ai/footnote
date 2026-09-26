@@ -21,6 +21,17 @@ import {
 } from '@footnote/contracts/providers';
 import type { EnvSpecEntry } from './types.js';
 
+const oidcBootstrapMetadata = {
+    owner: 'backend',
+    stage: 'bootstrap',
+    section: 'account-auth',
+    required: false,
+    secret: false,
+    kind: 'string',
+    defaultValue: noDefault(),
+    usedBy: ['packages/backend/src/config.ts'],
+} as const;
+
 // This file is the single source of truth for environment metadata.
 // Each env variable is declared once below, and every exported view is derived
 // from that one declaration.
@@ -478,6 +489,16 @@ export const envEntries = [
             'Absolute Footnote callback URI for OpenID Connect account sign-in.',
         defaultValue: noDefault(),
         usedBy: ['packages/backend/src/config.ts'],
+    }),
+
+    defineEnv({
+        ...oidcBootstrapMetadata,
+        key: 'OIDC_ADMIN_IDENTITIES',
+        description:
+            'Comma-separated issuer|subject pairs authorized for administrator access.',
+        notes: [
+            'OIDC admission remains provider-owned; this Footnote setting grants the separate administrator capability.',
+        ],
     }),
 
     defineEnv({
@@ -3232,6 +3253,7 @@ const BOOTSTRAP_ENV_ALLOWLIST = new Set<string>([
     'OIDC_ISSUER_URL',
     'OIDC_CLIENT_ID',
     'OIDC_REDIRECT_URI',
+    'OIDC_ADMIN_IDENTITIES',
     'PROMPT_CONFIG_PATH',
     'TRACE_API_TOKEN_FILE',
     'BOT_GENERATE_PROFILE_ID',

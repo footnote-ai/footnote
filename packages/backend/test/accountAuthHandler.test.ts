@@ -15,6 +15,7 @@ import {
     createAccountAuthHandlers,
 } from '../src/handlers/accountAuth.js';
 import { createAccountAuthService } from '../src/services/accountAuth.js';
+import { createInMemoryAccountStore } from '../src/storage/accounts/sqliteAccountStore.js';
 import type { OidcAccountClient } from '../src/services/oidcClient.js';
 
 const provider: OidcAccountClient = {
@@ -36,7 +37,11 @@ const startServer = async (
 ): Promise<{ baseUrl: string; stop: () => Promise<void> }> => {
     let tokenIndex = 0;
     const service = createAccountAuthService({
+        accountStore: createInMemoryAccountStore(),
         provider: enabled ? provider : null,
+        administratorIdentityKeys: new Set([
+            'https://identity.example/|subject-1',
+        ]),
         randomToken: () => `opaque-token-${++tokenIndex}`,
     });
     const handlers = createAccountAuthHandlers({
@@ -154,9 +159,11 @@ test('login callback session and CSRF logout complete one local flow', async (t)
     });
     const sessionPayload = (await sessionResponse.json()) as {
         authenticated: boolean;
+        isAdministrator: boolean;
         csrfToken: string;
     };
     assert.equal(sessionPayload.authenticated, true);
+    assert.equal(sessionPayload.isAdministrator, true);
     assert.ok(sessionPayload.csrfToken.length > 0);
 
     const rejectedLogout = await fetch(`${server.baseUrl}/api/auth/logout`, {

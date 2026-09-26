@@ -7,12 +7,13 @@
  */
 
 import path from 'node:path';
+import { randomUUID } from 'node:crypto';
 import { logger } from '../../packages/discord-bot/src/utils/logger.js';
 import {
     AUTH_SECRET_NAMES,
     AUTHELIA_IMAGE,
     AUTHELIA_VERSION,
-    OIDC_KEYS,
+    MANAGED_OIDC_KEYS,
 } from './constants.js';
 import {
     createSigningKey,
@@ -203,6 +204,7 @@ const applyFootnoteSecrets = async (input: {
     issuerUrl: string;
     redirectUri: string;
     clientSecret: string;
+    administratorIdentity: string;
 }): Promise<void> => {
     await commandOrThrow(input.runner, {
         command: 'fly',
@@ -212,9 +214,63 @@ const applyFootnoteSecrets = async (input: {
             'OIDC_CLIENT_ID=footnote',
             `OIDC_CLIENT_SECRET=${input.clientSecret}`,
             `OIDC_REDIRECT_URI=${input.redirectUri}`,
+            `OIDC_ADMIN_IDENTITIES=${input.administratorIdentity}`,
             '',
         ].join('\n'),
     });
+};
+
+const bindAdministratorIdentity = async (input: {
+    runner: CommandRunner;
+    authAppName: string;
+    username: string;
+    subject: string;
+}): Promise<void> => {
+    const result = await commandOrThrow(input.runner, {
+        command: 'fly',
+        args: [
+            'ssh',
+            'console',
+            '-a',
+            input.authAppName,
+            '-C',
+            [
+                'authelia',
+                'storage',
+                'user',
+                'identifiers',
+                'add',
+                input.username,
+                '--identifier',
+                input.subject,
+                '--service',
+                'openid',
+                '--config',
+                '/config/configuration.yml',
+                '--sqlite.path',
+                '/data/authelia.sqlite3',
+            ].join(' '),
+        ],
+    });
+    const outputValue = (label: string): string | undefined =>
+        result.stdout
+            .split(/\r?\n/)
+            .map((line) => line.trim())
+            .find((line) => line.startsWith(`${label}:`))
+            ?.slice(label.length + 1)
+            .trim();
+    const service = outputValue('Service');
+    const username = outputValue('Username');
+    const identifier = outputValue('Identifier');
+    if (
+        service !== 'openid' ||
+        username !== input.username ||
+        identifier !== input.subject
+    ) {
+        throw new Error(
+            'Authelia did not confirm the expected administrator OpenID identifier; Footnote administrator access was not configured.'
+        );
+    }
 };
 
 const provisionFreshProfile = async (input: {
@@ -233,6 +289,7 @@ const provisionFreshProfile = async (input: {
     username: string;
     displayName: string;
     email: string;
+    administratorSubject: string;
 }): Promise<void> => {
     const credentials = await generateCredentialMaterial({
         runner: input.runner,
@@ -279,6 +336,7 @@ const provisionFreshProfile = async (input: {
         username: input.username,
         displayName: input.displayName,
         email: input.email,
+        administratorSubject: input.administratorSubject,
         passwordHash: credentials.passwordHash,
         clientSecretHash: credentials.clientSecretHash,
         secretNames: [...AUTH_SECRET_NAMES],
@@ -318,12 +376,19 @@ const provisionFreshProfile = async (input: {
             args: ['deploy', '--config', input.manifestPath, '--yes'],
         });
         await probeAuthelia(input.fetcher, input.issuerUrl);
+        await bindAdministratorIdentity({
+            runner: input.runner,
+            authAppName: input.authAppName,
+            username: input.username,
+            subject: input.administratorSubject,
+        });
         await applyFootnoteSecrets({
             runner: input.runner,
             footnoteAppName: input.footnoteAppName,
             issuerUrl: input.issuerUrl,
             redirectUri: input.redirectUri,
             clientSecret: credentials.clientSecret,
+            administratorIdentity: `${input.issuerUrl}|${input.administratorSubject}`,
         });
     } catch (error) {
         logger.error(
@@ -347,7 +412,7 @@ const runProvisionAuthelia = async (
     const fetcher = overrides.fetcher ?? getFetcher();
     const serverToml = await readText(options.serverConfigPath);
     if (
-        OIDC_KEYS.some((key) =>
+        MANAGED_OIDC_KEYS.some((key) =>
             new RegExp(`^\\s*${key}\\s*=`, 'm').test(serverToml)
         )
     ) {
@@ -411,7 +476,7 @@ const runProvisionAuthelia = async (
     }
     await requireReplacementConfirmation(
         prompt,
-        OIDC_KEYS.filter((key) =>
+        MANAGED_OIDC_KEYS.filter((key) =>
             existingFootnoteSecretResult.names.includes(key)
         )
     );
@@ -424,6 +489,7 @@ const runProvisionAuthelia = async (
     ).trim();
     const email = (await prompt.text('Authelia administrator email: ')).trim();
     validateAdministrator(username, displayName, email);
+    const administratorSubject = randomUUID();
 
     const configurationPath = path.join(stateDirectory, 'configuration.yml');
     const usersPath = path.join(stateDirectory, 'users.yml');
@@ -444,6 +510,7 @@ const runProvisionAuthelia = async (
         username,
         displayName,
         email,
+        administratorSubject,
     });
     logger.info(`Authelia is ready at ${issuerUrl}.`);
     logger.info(`Inspect generated state at ${stateDirectory}.`);

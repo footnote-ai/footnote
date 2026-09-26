@@ -59,6 +59,7 @@ export type GetAuthSessionResponse =
           enabled: true;
           authenticated: true;
           principal: AuthenticatedPrincipal;
+          isAdministrator: boolean;
           expiresAt: string;
           csrfToken: string;
       };

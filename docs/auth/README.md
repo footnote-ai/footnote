@@ -1,12 +1,12 @@
 # Account Sign-In
 
-Footnote can use one OpenID Connect provider for administrator account sign-in
-and access.
+Footnote can use one OpenID Connect provider for account sign-in.
 Footnote supports the OIDC protocol, not a specific identity provider.
 Deployment tooling may support particular providers, but the runtime receives
 only the standard OIDC configuration values and does not know which provider
-was selected. OIDC proves who signed in. Footnote makes the separate
-administrator authorization decision.
+was selected. OIDC proves who signed in. Footnote maps that identity to a
+stable internal account and makes the separate administrator authorization
+decision.
 
 ## Runtime behavior
 
@@ -18,30 +18,36 @@ administrator authorization decision.
 - Signing out ends only the Footnote session. It does not sign the account out
   of the identity provider.
 - Provider tokens are validated during callback processing and are not retained.
-- During the administrator-only stage, every identity admitted by the configured
-  provider may use the selected administrator settings operations. This is a
-  temporary policy, not an administrator flag on the identity/session model.
+- A successful OIDC callback resolves or creates a Footnote account before the
+  local session is issued.
+- `OIDC_ADMIN_IDENTITIES` grants administrator access only to listed
+  `issuer|subject` pairs. Other admitted identities remain regular users.
+- The account store contains only internal account records and external
+  identity mappings. Email, display name, and broad provider claims are not
+  account ownership data.
 - When OIDC is disabled or unavailable, public Footnote keeps running.
 
 ## Configuration
 
-Set all four values in the backend process environment:
+Set the OIDC connection values in the backend process environment. Add the
+administrator allowlist when this instance has OIDC administrators:
 
 ```text
 OIDC_ISSUER_URL=https://identity.example/application/o/footnote/
 OIDC_CLIENT_ID=footnote
 OIDC_CLIENT_SECRET=<secret>
 OIDC_REDIRECT_URI=https://footnote.example/api/auth/callback
+OIDC_ADMIN_IDENTITIES=https://identity.example/application/o/footnote/|admin-subject
 ```
 
-`OIDC_CLIENT_SECRET` is secret. The other three values are non-secret bootstrap
+`OIDC_CLIENT_SECRET` is secret. The other four values are non-secret bootstrap
 environment values and intentionally do not belong in `footnote.yaml`.
 
 The issuer must use HTTPS. The redirect URI must use HTTPS except for local
 loopback development, where `http://localhost`, `http://127.0.0.1`, and
 `http://[::1]` are accepted. Its path must be exactly `/api/auth/callback`.
 
-Unset all four values to disable sign-in quietly. Partial or invalid
+Unset all OIDC values to disable sign-in quietly. Partial or invalid
 configuration disables sign-in and logs a warning containing key names only.
 
 ## Authentik test setup
@@ -54,17 +60,20 @@ Create an OAuth2/OpenID provider and application in Authentik:
 4. Add the exact `OIDC_REDIRECT_URI` as a strict redirect URI.
 5. Include `openid` and `profile` scope mappings.
 6. Require PKCE with S256.
-7. Assign the application only to the administrator allowed to test Footnote.
+7. Assign the application to the people admitted to Footnote.
 8. Copy the provider issuer, client ID, and client secret into the Footnote
    environment.
 
 Visit `/account` and choose **Sign in**. After callback validation, the page
 shows the local identity and expiry. **Sign out** clears only the local session.
+Leave `OIDC_ADMIN_IDENTITIES` empty to admit regular accounts without granting
+them administrator access.
 
 ## Authorization and recovery boundaries
 
-- Provider application assignment decides who may complete this first sign-in
-  flow.
+- Provider application assignment decides who may complete the sign-in flow.
+- The Footnote account store resolves the validated issuer-and-subject mapping
+  transactionally, so repeated first sign-ins cannot create duplicate accounts.
 - The backend, not the `/admin` page, authorizes account sessions for selected
   `/api/admin/*` settings operations.
 - Account-session writes require `x-auth-csrf`.
@@ -74,6 +83,8 @@ shows the local identity and expiry. **Sign out** clears only the local session.
 - Cookies contain only opaque random identifiers.
 - Identity and provider tokens are not persisted. Administrator audit events
   may contain only a deterministic hash of `issuer + subject`, not raw claims.
+- Future Footnote-owned data must reference the internal account ID, not the
+  OIDC issuer or subject.
 - The callback origin comes from `OIDC_REDIRECT_URI`, never the request `Host`.
 - Failed and replayed callbacks create no session and expose only a generic
   failure message.
@@ -115,8 +126,28 @@ password, signing key, HMAC secret, session secret, storage key, and client
 secret. If the provider app exists without local state, or managed secret keys
 are missing, the tool stops with recovery guidance instead of guessing. If
 remote Footnote OIDC keys already exist, only their names are shown and the
-operator must type `REPLACE` before all four are replaced together. Committed
+operator must type `REPLACE` before the OIDC values are replaced together. Committed
 OIDC keys in `server.toml` are an error and must be removed manually.
+
+The managed Footnote OIDC values include `OIDC_ADMIN_IDENTITIES`. On a fresh
+Authelia profile, provisioning generates a version-4 UUID, binds it to the
+intended administrator with the pinned Authelia storage CLI, verifies the
+binding, and writes `https://<footnote-app>-auth.fly.dev|<uuid>`. The UUID is
+the provider-managed OIDC subject; the operator does not enter a username or
+email as Footnote's identity key. The sanitized UUID is retained as stable
+recovery state, not as a promise that interrupted provisioning can resume
+automatically. A profile created before the administrator
+allowlist existed must be upgraded explicitly. Obtain existing subjects with
+the pinned provider's supported export command:
+
+```bash
+fly ssh console -a <footnote-app>-auth -C "authelia storage user identifiers export --file /tmp/identifiers.yml --config /config/configuration.yml --sqlite.path /data/authelia.sqlite3 && cat /tmp/identifiers.yml"
+```
+
+Use the exported OpenID identifier in the `issuer|sub` value before rerunning
+the provisioning command. The tool stops if the value is absent, so an existing
+administrator is not silently downgraded and no other admitted user is granted
+administrator access.
 
 Provisioning and health checks complete before Footnote authentication changes.
 Failures keep existing Footnote authentication unchanged, retain created

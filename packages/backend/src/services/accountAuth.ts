@@ -7,7 +7,12 @@
  */
 
 import { randomBytes } from 'node:crypto';
+import { buildExternalIdentityKey } from '@footnote/contracts';
 import type { AuthenticatedPrincipal } from '@footnote/contracts/web';
+import type {
+    AccountStore,
+    FootnoteAccount,
+} from '../storage/accounts/sqliteAccountStore.js';
 import type { OidcAccountClient } from './oidcClient.js';
 
 const DEFAULT_TRANSACTION_TTL_MS = 10 * 60 * 1_000;
@@ -24,6 +29,8 @@ type LoginTransaction = {
 
 export type AccountSession = {
     sessionId: string;
+    accountId: FootnoteAccount['id'];
+    isAdministrator: boolean;
     principal: AuthenticatedPrincipal;
     csrfToken: string;
     expiresAt: string;
@@ -52,6 +59,7 @@ export type CompleteAccountLoginResult =
               | 'disabled'
               | 'invalid_transaction'
               | 'provider_rejected'
+              | 'account_storage_unavailable'
               | 'session_capacity';
       };
 
@@ -68,6 +76,8 @@ export type AccountAuthService = {
 
 type CreateAccountAuthServiceDeps = {
     provider: OidcAccountClient | null;
+    accountStore: AccountStore | null;
+    administratorIdentityKeys?: ReadonlySet<string>;
     now?: () => number;
     randomToken?: (byteLength: number) => string;
     transactionTtlMs?: number;
@@ -83,6 +93,8 @@ type CreateAccountAuthServiceDeps = {
  */
 export const createAccountAuthService = ({
     provider,
+    accountStore,
+    administratorIdentityKeys,
     now = () => Date.now(),
     randomToken = (byteLength: number) =>
         randomBytes(byteLength).toString('base64url'),
@@ -96,6 +108,7 @@ export const createAccountAuthService = ({
         string,
         AccountSession & { expiresAtMs: number }
     >();
+    const administratorKeys = administratorIdentityKeys ?? new Set<string>();
 
     const pruneExpired = (): void => {
         const nowMs = now();
@@ -173,40 +186,62 @@ export const createAccountAuthService = ({
         }
         transactions.delete(transactionId);
 
+        let principal: AuthenticatedPrincipal;
         try {
-            const principal = await provider.exchangeCallback({
+            principal = await provider.exchangeCallback({
                 callbackQuery,
                 state: transaction.state,
                 nonce: transaction.nonce,
                 codeVerifier: transaction.codeVerifier,
             });
-            pruneExpired();
-            if (sessions.size >= maxSessions) {
-                return { ok: false, reason: 'session_capacity' };
-            }
-            const sessionId = randomToken(32);
-            const csrfToken = randomToken(32);
-            const expiresAtMs = now() + sessionTtlMs;
-            const session = {
-                sessionId,
-                principal,
-                csrfToken,
-                expiresAt: new Date(expiresAtMs).toISOString(),
-                expiresAtMs,
-            };
-            sessions.set(sessionId, session);
-            return {
-                ok: true,
-                session: {
-                    sessionId,
-                    principal,
-                    csrfToken,
-                    expiresAt: session.expiresAt,
-                },
-            };
         } catch {
             return { ok: false, reason: 'provider_rejected' };
         }
+
+        pruneExpired();
+        if (!accountStore) {
+            return { ok: false, reason: 'account_storage_unavailable' };
+        }
+        if (sessions.size >= maxSessions) {
+            return { ok: false, reason: 'session_capacity' };
+        }
+
+        let account: FootnoteAccount;
+        try {
+            account = accountStore.resolveOrCreateAccount({
+                issuer: principal.issuer,
+                subject: principal.subject,
+            });
+        } catch {
+            return { ok: false, reason: 'account_storage_unavailable' };
+        }
+
+        const sessionId = randomToken(32);
+        const csrfToken = randomToken(32);
+        const expiresAtMs = now() + sessionTtlMs;
+        const session = {
+            sessionId,
+            accountId: account.id,
+            isAdministrator: administratorKeys.has(
+                buildExternalIdentityKey(principal.issuer, principal.subject)
+            ),
+            principal,
+            csrfToken,
+            expiresAt: new Date(expiresAtMs).toISOString(),
+            expiresAtMs,
+        };
+        sessions.set(sessionId, session);
+        return {
+            ok: true,
+            session: {
+                sessionId,
+                accountId: session.accountId,
+                isAdministrator: session.isAdministrator,
+                principal,
+                csrfToken,
+                expiresAt: session.expiresAt,
+            },
+        };
     };
 
     const getSession = (sessionId: string): AccountSession | null => {
@@ -217,6 +252,8 @@ export const createAccountAuthService = ({
         }
         return {
             sessionId: session.sessionId,
+            accountId: session.accountId,
+            isAdministrator: session.isAdministrator,
             principal: session.principal,
             csrfToken: session.csrfToken,
             expiresAt: session.expiresAt,
