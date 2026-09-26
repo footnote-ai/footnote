@@ -7,6 +7,10 @@
  */
 
 import Database from 'better-sqlite3';
+import {
+    buildExternalIdentityKey,
+    canonicalizeIdentityIssuer,
+} from '@footnote/contracts';
 import fs from 'node:fs';
 import path from 'node:path';
 import { randomUUID } from 'node:crypto';
@@ -32,7 +36,7 @@ export const createInMemoryAccountStore = (): AccountStore => {
     const accounts = new Map<string, FootnoteAccount>();
     return {
         resolveOrCreateAccount: ({ issuer, subject }) => {
-            const key = `${issuer}|${subject}`;
+            const key = buildExternalIdentityKey(issuer, subject);
             const existing = accounts.get(key);
             if (existing) {
                 return existing;
@@ -117,12 +121,15 @@ export class SqliteAccountStore implements AccountStore {
         issuer,
         subject,
     }: ExternalIdentityKey): FootnoteAccount {
+        const canonicalIssuer = canonicalizeIdentityIssuer(issuer);
         const now = new Date().toISOString();
         const resolve = this.db.transaction((): FootnoteAccount => {
-            const existing = this.resolveStatement.get(issuer, subject) as
-                AccountRow | undefined;
+            const existing = this.resolveStatement.get(
+                canonicalIssuer,
+                subject
+            ) as AccountRow | undefined;
             if (existing) {
-                this.touchIdentityStatement.run(now, issuer, subject);
+                this.touchIdentityStatement.run(now, canonicalIssuer, subject);
                 return {
                     id: existing.account_id,
                     createdAt: existing.created_at,
@@ -141,7 +148,7 @@ export class SqliteAccountStore implements AccountStore {
                 account.updatedAt
             );
             this.insertIdentityStatement.run(
-                issuer,
+                canonicalIssuer,
                 subject,
                 account.id,
                 now,

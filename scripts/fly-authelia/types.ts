@@ -66,6 +66,7 @@ export type SafeState = {
     username: string;
     displayName: string;
     email: string;
+    administratorSubject?: string;
     passwordHash: string;
     clientSecretHash: string;
     secretNames: string[];

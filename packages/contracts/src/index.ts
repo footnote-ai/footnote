@@ -237,6 +237,10 @@ export type {
 } from './providers.js';
 export { supportedReasoningEfforts } from './providers.js';
 export {
+    buildExternalIdentityKey,
+    canonicalizeIdentityIssuer,
+} from './identity.js';
+export {
     intersectModelCapabilityFacts,
     modelCapabilitySupportStates,
     resolveModelProfileCapabilityFacts,

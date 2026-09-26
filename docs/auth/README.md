@@ -130,14 +130,22 @@ operator must type `REPLACE` before the OIDC values are replaced together. Commi
 OIDC keys in `server.toml` are an error and must be removed manually.
 
 The managed Footnote OIDC values include `OIDC_ADMIN_IDENTITIES`. On a fresh
-Authelia profile, provisioning asks for the intended administrator's exact OIDC
-`sub` claim and writes `https://<footnote-app>-auth.fly.dev|<sub>`. The subject
-is the stable OIDC identifier; do not enter the Authelia username or email. A
-profile created before the administrator allowlist existed must be upgraded
-explicitly by setting that value to the administrator's `issuer|sub` pair before
-rerunning the provisioning command. The tool stops if the value is absent, so
-an existing administrator is not silently downgraded and no other admitted user
-is granted administrator access.
+Authelia profile, provisioning generates a version-4 UUID, binds it to the
+intended administrator with the pinned Authelia storage CLI, verifies the
+binding, and writes `https://<footnote-app>-auth.fly.dev|<uuid>`. The UUID is
+the provider-managed OIDC subject; the operator does not enter a username or
+email as Footnote's identity key. A profile created before the administrator
+allowlist existed must be upgraded explicitly. Obtain existing subjects with
+the pinned provider's supported export command:
+
+```bash
+fly ssh console -a <footnote-app>-auth -C "authelia storage user identifiers export --file /tmp/identifiers.yml --config /config/configuration.yml --sqlite.path /data/authelia.sqlite3 && cat /tmp/identifiers.yml"
+```
+
+Use the exported OpenID identifier in the `issuer|sub` value before rerunning
+the provisioning command. The tool stops if the value is absent, so an existing
+administrator is not silently downgraded and no other admitted user is granted
+administrator access.
 
 Provisioning and health checks complete before Footnote authentication changes.
 Failures keep existing Footnote authentication unchanged, retain created

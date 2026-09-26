@@ -7,6 +7,7 @@
  */
 
 import { randomBytes } from 'node:crypto';
+import { buildExternalIdentityKey } from '@footnote/contracts';
 import type { AuthenticatedPrincipal } from '@footnote/contracts/web';
 import type {
     AccountStore,
@@ -222,7 +223,7 @@ export const createAccountAuthService = ({
             sessionId,
             accountId: account.id,
             isAdministrator: administratorKeys.has(
-                `${principal.issuer}|${principal.subject}`
+                buildExternalIdentityKey(principal.issuer, principal.subject)
             ),
             principal,
             csrfToken,

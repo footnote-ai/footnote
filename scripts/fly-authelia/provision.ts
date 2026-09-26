@@ -7,6 +7,7 @@
  */
 
 import path from 'node:path';
+import { randomUUID } from 'node:crypto';
 import { logger } from '../../packages/discord-bot/src/utils/logger.js';
 import {
     AUTH_SECRET_NAMES,
@@ -69,16 +70,6 @@ const validateAdministrator = (
             'Administrator display name and a valid email are required.'
         );
     }
-};
-
-const validateAdministratorSubject = (subject: string): string => {
-    const normalized = subject.trim();
-    if (!normalized || normalized.includes('|') || /\s/.test(normalized)) {
-        throw new Error(
-            'Footnote administrator OIDC subject must be the exact non-empty `sub` claim and must not contain whitespace or `|`. Do not use the Authelia username or email.'
-        );
-    }
-    return normalized;
 };
 
 const getFetcher = (): Fetcher => fetch as unknown as Fetcher;
@@ -229,6 +220,51 @@ const applyFootnoteSecrets = async (input: {
     });
 };
 
+const bindAdministratorIdentity = async (input: {
+    runner: CommandRunner;
+    authAppName: string;
+    username: string;
+    subject: string;
+}): Promise<void> => {
+    const result = await commandOrThrow(input.runner, {
+        command: 'fly',
+        args: [
+            'ssh',
+            'console',
+            '-a',
+            input.authAppName,
+            '-C',
+            [
+                'authelia',
+                'storage',
+                'user',
+                'identifiers',
+                'add',
+                input.username,
+                '--identifier',
+                input.subject,
+                '--service',
+                'openid',
+                '--config',
+                '/config/configuration.yml',
+                '--sqlite.path',
+                '/data/authelia.sqlite3',
+            ].join(' '),
+        ],
+    });
+    const binding = result.stdout.match(
+        /^\s*Service:\s*openid\s*$[\s\S]*?^\s*Username:\s*([^\r\n]+)\s*$[\s\S]*?^\s*Identifier:\s*([^\s\r\n]+)/m
+    );
+    if (
+        binding?.[1]?.trim() !== input.username ||
+        binding?.[2] !== input.subject
+    ) {
+        throw new Error(
+            'Authelia did not confirm the expected administrator OpenID identifier; Footnote administrator access was not configured.'
+        );
+    }
+};
+
 const provisionFreshProfile = async (input: {
     runner: CommandRunner;
     fetcher: Fetcher;
@@ -245,7 +281,7 @@ const provisionFreshProfile = async (input: {
     username: string;
     displayName: string;
     email: string;
-    administratorIdentity: string;
+    administratorSubject: string;
 }): Promise<void> => {
     const credentials = await generateCredentialMaterial({
         runner: input.runner,
@@ -292,6 +328,7 @@ const provisionFreshProfile = async (input: {
         username: input.username,
         displayName: input.displayName,
         email: input.email,
+        administratorSubject: input.administratorSubject,
         passwordHash: credentials.passwordHash,
         clientSecretHash: credentials.clientSecretHash,
         secretNames: [...AUTH_SECRET_NAMES],
@@ -331,13 +368,19 @@ const provisionFreshProfile = async (input: {
             args: ['deploy', '--config', input.manifestPath, '--yes'],
         });
         await probeAuthelia(input.fetcher, input.issuerUrl);
+        await bindAdministratorIdentity({
+            runner: input.runner,
+            authAppName: input.authAppName,
+            username: input.username,
+            subject: input.administratorSubject,
+        });
         await applyFootnoteSecrets({
             runner: input.runner,
             footnoteAppName: input.footnoteAppName,
             issuerUrl: input.issuerUrl,
             redirectUri: input.redirectUri,
             clientSecret: credentials.clientSecret,
-            administratorIdentity: input.administratorIdentity,
+            administratorIdentity: `${new URL(input.issuerUrl).href}|${input.administratorSubject}`,
         });
     } catch (error) {
         logger.error(
@@ -438,11 +481,7 @@ const runProvisionAuthelia = async (
     ).trim();
     const email = (await prompt.text('Authelia administrator email: ')).trim();
     validateAdministrator(username, displayName, email);
-    const administratorSubject = validateAdministratorSubject(
-        await prompt.text(
-            'Footnote administrator OIDC subject (`sub` claim, not username or email): '
-        )
-    );
+    const administratorSubject = randomUUID();
 
     const configurationPath = path.join(stateDirectory, 'configuration.yml');
     const usersPath = path.join(stateDirectory, 'users.yml');
@@ -463,7 +502,7 @@ const runProvisionAuthelia = async (
         username,
         displayName,
         email,
-        administratorIdentity: `${new URL(issuerUrl).href}|${administratorSubject}`,
+        administratorSubject,
     });
     logger.info(`Authelia is ready at ${issuerUrl}.`);
     logger.info(`Inspect generated state at ${stateDirectory}.`);

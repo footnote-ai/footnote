@@ -15,7 +15,7 @@ import Database from 'better-sqlite3';
 import { SqliteAccountStore } from '../src/storage/accounts/sqliteAccountStore.js';
 
 const identity = {
-    issuer: 'https://identity.example/application/o/footnote/',
+    issuer: 'https://identity.example/application/o/footnote',
     subject: 'subject-1',
 };
 
@@ -29,7 +29,10 @@ test('creates one stable account for a repeated external identity', () => {
     try {
         store = new SqliteAccountStore({ dbPath });
         const first = store.resolveOrCreateAccount(identity);
-        const repeated = store.resolveOrCreateAccount(identity);
+        const repeated = store.resolveOrCreateAccount({
+            ...identity,
+            issuer: `${identity.issuer}/`,
+        });
         const other = store.resolveOrCreateAccount({
             ...identity,
             subject: 'subject-2',

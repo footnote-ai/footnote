@@ -7,6 +7,7 @@
  */
 
 import { parseCsvEnv, parseOptionalTrimmedString } from '../parsers.js';
+import { buildExternalIdentityKey } from '@footnote/contracts';
 import type { RuntimeConfig, WarningSink } from '../types.js';
 
 const OIDC_KEYS = [
@@ -61,9 +62,6 @@ const parseRedirectUrl = (value: string): URL | null => {
     }
 };
 
-const buildIdentityKey = (issuer: string, subject: string): string =>
-    `${issuer}|${subject}`;
-
 const parseAdministratorIdentityKeys = (
     value: string | undefined,
     warn: WarningSink
@@ -84,7 +82,7 @@ const parseAdministratorIdentityKeys = (
             );
             return;
         }
-        keys.push(buildIdentityKey(issuer.href, subject));
+        keys.push(buildExternalIdentityKey(issuer.href, subject));
     });
 
     return [...new Set(keys)];
@@ -155,5 +153,3 @@ export const buildAccountAuthSection = (
         ),
     };
 };
-
-export { buildIdentityKey };

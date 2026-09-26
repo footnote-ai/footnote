@@ -192,7 +192,7 @@ export const ensureExistingProfile = async (input: {
     );
     if (missingFootnoteSecrets.length > 0) {
         throw new Error(
-            `Footnote is missing managed OIDC keys: ${missingFootnoteSecrets.join(', ')}. Restore them manually before rerunning; set OIDC_ADMIN_IDENTITIES to the exact issuer|sub pair for each administrator, and do not use a username or email. The client secret is not retained locally.`
+            `Footnote is missing managed OIDC keys: ${missingFootnoteSecrets.join(', ')}. Restore them manually before rerunning. For an existing Authelia profile, obtain the real OpenID subject with 'authelia storage user identifiers export' against the configured SQLite storage, then set OIDC_ADMIN_IDENTITIES to the exact issuer|sub pair; do not use a username or email. The client secret is not retained locally.`
         );
     }
     await commandOrThrow(input.runner, {

@@ -8,6 +8,7 @@
 
 import assert from 'node:assert/strict';
 import test from 'node:test';
+import { buildExternalIdentityKey } from '@footnote/contracts';
 import { createAccountAuthService } from '../src/services/accountAuth.js';
 import { createInMemoryAccountStore } from '../src/storage/accounts/sqliteAccountStore.js';
 import type {
@@ -26,6 +27,7 @@ const createProvider = (
         startError?: boolean | (() => boolean);
         callbackError?: boolean;
         callbackInputs?: OidcCallbackInput[];
+        callbackPrincipal?: typeof principal;
     } = {}
 ): OidcAccountClient => ({
     startAuthorization: async () => {
@@ -48,7 +50,7 @@ const createProvider = (
         if (options.callbackError) {
             throw new Error('invalid callback');
         }
-        return principal;
+        return options.callbackPrincipal ?? principal;
     },
 });
 
@@ -162,6 +164,79 @@ test('resolves regular accounts without granting administrator access', async ()
     if (completed.ok) {
         assert.equal(completed.session.isAdministrator, false);
     }
+});
+
+test('administrator lookup canonicalizes issuer URLs and preserves subject matching', async () => {
+    const complete = async (
+        configuredIdentity: string,
+        issuer: string,
+        subject: string
+    ): Promise<boolean> => {
+        const service = createAccountAuthService({
+            accountStore: createInMemoryAccountStore(),
+            provider: createProvider({
+                callbackPrincipal: {
+                    issuer,
+                    subject,
+                    displayName: 'Administrator',
+                },
+            }),
+            administratorIdentityKeys: new Set([
+                buildExternalIdentityKey(
+                    configuredIdentity.slice(
+                        0,
+                        configuredIdentity.lastIndexOf('|')
+                    ),
+                    configuredIdentity.slice(
+                        configuredIdentity.lastIndexOf('|') + 1
+                    )
+                ),
+            ]),
+        });
+        const started = await service.startLogin();
+        assert.equal(started.ok, true);
+        if (!started.ok) {
+            return false;
+        }
+        const completed = await service.completeLogin(
+            started.transactionId,
+            '?code=administrator'
+        );
+        return completed.ok && completed.session.isAdministrator;
+    };
+
+    assert.equal(
+        await complete(
+            'https://identity.example|subject-1',
+            'https://identity.example/',
+            'subject-1'
+        ),
+        true
+    );
+    assert.equal(
+        await complete(
+            'https://identity.example/|subject-1',
+            'https://identity.example',
+            'subject-1'
+        ),
+        true
+    );
+    assert.equal(
+        await complete(
+            'https://other.example/|subject-1',
+            'https://identity.example/',
+            'subject-1'
+        ),
+        false
+    );
+    assert.equal(
+        await complete(
+            'https://identity.example/|subject-1',
+            'https://identity.example/',
+            'subject-2'
+        ),
+        false
+    );
 });
 
 test('does not create a session when durable account storage is unavailable', async () => {

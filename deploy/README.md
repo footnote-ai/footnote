@@ -167,8 +167,9 @@ The Fly wrappers also offer an optional Authelia profile. Run
 `./deploy/fly/deploy.sh --auth-mode authelia` (or `-AuthMode authelia` in
 PowerShell) to provision it before applying the managed OIDC values. The default
 and `preserve` mode leave the current authentication configuration unchanged.
-Automatic Authelia provisioning asks for the intended administrator's exact OIDC
-`sub` claim and writes the matching `OIDC_ADMIN_IDENTITIES` entry. Existing
+Automatic Authelia provisioning generates a version-4 UUID, binds it to the
+intended administrator with Authelia's storage CLI, verifies that binding, and
+writes the matching `OIDC_ADMIN_IDENTITIES` entry. Existing
 profiles missing that setting stop with migration guidance instead of silently
 turning the administrator into a regular user.
 See [Account Sign-In](../docs/auth/README.md#authelia-on-fly-profile)

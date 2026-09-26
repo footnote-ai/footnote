@@ -13,8 +13,6 @@ import {
     AUTHELIA_IMAGE,
     AUTHELIA_IMAGE_DIGEST,
     AUTHELIA_VERSION,
-    MANAGED_OIDC_KEYS,
-    OIDC_KEYS,
 } from './fly-authelia/constants.js';
 import {
     parseServerDefaults,
@@ -28,12 +26,12 @@ export {
     AUTHELIA_IMAGE,
     AUTHELIA_IMAGE_DIGEST,
     AUTHELIA_VERSION,
-    MANAGED_OIDC_KEYS,
-    OIDC_KEYS,
     parseServerDefaults,
     provisionAuthelia,
     renderConfiguration,
 };
+
+export { MANAGED_OIDC_KEYS, OIDC_KEYS } from './fly-authelia/constants.js';
 
 export type { AuthMode, ProvisionOptions };
 
