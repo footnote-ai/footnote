@@ -327,6 +327,7 @@ test('does not save existing-profile state before Fly resources exist', async ()
                 'admin',
                 'Administrator',
                 'admin@example.com',
+                'admin-subject',
             ]),
             runner,
         }),
@@ -366,7 +367,13 @@ test('provisions, validates, probes, and stores only sanitized state', async () 
         mode: 'authelia',
         repositoryRoot: root,
         serverConfigPath,
-        prompt: promptFrom(['', 'admin', 'Administrator', 'admin@example.com']),
+        prompt: promptFrom([
+            '',
+            'admin',
+            'Administrator',
+            'admin@example.com',
+            'admin-subject',
+        ]),
         runner,
         fetcher: async () => ({
             status: 200,
@@ -434,12 +441,52 @@ test('provisions, validates, probes, and stores only sanitized state', async () 
         secretImport?.stdin?.includes('OIDC_CLIENT_SECRET=client-secret-value')
     );
     assert.equal(
+        secretImport?.stdin?.includes(
+            'OIDC_ADMIN_IDENTITIES=https://footnote-auth.fly.dev/|admin-subject'
+        ),
+        true
+    );
+    assert.equal(
         runner.calls.some((call) => call.args.includes('client-secret-value')),
         false
     );
     assert.equal(
         runner.calls.some((call) => call.args.includes(AUTHELIA_IMAGE)),
         true
+    );
+
+    const migrationRunner = new FakeRunner([
+        {
+            code: 0,
+            stdout: 'Name: footnote-auth',
+            stderr: '',
+        },
+        {
+            code: 0,
+            stdout: 'NAME\nAUTHELIA_SESSION_SECRET\nAUTHELIA_STORAGE_ENCRYPTION_KEY\nAUTHELIA_IDENTITY_VALIDATION_RESET_PASSWORD_JWT_SECRET\nAUTHELIA_IDENTITY_PROVIDERS_OIDC_HMAC_SECRET\nAUTHELIA_IDENTITY_PROVIDERS_OIDC_ISSUER_PRIVATE_KEY\nAUTHELIA_OIDC_CLIENT_SECRET\n',
+            stderr: '',
+        },
+        {
+            code: 0,
+            stdout: 'NAME\nOIDC_ISSUER_URL\nOIDC_CLIENT_ID\nOIDC_CLIENT_SECRET\nOIDC_REDIRECT_URI\n',
+            stderr: '',
+        },
+    ]);
+    await assert.rejects(
+        provisionAuthelia({
+            mode: 'authelia',
+            repositoryRoot: root,
+            serverConfigPath,
+            prompt: promptFrom(['']),
+            runner: migrationRunner,
+            fetcher: async () => ({
+                status: 200,
+                json: async () => ({
+                    issuer: 'https://footnote-auth.fly.dev',
+                }),
+            }),
+        }),
+        /OIDC_ADMIN_IDENTITIES/
     );
 
     const rerunRunner = new FakeRunner([
@@ -455,7 +502,7 @@ test('provisions, validates, probes, and stores only sanitized state', async () 
         },
         {
             code: 0,
-            stdout: 'NAME\nOIDC_ISSUER_URL\nOIDC_CLIENT_ID\nOIDC_CLIENT_SECRET\nOIDC_REDIRECT_URI\n',
+            stdout: 'NAME\nOIDC_ISSUER_URL\nOIDC_CLIENT_ID\nOIDC_CLIENT_SECRET\nOIDC_REDIRECT_URI\nOIDC_ADMIN_IDENTITIES\n',
             stderr: '',
         },
         { code: 0, stdout: '', stderr: '' },

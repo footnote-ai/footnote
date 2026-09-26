@@ -31,6 +31,7 @@ import {
     createAccountAuthService,
     type AccountAuthService,
 } from '../src/services/accountAuth.js';
+import { createInMemoryAccountStore } from '../src/storage/accounts/sqliteAccountStore.js';
 import type { OidcAccountClient } from '../src/services/oidcClient.js';
 import { ACCOUNT_SESSION_COOKIE_NAME } from '../src/http/authCookies.js';
 
@@ -85,7 +86,10 @@ const createAdminSettingsTestServer = async (options?: {
     });
     const accountAuthService =
         options?.accountAuthService ??
-        createAccountAuthService({ provider: null });
+        createAccountAuthService({
+            accountStore: createInMemoryAccountStore(),
+            provider: null,
+        });
     const events: Array<{
         message: string;
         meta?: Record<string, unknown>;
@@ -299,6 +303,7 @@ test('signed-in administrator sessions authorize settings reads and record a saf
         }),
     };
     const accountAuthService = createAccountAuthService({
+        accountStore: createInMemoryAccountStore(),
         provider,
         administratorIdentityKeys: ADMINISTRATOR_IDENTITY_KEYS,
         randomToken: (() => {
@@ -363,6 +368,7 @@ test('signed-in administrator writes require account CSRF while anonymous reques
         }),
     };
     const accountAuthService = createAccountAuthService({
+        accountStore: createInMemoryAccountStore(),
         provider,
         administratorIdentityKeys: ADMINISTRATOR_IDENTITY_KEYS,
     });
@@ -819,6 +825,7 @@ test('operator setup session can read and write existing settings until expiry',
         createSettingsFile: true,
         adminToken: null,
         accountAuthService: createAccountAuthService({
+            accountStore: createInMemoryAccountStore(),
             administratorIdentityKeys: ADMINISTRATOR_IDENTITY_KEYS,
             provider: {
                 startAuthorization: async () => ({

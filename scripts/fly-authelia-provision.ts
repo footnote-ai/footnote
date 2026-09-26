@@ -13,6 +13,7 @@ import {
     AUTHELIA_IMAGE,
     AUTHELIA_IMAGE_DIGEST,
     AUTHELIA_VERSION,
+    MANAGED_OIDC_KEYS,
     OIDC_KEYS,
 } from './fly-authelia/constants.js';
 import {
@@ -27,6 +28,7 @@ export {
     AUTHELIA_IMAGE,
     AUTHELIA_IMAGE_DIGEST,
     AUTHELIA_VERSION,
+    MANAGED_OIDC_KEYS,
     OIDC_KEYS,
     parseServerDefaults,
     provisionAuthelia,

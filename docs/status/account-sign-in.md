@@ -87,24 +87,25 @@ type AuthenticatedPrincipal = {
 `issuer + subject` is the stable identity. `displayName` is for presentation and
 uses `name`, then `preferred_username`, then `null`. Email is not an identifier.
 
-During the current administrator-only stage, every identity admitted by the
-configured provider is explicitly treated as an administrator by a separate
-authorization seam. The account identity and session shapes do not contain an
-administrator flag, so #521 can later authorize ordinary Footnote users
-without treating authentication as permission.
+Administrator access is now a separate authorization decision. An OIDC session
+is an administrator only when its normalized `issuer|subject` pair appears in
+`OIDC_ADMIN_IDENTITIES`; other identities admitted by the provider receive
+regular account sessions. The account store uses the internal Footnote account
+ID for future Footnote-owned data, while the issuer and subject remain only the
+external identity mapping.
 
 ### Configuration
 
-Add four optional environment variables:
+Add the following optional environment variables:
 
 - `OIDC_ISSUER_URL`
 - `OIDC_CLIENT_ID`
 - `OIDC_CLIENT_SECRET`
 - `OIDC_REDIRECT_URI`
+- `OIDC_ADMIN_IDENTITIES` (optional comma-separated `issuer|subject` allowlist)
 
-The three non-secret values remain bootstrap environment configuration, not
-`footnote.yaml` settings. The client secret remains secret environment
-configuration.
+The client secret remains secret environment configuration. The other values
+remain bootstrap environment configuration, not `footnote.yaml` settings.
 
 Require an HTTPS issuer. Allow an HTTP redirect URI only for a loopback host
 used during local development; deployed callback URIs must use HTTPS.
@@ -218,7 +219,7 @@ Files:
 Work:
 
 - Add `openid-client` 6.x to the shared dependency catalog and backend package.
-- Add the four OIDC environment entries.
+- Add the OIDC environment entries.
 - Classify the non-secret OIDC keys as bootstrap environment values.
 - Build one `accountAuth` runtime config section.
 - Treat incomplete or invalid configuration as disabled, with safe warnings.

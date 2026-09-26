@@ -12,7 +12,7 @@ import {
     AUTH_SECRET_NAMES,
     AUTHELIA_IMAGE,
     AUTHELIA_VERSION,
-    OIDC_KEYS,
+    MANAGED_OIDC_KEYS,
 } from './constants.js';
 import {
     createSigningKey,
@@ -69,6 +69,16 @@ const validateAdministrator = (
             'Administrator display name and a valid email are required.'
         );
     }
+};
+
+const validateAdministratorSubject = (subject: string): string => {
+    const normalized = subject.trim();
+    if (!normalized || normalized.includes('|') || /\s/.test(normalized)) {
+        throw new Error(
+            'Footnote administrator OIDC subject must be the exact non-empty `sub` claim and must not contain whitespace or `|`. Do not use the Authelia username or email.'
+        );
+    }
+    return normalized;
 };
 
 const getFetcher = (): Fetcher => fetch as unknown as Fetcher;
@@ -203,6 +213,7 @@ const applyFootnoteSecrets = async (input: {
     issuerUrl: string;
     redirectUri: string;
     clientSecret: string;
+    administratorIdentity: string;
 }): Promise<void> => {
     await commandOrThrow(input.runner, {
         command: 'fly',
@@ -212,6 +223,7 @@ const applyFootnoteSecrets = async (input: {
             'OIDC_CLIENT_ID=footnote',
             `OIDC_CLIENT_SECRET=${input.clientSecret}`,
             `OIDC_REDIRECT_URI=${input.redirectUri}`,
+            `OIDC_ADMIN_IDENTITIES=${input.administratorIdentity}`,
             '',
         ].join('\n'),
     });
@@ -233,6 +245,7 @@ const provisionFreshProfile = async (input: {
     username: string;
     displayName: string;
     email: string;
+    administratorIdentity: string;
 }): Promise<void> => {
     const credentials = await generateCredentialMaterial({
         runner: input.runner,
@@ -324,6 +337,7 @@ const provisionFreshProfile = async (input: {
             issuerUrl: input.issuerUrl,
             redirectUri: input.redirectUri,
             clientSecret: credentials.clientSecret,
+            administratorIdentity: input.administratorIdentity,
         });
     } catch (error) {
         logger.error(
@@ -347,7 +361,7 @@ const runProvisionAuthelia = async (
     const fetcher = overrides.fetcher ?? getFetcher();
     const serverToml = await readText(options.serverConfigPath);
     if (
-        OIDC_KEYS.some((key) =>
+        MANAGED_OIDC_KEYS.some((key) =>
             new RegExp(`^\\s*${key}\\s*=`, 'm').test(serverToml)
         )
     ) {
@@ -411,7 +425,7 @@ const runProvisionAuthelia = async (
     }
     await requireReplacementConfirmation(
         prompt,
-        OIDC_KEYS.filter((key) =>
+        MANAGED_OIDC_KEYS.filter((key) =>
             existingFootnoteSecretResult.names.includes(key)
         )
     );
@@ -424,6 +438,11 @@ const runProvisionAuthelia = async (
     ).trim();
     const email = (await prompt.text('Authelia administrator email: ')).trim();
     validateAdministrator(username, displayName, email);
+    const administratorSubject = validateAdministratorSubject(
+        await prompt.text(
+            'Footnote administrator OIDC subject (`sub` claim, not username or email): '
+        )
+    );
 
     const configurationPath = path.join(stateDirectory, 'configuration.yml');
     const usersPath = path.join(stateDirectory, 'users.yml');
@@ -444,6 +463,7 @@ const runProvisionAuthelia = async (
         username,
         displayName,
         email,
+        administratorIdentity: `${new URL(issuerUrl).href}|${administratorSubject}`,
     });
     logger.info(`Authelia is ready at ${issuerUrl}.`);
     logger.info(`Inspect generated state at ${stateDirectory}.`);

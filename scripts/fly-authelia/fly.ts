@@ -6,7 +6,7 @@
  * @footnote-ethics: high - Consent and fail-open ordering protect operators from silent identity changes.
  */
 
-import { AUTH_SECRET_NAMES, OIDC_KEYS } from './constants.js';
+import { AUTH_SECRET_NAMES, MANAGED_OIDC_KEYS } from './constants.js';
 import { commandOrThrow } from './runtime.js';
 import { logger } from '../../packages/discord-bot/src/utils/logger.js';
 import type {
@@ -81,7 +81,7 @@ export const requireReplacementConfirmation = async (
     );
     const confirmation = (
         await prompt.text(
-            'Type REPLACE to replace these four settings, or anything else to abort: '
+            'Type REPLACE to replace these OIDC settings, or anything else to abort: '
         )
     ).trim();
     if (confirmation !== 'REPLACE') {
@@ -187,12 +187,12 @@ export const ensureExistingProfile = async (input: {
         input.runner,
         input.footnoteAppName
     );
-    const missingFootnoteSecrets = OIDC_KEYS.filter(
+    const missingFootnoteSecrets = MANAGED_OIDC_KEYS.filter(
         (name) => !footnoteSecrets.includes(name)
     );
     if (missingFootnoteSecrets.length > 0) {
         throw new Error(
-            `Footnote is missing managed OIDC keys: ${missingFootnoteSecrets.join(', ')}. Restore them manually; the client secret is not retained locally.`
+            `Footnote is missing managed OIDC keys: ${missingFootnoteSecrets.join(', ')}. Restore them manually before rerunning; set OIDC_ADMIN_IDENTITIES to the exact issuer|sub pair for each administrator, and do not use a username or email. The client secret is not retained locally.`
         );
     }
     await commandOrThrow(input.runner, {

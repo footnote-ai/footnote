@@ -12,7 +12,6 @@ import type {
     AccountStore,
     FootnoteAccount,
 } from '../storage/accounts/sqliteAccountStore.js';
-import { createInMemoryAccountStore } from '../storage/accounts/sqliteAccountStore.js';
 import type { OidcAccountClient } from './oidcClient.js';
 
 const DEFAULT_TRANSACTION_TTL_MS = 10 * 60 * 1_000;
@@ -76,7 +75,7 @@ export type AccountAuthService = {
 
 type CreateAccountAuthServiceDeps = {
     provider: OidcAccountClient | null;
-    accountStore?: AccountStore | null;
+    accountStore: AccountStore | null;
     administratorIdentityKeys?: ReadonlySet<string>;
     now?: () => number;
     randomToken?: (byteLength: number) => string;
@@ -93,7 +92,7 @@ type CreateAccountAuthServiceDeps = {
  */
 export const createAccountAuthService = ({
     provider,
-    accountStore = createInMemoryAccountStore(),
+    accountStore,
     administratorIdentityKeys,
     now = () => Date.now(),
     randomToken = (byteLength: number) =>

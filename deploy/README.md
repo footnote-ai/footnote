@@ -151,20 +151,26 @@ OIDC_ISSUER_URL=https://identity.example/application/o/footnote/
 OIDC_CLIENT_ID=footnote
 OIDC_CLIENT_SECRET=<secret>
 OIDC_REDIRECT_URI=https://footnote.example/api/auth/callback
+OIDC_ADMIN_IDENTITIES=https://identity.example/application/o/footnote/|<administrator-subject>
 ```
 
 Keep `OIDC_CLIENT_SECRET` in `.env` or the deployment platform's secret store.
-Pass the other values as non-secret bootstrap environment variables. Compose
-loads local values from the root `.env`; Fly operators may set deployment
-environment values using their normal platform workflow.
+Pass the other values as non-secret bootstrap environment variables. The
+administrator value must contain the exact OIDC `sub` claim, not a username or
+email address. Compose loads local values from the root `.env`; Fly operators
+may set deployment environment values using their normal platform workflow.
 
 See [Account Sign-In](../docs/auth/README.md) for validation rules and the
 minimum Authentik setup.
 
 The Fly wrappers also offer an optional Authelia profile. Run
 `./deploy/fly/deploy.sh --auth-mode authelia` (or `-AuthMode authelia` in
-PowerShell) to provision it before applying the four OIDC secrets. The default
+PowerShell) to provision it before applying the managed OIDC values. The default
 and `preserve` mode leave the current authentication configuration unchanged.
+Automatic Authelia provisioning asks for the intended administrator's exact OIDC
+`sub` claim and writes the matching `OIDC_ADMIN_IDENTITIES` entry. Existing
+profiles missing that setting stop with migration guidance instead of silently
+turning the administrator into a regular user.
 See [Account Sign-In](../docs/auth/README.md#authelia-on-fly-profile)
 for ownership, reruns, recovery, and teardown. This profile is single-instance
 and non-HA; it is not a production identity-storage recommendation.

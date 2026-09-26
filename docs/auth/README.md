@@ -129,6 +129,16 @@ remote Footnote OIDC keys already exist, only their names are shown and the
 operator must type `REPLACE` before the OIDC values are replaced together. Committed
 OIDC keys in `server.toml` are an error and must be removed manually.
 
+The managed Footnote OIDC values include `OIDC_ADMIN_IDENTITIES`. On a fresh
+Authelia profile, provisioning asks for the intended administrator's exact OIDC
+`sub` claim and writes `https://<footnote-app>-auth.fly.dev|<sub>`. The subject
+is the stable OIDC identifier; do not enter the Authelia username or email. A
+profile created before the administrator allowlist existed must be upgraded
+explicitly by setting that value to the administrator's `issuer|sub` pair before
+rerunning the provisioning command. The tool stops if the value is absent, so
+an existing administrator is not silently downgraded and no other admitted user
+is granted administrator access.
+
 Provisioning and health checks complete before Footnote authentication changes.
 Failures keep existing Footnote authentication unchanged, retain created
 Authelia resources for diagnosis, and print a cleanup command. To tear down a

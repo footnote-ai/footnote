@@ -15,6 +15,7 @@ import {
     createAccountAuthHandlers,
 } from '../src/handlers/accountAuth.js';
 import { createAccountAuthService } from '../src/services/accountAuth.js';
+import { createInMemoryAccountStore } from '../src/storage/accounts/sqliteAccountStore.js';
 import type { OidcAccountClient } from '../src/services/oidcClient.js';
 
 const provider: OidcAccountClient = {
@@ -36,6 +37,7 @@ const startServer = async (
 ): Promise<{ baseUrl: string; stop: () => Promise<void> }> => {
     let tokenIndex = 0;
     const service = createAccountAuthService({
+        accountStore: createInMemoryAccountStore(),
         provider: enabled ? provider : null,
         administratorIdentityKeys: new Set([
             'https://identity.example/|subject-1',

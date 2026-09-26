@@ -9,6 +9,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { createAccountAuthService } from '../src/services/accountAuth.js';
+import { createInMemoryAccountStore } from '../src/storage/accounts/sqliteAccountStore.js';
 import type {
     OidcAccountClient,
     OidcCallbackInput,
@@ -52,13 +53,17 @@ const createProvider = (
 });
 
 test('disabled and unavailable providers create no login transaction', async () => {
-    const disabled = createAccountAuthService({ provider: null });
+    const disabled = createAccountAuthService({
+        accountStore: createInMemoryAccountStore(),
+        provider: null,
+    });
     assert.deepEqual(await disabled.startLogin(), {
         ok: false,
         reason: 'disabled',
     });
 
     const unavailable = createAccountAuthService({
+        accountStore: createInMemoryAccountStore(),
         provider: createProvider({ startError: true }),
     });
     assert.deepEqual(await unavailable.startLogin(), {
@@ -72,6 +77,7 @@ test('callback consumes a transaction once and creates an expiring session', asy
     let tokenIndex = 0;
     const callbackInputs: OidcCallbackInput[] = [];
     const service = createAccountAuthService({
+        accountStore: createInMemoryAccountStore(),
         provider: createProvider({ callbackInputs }),
         administratorIdentityKeys: new Set([
             'https://identity.example/|subject-1',
@@ -136,6 +142,7 @@ test('callback consumes a transaction once and creates an expiring session', asy
 
 test('resolves regular accounts without granting administrator access', async () => {
     const service = createAccountAuthService({
+        accountStore: createInMemoryAccountStore(),
         provider: createProvider(),
         administratorIdentityKeys: new Set([
             'https://identity.example/|administrator-subject',
@@ -179,6 +186,7 @@ test('does not create a session when durable account storage is unavailable', as
 
 test('failed callbacks remain consumed', async () => {
     const service = createAccountAuthService({
+        accountStore: createInMemoryAccountStore(),
         provider: createProvider({ callbackError: true }),
         randomToken: () => 'transaction-token',
     });
@@ -201,6 +209,7 @@ test('failed callbacks remain consumed', async () => {
 test('transaction capacity evicts the oldest login and preserves zero capacity', async () => {
     let tokenIndex = 0;
     const transactionService = createAccountAuthService({
+        accountStore: createInMemoryAccountStore(),
         provider: createProvider(),
         randomToken: () => `transaction-${++tokenIndex}`,
         maxTransactions: 1,
@@ -231,6 +240,7 @@ test('transaction capacity evicts the oldest login and preserves zero capacity',
     );
 
     const zeroCapacityService = createAccountAuthService({
+        accountStore: createInMemoryAccountStore(),
         provider: createProvider(),
         maxTransactions: 0,
     });
@@ -241,6 +251,7 @@ test('transaction capacity evicts the oldest login and preserves zero capacity',
 
     tokenIndex = 0;
     const sessionService = createAccountAuthService({
+        accountStore: createInMemoryAccountStore(),
         provider: createProvider(),
         randomToken: () => `session-${++tokenIndex}`,
         maxSessions: 1,
@@ -269,6 +280,7 @@ test('transaction capacity evicts the oldest login and preserves zero capacity',
 test('provider startup failure at capacity preserves the existing transaction', async () => {
     let failStart = false;
     const service = createAccountAuthService({
+        accountStore: createInMemoryAccountStore(),
         provider: createProvider({ startError: () => failStart }),
         maxTransactions: 1,
     });
@@ -295,6 +307,7 @@ test('provider startup failure at capacity preserves the existing transaction', 
 test('clearing a session is idempotent', async () => {
     let tokenIndex = 0;
     const service = createAccountAuthService({
+        accountStore: createInMemoryAccountStore(),
         provider: createProvider(),
         randomToken: () => `token-${++tokenIndex}`,
     });
