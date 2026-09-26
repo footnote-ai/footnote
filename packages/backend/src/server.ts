@@ -76,6 +76,7 @@ import { createSetupBootstrapService } from './services/setupBootstrap.js';
 import { createAccountAuthService } from './services/accountAuth.js';
 import { createOidcAccountClient } from './services/oidcClient.js';
 import { settingsSpecEntries } from './config/settings-spec.js';
+import { SqliteAccountStore } from './storage/accounts/sqliteAccountStore.js';
 
 /**
  * @footnote-logger: openAiRealtimeVoiceRuntime
@@ -580,8 +581,29 @@ const oidcAccountClient = runtimeConfig.accountAuth.enabled
           redirectUri: runtimeConfig.accountAuth.redirectUri,
       })
     : null;
+const accountStore = runtimeConfig.accountAuth.enabled
+    ? (() => {
+          try {
+              return new SqliteAccountStore({
+                  dbPath: path.join(
+                      runtimeConfig.server.dataDir,
+                      'accounts.db'
+                  ),
+              });
+          } catch (error) {
+              logger.error(
+                  `Account store unavailable; OIDC sign-in will not create sessions. ${error instanceof Error ? error.message : String(error)}`
+              );
+              return null;
+          }
+      })()
+    : null;
 const accountAuthService = createAccountAuthService({
     provider: oidcAccountClient,
+    accountStore,
+    administratorIdentityKeys: runtimeConfig.accountAuth.enabled
+        ? new Set(runtimeConfig.accountAuth.administratorIdentityKeys)
+        : undefined,
 });
 
 const handleRuntimeConfigRequest = createRuntimeConfigHandler({

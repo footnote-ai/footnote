@@ -48,6 +48,9 @@ const OPERATOR_LINK_HEADERS = {
     'content-type': 'application/json',
     'x-footnote-operator-request': 'cli',
 };
+const ADMINISTRATOR_IDENTITY_KEYS = new Set([
+    'https://identity.example/|administrator-subject',
+]);
 
 const createAdminSettingsTestServer = async (options?: {
     adminToken?: string | null;
@@ -297,6 +300,7 @@ test('signed-in administrator sessions authorize settings reads and record a saf
     };
     const accountAuthService = createAccountAuthService({
         provider,
+        administratorIdentityKeys: ADMINISTRATOR_IDENTITY_KEYS,
         randomToken: (() => {
             let index = 0;
             return () => `opaque-${++index}`;
@@ -358,7 +362,10 @@ test('signed-in administrator writes require account CSRF while anonymous reques
             displayName: null,
         }),
     };
-    const accountAuthService = createAccountAuthService({ provider });
+    const accountAuthService = createAccountAuthService({
+        provider,
+        administratorIdentityKeys: ADMINISTRATOR_IDENTITY_KEYS,
+    });
     const login = await accountAuthService.startLogin();
     assert.equal(login.ok, true);
     if (!login.ok) {
@@ -420,6 +427,50 @@ test('signed-in administrator writes require account CSRF while anonymous reques
             }
         );
         assert.equal(validCsrfResponse.status, 200);
+    } finally {
+        await server.close();
+        server.cleanup();
+    }
+});
+
+test('regular account sessions cannot use administrator settings routes', async () => {
+    const sessionId = 'regular-session';
+    const accountAuthService: AccountAuthService = {
+        enabled: true,
+        startLogin: async () => ({ ok: false, reason: 'disabled' }),
+        completeLogin: async () => ({ ok: false, reason: 'disabled' }),
+        getSession: (requestedSessionId) =>
+            requestedSessionId === sessionId
+                ? {
+                      sessionId,
+                      accountId: 'account-regular',
+                      isAdministrator: false,
+                      principal: {
+                          issuer: 'https://identity.example/',
+                          subject: 'regular-subject',
+                          displayName: 'Regular User',
+                      },
+                      csrfToken: 'csrf-token',
+                      expiresAt: '2026-09-25T00:00:00.000Z',
+                  }
+                : null,
+        clearSession: () => false,
+    };
+
+    const server = await createAdminSettingsTestServer({
+        adminToken: null,
+        accountAuthService,
+    });
+    try {
+        const response = await fetch(
+            `${server.url}/api/admin/settings/schema`,
+            {
+                headers: {
+                    cookie: `${ACCOUNT_SESSION_COOKIE_NAME}=${sessionId}`,
+                },
+            }
+        );
+        assert.equal(response.status, 401);
     } finally {
         await server.close();
         server.cleanup();
@@ -768,6 +819,7 @@ test('operator setup session can read and write existing settings until expiry',
         createSettingsFile: true,
         adminToken: null,
         accountAuthService: createAccountAuthService({
+            administratorIdentityKeys: ADMINISTRATOR_IDENTITY_KEYS,
             provider: {
                 startAuthorization: async () => ({
                     authorizationUrl: 'https://identity.example/authorize',

@@ -73,6 +73,9 @@ test('callback consumes a transaction once and creates an expiring session', asy
     const callbackInputs: OidcCallbackInput[] = [];
     const service = createAccountAuthService({
         provider: createProvider({ callbackInputs }),
+        administratorIdentityKeys: new Set([
+            'https://identity.example/|subject-1',
+        ]),
         now: () => nowMs,
         randomToken: () => `token-${++tokenIndex}`,
         transactionTtlMs: 100,
@@ -110,8 +113,68 @@ test('callback consumes a transaction once and creates an expiring session', asy
         service.getSession(completed.session.sessionId),
         completed.session
     );
+    assert.match(completed.session.accountId, /^[0-9a-f-]{36}$/);
+    assert.equal(completed.session.isAdministrator, true);
+    const repeatedLogin = await service.startLogin();
+    assert.equal(repeatedLogin.ok, true);
+    if (repeatedLogin.ok) {
+        const repeatedCompletion = await service.completeLogin(
+            repeatedLogin.transactionId,
+            '?code=second-login'
+        );
+        assert.equal(repeatedCompletion.ok, true);
+        if (repeatedCompletion.ok) {
+            assert.equal(
+                repeatedCompletion.session.accountId,
+                completed.session.accountId
+            );
+        }
+    }
     nowMs += 501;
     assert.equal(service.getSession(completed.session.sessionId), null);
+});
+
+test('resolves regular accounts without granting administrator access', async () => {
+    const service = createAccountAuthService({
+        provider: createProvider(),
+        administratorIdentityKeys: new Set([
+            'https://identity.example/|administrator-subject',
+        ]),
+    });
+    const started = await service.startLogin();
+    assert.equal(started.ok, true);
+    if (!started.ok) {
+        return;
+    }
+
+    const completed = await service.completeLogin(
+        started.transactionId,
+        '?code=regular'
+    );
+    assert.equal(completed.ok, true);
+    if (completed.ok) {
+        assert.equal(completed.session.isAdministrator, false);
+    }
+});
+
+test('does not create a session when durable account storage is unavailable', async () => {
+    const service = createAccountAuthService({
+        provider: createProvider(),
+        accountStore: null,
+    });
+    const started = await service.startLogin();
+    assert.equal(started.ok, true);
+    if (!started.ok) {
+        return;
+    }
+
+    assert.deepEqual(
+        await service.completeLogin(
+            started.transactionId,
+            '?code=storage-down'
+        ),
+        { ok: false, reason: 'account_storage_unavailable' }
+    );
 });
 
 test('failed callbacks remain consumed', async () => {

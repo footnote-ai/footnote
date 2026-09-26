@@ -5063,6 +5063,8 @@ components:
                           const: true
                       principal:
                           $ref: '#/components/schemas/AuthenticatedPrincipal'
+                      isAdministrator:
+                          type: boolean
                       expiresAt:
                           type: string
                           format: date-time
@@ -5073,6 +5075,7 @@ components:
                       - enabled
                       - authenticated
                       - principal
+                      - isAdministrator
                       - expiresAt
                       - csrfToken
                   additionalProperties: false

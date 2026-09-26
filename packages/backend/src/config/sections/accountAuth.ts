@@ -6,7 +6,7 @@
  * @footnote-ethics: high - Sign-in configuration controls access to account identity.
  */
 
-import { parseOptionalTrimmedString } from '../parsers.js';
+import { parseCsvEnv, parseOptionalTrimmedString } from '../parsers.js';
 import type { RuntimeConfig, WarningSink } from '../types.js';
 
 const OIDC_KEYS = [
@@ -59,6 +59,35 @@ const parseRedirectUrl = (value: string): URL | null => {
     } catch {
         return null;
     }
+};
+
+const buildIdentityKey = (issuer: string, subject: string): string =>
+    `${issuer}|${subject}`;
+
+const parseAdministratorIdentityKeys = (
+    value: string | undefined,
+    warn: WarningSink
+): string[] => {
+    const entries = parseCsvEnv(value, []);
+    const keys: string[] = [];
+
+    entries.forEach((entry, index) => {
+        const separatorIndex = entry.indexOf('|');
+        const issuerValue =
+            separatorIndex >= 0 ? entry.slice(0, separatorIndex).trim() : '';
+        const subject =
+            separatorIndex >= 0 ? entry.slice(separatorIndex + 1).trim() : '';
+        const issuer = issuerValue ? parseIssuerUrl(issuerValue) : null;
+        if (!issuer || subject.length === 0) {
+            warn(
+                `Ignoring invalid OIDC_ADMIN_IDENTITIES entry at position ${index + 1}. Expected issuer|subject.`
+            );
+            return;
+        }
+        keys.push(buildIdentityKey(issuer.href, subject));
+    });
+
+    return [...new Set(keys)];
 };
 
 /**
@@ -120,5 +149,11 @@ export const buildAccountAuthSection = (
         clientSecret: values.clientSecret!,
         redirectUri: redirect.href,
         secureCookies: redirect.protocol === 'https:',
+        administratorIdentityKeys: parseAdministratorIdentityKeys(
+            env.OIDC_ADMIN_IDENTITIES,
+            warn
+        ),
     };
 };
+
+export { buildIdentityKey };

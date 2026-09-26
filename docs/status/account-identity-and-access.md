@@ -1,10 +1,10 @@
 # Account Identity and Access Status
 
-Status: provider-neutral OIDC sign-in and signed-in administrator access are
-implemented. Regular-user account work remains ordered after administrator
-access.
+Status: provider-neutral OIDC sign-in, durable Footnote accounts, and separate
+administrator authorization are implemented. Account-owned feature data remains
+ordered after this foundation.
 
-Last updated: 2026-08-23.
+Last updated: 2026-09-25.
 
 This tracker describes the durable account direction. Each branch should still
 deliver one useful result, preserve public and setup behavior, and avoid
@@ -24,14 +24,19 @@ The runtime is provider-neutral. Authentik is the tested provider and the
 optional Authelia-on-Fly profile is deployment tooling, not a provider-specific
 runtime contract. Both are delivered foundations.
 
+Every successful callback now resolves or creates a durable Footnote account
+before issuing the local session. The account store keeps only the internal
+account ID and a separate issuer-and-subject mapping. It does not retain email,
+display name, broad provider claims, or a generic user-data bucket.
+
 ### Administrator access
 
 A signed-in administrator can open `/admin` and use the existing backend-owned
 settings editor. The backend authorizes the settings API; the web route is only
-a presentation entry point. During this administrator-only stage, every
-identity admitted by the configured provider is explicitly treated as an
-administrator. That temporary policy lives outside the identity/session shape
-so ordinary Footnote users can be separated later.
+a presentation entry point. Administrator access is a separate Footnote
+authorization decision. `OIDC_ADMIN_IDENTITIES` contains comma-separated
+`issuer|subject` pairs that receive the administrator capability; other admitted
+users receive ordinary account sessions.
 
 Administrator settings actions may record a deterministic hash of the external
 issuer and subject as a safe actor identifier. Footnote does not retain provider
@@ -54,23 +59,22 @@ When account sign-in is disabled or the identity provider is unavailable,
 anonymous/public Footnote behavior remains fail-open. The admin API is still
 backend-authorized and does not become public.
 
-## Next account direction
+## Account-owned data boundary
 
-The next stage is #521: admit ordinary OIDC users without administrator access.
-Every successful regular-user sign-in will resolve or create a durable
-Footnote-owned account and a separate external-identity mapping. Footnote-owned
-data will belong to the internal account identity, not directly to `issuer +
-subject`.
+Issue #521 establishes who owns future Footnote data. Future records should
+reference the internal account ID, not `issuer + subject`. SQLite uniqueness and
+one transaction cover the first-login race, while local sessions remain short-
+lived and process-local.
 
-Do not add regular-user storage, roles, permission tiers, persistent sessions,
-provider enrollment, passwords, or account lifecycle features to the
-administrator stage. Follow-on work is ordered in issue #525.
+This stage does not add memory, saved conversations, inferred profiles,
+uploads, preferences, export, deletion, or account merging. Follow-on work is
+ordered in issue #525.
 
 ## Work sequence
 
 1. #455 — provider-neutral OIDC sign-in (delivered)
 2. #456 — signed-in administrator access (delivered)
-3. #521 — durable Footnote accounts for regular OIDC users
+3. #521 — durable Footnote accounts for regular OIDC users (delivered)
 4. #522 — deliberate incident association and safe user view
 5. #523 — export explicit Footnote-owned account data
 6. #524 — delete Footnote account data with documented incident retention

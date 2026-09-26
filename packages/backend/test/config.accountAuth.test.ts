@@ -38,8 +38,33 @@ test('account auth enables valid HTTPS configuration', () => {
         clientSecret: 'secret-value',
         redirectUri: 'https://footnote.example/api/auth/callback',
         secureCookies: true,
+        administratorIdentityKeys: [],
     });
     assert.deepEqual(warnings, []);
+});
+
+test('account auth parses a narrow administrator identity allowlist', () => {
+    const warnings: string[] = [];
+    const config = buildAccountAuthSection(
+        {
+            OIDC_ISSUER_URL: 'https://identity.example/',
+            OIDC_CLIENT_ID: 'footnote',
+            OIDC_CLIENT_SECRET: 'secret-value',
+            OIDC_REDIRECT_URI: 'https://footnote.example/api/auth/callback',
+            OIDC_ADMIN_IDENTITIES:
+                'https://identity.example/|admin-subject,invalid-entry',
+        },
+        (message) => warnings.push(message)
+    );
+
+    assert.equal(config.enabled, true);
+    if (config.enabled) {
+        assert.deepEqual(config.administratorIdentityKeys, [
+            'https://identity.example/|admin-subject',
+        ]);
+    }
+    assert.match(warnings[0] ?? '', /OIDC_ADMIN_IDENTITIES/);
+    assert.doesNotMatch(warnings[0] ?? '', /admin-subject/);
 });
 
 test('account auth allows loopback HTTP callbacks for local development', () => {

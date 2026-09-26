@@ -57,6 +57,7 @@ test('account page uses typed session APIs and exposes all public states', async
     assert.match(source, /principal\.displayName \?\? principal\.subject/);
     assert.match(source, /disabled=\{logoutState === 'submitting'\}/);
     assert.match(source, /Signing out ends only this Footnote session/);
+    assert.match(source, /authenticatedSession\.isAdministrator/);
     assert.doesNotMatch(source, /localStorage|sessionStorage/);
     assert.doesNotMatch(source, /accessToken|refreshToken|idToken/);
 });

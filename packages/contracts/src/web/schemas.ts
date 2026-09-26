@@ -258,6 +258,7 @@ export const GetAuthSessionResponseSchema: z.ZodType<GetAuthSessionResponse> =
                 enabled: z.literal(true),
                 authenticated: z.literal(true),
                 principal: AuthenticatedPrincipalSchema,
+                isAdministrator: z.boolean(),
                 expiresAt: z.string().datetime(),
                 csrfToken: z.string().min(1),
             })

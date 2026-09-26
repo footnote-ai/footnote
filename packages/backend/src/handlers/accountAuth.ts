@@ -278,6 +278,7 @@ export const createAccountAuthHandlers = ({
             enabled: true,
             authenticated: true,
             principal: session.principal,
+            isAdministrator: session.isAdministrator,
             expiresAt: session.expiresAt,
             csrfToken: session.csrfToken,
         };

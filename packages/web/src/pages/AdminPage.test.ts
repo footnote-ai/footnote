@@ -31,6 +31,10 @@ test('admin route lazy-loads the account-session settings page', async () => {
     assert.match(adminSource, /<SetupPage mode="admin" \/>/);
     assert.match(setupSource, /getAuthSession\(\)/);
     assert.match(setupSource, /Sign in to an administrator account/);
+    assert.match(
+        setupSource,
+        /This account is not authorized to administer Footnote settings/
+    );
     assert.match(setupSource, /Administrator settings/);
     assert.match(setupSource, /ACCOUNT_CSRF_HEADER_NAME = 'x-auth-csrf'/);
     assert.match(setupSource, /SETUP_CSRF_HEADER_NAME = 'x-setup-csrf'/);

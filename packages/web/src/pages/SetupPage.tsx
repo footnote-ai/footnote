@@ -126,6 +126,14 @@ const SetupPage = ({ mode = 'setup' }: SetupPageProps): JSX.Element => {
                         });
                         return;
                     }
+                    if (!session.isAdministrator) {
+                        setExchangeState({
+                            status: 'error',
+                            message:
+                                'This account is not authorized to administer Footnote settings.',
+                        });
+                        return;
+                    }
                     setExchangeState({
                         status: 'ready',
                         csrfToken: session.csrfToken,

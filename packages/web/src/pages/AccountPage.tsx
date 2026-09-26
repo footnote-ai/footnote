@@ -208,12 +208,14 @@ const AccountPage = (): JSX.Element => {
                     Signing out ends only this Footnote session. It does not
                     sign you out of your identity provider.
                 </p>
-                <Link
-                    className="account-card__button account-card__button--primary"
-                    to="/admin"
-                >
-                    Open administrator settings
-                </Link>
+                {authenticatedSession.isAdministrator ? (
+                    <Link
+                        className="account-card__button account-card__button--primary"
+                        to="/admin"
+                    >
+                        Open administrator settings
+                    </Link>
+                ) : null}
                 <button
                     className="account-card__button"
                     type="button"

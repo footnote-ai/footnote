@@ -69,6 +69,7 @@ test('account auth keeps bootstrap values out of settings and the secret in env'
     assert.equal(envConfigSourceByKey.OIDC_ISSUER_URL, 'bootstrap_env');
     assert.equal(envConfigSourceByKey.OIDC_CLIENT_ID, 'bootstrap_env');
     assert.equal(envConfigSourceByKey.OIDC_REDIRECT_URI, 'bootstrap_env');
+    assert.equal(envConfigSourceByKey.OIDC_ADMIN_IDENTITIES, 'bootstrap_env');
     assert.equal(envConfigSourceByKey.OIDC_CLIENT_SECRET, 'secret_env');
     assert.equal(envSpecByKey.OIDC_CLIENT_SECRET.secret, true);
 });

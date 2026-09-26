@@ -109,6 +109,7 @@ test('account session schemas accept only the three public session states', () =
                 subject: 'account-123',
                 displayName: 'Example Operator',
             },
+            isAdministrator: true,
             expiresAt: '2026-07-23T12:00:00.000Z',
             csrfToken: 'csrf-token',
         }).success,
