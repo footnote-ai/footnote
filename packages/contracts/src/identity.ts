@@ -1,26 +1,13 @@
 /**
- * @description: Canonicalizes provider issuer values for stable external identity keys.
+ * @description: Builds exact issuer-and-subject keys for validated external identities.
  * @footnote-scope: core
  * @footnote-module: ExternalIdentityKey
- * @footnote-risk: high - Inconsistent issuer keys can split one person across accounts or authorization paths.
+ * @footnote-risk: high - Altering an OIDC issuer can split ownership or weaken authorization matching.
  * @footnote-ethics: high - Stable identity matching protects account ownership and administrator boundaries.
  */
 
-/**
- * Uses the URL parser's canonical representation while preserving the issuer
- * path that distinguishes OIDC tenants.
- */
-export const canonicalizeIdentityIssuer = (issuer: string): string => {
-    const parsed = new URL(issuer);
-    if (parsed.pathname !== '/') {
-        while (parsed.pathname.endsWith('/')) {
-            parsed.pathname = parsed.pathname.slice(0, -1);
-        }
-    }
-    return parsed.href;
-};
-
+/** The caller must supply an issuer and subject already validated by its trust boundary. */
 export const buildExternalIdentityKey = (
     issuer: string,
     subject: string
-): string => `${canonicalizeIdentityIssuer(issuer)}|${subject}`;
+): string => `${issuer}|${subject}`;

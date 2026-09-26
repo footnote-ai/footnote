@@ -134,7 +134,9 @@ Authelia profile, provisioning generates a version-4 UUID, binds it to the
 intended administrator with the pinned Authelia storage CLI, verifies the
 binding, and writes `https://<footnote-app>-auth.fly.dev|<uuid>`. The UUID is
 the provider-managed OIDC subject; the operator does not enter a username or
-email as Footnote's identity key. A profile created before the administrator
+email as Footnote's identity key. The sanitized UUID is retained as stable
+recovery state, not as a promise that interrupted provisioning can resume
+automatically. A profile created before the administrator
 allowlist existed must be upgraded explicitly. Obtain existing subjects with
 the pinned provider's supported export command:
 

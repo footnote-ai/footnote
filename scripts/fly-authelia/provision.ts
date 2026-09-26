@@ -388,7 +388,7 @@ const provisionFreshProfile = async (input: {
             issuerUrl: input.issuerUrl,
             redirectUri: input.redirectUri,
             clientSecret: credentials.clientSecret,
-            administratorIdentity: `${new URL(input.issuerUrl).href}|${input.administratorSubject}`,
+            administratorIdentity: `${input.issuerUrl}|${input.administratorSubject}`,
         });
     } catch (error) {
         logger.error(

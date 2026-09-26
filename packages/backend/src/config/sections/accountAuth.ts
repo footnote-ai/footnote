@@ -82,7 +82,7 @@ const parseAdministratorIdentityKeys = (
             );
             return;
         }
-        keys.push(buildExternalIdentityKey(issuer.href, subject));
+        keys.push(buildExternalIdentityKey(issuerValue, subject));
     });
 
     return [...new Set(keys)];

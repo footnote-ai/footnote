@@ -67,14 +67,15 @@ test('account auth parses a narrow administrator identity allowlist', () => {
     assert.doesNotMatch(warnings[0] ?? '', /admin-subject/);
 });
 
-test('account auth canonicalizes administrator issuer URLs before keying', () => {
+test('account auth preserves exact administrator issuer representations', () => {
     const config = buildAccountAuthSection(
         {
             OIDC_ISSUER_URL: 'https://identity.example',
             OIDC_CLIENT_ID: 'footnote',
             OIDC_CLIENT_SECRET: 'secret-value',
             OIDC_REDIRECT_URI: 'https://footnote.example/api/auth/callback',
-            OIDC_ADMIN_IDENTITIES: 'https://identity.example|admin-subject',
+            OIDC_ADMIN_IDENTITIES:
+                'https://identity.example|admin-subject,https://identity.example/|other-subject',
         },
         () => undefined
     );
@@ -82,7 +83,8 @@ test('account auth canonicalizes administrator issuer URLs before keying', () =>
     assert.equal(config.enabled, true);
     if (config.enabled) {
         assert.deepEqual(config.administratorIdentityKeys, [
-            'https://identity.example/|admin-subject',
+            'https://identity.example|admin-subject',
+            'https://identity.example/|other-subject',
         ]);
     }
 });

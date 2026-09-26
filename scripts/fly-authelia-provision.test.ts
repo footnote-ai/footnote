@@ -477,7 +477,7 @@ test('provisions, validates, probes, and stores only sanitized state', async () 
     );
     assert.equal(
         secretImport?.stdin?.includes(
-            `OIDC_ADMIN_IDENTITIES=https://footnote-auth.fly.dev/|${administratorSubject}`
+            `OIDC_ADMIN_IDENTITIES=https://footnote-auth.fly.dev|${administratorSubject}`
         ),
         true
     );

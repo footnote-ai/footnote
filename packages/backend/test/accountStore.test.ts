@@ -15,7 +15,7 @@ import Database from 'better-sqlite3';
 import { SqliteAccountStore } from '../src/storage/accounts/sqliteAccountStore.js';
 
 const identity = {
-    issuer: 'https://identity.example/application/o/footnote',
+    issuer: 'https://identity.example/application/o/footnote/',
     subject: 'subject-1',
 };
 
@@ -29,17 +29,24 @@ test('creates one stable account for a repeated external identity', () => {
     try {
         store = new SqliteAccountStore({ dbPath });
         const first = store.resolveOrCreateAccount(identity);
-        const repeated = store.resolveOrCreateAccount({
-            ...identity,
-            issuer: `${identity.issuer}/`,
-        });
-        const other = store.resolveOrCreateAccount({
+        const repeated = store.resolveOrCreateAccount(identity);
+        const otherSubject = store.resolveOrCreateAccount({
             ...identity,
             subject: 'subject-2',
         });
+        const otherPath = store.resolveOrCreateAccount({
+            ...identity,
+            issuer: 'https://identity.example/application/o/other/',
+        });
+        const otherSlash = store.resolveOrCreateAccount({
+            ...identity,
+            issuer: 'https://identity.example/application/o/footnote',
+        });
 
         assert.equal(first.id, repeated.id);
-        assert.notEqual(first.id, other.id);
+        assert.notEqual(first.id, otherSubject.id);
+        assert.notEqual(first.id, otherPath.id);
+        assert.notEqual(first.id, otherSlash.id);
 
         const db = new Database(dbPath, { readonly: true });
         assert.equal(
@@ -48,7 +55,7 @@ test('creates one stable account for a repeated external identity', () => {
                     count: number;
                 }
             ).count,
-            2
+            4
         );
         assert.equal(
             (
@@ -60,7 +67,7 @@ test('creates one stable account for a repeated external identity', () => {
                     count: number;
                 }
             ).count,
-            2
+            4
         );
         assert.deepEqual(
             (

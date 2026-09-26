@@ -166,7 +166,7 @@ test('resolves regular accounts without granting administrator access', async ()
     }
 });
 
-test('administrator lookup canonicalizes issuer URLs and preserves subject matching', async () => {
+test('administrator lookup preserves exact issuer and subject matching', async () => {
     const complete = async (
         configuredIdentity: string,
         issuer: string,
@@ -207,7 +207,7 @@ test('administrator lookup canonicalizes issuer URLs and preserves subject match
 
     assert.equal(
         await complete(
-            'https://identity.example|subject-1',
+            'https://identity.example/|subject-1',
             'https://identity.example/',
             'subject-1'
         ),
@@ -215,15 +215,15 @@ test('administrator lookup canonicalizes issuer URLs and preserves subject match
     );
     assert.equal(
         await complete(
-            'https://identity.example/|subject-1',
-            'https://identity.example',
+            'https://identity.example|subject-1',
+            'https://identity.example/',
             'subject-1'
         ),
-        true
+        false
     );
     assert.equal(
         await complete(
-            'https://other.example/|subject-1',
+            'https://identity.example/tenant|subject-1',
             'https://identity.example/',
             'subject-1'
         ),
