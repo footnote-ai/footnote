@@ -13,7 +13,9 @@
 export const canonicalizeIdentityIssuer = (issuer: string): string => {
     const parsed = new URL(issuer);
     if (parsed.pathname !== '/') {
-        parsed.pathname = parsed.pathname.replace(/\/+$/, '');
+        while (parsed.pathname.endsWith('/')) {
+            parsed.pathname = parsed.pathname.slice(0, -1);
+        }
     }
     return parsed.href;
 };

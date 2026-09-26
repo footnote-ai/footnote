@@ -252,12 +252,20 @@ const bindAdministratorIdentity = async (input: {
             ].join(' '),
         ],
     });
-    const binding = result.stdout.match(
-        /^\s*Service:\s*openid\s*$[\s\S]*?^\s*Username:\s*([^\r\n]+)\s*$[\s\S]*?^\s*Identifier:\s*([^\s\r\n]+)/m
-    );
+    const outputValue = (label: string): string | undefined =>
+        result.stdout
+            .split(/\r?\n/)
+            .map((line) => line.trim())
+            .find((line) => line.startsWith(`${label}:`))
+            ?.slice(label.length + 1)
+            .trim();
+    const service = outputValue('Service');
+    const username = outputValue('Username');
+    const identifier = outputValue('Identifier');
     if (
-        binding?.[1]?.trim() !== input.username ||
-        binding?.[2] !== input.subject
+        service !== 'openid' ||
+        username !== input.username ||
+        identifier !== input.subject
     ) {
         throw new Error(
             'Authelia did not confirm the expected administrator OpenID identifier; Footnote administrator access was not configured.'

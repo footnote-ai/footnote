@@ -111,6 +111,23 @@ const promptFrom = (answers: string[]): Prompt => ({
     },
 });
 
+const freshProvisionResponses = (bindingOutput: string): CommandResult[] => [
+    { code: 1, stdout: '', stderr: 'not found' },
+    { code: 0, stdout: 'NAME\n', stderr: '' },
+    { code: 0, stdout: 'Digest: $argon2id$password-hash\n', stderr: '' },
+    {
+        code: 0,
+        stdout: 'Random Password: client-secret-value\nDigest: $argon2id$client-hash\n',
+        stderr: '',
+    },
+    { code: 0, stdout: '', stderr: '' },
+    { code: 0, stdout: '', stderr: '' },
+    { code: 0, stdout: '', stderr: '' },
+    { code: 0, stdout: '', stderr: '' },
+    { code: 0, stdout: '', stderr: '' },
+    { code: 0, stdout: bindingOutput, stderr: '' },
+];
+
 test('derives Fly defaults from server.toml and renders provider-neutral OIDC settings', () => {
     assert.deepEqual(
         parseServerDefaults(
@@ -368,26 +385,7 @@ test('does not save existing-profile state before Fly resources exist', async ()
 test('provisions, validates, probes, and stores only sanitized state', async () => {
     const root = await createTempRoot();
     const serverConfigPath = await writeServerConfig(root);
-    const runner = new FakeRunner([
-        { code: 1, stdout: '', stderr: 'not found' },
-        { code: 0, stdout: 'NAME\n', stderr: '' },
-        { code: 0, stdout: 'Digest: $argon2id$password-hash\n', stderr: '' },
-        {
-            code: 0,
-            stdout: 'Random Password: client-secret-value\nDigest: $argon2id$client-hash\n',
-            stderr: '',
-        },
-        { code: 0, stdout: '', stderr: '' },
-        { code: 0, stdout: '', stderr: '' },
-        { code: 0, stdout: '', stderr: '' },
-        { code: 0, stdout: '', stderr: '' },
-        { code: 0, stdout: '', stderr: '' },
-        {
-            code: 0,
-            stdout: 'BINDING_OUTPUT',
-            stderr: '',
-        },
-    ]);
+    const runner = new FakeRunner(freshProvisionResponses('BINDING_OUTPUT'));
     await provisionAuthelia({
         mode: 'authelia',
         repositoryRoot: root,
@@ -564,26 +562,11 @@ test('provisions, validates, probes, and stores only sanitized state', async () 
 test('does not install the administrator allowlist when Authelia binding is not confirmed', async () => {
     const root = await createTempRoot();
     const serverConfigPath = await writeServerConfig(root);
-    const runner = new FakeRunner([
-        { code: 1, stdout: '', stderr: 'not found' },
-        { code: 0, stdout: 'NAME\n', stderr: '' },
-        { code: 0, stdout: 'Digest: $argon2id$password-hash\n', stderr: '' },
-        {
-            code: 0,
-            stdout: 'Random Password: client-secret-value\nDigest: $argon2id$client-hash\n',
-            stderr: '',
-        },
-        { code: 0, stdout: '', stderr: '' },
-        { code: 0, stdout: '', stderr: '' },
-        { code: 0, stdout: '', stderr: '' },
-        { code: 0, stdout: '', stderr: '' },
-        { code: 0, stdout: '', stderr: '' },
-        {
-            code: 0,
-            stdout: 'Added User Opaque Identifier:\n\tService: openid\n\tSector: \n\tUsername: admin\n\tIdentifier: 00000000-0000-4000-8000-000000000000\n',
-            stderr: '',
-        },
-    ]);
+    const runner = new FakeRunner(
+        freshProvisionResponses(
+            'Added User Opaque Identifier:\n\tService: openid\n\tSector: \n\tUsername: admin\n\tIdentifier: 00000000-0000-4000-8000-000000000000\n'
+        )
+    );
 
     await assert.rejects(
         provisionAuthelia({
