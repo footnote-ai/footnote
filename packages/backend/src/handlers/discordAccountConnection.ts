@@ -48,8 +48,15 @@ const cookie = (value: string, secure: boolean, maxAge = 600): string =>
 const csrfMatches = (req: IncomingMessage, token: string): boolean => {
     const value = req.headers[AUTH_CSRF_HEADER_NAME];
     const supplied = Array.isArray(value) ? value[0] : value;
-    if (!supplied?.length || supplied.length !== token.length) return false;
-    return timingSafeEqual(Buffer.from(supplied), Buffer.from(token));
+    if (!supplied) return false;
+    const suppliedBytes = Buffer.from(supplied);
+    const tokenBytes = Buffer.from(token);
+    if (
+        suppliedBytes.length === 0 ||
+        suppliedBytes.length !== tokenBytes.length
+    )
+        return false;
+    return timingSafeEqual(suppliedBytes, tokenBytes);
 };
 
 /**

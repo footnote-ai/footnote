@@ -29,7 +29,6 @@ import {
 } from '../src/services/executionContractTrustGraph/index.js';
 import { SimpleRateLimiter } from '../src/services/rateLimiter.js';
 import { logger } from '../src/utils/logger.js';
-import { createInMemoryAccountStore } from '../src/storage/accounts/sqliteAccountStore.js';
 
 type MutableEnv = NodeJS.ProcessEnv & {
     TURNSTILE_SECRET_KEY?: string;
@@ -291,14 +290,12 @@ const createTestServer = (
         });
     });
 
-test('ordinary Discord chat context does not create account ownership', async () => {
+test('ordinary Discord chat accepts a user ID in its surface context', async () => {
     const env = process.env as MutableEnv;
     const previousTraceToken = env.TRACE_API_TOKEN;
     const previousTurnstileSecret = env.TURNSTILE_SECRET_KEY;
     const previousTurnstileSite = env.TURNSTILE_SITE_KEY;
     const discordUserId = '12345678901234567';
-    const accountStore = createInMemoryAccountStore();
-
     env.TRACE_API_TOKEN = 'trace-secret';
     env.TURNSTILE_SECRET_KEY = 'turnstile-secret';
     env.TURNSTILE_SITE_KEY = 'turnstile-site';
@@ -319,10 +316,6 @@ test('ordinary Discord chat context does not create account ownership', async ()
         });
 
         assert.equal(response.status, 200);
-        assert.equal(
-            accountStore.findAccountByDiscordUserId(discordUserId),
-            null
-        );
     } finally {
         await server.close();
         env.TRACE_API_TOKEN = previousTraceToken;

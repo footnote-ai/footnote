@@ -213,6 +213,19 @@ test('trusted start, browser exchange, OIDC consent, and original-user confirmat
         }
     );
     assert.equal(csrfRejected.status, 403);
+    const malformedCsrfRejected = await fetch(
+        `${baseUrl}/api/auth/discord-connection/consent`,
+        {
+            method: 'POST',
+            headers: {
+                cookie: `${ACCOUNT_SESSION_COOKIE_NAME}=${sessionCookie}; footnote_discord_connection=${connectionCookie}`,
+                'x-auth-csrf': `${'a'.repeat(sessionBody.csrfToken.length - 1)}é`,
+                'content-type': 'application/json',
+            },
+            body: '{}',
+        }
+    );
+    assert.equal(malformedCsrfRejected.status, 403);
     const consent = await fetch(
         `${baseUrl}/api/auth/discord-connection/consent`,
         {

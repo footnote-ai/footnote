@@ -62,6 +62,7 @@ const AccountPage = (): JSX.Element => {
     const [showCallbackFailure] = useState(hasAuthFailureMarker);
     const accountStatusHeadingRef = useRef<ComponentRef<'h2'>>(null);
     const focusAfterLogoutRef = useRef(false);
+    const connectionEffectStartedRef = useRef(false);
 
     useEffect(() => {
         if (showCallbackFailure) {
@@ -91,6 +92,9 @@ const AccountPage = (): JSX.Element => {
     }, [reloadKey]);
 
     useEffect(() => {
+        if (connectionEffectStartedRef.current) return;
+        connectionEffectStartedRef.current = true;
+
         const fragment = new URLSearchParams(window.location.hash.slice(1));
         const capability = fragment.get('connect');
         if (capability) {

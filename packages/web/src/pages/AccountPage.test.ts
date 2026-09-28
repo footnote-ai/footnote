@@ -84,6 +84,7 @@ test('Discord connection removes its fragment and offers explicit consent and ca
     );
 
     assert.match(source, /fragment\.get\('connect'\)/);
+    assert.match(source, /if \(connectionEffectStartedRef\.current\) return;/);
     assert.match(source, /history\.replaceState/);
     assert.match(source, /exchangeDiscordConnection\(capability\)/);
     assert.match(source, /consentDiscordConnection\(csrfToken\)/);
