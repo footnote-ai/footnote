@@ -8,6 +8,7 @@
 
 // Shared error envelopes.
 export type { ApiErrorResponse, NormalizedApiError } from './types.js';
+export * from './discordAccounts.js';
 
 /**
  * @api.operationId: getAuthSession

@@ -182,6 +182,34 @@ type CreateExpressAppDeps = {
         req: http.IncomingMessage,
         res: http.ServerResponse
     ) => Promise<void>;
+    handleDiscordBrowserExchange?: (
+        req: http.IncomingMessage,
+        res: http.ServerResponse
+    ) => Promise<void>;
+    handleDiscordBrowserStatus?: (
+        req: http.IncomingMessage,
+        res: http.ServerResponse
+    ) => Promise<void>;
+    handleDiscordBrowserConsent?: (
+        req: http.IncomingMessage,
+        res: http.ServerResponse
+    ) => Promise<void>;
+    handleDiscordBrowserCancel?: (
+        req: http.IncomingMessage,
+        res: http.ServerResponse
+    ) => Promise<void>;
+    handleDiscordAccountStartRequest?: (
+        req: http.IncomingMessage,
+        res: http.ServerResponse
+    ) => Promise<void>;
+    handleDiscordAccountStatusRequest?: (
+        req: http.IncomingMessage,
+        res: http.ServerResponse
+    ) => Promise<void>;
+    handleDiscordAccountConfirmRequest?: (
+        req: http.IncomingMessage,
+        res: http.ServerResponse
+    ) => Promise<void>;
     handleStaticTransportRequest: HandleStaticTransportRequest;
     resolveAsset: ResolveAsset;
     mimeMap: ReadonlyMap<string, string>;
@@ -223,6 +251,13 @@ const createExpressApp = ({
     handleAuthCallbackRequest,
     handleAuthSessionRequest,
     handleAuthLogoutRequest,
+    handleDiscordBrowserExchange,
+    handleDiscordBrowserStatus,
+    handleDiscordBrowserConsent,
+    handleDiscordBrowserCancel,
+    handleDiscordAccountStartRequest,
+    handleDiscordAccountStatusRequest,
+    handleDiscordAccountConfirmRequest,
     handleStaticTransportRequest,
     resolveAsset,
     mimeMap,
@@ -267,6 +302,10 @@ const createExpressApp = ({
         handleAuthCallbackRequest,
         handleAuthSessionRequest,
         handleAuthLogoutRequest,
+        handleDiscordBrowserExchange,
+        handleDiscordBrowserStatus,
+        handleDiscordBrowserConsent,
+        handleDiscordBrowserCancel,
         logRequest,
     });
     registerIncidentRoutes({
@@ -293,6 +332,9 @@ const createExpressApp = ({
         handleFinishRecoverableTaskRequest,
         handleClaimRecoverableTasksRequest,
         handleInternalVoiceTtsRequest,
+        handleDiscordAccountStartRequest,
+        handleDiscordAccountStatusRequest,
+        handleDiscordAccountConfirmRequest,
         logRequest,
     });
     registerTraceRoutes({

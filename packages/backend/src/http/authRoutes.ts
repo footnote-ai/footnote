@@ -15,6 +15,13 @@ type RequestHandler = (
     res: ServerResponse
 ) => Promise<void>;
 
+const accountConnectionDisabled: RequestHandler = async (_req, res) => {
+    res.statusCode = 503;
+    res.setHeader('Cache-Control', 'no-store');
+    res.setHeader('Content-Type', 'application/json');
+    res.end(JSON.stringify({ error: 'Account connection unavailable' }));
+};
+
 type RegisterAuthRoutesDeps = {
     app: express.Express;
     normalizePathname: (pathname: string) => string;
@@ -22,6 +29,10 @@ type RegisterAuthRoutesDeps = {
     handleAuthCallbackRequest: RequestHandler;
     handleAuthSessionRequest: RequestHandler;
     handleAuthLogoutRequest: RequestHandler;
+    handleDiscordBrowserExchange?: RequestHandler;
+    handleDiscordBrowserStatus?: RequestHandler;
+    handleDiscordBrowserConsent?: RequestHandler;
+    handleDiscordBrowserCancel?: RequestHandler;
     logRequest: LogRequest;
 };
 
@@ -36,6 +47,10 @@ export const registerAuthRoutes = ({
     handleAuthCallbackRequest,
     handleAuthSessionRequest,
     handleAuthLogoutRequest,
+    handleDiscordBrowserExchange = accountConnectionDisabled,
+    handleDiscordBrowserStatus = accountConnectionDisabled,
+    handleDiscordBrowserConsent = accountConnectionDisabled,
+    handleDiscordBrowserCancel = accountConnectionDisabled,
     logRequest,
 }: RegisterAuthRoutesDeps): void => {
     const authRouter = createDispatchRouter({
@@ -68,6 +83,35 @@ export const registerAuthRoutes = ({
                 req.method === 'POST'
             ) {
                 await handleAuthLogoutRequest(req, res);
+                return;
+            }
+            if (
+                normalizedPathname ===
+                    '/api/auth/discord-connection/exchange' &&
+                req.method === 'POST'
+            ) {
+                await handleDiscordBrowserExchange(req, res);
+                return;
+            }
+            if (
+                normalizedPathname === '/api/auth/discord-connection' &&
+                req.method === 'GET'
+            ) {
+                await handleDiscordBrowserStatus(req, res);
+                return;
+            }
+            if (
+                normalizedPathname === '/api/auth/discord-connection/consent' &&
+                req.method === 'POST'
+            ) {
+                await handleDiscordBrowserConsent(req, res);
+                return;
+            }
+            if (
+                normalizedPathname === '/api/auth/discord-connection/cancel' &&
+                req.method === 'POST'
+            ) {
+                await handleDiscordBrowserCancel(req, res);
                 return;
             }
             next();

@@ -51,6 +51,7 @@ import { createRuntimeConfigHandler } from './handlers/config.js';
 import { createAdminSettingsHandlers } from './handlers/adminSettings.js';
 import { createSetupSessionHandlers } from './handlers/setupSession.js';
 import { createAccountAuthHandlers } from './handlers/accountAuth.js';
+import { createDiscordAccountConnectionHandlers } from './handlers/discordAccountConnection.js';
 import { createIncidentService } from './services/incidents.js';
 import { createIncidentAlertRouter } from './services/incidentAlerts.js';
 import {
@@ -653,6 +654,19 @@ const {
     logger,
     logRequest,
 });
+const discordAccountHandlers = createDiscordAccountConnectionHandlers({
+    service: accountAuthService,
+    traceApiToken: runtimeConfig.trace.apiToken,
+    serviceToken: runtimeConfig.reflect.serviceToken,
+    maxBodyBytes: runtimeConfig.reflect.maxBodyBytes,
+    secureCookies:
+        runtimeConfig.accountAuth.enabled &&
+        runtimeConfig.accountAuth.secureCookies,
+    publicOrigin: runtimeConfig.accountAuth.enabled
+        ? new URL(runtimeConfig.accountAuth.redirectUri).origin
+        : '',
+    logRequest,
+});
 const { handleInternalTextRequest } = createInternalTextHandler({
     internalNewsTaskService,
     internalImageDescriptionTaskService,
@@ -787,6 +801,15 @@ const app = createExpressApp({
     handleAuthCallbackRequest,
     handleAuthSessionRequest,
     handleAuthLogoutRequest,
+    handleDiscordBrowserExchange: discordAccountHandlers.handleBrowserExchange,
+    handleDiscordBrowserStatus: discordAccountHandlers.handleBrowserStatus,
+    handleDiscordBrowserConsent: discordAccountHandlers.handleBrowserConsent,
+    handleDiscordBrowserCancel: discordAccountHandlers.handleBrowserCancel,
+    handleDiscordAccountStartRequest: discordAccountHandlers.handleTrustedStart,
+    handleDiscordAccountStatusRequest:
+        discordAccountHandlers.handleTrustedStatus,
+    handleDiscordAccountConfirmRequest:
+        discordAccountHandlers.handleTrustedConfirm,
     handleStaticTransportRequest,
     resolveAsset,
     mimeMap,

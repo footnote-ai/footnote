@@ -8,6 +8,40 @@ was selected. OIDC proves who signed in. Footnote maps that identity to a
 stable internal account and makes the separate administrator authorization
 decision.
 
+## Connect a Discord account
+
+Run `/account connect` in Discord. The bot uses the Discord interaction's user
+ID and replies privately with a ten-minute connection link. The link's random
+capability is placed in its URL fragment, exchanged once for an HttpOnly
+browser cookie, and removed from the address bar. The browser signs in through
+this same OIDC flow and asks for explicit approval. Approval displays an
+eight-digit code; it does not persist the Discord mapping. Enter the code with
+`/account confirm code:<code>` from the Discord account that started the flow.
+
+The backend stores a separate Discord-ID-to-internal-account mapping in the
+account SQLite database. A Discord ID is never an account ID or OIDC issuer.
+One Discord identity cannot move between accounts; a conflict does not merge
+or expose the other account. The connection transaction is process-local,
+single-use, limited to one active request per Discord user, and expires after
+ten minutes. Five incorrect codes invalidate it. A restart requires starting
+again. `/account status` privately reports whether backend ownership resolution
+finds a mapping.
+
+The bot's trusted internal-service credential is required for start, status,
+and confirmation. Account sign-in or Discord connection never claims historical
+incidents. Ordinary Discord messages and chat context do not create or resolve
+account ownership.
+
+Connection capabilities and confirmation codes are never logged or persisted.
+Only the Discord snowflake is stored as a unique external mapping to the
+internal account; Discord usernames, display names, email, and provider tokens
+are not retained for this flow. Browser writes use the account session's CSRF
+token and no-store responses. Signing out the approving session invalidates its
+pending transaction. A missing OIDC provider, trusted service credential, or
+account store disables only connection operations; public chat remains
+available. Connecting an account grants no administrator access and does not
+claim a historical incident.
+
 ## Runtime behavior
 
 - OIDC authorization code flow uses PKCE S256, state, and nonce.

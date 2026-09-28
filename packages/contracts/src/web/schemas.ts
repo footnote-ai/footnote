@@ -7,6 +7,7 @@
  */
 
 import { z } from 'zod';
+export * from './discordAccounts.js';
 import {
     BOUNDED_REVIEW_ASSESS_DECISIONS,
     TRACE_ASSESS_FINAL_TEMPERAMENT_SIGNAL_KEYS,
