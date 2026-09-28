@@ -39,6 +39,18 @@ export type WebApiClient = {
     ) => Promise<GetRuntimeConfigResponse>;
     getAuthSession: (signal?: AbortSignal) => Promise<GetAuthSessionResponse>;
     logoutAccount: (csrfToken: string, signal?: AbortSignal) => Promise<void>;
+    exchangeDiscordConnection: ReturnType<
+        typeof createSharedWebApiClient
+    >['exchangeDiscordConnection'];
+    getDiscordConnectionState: ReturnType<
+        typeof createSharedWebApiClient
+    >['getDiscordConnectionState'];
+    consentDiscordConnection: ReturnType<
+        typeof createSharedWebApiClient
+    >['consentDiscordConnection'];
+    cancelDiscordConnection: ReturnType<
+        typeof createSharedWebApiClient
+    >['cancelDiscordConnection'];
     getTrace: (
         responseId: string,
         signal?: AbortSignal
@@ -67,6 +79,10 @@ export const createWebApiClient = (
     const getRuntimeConfig = shared.getRuntimeConfig;
     const getAuthSession = shared.getAuthSession;
     const logoutAccount = shared.logoutAccount;
+    const exchangeDiscordConnection = shared.exchangeDiscordConnection;
+    const getDiscordConnectionState = shared.getDiscordConnectionState;
+    const consentDiscordConnection = shared.consentDiscordConnection;
+    const cancelDiscordConnection = shared.cancelDiscordConnection;
     const getTrace = shared.getTrace;
     const getResponseVersions = shared.getResponseVersions;
 
@@ -76,6 +92,10 @@ export const createWebApiClient = (
         getRuntimeConfig,
         getAuthSession,
         logoutAccount,
+        exchangeDiscordConnection,
+        getDiscordConnectionState,
+        consentDiscordConnection,
+        cancelDiscordConnection,
         getTrace,
         getResponseVersions,
     };
@@ -116,6 +136,15 @@ export const logoutAccount = (
     csrfToken: string,
     signal?: AbortSignal
 ): Promise<void> => api.logoutAccount(csrfToken, signal);
+
+export const exchangeDiscordConnection = (capability: string) =>
+    api.exchangeDiscordConnection(capability);
+export const getDiscordConnectionState = (signal?: AbortSignal) =>
+    api.getDiscordConnectionState(signal);
+export const consentDiscordConnection = (csrfToken: string) =>
+    api.consentDiscordConnection(csrfToken);
+export const cancelDiscordConnection = (csrfToken: string) =>
+    api.cancelDiscordConnection(csrfToken);
 
 /**
  * Public API boundary helper for fetching trace details for a response id.

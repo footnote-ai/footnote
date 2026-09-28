@@ -290,6 +290,40 @@ const createTestServer = (
         });
     });
 
+test('ordinary Discord chat accepts a user ID in its surface context', async () => {
+    const env = process.env as MutableEnv;
+    const previousTraceToken = env.TRACE_API_TOKEN;
+    const previousTurnstileSecret = env.TURNSTILE_SECRET_KEY;
+    const previousTurnstileSite = env.TURNSTILE_SITE_KEY;
+    const discordUserId = '12345678901234567';
+    env.TRACE_API_TOKEN = 'trace-secret';
+    env.TURNSTILE_SECRET_KEY = 'turnstile-secret';
+    env.TURNSTILE_SITE_KEY = 'turnstile-site';
+
+    const server = await createTestServer();
+    try {
+        const response = await fetch(`${server.url}/api/chat`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-Trace-Token': 'trace-secret',
+            },
+            body: JSON.stringify(
+                createChatRequest({
+                    surfaceContext: { userId: discordUserId },
+                })
+            ),
+        });
+
+        assert.equal(response.status, 200);
+    } finally {
+        await server.close();
+        env.TRACE_API_TOKEN = previousTraceToken;
+        env.TURNSTILE_SECRET_KEY = previousTurnstileSecret;
+        env.TURNSTILE_SITE_KEY = previousTurnstileSite;
+    }
+});
+
 test('chat accepts trusted service calls with x-trace-token and no turnstile token', async () => {
     const env = process.env as MutableEnv;
     const previousTraceToken = env.TRACE_API_TOKEN;

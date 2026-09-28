@@ -20,6 +20,12 @@ const respondRecoverableTasksDisabled: RequestHandler = async (_req, res) => {
     res.setHeader('Content-Type', 'application/json');
     res.end(JSON.stringify({ error: 'Recoverable task store unavailable' }));
 };
+const respondDiscordAccountDisabled: RequestHandler = async (_req, res) => {
+    res.statusCode = 503;
+    res.setHeader('Cache-Control', 'no-store');
+    res.setHeader('Content-Type', 'application/json');
+    res.end(JSON.stringify({ error: 'Account connection unavailable' }));
+};
 
 type RegisterInternalRoutesDeps = {
     app: express.Express;
@@ -33,6 +39,9 @@ type RegisterInternalRoutesDeps = {
         taskId: string
     ) => Promise<void>;
     handleClaimRecoverableTasksRequest?: RequestHandler;
+    handleDiscordAccountStartRequest?: RequestHandler;
+    handleDiscordAccountStatusRequest?: RequestHandler;
+    handleDiscordAccountConfirmRequest?: RequestHandler;
     logRequest: LogRequest;
 };
 
@@ -68,6 +77,9 @@ const registerInternalRoutes = ({
     handleCreateRecoverableTaskRequest = respondRecoverableTasksDisabled,
     handleFinishRecoverableTaskRequest = respondRecoverableTasksDisabled,
     handleClaimRecoverableTasksRequest = respondRecoverableTasksDisabled,
+    handleDiscordAccountStartRequest = respondDiscordAccountDisabled,
+    handleDiscordAccountStatusRequest = respondDiscordAccountDisabled,
+    handleDiscordAccountConfirmRequest = respondDiscordAccountDisabled,
     logRequest,
 }: RegisterInternalRoutesDeps): void => {
     const internalRouter = express.Router();
@@ -123,6 +135,27 @@ const registerInternalRoutes = ({
     internalRouter.all('/voice/tts', async (req, res) => {
         try {
             await handleInternalVoiceTtsRequest(req, res);
+        } catch (error) {
+            respondWithRouteError(req, res, logRequest, error);
+        }
+    });
+    internalRouter.all('/discord/account/start', async (req, res) => {
+        try {
+            await handleDiscordAccountStartRequest(req, res);
+        } catch (error) {
+            respondWithRouteError(req, res, logRequest, error);
+        }
+    });
+    internalRouter.all('/discord/account/status', async (req, res) => {
+        try {
+            await handleDiscordAccountStatusRequest(req, res);
+        } catch (error) {
+            respondWithRouteError(req, res, logRequest, error);
+        }
+    });
+    internalRouter.all('/discord/account/confirm', async (req, res) => {
+        try {
+            await handleDiscordAccountConfirmRequest(req, res);
         } catch (error) {
             respondWithRouteError(req, res, logRequest, error);
         }

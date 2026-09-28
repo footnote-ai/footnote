@@ -15,6 +15,13 @@ type RequestHandler = (
     res: ServerResponse
 ) => Promise<void>;
 
+const accountConnectionDisabled: RequestHandler = async (_req, res) => {
+    res.statusCode = 503;
+    res.setHeader('Cache-Control', 'no-store');
+    res.setHeader('Content-Type', 'application/json');
+    res.end(JSON.stringify({ error: 'Account connection unavailable' }));
+};
+
 type RegisterAuthRoutesDeps = {
     app: express.Express;
     normalizePathname: (pathname: string) => string;
@@ -22,6 +29,10 @@ type RegisterAuthRoutesDeps = {
     handleAuthCallbackRequest: RequestHandler;
     handleAuthSessionRequest: RequestHandler;
     handleAuthLogoutRequest: RequestHandler;
+    handleDiscordBrowserExchange?: RequestHandler;
+    handleDiscordBrowserStatus?: RequestHandler;
+    handleDiscordBrowserConsent?: RequestHandler;
+    handleDiscordBrowserCancel?: RequestHandler;
     logRequest: LogRequest;
 };
 
@@ -36,8 +47,27 @@ export const registerAuthRoutes = ({
     handleAuthCallbackRequest,
     handleAuthSessionRequest,
     handleAuthLogoutRequest,
+    handleDiscordBrowserExchange = accountConnectionDisabled,
+    handleDiscordBrowserStatus = accountConnectionDisabled,
+    handleDiscordBrowserConsent = accountConnectionDisabled,
+    handleDiscordBrowserCancel = accountConnectionDisabled,
     logRequest,
 }: RegisterAuthRoutesDeps): void => {
+    const discordBrowserRoutes = new Map<string, RequestHandler>([
+        [
+            'POST /api/auth/discord-connection/exchange',
+            handleDiscordBrowserExchange,
+        ],
+        ['GET /api/auth/discord-connection', handleDiscordBrowserStatus],
+        [
+            'POST /api/auth/discord-connection/consent',
+            handleDiscordBrowserConsent,
+        ],
+        [
+            'POST /api/auth/discord-connection/cancel',
+            handleDiscordBrowserCancel,
+        ],
+    ]);
     const authRouter = createDispatchRouter({
         normalizePathname,
         logRequest,
@@ -68,6 +98,13 @@ export const registerAuthRoutes = ({
                 req.method === 'POST'
             ) {
                 await handleAuthLogoutRequest(req, res);
+                return;
+            }
+            const discordBrowserHandler = discordBrowserRoutes.get(
+                `${req.method} ${normalizedPathname}`
+            );
+            if (discordBrowserHandler) {
+                await discordBrowserHandler(req, res);
                 return;
             }
             next();

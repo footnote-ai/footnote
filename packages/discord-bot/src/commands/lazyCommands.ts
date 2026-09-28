@@ -25,6 +25,7 @@ type CommandDefinition = {
 
 const commandModuleLoaders: Record<string, () => Promise<LoadedCommandModule>> =
     {
+        account: () => import('./account.js'),
         chat: () => import('./chat.js'),
         image: () => import('./image.js'),
         call: () => import('./call.js'),

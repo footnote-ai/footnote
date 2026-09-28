@@ -56,8 +56,8 @@ detail once you have the main runtime shape in mind.
   when `footnote.yaml` is missing, including setup-route gating and first-write
   sentinel behavior.
 - [Account Identity and Access](../auth/README.md):
-  proposed provider-neutral login direction for administrators and future user
-  accounts.
+  provider-neutral login, durable accounts, Discord linking, and administrator
+  access boundaries.
 - [Footnote and Common Agentic Patterns](./footnote-and-common-agentic-patterns.md):
   external-pattern comparison and fit.
 - [Footnote Annotations](./footnote-annotations.md): code annotation conventions.

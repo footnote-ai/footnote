@@ -8,6 +8,29 @@ was selected. OIDC proves who signed in. Footnote maps that identity to a
 stable internal account and makes the separate administrator authorization
 decision.
 
+## Connect a Discord account
+
+Run `/account connect` in Discord. The bot privately replies with a link that
+expires in ten minutes. Open it, sign in, and approve the connection. Footnote
+then shows an eight-digit code; enter it with `/account confirm code:<code>`
+from the same Discord account. Browser approval alone does not connect the
+accounts. `/account status` privately checks the link.
+
+Footnote links the Discord ID to the internal account. Repeating the link to
+the same account is harmless. If that ID already belongs to another account,
+Footnote refuses the link; it never moves identities or merges accounts.
+Unfinished requests stay in process memory, expire after ten minutes, and are
+cleared on restart. Five incorrect codes invalidate a request.
+
+The link token is carried in the URL fragment, removed from the address bar
+after exchange, and held in an HttpOnly browser cookie. Tokens and codes are
+not logged or stored. Browser writes require the signed-in session's CSRF
+token; signing out cancels its pending request. The bot's internal service
+credential is required to start, check, or confirm a link. Missing sign-in or
+bot configuration disables linking, not public chat. Linking does not grant
+administrator access or claim a past incident. Discord usernames and provider
+tokens are not retained.
+
 ## Runtime behavior
 
 - OIDC authorization code flow uses PKCE S256, state, and nonce.

@@ -76,3 +76,20 @@ test('account page reports callback failure without retaining its query marker',
     assert.match(source, /aria-live="polite"/);
     assert.match(source, /accountStatusHeadingRef\.current\?\.focus\(\)/);
 });
+
+test('Discord connection removes its fragment and offers explicit consent and cancel', async () => {
+    const source = await readFile(
+        `${webSourceDirectory}pages/AccountPage.tsx`,
+        'utf8'
+    );
+
+    assert.match(source, /fragment\.get\('connect'\)/);
+    assert.match(source, /if \(connectionEffectStartedRef\.current\) return;/);
+    assert.match(source, /history\.replaceState/);
+    assert.match(source, /exchangeDiscordConnection\(capability\)/);
+    assert.match(source, /consentDiscordConnection\(csrfToken\)/);
+    assert.match(source, /cancelDiscordConnection\(csrfToken\)/);
+    assert.match(source, /Approve connection/);
+    assert.match(source, /\/account confirm code:/);
+    assert.match(source, /<output/);
+});

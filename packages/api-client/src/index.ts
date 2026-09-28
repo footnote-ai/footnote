@@ -56,6 +56,10 @@ import {
     type TraceApi,
 } from './traces.js';
 import { createWebReadApi, type WebReadApi } from './web.js';
+import {
+    createDiscordAccountApi,
+    type DiscordAccountApi,
+} from './discordAccounts.js';
 
 export type CreateDiscordApiClientOptions = CreateApiTransportOptions & {
     baseUrl: string;
@@ -75,7 +79,8 @@ export type DiscordApiClient = {
     InternalImageApi &
     InternalTextApi &
     InternalVoiceApi &
-    RecoverableTaskApi;
+    RecoverableTaskApi &
+    DiscordAccountApi;
 
 export const createDiscordApiClient = ({
     baseUrl,
@@ -107,6 +112,7 @@ export const createDiscordApiClient = ({
         ...createRecoverableTaskApi(requestJson, { traceApiToken }),
         ...createChatApi(requestJson, { traceApiToken }),
         ...createTraceApi(requestJson, { traceApiToken }),
+        ...createDiscordAccountApi(requestJson, traceApiToken),
     };
 };
 
@@ -150,6 +156,7 @@ export const createWebApiClient = ({
 export { createApiTransport, isApiClientError };
 export {
     createAccountAuthApi,
+    createDiscordAccountApi,
     createChatApi,
     createIncidentApi,
     createInternalImageApi,
@@ -161,6 +168,7 @@ export {
 };
 export type {
     AccountAuthApi,
+    DiscordAccountApi,
     ApiClientError,
     ApiErrorResponse,
     ApiJsonResult,

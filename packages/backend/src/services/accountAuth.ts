@@ -6,7 +6,7 @@
  * @footnote-ethics: high - This service controls identity admission and minimizes retained account data.
  */
 
-import { randomBytes } from 'node:crypto';
+import { randomBytes, randomInt, timingSafeEqual } from 'node:crypto';
 import { buildExternalIdentityKey } from '@footnote/contracts';
 import type { AuthenticatedPrincipal } from '@footnote/contracts/web';
 import type {
@@ -26,6 +26,30 @@ type LoginTransaction = {
     codeVerifier: string;
     expiresAtMs: number;
 };
+
+type DiscordConnectionTransaction = {
+    discordUserId: string;
+    expiresAtMs: number;
+    capability: string | null;
+    connectionSessionId: string | null;
+    approvedAccountId: string | null;
+    approvedSessionId: string | null;
+    confirmationCode: string | null;
+    failedAttempts: number;
+};
+
+export type DiscordConnectionState =
+    | 'waiting-for-sign-in'
+    | 'waiting-for-approval'
+    | 'waiting-for-discord-confirmation';
+export type DiscordConnectionResult =
+    | 'linked'
+    | 'already-linked'
+    | 'conflict'
+    | 'invalid'
+    | 'wrong-code'
+    | 'attempts-exhausted'
+    | 'unavailable';
 
 export type AccountSession = {
     sessionId: string;
@@ -74,6 +98,35 @@ export type AccountAuthService = {
     clearSession: (sessionId: string) => boolean;
 };
 
+export type DiscordAccountConnectionService = {
+    discordConnectionsEnabled: boolean;
+    startDiscordConnection: (
+        discordUserId: string
+    ) => { capability: string; expiresAt: string } | null;
+    exchangeDiscordCapability: (capability: string) => string | null;
+    getDiscordConnectionState: (
+        connectionSessionId: string,
+        sessionId?: string
+    ) => DiscordConnectionState | null;
+    getDiscordConfirmationCode: (
+        connectionSessionId: string,
+        sessionId?: string
+    ) => string | null;
+    approveDiscordConnection: (
+        connectionSessionId: string,
+        accountId: string,
+        sessionId: string
+    ) => string | null;
+    cancelDiscordConnection: (connectionSessionId: string) => boolean;
+    confirmDiscordConnection: (
+        discordUserId: string,
+        code: string
+    ) => DiscordConnectionResult;
+    findAccountByDiscordUserId: (
+        discordUserId: string
+    ) => FootnoteAccount | null;
+};
+
 type CreateAccountAuthServiceDeps = {
     provider: OidcAccountClient | null;
     accountStore: AccountStore | null;
@@ -87,9 +140,9 @@ type CreateAccountAuthServiceDeps = {
 };
 
 /**
- * Keeps authentication state process-local for the first account slice.
- * Provider errors fail closed for session creation without affecting public
- * Footnote routes.
+ * Keeps OIDC sessions and bounded Discord connection transactions process-local.
+ * Identity, storage, and provider failures fail closed for account operations
+ * without affecting public Footnote routes.
  */
 export const createAccountAuthService = ({
     provider,
@@ -102,8 +155,11 @@ export const createAccountAuthService = ({
     sessionTtlMs = DEFAULT_SESSION_TTL_MS,
     maxTransactions = DEFAULT_MAX_TRANSACTIONS,
     maxSessions = DEFAULT_MAX_SESSIONS,
-}: CreateAccountAuthServiceDeps): AccountAuthService => {
+}: CreateAccountAuthServiceDeps): AccountAuthService &
+    DiscordAccountConnectionService => {
     const transactions = new Map<string, LoginTransaction>();
+    const discordTransactions = new Map<string, DiscordConnectionTransaction>();
+    const transactionByDiscordUserId = new Map<string, string>();
     const sessions = new Map<
         string,
         AccountSession & { expiresAtMs: number }
@@ -260,14 +316,213 @@ export const createAccountAuthService = ({
         };
     };
 
-    const clearSession = (sessionId: string): boolean =>
-        sessions.delete(sessionId);
+    const clearSession = (sessionId: string): boolean => {
+        for (const [id, tx] of discordTransactions) {
+            if (tx.approvedSessionId === sessionId) clearDiscordTransaction(id);
+        }
+        return sessions.delete(sessionId);
+    };
+
+    const clearDiscordTransaction = (id: string): void => {
+        const transaction = discordTransactions.get(id);
+        if (!transaction) return;
+        discordTransactions.delete(id);
+        if (transactionByDiscordUserId.get(transaction.discordUserId) === id) {
+            transactionByDiscordUserId.delete(transaction.discordUserId);
+        }
+    };
+
+    const getActiveDiscordTransaction = (
+        id: string
+    ): DiscordConnectionTransaction | null => {
+        const transaction = discordTransactions.get(id);
+        if (!transaction || transaction.expiresAtMs <= now()) {
+            clearDiscordTransaction(id);
+            return null;
+        }
+        return transaction;
+    };
+
+    const startDiscordConnection = (
+        discordUserId: string
+    ): { capability: string; expiresAt: string } | null => {
+        if (!provider || !accountStore || maxTransactions <= 0) return null;
+        const activeId = transactionByDiscordUserId.get(discordUserId);
+        if (activeId) clearDiscordTransaction(activeId);
+        for (const [id, tx] of discordTransactions) {
+            if (tx.expiresAtMs <= now()) clearDiscordTransaction(id);
+        }
+        while (discordTransactions.size >= maxTransactions) {
+            const oldest = discordTransactions.keys().next().value;
+            if (oldest === undefined) return null;
+            clearDiscordTransaction(oldest);
+        }
+        const id = randomToken(32);
+        const capability = randomToken(32);
+        const expiresAtMs = now() + transactionTtlMs;
+        discordTransactions.set(id, {
+            discordUserId,
+            expiresAtMs,
+            capability,
+            connectionSessionId: null,
+            approvedAccountId: null,
+            approvedSessionId: null,
+            confirmationCode: null,
+            failedAttempts: 0,
+        });
+        transactionByDiscordUserId.set(discordUserId, id);
+        return { capability, expiresAt: new Date(expiresAtMs).toISOString() };
+    };
+
+    const exchangeDiscordCapability = (capability: string): string | null => {
+        for (const [id, tx] of discordTransactions) {
+            if (
+                tx.capability &&
+                tx.capability === capability &&
+                getActiveDiscordTransaction(id)
+            ) {
+                tx.capability = null;
+                tx.connectionSessionId = randomToken(32);
+                return tx.connectionSessionId;
+            }
+        }
+        return null;
+    };
+
+    const getDiscordConnectionState = (
+        connectionSessionId: string,
+        sessionId?: string
+    ): DiscordConnectionState | null => {
+        for (const [id, tx] of discordTransactions) {
+            if (
+                tx.connectionSessionId === connectionSessionId &&
+                getActiveDiscordTransaction(id)
+            ) {
+                if (
+                    tx.approvedSessionId &&
+                    tx.approvedSessionId !== sessionId
+                ) {
+                    clearDiscordTransaction(id);
+                    return null;
+                }
+                if (tx.confirmationCode)
+                    return 'waiting-for-discord-confirmation';
+                return sessionId
+                    ? 'waiting-for-approval'
+                    : 'waiting-for-sign-in';
+            }
+        }
+        return null;
+    };
+
+    const getDiscordConfirmationCode = (
+        connectionSessionId: string,
+        sessionId?: string
+    ): string | null => {
+        for (const [id, tx] of discordTransactions) {
+            if (
+                tx.connectionSessionId === connectionSessionId &&
+                getActiveDiscordTransaction(id)
+            )
+                return tx.approvedSessionId === sessionId
+                    ? tx.confirmationCode
+                    : null;
+        }
+        return null;
+    };
+
+    const approveDiscordConnection = (
+        connectionSessionId: string,
+        accountId: string,
+        sessionId: string
+    ): string | null => {
+        for (const [id, tx] of discordTransactions) {
+            if (
+                tx.connectionSessionId !== connectionSessionId ||
+                !getActiveDiscordTransaction(id)
+            )
+                continue;
+            if (tx.approvedAccountId && tx.approvedAccountId !== accountId)
+                return null;
+            if (!tx.approvedAccountId) {
+                tx.approvedAccountId = accountId;
+                tx.approvedSessionId = sessionId;
+            } else if (tx.approvedSessionId !== sessionId) return null;
+            if (!tx.confirmationCode)
+                tx.confirmationCode = Array.from(
+                    { length: 8 },
+                    () => '0123456789'[randomInt(10)]
+                ).join('');
+            return tx.confirmationCode;
+        }
+        return null;
+    };
+
+    const cancelDiscordConnection = (connectionSessionId: string): boolean => {
+        for (const [id, tx] of discordTransactions) {
+            if (tx.connectionSessionId === connectionSessionId) {
+                clearDiscordTransaction(id);
+                return true;
+            }
+        }
+        return false;
+    };
+
+    const confirmDiscordConnection = (
+        discordUserId: string,
+        code: string
+    ): DiscordConnectionResult => {
+        if (!accountStore) return 'invalid';
+        const id = transactionByDiscordUserId.get(discordUserId);
+        const tx = id ? getActiveDiscordTransaction(id) : null;
+        if (!id || !tx?.approvedAccountId || !tx.confirmationCode)
+            return 'invalid';
+        const expected = Buffer.from(tx.confirmationCode);
+        const supplied = Buffer.from(code);
+        if (
+            expected.length !== supplied.length ||
+            !timingSafeEqual(expected, supplied)
+        ) {
+            tx.failedAttempts += 1;
+            if (tx.failedAttempts >= 5) {
+                clearDiscordTransaction(id);
+                return 'attempts-exhausted';
+            }
+            return 'wrong-code';
+        }
+        let result: 'linked' | 'already-linked' | 'conflict';
+        try {
+            result = accountStore.linkDiscordUserToAccount(
+                discordUserId,
+                tx.approvedAccountId
+            );
+        } catch {
+            return 'unavailable';
+        }
+        clearDiscordTransaction(id);
+        return result;
+    };
+
+    const findAccountByDiscordUserId = (
+        discordUserId: string
+    ): FootnoteAccount | null => {
+        return accountStore?.findAccountByDiscordUserId(discordUserId) ?? null;
+    };
 
     return {
         enabled: provider !== null,
+        discordConnectionsEnabled: provider !== null && accountStore !== null,
         startLogin,
         completeLogin,
         getSession,
         clearSession,
+        startDiscordConnection,
+        exchangeDiscordCapability,
+        getDiscordConnectionState,
+        getDiscordConfirmationCode,
+        approveDiscordConnection,
+        cancelDiscordConnection,
+        confirmDiscordConnection,
+        findAccountByDiscordUserId,
     };
 };

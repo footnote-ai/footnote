@@ -7,9 +7,11 @@
  */
 
 import assert from 'node:assert/strict';
+import { execFile } from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { promisify } from 'node:util';
 import test from 'node:test';
 import Database from 'better-sqlite3';
 import { SqliteAccountStore } from '../src/storage/accounts/sqliteAccountStore.js';
@@ -18,6 +20,7 @@ const identity = {
     issuer: 'https://identity.example/application/o/footnote/',
     subject: 'subject-1',
 };
+const execFileAsync = promisify(execFile);
 
 test('creates one stable account for a repeated external identity', () => {
     const tempDir = fs.mkdtempSync(
@@ -104,6 +107,104 @@ test('two stores resolving the same first identity converge on one account', () 
     } finally {
         firstStore?.close();
         secondStore?.close();
+        fs.rmSync(tempDir, { recursive: true, force: true });
+    }
+});
+
+test('Discord mapping survives reopen, is idempotent, and never moves', () => {
+    const tempDir = fs.mkdtempSync(
+        path.join(os.tmpdir(), 'footnote-discord-account-')
+    );
+    const dbPath = path.join(tempDir, 'accounts.db');
+    let store: SqliteAccountStore | null = null;
+    try {
+        store = new SqliteAccountStore({ dbPath });
+        const accountA = store.resolveOrCreateAccount(identity);
+        const accountB = store.resolveOrCreateAccount({
+            ...identity,
+            subject: 'subject-2',
+        });
+        assert.equal(
+            store.linkDiscordUserToAccount('discord-1', accountA.id),
+            'linked'
+        );
+        assert.equal(
+            store.linkDiscordUserToAccount('discord-1', accountA.id),
+            'already-linked'
+        );
+        assert.equal(
+            store.linkDiscordUserToAccount('discord-1', accountB.id),
+            'conflict'
+        );
+        store.close();
+        store = new SqliteAccountStore({ dbPath });
+        assert.equal(
+            store.findAccountByDiscordUserId('discord-1')?.id,
+            accountA.id
+        );
+        assert.equal(store.findAccountByDiscordUserId('discord-2'), null);
+    } finally {
+        store?.close();
+        fs.rmSync(tempDir, { recursive: true, force: true });
+    }
+});
+
+test('concurrent Discord links preserve one account and isolate conflicts', async () => {
+    const tempDir = fs.mkdtempSync(
+        path.join(os.tmpdir(), 'footnote-discord-race-')
+    );
+    const dbPath = path.join(tempDir, 'accounts.db');
+    let store: SqliteAccountStore | null = null;
+    try {
+        store = new SqliteAccountStore({ dbPath });
+        const accountA = store.resolveOrCreateAccount(identity);
+        const accountB = store.resolveOrCreateAccount({
+            ...identity,
+            subject: 'subject-2',
+        });
+        store.close();
+        store = null;
+        const worker = `
+            import { SqliteAccountStore } from './packages/backend/src/storage/accounts/sqliteAccountStore.ts';
+            const store = new SqliteAccountStore({ dbPath: process.argv[1] });
+            try { console.log(store.linkDiscordUserToAccount(process.argv[2], process.argv[3])); }
+            finally { store.close(); }
+        `;
+        const link = (accountId: string) =>
+            execFileAsync(
+                process.execPath,
+                [
+                    '--import',
+                    'tsx',
+                    '--input-type=module',
+                    '--eval',
+                    worker,
+                    dbPath,
+                    'discord-1',
+                    accountId,
+                ],
+                { cwd: process.cwd() }
+            ).then(({ stdout }) => stdout.trim());
+        const outcomes = await Promise.all([
+            link(accountA.id),
+            link(accountB.id),
+        ]);
+        assert.equal(
+            outcomes.filter((result) => result === 'linked').length,
+            1
+        );
+        assert.equal(
+            outcomes.filter((result) => result === 'conflict').length,
+            1
+        );
+        store = new SqliteAccountStore({ dbPath });
+        assert.ok(
+            [accountA.id, accountB.id].includes(
+                store.findAccountByDiscordUserId('discord-1')?.id ?? ''
+            )
+        );
+    } finally {
+        store?.close();
         fs.rmSync(tempDir, { recursive: true, force: true });
     }
 });

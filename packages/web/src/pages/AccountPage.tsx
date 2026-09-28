@@ -7,10 +7,20 @@
  */
 
 import { useEffect, useRef, useState, type ComponentRef } from 'react';
-import type { GetAuthSessionResponse } from '@footnote/contracts/web';
+import type {
+    DiscordConnectionStateResponse,
+    GetAuthSessionResponse,
+} from '@footnote/contracts/web';
 import PublicPageLayout from '@components/PublicPageLayout';
 import { Link } from 'react-router-dom';
-import { getAuthSession, logoutAccount } from '../utils/api';
+import {
+    cancelDiscordConnection,
+    consentDiscordConnection,
+    exchangeDiscordConnection,
+    getAuthSession,
+    getDiscordConnectionState,
+    logoutAccount,
+} from '../utils/api';
 
 type SessionState =
     | { status: 'loading' }
@@ -18,6 +28,14 @@ type SessionState =
     | { status: 'error' };
 
 type LogoutState = 'idle' | 'submitting' | 'error';
+type ConnectionState =
+    | { status: 'loading' }
+    | {
+          status: 'ready';
+          state: DiscordConnectionStateResponse['state'];
+          code?: string;
+      }
+    | { status: 'error' };
 
 const hasAuthFailureMarker = (): boolean =>
     new URLSearchParams(window.location.search).get('auth') === 'failed';
@@ -38,9 +56,13 @@ const AccountPage = (): JSX.Element => {
     });
     const [reloadKey, setReloadKey] = useState(0);
     const [logoutState, setLogoutState] = useState<LogoutState>('idle');
+    const [connectionState, setConnectionState] = useState<ConnectionState>({
+        status: 'loading',
+    });
     const [showCallbackFailure] = useState(hasAuthFailureMarker);
     const accountStatusHeadingRef = useRef<ComponentRef<'h2'>>(null);
     const focusAfterLogoutRef = useRef(false);
+    const connectionEffectStartedRef = useRef(false);
 
     useEffect(() => {
         if (showCallbackFailure) {
@@ -68,6 +90,62 @@ const AccountPage = (): JSX.Element => {
             controller.abort();
         };
     }, [reloadKey]);
+
+    useEffect(() => {
+        if (connectionEffectStartedRef.current) return;
+        connectionEffectStartedRef.current = true;
+
+        const fragment = new URLSearchParams(window.location.hash.slice(1));
+        const capability = fragment.get('connect');
+        if (capability) {
+            window.history.replaceState(
+                window.history.state,
+                '',
+                `${window.location.pathname}${window.location.search}`
+            );
+            void exchangeDiscordConnection(capability)
+                .then((result) =>
+                    setConnectionState({
+                        status: 'ready',
+                        state: result.state,
+                        code: result.code,
+                    })
+                )
+                .catch(() => setConnectionState({ status: 'error' }));
+            return;
+        }
+        void getDiscordConnectionState()
+            .then((result) =>
+                setConnectionState({
+                    status: 'ready',
+                    state: result.state,
+                    code: result.code,
+                })
+            )
+            .catch(() => setConnectionState({ status: 'error' }));
+    }, []);
+
+    const handleDiscordConsent = async (csrfToken: string): Promise<void> => {
+        try {
+            const result = await consentDiscordConnection(csrfToken);
+            setConnectionState({
+                status: 'ready',
+                state: 'waiting-for-discord-confirmation',
+                code: result.code,
+            });
+        } catch {
+            setConnectionState({ status: 'error' });
+        }
+    };
+
+    const handleDiscordCancel = async (csrfToken: string): Promise<void> => {
+        try {
+            await cancelDiscordConnection(csrfToken);
+            setConnectionState({ status: 'ready', state: 'none' });
+        } catch {
+            setConnectionState({ status: 'error' });
+        }
+    };
 
     useEffect(() => {
         if (focusAfterLogoutRef.current && sessionState.status === 'ready') {
@@ -235,6 +313,76 @@ const AccountPage = (): JSX.Element => {
         );
     };
 
+    const renderDiscordConnection = (): JSX.Element | null => {
+        if (
+            connectionState.status === 'loading' ||
+            (connectionState.status === 'ready' &&
+                connectionState.state === 'none')
+        )
+            return null;
+        if (connectionState.status === 'error')
+            return (
+                <p className="account-card__error" role="alert">
+                    Discord connection could not be loaded or completed. Start
+                    again from Discord.
+                </p>
+            );
+        if (connectionState.state === 'expired')
+            return (
+                <p className="account-card__error" role="alert">
+                    This Discord connection expired or was cancelled. Start
+                    again with <code>/account connect</code>.
+                </p>
+            );
+        if (connectionState.state === 'waiting-for-discord-confirmation')
+            return (
+                <output className="account-card__status">
+                    Run{' '}
+                    <code>/account confirm code:{connectionState.code}</code> in
+                    the Discord account that started this request.
+                </output>
+            );
+        if (
+            sessionState.status !== 'ready' ||
+            !sessionState.session.enabled ||
+            !sessionState.session.authenticated
+        ) {
+            return (
+                <div className="account-card__stack">
+                    <output>
+                        Sign in to the Footnote account you want to connect.
+                    </output>
+                    <a
+                        className="account-card__button account-card__button--primary"
+                        href="/api/auth/login"
+                    >
+                        Sign in
+                    </a>
+                </div>
+            );
+        }
+        const csrfToken = sessionState.session.csrfToken;
+        return (
+            <div className="account-card__stack">
+                <p>Connect your Discord account to this Footnote account?</p>
+                <button
+                    className="account-card__button account-card__button--primary"
+                    type="button"
+                    onClick={() => void handleDiscordConsent(csrfToken)}
+                >
+                    Approve connection
+                </button>
+                <button
+                    className="account-card__button"
+                    type="button"
+                    onClick={() => void handleDiscordCancel(csrfToken)}
+                >
+                    Cancel connection
+                </button>
+            </div>
+        );
+    };
+
     return (
         <PublicPageLayout>
             <main id="main-content" className="public-page__main account-page">
@@ -254,6 +402,18 @@ const AccountPage = (): JSX.Element => {
                     <div className="account-card" aria-live="polite">
                         {renderSessionState()}
                     </div>
+                    {connectionState.status === 'ready' &&
+                    connectionState.state === 'none' ? null : (
+                        <section
+                            className="account-card account-card__stack"
+                            aria-labelledby="discord-connection-heading"
+                        >
+                            <h2 id="discord-connection-heading">
+                                Discord account connection
+                            </h2>
+                            {renderDiscordConnection()}
+                        </section>
+                    )}
                 </section>
             </main>
         </PublicPageLayout>

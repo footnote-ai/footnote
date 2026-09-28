@@ -1,10 +1,10 @@
 # Account Identity and Access Status
 
-Status: provider-neutral OIDC sign-in, durable Footnote accounts, and separate
-administrator authorization are implemented. Account-owned feature data remains
-ordered after this foundation.
+Status: provider-neutral OIDC sign-in, durable Footnote accounts, separate
+administrator authorization, and explicit Discord account connection are
+implemented. Account-owned feature data remains ordered after this foundation.
 
-Last updated: 2026-09-25.
+Last updated: 2026-09-28.
 
 This tracker describes the durable account direction. Each branch should still
 deliver one useful result, preserve public and setup behavior, and avoid
@@ -37,6 +37,21 @@ a presentation entry point. Administrator access is a separate Footnote
 authorization decision. `OIDC_ADMIN_IDENTITIES` contains comma-separated
 `issuer|subject` pairs that receive the administrator capability; other admitted
 users receive ordinary account sessions.
+
+### Explicit Discord connection
+
+`/account connect` starts a private ten-minute transaction from the trusted
+Discord interaction identity. The existing OIDC account page authenticates the
+browser user and requires explicit consent; consent returns a one-time code,
+not a durable mapping. `/account confirm` binds the code only when submitted by
+the original Discord user. `/account status` resolves the persisted mapping
+through the backend.
+
+Footnote stores the Discord ID separately from the internal account. Repeating
+a link to the same account is harmless. If that ID is linked to another
+Footnote account, Footnote refuses the new link. Unfinished requests expire
+after ten minutes and stay in process memory; a restart clears them. See
+[Discord account connection](../auth/README.md#connect-a-discord-account).
 
 Administrator settings actions may record a deterministic hash of the external
 issuer and subject as a safe actor identifier. Footnote does not retain provider
@@ -75,9 +90,10 @@ ordered in issue #525.
 1. #455 — provider-neutral OIDC sign-in (delivered)
 2. #456 — signed-in administrator access (delivered)
 3. #521 — durable Footnote accounts for regular OIDC users (delivered)
-4. #522 — deliberate incident association and safe user view
-5. #523 — export explicit Footnote-owned account data
-6. #524 — delete Footnote account data with documented incident retention
+4. #752 — explicit Discord account connection (delivered)
+5. #522 — deliberate incident association and safe user view
+6. #523 — export explicit Footnote-owned account data
+7. #524 — delete Footnote account data with documented incident retention
 
 The sequence keeps external authentication, Footnote authorization, and
 Footnote-owned data as separate decisions.
