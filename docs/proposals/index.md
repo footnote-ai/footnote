@@ -7,3 +7,7 @@ we move them to [`implemented/`](./implemented/) or
 - Move a proposal to `implemented/` once we build it.
 - Move a proposal to `rejected/` when we decide against it, and explain why.
 - Keep in-progress work trackers in [`docs/status/`](../status/).
+
+Current drafts:
+
+- [Draft feedback on Microsoft's Humanist AI Code of Conduct](./microsoft-humanist-ai-feedback.md): prior-art comparison and possible questions for human review; not submitted.
