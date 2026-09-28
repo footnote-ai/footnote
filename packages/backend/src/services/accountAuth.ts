@@ -461,7 +461,7 @@ export const createAccountAuthService = ({
         if (!accountStore) return 'invalid';
         const id = discordByUser.get(discordUserId);
         const tx = id ? activeDiscordTransaction(id) : null;
-        if (!id || !tx || !tx.approvedAccountId || !tx.confirmationCode)
+        if (!id || !tx?.approvedAccountId || !tx.confirmationCode)
             return 'invalid';
         const expected = Buffer.from(tx.confirmationCode);
         const supplied = Buffer.from(code);

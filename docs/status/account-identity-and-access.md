@@ -52,7 +52,7 @@ account row. They are not fabricated OIDC identities. Same-account repeats are
 idempotent, cross-account conflicts never move mappings or merge accounts, and
 the transient transaction is bounded and process-local. No Discord OAuth
 tokens, usernames, or profile claims are retained. Failure of these operations
-does not disable public chat. See [Discord Account Connection](../architecture/discord-account-connection.md).
+does not disable public chat. See [Discord Account Connection](../auth/README.md#connect-a-discord-account).
 
 Administrator settings actions may record a deterministic hash of the external
 issuer and subject as a safe actor identifier. Footnote does not retain provider

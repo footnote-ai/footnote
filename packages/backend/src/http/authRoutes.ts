@@ -53,6 +53,21 @@ export const registerAuthRoutes = ({
     handleDiscordBrowserCancel = accountConnectionDisabled,
     logRequest,
 }: RegisterAuthRoutesDeps): void => {
+    const discordBrowserRoutes = new Map<string, RequestHandler>([
+        [
+            'POST /api/auth/discord-connection/exchange',
+            handleDiscordBrowserExchange,
+        ],
+        ['GET /api/auth/discord-connection', handleDiscordBrowserStatus],
+        [
+            'POST /api/auth/discord-connection/consent',
+            handleDiscordBrowserConsent,
+        ],
+        [
+            'POST /api/auth/discord-connection/cancel',
+            handleDiscordBrowserCancel,
+        ],
+    ]);
     const authRouter = createDispatchRouter({
         normalizePathname,
         logRequest,
@@ -85,33 +100,11 @@ export const registerAuthRoutes = ({
                 await handleAuthLogoutRequest(req, res);
                 return;
             }
-            if (
-                normalizedPathname ===
-                    '/api/auth/discord-connection/exchange' &&
-                req.method === 'POST'
-            ) {
-                await handleDiscordBrowserExchange(req, res);
-                return;
-            }
-            if (
-                normalizedPathname === '/api/auth/discord-connection' &&
-                req.method === 'GET'
-            ) {
-                await handleDiscordBrowserStatus(req, res);
-                return;
-            }
-            if (
-                normalizedPathname === '/api/auth/discord-connection/consent' &&
-                req.method === 'POST'
-            ) {
-                await handleDiscordBrowserConsent(req, res);
-                return;
-            }
-            if (
-                normalizedPathname === '/api/auth/discord-connection/cancel' &&
-                req.method === 'POST'
-            ) {
-                await handleDiscordBrowserCancel(req, res);
+            const discordBrowserHandler = discordBrowserRoutes.get(
+                `${req.method} ${normalizedPathname}`
+            );
+            if (discordBrowserHandler) {
+                await discordBrowserHandler(req, res);
                 return;
             }
             next();

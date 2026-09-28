@@ -7,7 +7,10 @@
  */
 
 import { useEffect, useRef, useState, type ComponentRef } from 'react';
-import type { GetAuthSessionResponse } from '@footnote/contracts/web';
+import type {
+    DiscordAccountBrowserResponse,
+    GetAuthSessionResponse,
+} from '@footnote/contracts/web';
 import PublicPageLayout from '@components/PublicPageLayout';
 import { Link } from 'react-router-dom';
 import {
@@ -18,7 +21,6 @@ import {
     getDiscordConnection,
     logoutAccount,
 } from '../utils/api';
-import type { DiscordAccountBrowserResponse } from '@footnote/contracts/web';
 
 type SessionState =
     | { status: 'loading' }
@@ -330,11 +332,11 @@ const AccountPage = (): JSX.Element => {
             );
         if (connectionState.state === 'approved')
             return (
-                <p className="account-card__status" role="status">
+                <output className="account-card__status">
                     Run{' '}
                     <code>/account confirm code:{connectionState.code}</code> in
                     the Discord account that started this request.
-                </p>
+                </output>
             );
         if (
             sessionState.status !== 'ready' ||
@@ -343,11 +345,11 @@ const AccountPage = (): JSX.Element => {
         ) {
             return (
                 <div className="account-card__stack">
-                    <p role="status">
+                    <output>
                         Sign in to the Footnote account you want to connect.
                         Approval does not link the account until you confirm in
                         Discord.
-                    </p>
+                    </output>
                     <a
                         className="account-card__button account-card__button--primary"
                         href="/api/auth/login"
@@ -360,10 +362,10 @@ const AccountPage = (): JSX.Element => {
         const csrfToken = sessionState.session.csrfToken;
         if (connectionState.state === 'ready-to-confirm')
             return (
-                <p role="status">
+                <output>
                     This browser has already approved the connection. Return to
                     Discord to enter its code.
-                </p>
+                </output>
             );
         return (
             <div className="account-card__stack">

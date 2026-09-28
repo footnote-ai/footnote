@@ -6,10 +6,10 @@
  * @footnote-ethics: high - Session and CSRF handling affect user identity privacy and account control.
  */
 
-import type { GetAuthSessionResponse } from '@footnote/contracts/web';
 import type {
     DiscordAccountBrowserResponse,
     DiscordAccountExchangeRequest,
+    GetAuthSessionResponse,
 } from '@footnote/contracts/web';
 import type { ApiRequester } from './client.js';
 import {

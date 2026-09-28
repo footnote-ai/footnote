@@ -29,6 +29,7 @@ import {
 } from '../src/services/executionContractTrustGraph/index.js';
 import { SimpleRateLimiter } from '../src/services/rateLimiter.js';
 import { logger } from '../src/utils/logger.js';
+import { createInMemoryAccountStore } from '../src/storage/accounts/sqliteAccountStore.js';
 
 type MutableEnv = NodeJS.ProcessEnv & {
     TURNSTILE_SECRET_KEY?: string;
@@ -289,6 +290,43 @@ const createTestServer = (
             });
         });
     });
+
+test('ordinary Discord chat context does not create account ownership', async () => {
+    const env = process.env as MutableEnv;
+    const previousTraceToken = env.TRACE_API_TOKEN;
+    const previousTurnstileSecret = env.TURNSTILE_SECRET_KEY;
+    const previousTurnstileSite = env.TURNSTILE_SITE_KEY;
+    const discordUserId = '12345678901234567';
+    const accountStore = createInMemoryAccountStore();
+
+    env.TRACE_API_TOKEN = 'trace-secret';
+    env.TURNSTILE_SECRET_KEY = 'turnstile-secret';
+    env.TURNSTILE_SITE_KEY = 'turnstile-site';
+
+    const server = await createTestServer();
+    try {
+        const response = await fetch(`${server.url}/api/chat`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-Trace-Token': 'trace-secret',
+            },
+            body: JSON.stringify(
+                createChatRequest({
+                    surfaceContext: { userId: discordUserId },
+                })
+            ),
+        });
+
+        assert.equal(response.status, 200);
+        assert.equal(accountStore.getDiscordAccount(discordUserId), null);
+    } finally {
+        await server.close();
+        env.TRACE_API_TOKEN = previousTraceToken;
+        env.TURNSTILE_SECRET_KEY = previousTurnstileSecret;
+        env.TURNSTILE_SITE_KEY = previousTurnstileSite;
+    }
+});
 
 test('chat accepts trusted service calls with x-trace-token and no turnstile token', async () => {
     const env = process.env as MutableEnv;

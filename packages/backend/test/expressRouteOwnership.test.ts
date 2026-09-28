@@ -172,6 +172,34 @@ test('account auth routes keep exact Express path and method ownership', async (
     assert.ok(dispatchCalls.includes('/api/auth/logout'));
 });
 
+test('disabled account connection routes do not block public chat or link accounts', async (t) => {
+    const dispatchCalls: string[] = [];
+    const app = createExpressApp(
+        baseAppDeps(dispatchCalls, {
+            handleChatRequest: async (_req, res) => {
+                res.statusCode = 200;
+                res.end('public-chat');
+            },
+        })
+    );
+    const server = await createTestServer(app);
+    t.after(server.stop);
+
+    const chat = await fetch(`${server.baseUrl}/api/chat`, { method: 'POST' });
+    assert.equal(chat.status, 200);
+    assert.equal(await chat.text(), 'public-chat');
+
+    const connection = await fetch(
+        `${server.baseUrl}/api/auth/discord-connection/exchange`,
+        { method: 'POST' }
+    );
+    assert.equal(connection.status, 503);
+    assert.equal(connection.headers.get('cache-control'), 'no-store');
+    assert.deepEqual(await connection.json(), {
+        error: 'Account connection unavailable',
+    });
+});
+
 test('chat route is Express-owned and bypasses central dispatch', async (t) => {
     const dispatchCalls: string[] = [];
     let chatCalls = 0;

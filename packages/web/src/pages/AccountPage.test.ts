@@ -90,5 +90,5 @@ test('Discord connection removes its fragment and offers explicit consent and ca
     assert.match(source, /cancelDiscordConnection\(csrfToken\)/);
     assert.match(source, /Approve and show confirmation code/);
     assert.match(source, /\/account confirm code:/);
-    assert.match(source, /role="status"/);
+    assert.match(source, /<output/);
 });
