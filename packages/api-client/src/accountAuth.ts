@@ -7,13 +7,13 @@
  */
 
 import type {
-    DiscordAccountBrowserResponse,
+    DiscordConnectionStateResponse,
     DiscordAccountExchangeRequest,
     GetAuthSessionResponse,
 } from '@footnote/contracts/web';
 import type { ApiRequester } from './client.js';
 import {
-    DiscordAccountBrowserResponseSchema,
+    DiscordConnectionStateResponseSchema,
     DiscordAccountConsentResponseSchema,
     createSchemaResponseValidator,
 } from '@footnote/contracts/web/schemas';
@@ -24,10 +24,10 @@ export type AccountAuthApi = {
     logoutAccount: (csrfToken: string, signal?: AbortSignal) => Promise<void>;
     exchangeDiscordConnection: (
         capability: string
-    ) => Promise<DiscordAccountBrowserResponse>;
-    getDiscordConnection: (
+    ) => Promise<DiscordConnectionStateResponse>;
+    getDiscordConnectionState: (
         signal?: AbortSignal
-    ) => Promise<DiscordAccountBrowserResponse>;
+    ) => Promise<DiscordConnectionStateResponse>;
     consentDiscordConnection: (csrfToken: string) => Promise<{ code: string }>;
     cancelDiscordConnection: (csrfToken: string) => Promise<void>;
 };
@@ -80,32 +80,32 @@ export const createAccountAuthApi = (
     /** @api.operationId: postDiscordConnectionExchange @api.path: POST /api/auth/discord-connection/exchange */
     const exchangeDiscordConnection = async (
         capability: string
-    ): Promise<DiscordAccountBrowserResponse> => {
-        const response = await requestJson<DiscordAccountBrowserResponse>(
+    ): Promise<DiscordConnectionStateResponse> => {
+        const response = await requestJson<DiscordConnectionStateResponse>(
             '/api/auth/discord-connection/exchange',
             {
                 method: 'POST',
                 cache: 'no-store',
                 body: { capability } satisfies DiscordAccountExchangeRequest,
                 validateResponse: createSchemaResponseValidator(
-                    DiscordAccountBrowserResponseSchema
+                    DiscordConnectionStateResponseSchema
                 ),
             }
         );
         return response.data;
     };
-    /** @api.operationId: getDiscordConnection @api.path: GET /api/auth/discord-connection */
-    const getDiscordConnection = async (
+    /** @api.operationId: getDiscordConnectionState @api.path: GET /api/auth/discord-connection */
+    const getDiscordConnectionState = async (
         signal?: AbortSignal
-    ): Promise<DiscordAccountBrowserResponse> => {
-        const response = await requestJson<DiscordAccountBrowserResponse>(
+    ): Promise<DiscordConnectionStateResponse> => {
+        const response = await requestJson<DiscordConnectionStateResponse>(
             '/api/auth/discord-connection',
             {
                 method: 'GET',
                 signal,
                 cache: 'no-store',
                 validateResponse: createSchemaResponseValidator(
-                    DiscordAccountBrowserResponseSchema
+                    DiscordConnectionStateResponseSchema
                 ),
             }
         );
@@ -145,7 +145,7 @@ export const createAccountAuthApi = (
         getAuthSession,
         logoutAccount,
         exchangeDiscordConnection,
-        getDiscordConnection,
+        getDiscordConnectionState,
         consentDiscordConnection,
         cancelDiscordConnection,
     };

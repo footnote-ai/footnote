@@ -1099,12 +1099,12 @@ paths:
                         application/json:
                             schema:
                                 {
-                                    $ref: '#/components/schemas/DiscordConnectionBrowserResponse',
+                                    $ref: '#/components/schemas/DiscordConnectionStateResponse',
                                 }
                 '410': { $ref: '#/components/responses/NotFound' }
     /api/auth/discord-connection:
         get:
-            operationId: getDiscordConnection
+            operationId: getDiscordConnectionState
             x-codeRefs:
                 - packages/backend/src/handlers/discordAccountConnection.ts#createDiscordAccountConnectionHandlers
             summary: Read the current browser-bound Discord connection state
@@ -1120,7 +1120,7 @@ paths:
                         application/json:
                             schema:
                                 {
-                                    $ref: '#/components/schemas/DiscordConnectionBrowserResponse',
+                                    $ref: '#/components/schemas/DiscordConnectionStateResponse',
                                 }
     /api/auth/discord-connection/consent:
         post:
@@ -1231,7 +1231,7 @@ paths:
                 - packages/backend/src/handlers/discordAccountConnection.ts#createDiscordAccountConnectionHandlers
                 - packages/api-client/src/discordAccounts.ts#createDiscordAccountApi
                 - packages/contracts/src/web/discordAccounts.ts#DiscordAccountConfirmRequestSchema
-            summary: Confirm a browser-approved Discord account connection
+            summary: Confirm a Discord connection with its code
             tags: [Accounts]
             security: [{ TrustedServiceToken: [] }, { TraceToken: [] }]
             requestBody:
@@ -5251,7 +5251,7 @@ components:
                         ]
             required: [result]
             additionalProperties: false
-        DiscordConnectionBrowserResponse:
+        DiscordConnectionStateResponse:
             type: object
             properties:
                 state:
@@ -5260,8 +5260,8 @@ components:
                         enum:
                             [
                                 waiting-for-sign-in,
-                                ready-to-confirm,
-                                approved,
+                                waiting-for-approval,
+                                waiting-for-discord-confirmation,
                                 expired,
                                 none,
                             ],

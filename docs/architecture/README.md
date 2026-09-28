@@ -58,8 +58,6 @@ detail once you have the main runtime shape in mind.
 - [Account Identity and Access](../auth/README.md):
   provider-neutral login, durable accounts, Discord linking, and administrator
   access boundaries.
-- [Discord connection flow and privacy](../auth/README.md#connect-a-discord-account):
-  explicit account linking, transaction lifecycle, and privacy boundaries.
 - [Footnote and Common Agentic Patterns](./footnote-and-common-agentic-patterns.md):
   external-pattern comparison and fit.
 - [Footnote Annotations](./footnote-annotations.md): code annotation conventions.

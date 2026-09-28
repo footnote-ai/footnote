@@ -43,12 +43,12 @@ export const DiscordAccountConfirmResponseSchema = z
         ]),
     })
     .strict();
-export const DiscordAccountBrowserResponseSchema = z
+export const DiscordConnectionStateResponseSchema = z
     .object({
         state: z.enum([
             'waiting-for-sign-in',
-            'ready-to-confirm',
-            'approved',
+            'waiting-for-approval',
+            'waiting-for-discord-confirmation',
             'expired',
             'none',
         ]),
@@ -89,11 +89,11 @@ export type DiscordAccountConfirmResponse = {
         | 'attempts-exhausted'
         | 'unavailable';
 };
-export type DiscordAccountBrowserResponse = {
+export type DiscordConnectionStateResponse = {
     state:
         | 'waiting-for-sign-in'
-        | 'ready-to-confirm'
-        | 'approved'
+        | 'waiting-for-approval'
+        | 'waiting-for-discord-confirmation'
         | 'expired'
         | 'none';
     code?: string;

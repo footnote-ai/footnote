@@ -16,7 +16,7 @@ const data = new SlashCommandBuilder()
     .addSubcommand((command) =>
         command
             .setName('connect')
-            .setDescription('Start private account connection')
+            .setDescription('Get a link to connect your Footnote account')
     )
     .addSubcommand((command) =>
         command
@@ -26,7 +26,7 @@ const data = new SlashCommandBuilder()
     .addSubcommand((command) =>
         command
             .setName('confirm')
-            .setDescription('Confirm your browser-approved connection')
+            .setDescription('Enter the code to connect your account')
             .addStringOption((option) =>
                 option
                     .setName('code')
@@ -48,7 +48,7 @@ const command: Command = {
                     discordUserId: interaction.user.id,
                 });
                 await interaction.editReply(
-                    `Open this private, short-lived link to sign in and approve: ${result.connectionUrl}`
+                    `Open this link to connect your Footnote account. It expires in 10 minutes: ${result.connectionUrl}`
                 );
             } else if (subcommand === 'status') {
                 const result = await botApi.getDiscordAccountStatus({
@@ -85,7 +85,7 @@ const command: Command = {
         } catch {
             logger.warn('Discord account command failed.');
             await interaction.editReply(
-                'Account connection is unavailable. Public chat remains available. Please try again later.'
+                'Account connection is unavailable right now. Try again later.'
             );
         }
     },

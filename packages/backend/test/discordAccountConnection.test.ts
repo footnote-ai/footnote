@@ -45,30 +45,46 @@ test('Discord linking requires browser approval and the initiating Discord user'
 
     const started = service.startDiscordConnection('discord-user-a');
     assert.ok(started);
-    const browserId = service.exchangeDiscordCapability(started.capability);
-    assert.ok(browserId);
+    const connectionSessionId = service.exchangeDiscordCapability(
+        started.capability
+    );
+    assert.ok(connectionSessionId);
     assert.equal(service.exchangeDiscordCapability(started.capability), null);
     assert.equal(
-        service.getDiscordConnection(browserId),
+        service.getDiscordConnectionState(connectionSessionId),
         'waiting-for-sign-in'
     );
+    assert.equal(
+        service.getDiscordConnectionState(
+            connectionSessionId,
+            auth.session.sessionId
+        ),
+        'waiting-for-approval'
+    );
     const code = service.approveDiscordConnection(
-        browserId,
+        connectionSessionId,
         auth.session.accountId,
         auth.session.sessionId
     );
     assert.match(code ?? '', /^\d{8}$/);
     assert.equal(
+        service.getDiscordConnectionState(
+            connectionSessionId,
+            auth.session.sessionId
+        ),
+        'waiting-for-discord-confirmation'
+    );
+    assert.equal(
         service.confirmDiscordConnection('discord-user-b', code ?? ''),
         'invalid'
     );
-    assert.equal(service.getDiscordAccount('discord-user-a'), null);
+    assert.equal(service.findAccountByDiscordUserId('discord-user-a'), null);
     assert.equal(
         service.confirmDiscordConnection('discord-user-a', code ?? ''),
         'linked'
     );
     assert.equal(
-        service.getDiscordAccount('discord-user-a')?.id,
+        service.findAccountByDiscordUserId('discord-user-a')?.id,
         auth.session.accountId
     );
     assert.equal(
@@ -89,7 +105,7 @@ test('Discord linking requires browser approval and the initiating Discord user'
     );
     assert.ok(secondCode);
     assert.equal(
-        service.getDiscordConnection(secondBrowser, 'different-session'),
+        service.getDiscordConnectionState(secondBrowser, 'different-session'),
         null
     );
     assert.equal(
@@ -119,10 +135,12 @@ test('Discord connection expires and invalidates after five wrong codes', async 
     if (!auth.ok) return;
     const started = service.startDiscordConnection('discord-user-a');
     assert.ok(started);
-    const browserId = service.exchangeDiscordCapability(started.capability);
-    assert.ok(browserId);
+    const connectionSessionId = service.exchangeDiscordCapability(
+        started.capability
+    );
+    assert.ok(connectionSessionId);
     service.approveDiscordConnection(
-        browserId,
+        connectionSessionId,
         auth.session.accountId,
         auth.session.sessionId
     );
@@ -145,8 +163,8 @@ test('Discord connection expires and invalidates after five wrong codes', async 
 test('transient storage failure blocks confirmation without losing the approval', async () => {
     let token = 0;
     const store = createInMemoryAccountStore();
-    const link = store.linkDiscordAccount;
-    store.linkDiscordAccount = () => {
+    const link = store.linkDiscordUserToAccount;
+    store.linkDiscordUserToAccount = () => {
         throw new Error('storage unavailable');
     };
     const service = createAccountAuthService({
@@ -165,10 +183,12 @@ test('transient storage failure blocks confirmation without losing the approval'
     if (!auth.ok) return;
     const started = service.startDiscordConnection('discord-user-a');
     assert.ok(started);
-    const browserId = service.exchangeDiscordCapability(started.capability);
-    assert.ok(browserId);
+    const connectionSessionId = service.exchangeDiscordCapability(
+        started.capability
+    );
+    assert.ok(connectionSessionId);
     const code = service.approveDiscordConnection(
-        browserId,
+        connectionSessionId,
         auth.session.accountId,
         auth.session.sessionId
     );
@@ -177,7 +197,7 @@ test('transient storage failure blocks confirmation without losing the approval'
         service.confirmDiscordConnection('discord-user-a', code),
         'unavailable'
     );
-    store.linkDiscordAccount = link;
+    store.linkDiscordUserToAccount = link;
     assert.equal(
         service.confirmDiscordConnection('discord-user-a', code),
         'linked'

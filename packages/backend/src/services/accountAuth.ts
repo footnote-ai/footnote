@@ -31,15 +31,17 @@ type DiscordConnectionTransaction = {
     discordUserId: string;
     expiresAtMs: number;
     capability: string | null;
-    browserId: string | null;
+    connectionSessionId: string | null;
     approvedAccountId: string | null;
     approvedSessionId: string | null;
     confirmationCode: string | null;
     failedAttempts: number;
 };
 
-export type DiscordConnectionStatus =
-    'waiting-for-sign-in' | 'ready-to-confirm' | 'approved';
+export type DiscordConnectionState =
+    | 'waiting-for-sign-in'
+    | 'waiting-for-approval'
+    | 'waiting-for-discord-confirmation';
 export type DiscordConnectionResult =
     | 'linked'
     | 'already-linked'
@@ -102,25 +104,27 @@ export type DiscordAccountConnectionService = {
         discordUserId: string
     ) => { capability: string; expiresAt: string } | null;
     exchangeDiscordCapability: (capability: string) => string | null;
-    getDiscordConnection: (
-        browserId: string,
+    getDiscordConnectionState: (
+        connectionSessionId: string,
         sessionId?: string
-    ) => DiscordConnectionStatus | null;
+    ) => DiscordConnectionState | null;
     getDiscordConfirmationCode: (
-        browserId: string,
+        connectionSessionId: string,
         sessionId?: string
     ) => string | null;
     approveDiscordConnection: (
-        browserId: string,
+        connectionSessionId: string,
         accountId: string,
         sessionId: string
     ) => string | null;
-    cancelDiscordConnection: (browserId: string) => boolean;
+    cancelDiscordConnection: (connectionSessionId: string) => boolean;
     confirmDiscordConnection: (
         discordUserId: string,
         code: string
     ) => DiscordConnectionResult;
-    getDiscordAccount: (discordUserId: string) => FootnoteAccount | null;
+    findAccountByDiscordUserId: (
+        discordUserId: string
+    ) => FootnoteAccount | null;
 };
 
 type CreateAccountAuthServiceDeps = {
@@ -155,7 +159,7 @@ export const createAccountAuthService = ({
     DiscordAccountConnectionService => {
     const transactions = new Map<string, LoginTransaction>();
     const discordTransactions = new Map<string, DiscordConnectionTransaction>();
-    const discordByUser = new Map<string, string>();
+    const transactionByDiscordUserId = new Map<string, string>();
     const sessions = new Map<
         string,
         AccountSession & { expiresAtMs: number }
@@ -323,12 +327,12 @@ export const createAccountAuthService = ({
         const transaction = discordTransactions.get(id);
         if (!transaction) return;
         discordTransactions.delete(id);
-        if (discordByUser.get(transaction.discordUserId) === id) {
-            discordByUser.delete(transaction.discordUserId);
+        if (transactionByDiscordUserId.get(transaction.discordUserId) === id) {
+            transactionByDiscordUserId.delete(transaction.discordUserId);
         }
     };
 
-    const activeDiscordTransaction = (
+    const getActiveDiscordTransaction = (
         id: string
     ): DiscordConnectionTransaction | null => {
         const transaction = discordTransactions.get(id);
@@ -343,7 +347,7 @@ export const createAccountAuthService = ({
         discordUserId: string
     ): { capability: string; expiresAt: string } | null => {
         if (!provider || !accountStore || maxTransactions <= 0) return null;
-        const activeId = discordByUser.get(discordUserId);
+        const activeId = transactionByDiscordUserId.get(discordUserId);
         if (activeId) clearDiscordTransaction(activeId);
         for (const [id, tx] of discordTransactions) {
             if (tx.expiresAtMs <= now()) clearDiscordTransaction(id);
@@ -360,13 +364,13 @@ export const createAccountAuthService = ({
             discordUserId,
             expiresAtMs,
             capability,
-            browserId: null,
+            connectionSessionId: null,
             approvedAccountId: null,
             approvedSessionId: null,
             confirmationCode: null,
             failedAttempts: 0,
         });
-        discordByUser.set(discordUserId, id);
+        transactionByDiscordUserId.set(discordUserId, id);
         return { capability, expiresAt: new Date(expiresAtMs).toISOString() };
     };
 
@@ -375,22 +379,25 @@ export const createAccountAuthService = ({
             if (
                 tx.capability &&
                 tx.capability === capability &&
-                activeDiscordTransaction(id)
+                getActiveDiscordTransaction(id)
             ) {
                 tx.capability = null;
-                tx.browserId = randomToken(32);
-                return tx.browserId;
+                tx.connectionSessionId = randomToken(32);
+                return tx.connectionSessionId;
             }
         }
         return null;
     };
 
-    const getDiscordConnection = (
-        browserId: string,
+    const getDiscordConnectionState = (
+        connectionSessionId: string,
         sessionId?: string
-    ): DiscordConnectionStatus | null => {
+    ): DiscordConnectionState | null => {
         for (const [id, tx] of discordTransactions) {
-            if (tx.browserId === browserId && activeDiscordTransaction(id)) {
+            if (
+                tx.connectionSessionId === connectionSessionId &&
+                getActiveDiscordTransaction(id)
+            ) {
                 if (
                     tx.approvedSessionId &&
                     tx.approvedSessionId !== sessionId
@@ -398,9 +405,10 @@ export const createAccountAuthService = ({
                     clearDiscordTransaction(id);
                     return null;
                 }
-                if (tx.confirmationCode) return 'approved';
-                return tx.approvedAccountId
-                    ? 'ready-to-confirm'
+                if (tx.confirmationCode)
+                    return 'waiting-for-discord-confirmation';
+                return sessionId
+                    ? 'waiting-for-approval'
                     : 'waiting-for-sign-in';
             }
         }
@@ -408,11 +416,14 @@ export const createAccountAuthService = ({
     };
 
     const getDiscordConfirmationCode = (
-        browserId: string,
+        connectionSessionId: string,
         sessionId?: string
     ): string | null => {
         for (const [id, tx] of discordTransactions) {
-            if (tx.browserId === browserId && activeDiscordTransaction(id))
+            if (
+                tx.connectionSessionId === connectionSessionId &&
+                getActiveDiscordTransaction(id)
+            )
                 return tx.approvedSessionId === sessionId
                     ? tx.confirmationCode
                     : null;
@@ -421,12 +432,15 @@ export const createAccountAuthService = ({
     };
 
     const approveDiscordConnection = (
-        browserId: string,
+        connectionSessionId: string,
         accountId: string,
         sessionId: string
     ): string | null => {
         for (const [id, tx] of discordTransactions) {
-            if (tx.browserId !== browserId || !activeDiscordTransaction(id))
+            if (
+                tx.connectionSessionId !== connectionSessionId ||
+                !getActiveDiscordTransaction(id)
+            )
                 continue;
             if (tx.approvedAccountId && tx.approvedAccountId !== accountId)
                 return null;
@@ -444,9 +458,9 @@ export const createAccountAuthService = ({
         return null;
     };
 
-    const cancelDiscordConnection = (browserId: string): boolean => {
+    const cancelDiscordConnection = (connectionSessionId: string): boolean => {
         for (const [id, tx] of discordTransactions) {
-            if (tx.browserId === browserId) {
+            if (tx.connectionSessionId === connectionSessionId) {
                 clearDiscordTransaction(id);
                 return true;
             }
@@ -459,8 +473,8 @@ export const createAccountAuthService = ({
         code: string
     ): DiscordConnectionResult => {
         if (!accountStore) return 'invalid';
-        const id = discordByUser.get(discordUserId);
-        const tx = id ? activeDiscordTransaction(id) : null;
+        const id = transactionByDiscordUserId.get(discordUserId);
+        const tx = id ? getActiveDiscordTransaction(id) : null;
         if (!id || !tx?.approvedAccountId || !tx.confirmationCode)
             return 'invalid';
         const expected = Buffer.from(tx.confirmationCode);
@@ -478,7 +492,7 @@ export const createAccountAuthService = ({
         }
         let result: 'linked' | 'already-linked' | 'conflict';
         try {
-            result = accountStore.linkDiscordAccount(
+            result = accountStore.linkDiscordUserToAccount(
                 discordUserId,
                 tx.approvedAccountId
             );
@@ -489,10 +503,10 @@ export const createAccountAuthService = ({
         return result;
     };
 
-    const getDiscordAccount = (
+    const findAccountByDiscordUserId = (
         discordUserId: string
     ): FootnoteAccount | null => {
-        return accountStore?.getDiscordAccount(discordUserId) ?? null;
+        return accountStore?.findAccountByDiscordUserId(discordUserId) ?? null;
     };
 
     return {
@@ -504,11 +518,11 @@ export const createAccountAuthService = ({
         clearSession,
         startDiscordConnection,
         exchangeDiscordCapability,
-        getDiscordConnection,
+        getDiscordConnectionState,
         getDiscordConfirmationCode,
         approveDiscordConnection,
         cancelDiscordConnection,
         confirmDiscordConnection,
-        getDiscordAccount,
+        findAccountByDiscordUserId,
     };
 };

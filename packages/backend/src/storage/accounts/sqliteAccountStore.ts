@@ -1,5 +1,5 @@
 /**
- * @description: Persists stable Footnote accounts and their external OIDC identity mappings.
+ * @description: Persists stable Footnote accounts and their OIDC and Discord links.
  * @footnote-scope: core
  * @footnote-module: SqliteAccountStore
  * @footnote-risk: high - Identity mapping errors can attach future data to the wrong account.
@@ -25,8 +25,10 @@ export type FootnoteAccount = {
 
 export type AccountStore = {
     resolveOrCreateAccount: (identity: ExternalIdentityKey) => FootnoteAccount;
-    getDiscordAccount: (discordUserId: string) => FootnoteAccount | null;
-    linkDiscordAccount: (
+    findAccountByDiscordUserId: (
+        discordUserId: string
+    ) => FootnoteAccount | null;
+    linkDiscordUserToAccount: (
         discordUserId: string,
         accountId: string
     ) => 'linked' | 'already-linked' | 'conflict';
@@ -36,7 +38,7 @@ export type AccountStore = {
 /** Test-only fallback used when the auth service is constructed without persistence. */
 export const createInMemoryAccountStore = (): AccountStore => {
     const accounts = new Map<string, FootnoteAccount>();
-    const discordAccounts = new Map<string, string>();
+    const discordAccountLinks = new Map<string, string>();
     return {
         resolveOrCreateAccount: ({ issuer, subject }) => {
             const key = buildExternalIdentityKey(issuer, subject);
@@ -53,18 +55,18 @@ export const createInMemoryAccountStore = (): AccountStore => {
             accounts.set(key, account);
             return account;
         },
-        getDiscordAccount: (discordUserId) => {
-            const accountId = discordAccounts.get(discordUserId);
+        findAccountByDiscordUserId: (discordUserId) => {
+            const accountId = discordAccountLinks.get(discordUserId);
             return accountId
                 ? ([...accounts.values()].find(({ id }) => id === accountId) ??
                       null)
                 : null;
         },
-        linkDiscordAccount: (discordUserId, accountId) => {
-            const existing = discordAccounts.get(discordUserId);
+        linkDiscordUserToAccount: (discordUserId, accountId) => {
+            const existing = discordAccountLinks.get(discordUserId);
             if (existing)
                 return existing === accountId ? 'already-linked' : 'conflict';
-            discordAccounts.set(discordUserId, accountId);
+            discordAccountLinks.set(discordUserId, accountId);
             return 'linked';
         },
     };
@@ -87,8 +89,8 @@ export class SqliteAccountStore implements AccountStore {
     private readonly insertAccountStatement: Database.Statement;
     private readonly insertIdentityStatement: Database.Statement;
     private readonly touchIdentityStatement: Database.Statement;
-    private readonly getDiscordAccountStatement: Database.Statement;
-    private readonly linkDiscordAccountStatement: Database.Statement;
+    private readonly findAccountByDiscordUserIdStatement: Database.Statement;
+    private readonly linkDiscordUserToAccountStatement: Database.Statement;
 
     constructor(config: { dbPath: string }) {
         const resolvedPath = path.resolve(config.dbPath);
@@ -112,13 +114,13 @@ export class SqliteAccountStore implements AccountStore {
             );
             CREATE INDEX IF NOT EXISTS idx_external_identities_account_id
                 ON external_identities(account_id);
-            CREATE TABLE IF NOT EXISTS discord_accounts (
+            CREATE TABLE IF NOT EXISTS discord_account_links (
                 discord_user_id TEXT PRIMARY KEY,
                 account_id TEXT NOT NULL REFERENCES accounts(account_id) ON DELETE CASCADE,
                 created_at TEXT NOT NULL
             );
-            CREATE INDEX IF NOT EXISTS idx_discord_accounts_account_id
-                ON discord_accounts(account_id);
+            CREATE INDEX IF NOT EXISTS idx_discord_account_links_account_id
+                ON discord_account_links(account_id);
         `);
 
         this.resolveStatement = this.db.prepare(`
@@ -141,14 +143,14 @@ export class SqliteAccountStore implements AccountStore {
             UPDATE external_identities SET last_seen_at = ?
             WHERE issuer = ? AND subject = ?
         `);
-        this.getDiscordAccountStatement = this.db.prepare(`
+        this.findAccountByDiscordUserIdStatement = this.db.prepare(`
             SELECT a.account_id, a.created_at, a.updated_at
-            FROM discord_accounts AS identity
-            INNER JOIN accounts AS a ON a.account_id = identity.account_id
-            WHERE identity.discord_user_id = ? LIMIT 1
+            FROM discord_account_links AS discord_link
+            INNER JOIN accounts AS a ON a.account_id = discord_link.account_id
+            WHERE discord_link.discord_user_id = ? LIMIT 1
         `);
-        this.linkDiscordAccountStatement = this.db.prepare(`
-            INSERT INTO discord_accounts(discord_user_id, account_id, created_at)
+        this.linkDiscordUserToAccountStatement = this.db.prepare(`
+            INSERT INTO discord_account_links(discord_user_id, account_id, created_at)
             VALUES (?, ?, ?)
         `);
     }
@@ -194,9 +196,10 @@ export class SqliteAccountStore implements AccountStore {
     }
 
     /** Resolves the backend-owned account for a stable Discord snowflake. */
-    getDiscordAccount(discordUserId: string): FootnoteAccount | null {
-        const row = this.getDiscordAccountStatement.get(discordUserId) as
-            AccountRow | undefined;
+    findAccountByDiscordUserId(discordUserId: string): FootnoteAccount | null {
+        const row = this.findAccountByDiscordUserIdStatement.get(
+            discordUserId
+        ) as AccountRow | undefined;
         return row
             ? {
                   id: row.account_id,
@@ -207,20 +210,20 @@ export class SqliteAccountStore implements AccountStore {
     }
 
     /** Atomically adds a Discord mapping without moving or merging identities. */
-    linkDiscordAccount(
+    linkDiscordUserToAccount(
         discordUserId: string,
         accountId: string
     ): 'linked' | 'already-linked' | 'conflict' {
         return this.db
             .transaction(() => {
-                const existing = this.getDiscordAccountStatement.get(
+                const existing = this.findAccountByDiscordUserIdStatement.get(
                     discordUserId
                 ) as AccountRow | undefined;
                 if (existing)
                     return existing.account_id === accountId
                         ? 'already-linked'
                         : 'conflict';
-                this.linkDiscordAccountStatement.run(
+                this.linkDiscordUserToAccountStatement.run(
                     discordUserId,
                     accountId,
                     new Date().toISOString()

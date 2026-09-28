@@ -42,9 +42,9 @@ export type WebApiClient = {
     exchangeDiscordConnection: ReturnType<
         typeof createSharedWebApiClient
     >['exchangeDiscordConnection'];
-    getDiscordConnection: ReturnType<
+    getDiscordConnectionState: ReturnType<
         typeof createSharedWebApiClient
-    >['getDiscordConnection'];
+    >['getDiscordConnectionState'];
     consentDiscordConnection: ReturnType<
         typeof createSharedWebApiClient
     >['consentDiscordConnection'];
@@ -80,7 +80,7 @@ export const createWebApiClient = (
     const getAuthSession = shared.getAuthSession;
     const logoutAccount = shared.logoutAccount;
     const exchangeDiscordConnection = shared.exchangeDiscordConnection;
-    const getDiscordConnection = shared.getDiscordConnection;
+    const getDiscordConnectionState = shared.getDiscordConnectionState;
     const consentDiscordConnection = shared.consentDiscordConnection;
     const cancelDiscordConnection = shared.cancelDiscordConnection;
     const getTrace = shared.getTrace;
@@ -93,7 +93,7 @@ export const createWebApiClient = (
         getAuthSession,
         logoutAccount,
         exchangeDiscordConnection,
-        getDiscordConnection,
+        getDiscordConnectionState,
         consentDiscordConnection,
         cancelDiscordConnection,
         getTrace,
@@ -139,8 +139,8 @@ export const logoutAccount = (
 
 export const exchangeDiscordConnection = (capability: string) =>
     api.exchangeDiscordConnection(capability);
-export const getDiscordConnection = (signal?: AbortSignal) =>
-    api.getDiscordConnection(signal);
+export const getDiscordConnectionState = (signal?: AbortSignal) =>
+    api.getDiscordConnectionState(signal);
 export const consentDiscordConnection = (csrfToken: string) =>
     api.consentDiscordConnection(csrfToken);
 export const cancelDiscordConnection = (csrfToken: string) =>

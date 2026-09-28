@@ -38,6 +38,8 @@ test('account command uses interaction identity and private start/status/confirm
     assert.match(source, /getDiscordAccountStatus/);
     assert.match(source, /confirmDiscordAccountConnection/);
     assert.match(source, /connection is unavailable/);
+    assert.match(source, /It expires in 10 minutes/);
+    assert.doesNotMatch(source, /Public chat remains available/);
     assert.match(definitions, /"name": "account"/);
     assert.match(catalog, /account: \(\) => import\('\.\/account\.js'\)/);
 });

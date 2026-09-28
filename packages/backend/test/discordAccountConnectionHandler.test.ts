@@ -148,6 +148,9 @@ test('trusted start, browser exchange, OIDC consent, and original-user confirmat
         }
     );
     assert.equal(exchanged.status, 200);
+    assert.deepEqual(await exchanged.json(), {
+        state: 'waiting-for-sign-in',
+    });
     const connectionCookie = cookieValue(
         exchanged.headers.get('set-cookie') ?? '',
         'footnote_discord_connection'
@@ -186,6 +189,17 @@ test('trusted start, browser exchange, OIDC consent, and original-user confirmat
         headers: { cookie: `${ACCOUNT_SESSION_COOKIE_NAME}=${sessionCookie}` },
     });
     const sessionBody = (await session.json()) as { csrfToken: string };
+    const waitingForApproval = await fetch(
+        `${baseUrl}/api/auth/discord-connection`,
+        {
+            headers: {
+                cookie: `${ACCOUNT_SESSION_COOKIE_NAME}=${sessionCookie}; footnote_discord_connection=${connectionCookie}`,
+            },
+        }
+    );
+    assert.deepEqual(await waitingForApproval.json(), {
+        state: 'waiting-for-approval',
+    });
 
     const csrfRejected = await fetch(
         `${baseUrl}/api/auth/discord-connection/consent`,
@@ -214,6 +228,18 @@ test('trusted start, browser exchange, OIDC consent, and original-user confirmat
     assert.equal(consent.status, 200);
     const { code } = (await consent.json()) as { code: string };
     assert.match(code, /^\d{8}$/);
+    const waitingForDiscord = await fetch(
+        `${baseUrl}/api/auth/discord-connection`,
+        {
+            headers: {
+                cookie: `${ACCOUNT_SESSION_COOKIE_NAME}=${sessionCookie}; footnote_discord_connection=${connectionCookie}`,
+            },
+        }
+    );
+    assert.deepEqual(await waitingForDiscord.json(), {
+        state: 'waiting-for-discord-confirmation',
+        code,
+    });
     const otherUser = await fetch(
         `${baseUrl}/api/internal/discord/account/confirm`,
         {
@@ -298,7 +324,7 @@ test('trusted start, browser exchange, OIDC consent, and original-user confirmat
         }
     );
     assert.equal(cancelled.status, 200);
-    assert.equal(service.getDiscordConnection(secondCookie), null);
+    assert.equal(service.getDiscordConnectionState(secondCookie), null);
     assert.ok(
         logs.every(
             (entry) =>

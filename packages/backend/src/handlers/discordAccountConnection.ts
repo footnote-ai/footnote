@@ -166,7 +166,8 @@ export const createDiscordAccountConnectionHandlers = ({
         try {
             sendJson(res, 200, {
                 connected:
-                    service.getDiscordAccount(body.discordUserId) !== null,
+                    service.findAccountByDiscordUserId(body.discordUserId) !==
+                    null,
             });
         } catch {
             sendJson(res, 503, { error: 'Account connection unavailable' });
@@ -222,35 +223,44 @@ export const createDiscordAccountConnectionHandlers = ({
             DiscordAccountExchangeRequestSchema
         );
         if (!body) return;
-        const browserId = service.exchangeDiscordCapability(body.capability);
-        if (!browserId) {
+        const connectionSessionId = service.exchangeDiscordCapability(
+            body.capability
+        );
+        if (!connectionSessionId) {
             sendJson(res, 410, { error: 'Connection expired or unavailable' });
             return;
         }
-        res.setHeader('Set-Cookie', cookie(browserId, secureCookies));
+        res.setHeader('Set-Cookie', cookie(connectionSessionId, secureCookies));
         sendJson(res, 200, {
-            state: service.getDiscordConnection(browserId) ?? 'expired',
+            state:
+                service.getDiscordConnectionState(connectionSessionId) ??
+                'expired',
         });
     };
-    /** @api.operationId: getDiscordConnection @api.path: GET /api/auth/discord-connection */
+    /** @api.operationId: getDiscordConnectionState @api.path: GET /api/auth/discord-connection */
     const handleBrowserStatus = async (
         req: IncomingMessage,
         res: ServerResponse
     ): Promise<void> => {
         noStore(res);
-        const browserId = readCookieValue(req, CONNECTION_COOKIE);
+        const connectionSessionId = readCookieValue(req, CONNECTION_COOKIE);
         const sessionId = readCookieValue(req, ACCOUNT_SESSION_COOKIE_NAME);
         const session = sessionId ? service.getSession(sessionId) : null;
-        const state = browserId
-            ? service.getDiscordConnection(browserId, session?.sessionId)
+        const state = connectionSessionId
+            ? service.getDiscordConnectionState(
+                  connectionSessionId,
+                  session?.sessionId
+              )
             : null;
         sendJson(res, 200, {
-            state: state ?? (browserId ? 'expired' : 'none'),
-            ...(state === 'approved' && browserId && session
+            state: state ?? (connectionSessionId ? 'expired' : 'none'),
+            ...(state === 'waiting-for-discord-confirmation' &&
+            connectionSessionId &&
+            session
                 ? {
                       code:
                           service.getDiscordConfirmationCode(
-                              browserId,
+                              connectionSessionId,
                               session.sessionId
                           ) ?? undefined,
                   }
@@ -274,17 +284,21 @@ export const createDiscordAccountConnectionHandlers = ({
             DiscordAccountConsentRequestSchema
         );
         if (!body) return;
-        const browserId = readCookieValue(req, CONNECTION_COOKIE);
+        const connectionSessionId = readCookieValue(req, CONNECTION_COOKIE);
         const sessionId = readCookieValue(req, ACCOUNT_SESSION_COOKIE_NAME);
         const session = sessionId ? service.getSession(sessionId) : null;
-        if (!browserId || !session || !csrfMatches(req, session.csrfToken)) {
+        if (
+            !connectionSessionId ||
+            !session ||
+            !csrfMatches(req, session.csrfToken)
+        ) {
             sendJson(res, 403, {
                 error: 'Sign in and retry the connection request',
             });
             return;
         }
         const code = service.approveDiscordConnection(
-            browserId,
+            connectionSessionId,
             session.accountId,
             session.sessionId
         );
@@ -306,16 +320,20 @@ export const createDiscordAccountConnectionHandlers = ({
             sendJson(res, 405, { error: 'Method not allowed' });
             return;
         }
-        const browserId = readCookieValue(req, CONNECTION_COOKIE);
+        const connectionSessionId = readCookieValue(req, CONNECTION_COOKIE);
         const sessionId = readCookieValue(req, ACCOUNT_SESSION_COOKIE_NAME);
         const session = sessionId ? service.getSession(sessionId) : null;
-        if (!browserId || !session || !csrfMatches(req, session.csrfToken)) {
+        if (
+            !connectionSessionId ||
+            !session ||
+            !csrfMatches(req, session.csrfToken)
+        ) {
             sendJson(res, 403, {
                 error: 'Sign in and retry the connection request',
             });
             return;
         }
-        service.cancelDiscordConnection(browserId);
+        service.cancelDiscordConnection(connectionSessionId);
         res.setHeader('Set-Cookie', cookie('', secureCookies, 0));
         sendJson(res, 200, { cancelled: true });
     };

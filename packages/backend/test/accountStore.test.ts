@@ -125,21 +125,24 @@ test('Discord mapping survives reopen, is idempotent, and never moves', () => {
             subject: 'subject-2',
         });
         assert.equal(
-            store.linkDiscordAccount('discord-1', accountA.id),
+            store.linkDiscordUserToAccount('discord-1', accountA.id),
             'linked'
         );
         assert.equal(
-            store.linkDiscordAccount('discord-1', accountA.id),
+            store.linkDiscordUserToAccount('discord-1', accountA.id),
             'already-linked'
         );
         assert.equal(
-            store.linkDiscordAccount('discord-1', accountB.id),
+            store.linkDiscordUserToAccount('discord-1', accountB.id),
             'conflict'
         );
         store.close();
         store = new SqliteAccountStore({ dbPath });
-        assert.equal(store.getDiscordAccount('discord-1')?.id, accountA.id);
-        assert.equal(store.getDiscordAccount('discord-2'), null);
+        assert.equal(
+            store.findAccountByDiscordUserId('discord-1')?.id,
+            accountA.id
+        );
+        assert.equal(store.findAccountByDiscordUserId('discord-2'), null);
     } finally {
         store?.close();
         fs.rmSync(tempDir, { recursive: true, force: true });
@@ -164,7 +167,7 @@ test('concurrent Discord links preserve one account and isolate conflicts', asyn
         const worker = `
             import { SqliteAccountStore } from './packages/backend/src/storage/accounts/sqliteAccountStore.ts';
             const store = new SqliteAccountStore({ dbPath: process.argv[1] });
-            try { console.log(store.linkDiscordAccount(process.argv[2], process.argv[3])); }
+            try { console.log(store.linkDiscordUserToAccount(process.argv[2], process.argv[3])); }
             finally { store.close(); }
         `;
         const link = (accountId: string) =>
@@ -197,7 +200,7 @@ test('concurrent Discord links preserve one account and isolate conflicts', asyn
         store = new SqliteAccountStore({ dbPath });
         assert.ok(
             [accountA.id, accountB.id].includes(
-                store.getDiscordAccount('discord-1')?.id ?? ''
+                store.findAccountByDiscordUserId('discord-1')?.id ?? ''
             )
         );
     } finally {

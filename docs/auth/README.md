@@ -10,37 +10,26 @@ decision.
 
 ## Connect a Discord account
 
-Run `/account connect` in Discord. The bot uses the Discord interaction's user
-ID and replies privately with a ten-minute connection link. The link's random
-capability is placed in its URL fragment, exchanged once for an HttpOnly
-browser cookie, and removed from the address bar. The browser signs in through
-this same OIDC flow and asks for explicit approval. Approval displays an
-eight-digit code; it does not persist the Discord mapping. Enter the code with
-`/account confirm code:<code>` from the Discord account that started the flow.
+Run `/account connect` in Discord. The bot privately replies with a link that
+expires in ten minutes. Open it, sign in, and approve the connection. Footnote
+then shows an eight-digit code; enter it with `/account confirm code:<code>`
+from the same Discord account. Browser approval alone does not connect the
+accounts. `/account status` privately checks the link.
 
-The backend stores a separate Discord-ID-to-internal-account mapping in the
-account SQLite database. A Discord ID is never an account ID or OIDC issuer.
-One Discord identity cannot move between accounts; a conflict does not merge
-or expose the other account. The connection transaction is process-local,
-single-use, limited to one active request per Discord user, and expires after
-ten minutes. Five incorrect codes invalidate it. A restart requires starting
-again. `/account status` privately reports whether backend ownership resolution
-finds a mapping.
+Footnote links the Discord ID to the internal account. Repeating the link to
+the same account is harmless. If that ID already belongs to another account,
+Footnote refuses the link; it never moves identities or merges accounts.
+Unfinished requests stay in process memory, expire after ten minutes, and are
+cleared on restart. Five incorrect codes invalidate a request.
 
-The bot's trusted internal-service credential is required for start, status,
-and confirmation. Account sign-in or Discord connection never claims historical
-incidents. Ordinary Discord messages and chat context do not create or resolve
-account ownership.
-
-Connection capabilities and confirmation codes are never logged or persisted.
-Only the Discord snowflake is stored as a unique external mapping to the
-internal account; Discord usernames, display names, email, and provider tokens
-are not retained for this flow. Browser writes use the account session's CSRF
-token and no-store responses. Signing out the approving session invalidates its
-pending transaction. A missing OIDC provider, trusted service credential, or
-account store disables only connection operations; public chat remains
-available. Connecting an account grants no administrator access and does not
-claim a historical incident.
+The link token is carried in the URL fragment, removed from the address bar
+after exchange, and held in an HttpOnly browser cookie. Tokens and codes are
+not logged or stored. Browser writes require the signed-in session's CSRF
+token; signing out cancels its pending request. The bot's internal service
+credential is required to start, check, or confirm a link. Missing sign-in or
+bot configuration disables linking, not public chat. Linking does not grant
+administrator access or claim a past incident. Discord usernames and provider
+tokens are not retained.
 
 ## Runtime behavior
 

@@ -7,7 +7,7 @@
             {
                 "type": 1,
                 "name": "connect",
-                "description": "Start private account connection"
+                "description": "Get a link to connect your Footnote account"
             },
             {
                 "type": 1,
@@ -17,7 +17,7 @@
             {
                 "type": 1,
                 "name": "confirm",
-                "description": "Confirm your browser-approved connection",
+                "description": "Enter the code to connect your account",
                 "options": [
                     {
                         "type": 3,

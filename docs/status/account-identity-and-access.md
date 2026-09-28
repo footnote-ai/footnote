@@ -47,12 +47,11 @@ not a durable mapping. `/account confirm` binds the code only when submitted by
 the original Discord user. `/account status` resolves the persisted mapping
 through the backend.
 
-Discord mappings use a separate unique-ID table referencing the internal
-account row. They are not fabricated OIDC identities. Same-account repeats are
-idempotent, cross-account conflicts never move mappings or merge accounts, and
-the transient transaction is bounded and process-local. No Discord OAuth
-tokens, usernames, or profile claims are retained. Failure of these operations
-does not disable public chat. See [Discord Account Connection](../auth/README.md#connect-a-discord-account).
+Footnote stores the Discord ID separately from the internal account. Repeating
+a link to the same account is harmless. If that ID is linked to another
+Footnote account, Footnote refuses the new link. Unfinished requests expire
+after ten minutes and stay in process memory; a restart clears them. See
+[Discord account connection](../auth/README.md#connect-a-discord-account).
 
 Administrator settings actions may record a deterministic hash of the external
 issuer and subject as a safe actor identifier. Footnote does not retain provider

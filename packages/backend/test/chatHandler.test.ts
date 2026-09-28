@@ -319,7 +319,10 @@ test('ordinary Discord chat context does not create account ownership', async ()
         });
 
         assert.equal(response.status, 200);
-        assert.equal(accountStore.getDiscordAccount(discordUserId), null);
+        assert.equal(
+            accountStore.findAccountByDiscordUserId(discordUserId),
+            null
+        );
     } finally {
         await server.close();
         env.TRACE_API_TOKEN = previousTraceToken;

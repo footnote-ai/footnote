@@ -8,7 +8,7 @@
 
 import { useEffect, useRef, useState, type ComponentRef } from 'react';
 import type {
-    DiscordAccountBrowserResponse,
+    DiscordConnectionStateResponse,
     GetAuthSessionResponse,
 } from '@footnote/contracts/web';
 import PublicPageLayout from '@components/PublicPageLayout';
@@ -18,7 +18,7 @@ import {
     consentDiscordConnection,
     exchangeDiscordConnection,
     getAuthSession,
-    getDiscordConnection,
+    getDiscordConnectionState,
     logoutAccount,
 } from '../utils/api';
 
@@ -32,7 +32,7 @@ type ConnectionState =
     | { status: 'loading' }
     | {
           status: 'ready';
-          state: DiscordAccountBrowserResponse['state'];
+          state: DiscordConnectionStateResponse['state'];
           code?: string;
       }
     | { status: 'error' };
@@ -110,7 +110,7 @@ const AccountPage = (): JSX.Element => {
                 .catch(() => setConnectionState({ status: 'error' }));
             return;
         }
-        void getDiscordConnection()
+        void getDiscordConnectionState()
             .then((result) =>
                 setConnectionState({
                     status: 'ready',
@@ -126,7 +126,7 @@ const AccountPage = (): JSX.Element => {
             const result = await consentDiscordConnection(csrfToken);
             setConnectionState({
                 status: 'ready',
-                state: 'approved',
+                state: 'waiting-for-discord-confirmation',
                 code: result.code,
             });
         } catch {
@@ -330,7 +330,7 @@ const AccountPage = (): JSX.Element => {
                     again with <code>/account connect</code>.
                 </p>
             );
-        if (connectionState.state === 'approved')
+        if (connectionState.state === 'waiting-for-discord-confirmation')
             return (
                 <output className="account-card__status">
                     Run{' '}
@@ -347,8 +347,6 @@ const AccountPage = (): JSX.Element => {
                 <div className="account-card__stack">
                     <output>
                         Sign in to the Footnote account you want to connect.
-                        Approval does not link the account until you confirm in
-                        Discord.
                     </output>
                     <a
                         className="account-card__button account-card__button--primary"
@@ -360,25 +358,15 @@ const AccountPage = (): JSX.Element => {
             );
         }
         const csrfToken = sessionState.session.csrfToken;
-        if (connectionState.state === 'ready-to-confirm')
-            return (
-                <output>
-                    This browser has already approved the connection. Return to
-                    Discord to enter its code.
-                </output>
-            );
         return (
             <div className="account-card__stack">
-                <p>
-                    Connect the Discord account that opened this private link to
-                    the Footnote account signed in here?
-                </p>
+                <p>Connect your Discord account to this Footnote account?</p>
                 <button
                     className="account-card__button account-card__button--primary"
                     type="button"
                     onClick={() => void handleDiscordConsent(csrfToken)}
                 >
-                    Approve and show confirmation code
+                    Approve connection
                 </button>
                 <button
                     className="account-card__button"
