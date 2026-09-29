@@ -29,6 +29,7 @@ type RegisterAuthRoutesDeps = {
     handleAuthCallbackRequest: RequestHandler;
     handleAuthSessionRequest: RequestHandler;
     handleAuthLogoutRequest: RequestHandler;
+    handleAccountDeletionRequest?: RequestHandler;
     handleDiscordBrowserExchange?: RequestHandler;
     handleDiscordBrowserStatus?: RequestHandler;
     handleDiscordBrowserConsent?: RequestHandler;
@@ -47,6 +48,7 @@ export const registerAuthRoutes = ({
     handleAuthCallbackRequest,
     handleAuthSessionRequest,
     handleAuthLogoutRequest,
+    handleAccountDeletionRequest = accountConnectionDisabled,
     handleDiscordBrowserExchange = accountConnectionDisabled,
     handleDiscordBrowserStatus = accountConnectionDisabled,
     handleDiscordBrowserConsent = accountConnectionDisabled,
@@ -98,6 +100,13 @@ export const registerAuthRoutes = ({
                 req.method === 'POST'
             ) {
                 await handleAuthLogoutRequest(req, res);
+                return;
+            }
+            if (
+                normalizedPathname === '/api/auth/delete' &&
+                req.method === 'POST'
+            ) {
+                await handleAccountDeletionRequest(req, res);
                 return;
             }
             const discordBrowserHandler = discordBrowserRoutes.get(

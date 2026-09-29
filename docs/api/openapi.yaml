@@ -1072,6 +1072,48 @@ paths:
                 '403':
                     $ref: '#/components/responses/Forbidden'
 
+    /api/auth/delete:
+        post:
+            operationId: postAccountDeletion
+            x-codeRefs:
+                - packages/backend/src/handlers/accountAuth.ts#createAccountAuthHandlers
+                - packages/api-client/src/accountAuth.ts#createAccountAuthApi
+            summary: Delete the current Footnote account
+            description: |
+                Requires the signed-in account session and its CSRF token.
+                Deletes Footnote's account and external identity mappings, and
+                removes the account's incident associations. External identity
+                provider accounts are not changed.
+            tags:
+                - Accounts
+            security:
+                - {}
+                - AccountSessionCookie: []
+            parameters:
+                - $ref: '#/components/parameters/AuthCsrfHeader'
+            responses:
+                '204':
+                    description: Footnote account deleted and local session cleared.
+                    headers:
+                        Set-Cookie:
+                            description: Expires the local account-session cookie.
+                            schema:
+                                type: string
+                        Cache-Control:
+                            schema:
+                                type: string
+                                const: no-store
+                '401':
+                    $ref: '#/components/responses/Unauthorized'
+                '403':
+                    $ref: '#/components/responses/Forbidden'
+                '503':
+                    description: Account deletion could not complete.
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ErrorResponse'
+
     /api/auth/discord-connection/exchange:
         post:
             operationId: postDiscordConnectionExchange

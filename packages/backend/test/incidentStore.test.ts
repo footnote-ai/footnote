@@ -265,3 +265,64 @@ test('incident claim capabilities expire and associate once without disclosing o
         await fs.rm(tempRoot, { recursive: true, force: true });
     }
 });
+
+test('deleting account associations removes its claim verifiers but preserves unclaimed and other rows', async () => {
+    const tempRoot = await fs.mkdtemp(
+        path.join(os.tmpdir(), 'incident-account-delete-')
+    );
+    const store = new SqliteIncidentStore({
+        dbPath: path.join(tempRoot, 'incidents.db'),
+        pseudonymizationSecret: SECRET,
+    });
+    try {
+        for (const [capabilityHash, expiresAt] of [
+            ['account-capability', '2026-10-02T00:00:00.000Z'],
+            ['other-capability', '2026-10-02T00:00:00.000Z'],
+            ['unclaimed-capability', '2026-10-02T00:00:00.000Z'],
+        ]) {
+            await store.createIncidentWithAudit({
+                incident: { consentedAt: new Date().toISOString() },
+                auditEvent: { action: 'incident.created' },
+                association: { capabilityHash, expiresAt },
+            });
+        }
+        await store.associateIncident(
+            'account-capability',
+            'account-a',
+            '2026-10-01T00:00:00.000Z'
+        );
+        await store.associateIncident(
+            'other-capability',
+            'account-b',
+            '2026-10-01T00:00:00.000Z'
+        );
+
+        await store.deleteAssociationsForAccount('account-a');
+        await store.deleteAssociationsForAccount('account-a');
+
+        assert.deepEqual(await store.listAssociatedIncidents('account-a'), []);
+        assert.equal(
+            await store.associateIncident(
+                'account-capability',
+                'account-a',
+                '2026-10-01T00:00:00.000Z'
+            ),
+            'unavailable'
+        );
+        assert.equal(
+            await store.associateIncident(
+                'unclaimed-capability',
+                'account-b',
+                '2026-10-01T00:00:00.000Z'
+            ),
+            'associated'
+        );
+        assert.equal(
+            (await store.listAssociatedIncidents('account-b')).length,
+            2
+        );
+    } finally {
+        store.close();
+        await fs.rm(tempRoot, { recursive: true, force: true });
+    }
+});

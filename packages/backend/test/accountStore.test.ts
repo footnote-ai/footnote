@@ -149,6 +149,40 @@ test('Discord mapping survives reopen, is idempotent, and never moves', () => {
     }
 });
 
+test('deleting an account removes its identity and Discord mappings idempotently', () => {
+    const tempDir = fs.mkdtempSync(
+        path.join(os.tmpdir(), 'footnote-account-delete-')
+    );
+    let store: SqliteAccountStore | null = null;
+    try {
+        store = new SqliteAccountStore({
+            dbPath: path.join(tempDir, 'accounts.db'),
+        });
+        const account = store.resolveOrCreateAccount(identity);
+        const other = store.resolveOrCreateAccount({
+            ...identity,
+            subject: 'subject-2',
+        });
+        store.linkDiscordUserToAccount('discord-1', account.id);
+
+        store.deleteAccount(account.id);
+        store.deleteAccount(account.id);
+
+        assert.notEqual(store.resolveOrCreateAccount(identity).id, account.id);
+        assert.equal(store.findAccountByDiscordUserId('discord-1'), null);
+        assert.equal(
+            store.resolveOrCreateAccount({
+                ...identity,
+                subject: 'subject-2',
+            }).id,
+            other.id
+        );
+    } finally {
+        store?.close();
+        fs.rmSync(tempDir, { recursive: true, force: true });
+    }
+});
+
 test('account export storage returns only the requested account mappings', () => {
     const tempDir = fs.mkdtempSync(
         path.join(os.tmpdir(), 'footnote-account-export-')

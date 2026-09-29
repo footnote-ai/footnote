@@ -22,6 +22,7 @@ import { loadGetAuthSessionResponseValidator } from './lazyWebValidators.js';
 export type AccountAuthApi = {
     getAuthSession: (signal?: AbortSignal) => Promise<GetAuthSessionResponse>;
     logoutAccount: (csrfToken: string, signal?: AbortSignal) => Promise<void>;
+    deleteAccount: (csrfToken: string, signal?: AbortSignal) => Promise<void>;
     exchangeDiscordConnection: (
         capability: string
     ) => Promise<DiscordConnectionStateResponse>;
@@ -74,6 +75,19 @@ export const createAccountAuthApi = (
             headers: {
                 'x-auth-csrf': csrfToken,
             },
+        });
+    };
+
+    /** @api.operationId: postAccountDeletion @api.path: POST /api/auth/delete */
+    const deleteAccount = async (
+        csrfToken: string,
+        signal?: AbortSignal
+    ): Promise<void> => {
+        await requestJson<unknown>('/api/auth/delete', {
+            method: 'POST',
+            signal,
+            cache: 'no-store',
+            headers: { 'x-auth-csrf': csrfToken },
         });
     };
 
@@ -144,6 +158,7 @@ export const createAccountAuthApi = (
     return {
         getAuthSession,
         logoutAccount,
+        deleteAccount,
         exchangeDiscordConnection,
         getDiscordConnectionState,
         consentDiscordConnection,

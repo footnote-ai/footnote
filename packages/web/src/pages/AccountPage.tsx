@@ -1,5 +1,5 @@
 /**
- * @description: Shows account sign-in availability, the current backend-owned session, and local logout.
+ * @description: Shows account sign-in availability, the current backend-owned session, logout, and account deletion.
  * @footnote-scope: web
  * @footnote-module: AccountPage
  * @footnote-risk: medium - State mistakes can misrepresent whether a user is signed in or signed out.
@@ -30,6 +30,7 @@ import {
     getDiscordConnectionState,
     claimIncident,
     logoutAccount,
+    deleteAccount,
 } from '../utils/api';
 
 type SessionState =
@@ -38,6 +39,7 @@ type SessionState =
     | { status: 'error' };
 
 type LogoutState = 'idle' | 'submitting' | 'error';
+type DeletionState = 'idle' | 'submitting' | 'error' | 'success';
 type AccountIncidentsState =
     | { status: 'loading'; accountKey: string | null }
     | {
@@ -74,6 +76,7 @@ const AccountPage = (): JSX.Element => {
     });
     const [reloadKey, setReloadKey] = useState(0);
     const [logoutState, setLogoutState] = useState<LogoutState>('idle');
+    const [deletionState, setDeletionState] = useState<DeletionState>('idle');
     const [connectionState, setConnectionState] = useState<ConnectionState>({
         status: 'loading',
     });
@@ -266,6 +269,37 @@ const AccountPage = (): JSX.Element => {
         }
     };
 
+    const handleDeleteAccount = async (
+        session: Extract<
+            GetAuthSessionResponse,
+            { enabled: true; authenticated: true }
+        >
+    ): Promise<void> => {
+        if (
+            !window.confirm(
+                'Permanently delete your Footnote account, its sign-in mappings, and its report links? Your external identity-provider accounts will not be changed.'
+            )
+        ) {
+            return;
+        }
+
+        setDeletionState('submitting');
+        try {
+            await deleteAccount(session.csrfToken);
+            setSessionState({
+                status: 'ready',
+                session: { enabled: true, authenticated: false },
+            });
+            setDeletionState('success');
+        } catch {
+            setSessionState({
+                status: 'ready',
+                session: { enabled: true, authenticated: false },
+            });
+            setDeletionState('error');
+        }
+    };
+
     const handleClaimIncident = async (
         event: FormEvent<HTMLFormElement>,
         session: Extract<
@@ -433,6 +467,24 @@ const AccountPage = (): JSX.Element => {
                         Sign-out could not be completed. Please try again.
                     </p>
                 ) : null}
+                {deletionState === 'error' ? (
+                    <p className="account-card__error" role="alert">
+                        Account deletion could not finish. Sign in again and
+                        retry.
+                    </p>
+                ) : null}
+                <button
+                    className="account-card__button"
+                    type="button"
+                    disabled={deletionState === 'submitting'}
+                    onClick={() => {
+                        void handleDeleteAccount(authenticatedSession);
+                    }}
+                >
+                    {deletionState === 'submitting'
+                        ? 'Deleting account…'
+                        : 'Delete Footnote account'}
+                </button>
             </div>
         );
     };
@@ -672,6 +724,13 @@ const AccountPage = (): JSX.Element => {
                         </p>
                     ) : null}
                     <div className="account-card" aria-live="polite">
+                        {deletionState === 'success' ? (
+                            <p className="account-card__status" role="status">
+                                Your Footnote account has been deleted. Your
+                                external sign-in accounts were not changed.
+                                Incident reports are managed separately.
+                            </p>
+                        ) : null}
                         {renderSessionState()}
                     </div>
                     {renderAccountIncidents()}

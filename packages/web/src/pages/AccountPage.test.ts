@@ -66,6 +66,19 @@ test('account page uses typed session APIs and exposes all public states', async
     assert.doesNotMatch(source, /accessToken|refreshToken|idToken/);
 });
 
+test('account page confirms deletion and reports signed-out result', async () => {
+    const source = await readFile(
+        `${webSourceDirectory}pages/AccountPage.tsx`,
+        'utf8'
+    );
+
+    assert.match(source, /window\.confirm\(/);
+    assert.match(source, /deleteAccount\(session\.csrfToken\)/);
+    assert.match(source, /Delete Footnote account/);
+    assert.match(source, /Your Footnote account has been deleted/);
+    assert.match(source, /Your\s+external sign-in accounts were not changed/);
+});
+
 test('account report selection and claim drafts reset across logout and account changes', async () => {
     const source = await readFile(
         `${webSourceDirectory}pages/AccountPage.tsx`,

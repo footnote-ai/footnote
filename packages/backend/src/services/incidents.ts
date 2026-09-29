@@ -271,6 +271,9 @@ export const createIncidentService = ({
         async listAssociatedIncidents(accountId: string) {
             return incidentStore.listAssociatedIncidents(accountId);
         },
+        deleteAccountAssociations(accountId: string): void {
+            incidentStore.deleteAssociationsForAccount(accountId);
+        },
 
         async listAssociatedIncidentsForExport(accountId: string) {
             return incidentStore.listAssociatedIncidentsForExport(accountId);

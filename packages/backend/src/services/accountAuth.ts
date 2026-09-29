@@ -25,6 +25,7 @@ type LoginTransaction = {
     nonce: string;
     codeVerifier: string;
     expiresAtMs: number;
+    authEpoch: number;
 };
 
 type DiscordConnectionTransaction = {
@@ -69,7 +70,8 @@ export type StartAccountLoginResult =
       }
     | {
           ok: false;
-          reason: 'disabled' | 'capacity' | 'provider_unavailable';
+          reason:
+              'disabled' | 'capacity' | 'provider_unavailable' | 'invalidated';
       };
 
 export type CompleteAccountLoginResult =
@@ -96,6 +98,9 @@ export type AccountAuthService = {
     ) => Promise<CompleteAccountLoginResult>;
     getSession: (sessionId: string) => AccountSession | null;
     clearSession: (sessionId: string) => boolean;
+    invalidateAccountSessions: (accountId: string) => void;
+    beginAccountDeletion: (accountId: string) => void;
+    finishAccountDeletion: (accountId: string) => void;
 };
 
 export type DiscordAccountConnectionService = {
@@ -165,6 +170,8 @@ export const createAccountAuthService = ({
         AccountSession & { expiresAtMs: number }
     >();
     const administratorKeys = administratorIdentityKeys ?? new Set<string>();
+    let authEpoch = 0;
+    const deletingAccounts = new Set<string>();
 
     const pruneExpired = (): void => {
         const nowMs = now();
@@ -203,9 +210,13 @@ export const createAccountAuthService = ({
             return { ok: false, reason: 'capacity' };
         }
 
+        const transactionEpoch = authEpoch;
         try {
             const authorization = await provider.startAuthorization();
             pruneExpired();
+            if (transactionEpoch !== authEpoch) {
+                return { ok: false, reason: 'invalidated' };
+            }
             if (!makeRoomForTransaction()) {
                 return { ok: false, reason: 'capacity' };
             }
@@ -216,6 +227,7 @@ export const createAccountAuthService = ({
                 nonce: authorization.nonce,
                 codeVerifier: authorization.codeVerifier,
                 expiresAtMs,
+                authEpoch: transactionEpoch,
             });
             return {
                 ok: true,
@@ -255,6 +267,9 @@ export const createAccountAuthService = ({
         }
 
         pruneExpired();
+        if (transaction.authEpoch !== authEpoch) {
+            return { ok: false, reason: 'invalid_transaction' };
+        }
         if (!accountStore) {
             return { ok: false, reason: 'account_storage_unavailable' };
         }
@@ -270,6 +285,9 @@ export const createAccountAuthService = ({
             });
         } catch {
             return { ok: false, reason: 'account_storage_unavailable' };
+        }
+        if (deletingAccounts.has(account.id)) {
+            return { ok: false, reason: 'invalid_transaction' };
         }
 
         const sessionId = randomToken(32);
@@ -321,6 +339,25 @@ export const createAccountAuthService = ({
             if (tx.approvedSessionId === sessionId) clearDiscordTransaction(id);
         }
         return sessions.delete(sessionId);
+    };
+
+    /** Revokes every local session and approved Discord connection for an account. */
+    const invalidateAccountSessions = (accountId: string): void => {
+        for (const [sessionId, session] of sessions) {
+            if (session.accountId === accountId) clearSession(sessionId);
+        }
+    };
+
+    const beginAccountDeletion = (accountId: string): void => {
+        // ponytail: one process-wide epoch invalidates unrelated pending OIDC logins; use per-identity fences only if that collateral impact matters.
+        authEpoch += 1;
+        deletingAccounts.add(accountId);
+        transactions.clear();
+        invalidateAccountSessions(accountId);
+    };
+
+    const finishAccountDeletion = (accountId: string): void => {
+        deletingAccounts.delete(accountId);
     };
 
     const clearDiscordTransaction = (id: string): void => {
@@ -516,6 +553,9 @@ export const createAccountAuthService = ({
         completeLogin,
         getSession,
         clearSession,
+        invalidateAccountSessions,
+        beginAccountDeletion,
+        finishAccountDeletion,
         startDiscordConnection,
         exchangeDiscordCapability,
         getDiscordConnectionState,

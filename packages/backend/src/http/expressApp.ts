@@ -93,6 +93,10 @@ type CreateExpressAppDeps = {
         req: http.IncomingMessage,
         res: http.ServerResponse
     ) => Promise<void>;
+    handleAccountDeletionRequest?: (
+        req: http.IncomingMessage,
+        res: http.ServerResponse
+    ) => Promise<void>;
     handleChatRequest: (
         req: http.IncomingMessage,
         res: http.ServerResponse
@@ -267,6 +271,7 @@ const createExpressApp = ({
     handleAuthCallbackRequest,
     handleAuthSessionRequest,
     handleAuthLogoutRequest,
+    handleAccountDeletionRequest,
     handleDiscordBrowserExchange,
     handleDiscordBrowserStatus,
     handleDiscordBrowserConsent,
@@ -318,6 +323,7 @@ const createExpressApp = ({
         handleAuthCallbackRequest,
         handleAuthSessionRequest,
         handleAuthLogoutRequest,
+        handleAccountDeletionRequest,
         handleDiscordBrowserExchange,
         handleDiscordBrowserStatus,
         handleDiscordBrowserConsent,

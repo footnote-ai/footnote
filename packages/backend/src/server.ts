@@ -662,8 +662,11 @@ const {
     handleAuthCallbackRequest,
     handleAuthSessionRequest,
     handleAuthLogoutRequest,
+    handleAccountDeletionRequest,
 } = createAccountAuthHandlers({
     accountAuthService,
+    accountStore,
+    incidentService,
     secureCookies:
         runtimeConfig.accountAuth.enabled &&
         runtimeConfig.accountAuth.secureCookies,
@@ -820,6 +823,7 @@ const app = createExpressApp({
     handleAuthCallbackRequest,
     handleAuthSessionRequest,
     handleAuthLogoutRequest,
+    handleAccountDeletionRequest,
     handleDiscordBrowserExchange: discordAccountHandlers.handleBrowserExchange,
     handleDiscordBrowserStatus: discordAccountHandlers.handleBrowserStatus,
     handleDiscordBrowserConsent: discordAccountHandlers.handleBrowserConsent,

@@ -188,6 +188,7 @@ export class SqliteIncidentStore {
     private readonly findIncidentAssociationByCapabilityStatement: Database.Statement;
     private readonly associateIncidentStatement: Database.Statement;
     private readonly listAssociatedIncidentsStatement: Database.Statement;
+    private readonly deleteAssociationsForAccountStatement: Database.Statement;
     private readonly pseudonymizationSecret: string;
 
     /**
@@ -398,6 +399,9 @@ export class SqliteIncidentStore {
       WHERE incident_associations.account_id = ?
       ORDER BY incidents.created_at DESC, incidents.id DESC
     `);
+        this.deleteAssociationsForAccountStatement = this.db.prepare(
+            'DELETE FROM incident_associations WHERE account_id = ?'
+        );
 
         incidentLogger.info(
             `Initialized SQLite incident store at ${resolvedPath}`
@@ -871,6 +875,11 @@ export class SqliteIncidentStore {
                   ]
                 : []
         );
+    }
+
+    /** Removes account links and claim verifiers without touching incident records or unclaimed reports. */
+    deleteAssociationsForAccount(accountId: string): void {
+        this.deleteAssociationsForAccountStatement.run(accountId);
     }
 
     /**

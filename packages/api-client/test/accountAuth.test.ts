@@ -95,3 +95,24 @@ test('logoutAccount posts only the CSRF header and normalizes success to void', 
     assert.equal(capturedOptions.body, undefined);
     assert.equal(result, undefined);
 });
+
+test('deleteAccount posts only the CSRF header without caching', async () => {
+    let capturedEndpoint = '';
+    let capturedOptions: ApiRequestOptions<unknown> = {};
+    const requestJson: ApiRequester = async <T>(
+        endpoint: string,
+        options: ApiRequestOptions<T> = {}
+    ): Promise<ApiJsonResult<T>> => {
+        capturedEndpoint = endpoint;
+        capturedOptions = options as ApiRequestOptions<unknown>;
+        return { status: 204, data: null as T };
+    };
+
+    await createAccountAuthApi(requestJson).deleteAccount('csrf-token');
+
+    assert.equal(capturedEndpoint, '/api/auth/delete');
+    assert.equal(capturedOptions.method, 'POST');
+    assert.equal(capturedOptions.cache, 'no-store');
+    assert.deepEqual(capturedOptions.headers, { 'x-auth-csrf': 'csrf-token' });
+    assert.equal(capturedOptions.body, undefined);
+});
