@@ -59,7 +59,7 @@ const startServer = async (
         accountAuthService: service,
         accountStore,
         incidentService: {
-            deleteAccountAssociations: (accountId) => {
+            redactAndDeleteAccountAssociations: async (accountId) => {
                 if (associationDeletionFails) {
                     throw new Error('incident store unavailable');
                 }

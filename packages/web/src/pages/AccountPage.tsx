@@ -277,7 +277,7 @@ const AccountPage = (): JSX.Element => {
     ): Promise<void> => {
         if (
             !window.confirm(
-                'Permanently delete your Footnote account, its sign-in mappings, and its report links? Your external identity-provider accounts will not be changed.'
+                'Delete your Footnote account, sign-in links, Discord connection, and links to reports you claimed? Your external sign-in and Discord accounts will stay active. Claimed safety reports will remain, but their descriptions, contact information, and details identifying you will be removed. Unclaimed reports will not change. This cannot be undone.'
             )
         ) {
             return;
@@ -727,8 +727,11 @@ const AccountPage = (): JSX.Element => {
                         {deletionState === 'success' ? (
                             <p className="account-card__status" role="status">
                                 Your Footnote account has been deleted. Your
-                                external sign-in accounts were not changed.
-                                Incident reports are managed separately.
+                                sign-in and Discord accounts were not changed.
+                                Claimed safety reports remain, but their
+                                descriptions, contact information, and details
+                                identifying you were removed. Unclaimed reports
+                                were not changed.
                             </p>
                         ) : null}
                         {renderSessionState()}

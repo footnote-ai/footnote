@@ -76,7 +76,15 @@ test('account page confirms deletion and reports signed-out result', async () =>
     assert.match(source, /deleteAccount\(session\.csrfToken\)/);
     assert.match(source, /Delete Footnote account/);
     assert.match(source, /Your Footnote account has been deleted/);
-    assert.match(source, /Your\s+external sign-in accounts were not changed/);
+    assert.match(source, /Claimed safety reports will remain/);
+    assert.match(source, /details identifying you will be removed/);
+    assert.match(source, /Unclaimed reports will not change/);
+    assert.match(
+        source,
+        /Your\s+sign-in and Discord accounts were not changed/
+    );
+    assert.match(source, /details\s+identifying you were removed/);
+    assert.match(source, /Claimed safety reports remain/);
 });
 
 test('account report selection and claim drafts reset across logout and account changes', async () => {

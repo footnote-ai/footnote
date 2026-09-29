@@ -39,7 +39,10 @@ type RequestHandler = (
 type CreateAccountAuthHandlersDeps = {
     accountAuthService: AccountAuthService;
     accountStore?: AccountStore | null;
-    incidentService?: Pick<IncidentService, 'deleteAccountAssociations'> | null;
+    incidentService?: Pick<
+        IncidentService,
+        'redactAndDeleteAccountAssociations'
+    > | null;
     secureCookies: boolean;
     logger: AccountAuthLogger;
     logRequest: (
@@ -358,7 +361,9 @@ export const createAccountAuthHandlers = ({
 
         accountAuthService.beginAccountDeletion(session.accountId);
         try {
-            incidentService.deleteAccountAssociations(session.accountId);
+            await incidentService.redactAndDeleteAccountAssociations(
+                session.accountId
+            );
             accountStore.deleteAccount(session.accountId);
         } catch {
             res.setHeader('Set-Cookie', buildSessionClearCookie(secureCookies));
