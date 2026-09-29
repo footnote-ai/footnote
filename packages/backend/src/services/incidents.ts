@@ -272,10 +272,6 @@ export const createIncidentService = ({
             return incidentStore.listAssociatedIncidents(accountId);
         },
 
-        async getAssociatedIncident(accountId: string, incidentId: string) {
-            return incidentStore.getAssociatedIncident(accountId, incidentId);
-        },
-
         async listIncidents(filters: {
             status?: IncidentSummary['status'];
             tag?: string;

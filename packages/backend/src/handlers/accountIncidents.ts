@@ -8,7 +8,6 @@
 import { timingSafeEqual } from 'node:crypto';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import {
-    GetAccountIncidentResponseSchema,
     GetAccountIncidentsResponseSchema,
     PostAccountIncidentClaimRequestSchema,
 } from '@footnote/contracts/web/schemas';
@@ -29,12 +28,6 @@ type RequestHandler = (
     req: IncomingMessage,
     res: ServerResponse
 ) => Promise<void>;
-type ParsedUrlHandler = (
-    req: IncomingMessage,
-    res: ServerResponse,
-    parsedUrl: URL
-) => Promise<void>;
-
 const readHeader = (value: string | string[] | undefined): string | null => {
     const header = Array.isArray(value) ? value[0] : value;
     return header?.trim() || null;
@@ -60,7 +53,6 @@ export const createAccountIncidentHandlers = ({
     logRequest: TrustedRouteLogRequest;
 }): {
     handleAccountIncidentsRequest: RequestHandler;
-    handleAccountIncidentRequest: ParsedUrlHandler;
     handleAccountIncidentClaimRequest: RequestHandler;
 } => {
     const readAccountSession = (req: IncomingMessage) => {
@@ -157,71 +149,8 @@ export const createAccountIncidentHandlers = ({
         logRequest(req, res, 'account incident claim success');
     };
 
-    /** @api.operationId: getAccountIncident @api.path: GET /api/account/incidents/{incidentId} */
-    const handleAccountIncidentRequest: ParsedUrlHandler = async (
-        req,
-        res,
-        parsedUrl
-    ) => {
-        res.setHeader('Cache-Control', 'no-store');
-        if (req.method !== 'GET') {
-            sendJson(res, 405, { error: 'Method not allowed' });
-            logRequest(req, res, 'account incident method-not-allowed');
-            return;
-        }
-        const session = readAccountSession(req);
-        if (!session) {
-            sendJson(res, 401, { error: 'Sign in required' });
-            logRequest(req, res, 'account incident signed-out');
-            return;
-        }
-        if (!incidentService) {
-            sendJson(res, 503, { error: 'Incident account view unavailable' });
-            logRequest(req, res, 'account incident unavailable');
-            return;
-        }
-        const match = parsedUrl.pathname.match(
-            /^\/api\/account\/incidents\/([^/]+)\/?$/
-        );
-        let incidentId: string;
-        try {
-            incidentId = match ? decodeURIComponent(match[1]).trim() : '';
-        } catch {
-            incidentId = '';
-        }
-        if (!incidentId) {
-            sendJson(res, 404, { error: 'Report not found' });
-            logRequest(req, res, 'account incident not-found');
-            return;
-        }
-        const incident = await incidentService.getAssociatedIncident(
-            session.accountId,
-            incidentId
-        );
-        if (!incident) {
-            sendJson(res, 404, { error: 'Report not found' });
-            logRequest(req, res, 'account incident not-found');
-            return;
-        }
-        const payload = GetAccountIncidentResponseSchema.safeParse({
-            incident,
-        });
-        if (!payload.success) {
-            sendJson(res, 500, { error: 'Failed to load report' });
-            logRequest(
-                req,
-                res,
-                'account incident invalid reporter projection'
-            );
-            return;
-        }
-        sendJson(res, 200, payload.data);
-        logRequest(req, res, 'account incident success');
-    };
-
     return {
         handleAccountIncidentsRequest,
-        handleAccountIncidentRequest,
         handleAccountIncidentClaimRequest,
     };
 };

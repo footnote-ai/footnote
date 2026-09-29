@@ -197,11 +197,6 @@ export type GetAccountIncidentsResponse = {
     incidents: ReporterIncidentSummary[];
 };
 
-/** @api.operationId: getAccountIncident @api.path: GET /api/account/incidents/{incidentId} */
-export type GetAccountIncidentResponse = {
-    incident: ReporterIncidentSummary;
-};
-
 /** @api.operationId: postAccountIncidentClaim @api.path: POST /api/account/incidents/claim */
 export type PostAccountIncidentClaimRequest = {
     claimCode: string;

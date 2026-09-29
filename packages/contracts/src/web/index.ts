@@ -189,7 +189,6 @@ export type {
  */
 export type {
     GetAccountIncidentsResponse,
-    GetAccountIncidentResponse,
     PostAccountIncidentClaimRequest,
     PostAccountIncidentClaimResponse,
     ReporterIncidentSummary,
@@ -270,7 +269,6 @@ export {
     AdminSettingsValidationFailureResponseSchema,
     GetAdminSettingsSchemaResponseSchema,
     GetAccountIncidentsResponseSchema,
-    GetAccountIncidentResponseSchema,
     PostAccountIncidentClaimRequestSchema,
     PostAccountIncidentClaimResponseSchema,
     ReporterIncidentSummarySchema,

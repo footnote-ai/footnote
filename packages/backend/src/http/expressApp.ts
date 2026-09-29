@@ -85,11 +85,6 @@ type CreateExpressAppDeps = {
         req: http.IncomingMessage,
         res: http.ServerResponse
     ) => Promise<void>;
-    handleAccountIncidentRequest: (
-        req: http.IncomingMessage,
-        res: http.ServerResponse,
-        parsedUrl: URL
-    ) => Promise<void>;
     handleAccountIncidentClaimRequest: (
         req: http.IncomingMessage,
         res: http.ServerResponse
@@ -241,7 +236,6 @@ const createExpressApp = ({
     handleIncidentRemediationRequest,
     handleIncidentDetailRequest,
     handleAccountIncidentsRequest,
-    handleAccountIncidentRequest,
     handleAccountIncidentClaimRequest,
     handleChatRequest,
     handleInternalTextRequest,
@@ -329,7 +323,6 @@ const createExpressApp = ({
         app,
         normalizePathname,
         handleAccountIncidentsRequest,
-        handleAccountIncidentRequest,
         handleAccountIncidentClaimRequest,
         logRequest,
     });

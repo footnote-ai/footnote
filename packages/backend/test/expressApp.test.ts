@@ -78,8 +78,6 @@ test('express shell returns handled API dispatch without entering static fallbac
         handleIncidentRemediationRequest: async () => undefined,
         handleIncidentDetailRequest: async () => undefined,
         handleAccountIncidentsRequest: createUnhandledRouteHandler,
-        handleAccountIncidentRequest: async (req, res) =>
-            createUnhandledRouteHandler(req, res),
         handleAccountIncidentClaimRequest: createUnhandledRouteHandler,
         handleChatRequest: createUnhandledRouteHandler,
         handleInternalTextRequest: createUnhandledRouteHandler,
@@ -139,8 +137,6 @@ test('express shell falls through API dispatch and serves static transport', asy
         handleIncidentRemediationRequest: async () => undefined,
         handleIncidentDetailRequest: async () => undefined,
         handleAccountIncidentsRequest: createUnhandledRouteHandler,
-        handleAccountIncidentRequest: async (req, res) =>
-            createUnhandledRouteHandler(req, res),
         handleAccountIncidentClaimRequest: createUnhandledRouteHandler,
         handleChatRequest: createUnhandledRouteHandler,
         handleInternalTextRequest: createUnhandledRouteHandler,

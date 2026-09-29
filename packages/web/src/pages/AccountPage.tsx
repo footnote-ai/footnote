@@ -8,6 +8,7 @@
 
 import {
     useEffect,
+    useLayoutEffect,
     useRef,
     useState,
     type ComponentRef,
@@ -15,7 +16,6 @@ import {
 } from 'react';
 import type {
     DiscordConnectionStateResponse,
-    GetAccountIncidentResponse,
     GetAccountIncidentsResponse,
     GetAuthSessionResponse,
 } from '@footnote/contracts/web';
@@ -26,7 +26,6 @@ import {
     consentDiscordConnection,
     exchangeDiscordConnection,
     getAuthSession,
-    getAccountIncident,
     getAccountIncidents,
     getDiscordConnectionState,
     claimIncident,
@@ -40,9 +39,13 @@ type SessionState =
 
 type LogoutState = 'idle' | 'submitting' | 'error';
 type AccountIncidentsState =
-    | { status: 'loading' }
-    | { status: 'ready'; incidents: GetAccountIncidentsResponse['incidents'] }
-    | { status: 'error' };
+    | { status: 'loading'; accountKey: string | null }
+    | {
+          status: 'ready';
+          accountKey: string | null;
+          incidents: GetAccountIncidentsResponse['incidents'];
+      }
+    | { status: 'error'; accountKey: string };
 type ConnectionState =
     | { status: 'loading' }
     | {
@@ -75,21 +78,32 @@ const AccountPage = (): JSX.Element => {
         status: 'loading',
     });
     const [incidentsState, setIncidentsState] = useState<AccountIncidentsState>(
-        { status: 'loading' }
+        { status: 'loading', accountKey: null }
     );
-    const [claimCode, setClaimCode] = useState('');
-    const [claimMessage, setClaimMessage] = useState('');
+    const [claimCodeDraft, setClaimCodeDraft] = useState<{
+        accountKey: string | null;
+        value: string;
+    }>({ accountKey: null, value: '' });
+    const [claimMessageDraft, setClaimMessageDraft] = useState<{
+        accountKey: string | null;
+        value: string;
+    }>({ accountKey: null, value: '' });
     const [incidentReloadKey, setIncidentReloadKey] = useState(0);
-    const [selectedIncident, setSelectedIncident] = useState<
-        GetAccountIncidentResponse['incident'] | null
-    >(null);
-    const [openingIncidentId, setOpeningIncidentId] = useState<string | null>(
-        null
-    );
+    const [selectedIncidentId, setSelectedIncidentId] = useState<{
+        accountKey: string;
+        incidentId: string;
+    } | null>(null);
     const [showCallbackFailure] = useState(hasAuthFailureMarker);
     const accountStatusHeadingRef = useRef<ComponentRef<'h2'>>(null);
     const focusAfterLogoutRef = useRef(false);
     const connectionEffectStartedRef = useRef(false);
+    const activeAccountKeyRef = useRef<string | null>(null);
+    const accountKey =
+        sessionState.status === 'ready' &&
+        sessionState.session.enabled &&
+        sessionState.session.authenticated
+            ? `${sessionState.session.principal.issuer}\u0000${sessionState.session.principal.subject}`
+            : null;
 
     useEffect(() => {
         if (showCallbackFailure) {
@@ -118,32 +132,50 @@ const AccountPage = (): JSX.Element => {
         };
     }, [reloadKey]);
 
+    useLayoutEffect(() => {
+        const previousAccountKey = activeAccountKeyRef.current;
+        activeAccountKeyRef.current = accountKey;
+        if (previousAccountKey !== accountKey) {
+            setClaimCodeDraft({ accountKey: null, value: '' });
+            setClaimMessageDraft({ accountKey: null, value: '' });
+            setSelectedIncidentId(null);
+        }
+    }, [accountKey]);
+
     useEffect(() => {
-        if (
-            sessionState.status !== 'ready' ||
-            !sessionState.session.enabled ||
-            !sessionState.session.authenticated
-        ) {
-            setIncidentsState({ status: 'ready', incidents: [] });
+        if (accountKey === null) {
+            setIncidentsState({
+                status: 'ready',
+                accountKey: null,
+                incidents: [],
+            });
             return;
         }
         const controller = new AbortController();
-        setIncidentsState({ status: 'loading' });
+        setIncidentsState({ status: 'loading', accountKey });
         void getAccountIncidents(controller.signal)
             .then((result) => {
-                if (!controller.signal.aborted) {
+                if (
+                    !controller.signal.aborted &&
+                    activeAccountKeyRef.current === accountKey
+                ) {
                     setIncidentsState({
                         status: 'ready',
+                        accountKey,
                         incidents: result.incidents,
                     });
                 }
             })
             .catch(() => {
-                if (!controller.signal.aborted)
-                    setIncidentsState({ status: 'error' });
+                if (
+                    !controller.signal.aborted &&
+                    activeAccountKeyRef.current === accountKey
+                ) {
+                    setIncidentsState({ status: 'error', accountKey });
+                }
             });
         return (): void => controller.abort();
-    }, [sessionState, incidentReloadKey]);
+    }, [accountKey, incidentReloadKey]);
 
     useEffect(() => {
         if (connectionEffectStartedRef.current) return;
@@ -215,6 +247,9 @@ const AccountPage = (): JSX.Element => {
         >
     ): Promise<void> => {
         setLogoutState('submitting');
+        setClaimCodeDraft({ accountKey: null, value: '' });
+        setClaimMessageDraft({ accountKey: null, value: '' });
+        setSelectedIncidentId(null);
         try {
             await logoutAccount(session.csrfToken);
             focusAfterLogoutRef.current = true;
@@ -236,32 +271,33 @@ const AccountPage = (): JSX.Element => {
         session: Extract<
             GetAuthSessionResponse,
             { enabled: true; authenticated: true }
-        >
+        >,
+        submittedAccountKey: string
     ): Promise<void> => {
         event.preventDefault();
-        setClaimMessage('');
+        const submittedCode =
+            claimCodeDraft.accountKey === submittedAccountKey
+                ? claimCodeDraft.value.trim()
+                : '';
+        setClaimMessageDraft({
+            accountKey: submittedAccountKey,
+            value: '',
+        });
         try {
-            await claimIncident(claimCode.trim(), session.csrfToken);
-            setClaimCode('');
-            setClaimMessage('Report added to your account.');
+            await claimIncident(submittedCode, session.csrfToken);
+            if (activeAccountKeyRef.current !== submittedAccountKey) return;
+            setClaimCodeDraft({ accountKey: submittedAccountKey, value: '' });
+            setClaimMessageDraft({
+                accountKey: submittedAccountKey,
+                value: 'Report added to your account.',
+            });
             setIncidentReloadKey((value) => value + 1);
         } catch {
-            setClaimMessage(
-                'That claim code is invalid, expired, or already used.'
-            );
-        }
-    };
-
-    const handleOpenIncident = async (incidentId: string): Promise<void> => {
-        setOpeningIncidentId(incidentId);
-        setSelectedIncident(null);
-        try {
-            const response = await getAccountIncident(incidentId);
-            setSelectedIncident(response.incident);
-        } catch {
-            setClaimMessage('That report could not be opened.');
-        } finally {
-            setOpeningIncidentId(null);
+            if (activeAccountKeyRef.current !== submittedAccountKey) return;
+            setClaimMessageDraft({
+                accountKey: submittedAccountKey,
+                value: 'That claim code is invalid or expired.',
+            });
         }
     };
 
@@ -496,6 +532,28 @@ const AccountPage = (): JSX.Element => {
             );
         }
         const session = sessionState.session;
+        const sessionAccountKey = `${session.principal.issuer}\u0000${session.principal.subject}`;
+        const currentIncidentsState =
+            incidentsState.accountKey === sessionAccountKey
+                ? incidentsState
+                : { status: 'loading' as const, accountKey: sessionAccountKey };
+        const claimCode =
+            claimCodeDraft.accountKey === sessionAccountKey
+                ? claimCodeDraft.value
+                : '';
+        const claimMessage =
+            claimMessageDraft.accountKey === sessionAccountKey
+                ? claimMessageDraft.value
+                : '';
+        const selectedIncident =
+            currentIncidentsState.status === 'ready'
+                ? currentIncidentsState.incidents.find(
+                      (incident) =>
+                          selectedIncidentId?.accountKey ===
+                              sessionAccountKey &&
+                          incident.incidentId === selectedIncidentId.incidentId
+                  )
+                : undefined;
         return (
             <section
                 className="account-card account-card__stack"
@@ -505,7 +563,11 @@ const AccountPage = (): JSX.Element => {
                 <p>Enter the claim code shown after you submitted a report.</p>
                 <form
                     onSubmit={(event) =>
-                        void handleClaimIncident(event, session)
+                        void handleClaimIncident(
+                            event,
+                            session,
+                            sessionAccountKey
+                        )
                     }
                 >
                     <label htmlFor="incident-claim-code">Claim code</label>
@@ -513,7 +575,12 @@ const AccountPage = (): JSX.Element => {
                         id="incident-claim-code"
                         autoComplete="off"
                         value={claimCode}
-                        onChange={(event) => setClaimCode(event.target.value)}
+                        onChange={(event) =>
+                            setClaimCodeDraft({
+                                accountKey: sessionAccountKey,
+                                value: event.target.value,
+                            })
+                        }
                     />
                     <button
                         className="account-card__button account-card__button--primary"
@@ -524,39 +591,34 @@ const AccountPage = (): JSX.Element => {
                     </button>
                 </form>
                 {claimMessage ? <p role="status">{claimMessage}</p> : null}
-                {incidentsState.status === 'loading' ? (
+                {currentIncidentsState.status === 'loading' ? (
                     <p role="status">Loading reports…</p>
                 ) : null}
-                {incidentsState.status === 'error' ? (
+                {currentIncidentsState.status === 'error' ? (
                     <p className="account-card__error" role="alert">
                         Reports could not be loaded. Please try again.
                     </p>
                 ) : null}
-                {incidentsState.status === 'ready' &&
-                incidentsState.incidents.length === 0 ? (
+                {currentIncidentsState.status === 'ready' &&
+                currentIncidentsState.incidents.length === 0 ? (
                     <p>No reports are linked to this account.</p>
                 ) : null}
-                {incidentsState.status === 'ready' &&
-                incidentsState.incidents.length > 0 ? (
+                {currentIncidentsState.status === 'ready' &&
+                currentIncidentsState.incidents.length > 0 ? (
                     <ul>
-                        {incidentsState.incidents.map((incident) => (
+                        {currentIncidentsState.incidents.map((incident) => (
                             <li key={incident.incidentId}>
                                 <button
                                     className="account-card__button"
                                     type="button"
                                     onClick={() =>
-                                        void handleOpenIncident(
-                                            incident.incidentId
-                                        )
-                                    }
-                                    disabled={
-                                        openingIncidentId ===
-                                        incident.incidentId
+                                        setSelectedIncidentId({
+                                            accountKey: sessionAccountKey,
+                                            incidentId: incident.incidentId,
+                                        })
                                     }
                                 >
-                                    {openingIncidentId === incident.incidentId
-                                        ? 'Loading report…'
-                                        : `View report ${incident.incidentId}`}
+                                    View report {incident.incidentId}
                                 </button>
                             </li>
                         ))}

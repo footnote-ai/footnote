@@ -2824,11 +2824,6 @@ export const GetAccountIncidentsResponseSchema = z
     .object({ incidents: z.array(ReporterIncidentSummarySchema) })
     .strict();
 
-/** @api.operationId: getAccountIncident @api.path: GET /api/account/incidents/{incidentId} */
-export const GetAccountIncidentResponseSchema = z
-    .object({ incident: ReporterIncidentSummarySchema })
-    .strict();
-
 /** @api.operationId: postAccountIncidentClaim @api.path: POST /api/account/incidents/claim */
 export const PostAccountIncidentClaimRequestSchema = z
     .object({

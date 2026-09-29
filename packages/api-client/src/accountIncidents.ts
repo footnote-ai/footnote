@@ -6,12 +6,10 @@
  * @footnote-ethics: high - These operations expose sensitive reporter status.
  */
 import type {
-    GetAccountIncidentResponse,
     GetAccountIncidentsResponse,
     PostAccountIncidentClaimResponse,
 } from '@footnote/contracts/web';
 import {
-    GetAccountIncidentResponseSchema,
     GetAccountIncidentsResponseSchema,
     PostAccountIncidentClaimResponseSchema,
 } from '@footnote/contracts/web/schemas';
@@ -22,10 +20,6 @@ export type AccountIncidentApi = {
     getAccountIncidents: (
         signal?: AbortSignal
     ) => Promise<GetAccountIncidentsResponse>;
-    getAccountIncident: (
-        incidentId: string,
-        signal?: AbortSignal
-    ) => Promise<GetAccountIncidentResponse>;
     claimIncident: (claimCode: string, csrfToken: string) => Promise<void>;
 };
 
@@ -42,20 +36,6 @@ export const createAccountIncidentApi = (
                 cache: 'no-store',
                 validateResponse: createSchemaResponseValidator(
                     GetAccountIncidentsResponseSchema
-                ),
-            }
-        );
-        return response.data;
-    },
-    getAccountIncident: async (incidentId, signal) => {
-        const response = await requestJson<GetAccountIncidentResponse>(
-            `/api/account/incidents/${encodeURIComponent(incidentId)}`,
-            {
-                method: 'GET',
-                signal,
-                cache: 'no-store',
-                validateResponse: createSchemaResponseValidator(
-                    GetAccountIncidentResponseSchema
                 ),
             }
         );

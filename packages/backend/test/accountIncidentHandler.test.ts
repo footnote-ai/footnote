@@ -56,15 +56,11 @@ test('reports stay anonymous until explicitly claimed and remain account-scoped'
         logRequest: () => undefined,
     });
     const server = http.createServer((req, res) => {
-        const parsedUrl = new URL(req.url ?? '/', 'http://localhost');
-        if (parsedUrl.pathname === '/api/account/incidents') {
+        const pathname = new URL(req.url ?? '/', 'http://localhost').pathname;
+        if (pathname === '/api/account/incidents') {
             void handlers.handleAccountIncidentsRequest(req, res);
-        } else if (parsedUrl.pathname === '/api/account/incidents/claim') {
+        } else if (pathname === '/api/account/incidents/claim') {
             void handlers.handleAccountIncidentClaimRequest(req, res);
-        } else if (
-            /^\/api\/account\/incidents\/[^/]+$/.test(parsedUrl.pathname)
-        ) {
-            void handlers.handleAccountIncidentRequest(req, res, parsedUrl);
         } else {
             res.statusCode = 404;
             res.end();
@@ -106,7 +102,6 @@ test('reports stay anonymous until explicitly claimed and remain account-scoped'
         consentedAt: new Date().toISOString(),
     };
     const reported = await incidentService.reportIncident(request);
-    const incidentId = reported.incident.incidentId;
     const accountHeaders = (session: typeof reporter) => ({
         cookie: `footnote_account_session=${session.sessionId}`,
     });
@@ -158,24 +153,13 @@ test('reports stay anonymous until explicitly claimed and remain account-scoped'
         'status',
         'updatedAt',
     ]);
-
-    const detail = await fetch(
-        `${baseUrl}/api/account/incidents/${incidentId}`,
-        { headers: accountHeaders(reporter) }
-    );
-    assert.equal(detail.status, 200);
-    const detailText = await detail.text();
-    assert.ok(!detailText.includes('private report description'));
-    assert.ok(!detailText.includes('private-contact@example.com'));
-    assert.ok(!detailText.includes('auditEvents'));
+    const ownerListText = JSON.stringify(listBody);
+    assert.ok(!ownerListText.includes('private report description'));
+    assert.ok(!ownerListText.includes('private-contact@example.com'));
+    assert.ok(!ownerListText.includes('auditEvents'));
 
     const foreignList = await fetch(`${baseUrl}/api/account/incidents`, {
         headers: accountHeaders(otherAccount),
     });
     assert.deepEqual(await foreignList.json(), { incidents: [] });
-    const foreignDetail = await fetch(
-        `${baseUrl}/api/account/incidents/${incidentId}`,
-        { headers: accountHeaders(otherAccount) }
-    );
-    assert.equal(foreignDetail.status, 404);
 });

@@ -9,7 +9,6 @@ import express from 'express';
 import {
     createDispatchRouter,
     type LogRequest,
-    type ParsedUrlHandler,
     type RequestHandler,
 } from './dispatchRouter.js';
 
@@ -19,21 +18,19 @@ export const registerAccountIncidentRoutes = ({
     app,
     normalizePathname,
     handleAccountIncidentsRequest,
-    handleAccountIncidentRequest,
     handleAccountIncidentClaimRequest,
     logRequest,
 }: {
     app: express.Express;
     normalizePathname: (pathname: string) => string;
     handleAccountIncidentsRequest: RequestHandler;
-    handleAccountIncidentRequest: ParsedUrlHandler;
     handleAccountIncidentClaimRequest: RequestHandler;
     logRequest: LogRequest;
 }): void => {
     const router = createDispatchRouter({
         normalizePathname,
         logRequest,
-        matcher: async ({ req, res, next, parsedUrl, normalizedPathname }) => {
+        matcher: async ({ req, res, next, normalizedPathname }) => {
             if (
                 normalizedPathname === '/api/account/incidents' &&
                 req.method === 'GET'
@@ -46,15 +43,6 @@ export const registerAccountIncidentRoutes = ({
                 req.method === 'POST'
             ) {
                 await handleAccountIncidentClaimRequest(req, res);
-                return;
-            }
-            if (
-                /^\/api\/account\/incidents\/[^/]+\/?$/.test(
-                    normalizedPathname
-                ) &&
-                req.method === 'GET'
-            ) {
-                await handleAccountIncidentRequest(req, res, parsedUrl);
                 return;
             }
             next();

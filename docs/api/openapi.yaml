@@ -1397,40 +1397,6 @@ paths:
                 '503':
                     $ref: '#/components/responses/ServiceUnavailable'
 
-    /api/account/incidents/{incidentId}:
-        get:
-            operationId: getAccountIncident
-            x-codeRefs:
-                - packages/backend/src/handlers/accountIncidents.ts#handleAccountIncidentRequest
-                - packages/api-client/src/accountIncidents.ts#getAccountIncident
-                - packages/web/src/utils/api.ts#getAccountIncident
-                - packages/contracts/src/web/types.ts#GetAccountIncidentResponse
-                - packages/contracts/src/web/schemas.ts#GetAccountIncidentResponseSchema
-            summary: Open a report associated with the signed-in account
-            tags:
-                - Accounts
-            security:
-                - AccountSessionCookie: []
-            parameters:
-                - name: incidentId
-                  in: path
-                  required: true
-                  schema:
-                      type: string
-            responses:
-                '200':
-                    description: Reporter-safe incident status only
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/AccountIncidentResponse'
-                '401':
-                    $ref: '#/components/responses/Unauthorized'
-                '404':
-                    $ref: '#/components/responses/NotFound'
-                '503':
-                    $ref: '#/components/responses/ServiceUnavailable'
-
     /api/account/incidents/claim:
         post:
             operationId: postAccountIncidentClaim
@@ -1441,7 +1407,7 @@ paths:
                 - packages/contracts/src/web/types.ts#PostAccountIncidentClaimRequest
                 - packages/contracts/src/web/types.ts#PostAccountIncidentClaimResponse
                 - packages/contracts/src/web/schemas.ts#PostAccountIncidentClaimRequestSchema
-                - packages/contracts/src/web/types.ts#PostAccountIncidentClaimResponse
+                - packages/contracts/src/web/schemas.ts#PostAccountIncidentClaimResponseSchema
             summary: Explicitly associate a report with the signed-in account
             description: Requires the account session cookie and its CSRF header. Invalid, expired, and already-associated-by-another-account codes have the same response.
             tags:
@@ -2040,13 +2006,6 @@ components:
                     items:
                         $ref: '#/components/schemas/ReporterIncidentSummary'
             required: [incidents]
-            additionalProperties: false
-        AccountIncidentResponse:
-            type: object
-            properties:
-                incident:
-                    $ref: '#/components/schemas/ReporterIncidentSummary'
-            required: [incident]
             additionalProperties: false
         AccountIncidentClaimRequest:
             type: object

@@ -183,7 +183,6 @@ export class SqliteIncidentStore {
     private readonly findIncidentAssociationByCapabilityStatement: Database.Statement;
     private readonly associateIncidentStatement: Database.Statement;
     private readonly listAssociatedIncidentsStatement: Database.Statement;
-    private readonly getAssociatedIncidentStatement: Database.Statement;
     private readonly pseudonymizationSecret: string;
 
     /**
@@ -392,13 +391,6 @@ export class SqliteIncidentStore {
       INNER JOIN incidents ON incidents.id = incident_associations.incident_id
       WHERE incident_associations.account_id = ?
       ORDER BY incidents.created_at DESC, incidents.id DESC
-    `);
-        this.getAssociatedIncidentStatement = this.db.prepare(`
-      SELECT incidents.short_id, incidents.status, incidents.created_at, incidents.updated_at
-      FROM incident_associations
-      INNER JOIN incidents ON incidents.id = incident_associations.incident_id
-      WHERE incident_associations.account_id = ? AND incidents.short_id = ?
-      LIMIT 1
     `);
 
         incidentLogger.info(
@@ -843,31 +835,6 @@ export class SqliteIncidentStore {
             createdAt: row.created_at,
             updatedAt: row.updated_at,
         }));
-    }
-
-    /** Reads one incident only through an existing account association. */
-    async getAssociatedIncident(
-        accountId: string,
-        incidentId: string
-    ): Promise<AssociatedIncident | null> {
-        const row = (await this.withRetry(() =>
-            this.getAssociatedIncidentStatement.get(accountId, incidentId)
-        )) as
-            | {
-                  short_id: string;
-                  status: IncidentStatus;
-                  created_at: string;
-                  updated_at: string;
-              }
-            | undefined;
-        return row
-            ? {
-                  incidentId: row.short_id,
-                  status: row.status,
-                  createdAt: row.created_at,
-                  updatedAt: row.updated_at,
-              }
-            : null;
     }
 
     /**

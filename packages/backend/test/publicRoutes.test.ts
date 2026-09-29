@@ -79,8 +79,6 @@ test('public routes are Express-owned and bypass central /api dispatch while pre
         handleIncidentRemediationRequest: async () => undefined,
         handleIncidentDetailRequest: async () => undefined,
         handleAccountIncidentsRequest: createUnhandledRouteHandler,
-        handleAccountIncidentRequest: async (req, res) =>
-            createUnhandledRouteHandler(req, res),
         handleAccountIncidentClaimRequest: createUnhandledRouteHandler,
         handleChatRequest: async (_req, res) => {
             handledPaths.push('/api/chat');
