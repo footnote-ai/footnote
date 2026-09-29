@@ -16,6 +16,7 @@ import type {
     PostIncidentReportRequest,
     PostIncidentStatusRequest,
 } from '@footnote/contracts/web';
+import { createHash, randomBytes } from 'node:crypto';
 import type { CorrelationEnvelope } from '@footnote/contracts';
 import { logger } from '../utils/logger.js';
 import type {
@@ -29,6 +30,8 @@ const incidentServiceLogger =
     typeof logger.child === 'function'
         ? logger.child({ module: 'incidentService' })
         : logger;
+
+const INCIDENT_CLAIM_TTL_MS = 30 * 24 * 60 * 60 * 1000;
 
 /**
  * Raised when callers ask for an incident short ID that does not exist.
@@ -205,7 +208,9 @@ export const createIncidentService = ({
         async reportIncident(request: PostIncidentReportRequest): Promise<{
             incident: IncidentDetail;
             remediation: { state: 'pending' };
+            claimCode: string;
         }> {
+            const claimCode = randomBytes(32).toString('base64url');
             const incident = await incidentStore.createIncidentWithAudit({
                 incident: {
                     reporterId: request.reporterUserId,
@@ -227,6 +232,14 @@ export const createIncidentService = ({
                     action: 'incident.created',
                     notes: buildIncidentCreatedAuditNotes(request),
                 },
+                association: {
+                    capabilityHash: createHash('sha256')
+                        .update(claimCode)
+                        .digest('hex'),
+                    expiresAt: new Date(
+                        Date.now() + INCIDENT_CLAIM_TTL_MS
+                    ).toISOString(),
+                },
             });
 
             const detail = await getIncidentDetail(incident.shortId);
@@ -241,7 +254,22 @@ export const createIncidentService = ({
             return {
                 incident: detail.incident,
                 remediation: { state: 'pending' },
+                claimCode,
             };
+        },
+
+        async associateIncident(
+            claimCode: string,
+            accountId: string
+        ): Promise<'associated' | 'already-associated' | 'unavailable'> {
+            return incidentStore.associateIncident(
+                createHash('sha256').update(claimCode).digest('hex'),
+                accountId
+            );
+        },
+
+        async listAssociatedIncidents(accountId: string) {
+            return incidentStore.listAssociatedIncidents(accountId);
         },
 
         async listIncidents(filters: {

@@ -95,6 +95,8 @@ const baseAppDeps = (
         res.statusCode = 200;
         res.end('incident-detail');
     },
+    handleAccountIncidentsRequest: createUnhandledRouteHandler,
+    handleAccountIncidentClaimRequest: createUnhandledRouteHandler,
     handleChatRequest: createUnhandledRouteHandler,
     handleInternalTextRequest: createUnhandledRouteHandler,
     handleInternalImageRequest: createUnhandledRouteHandler,

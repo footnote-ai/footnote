@@ -6,9 +6,17 @@
  * @footnote-ethics: high - Identity display and logout controls affect user privacy and account agency.
  */
 
-import { useEffect, useRef, useState, type ComponentRef } from 'react';
+import {
+    useEffect,
+    useLayoutEffect,
+    useRef,
+    useState,
+    type ComponentRef,
+    type FormEvent,
+} from 'react';
 import type {
     DiscordConnectionStateResponse,
+    GetAccountIncidentsResponse,
     GetAuthSessionResponse,
 } from '@footnote/contracts/web';
 import PublicPageLayout from '@components/PublicPageLayout';
@@ -18,7 +26,9 @@ import {
     consentDiscordConnection,
     exchangeDiscordConnection,
     getAuthSession,
+    getAccountIncidents,
     getDiscordConnectionState,
+    claimIncident,
     logoutAccount,
 } from '../utils/api';
 
@@ -28,6 +38,14 @@ type SessionState =
     | { status: 'error' };
 
 type LogoutState = 'idle' | 'submitting' | 'error';
+type AccountIncidentsState =
+    | { status: 'loading'; accountKey: string | null }
+    | {
+          status: 'ready';
+          accountKey: string | null;
+          incidents: GetAccountIncidentsResponse['incidents'];
+      }
+    | { status: 'error'; accountKey: string };
 type ConnectionState =
     | { status: 'loading' }
     | {
@@ -59,10 +77,33 @@ const AccountPage = (): JSX.Element => {
     const [connectionState, setConnectionState] = useState<ConnectionState>({
         status: 'loading',
     });
+    const [incidentsState, setIncidentsState] = useState<AccountIncidentsState>(
+        { status: 'loading', accountKey: null }
+    );
+    const [claimCodeDraft, setClaimCodeDraft] = useState<{
+        accountKey: string | null;
+        value: string;
+    }>({ accountKey: null, value: '' });
+    const [claimMessageDraft, setClaimMessageDraft] = useState<{
+        accountKey: string | null;
+        value: string;
+    }>({ accountKey: null, value: '' });
+    const [incidentReloadKey, setIncidentReloadKey] = useState(0);
+    const [selectedIncidentId, setSelectedIncidentId] = useState<{
+        accountKey: string;
+        incidentId: string;
+    } | null>(null);
     const [showCallbackFailure] = useState(hasAuthFailureMarker);
     const accountStatusHeadingRef = useRef<ComponentRef<'h2'>>(null);
     const focusAfterLogoutRef = useRef(false);
     const connectionEffectStartedRef = useRef(false);
+    const activeAccountKeyRef = useRef<string | null>(null);
+    const accountKey =
+        sessionState.status === 'ready' &&
+        sessionState.session.enabled &&
+        sessionState.session.authenticated
+            ? `${sessionState.session.principal.issuer}\u0000${sessionState.session.principal.subject}`
+            : null;
 
     useEffect(() => {
         if (showCallbackFailure) {
@@ -90,6 +131,51 @@ const AccountPage = (): JSX.Element => {
             controller.abort();
         };
     }, [reloadKey]);
+
+    useLayoutEffect(() => {
+        const previousAccountKey = activeAccountKeyRef.current;
+        activeAccountKeyRef.current = accountKey;
+        if (previousAccountKey !== accountKey) {
+            setClaimCodeDraft({ accountKey: null, value: '' });
+            setClaimMessageDraft({ accountKey: null, value: '' });
+            setSelectedIncidentId(null);
+        }
+    }, [accountKey]);
+
+    useEffect(() => {
+        if (accountKey === null) {
+            setIncidentsState({
+                status: 'ready',
+                accountKey: null,
+                incidents: [],
+            });
+            return;
+        }
+        const controller = new AbortController();
+        setIncidentsState({ status: 'loading', accountKey });
+        void getAccountIncidents(controller.signal)
+            .then((result) => {
+                if (
+                    !controller.signal.aborted &&
+                    activeAccountKeyRef.current === accountKey
+                ) {
+                    setIncidentsState({
+                        status: 'ready',
+                        accountKey,
+                        incidents: result.incidents,
+                    });
+                }
+            })
+            .catch(() => {
+                if (
+                    !controller.signal.aborted &&
+                    activeAccountKeyRef.current === accountKey
+                ) {
+                    setIncidentsState({ status: 'error', accountKey });
+                }
+            });
+        return (): void => controller.abort();
+    }, [accountKey, incidentReloadKey]);
 
     useEffect(() => {
         if (connectionEffectStartedRef.current) return;
@@ -161,6 +247,9 @@ const AccountPage = (): JSX.Element => {
         >
     ): Promise<void> => {
         setLogoutState('submitting');
+        setClaimCodeDraft({ accountKey: null, value: '' });
+        setClaimMessageDraft({ accountKey: null, value: '' });
+        setSelectedIncidentId(null);
         try {
             await logoutAccount(session.csrfToken);
             focusAfterLogoutRef.current = true;
@@ -174,6 +263,41 @@ const AccountPage = (): JSX.Element => {
             setLogoutState('idle');
         } catch {
             setLogoutState('error');
+        }
+    };
+
+    const handleClaimIncident = async (
+        event: FormEvent<HTMLFormElement>,
+        session: Extract<
+            GetAuthSessionResponse,
+            { enabled: true; authenticated: true }
+        >,
+        submittedAccountKey: string
+    ): Promise<void> => {
+        event.preventDefault();
+        const submittedCode =
+            claimCodeDraft.accountKey === submittedAccountKey
+                ? claimCodeDraft.value.trim()
+                : '';
+        setClaimMessageDraft({
+            accountKey: submittedAccountKey,
+            value: '',
+        });
+        try {
+            await claimIncident(submittedCode, session.csrfToken);
+            if (activeAccountKeyRef.current !== submittedAccountKey) return;
+            setClaimCodeDraft({ accountKey: submittedAccountKey, value: '' });
+            setClaimMessageDraft({
+                accountKey: submittedAccountKey,
+                value: 'Report added to your account.',
+            });
+            setIncidentReloadKey((value) => value + 1);
+        } catch {
+            if (activeAccountKeyRef.current !== submittedAccountKey) return;
+            setClaimMessageDraft({
+                accountKey: submittedAccountKey,
+                value: 'That claim code is invalid or expired.',
+            });
         }
     };
 
@@ -383,6 +507,154 @@ const AccountPage = (): JSX.Element => {
         );
     };
 
+    const renderAccountIncidents = (): JSX.Element | null => {
+        if (sessionState.status !== 'ready' || !sessionState.session.enabled) {
+            return null;
+        }
+        if (!sessionState.session.authenticated) {
+            return (
+                <section
+                    className="account-card account-card__stack"
+                    aria-labelledby="account-incidents-heading"
+                >
+                    <h2 id="account-incidents-heading">Your reports</h2>
+                    <p>
+                        Sign in to add a report to your account or check its
+                        status.
+                    </p>
+                    <a
+                        className="account-card__button account-card__button--primary"
+                        href="/api/auth/login"
+                    >
+                        Sign in
+                    </a>
+                </section>
+            );
+        }
+        const session = sessionState.session;
+        const sessionAccountKey = `${session.principal.issuer}\u0000${session.principal.subject}`;
+        const currentIncidentsState =
+            incidentsState.accountKey === sessionAccountKey
+                ? incidentsState
+                : { status: 'loading' as const, accountKey: sessionAccountKey };
+        const claimCode =
+            claimCodeDraft.accountKey === sessionAccountKey
+                ? claimCodeDraft.value
+                : '';
+        const claimMessage =
+            claimMessageDraft.accountKey === sessionAccountKey
+                ? claimMessageDraft.value
+                : '';
+        const selectedIncident =
+            currentIncidentsState.status === 'ready'
+                ? currentIncidentsState.incidents.find(
+                      (incident) =>
+                          selectedIncidentId?.accountKey ===
+                              sessionAccountKey &&
+                          incident.incidentId === selectedIncidentId.incidentId
+                  )
+                : undefined;
+        return (
+            <section
+                className="account-card account-card__stack"
+                aria-labelledby="account-incidents-heading"
+            >
+                <h2 id="account-incidents-heading">Your reports</h2>
+                <p>Enter the claim code shown after you submitted a report.</p>
+                <form
+                    onSubmit={(event) =>
+                        void handleClaimIncident(
+                            event,
+                            session,
+                            sessionAccountKey
+                        )
+                    }
+                >
+                    <label htmlFor="incident-claim-code">Claim code</label>
+                    <input
+                        id="incident-claim-code"
+                        autoComplete="off"
+                        value={claimCode}
+                        onChange={(event) =>
+                            setClaimCodeDraft({
+                                accountKey: sessionAccountKey,
+                                value: event.target.value,
+                            })
+                        }
+                    />
+                    <button
+                        className="account-card__button account-card__button--primary"
+                        type="submit"
+                        disabled={!claimCode.trim()}
+                    >
+                        Add report
+                    </button>
+                </form>
+                {claimMessage ? <p role="status">{claimMessage}</p> : null}
+                {currentIncidentsState.status === 'loading' ? (
+                    <p role="status">Loading reports…</p>
+                ) : null}
+                {currentIncidentsState.status === 'error' ? (
+                    <p className="account-card__error" role="alert">
+                        Reports could not be loaded. Please try again.
+                    </p>
+                ) : null}
+                {currentIncidentsState.status === 'ready' &&
+                currentIncidentsState.incidents.length === 0 ? (
+                    <p>No reports are linked to this account.</p>
+                ) : null}
+                {currentIncidentsState.status === 'ready' &&
+                currentIncidentsState.incidents.length > 0 ? (
+                    <ul>
+                        {currentIncidentsState.incidents.map((incident) => (
+                            <li key={incident.incidentId}>
+                                <button
+                                    className="account-card__button"
+                                    type="button"
+                                    onClick={() =>
+                                        setSelectedIncidentId({
+                                            accountKey: sessionAccountKey,
+                                            incidentId: incident.incidentId,
+                                        })
+                                    }
+                                >
+                                    View report {incident.incidentId}
+                                </button>
+                            </li>
+                        ))}
+                    </ul>
+                ) : null}
+                {selectedIncident ? (
+                    <article
+                        aria-label={`Report ${selectedIncident.incidentId}`}
+                    >
+                        <h3>Report {selectedIncident.incidentId}</h3>
+                        <p>
+                            Status:{' '}
+                            {selectedIncident.status.replaceAll('_', ' ')}
+                        </p>
+                        <p>
+                            Submitted{' '}
+                            <time dateTime={selectedIncident.createdAt}>
+                                {new Date(
+                                    selectedIncident.createdAt
+                                ).toLocaleString()}
+                            </time>
+                        </p>
+                        <p>
+                            Updated{' '}
+                            <time dateTime={selectedIncident.updatedAt}>
+                                {new Date(
+                                    selectedIncident.updatedAt
+                                ).toLocaleString()}
+                            </time>
+                        </p>
+                    </article>
+                ) : null}
+            </section>
+        );
+    };
+
     return (
         <PublicPageLayout>
             <main id="main-content" className="public-page__main account-page">
@@ -402,6 +674,7 @@ const AccountPage = (): JSX.Element => {
                     <div className="account-card" aria-live="polite">
                         {renderSessionState()}
                     </div>
+                    {renderAccountIncidents()}
                     {connectionState.status === 'ready' &&
                     connectionState.state === 'none' ? null : (
                         <section

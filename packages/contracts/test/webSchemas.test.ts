@@ -2390,6 +2390,7 @@ test('incident schemas accept valid request and response payloads', () => {
         PostIncidentReportResponseSchema.safeParse({
             ...baseIncidentDetail,
             remediation: { state: 'pending' },
+            claimCode: 'A'.repeat(43),
         }).success,
         true
     );

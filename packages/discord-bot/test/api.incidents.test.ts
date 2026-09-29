@@ -97,6 +97,7 @@ test('incident API methods send trusted headers and parse response payloads', as
                 data: {
                     incident: sharedIncident,
                     remediation: { state: 'pending' },
+                    claimCode: 'A'.repeat(43),
                 } as T,
             };
         }

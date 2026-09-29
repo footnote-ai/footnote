@@ -49,6 +49,10 @@ test('account page uses typed session APIs and exposes all public states', async
     assert.match(source, /getAuthSession\(controller\.signal\)/);
     assert.match(source, /controller\.abort\(\)/);
     assert.match(source, /logoutAccount\(session\.csrfToken\)/);
+    assert.match(source, /getAccountIncidents\(controller\.signal\)/);
+    assert.match(source, /claimIncident\(submittedCode, session\.csrfToken\)/);
+    assert.match(source, /Report added to your account/);
+    assert.match(source, /View report/);
     assert.match(source, /Loading account…/);
     assert.match(source, /Sign-in is unavailable/);
     assert.match(source, /Signed out/);
@@ -60,6 +64,28 @@ test('account page uses typed session APIs and exposes all public states', async
     assert.match(source, /authenticatedSession\.isAdministrator/);
     assert.doesNotMatch(source, /localStorage|sessionStorage/);
     assert.doesNotMatch(source, /accessToken|refreshToken|idToken/);
+});
+
+test('account report selection and claim drafts reset across logout and account changes', async () => {
+    const source = await readFile(
+        `${webSourceDirectory}pages/AccountPage.tsx`,
+        'utf8'
+    );
+
+    assert.match(source, /incidentsState\.accountKey === sessionAccountKey/);
+    assert.match(source, /activeAccountKeyRef\.current === accountKey/);
+    assert.match(source, /previousAccountKey !== accountKey/);
+    assert.match(
+        source,
+        /setClaimCodeDraft\(\{ accountKey: null, value: '' \}\)/
+    );
+    assert.match(source, /setSelectedIncidentId\(null\)/);
+    assert.match(
+        source,
+        /selectedIncidentId\?\.accountKey ===\s+sessionAccountKey/
+    );
+    assert.doesNotMatch(source, /getAccountIncident\(/);
+    assert.doesNotMatch(source, /already used/);
 });
 
 test('account page reports callback failure without retaining its query marker', async () => {

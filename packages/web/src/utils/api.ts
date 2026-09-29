@@ -39,6 +39,10 @@ export type WebApiClient = {
     ) => Promise<GetRuntimeConfigResponse>;
     getAuthSession: (signal?: AbortSignal) => Promise<GetAuthSessionResponse>;
     logoutAccount: (csrfToken: string, signal?: AbortSignal) => Promise<void>;
+    getAccountIncidents: ReturnType<
+        typeof createSharedWebApiClient
+    >['getAccountIncidents'];
+    claimIncident: ReturnType<typeof createSharedWebApiClient>['claimIncident'];
     exchangeDiscordConnection: ReturnType<
         typeof createSharedWebApiClient
     >['exchangeDiscordConnection'];
@@ -79,6 +83,8 @@ export const createWebApiClient = (
     const getRuntimeConfig = shared.getRuntimeConfig;
     const getAuthSession = shared.getAuthSession;
     const logoutAccount = shared.logoutAccount;
+    const getAccountIncidents = shared.getAccountIncidents;
+    const claimIncident = shared.claimIncident;
     const exchangeDiscordConnection = shared.exchangeDiscordConnection;
     const getDiscordConnectionState = shared.getDiscordConnectionState;
     const consentDiscordConnection = shared.consentDiscordConnection;
@@ -92,6 +98,8 @@ export const createWebApiClient = (
         getRuntimeConfig,
         getAuthSession,
         logoutAccount,
+        getAccountIncidents,
+        claimIncident,
         exchangeDiscordConnection,
         getDiscordConnectionState,
         consentDiscordConnection,
@@ -136,6 +144,11 @@ export const logoutAccount = (
     csrfToken: string,
     signal?: AbortSignal
 ): Promise<void> => api.logoutAccount(csrfToken, signal);
+
+export const getAccountIncidents = (signal?: AbortSignal) =>
+    api.getAccountIncidents(signal);
+export const claimIncident = (claimCode: string, csrfToken: string) =>
+    api.claimIncident(claimCode, csrfToken);
 
 export const exchangeDiscordConnection = (capability: string) =>
     api.exchangeDiscordConnection(capability);

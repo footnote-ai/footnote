@@ -114,6 +114,7 @@ test('incident report modal stores the incident and remediation outcome', async 
     let capturedRemediationRequest: unknown = null;
     const deferReplyPayloads: unknown[] = [];
     let deletedReply = false;
+    const successReplyPayloads: unknown[] = [];
 
     botApi.getTrace = (async () => ({
         status: 200,
@@ -156,6 +157,7 @@ test('incident report modal stores the incident and remediation outcome', async 
                 auditEvents: [],
             },
             remediation: { state: 'pending' },
+            claimCode: 'C'.repeat(43),
         };
     }) as typeof botApi.reportIncident;
     botApi.recordIncidentRemediation = (async (incidentId, request) => {
@@ -245,6 +247,9 @@ test('incident report modal stores the incident and remediation outcome', async 
             deferReply: async (payload: unknown) => {
                 deferReplyPayloads.push(payload);
             },
+            editReply: async (payload: unknown) => {
+                successReplyPayloads.push(payload);
+            },
             deleteReply: async () => {
                 deletedReply = true;
             },
@@ -269,7 +274,11 @@ test('incident report modal stores the incident and remediation outcome', async 
         assert.equal(remediationRequest.request.actorUserId, 'user-1');
         assert.equal(remediationRequest.request.state, 'applied');
         assert.equal(deferReplyPayloads.length, 1);
-        assert.equal(deletedReply, true);
+        assert.equal(deletedReply, false);
+        assert.match(
+            String((successReplyPayloads[0] as { content?: string }).content),
+            /C{43}/
+        );
     } finally {
         botApi.getTrace = originalGetTrace;
         botApi.reportIncident = originalReportIncident;
@@ -403,6 +412,7 @@ test('incident report modal keeps the deferred reply open when remediation persi
             auditEvents: [],
         },
         remediation: { state: 'pending' },
+        claimCode: 'C'.repeat(43),
     })) as typeof botApi.reportIncident;
     botApi.recordIncidentRemediation = (async () => {
         throw new Error('sqlite busy');
@@ -456,7 +466,7 @@ test('incident report modal keeps the deferred reply open when remediation persi
         assert.equal(deletedReply, false);
         assert.match(
             String((modalEditReplyPayloads[0] as { content?: string }).content),
-            /resume saving the existing incident/i
+            /claim code/i
         );
     } finally {
         botApi.getTrace = originalGetTrace;
@@ -472,6 +482,7 @@ test('incident report retry resumes remediation persistence without creating a d
     let reportIncidentCalls = 0;
     let remediationAttempts = 0;
     let deletedReply = false;
+    const completionReplies: unknown[] = [];
 
     botApi.getTrace = (async () => ({
         status: 200,
@@ -514,6 +525,7 @@ test('incident report retry resumes remediation persistence without creating a d
                 auditEvents: [],
             },
             remediation: { state: 'pending' },
+            claimCode: 'C'.repeat(43),
         };
     }) as typeof botApi.reportIncident;
     botApi.recordIncidentRemediation = (async () => {
@@ -585,7 +597,9 @@ test('incident report retry resumes remediation persistence without creating a d
                 getTextInputValue: () => '',
             },
             deferReply: async () => undefined,
-            editReply: async () => undefined,
+            editReply: async (payload: unknown) => {
+                completionReplies.push(payload);
+            },
             deleteReply: async () => undefined,
         } as never);
 
@@ -622,7 +636,9 @@ test('incident report retry resumes remediation persistence without creating a d
                 getTextInputValue: () => '',
             },
             deferReply: async () => undefined,
-            editReply: async () => undefined,
+            editReply: async (payload: unknown) => {
+                completionReplies.push(payload);
+            },
             deleteReply: async () => {
                 deletedReply = true;
             },
@@ -630,7 +646,13 @@ test('incident report retry resumes remediation persistence without creating a d
 
         assert.equal(reportIncidentCalls, 1);
         assert.equal(remediationAttempts, 4);
-        assert.equal(deletedReply, true);
+        assert.equal(deletedReply, false);
+        assert.ok(
+            String(
+                (completionReplies.at(-1) as { content?: string } | undefined)
+                    ?.content
+            ).includes('C'.repeat(43))
+        );
     } finally {
         botApi.getTrace = originalGetTrace;
         botApi.reportIncident = originalReportIncident;

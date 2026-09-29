@@ -121,6 +121,14 @@ export interface SqliteIncidentStoreConfig {
 type CreateIncidentAuditInput = {
     incident: CreateIncidentInput;
     auditEvent: AppendAuditEventInput;
+    association?: { capabilityHash: string; expiresAt: string };
+};
+
+export type AssociatedIncident = {
+    incidentId: string;
+    status: IncidentStatus;
+    createdAt: string;
+    updatedAt: string;
 };
 
 type UpdateStatusWithAuditInput = {
@@ -171,6 +179,10 @@ export class SqliteIncidentStore {
     private readonly getIncidentByShortIdStatement: Database.Statement;
     private readonly insertAuditEvent: Database.Statement;
     private readonly getAuditEventsByIncidentIdStatement: Database.Statement;
+    private readonly insertIncidentAssociationStatement: Database.Statement;
+    private readonly findIncidentAssociationByCapabilityStatement: Database.Statement;
+    private readonly associateIncidentStatement: Database.Statement;
+    private readonly listAssociatedIncidentsStatement: Database.Statement;
     private readonly pseudonymizationSecret: string;
 
     /**
@@ -226,6 +238,17 @@ export class SqliteIncidentStore {
         FOREIGN KEY (incident_id) REFERENCES incidents(id) ON DELETE CASCADE
       );
       CREATE INDEX IF NOT EXISTS idx_audit_incident_id ON incident_audit_events (incident_id);
+
+      CREATE TABLE IF NOT EXISTS incident_associations (
+        incident_id INTEGER PRIMARY KEY,
+        capability_hash TEXT NOT NULL UNIQUE,
+        claim_expires_at TEXT NOT NULL,
+        account_id TEXT,
+        associated_at TEXT,
+        FOREIGN KEY (incident_id) REFERENCES incidents(id) ON DELETE CASCADE
+      );
+      CREATE INDEX IF NOT EXISTS idx_incident_associations_account_id
+        ON incident_associations (account_id);
     `);
 
         this.ensureIncidentColumn('reporter_hash', 'TEXT');
@@ -345,6 +368,29 @@ export class SqliteIncidentStore {
       FROM incident_audit_events
       WHERE incident_id = ?
       ORDER BY created_at ASC, id ASC
+    `);
+        this.insertIncidentAssociationStatement = this.db.prepare(`
+      INSERT INTO incident_associations (
+        incident_id, capability_hash, claim_expires_at
+      ) VALUES (?, ?, ?)
+    `);
+        this.findIncidentAssociationByCapabilityStatement = this.db.prepare(`
+      SELECT account_id, claim_expires_at
+      FROM incident_associations
+      WHERE capability_hash = ?
+      LIMIT 1
+    `);
+        this.associateIncidentStatement = this.db.prepare(`
+      UPDATE incident_associations
+      SET account_id = ?, associated_at = ?
+      WHERE capability_hash = ? AND account_id IS NULL AND claim_expires_at > ?
+    `);
+        this.listAssociatedIncidentsStatement = this.db.prepare(`
+      SELECT incidents.short_id, incidents.status, incidents.created_at, incidents.updated_at
+      FROM incident_associations
+      INNER JOIN incidents ON incidents.id = incident_associations.incident_id
+      WHERE incident_associations.account_id = ?
+      ORDER BY incidents.created_at DESC, incidents.id DESC
     `);
 
         incidentLogger.info(
@@ -696,6 +742,13 @@ export class SqliteIncidentStore {
             this.insertAuditEvent.run(
                 this.buildAuditInsertValues(id, input.auditEvent, now)
             );
+            if (input.association) {
+                this.insertIncidentAssociationStatement.run(
+                    id,
+                    input.association.capabilityHash,
+                    input.association.expiresAt
+                );
+            }
 
             const incidentRow = this.getIncidentRowByIdSync(id);
             if (!incidentRow) {
@@ -727,6 +780,61 @@ export class SqliteIncidentStore {
         });
 
         return incident;
+    }
+
+    /** Associates a report only while its one-time claim capability is valid. */
+    async associateIncident(
+        capabilityHash: string,
+        accountId: string,
+        now = new Date().toISOString()
+    ): Promise<'associated' | 'already-associated' | 'unavailable'> {
+        return this.db
+            .transaction(() => {
+                const existing =
+                    this.findIncidentAssociationByCapabilityStatement.get(
+                        capabilityHash
+                    ) as
+                        | {
+                              account_id: string | null;
+                              claim_expires_at: string;
+                          }
+                        | undefined;
+                if (!existing) return 'unavailable';
+                if (existing.account_id) {
+                    return existing.account_id === accountId
+                        ? 'already-associated'
+                        : 'unavailable';
+                }
+                if (existing.claim_expires_at <= now) return 'unavailable';
+                const result = this.associateIncidentStatement.run(
+                    accountId,
+                    now,
+                    capabilityHash,
+                    now
+                );
+                return result.changes === 1 ? 'associated' : 'unavailable';
+            })
+            .immediate();
+    }
+
+    /** Lists only reporter-safe fields for incidents linked to one account. */
+    async listAssociatedIncidents(
+        accountId: string
+    ): Promise<AssociatedIncident[]> {
+        const rows = (await this.withRetry(() =>
+            this.listAssociatedIncidentsStatement.all(accountId)
+        )) as Array<{
+            short_id: string;
+            status: IncidentStatus;
+            created_at: string;
+            updated_at: string;
+        }>;
+        return rows.map((row) => ({
+            incidentId: row.short_id,
+            status: row.status,
+            createdAt: row.created_at,
+            updatedAt: row.updated_at,
+        }));
     }
 
     /**

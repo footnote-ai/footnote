@@ -61,6 +61,7 @@ type IncidentReportSession = {
     jumpUrl?: string;
     stage: 'draft' | 'awaiting_remediation_persist';
     incidentId?: string;
+    claimCode?: string;
     remediationOutcome?: {
         state: IncidentRemediationOutcome['state'];
         notes: string;
@@ -288,6 +289,7 @@ export const handleIncidentReportButton = async (
             modelVersion: metadata?.modelVersion,
             jumpUrl: anchorMessage?.url,
             incidentId: existingSession?.incidentId,
+            claimCode: existingSession?.claimCode,
             remediationOutcome: existingSession?.remediationOutcome,
         });
 
@@ -456,6 +458,7 @@ export const handleIncidentReportModal = async (
         replyDeferred = true;
 
         let incidentId = session.incidentId;
+        let claimCode = session.claimCode;
         let remediationOutcome = session.remediationOutcome;
 
         if (
@@ -478,6 +481,7 @@ export const handleIncidentReportModal = async (
                 consentedAt: new Date().toISOString(),
             });
             incidentId = reportResponse.incident.incidentId;
+            claimCode = reportResponse.claimCode;
             remediationOutcome = {
                 state: 'failed',
                 notes: 'Could not fetch the target message for remediation.',
@@ -514,6 +518,7 @@ export const handleIncidentReportModal = async (
                 ...currentSession,
                 stage: 'awaiting_remediation_persist',
                 incidentId,
+                claimCode,
                 remediationOutcome,
             }));
         }
@@ -535,26 +540,15 @@ export const handleIncidentReportModal = async (
                 }
             );
             await interaction.editReply({
-                content:
-                    'The incident was stored, but remediation tracking could not be saved yet. Please retry this report to resume saving the existing incident.',
+                content: `Your report was submitted. Remediation tracking could not be saved yet; please retry to finish. To check report status later, sign in at Footnote and enter this claim code on the Account page:\n\`${claimCode ?? 'unavailable'}\``,
             });
             return;
         }
 
         clearIncidentReportSession(sessionKey);
-        try {
-            await interaction.deleteReply();
-        } catch (deleteError) {
-            incidentReportLogger.warn(
-                'Failed to remove success confirmation for incident report',
-                {
-                    ...logContext,
-                    incidentId,
-                    remediationState: remediationOutcome.state,
-                    error: formatApiError(deleteError),
-                }
-            );
-        }
+        await interaction.editReply({
+            content: `Your report was submitted. To check its status later, sign in at Footnote and enter this claim code on the Account page. The code expires in 30 days:\n\`${claimCode ?? 'unavailable'}\``,
+        });
     } catch (error) {
         incidentReportLogger.error('Failed to submit incident report', {
             ...logContext,
