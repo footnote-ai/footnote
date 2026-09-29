@@ -125,8 +125,9 @@ An audit event should contain:
 
 Status changes append audit events instead of rewriting history. Account
 deletion clears the reporter actor hash from an explicitly claimed incident's
-`incident.created` event, but keeps the event, action, notes, and timestamp.
-Later operator audit events remain unchanged.
+`incident.created` event. The event, action, timestamp, and non-identifying
+parts of its notes remain; reporter-derived tag values are removed from legacy
+creation notes. Later operator audit events remain unchanged.
 
 ## Pseudonymization boundary
 
