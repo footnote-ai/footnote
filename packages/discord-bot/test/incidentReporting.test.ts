@@ -648,11 +648,10 @@ test('incident report retry resumes remediation persistence without creating a d
         assert.equal(remediationAttempts, 4);
         assert.equal(deletedReply, false);
         assert.ok(
-            completionReplies.some((payload) =>
-                String((payload as { content?: string }).content).includes(
-                    'C'.repeat(43)
-                )
-            )
+            String(
+                (completionReplies.at(-1) as { content?: string } | undefined)
+                    ?.content
+            ).includes('C'.repeat(43))
         );
     } finally {
         botApi.getTrace = originalGetTrace;

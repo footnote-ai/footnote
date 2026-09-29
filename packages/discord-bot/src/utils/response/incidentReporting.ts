@@ -289,6 +289,7 @@ export const handleIncidentReportButton = async (
             modelVersion: metadata?.modelVersion,
             jumpUrl: anchorMessage?.url,
             incidentId: existingSession?.incidentId,
+            claimCode: existingSession?.claimCode,
             remediationOutcome: existingSession?.remediationOutcome,
         });
 
