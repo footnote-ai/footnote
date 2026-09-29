@@ -831,6 +831,42 @@ const AccountPage = (): JSX.Element => {
                     </p>
                 </section>
             );
+        let memoryWriteErrorMessage: string | null = null;
+        if (memoryWriteError === 'limit') {
+            memoryWriteErrorMessage =
+                'You have reached the 50-memory limit. Forget a saved memory before adding another.';
+        } else if (memoryWriteError === 'save') {
+            memoryWriteErrorMessage =
+                'The memory could not be saved. Please try again.';
+        } else if (memoryWriteError === 'forget') {
+            memoryWriteErrorMessage =
+                'The memory could not be forgotten. Please try again.';
+        }
+
+        let savedMemoryList: JSX.Element | null = null;
+        if (memoryReadState === 'ready' && memories.length === 0) {
+            savedMemoryList = <p>No saved memories.</p>;
+        } else if (memoryReadState === 'ready') {
+            savedMemoryList = (
+                <ul>
+                    {memories.map((memory) => (
+                        <li key={memory.id}>
+                            <p>{memory.text}</p>
+                            <button
+                                className="account-card__button"
+                                type="button"
+                                disabled={memoryBusy}
+                                onClick={() =>
+                                    void handleForgetMemory(memory.id)
+                                }
+                            >
+                                Forget
+                            </button>
+                        </li>
+                    ))}
+                </ul>
+            );
+        }
         return (
             <section
                 className="account-card account-card__stack"
@@ -866,15 +902,13 @@ const AccountPage = (): JSX.Element => {
                         Save memory
                     </button>
                 </form>
-                {memoryWriteError ? (
+                {memoryWriteErrorMessage ? (
                     <p className="account-card__error" role="alert">
-                        {memoryWriteError === 'limit'
-                            ? 'You have reached the 50-memory limit. Forget a saved memory before adding another.'
-                            : `The memory could not be ${memoryWriteError === 'save' ? 'saved' : 'forgotten'}. Please try again.`}
+                        {memoryWriteErrorMessage}
                     </p>
                 ) : null}
                 {memoryReadState === 'loading' ? (
-                    <p role="status">Loading saved memories…</p>
+                    <output>Loading saved memories…</output>
                 ) : null}
                 {memoryReadState === 'error' ? (
                     <div>
@@ -892,27 +926,7 @@ const AccountPage = (): JSX.Element => {
                         </button>
                     </div>
                 ) : null}
-                {memoryReadState === 'ready' && memories.length === 0 ? (
-                    <p>No saved memories.</p>
-                ) : memoryReadState === 'ready' ? (
-                    <ul>
-                        {memories.map((memory) => (
-                            <li key={memory.id}>
-                                <p>{memory.text}</p>
-                                <button
-                                    className="account-card__button"
-                                    type="button"
-                                    disabled={memoryBusy}
-                                    onClick={() =>
-                                        void handleForgetMemory(memory.id)
-                                    }
-                                >
-                                    Forget
-                                </button>
-                            </li>
-                        ))}
-                    </ul>
-                ) : null}
+                {savedMemoryList}
             </section>
         );
     };

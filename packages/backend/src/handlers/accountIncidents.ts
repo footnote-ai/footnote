@@ -5,7 +5,6 @@
  * @footnote-risk: high - Session and claim checks guard incident access.
  * @footnote-ethics: high - Reporter views must not expose operator-only incident data.
  */
-import { timingSafeEqual } from 'node:crypto';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import {
     GetAccountIncidentsResponseSchema,
@@ -14,12 +13,11 @@ import {
 import type { AccountAuthService } from '../services/accountAuth.js';
 import type { IncidentService } from '../services/incidents.js';
 import type { AccountStore } from '../storage/accounts/sqliteAccountStore.js';
-import {
-    ACCOUNT_SESSION_COOKIE_NAME,
-    AUTH_CSRF_HEADER_NAME,
-    readCookieValue,
-} from '../http/authCookies.js';
 import { sendJson } from './chatResponses.js';
+import {
+    readAccountSession,
+    requireAccountMutationSession,
+} from './accountRequest.js';
 import {
     parseTrustedBodyWithSchema,
     type TrustedRouteLogRequest,
@@ -29,20 +27,6 @@ type RequestHandler = (
     req: IncomingMessage,
     res: ServerResponse
 ) => Promise<void>;
-const readHeader = (value: string | string[] | undefined): string | null => {
-    const header = Array.isArray(value) ? value[0] : value;
-    return header?.trim() || null;
-};
-
-const constantTimeEquals = (left: string, right: string): boolean => {
-    const leftBuffer = Buffer.from(left);
-    const rightBuffer = Buffer.from(right);
-    return (
-        leftBuffer.length === rightBuffer.length &&
-        timingSafeEqual(leftBuffer, rightBuffer)
-    );
-};
-
 /** Creates account-scoped handlers; administrator status grants no extra access. */
 export const createAccountIncidentHandlers = ({
     accountAuthService,
@@ -59,11 +43,6 @@ export const createAccountIncidentHandlers = ({
     handleAccountIncidentClaimRequest: RequestHandler;
     handleAccountExportRequest: RequestHandler;
 } => {
-    const readAccountSession = (req: IncomingMessage) => {
-        const sessionId = readCookieValue(req, ACCOUNT_SESSION_COOKIE_NAME);
-        return sessionId ? accountAuthService.getSession(sessionId) : null;
-    };
-
     /** @api.operationId: getAccountIncidents @api.path: GET /api/account/incidents */
     const handleAccountIncidentsRequest: RequestHandler = async (req, res) => {
         res.setHeader('Cache-Control', 'no-store');
@@ -72,7 +51,7 @@ export const createAccountIncidentHandlers = ({
             logRequest(req, res, 'account incidents method-not-allowed');
             return;
         }
-        const session = readAccountSession(req);
+        const session = readAccountSession(req, accountAuthService);
         if (!session || !incidentService) {
             sendJson(res, session ? 503 : 401, {
                 error: session
@@ -113,18 +92,14 @@ export const createAccountIncidentHandlers = ({
             logRequest(req, res, 'account incident claim method-not-allowed');
             return;
         }
-        const session = readAccountSession(req);
-        if (!session) {
-            sendJson(res, 401, { error: 'Sign in required' });
-            logRequest(req, res, 'account incident claim signed-out');
-            return;
-        }
-        const csrfToken = readHeader(req.headers[AUTH_CSRF_HEADER_NAME]);
-        if (!csrfToken || !constantTimeEquals(csrfToken, session.csrfToken)) {
-            sendJson(res, 403, { error: 'Invalid CSRF token' });
-            logRequest(req, res, 'account incident claim invalid-csrf');
-            return;
-        }
+        const session = requireAccountMutationSession({
+            req,
+            res,
+            accountAuthService,
+            logRequest,
+            routeLabel: 'account incident claim',
+        });
+        if (!session) return;
         if (!incidentService) {
             sendJson(res, 503, { error: 'Incident account view unavailable' });
             logRequest(req, res, 'account incident claim unavailable');
@@ -161,7 +136,7 @@ export const createAccountIncidentHandlers = ({
             logRequest(req, res, 'account export method-not-allowed');
             return;
         }
-        const session = readAccountSession(req);
+        const session = readAccountSession(req, accountAuthService);
         if (!session) {
             sendJson(res, 401, { error: 'Sign in required' });
             logRequest(req, res, 'account export signed-out');

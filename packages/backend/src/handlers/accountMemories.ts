@@ -5,7 +5,6 @@
  * @footnote-risk: high - Session and ownership checks protect durable private data.
  * @footnote-ethics: high - These handlers let users inspect and delete their saved memories.
  */
-import { timingSafeEqual } from 'node:crypto';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import {
     GetAccountMemoriesResponseSchema,
@@ -14,12 +13,11 @@ import {
 } from '@footnote/contracts/web/schemas';
 import type { AccountAuthService } from '../services/accountAuth.js';
 import type { AccountStore } from '../storage/accounts/sqliteAccountStore.js';
-import {
-    ACCOUNT_SESSION_COOKIE_NAME,
-    AUTH_CSRF_HEADER_NAME,
-    readCookieValue,
-} from '../http/authCookies.js';
 import { sendJson } from './chatResponses.js';
+import {
+    readAccountSession,
+    requireAccountMutationSession,
+} from './accountRequest.js';
 import {
     parseTrustedBodyWithSchema,
     type TrustedRouteLogRequest,
@@ -28,21 +26,7 @@ import {
 type RequestHandler = (
     req: IncomingMessage,
     res: ServerResponse
-) => Promise<void>;
-
-const readHeader = (value: string | string[] | undefined): string | null => {
-    const header = Array.isArray(value) ? value[0] : value;
-    return header?.trim() || null;
-};
-
-const constantTimeEquals = (left: string, right: string): boolean => {
-    const leftBuffer = Buffer.from(left);
-    const rightBuffer = Buffer.from(right);
-    return (
-        leftBuffer.length === rightBuffer.length &&
-        timingSafeEqual(leftBuffer, rightBuffer)
-    );
-};
+) => void | Promise<void>;
 
 /** Creates memory handlers scoped only to the authenticated Footnote account. */
 export const createAccountMemoryHandlers = ({
@@ -58,15 +42,10 @@ export const createAccountMemoryHandlers = ({
     handleAccountMemoryCreateRequest: RequestHandler;
     handleAccountMemoryDeleteRequest: RequestHandler;
 } => {
-    const readAccountSession = (req: IncomingMessage) => {
-        const sessionId = readCookieValue(req, ACCOUNT_SESSION_COOKIE_NAME);
-        return sessionId ? accountAuthService.getSession(sessionId) : null;
-    };
-
     /** @api.operationId: getAccountMemories @api.path: GET /api/account/memories */
-    const handleAccountMemoriesRequest: RequestHandler = async (req, res) => {
+    const handleAccountMemoriesRequest: RequestHandler = (req, res) => {
         res.setHeader('Cache-Control', 'no-store');
-        const session = readAccountSession(req);
+        const session = readAccountSession(req, accountAuthService);
         if (!session) {
             sendJson(res, 401, { error: 'Sign in required' });
             logRequest(req, res, 'account memories signed-out');
@@ -95,18 +74,14 @@ export const createAccountMemoryHandlers = ({
         res
     ) => {
         res.setHeader('Cache-Control', 'no-store');
-        const session = readAccountSession(req);
-        if (!session) {
-            sendJson(res, 401, { error: 'Sign in required' });
-            logRequest(req, res, 'account memory create signed-out');
-            return;
-        }
-        const csrfToken = readHeader(req.headers[AUTH_CSRF_HEADER_NAME]);
-        if (!csrfToken || !constantTimeEquals(csrfToken, session.csrfToken)) {
-            sendJson(res, 403, { error: 'Invalid CSRF token' });
-            logRequest(req, res, 'account memory create invalid-csrf');
-            return;
-        }
+        const session = requireAccountMutationSession({
+            req,
+            res,
+            accountAuthService,
+            logRequest,
+            routeLabel: 'account memory create',
+        });
+        if (!session) return;
         if (!accountStore) {
             sendJson(res, 503, { error: 'Account memories unavailable' });
             logRequest(req, res, 'account memory create unavailable');
@@ -137,23 +112,16 @@ export const createAccountMemoryHandlers = ({
     };
 
     /** @api.operationId: deleteAccountMemory @api.path: DELETE /api/account/memories/{memoryId} */
-    const handleAccountMemoryDeleteRequest: RequestHandler = async (
-        req,
-        res
-    ) => {
+    const handleAccountMemoryDeleteRequest: RequestHandler = (req, res) => {
         res.setHeader('Cache-Control', 'no-store');
-        const session = readAccountSession(req);
-        if (!session) {
-            sendJson(res, 401, { error: 'Sign in required' });
-            logRequest(req, res, 'account memory delete signed-out');
-            return;
-        }
-        const csrfToken = readHeader(req.headers[AUTH_CSRF_HEADER_NAME]);
-        if (!csrfToken || !constantTimeEquals(csrfToken, session.csrfToken)) {
-            sendJson(res, 403, { error: 'Invalid CSRF token' });
-            logRequest(req, res, 'account memory delete invalid-csrf');
-            return;
-        }
+        const session = requireAccountMutationSession({
+            req,
+            res,
+            accountAuthService,
+            logRequest,
+            routeLabel: 'account memory delete',
+        });
+        if (!session) return;
         if (!accountStore) {
             sendJson(res, 503, { error: 'Account memories unavailable' });
             logRequest(req, res, 'account memory delete unavailable');

@@ -97,15 +97,15 @@ type CreateExpressAppDeps = {
     handleAccountMemoriesRequest?: (
         req: http.IncomingMessage,
         res: http.ServerResponse
-    ) => Promise<void>;
+    ) => void | Promise<void>;
     handleAccountMemoryCreateRequest?: (
         req: http.IncomingMessage,
         res: http.ServerResponse
-    ) => Promise<void>;
+    ) => void | Promise<void>;
     handleAccountMemoryDeleteRequest?: (
         req: http.IncomingMessage,
         res: http.ServerResponse
-    ) => Promise<void>;
+    ) => void | Promise<void>;
     handleAccountDeletionRequest?: (
         req: http.IncomingMessage,
         res: http.ServerResponse
@@ -301,10 +301,10 @@ const createExpressApp = ({
     frameAncestors,
     logRequest,
 }: CreateExpressAppDeps): express.Express => {
-    const unavailableMemoryHandler = async (
+    const unavailableMemoryHandler = (
         _req: http.IncomingMessage,
         res: http.ServerResponse
-    ): Promise<void> => {
+    ): void => {
         res.statusCode = 503;
         res.end(JSON.stringify({ error: 'Account memories unavailable' }));
     };

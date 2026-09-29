@@ -6,11 +6,13 @@
  * @footnote-ethics: high - These routes expose and alter private saved memories.
  */
 import express from 'express';
-import {
-    createDispatchRouter,
-    type LogRequest,
-    type RequestHandler,
-} from './dispatchRouter.js';
+import { createDispatchRouter, type LogRequest } from './dispatchRouter.js';
+import type { IncomingMessage, ServerResponse } from 'node:http';
+
+type AccountMemoryRequestHandler = (
+    req: IncomingMessage,
+    res: ServerResponse
+) => void | Promise<void>;
 
 /** @api.operationId: getAccountMemories @api.path: GET /api/account/memories */
 /** @api.operationId: postAccountMemory @api.path: POST /api/account/memories */
@@ -25,9 +27,9 @@ export const registerAccountMemoryRoutes = ({
 }: {
     app: express.Express;
     normalizePathname: (pathname: string) => string;
-    handleAccountMemoriesRequest: RequestHandler;
-    handleAccountMemoryCreateRequest: RequestHandler;
-    handleAccountMemoryDeleteRequest: RequestHandler;
+    handleAccountMemoriesRequest: AccountMemoryRequestHandler;
+    handleAccountMemoryCreateRequest: AccountMemoryRequestHandler;
+    handleAccountMemoryDeleteRequest: AccountMemoryRequestHandler;
     logRequest: LogRequest;
 }): void => {
     const router = createDispatchRouter({
