@@ -31,6 +31,16 @@ import {
 import { getRequestIdentity, parseChatRequest } from './chatRequest.js';
 import { createChatRateLimitController } from './chatRateLimit.js';
 import { buildProviderUnavailableError, sendJson } from './chatResponses.js';
+import type {
+    AccountAuthService,
+    DiscordAccountConnectionService,
+} from '../services/accountAuth.js';
+import type { AccountStore } from '../storage/accounts/sqliteAccountStore.js';
+import { readAccountSession } from './accountRequest.js';
+import {
+    resolveAdvisoryUserMemories,
+    type AdvisoryUserMemoryContext,
+} from '../services/accountMemoryContext.js';
 
 type LogRequest = (
     req: IncomingMessage,
@@ -56,6 +66,14 @@ type ChatHandlerDeps = {
     buildResponseMetadata: BuildResponseMetadata;
     maxChatBodyBytes: number;
     executionContractTrustGraph?: CreateChatServiceOptions['executionContractTrustGraph'];
+    accountAuthService?:
+        | (AccountAuthService &
+              Pick<
+                  DiscordAccountConnectionService,
+                  'findAccountByDiscordUserId'
+              >)
+        | null;
+    accountStore?: AccountStore | null;
 };
 
 // The handler keeps transport concerns here and pushes business logic into helpers/services.
@@ -151,6 +169,8 @@ const createChatHandler = ({
     buildResponseMetadata,
     maxChatBodyBytes,
     executionContractTrustGraph,
+    accountAuthService = null,
+    accountStore = null,
 }: ChatHandlerDeps) => {
     const chatOrchestrator = generationRuntime
         ? createChatOrchestrator({
@@ -327,8 +347,45 @@ const createChatHandler = ({
                           assistantIdentity: undefined,
                       };
 
+            let memoryContext: AdvisoryUserMemoryContext;
+            try {
+                memoryContext = resolveAdvisoryUserMemories({
+                    surface: chatRequest.surface,
+                    session:
+                        chatRequest.surface === 'web' &&
+                        accountAuthService !== null
+                            ? readAccountSession(req, accountAuthService)
+                            : null,
+                    trustedDiscordUserId:
+                        chatRequest.surface === 'discord' &&
+                        authResult.data.serviceAuth.isTrustedService
+                            ? chatRequest.surfaceContext?.userId
+                            : undefined,
+                    accountAuthService,
+                    accountStore,
+                });
+            } catch {
+                // Optional account context must not block ordinary chat, and
+                // diagnostic logs never include a session, account, or memory value.
+                memoryContext = {
+                    memories: [],
+                    status: 'failed',
+                };
+            }
+            if (memoryContext.status === 'unavailable') {
+                logger.warn('Chat user memory retrieval unavailable.');
+            } else if (memoryContext.status === 'failed') {
+                logger.error('Chat user memory resolution failed.');
+            } else if (memoryContext.status === 'corrupt') {
+                logger.warn(
+                    'Chat user memory retrieval skipped corrupt records.'
+                );
+            }
+
             // From here on, the request is fully normalized and can delegate to the shared workflow.
-            const chatResponse = await chatOrchestrator.runChat(chatRequest);
+            const chatResponse = await chatOrchestrator.runChat(chatRequest, {
+                advisoryUserMemories: memoryContext.memories,
+            });
             sendJson(res, 200, chatResponse);
             logRequest(
                 req,

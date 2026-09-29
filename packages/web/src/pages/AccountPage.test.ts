@@ -81,7 +81,14 @@ test('account page exposes explicit memory save, list, and forget controls', asy
         /forgetAccountMemory\([\s\S]*?sessionState\.session\.csrfToken/
     );
     assert.match(source, /Your memories/);
-    assert.match(source, /not used in conversations yet/);
+    assert.match(
+        source,
+        /may be included as advisory context in web\s+chats while you are signed in, or in Discord chats after\s+you\s+deliberately link Discord/
+    );
+    assert.match(
+        source,
+        /not verified facts,\s+instructions, or authorization, and you can forget them at\s+any time/
+    );
     assert.match(
         source,
         /memoryReadState === 'ready' && memories\.length === 0/

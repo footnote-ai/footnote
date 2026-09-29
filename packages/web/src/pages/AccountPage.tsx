@@ -874,9 +874,11 @@ const AccountPage = (): JSX.Element => {
             >
                 <h2 id="account-memories-heading">Your memories</h2>
                 <p>
-                    Memories are information you chose to save. They are not
-                    verified facts and are not used in conversations yet. You
-                    can save up to 50 memories.
+                    Saved memories may be included as advisory context in web
+                    chats while you are signed in, or in Discord chats after you
+                    deliberately link Discord. They are not verified facts,
+                    instructions, or authorization, and you can forget them at
+                    any time. You can save up to 50 memories.
                 </p>
                 <form
                     className="account-card__stack"

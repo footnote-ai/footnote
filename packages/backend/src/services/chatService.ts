@@ -974,6 +974,8 @@ export type RunChatMessagesInput = {
     messages: RuntimeMessage[];
     conversationSnapshot: string;
     contextEnvelope: ConversationContextEnvelope;
+    /** Backend-resolved explicit memories; model input keeps them user-level advisory data. */
+    advisoryUserMemories?: readonly string[];
     orchestrationStartedAtMs?: number;
     plannerTemperament?: PartialResponseTemperament;
     safetyTier?: SafetyTier;
@@ -1219,6 +1221,7 @@ export const createChatService = ({
         messages,
         conversationSnapshot,
         contextEnvelope,
+        advisoryUserMemories,
         orchestrationStartedAtMs,
         plannerTemperament,
         safetyTier,
@@ -1613,6 +1616,7 @@ export const createChatService = ({
                     plannerStepExecutor,
                     planContinuationBuilder,
                     contextEnvelope,
+                    advisoryUserMemories,
                     contextStepRequests:
                         effectiveContextStepRequests.length > 0
                             ? effectiveContextStepRequests

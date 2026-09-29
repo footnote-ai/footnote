@@ -785,6 +785,8 @@ const handleChatRequest = createChatHandler({
     buildResponseMetadata,
     maxChatBodyBytes: runtimeConfig.reflect.maxBodyBytes,
     executionContractTrustGraph: executionContractTrustGraphRuntimeOptions,
+    accountAuthService,
+    accountStore,
 });
 const { dispatchHttpRoute, dispatchUpgradeRoute } = createRouteDispatcher({
     handlers: {

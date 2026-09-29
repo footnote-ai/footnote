@@ -736,7 +736,8 @@ export const createChatOrchestrator = ({
      * we still owe the caller a message.
      */
     const runChat = async (
-        request: PostChatRequest
+        request: PostChatRequest,
+        context?: { advisoryUserMemories: readonly string[] }
     ): Promise<PostChatResponse> => {
         let activePlannerProfile = plannerProfile;
         const safetyIdentifier = deriveOpenAiSafetyIdentifier(
@@ -1484,6 +1485,9 @@ export const createChatOrchestrator = ({
             messages: baseConversationMessages,
             conversationSnapshot: baseConversationSnapshot,
             contextEnvelope,
+            ...(context?.advisoryUserMemories !== undefined && {
+                advisoryUserMemories: context.advisoryUserMemories,
+            }),
             orchestrationStartedAtMs: orchestrationStartedAt,
             safetyTier: evaluatorSafetyTierHint,
             model: defaultResponseProfile.providerModel,

@@ -29,6 +29,8 @@ import {
 } from '../src/services/executionContractTrustGraph/index.js';
 import { SimpleRateLimiter } from '../src/services/rateLimiter.js';
 import { logger } from '../src/utils/logger.js';
+import type { AccountSession } from '../src/services/accountAuth.js';
+import { createInMemoryAccountStore } from '../src/storage/accounts/sqliteAccountStore.js';
 
 type MutableEnv = NodeJS.ProcessEnv & {
     TURNSTILE_SECRET_KEY?: string;
@@ -69,6 +71,11 @@ type CreateTestServerOptions = {
     sessionRateLimiter?: SimpleRateLimiter;
     serviceRateLimiter?: SimpleRateLimiter;
     executionContractTrustGraph?: CreateChatServiceOptions['executionContractTrustGraph'];
+    accountAuthService?: Parameters<
+        typeof createChatHandler
+    >[0]['accountAuthService'];
+    accountStore?: Parameters<typeof createChatHandler>[0]['accountStore'];
+    onGenerationRequest?: (request: GenerationRequest) => void;
     logRequest?: (
         req: http.IncomingMessage,
         res: http.ServerResponse,
@@ -200,6 +207,7 @@ const createTestServer = (
                 : ({
                       kind: 'test-runtime',
                       async generate(request: GenerationRequest) {
+                          options.onGenerationRequest?.(request);
                           const isPlannerRequest = request.messages.some(
                               (message) =>
                                   message.content.includes(
@@ -265,6 +273,8 @@ const createTestServer = (
             buildResponseMetadata: () => createMetadata(),
             maxChatBodyBytes: 20000,
             executionContractTrustGraph,
+            accountAuthService: options.accountAuthService,
+            accountStore: options.accountStore,
         });
 
         const server = http.createServer((req, res) => {
@@ -321,6 +331,127 @@ test('ordinary Discord chat accepts a user ID in its surface context', async () 
         env.TRACE_API_TOKEN = previousTraceToken;
         env.TURNSTILE_SECRET_KEY = previousTurnstileSecret;
         env.TURNSTILE_SITE_KEY = previousTurnstileSite;
+    }
+});
+
+test('validated account memories reach generation and session lookup failures fail open', async () => {
+    const env = process.env as MutableEnv;
+    const previousTraceToken = env.TRACE_API_TOKEN;
+    env.TRACE_API_TOKEN = 'trace-secret';
+
+    const accountStore = createInMemoryAccountStore();
+    const account = accountStore.resolveOrCreateAccount({
+        issuer: 'https://issuer.example',
+        subject: 'memory-owner',
+    });
+    accountStore.addMemory(account.id, 'I prefer short answers.');
+    const session: AccountSession = {
+        sessionId: 'validated-session',
+        accountId: account.id,
+        isAdministrator: false,
+        principal: {
+            issuer: 'https://issuer.example',
+            subject: 'memory-owner',
+            displayName: null,
+        },
+        csrfToken: 'csrf',
+        expiresAt: new Date(Date.now() + 60_000).toISOString(),
+    };
+    const authService = {
+        enabled: true,
+        startLogin: async () => ({
+            ok: false as const,
+            reason: 'disabled' as const,
+        }),
+        completeLogin: async () => ({
+            ok: false as const,
+            reason: 'disabled' as const,
+        }),
+        getSession: (sessionId: string) =>
+            sessionId === session.sessionId ? session : null,
+        clearSession: () => true,
+        invalidateAccountSessions: () => undefined,
+        beginAccountDeletion: () => undefined,
+        finishAccountDeletion: () => undefined,
+        findAccountByDiscordUserId: () => null,
+    } satisfies NonNullable<
+        Parameters<typeof createChatHandler>[0]['accountAuthService']
+    >;
+    const generationRequests: GenerationRequest[] = [];
+    const server = await createTestServer({
+        accountAuthService: authService,
+        accountStore,
+        onGenerationRequest: (request) => generationRequests.push(request),
+    });
+    try {
+        const response = await fetch(`${server.url}/api/chat`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-Trace-Token': 'trace-secret',
+                Cookie: 'footnote_account_session=validated-session',
+            },
+            body: JSON.stringify(
+                createChatRequest({
+                    surface: 'web',
+                    trigger: { kind: 'submit' },
+                })
+            ),
+        });
+
+        assert.equal(response.status, 200);
+        const memoryMessage = generationRequests
+            .flatMap((request) => request.messages)
+            .find((message) =>
+                message.content.includes('I prefer short answers.')
+            );
+        assert.equal(memoryMessage?.role, 'user');
+    } finally {
+        await server.close();
+    }
+
+    const brokenAuthService = {
+        ...authService,
+        getSession: () => {
+            throw new Error('session lookup details');
+        },
+    } satisfies NonNullable<
+        Parameters<typeof createChatHandler>[0]['accountAuthService']
+    >;
+    const failOpenRequests: GenerationRequest[] = [];
+    const failOpenServer = await createTestServer({
+        accountAuthService: brokenAuthService,
+        accountStore,
+        onGenerationRequest: (request) => failOpenRequests.push(request),
+    });
+    try {
+        const response = await fetch(`${failOpenServer.url}/api/chat`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-Trace-Token': 'trace-secret',
+                Cookie: 'footnote_account_session=validated-session',
+            },
+            body: JSON.stringify(
+                createChatRequest({
+                    surface: 'web',
+                    trigger: { kind: 'submit' },
+                })
+            ),
+        });
+
+        assert.equal(response.status, 200);
+        assert.equal(
+            failOpenRequests
+                .flatMap((request) => request.messages)
+                .some((message) =>
+                    message.content.includes('I prefer short answers.')
+                ),
+            false
+        );
+    } finally {
+        await failOpenServer.close();
+        env.TRACE_API_TOKEN = previousTraceToken;
     }
 });
 
