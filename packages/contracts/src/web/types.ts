@@ -207,6 +207,16 @@ export type PostAccountIncidentClaimResponse = {
     success: true;
 };
 
+/** @api.operationId: getAccountMemories @api.path: GET /api/account/memories */
+export type AccountMemory = { id: string; text: string; createdAt: string };
+export type GetAccountMemoriesResponse = { memories: AccountMemory[] };
+/** @api.operationId: postAccountMemory @api.path: POST /api/account/memories */
+export type PostAccountMemoryRequest = { text: string };
+/** @api.operationId: postAccountMemory @api.path: POST /api/account/memories */
+export type PostAccountMemoryResponse = { memory: AccountMemory };
+/** @api.operationId: deleteAccountMemory @api.path: DELETE /api/account/memories/{memoryId} */
+export type DeleteAccountMemoryResponse = { success: true };
+
 /**
  * Newest-first incident list response for review tooling.
  *

@@ -14,6 +14,7 @@ import { registerSetupRoutes } from './setupRoutes.js';
 import { registerAuthRoutes } from './authRoutes.js';
 import { registerIncidentRoutes } from './incidentRoutes.js';
 import { registerAccountIncidentRoutes } from './accountIncidentRoutes.js';
+import { registerAccountMemoryRoutes } from './accountMemoryRoutes.js';
 import { registerChatRoutes } from './chatRoutes.js';
 import { registerInternalRoutes } from './internalRoutes.js';
 import { registerTraceRoutes } from './traceRoutes.js';
@@ -93,6 +94,18 @@ type CreateExpressAppDeps = {
         req: http.IncomingMessage,
         res: http.ServerResponse
     ) => Promise<void>;
+    handleAccountMemoriesRequest?: (
+        req: http.IncomingMessage,
+        res: http.ServerResponse
+    ) => void | Promise<void>;
+    handleAccountMemoryCreateRequest?: (
+        req: http.IncomingMessage,
+        res: http.ServerResponse
+    ) => void | Promise<void>;
+    handleAccountMemoryDeleteRequest?: (
+        req: http.IncomingMessage,
+        res: http.ServerResponse
+    ) => void | Promise<void>;
     handleAccountDeletionRequest?: (
         req: http.IncomingMessage,
         res: http.ServerResponse
@@ -246,6 +259,9 @@ const createExpressApp = ({
     handleAccountIncidentsRequest,
     handleAccountIncidentClaimRequest,
     handleAccountExportRequest,
+    handleAccountMemoriesRequest,
+    handleAccountMemoryCreateRequest,
+    handleAccountMemoryDeleteRequest,
     handleChatRequest,
     handleInternalTextRequest,
     handleInternalImageRequest,
@@ -285,6 +301,19 @@ const createExpressApp = ({
     frameAncestors,
     logRequest,
 }: CreateExpressAppDeps): express.Express => {
+    const unavailableMemoryHandler = (
+        _req: http.IncomingMessage,
+        res: http.ServerResponse
+    ): void => {
+        res.statusCode = 503;
+        res.end(JSON.stringify({ error: 'Account memories unavailable' }));
+    };
+    const memoryListHandler =
+        handleAccountMemoriesRequest ?? unavailableMemoryHandler;
+    const memoryCreateHandler =
+        handleAccountMemoryCreateRequest ?? unavailableMemoryHandler;
+    const memoryDeleteHandler =
+        handleAccountMemoryDeleteRequest ?? unavailableMemoryHandler;
     const app = express();
     // Express's generic trust-proxy mode would trust arbitrary X-Forwarded-For.
     // Security consumers use the explicit Fly/Cloudflare resolver instead.
@@ -336,6 +365,14 @@ const createExpressApp = ({
         handleAccountIncidentsRequest,
         handleAccountIncidentClaimRequest,
         handleAccountExportRequest,
+        logRequest,
+    });
+    registerAccountMemoryRoutes({
+        app,
+        normalizePathname,
+        handleAccountMemoriesRequest: memoryListHandler,
+        handleAccountMemoryCreateRequest: memoryCreateHandler,
+        handleAccountMemoryDeleteRequest: memoryDeleteHandler,
         logRequest,
     });
     registerIncidentRoutes({

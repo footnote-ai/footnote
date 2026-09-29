@@ -44,6 +44,15 @@ export type WebApiClient = {
         typeof createSharedWebApiClient
     >['getAccountIncidents'];
     claimIncident: ReturnType<typeof createSharedWebApiClient>['claimIncident'];
+    getAccountMemories: ReturnType<
+        typeof createSharedWebApiClient
+    >['getAccountMemories'];
+    addAccountMemory: ReturnType<
+        typeof createSharedWebApiClient
+    >['addAccountMemory'];
+    forgetAccountMemory: ReturnType<
+        typeof createSharedWebApiClient
+    >['forgetAccountMemory'];
     exchangeDiscordConnection: ReturnType<
         typeof createSharedWebApiClient
     >['exchangeDiscordConnection'];
@@ -87,6 +96,9 @@ export const createWebApiClient = (
     const deleteAccount = shared.deleteAccount;
     const getAccountIncidents = shared.getAccountIncidents;
     const claimIncident = shared.claimIncident;
+    const getAccountMemories = shared.getAccountMemories;
+    const addAccountMemory = shared.addAccountMemory;
+    const forgetAccountMemory = shared.forgetAccountMemory;
     const exchangeDiscordConnection = shared.exchangeDiscordConnection;
     const getDiscordConnectionState = shared.getDiscordConnectionState;
     const consentDiscordConnection = shared.consentDiscordConnection;
@@ -103,6 +115,9 @@ export const createWebApiClient = (
         deleteAccount,
         getAccountIncidents,
         claimIncident,
+        getAccountMemories,
+        addAccountMemory,
+        forgetAccountMemory,
         exchangeDiscordConnection,
         getDiscordConnectionState,
         consentDiscordConnection,
@@ -155,6 +170,12 @@ export const getAccountIncidents = (signal?: AbortSignal) =>
     api.getAccountIncidents(signal);
 export const claimIncident = (claimCode: string, csrfToken: string) =>
     api.claimIncident(claimCode, csrfToken);
+export const getAccountMemories = (signal?: AbortSignal) =>
+    api.getAccountMemories(signal);
+export const addAccountMemory = (text: string, csrfToken: string) =>
+    api.addAccountMemory(text, csrfToken);
+export const forgetAccountMemory = (memoryId: string, csrfToken: string) =>
+    api.forgetAccountMemory(memoryId, csrfToken);
 
 export const exchangeDiscordConnection = (capability: string) =>
     api.exchangeDiscordConnection(capability);

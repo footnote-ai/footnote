@@ -66,6 +66,30 @@ test('account page uses typed session APIs and exposes all public states', async
     assert.doesNotMatch(source, /accessToken|refreshToken|idToken/);
 });
 
+test('account page exposes explicit memory save, list, and forget controls', async () => {
+    const source = await readFile(
+        `${webSourceDirectory}pages/AccountPage.tsx`,
+        'utf8'
+    );
+    assert.match(source, /getAccountMemories/);
+    assert.match(
+        source,
+        /addAccountMemory\([\s\S]*?sessionState\.session\.csrfToken/
+    );
+    assert.match(
+        source,
+        /forgetAccountMemory\([\s\S]*?sessionState\.session\.csrfToken/
+    );
+    assert.match(source, /Your memories/);
+    assert.match(source, /not used in conversations yet/);
+    assert.match(
+        source,
+        /memoryReadState === 'ready' && memories\.length === 0/
+    );
+    assert.match(source, /reached the 50-memory limit/);
+    assert.match(source, /saved memories, sign-in links/);
+});
+
 test('account page confirms deletion and reports signed-out result', async () => {
     const source = await readFile(
         `${webSourceDirectory}pages/AccountPage.tsx`,

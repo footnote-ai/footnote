@@ -164,12 +164,16 @@ test('deleting an account removes its identity and Discord mappings idempotently
             subject: 'subject-2',
         });
         store.linkDiscordUserToAccount('discord-1', account.id);
+        const memory = store.addMemory(account.id, 'remove with owner');
+        assert.ok(memory);
 
         store.deleteAccount(account.id);
         store.deleteAccount(account.id);
 
         assert.notEqual(store.resolveOrCreateAccount(identity).id, account.id);
         assert.equal(store.findAccountByDiscordUserId('discord-1'), null);
+        assert.deepEqual(store.listMemories(account.id), []);
+        assert.equal(store.forgetMemory(other.id, memory.id), false);
         assert.equal(
             store.resolveOrCreateAccount({
                 ...identity,
@@ -199,6 +203,8 @@ test('account export storage returns only the requested account mappings', () =>
         });
         store.linkDiscordUserToAccount('discord-owner', owner.id);
         store.linkDiscordUserToAccount('discord-other', other.id);
+        const memory = store.addMemory(owner.id, 'only for owner');
+        store.addMemory(other.id, 'not for owner');
 
         const exported = store.getAccountExportData(owner.id);
         assert.ok(exported);
@@ -210,6 +216,7 @@ test('account export storage returns only the requested account mappings', () =>
                 lastSeenAt: owner.createdAt,
             },
         ]);
+        assert.deepEqual(exported.memories, [memory]);
         assert.equal(exported.discordMappings.length, 1);
         assert.equal(
             exported.discordMappings[0]?.discordUserId,
@@ -219,6 +226,27 @@ test('account export storage returns only the requested account mappings', () =>
         const serialized = JSON.stringify(exported);
         assert.ok(!serialized.includes('other-subject'));
         assert.ok(!serialized.includes('discord-other'));
+    } finally {
+        store?.close();
+        fs.rmSync(tempDir, { recursive: true, force: true });
+    }
+});
+
+test('account memories have a bounded persisted count', () => {
+    const tempDir = fs.mkdtempSync(
+        path.join(os.tmpdir(), 'account-memory-cap-')
+    );
+    let store: SqliteAccountStore | null = null;
+    try {
+        store = new SqliteAccountStore({
+            dbPath: path.join(tempDir, 'accounts.db'),
+        });
+        const account = store.resolveOrCreateAccount(identity);
+        for (let index = 0; index < 50; index += 1) {
+            assert.ok(store.addMemory(account.id, `memory ${index}`));
+        }
+        assert.equal(store.addMemory(account.id, 'over the limit'), null);
+        assert.equal(store.listMemories(account.id).length, 50);
     } finally {
         store?.close();
         fs.rmSync(tempDir, { recursive: true, force: true });

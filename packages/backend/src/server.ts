@@ -52,6 +52,7 @@ import { createAdminSettingsHandlers } from './handlers/adminSettings.js';
 import { createSetupSessionHandlers } from './handlers/setupSession.js';
 import { createAccountAuthHandlers } from './handlers/accountAuth.js';
 import { createAccountIncidentHandlers } from './handlers/accountIncidents.js';
+import { createAccountMemoryHandlers } from './handlers/accountMemories.js';
 import { createDiscordAccountConnectionHandlers } from './handlers/discordAccountConnection.js';
 import {
     createIncidentService,
@@ -622,6 +623,15 @@ const {
     incidentService,
     logRequest,
 });
+const {
+    handleAccountMemoriesRequest,
+    handleAccountMemoryCreateRequest,
+    handleAccountMemoryDeleteRequest,
+} = createAccountMemoryHandlers({
+    accountAuthService,
+    accountStore,
+    logRequest,
+});
 
 const handleRuntimeConfigRequest = createRuntimeConfigHandler({
     logRequest,
@@ -798,6 +808,9 @@ const app = createExpressApp({
     handleAccountIncidentsRequest,
     handleAccountIncidentClaimRequest,
     handleAccountExportRequest,
+    handleAccountMemoriesRequest,
+    handleAccountMemoryCreateRequest,
+    handleAccountMemoryDeleteRequest,
     handleChatRequest,
     handleInternalTextRequest,
     handleInternalImageRequest,

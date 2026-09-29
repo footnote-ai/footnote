@@ -9,7 +9,7 @@ openapi: 3.1.0
 info:
     title: Footnote Backend API
     # Versioning: bump when request/response shapes, status codes, or auth requirements change; docs-only edits can skip.
-    version: 1.7.0
+    version: 1.8.0
     license:
         name: MIT + Hippocratic License v3 (HL3-CORE)
         url: docs/LICENSE_STRATEGY.md
@@ -1482,6 +1482,103 @@ paths:
                 '503':
                     $ref: '#/components/responses/ServiceUnavailable'
 
+    /api/account/memories:
+        get:
+            operationId: getAccountMemories
+            x-codeRefs:
+                - packages/backend/src/handlers/accountMemories.ts#handleAccountMemoriesRequest
+                - packages/api-client/src/accountMemories.ts#getAccountMemories
+                - packages/web/src/utils/api.ts#getAccountMemories
+                - packages/contracts/src/web/types.ts#GetAccountMemoriesResponse
+                - packages/contracts/src/web/schemas.ts#GetAccountMemoriesResponseSchema
+            summary: List memories explicitly saved to the signed-in account
+            tags: [Accounts]
+            security: [{ AccountSessionCookie: [] }]
+            responses:
+                '200':
+                    description: Account-owned memories
+                    content:
+                        application/json:
+                            schema:
+                                {
+                                    $ref: '#/components/schemas/AccountMemoriesResponse',
+                                }
+                '401': { $ref: '#/components/responses/Unauthorized' }
+                '503': { $ref: '#/components/responses/ServiceUnavailable' }
+        post:
+            operationId: postAccountMemory
+            x-codeRefs:
+                - packages/backend/src/handlers/accountMemories.ts#handleAccountMemoryCreateRequest
+                - packages/api-client/src/accountMemories.ts#addAccountMemory
+                - packages/web/src/utils/api.ts#addAccountMemory
+                - packages/contracts/src/web/types.ts#PostAccountMemoryRequest
+                - packages/contracts/src/web/types.ts#PostAccountMemoryResponse
+                - packages/contracts/src/web/schemas.ts#PostAccountMemoryRequestSchema
+                - packages/contracts/src/web/schemas.ts#PostAccountMemoryResponseSchema
+            summary: Save a memory to the signed-in account
+            tags: [Accounts]
+            security: [{ AccountSessionCookie: [] }]
+            parameters: [{ $ref: '#/components/parameters/AuthCsrfHeader' }]
+            requestBody:
+                required: true
+                content:
+                    application/json:
+                        schema:
+                            {
+                                $ref: '#/components/schemas/AccountMemoryCreateRequest',
+                            }
+            responses:
+                '201':
+                    description: Saved memory
+                    content:
+                        application/json:
+                            schema:
+                                {
+                                    $ref: '#/components/schemas/AccountMemoryCreateResponse',
+                                }
+                '400': { $ref: '#/components/responses/BadRequest' }
+                '401': { $ref: '#/components/responses/Unauthorized' }
+                '403': { $ref: '#/components/responses/Forbidden' }
+                '409':
+                    description: The account already has the maximum of 50 saved memories
+                    content:
+                        application/json:
+                            schema:
+                                { $ref: '#/components/schemas/ErrorResponse' }
+                '503': { $ref: '#/components/responses/ServiceUnavailable' }
+
+    /api/account/memories/{memoryId}:
+        delete:
+            operationId: deleteAccountMemory
+            x-codeRefs:
+                - packages/backend/src/handlers/accountMemories.ts#handleAccountMemoryDeleteRequest
+                - packages/api-client/src/accountMemories.ts#forgetAccountMemory
+                - packages/web/src/utils/api.ts#forgetAccountMemory
+                - packages/contracts/src/web/types.ts#DeleteAccountMemoryResponse
+            summary: Forget a memory owned by the signed-in account
+            tags: [Accounts]
+            security: [{ AccountSessionCookie: [] }]
+            parameters:
+                - name: memoryId
+                  in: path
+                  required: true
+                  schema: { type: string, format: uuid }
+                - $ref: '#/components/parameters/AuthCsrfHeader'
+            responses:
+                '200':
+                    description: Memory deleted
+                    content:
+                        application/json:
+                            schema:
+                                {
+                                    $ref: '#/components/schemas/AccountMemoryDeleteResponse',
+                                }
+                '400': { $ref: '#/components/responses/BadRequest' }
+                '401': { $ref: '#/components/responses/Unauthorized' }
+                '403': { $ref: '#/components/responses/Forbidden' }
+                '404': { $ref: '#/components/responses/NotFound' }
+                '503': { $ref: '#/components/responses/ServiceUnavailable' }
+
     /api/account/export:
         get:
             operationId: getAccountExport
@@ -2091,6 +2188,40 @@ components:
                     enum: [true]
             required: [success]
             additionalProperties: false
+        AccountMemory:
+            type: object
+            properties:
+                id: { type: string, format: uuid }
+                text: { type: string }
+                createdAt: { type: string, format: date-time }
+            required: [id, text, createdAt]
+            additionalProperties: false
+        AccountMemoriesResponse:
+            type: object
+            properties:
+                memories:
+                    type: array
+                    items: { $ref: '#/components/schemas/AccountMemory' }
+            required: [memories]
+            additionalProperties: false
+        AccountMemoryCreateRequest:
+            type: object
+            properties:
+                text: { type: string, minLength: 1, maxLength: 2000 }
+            required: [text]
+            additionalProperties: false
+        AccountMemoryCreateResponse:
+            type: object
+            properties:
+                memory: { $ref: '#/components/schemas/AccountMemory' }
+            required: [memory]
+            additionalProperties: false
+        AccountMemoryDeleteResponse:
+            type: object
+            properties:
+                success: { type: boolean, enum: [true] }
+            required: [success]
+            additionalProperties: false
         AccountDataExport:
             type: object
             properties:
@@ -2109,7 +2240,9 @@ components:
                         identityProvider: { type: string }
                         modelProviders: { type: string }
                         incidents: { type: string }
-                    required: [identityProvider, modelProviders, incidents]
+                        memories: { type: string }
+                    required:
+                        [identityProvider, modelProviders, incidents, memories]
                     additionalProperties: false
                 data:
                     type: object
@@ -2129,15 +2262,27 @@ components:
                             $ref: '#/components/schemas/AccountExportDiscordMappings'
                         incidentAssociations:
                             $ref: '#/components/schemas/AccountExportIncidentAssociations'
+                        memories:
+                            $ref: '#/components/schemas/AccountExportMemories'
                     required:
                         [
                             account,
                             externalIdentityMappings,
                             discordMappings,
                             incidentAssociations,
+                            memories,
                         ]
                     additionalProperties: false
             required: [format, version, generatedAt, retention, data]
+            additionalProperties: false
+        AccountExportMemories:
+            type: object
+            properties:
+                category: { type: string, enum: [user_memories] }
+                records:
+                    type: array
+                    items: { $ref: '#/components/schemas/AccountMemory' }
+            required: [category, records]
             additionalProperties: false
         AccountExportExternalIdentities:
             type: object

@@ -17,6 +17,7 @@ import {
 import type {
     DiscordConnectionStateResponse,
     GetAccountIncidentsResponse,
+    AccountMemory,
     GetAuthSessionResponse,
 } from '@footnote/contracts/web';
 import PublicPageLayout from '@components/PublicPageLayout';
@@ -27,10 +28,14 @@ import {
     exchangeDiscordConnection,
     getAuthSession,
     getAccountIncidents,
+    getAccountMemories,
+    addAccountMemory,
+    forgetAccountMemory,
     getDiscordConnectionState,
     claimIncident,
     logoutAccount,
     deleteAccount,
+    isApiClientError,
 } from '../utils/api';
 
 type SessionState =
@@ -40,6 +45,7 @@ type SessionState =
 
 type LogoutState = 'idle' | 'submitting' | 'error';
 type DeletionState = 'idle' | 'submitting' | 'error' | 'success';
+type MemoryReadState = 'loading' | 'ready' | 'error';
 type AccountIncidentsState =
     | { status: 'loading'; accountKey: string | null }
     | {
@@ -92,6 +98,15 @@ const AccountPage = (): JSX.Element => {
         value: string;
     }>({ accountKey: null, value: '' });
     const [incidentReloadKey, setIncidentReloadKey] = useState(0);
+    const [memories, setMemories] = useState<AccountMemory[]>([]);
+    const [memoryText, setMemoryText] = useState('');
+    const [memoryReadState, setMemoryReadState] =
+        useState<MemoryReadState>('loading');
+    const [memoryReloadKey, setMemoryReloadKey] = useState(0);
+    const [memoryWriteError, setMemoryWriteError] = useState<
+        'save' | 'forget' | 'limit' | null
+    >(null);
+    const [memoryBusy, setMemoryBusy] = useState(false);
     const [selectedIncidentId, setSelectedIncidentId] = useState<{
         accountKey: string;
         incidentId: string;
@@ -142,6 +157,11 @@ const AccountPage = (): JSX.Element => {
             setClaimCodeDraft({ accountKey: null, value: '' });
             setClaimMessageDraft({ accountKey: null, value: '' });
             setSelectedIncidentId(null);
+            setMemories([]);
+            setMemoryReadState('loading');
+            setMemoryText('');
+            setMemoryWriteError(null);
+            setMemoryBusy(false);
         }
     }, [accountKey]);
 
@@ -179,6 +199,94 @@ const AccountPage = (): JSX.Element => {
             });
         return (): void => controller.abort();
     }, [accountKey, incidentReloadKey]);
+
+    useEffect(() => {
+        if (accountKey === null) {
+            setMemories([]);
+            setMemoryReadState('ready');
+            return;
+        }
+        const controller = new AbortController();
+        setMemoryReadState('loading');
+        void getAccountMemories(controller.signal)
+            .then(({ memories: result }) => {
+                if (
+                    !controller.signal.aborted &&
+                    activeAccountKeyRef.current === accountKey
+                )
+                    setMemories(result);
+                if (
+                    !controller.signal.aborted &&
+                    activeAccountKeyRef.current === accountKey
+                )
+                    setMemoryReadState('ready');
+            })
+            .catch(() => {
+                if (
+                    !controller.signal.aborted &&
+                    activeAccountKeyRef.current === accountKey
+                )
+                    setMemoryReadState('error');
+            });
+        return (): void => controller.abort();
+    }, [accountKey, memoryReloadKey]);
+
+    const handleAddMemory = async (
+        event: FormEvent<HTMLFormElement>
+    ): Promise<void> => {
+        event.preventDefault();
+        if (
+            sessionState.status !== 'ready' ||
+            !sessionState.session.authenticated ||
+            accountKey === null
+        )
+            return;
+        const submittedAccountKey = accountKey;
+        setMemoryBusy(true);
+        setMemoryWriteError(null);
+        try {
+            const result = await addAccountMemory(
+                memoryText,
+                sessionState.session.csrfToken
+            );
+            if (activeAccountKeyRef.current !== submittedAccountKey) return;
+            setMemories((current) => [...current, result.memory]);
+            setMemoryText('');
+        } catch (error: unknown) {
+            if (activeAccountKeyRef.current !== submittedAccountKey) return;
+            setMemoryWriteError(
+                isApiClientError(error) && error.status === 409
+                    ? 'limit'
+                    : 'save'
+            );
+        } finally {
+            setMemoryBusy(false);
+        }
+    };
+
+    const handleForgetMemory = async (memoryId: string): Promise<void> => {
+        if (
+            sessionState.status !== 'ready' ||
+            !sessionState.session.authenticated ||
+            accountKey === null
+        )
+            return;
+        const submittedAccountKey = accountKey;
+        setMemoryBusy(true);
+        setMemoryWriteError(null);
+        try {
+            await forgetAccountMemory(memoryId, sessionState.session.csrfToken);
+            if (activeAccountKeyRef.current !== submittedAccountKey) return;
+            setMemories((current) =>
+                current.filter((memory) => memory.id !== memoryId)
+            );
+        } catch {
+            if (activeAccountKeyRef.current !== submittedAccountKey) return;
+            setMemoryWriteError('forget');
+        } finally {
+            setMemoryBusy(false);
+        }
+    };
 
     useEffect(() => {
         if (connectionEffectStartedRef.current) return;
@@ -277,7 +385,7 @@ const AccountPage = (): JSX.Element => {
     ): Promise<void> => {
         if (
             !window.confirm(
-                'Delete your Footnote account, sign-in links, Discord connection, and links to reports you claimed? Your external sign-in and Discord accounts will stay active. Claimed safety reports will remain, but their descriptions, contact information, and details identifying you will be removed. Unclaimed reports will not change. This cannot be undone.'
+                'Delete your Footnote account, saved memories, sign-in links, Discord connection, and links to reports you claimed? Your external sign-in and Discord accounts will stay active. Claimed safety reports will remain, but their descriptions, contact information, and details identifying you will be removed. Unclaimed reports will not change. This cannot be undone.'
             )
         ) {
             return;
@@ -707,6 +815,122 @@ const AccountPage = (): JSX.Element => {
         );
     };
 
+    const renderMemories = (): JSX.Element | null => {
+        if (sessionState.status !== 'ready' || !sessionState.session.enabled)
+            return null;
+        if (!sessionState.session.authenticated)
+            return (
+                <section
+                    className="account-card account-card__stack"
+                    aria-labelledby="account-memories-heading"
+                >
+                    <h2 id="account-memories-heading">Your memories</h2>
+                    <p>
+                        Sign in to save and manage information you want Footnote
+                        to remember.
+                    </p>
+                </section>
+            );
+        let memoryWriteErrorMessage: string | null = null;
+        if (memoryWriteError === 'limit') {
+            memoryWriteErrorMessage =
+                'You have reached the 50-memory limit. Forget a saved memory before adding another.';
+        } else if (memoryWriteError === 'save') {
+            memoryWriteErrorMessage =
+                'The memory could not be saved. Please try again.';
+        } else if (memoryWriteError === 'forget') {
+            memoryWriteErrorMessage =
+                'The memory could not be forgotten. Please try again.';
+        }
+
+        let savedMemoryList: JSX.Element | null = null;
+        if (memoryReadState === 'ready' && memories.length === 0) {
+            savedMemoryList = <p>No saved memories.</p>;
+        } else if (memoryReadState === 'ready') {
+            savedMemoryList = (
+                <ul>
+                    {memories.map((memory) => (
+                        <li key={memory.id}>
+                            <p>{memory.text}</p>
+                            <button
+                                className="account-card__button"
+                                type="button"
+                                disabled={memoryBusy}
+                                onClick={() =>
+                                    void handleForgetMemory(memory.id)
+                                }
+                            >
+                                Forget
+                            </button>
+                        </li>
+                    ))}
+                </ul>
+            );
+        }
+        return (
+            <section
+                className="account-card account-card__stack"
+                aria-labelledby="account-memories-heading"
+            >
+                <h2 id="account-memories-heading">Your memories</h2>
+                <p>
+                    Memories are information you chose to save. They are not
+                    verified facts and are not used in conversations yet. You
+                    can save up to 50 memories.
+                </p>
+                <form
+                    className="account-card__stack"
+                    onSubmit={(event) => void handleAddMemory(event)}
+                >
+                    <label htmlFor="account-memory-text">Add a memory</label>
+                    <textarea
+                        id="account-memory-text"
+                        value={memoryText}
+                        maxLength={2000}
+                        required
+                        onChange={(event) => setMemoryText(event.target.value)}
+                    />
+                    <button
+                        className="account-card__button account-card__button--primary"
+                        type="submit"
+                        disabled={
+                            memoryBusy ||
+                            memoryReadState !== 'ready' ||
+                            memoryText.trim().length === 0
+                        }
+                    >
+                        Save memory
+                    </button>
+                </form>
+                {memoryWriteErrorMessage ? (
+                    <p className="account-card__error" role="alert">
+                        {memoryWriteErrorMessage}
+                    </p>
+                ) : null}
+                {memoryReadState === 'loading' ? (
+                    <output>Loading saved memories…</output>
+                ) : null}
+                {memoryReadState === 'error' ? (
+                    <div>
+                        <p className="account-card__error" role="alert">
+                            Saved memories could not be loaded.
+                        </p>
+                        <button
+                            className="account-card__button"
+                            type="button"
+                            onClick={() =>
+                                setMemoryReloadKey((value) => value + 1)
+                            }
+                        >
+                            Try again
+                        </button>
+                    </div>
+                ) : null}
+                {savedMemoryList}
+            </section>
+        );
+    };
+
     return (
         <PublicPageLayout>
             <main id="main-content" className="public-page__main account-page">
@@ -737,6 +961,7 @@ const AccountPage = (): JSX.Element => {
                         {renderSessionState()}
                     </div>
                     {renderAccountIncidents()}
+                    {renderMemories()}
                     {connectionState.status === 'ready' &&
                     connectionState.state === 'none' ? null : (
                         <section
