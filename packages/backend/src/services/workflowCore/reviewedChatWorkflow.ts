@@ -852,6 +852,8 @@ const buildWorkflowLineage = (input: {
         stepCount: records.length,
         maxSteps: input.executionLimits.maxWorkflowSteps,
         maxDurationMs: input.maxDurationMs,
+        // Record only a coarse count after generation succeeds; the public trace
+        // never receives memory text or account identity.
         ...(input.advisoryUserMemoryCount === undefined ||
         input.advisoryUserMemoryCount <= 0 ||
         !records.some(
