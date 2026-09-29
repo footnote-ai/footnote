@@ -2839,6 +2839,30 @@ export const PostAccountIncidentClaimResponseSchema = z
     .object({ success: z.literal(true) })
     .strict();
 
+/** @api.operationId: getAccountMemories @api.path: GET /api/account/memories */
+export const AccountMemorySchema = z
+    .object({
+        id: z.string().uuid(),
+        text: z.string(),
+        createdAt: z.string().datetime(),
+    })
+    .strict();
+export const GetAccountMemoriesResponseSchema = z
+    .object({ memories: z.array(AccountMemorySchema) })
+    .strict();
+/** @api.operationId: postAccountMemory @api.path: POST /api/account/memories */
+export const PostAccountMemoryRequestSchema = z
+    .object({ text: z.string().trim().min(1).max(2000) })
+    .strict();
+/** @api.operationId: postAccountMemory @api.path: POST /api/account/memories */
+export const PostAccountMemoryResponseSchema = z
+    .object({ memory: AccountMemorySchema })
+    .strict();
+/** @api.operationId: deleteAccountMemory @api.path: DELETE /api/account/memories/{memoryId} */
+export const DeleteAccountMemoryResponseSchema = z
+    .object({ success: z.literal(true) })
+    .strict();
+
 /**
  * @api.operationId: listIncidents
  * @api.path: GET /api/incidents

@@ -189,6 +189,11 @@ export type {
  */
 export type {
     GetAccountIncidentsResponse,
+    AccountMemory,
+    GetAccountMemoriesResponse,
+    PostAccountMemoryRequest,
+    PostAccountMemoryResponse,
+    DeleteAccountMemoryResponse,
     PostAccountIncidentClaimRequest,
     PostAccountIncidentClaimResponse,
     ReporterIncidentSummary,
@@ -269,6 +274,11 @@ export {
     AdminSettingsValidationFailureResponseSchema,
     GetAdminSettingsSchemaResponseSchema,
     GetAccountIncidentsResponseSchema,
+    AccountMemorySchema,
+    GetAccountMemoriesResponseSchema,
+    PostAccountMemoryRequestSchema,
+    PostAccountMemoryResponseSchema,
+    DeleteAccountMemoryResponseSchema,
     PostAccountIncidentClaimRequestSchema,
     PostAccountIncidentClaimResponseSchema,
     ReporterIncidentSummarySchema,

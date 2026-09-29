@@ -13,6 +13,7 @@ import path from 'node:path';
 import test from 'node:test';
 import type { PostIncidentReportRequest } from '@footnote/contracts/web';
 import { createAccountIncidentHandlers } from '../src/handlers/accountIncidents.js';
+import { createAccountMemoryHandlers } from '../src/handlers/accountMemories.js';
 import { createAccountAuthService } from '../src/services/accountAuth.js';
 import { createIncidentService } from '../src/services/incidents.js';
 import type { OidcAccountClient } from '../src/services/oidcClient.js';
@@ -57,6 +58,11 @@ test('reports stay anonymous until explicitly claimed and remain account-scoped'
         incidentService,
         logRequest: () => undefined,
     });
+    const memoryHandlers = createAccountMemoryHandlers({
+        accountAuthService,
+        accountStore,
+        logRequest: () => undefined,
+    });
     const server = http.createServer((req, res) => {
         const pathname = new URL(req.url ?? '/', 'http://localhost').pathname;
         if (pathname === '/api/account/incidents') {
@@ -65,6 +71,21 @@ test('reports stay anonymous until explicitly claimed and remain account-scoped'
             void handlers.handleAccountIncidentClaimRequest(req, res);
         } else if (pathname === '/api/account/export') {
             void handlers.handleAccountExportRequest(req, res);
+        } else if (
+            pathname === '/api/account/memories' &&
+            req.method === 'GET'
+        ) {
+            void memoryHandlers.handleAccountMemoriesRequest(req, res);
+        } else if (
+            pathname === '/api/account/memories' &&
+            req.method === 'POST'
+        ) {
+            void memoryHandlers.handleAccountMemoryCreateRequest(req, res);
+        } else if (
+            pathname.startsWith('/api/account/memories/') &&
+            req.method === 'DELETE'
+        ) {
+            void memoryHandlers.handleAccountMemoryDeleteRequest(req, res);
         } else {
             res.statusCode = 404;
             res.end();
@@ -118,6 +139,135 @@ test('reports stay anonymous until explicitly claimed and remain account-scoped'
     const accountHeaders = (session: typeof reporter) => ({
         cookie: `footnote_account_session=${session.sessionId}`,
     });
+    assert.equal((await fetch(`${baseUrl}/api/account/memories`)).status, 401);
+    assert.equal(
+        (
+            await fetch(`${baseUrl}/api/account/memories`, {
+                method: 'POST',
+                headers: { 'content-type': 'application/json' },
+                body: JSON.stringify({ text: 'anonymous memory' }),
+            })
+        ).status,
+        401
+    );
+    assert.equal(
+        (
+            await fetch(
+                `${baseUrl}/api/account/memories/00000000-0000-4000-8000-000000000000`,
+                { method: 'DELETE' }
+            )
+        ).status,
+        401
+    );
+    const initialMemories = await fetch(`${baseUrl}/api/account/memories`, {
+        headers: accountHeaders(reporter),
+    });
+    assert.equal(initialMemories.status, 200);
+    assert.deepEqual(await initialMemories.json(), { memories: [] });
+    const noCsrfMemory = await fetch(`${baseUrl}/api/account/memories`, {
+        method: 'POST',
+        headers: {
+            ...accountHeaders(reporter),
+            'content-type': 'application/json',
+        },
+        body: JSON.stringify({ text: 'keep private' }),
+    });
+    assert.equal(noCsrfMemory.status, 403);
+    const addedMemory = await fetch(`${baseUrl}/api/account/memories`, {
+        method: 'POST',
+        headers: {
+            ...accountHeaders(reporter),
+            'content-type': 'application/json',
+            'x-auth-csrf': reporter.csrfToken,
+        },
+        body: JSON.stringify({ text: 'concise answers' }),
+    });
+    assert.equal(addedMemory.status, 201);
+    const saved = (await addedMemory.json()) as {
+        memory: { id: string; text: string };
+    };
+    assert.equal(
+        (
+            await fetch(`${baseUrl}/api/account/memories/${saved.memory.id}`, {
+                method: 'DELETE',
+                headers: accountHeaders(reporter),
+            })
+        ).status,
+        403
+    );
+    const ownerMemories = await fetch(`${baseUrl}/api/account/memories`, {
+        headers: accountHeaders(reporter),
+    });
+    assert.deepEqual(await ownerMemories.json(), {
+        memories: [saved.memory],
+    });
+    const multibyteMemory = await fetch(`${baseUrl}/api/account/memories`, {
+        method: 'POST',
+        headers: {
+            ...accountHeaders(reporter),
+            'content-type': 'application/json',
+            'x-auth-csrf': reporter.csrfToken,
+        },
+        body: JSON.stringify({ text: '界'.repeat(2000) }),
+    });
+    assert.equal(multibyteMemory.status, 201);
+    const multibyteSaved = (await multibyteMemory.json()) as {
+        memory: { id: string };
+    };
+    assert.equal(
+        (
+            await fetch(
+                `${baseUrl}/api/account/memories/${multibyteSaved.memory.id}`,
+                {
+                    method: 'DELETE',
+                    headers: {
+                        ...accountHeaders(reporter),
+                        'x-auth-csrf': reporter.csrfToken,
+                    },
+                }
+            )
+        ).status,
+        200
+    );
+    const foreignMemories = await fetch(`${baseUrl}/api/account/memories`, {
+        headers: accountHeaders(otherAccount),
+    });
+    assert.deepEqual(await foreignMemories.json(), { memories: [] });
+    const forgetForeign = await fetch(
+        `${baseUrl}/api/account/memories/${saved.memory.id}`,
+        {
+            method: 'DELETE',
+            headers: {
+                ...accountHeaders(otherAccount),
+                'x-auth-csrf': otherAccount.csrfToken,
+            },
+        }
+    );
+    assert.equal(forgetForeign.status, 404);
+    const forgetOwned = await fetch(
+        `${baseUrl}/api/account/memories/${saved.memory.id}`,
+        {
+            method: 'DELETE',
+            headers: {
+                ...accountHeaders(reporter),
+                'x-auth-csrf': reporter.csrfToken,
+            },
+        }
+    );
+    assert.equal(forgetOwned.status, 200);
+    for (const id of [
+        saved.memory.id,
+        '00000000-0000-4000-8000-000000000000',
+    ]) {
+        const retry = await fetch(`${baseUrl}/api/account/memories/${id}`, {
+            method: 'DELETE',
+            headers: {
+                ...accountHeaders(reporter),
+                'x-auth-csrf': reporter.csrfToken,
+            },
+        });
+        assert.equal(retry.status, 404);
+    }
 
     const initiallyEmpty = await fetch(`${baseUrl}/api/account/incidents`, {
         headers: accountHeaders(reporter),
@@ -179,6 +329,20 @@ test('reports stay anonymous until explicitly claimed and remain account-scoped'
     const anonymousExport = await fetch(`${baseUrl}/api/account/export`);
     assert.equal(anonymousExport.status, 401);
 
+    const exportMemoryResponse = await fetch(
+        `${baseUrl}/api/account/memories`,
+        {
+            method: 'POST',
+            headers: {
+                ...accountHeaders(reporter),
+                'x-auth-csrf': reporter.csrfToken,
+                'content-type': 'application/json',
+            },
+            body: JSON.stringify({ text: 'exported preference' }),
+        }
+    );
+    assert.equal(exportMemoryResponse.status, 201);
+
     const ownerExport = await fetch(`${baseUrl}/api/account/export`, {
         headers: accountHeaders(reporter),
     });
@@ -205,10 +369,35 @@ test('reports stay anonymous until explicitly claimed and remain account-scoped'
                     incident: Record<string, unknown>;
                 }>;
             };
+            memories: {
+                category: string;
+                records: Array<{ id: string; text: string }>;
+            };
         };
     };
     assert.equal(exportBody.data.account.category, 'account');
     assert.equal(exportBody.data.account.id, reporter.accountId);
+    assert.equal(exportBody.data.memories.category, 'user_memories');
+    assert.equal(
+        exportBody.data.memories.records[0]?.text,
+        'exported preference'
+    );
+
+    for (let index = 0; index < 49; index += 1) {
+        assert.ok(
+            accountStore.addMemory(reporter.accountId, `memory ${index}`)
+        );
+    }
+    const overLimit = await fetch(`${baseUrl}/api/account/memories`, {
+        method: 'POST',
+        headers: {
+            ...accountHeaders(reporter),
+            'x-auth-csrf': reporter.csrfToken,
+            'content-type': 'application/json',
+        },
+        body: JSON.stringify({ text: 'one too many' }),
+    });
+    assert.equal(overLimit.status, 409);
     assert.deepEqual(
         exportBody.data.externalIdentityMappings.records.map(
             ({ subject: exportedSubject }) => exportedSubject

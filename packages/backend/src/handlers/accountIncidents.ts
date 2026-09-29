@@ -191,6 +191,8 @@ export const createAccountIncidentHandlers = ({
                     'Provider-side model data retention is outside Footnote account data and is not represented here.',
                 incidents:
                     'Incident reports remain separately governed operational records. Only this account’s association time and reporter-safe summary are included.',
+                memories:
+                    'Memories are text explicitly saved by the account holder and are not verified source evidence.',
             },
             data: {
                 account: { category: 'account', ...accountData.account },
@@ -201,6 +203,10 @@ export const createAccountIncidentHandlers = ({
                 discordMappings: {
                     category: 'discord_mappings',
                     records: accountData.discordMappings,
+                },
+                memories: {
+                    category: 'user_memories',
+                    records: accountData.memories,
                 },
                 incidentAssociations: {
                     category: 'incident_associations',

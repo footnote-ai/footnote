@@ -29,7 +29,11 @@ export type AccountExportData = {
         ExternalIdentityKey & { createdAt: string; lastSeenAt: string }
     >;
     discordMappings: Array<{ discordUserId: string; createdAt: string }>;
+    memories: AccountMemory[];
 };
+
+export type AccountMemory = { id: string; text: string; createdAt: string };
+const MAX_ACCOUNT_MEMORIES = 50;
 
 export type AccountStore = {
     resolveOrCreateAccount: (identity: ExternalIdentityKey) => FootnoteAccount;
@@ -42,6 +46,9 @@ export type AccountStore = {
         accountId: string
     ) => 'linked' | 'already-linked' | 'conflict';
     getAccountExportData: (accountId: string) => AccountExportData | null;
+    listMemories: (accountId: string) => AccountMemory[];
+    addMemory: (accountId: string, text: string) => AccountMemory | null;
+    forgetMemory: (accountId: string, memoryId: string) => boolean;
     close?: () => void;
 };
 
@@ -58,6 +65,7 @@ export const createInMemoryAccountStore = (): AccountStore => {
     >();
     const discordAccountLinks = new Map<string, string>();
     const discordMappingDates = new Map<string, string>();
+    const memories = new Map<string, AccountMemory & { accountId: string }>();
     return {
         resolveOrCreateAccount: ({ issuer, subject }) => {
             const key = buildExternalIdentityKey(issuer, subject);
@@ -99,6 +107,9 @@ export const createInMemoryAccountStore = (): AccountStore => {
                     discordMappingDates.delete(discordUserId);
                 }
             }
+            for (const [id, memory] of memories) {
+                if (memory.accountId === accountId) memories.delete(id);
+            }
         },
         findAccountByDiscordUserId: (discordUserId) => {
             const accountId = discordAccountLinks.get(discordUserId);
@@ -136,7 +147,45 @@ export const createInMemoryAccountStore = (): AccountStore => {
                         discordUserId,
                         createdAt: discordMappingDates.get(discordUserId) ?? '',
                     })),
+                memories: [...memories.values()]
+                    .filter(({ accountId: ownerId }) => ownerId === accountId)
+                    .map(({ id, text, createdAt }) => ({
+                        id,
+                        text,
+                        createdAt,
+                    })),
             };
+        },
+        listMemories: (accountId) =>
+            [...memories.values()]
+                .filter(({ accountId: ownerId }) => ownerId === accountId)
+                .map(({ id, text, createdAt }) => ({ id, text, createdAt })),
+        addMemory: (accountId, text) => {
+            if (
+                [...memories.values()].filter(
+                    (memory) => memory.accountId === accountId
+                ).length >= MAX_ACCOUNT_MEMORIES
+            ) {
+                return null;
+            }
+            const memory = {
+                id: randomUUID(),
+                text,
+                createdAt: new Date().toISOString(),
+                accountId,
+            };
+            memories.set(memory.id, memory);
+            return {
+                id: memory.id,
+                text: memory.text,
+                createdAt: memory.createdAt,
+            };
+        },
+        forgetMemory: (accountId, memoryId) => {
+            const memory = memories.get(memoryId);
+            return memory?.accountId === accountId
+                ? memories.delete(memoryId)
+                : false;
         },
     };
 };
@@ -164,6 +213,10 @@ export class SqliteAccountStore implements AccountStore {
     private readonly getIdentityMappingsByAccountIdStatement: Database.Statement;
     private readonly getDiscordMappingsByAccountIdStatement: Database.Statement;
     private readonly deleteAccountStatement: Database.Statement;
+    private readonly listMemoriesStatement: Database.Statement;
+    private readonly countMemoriesByAccountIdStatement: Database.Statement;
+    private readonly addMemoryStatement: Database.Statement;
+    private readonly forgetMemoryStatement: Database.Statement;
 
     constructor(config: { dbPath: string }) {
         const resolvedPath = path.resolve(config.dbPath);
@@ -194,6 +247,14 @@ export class SqliteAccountStore implements AccountStore {
             );
             CREATE INDEX IF NOT EXISTS idx_discord_account_links_account_id
                 ON discord_account_links(account_id);
+            CREATE TABLE IF NOT EXISTS account_memories (
+                memory_id TEXT PRIMARY KEY,
+                account_id TEXT NOT NULL REFERENCES accounts(account_id) ON DELETE CASCADE,
+                memory_text TEXT NOT NULL,
+                created_at TEXT NOT NULL
+            );
+            CREATE INDEX IF NOT EXISTS idx_account_memories_account_id
+                ON account_memories(account_id, created_at, memory_id);
         `);
 
         this.resolveStatement = this.db.prepare(`
@@ -239,6 +300,18 @@ export class SqliteAccountStore implements AccountStore {
         `);
         this.deleteAccountStatement = this.db.prepare(
             'DELETE FROM accounts WHERE account_id = ?'
+        );
+        this.listMemoriesStatement = this.db.prepare(
+            'SELECT memory_id AS id, memory_text AS text, created_at AS createdAt FROM account_memories WHERE account_id = ? ORDER BY created_at, memory_id'
+        );
+        this.countMemoriesByAccountIdStatement = this.db.prepare(
+            'SELECT COUNT(*) AS count FROM account_memories WHERE account_id = ?'
+        );
+        this.addMemoryStatement = this.db.prepare(
+            'INSERT INTO account_memories(memory_id, account_id, memory_text, created_at) VALUES (?, ?, ?, ?)'
+        );
+        this.forgetMemoryStatement = this.db.prepare(
+            'DELETE FROM account_memories WHERE account_id = ? AND memory_id = ?'
         );
     }
 
@@ -352,7 +425,38 @@ export class SqliteAccountStore implements AccountStore {
                 discordUserId: row.discord_user_id,
                 createdAt: row.created_at,
             })),
+            memories: this.listMemories(accountId),
         };
+    }
+
+    listMemories(accountId: string): AccountMemory[] {
+        return this.listMemoriesStatement.all(accountId) as AccountMemory[];
+    }
+
+    addMemory(accountId: string, text: string): AccountMemory | null {
+        const memory = {
+            id: randomUUID(),
+            text,
+            createdAt: new Date().toISOString(),
+        };
+        const add = this.db.transaction(() => {
+            const count = this.countMemoriesByAccountIdStatement.get(
+                accountId
+            ) as { count: number };
+            if (count.count >= MAX_ACCOUNT_MEMORIES) return false;
+            this.addMemoryStatement.run(
+                memory.id,
+                accountId,
+                text,
+                memory.createdAt
+            );
+            return true;
+        });
+        return add.immediate() ? memory : null;
+    }
+
+    forgetMemory(accountId: string, memoryId: string): boolean {
+        return this.forgetMemoryStatement.run(accountId, memoryId).changes > 0;
     }
 
     /** Deletes the account and its provider/Discord mappings; missing accounts are already deleted. */
