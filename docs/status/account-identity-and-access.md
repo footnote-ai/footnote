@@ -1,10 +1,11 @@
 # Account Identity and Access Status
 
 Status: provider-neutral OIDC sign-in, durable Footnote accounts, separate
-administrator authorization, and explicit Discord account connection are
-implemented. Account-owned feature data remains ordered after this foundation.
+administrator authorization, explicit Discord connection, and the first
+account lifecycle (incident association, export, and deletion) are implemented.
+User-owned memory remains later work under #605.
 
-Last updated: 2026-09-28.
+Last updated: 2026-09-29.
 
 This tracker describes the durable account direction. Each branch should still
 deliver one useful result, preserve public and setup behavior, and avoid
@@ -81,9 +82,9 @@ reference the internal account ID, not `issuer + subject`. SQLite uniqueness and
 one transaction cover the first-login race, while local sessions remain short-
 lived and process-local.
 
-This stage does not add memory, saved conversations, inferred profiles,
-uploads, preferences, deletion, or account merging. Follow-on work is ordered
-in issue #525.
+Account lifecycle v1 now covers incident association, export, and deletion.
+It does not add memory, saved conversations, inferred profiles, uploads,
+preferences, or account merging. Follow-on work is ordered in issue #525.
 
 ### Incident reports
 
@@ -115,9 +116,11 @@ and incident contact/description fields.
 2. #456 — signed-in administrator access (delivered)
 3. #521 — durable Footnote accounts for regular OIDC users (delivered)
 4. #752 — explicit Discord account connection (delivered)
-5. #522 — deliberate incident association and safe user view
-6. #523 — export explicit Footnote-owned account data (delivered)
-7. #524 — delete Footnote account data with documented incident retention
+5. #522 — deliberate incident association and safe user view (delivered by PR #754)
+6. #523 — export explicit Footnote-owned account data (delivered by PR #755)
+7. #524 — delete Footnote account data with documented incident retention (delivered by PR #756)
+8. Account lifecycle v1 — complete after #522, #523, and #524.
+9. #605 — explicit user-owned memory, subsequent to this lifecycle boundary.
 
 The sequence keeps external authentication, Footnote authorization, and
 Footnote-owned data as separate decisions.
