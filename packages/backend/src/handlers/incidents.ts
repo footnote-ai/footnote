@@ -120,6 +120,7 @@ export const createIncidentHandlers = ({
         req: IncomingMessage,
         res: ServerResponse
     ): Promise<void> => {
+        res.setHeader('Cache-Control', 'no-store');
         try {
             if (req.method !== 'POST') {
                 sendJson(res, 405, { error: 'Method not allowed' });

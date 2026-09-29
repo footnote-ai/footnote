@@ -13,6 +13,7 @@ import { registerAdminRoutes } from './adminRoutes.js';
 import { registerSetupRoutes } from './setupRoutes.js';
 import { registerAuthRoutes } from './authRoutes.js';
 import { registerIncidentRoutes } from './incidentRoutes.js';
+import { registerAccountIncidentRoutes } from './accountIncidentRoutes.js';
 import { registerChatRoutes } from './chatRoutes.js';
 import { registerInternalRoutes } from './internalRoutes.js';
 import { registerTraceRoutes } from './traceRoutes.js';
@@ -79,6 +80,19 @@ type CreateExpressAppDeps = {
         req: http.IncomingMessage,
         res: http.ServerResponse,
         parsedUrl: URL
+    ) => Promise<void>;
+    handleAccountIncidentsRequest: (
+        req: http.IncomingMessage,
+        res: http.ServerResponse
+    ) => Promise<void>;
+    handleAccountIncidentRequest: (
+        req: http.IncomingMessage,
+        res: http.ServerResponse,
+        parsedUrl: URL
+    ) => Promise<void>;
+    handleAccountIncidentClaimRequest: (
+        req: http.IncomingMessage,
+        res: http.ServerResponse
     ) => Promise<void>;
     handleChatRequest: (
         req: http.IncomingMessage,
@@ -226,6 +240,9 @@ const createExpressApp = ({
     handleIncidentNotesRequest,
     handleIncidentRemediationRequest,
     handleIncidentDetailRequest,
+    handleAccountIncidentsRequest,
+    handleAccountIncidentRequest,
+    handleAccountIncidentClaimRequest,
     handleChatRequest,
     handleInternalTextRequest,
     handleInternalImageRequest,
@@ -306,6 +323,14 @@ const createExpressApp = ({
         handleDiscordBrowserStatus,
         handleDiscordBrowserConsent,
         handleDiscordBrowserCancel,
+        logRequest,
+    });
+    registerAccountIncidentRoutes({
+        app,
+        normalizePathname,
+        handleAccountIncidentsRequest,
+        handleAccountIncidentRequest,
+        handleAccountIncidentClaimRequest,
         logRequest,
     });
     registerIncidentRoutes({

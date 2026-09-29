@@ -17,6 +17,10 @@ import {
 } from './client.js';
 import { createAccountAuthApi, type AccountAuthApi } from './accountAuth.js';
 import {
+    createAccountIncidentApi,
+    type AccountIncidentApi,
+} from './accountIncidents.js';
+import {
     createIncidentApi,
     type CreateIncidentApiOptions,
     type IncidentApi,
@@ -126,7 +130,8 @@ export type WebApiClient = {
     requestJson: ApiRequester;
     chatQuestion: ChatApi['chatQuestion'];
 } & WebReadApi &
-    AccountAuthApi;
+    AccountAuthApi &
+    AccountIncidentApi;
 
 export const createWebApiClient = ({
     baseUrl,
@@ -144,18 +149,21 @@ export const createWebApiClient = ({
     const chatApi = createChatApi(requestJson);
     const webReadApi = createWebReadApi(requestJson);
     const accountAuthApi = createAccountAuthApi(requestJson);
+    const accountIncidentApi = createAccountIncidentApi(requestJson);
 
     return {
         requestJson,
         chatQuestion: chatApi.chatQuestion,
         ...webReadApi,
         ...accountAuthApi,
+        ...accountIncidentApi,
     };
 };
 
 export { createApiTransport, isApiClientError };
 export {
     createAccountAuthApi,
+    createAccountIncidentApi,
     createDiscordAccountApi,
     createChatApi,
     createIncidentApi,
@@ -168,6 +176,7 @@ export {
 };
 export type {
     AccountAuthApi,
+    AccountIncidentApi,
     DiscordAccountApi,
     ApiClientError,
     ApiErrorResponse,

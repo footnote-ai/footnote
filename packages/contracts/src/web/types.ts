@@ -181,6 +181,35 @@ export type PostIncidentReportResponse = {
     remediation: {
         state: 'pending';
     };
+    claimCode: string;
+};
+
+/** Reporter-safe status shown to the signed-in account holder. */
+export type ReporterIncidentSummary = {
+    incidentId: string;
+    status: IncidentStatus;
+    createdAt: string;
+    updatedAt: string;
+};
+
+/** @api.operationId: getAccountIncidents @api.path: GET /api/account/incidents */
+export type GetAccountIncidentsResponse = {
+    incidents: ReporterIncidentSummary[];
+};
+
+/** @api.operationId: getAccountIncident @api.path: GET /api/account/incidents/{incidentId} */
+export type GetAccountIncidentResponse = {
+    incident: ReporterIncidentSummary;
+};
+
+/** @api.operationId: postAccountIncidentClaim @api.path: POST /api/account/incidents/claim */
+export type PostAccountIncidentClaimRequest = {
+    claimCode: string;
+};
+
+/** @api.operationId: postAccountIncidentClaim @api.path: POST /api/account/incidents/claim */
+export type PostAccountIncidentClaimResponse = {
+    success: true;
 };
 
 /**

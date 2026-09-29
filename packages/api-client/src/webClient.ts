@@ -18,6 +18,10 @@ import {
 } from './client.js';
 import { createAccountAuthApi, type AccountAuthApi } from './accountAuth.js';
 import {
+    createAccountIncidentApi,
+    type AccountIncidentApi,
+} from './accountIncidents.js';
+import {
     createChatApi,
     type ChatApi,
     type ChatQuestionOptions,
@@ -38,7 +42,8 @@ export type WebApiClient = {
     requestJson: ApiRequester;
     chatQuestion: ChatApi['chatQuestion'];
 } & WebReadApi &
-    AccountAuthApi;
+    AccountAuthApi &
+    AccountIncidentApi;
 
 /**
  * @description: Creates the web API boundary client and wires `createApiTransport`, `createChatApi`, and `createWebReadApi`.
@@ -63,19 +68,27 @@ export const createWebApiClient = ({
     const chatApi = createChatApi(requestJson, { traceApiToken });
     const webReadApi = createWebReadApi(requestJson);
     const accountAuthApi = createAccountAuthApi(requestJson);
+    const accountIncidentApi = createAccountIncidentApi(requestJson);
 
     return {
         requestJson,
         chatQuestion: chatApi.chatQuestion,
         ...webReadApi,
         ...accountAuthApi,
+        ...accountIncidentApi,
     };
 };
 
 export { createApiTransport, isApiClientError };
-export { createAccountAuthApi, createChatApi, createWebReadApi };
+export {
+    createAccountAuthApi,
+    createAccountIncidentApi,
+    createChatApi,
+    createWebReadApi,
+};
 export type {
     AccountAuthApi,
+    AccountIncidentApi,
     ApiClientError,
     ApiErrorResponse,
     ApiJsonResult,

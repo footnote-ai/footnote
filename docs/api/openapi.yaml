@@ -445,9 +445,10 @@ paths:
                 - packages/api-client/src/incidents.ts#reportIncident
                 - packages/contracts/src/web/types.ts#PostIncidentReportRequest
                 - packages/contracts/src/web/types.ts#PostIncidentReportResponse
+                - packages/contracts/src/web/schemas.ts#PostIncidentReportResponseSchema
             summary: Create an incident report
             description: |
-                Trusted internal endpoint for Discord-driven incident reports.
+                Trusted internal endpoint for Discord-driven incident reports. Returns a one-time, 30-day claim code to the trusted bot; only its hash is persisted, and the code is shown privately to the reporter for a later explicit association.
                 Accepts raw Discord resource identifiers from the bot and persists only pseudonymized pointers.
                 Requires either `x-service-token` or `x-trace-token`.
                 Intended for trusted internal callers; normal internal service rate limits still apply.
@@ -1370,6 +1371,109 @@ paths:
                 '503':
                     $ref: '#/components/responses/ServiceUnavailable'
 
+    /api/account/incidents:
+        get:
+            operationId: getAccountIncidents
+            x-codeRefs:
+                - packages/backend/src/handlers/accountIncidents.ts#handleAccountIncidentsRequest
+                - packages/api-client/src/accountIncidents.ts#getAccountIncidents
+                - packages/web/src/utils/api.ts#getAccountIncidents
+                - packages/contracts/src/web/types.ts#GetAccountIncidentsResponse
+                - packages/contracts/src/web/schemas.ts#GetAccountIncidentsResponseSchema
+            summary: List reports associated with the signed-in account
+            tags:
+                - Accounts
+            security:
+                - AccountSessionCookie: []
+            responses:
+                '200':
+                    description: Reporter-safe incident summaries only
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/AccountIncidentListResponse'
+                '401':
+                    $ref: '#/components/responses/Unauthorized'
+                '503':
+                    $ref: '#/components/responses/ServiceUnavailable'
+
+    /api/account/incidents/{incidentId}:
+        get:
+            operationId: getAccountIncident
+            x-codeRefs:
+                - packages/backend/src/handlers/accountIncidents.ts#handleAccountIncidentRequest
+                - packages/api-client/src/accountIncidents.ts#getAccountIncident
+                - packages/web/src/utils/api.ts#getAccountIncident
+                - packages/contracts/src/web/types.ts#GetAccountIncidentResponse
+                - packages/contracts/src/web/schemas.ts#GetAccountIncidentResponseSchema
+            summary: Open a report associated with the signed-in account
+            tags:
+                - Accounts
+            security:
+                - AccountSessionCookie: []
+            parameters:
+                - name: incidentId
+                  in: path
+                  required: true
+                  schema:
+                      type: string
+            responses:
+                '200':
+                    description: Reporter-safe incident status only
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/AccountIncidentResponse'
+                '401':
+                    $ref: '#/components/responses/Unauthorized'
+                '404':
+                    $ref: '#/components/responses/NotFound'
+                '503':
+                    $ref: '#/components/responses/ServiceUnavailable'
+
+    /api/account/incidents/claim:
+        post:
+            operationId: postAccountIncidentClaim
+            x-codeRefs:
+                - packages/backend/src/handlers/accountIncidents.ts#handleAccountIncidentClaimRequest
+                - packages/api-client/src/accountIncidents.ts#claimIncident
+                - packages/web/src/utils/api.ts#claimIncident
+                - packages/contracts/src/web/types.ts#PostAccountIncidentClaimRequest
+                - packages/contracts/src/web/types.ts#PostAccountIncidentClaimResponse
+                - packages/contracts/src/web/schemas.ts#PostAccountIncidentClaimRequestSchema
+                - packages/contracts/src/web/types.ts#PostAccountIncidentClaimResponse
+            summary: Explicitly associate a report with the signed-in account
+            description: Requires the account session cookie and its CSRF header. Invalid, expired, and already-associated-by-another-account codes have the same response.
+            tags:
+                - Accounts
+            security:
+                - AccountSessionCookie: []
+            parameters:
+                - $ref: '#/components/parameters/AuthCsrfHeader'
+            requestBody:
+                required: true
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/AccountIncidentClaimRequest'
+            responses:
+                '200':
+                    description: Report associated, or already associated with this account
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/AccountIncidentClaimResponse'
+                '400':
+                    $ref: '#/components/responses/BadRequest'
+                '401':
+                    $ref: '#/components/responses/Unauthorized'
+                '403':
+                    $ref: '#/components/responses/Forbidden'
+                '404':
+                    $ref: '#/components/responses/NotFound'
+                '503':
+                    $ref: '#/components/responses/ServiceUnavailable'
+
     /api/admin/settings/template:
         get:
             operationId: getAdminSettingsTemplate
@@ -1873,9 +1977,15 @@ components:
                     required:
                         - state
                     additionalProperties: false
+                claimCode:
+                    type: string
+                    description: One-time 256-bit claim code, valid for 30 days; returned only to the trusted reporting bot and not stored in plaintext.
+                    minLength: 43
+                    maxLength: 43
             required:
                 - incident
                 - remediation
+                - claimCode
             additionalProperties: false
             example:
                 incident:
@@ -1906,6 +2016,55 @@ components:
                           createdAt: '2026-03-13T17:00:00.000Z'
                 remediation:
                     state: pending
+                claimCode: 'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA'
+        ReporterIncidentSummary:
+            type: object
+            properties:
+                incidentId:
+                    type: string
+                status:
+                    $ref: '#/components/schemas/IncidentStatus'
+                createdAt:
+                    type: string
+                    format: date-time
+                updatedAt:
+                    type: string
+                    format: date-time
+            required: [incidentId, status, createdAt, updatedAt]
+            additionalProperties: false
+        AccountIncidentListResponse:
+            type: object
+            properties:
+                incidents:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/ReporterIncidentSummary'
+            required: [incidents]
+            additionalProperties: false
+        AccountIncidentResponse:
+            type: object
+            properties:
+                incident:
+                    $ref: '#/components/schemas/ReporterIncidentSummary'
+            required: [incident]
+            additionalProperties: false
+        AccountIncidentClaimRequest:
+            type: object
+            properties:
+                claimCode:
+                    type: string
+                    minLength: 43
+                    maxLength: 43
+            required: [claimCode]
+            additionalProperties: false
+        AccountIncidentClaimResponse:
+            type: object
+            properties:
+                success:
+                    type: boolean
+                    enum: [true]
+            required: [success]
+            additionalProperties: false
 
         IncidentListResponse:
             type: object

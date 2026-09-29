@@ -181,3 +181,87 @@ test('SqliteIncidentStore rolls back status changes when the audit append fails'
         await fs.rm(tempRoot, { recursive: true, force: true });
     }
 });
+
+test('incident claim capabilities expire and associate once without disclosing other accounts', async () => {
+    const tempRoot = await fs.mkdtemp(
+        path.join(os.tmpdir(), 'incident-store-')
+    );
+    const store = new SqliteIncidentStore({
+        dbPath: path.join(tempRoot, 'incidents.db'),
+        pseudonymizationSecret: SECRET,
+    });
+
+    try {
+        const incident = await store.createIncidentWithAudit({
+            incident: { consentedAt: new Date().toISOString() },
+            auditEvent: { action: 'incident.created' },
+            association: {
+                capabilityHash: 'hashed-capability',
+                expiresAt: '2026-10-01T00:00:00.000Z',
+            },
+        });
+
+        assert.equal(
+            await store.associateIncident(
+                'hashed-capability',
+                'account-a',
+                '2026-09-30T00:00:00.000Z'
+            ),
+            'associated'
+        );
+        assert.equal(
+            await store.associateIncident(
+                'hashed-capability',
+                'account-a',
+                '2026-09-30T00:01:00.000Z'
+            ),
+            'already-associated'
+        );
+        assert.equal(
+            await store.associateIncident(
+                'hashed-capability',
+                'account-b',
+                '2026-09-30T00:01:00.000Z'
+            ),
+            'unavailable'
+        );
+        assert.equal(
+            await store.associateIncident(
+                'hashed-capability',
+                'account-a',
+                '2026-10-01T00:00:00.000Z'
+            ),
+            'already-associated'
+        );
+        assert.deepEqual(await store.listAssociatedIncidents('account-a'), [
+            {
+                incidentId: incident.shortId,
+                status: 'new',
+                createdAt: incident.createdAt,
+                updatedAt: incident.updatedAt,
+            },
+        ]);
+        assert.deepEqual(await store.listAssociatedIncidents('account-b'), []);
+
+        const expired = await store.createIncidentWithAudit({
+            incident: { consentedAt: new Date().toISOString() },
+            auditEvent: { action: 'incident.created' },
+            association: {
+                capabilityHash: 'expired-capability',
+                expiresAt: '2026-09-30T00:00:00.000Z',
+            },
+        });
+        assert.ok(expired.shortId);
+        assert.equal(
+            await store.associateIncident(
+                'expired-capability',
+                'account-a',
+                '2026-10-01T00:00:00.000Z'
+            ),
+            'unavailable'
+        );
+    } finally {
+        store.close();
+        await fs.rm(tempRoot, { recursive: true, force: true });
+    }
+});

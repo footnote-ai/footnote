@@ -14,6 +14,14 @@ import { createExpressApp } from '../src/http/expressApp.js';
 
 const TEST_HOST = '127.0.0.1';
 
+const createUnhandledRouteHandler = async (
+    _req: http.IncomingMessage,
+    res: http.ServerResponse
+): Promise<void> => {
+    res.statusCode = 501;
+    res.end('not-implemented');
+};
+
 const createTestServer = (
     app: ReturnType<typeof createExpressApp>
 ): Promise<{
@@ -70,6 +78,10 @@ test('public routes are Express-owned and bypass central /api dispatch while pre
         handleIncidentNotesRequest: async () => undefined,
         handleIncidentRemediationRequest: async () => undefined,
         handleIncidentDetailRequest: async () => undefined,
+        handleAccountIncidentsRequest: createUnhandledRouteHandler,
+        handleAccountIncidentRequest: async (req, res) =>
+            createUnhandledRouteHandler(req, res),
+        handleAccountIncidentClaimRequest: createUnhandledRouteHandler,
         handleChatRequest: async (_req, res) => {
             handledPaths.push('/api/chat');
             res.statusCode = 200;

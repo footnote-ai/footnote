@@ -51,8 +51,12 @@ import { createRuntimeConfigHandler } from './handlers/config.js';
 import { createAdminSettingsHandlers } from './handlers/adminSettings.js';
 import { createSetupSessionHandlers } from './handlers/setupSession.js';
 import { createAccountAuthHandlers } from './handlers/accountAuth.js';
+import { createAccountIncidentHandlers } from './handlers/accountIncidents.js';
 import { createDiscordAccountConnectionHandlers } from './handlers/discordAccountConnection.js';
-import { createIncidentService } from './services/incidents.js';
+import {
+    createIncidentService,
+    type IncidentService,
+} from './services/incidents.js';
 import { createIncidentAlertRouter } from './services/incidentAlerts.js';
 import {
     createInternalImageDescriptionTaskService,
@@ -527,12 +531,14 @@ let handleIncidentRemediationRequest: (
     res: http.ServerResponse,
     parsedUrl: URL
 ) => Promise<void>;
+let incidentService: IncidentService | null = null;
 
 if (incidentStore) {
-    const incidentService = createIncidentService({
+    const service = createIncidentService({
         incidentStore,
         alertRouter: incidentAlertRouter,
     });
+    incidentService = service;
     ({
         handleIncidentReportRequest,
         handleIncidentListRequest,
@@ -541,7 +547,7 @@ if (incidentStore) {
         handleIncidentNotesRequest,
         handleIncidentRemediationRequest,
     } = createIncidentHandlers({
-        incidentService,
+        incidentService: service,
         logRequest,
         maxIncidentBodyBytes: runtimeConfig.reflect.maxBodyBytes,
         traceApiToken: runtimeConfig.trace.apiToken,
@@ -605,6 +611,15 @@ const accountAuthService = createAccountAuthService({
     administratorIdentityKeys: runtimeConfig.accountAuth.enabled
         ? new Set(runtimeConfig.accountAuth.administratorIdentityKeys)
         : undefined,
+});
+const {
+    handleAccountIncidentsRequest,
+    handleAccountIncidentRequest,
+    handleAccountIncidentClaimRequest,
+} = createAccountIncidentHandlers({
+    accountAuthService,
+    incidentService,
+    logRequest,
 });
 
 const handleRuntimeConfigRequest = createRuntimeConfigHandler({
@@ -776,6 +791,9 @@ const app = createExpressApp({
     handleIncidentNotesRequest,
     handleIncidentRemediationRequest,
     handleIncidentDetailRequest,
+    handleAccountIncidentsRequest,
+    handleAccountIncidentRequest,
+    handleAccountIncidentClaimRequest,
     handleChatRequest,
     handleInternalTextRequest,
     handleInternalImageRequest,

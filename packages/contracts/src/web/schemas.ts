@@ -2802,7 +2802,46 @@ export const PostIncidentReportResponseSchema = z
                 state: z.literal('pending'),
             })
             .strict(),
+        claimCode: z
+            .string()
+            .length(43)
+            .regex(/^[A-Za-z0-9_-]+$/),
     })
+    .strict();
+
+/** @api.operationId: getAccountIncidents @api.path: GET /api/account/incidents */
+export const ReporterIncidentSummarySchema = z
+    .object({
+        incidentId: z.string().min(1),
+        status: IncidentStatusSchema,
+        createdAt: z.string().datetime(),
+        updatedAt: z.string().datetime(),
+    })
+    .strict();
+
+/** @api.operationId: getAccountIncidents @api.path: GET /api/account/incidents */
+export const GetAccountIncidentsResponseSchema = z
+    .object({ incidents: z.array(ReporterIncidentSummarySchema) })
+    .strict();
+
+/** @api.operationId: getAccountIncident @api.path: GET /api/account/incidents/{incidentId} */
+export const GetAccountIncidentResponseSchema = z
+    .object({ incident: ReporterIncidentSummarySchema })
+    .strict();
+
+/** @api.operationId: postAccountIncidentClaim @api.path: POST /api/account/incidents/claim */
+export const PostAccountIncidentClaimRequestSchema = z
+    .object({
+        claimCode: z
+            .string()
+            .length(43)
+            .regex(/^[A-Za-z0-9_-]+$/),
+    })
+    .strict();
+
+/** @api.operationId: postAccountIncidentClaim @api.path: POST /api/account/incidents/claim */
+export const PostAccountIncidentClaimResponseSchema = z
+    .object({ success: z.literal(true) })
     .strict();
 
 /**

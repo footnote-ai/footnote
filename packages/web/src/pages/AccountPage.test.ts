@@ -49,6 +49,14 @@ test('account page uses typed session APIs and exposes all public states', async
     assert.match(source, /getAuthSession\(controller\.signal\)/);
     assert.match(source, /controller\.abort\(\)/);
     assert.match(source, /logoutAccount\(session\.csrfToken\)/);
+    assert.match(source, /getAccountIncidents\(controller\.signal\)/);
+    assert.match(source, /getAccountIncident\(incidentId\)/);
+    assert.match(
+        source,
+        /claimIncident\(claimCode\.trim\(\), session\.csrfToken\)/
+    );
+    assert.match(source, /Report added to your account/);
+    assert.match(source, /View report/);
     assert.match(source, /Loading account…/);
     assert.match(source, /Sign-in is unavailable/);
     assert.match(source, /Signed out/);

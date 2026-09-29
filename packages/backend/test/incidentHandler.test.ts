@@ -133,10 +133,13 @@ test('incident report/list/detail flow stores pseudonymized pointers and omits j
         );
 
         assert.equal(reportResponse.status, 200);
+        assert.equal(reportResponse.headers.get('cache-control'), 'no-store');
         const reportPayload = (await reportResponse.json()) as {
             incident: { incidentId: string; remediation: { state: string } };
             remediation: { state: string };
+            claimCode: string;
         };
+        assert.match(reportPayload.claimCode, /^[A-Za-z0-9_-]{43}$/);
         assert.equal(reportPayload.remediation.state, 'pending');
         assert.equal(reportPayload.incident.remediation.state, 'pending');
 
@@ -355,6 +358,12 @@ test('incident handlers reject missing auth and return 404 for unknown incidents
     try {
         const missingAuthResponse = await fetch(`${server.url}/api/incidents`);
         assert.equal(missingAuthResponse.status, 401);
+
+        const unauthenticatedReportResponse = await fetch(
+            `${server.url}/api/incidents/report`,
+            { method: 'POST' }
+        );
+        assert.equal(unauthenticatedReportResponse.status, 401);
 
         const invalidAuthResponse = await fetch(`${server.url}/api/incidents`, {
             headers: {
@@ -611,8 +620,7 @@ test('incident lifecycle emits structured created, updated, and resolved logs wi
     assert.ok(updatedLogs.length >= 2);
     for (const updatedLog of updatedLogs) {
         const updatedPayload = updatedLog.payload as
-            | { correlation?: { responseId?: string | null } }
-            | undefined;
+            { correlation?: { responseId?: string | null } } | undefined;
         assert.equal(
             Object.prototype.hasOwnProperty.call(
                 updatedPayload?.correlation ?? {},

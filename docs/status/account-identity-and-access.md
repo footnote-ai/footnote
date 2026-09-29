@@ -85,6 +85,15 @@ This stage does not add memory, saved conversations, inferred profiles,
 uploads, preferences, export, deletion, or account merging. Follow-on work is
 ordered in issue #525.
 
+### Incident reports
+
+An account association lets its holder see only the report's ID, status, and
+submitted/updated times. The incident remains an operational record; claiming
+it does not grant review powers or make its notes part of account data. Export
+work (#523) should include the association and this reporter-safe view. Account
+deletion (#524) should detach the association while leaving the incident under
+its existing incident-retention rules. Unclaimed reports remain anonymous.
+
 ## Work sequence
 
 1. #455 — provider-neutral OIDC sign-in (delivered)

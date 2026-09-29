@@ -188,6 +188,11 @@ export type {
  * @api.path: POST /api/incidents/{incidentId}/remediation
  */
 export type {
+    GetAccountIncidentsResponse,
+    GetAccountIncidentResponse,
+    PostAccountIncidentClaimRequest,
+    PostAccountIncidentClaimResponse,
+    ReporterIncidentSummary,
     IncidentAuditAction,
     IncidentAuditEvent,
     IncidentDetail,
@@ -264,6 +269,11 @@ export {
     AdminSettingsValidationErrorSchema,
     AdminSettingsValidationFailureResponseSchema,
     GetAdminSettingsSchemaResponseSchema,
+    GetAccountIncidentsResponseSchema,
+    GetAccountIncidentResponseSchema,
+    PostAccountIncidentClaimRequestSchema,
+    PostAccountIncidentClaimResponseSchema,
+    ReporterIncidentSummarySchema,
     PostAdminSettingsValidateRequestSchema,
     PostAdminSettingsValidateResponseSchema,
     PutAdminSettingsYamlResponseSchema,

@@ -6,9 +6,17 @@
  * @footnote-ethics: high - Identity display and logout controls affect user privacy and account agency.
  */
 
-import { useEffect, useRef, useState, type ComponentRef } from 'react';
+import {
+    useEffect,
+    useRef,
+    useState,
+    type ComponentRef,
+    type FormEvent,
+} from 'react';
 import type {
     DiscordConnectionStateResponse,
+    GetAccountIncidentResponse,
+    GetAccountIncidentsResponse,
     GetAuthSessionResponse,
 } from '@footnote/contracts/web';
 import PublicPageLayout from '@components/PublicPageLayout';
@@ -18,7 +26,10 @@ import {
     consentDiscordConnection,
     exchangeDiscordConnection,
     getAuthSession,
+    getAccountIncident,
+    getAccountIncidents,
     getDiscordConnectionState,
+    claimIncident,
     logoutAccount,
 } from '../utils/api';
 
@@ -28,6 +39,10 @@ type SessionState =
     | { status: 'error' };
 
 type LogoutState = 'idle' | 'submitting' | 'error';
+type AccountIncidentsState =
+    | { status: 'loading' }
+    | { status: 'ready'; incidents: GetAccountIncidentsResponse['incidents'] }
+    | { status: 'error' };
 type ConnectionState =
     | { status: 'loading' }
     | {
@@ -59,6 +74,18 @@ const AccountPage = (): JSX.Element => {
     const [connectionState, setConnectionState] = useState<ConnectionState>({
         status: 'loading',
     });
+    const [incidentsState, setIncidentsState] = useState<AccountIncidentsState>(
+        { status: 'loading' }
+    );
+    const [claimCode, setClaimCode] = useState('');
+    const [claimMessage, setClaimMessage] = useState('');
+    const [incidentReloadKey, setIncidentReloadKey] = useState(0);
+    const [selectedIncident, setSelectedIncident] = useState<
+        GetAccountIncidentResponse['incident'] | null
+    >(null);
+    const [openingIncidentId, setOpeningIncidentId] = useState<string | null>(
+        null
+    );
     const [showCallbackFailure] = useState(hasAuthFailureMarker);
     const accountStatusHeadingRef = useRef<ComponentRef<'h2'>>(null);
     const focusAfterLogoutRef = useRef(false);
@@ -90,6 +117,33 @@ const AccountPage = (): JSX.Element => {
             controller.abort();
         };
     }, [reloadKey]);
+
+    useEffect(() => {
+        if (
+            sessionState.status !== 'ready' ||
+            !sessionState.session.enabled ||
+            !sessionState.session.authenticated
+        ) {
+            setIncidentsState({ status: 'ready', incidents: [] });
+            return;
+        }
+        const controller = new AbortController();
+        setIncidentsState({ status: 'loading' });
+        void getAccountIncidents(controller.signal)
+            .then((result) => {
+                if (!controller.signal.aborted) {
+                    setIncidentsState({
+                        status: 'ready',
+                        incidents: result.incidents,
+                    });
+                }
+            })
+            .catch(() => {
+                if (!controller.signal.aborted)
+                    setIncidentsState({ status: 'error' });
+            });
+        return (): void => controller.abort();
+    }, [sessionState, incidentReloadKey]);
 
     useEffect(() => {
         if (connectionEffectStartedRef.current) return;
@@ -174,6 +228,40 @@ const AccountPage = (): JSX.Element => {
             setLogoutState('idle');
         } catch {
             setLogoutState('error');
+        }
+    };
+
+    const handleClaimIncident = async (
+        event: FormEvent<HTMLFormElement>,
+        session: Extract<
+            GetAuthSessionResponse,
+            { enabled: true; authenticated: true }
+        >
+    ): Promise<void> => {
+        event.preventDefault();
+        setClaimMessage('');
+        try {
+            await claimIncident(claimCode.trim(), session.csrfToken);
+            setClaimCode('');
+            setClaimMessage('Report added to your account.');
+            setIncidentReloadKey((value) => value + 1);
+        } catch {
+            setClaimMessage(
+                'That claim code is invalid, expired, or already used.'
+            );
+        }
+    };
+
+    const handleOpenIncident = async (incidentId: string): Promise<void> => {
+        setOpeningIncidentId(incidentId);
+        setSelectedIncident(null);
+        try {
+            const response = await getAccountIncident(incidentId);
+            setSelectedIncident(response.incident);
+        } catch {
+            setClaimMessage('That report could not be opened.');
+        } finally {
+            setOpeningIncidentId(null);
         }
     };
 
@@ -383,6 +471,128 @@ const AccountPage = (): JSX.Element => {
         );
     };
 
+    const renderAccountIncidents = (): JSX.Element | null => {
+        if (sessionState.status !== 'ready' || !sessionState.session.enabled) {
+            return null;
+        }
+        if (!sessionState.session.authenticated) {
+            return (
+                <section
+                    className="account-card account-card__stack"
+                    aria-labelledby="account-incidents-heading"
+                >
+                    <h2 id="account-incidents-heading">Your reports</h2>
+                    <p>
+                        Sign in to add a report to your account or check its
+                        status.
+                    </p>
+                    <a
+                        className="account-card__button account-card__button--primary"
+                        href="/api/auth/login"
+                    >
+                        Sign in
+                    </a>
+                </section>
+            );
+        }
+        const session = sessionState.session;
+        return (
+            <section
+                className="account-card account-card__stack"
+                aria-labelledby="account-incidents-heading"
+            >
+                <h2 id="account-incidents-heading">Your reports</h2>
+                <p>Enter the claim code shown after you submitted a report.</p>
+                <form
+                    onSubmit={(event) =>
+                        void handleClaimIncident(event, session)
+                    }
+                >
+                    <label htmlFor="incident-claim-code">Claim code</label>
+                    <input
+                        id="incident-claim-code"
+                        autoComplete="off"
+                        value={claimCode}
+                        onChange={(event) => setClaimCode(event.target.value)}
+                    />
+                    <button
+                        className="account-card__button account-card__button--primary"
+                        type="submit"
+                        disabled={!claimCode.trim()}
+                    >
+                        Add report
+                    </button>
+                </form>
+                {claimMessage ? <p role="status">{claimMessage}</p> : null}
+                {incidentsState.status === 'loading' ? (
+                    <p role="status">Loading reports…</p>
+                ) : null}
+                {incidentsState.status === 'error' ? (
+                    <p className="account-card__error" role="alert">
+                        Reports could not be loaded. Please try again.
+                    </p>
+                ) : null}
+                {incidentsState.status === 'ready' &&
+                incidentsState.incidents.length === 0 ? (
+                    <p>No reports are linked to this account.</p>
+                ) : null}
+                {incidentsState.status === 'ready' &&
+                incidentsState.incidents.length > 0 ? (
+                    <ul>
+                        {incidentsState.incidents.map((incident) => (
+                            <li key={incident.incidentId}>
+                                <button
+                                    className="account-card__button"
+                                    type="button"
+                                    onClick={() =>
+                                        void handleOpenIncident(
+                                            incident.incidentId
+                                        )
+                                    }
+                                    disabled={
+                                        openingIncidentId ===
+                                        incident.incidentId
+                                    }
+                                >
+                                    {openingIncidentId === incident.incidentId
+                                        ? 'Loading report…'
+                                        : `View report ${incident.incidentId}`}
+                                </button>
+                            </li>
+                        ))}
+                    </ul>
+                ) : null}
+                {selectedIncident ? (
+                    <article
+                        aria-label={`Report ${selectedIncident.incidentId}`}
+                    >
+                        <h3>Report {selectedIncident.incidentId}</h3>
+                        <p>
+                            Status:{' '}
+                            {selectedIncident.status.replaceAll('_', ' ')}
+                        </p>
+                        <p>
+                            Submitted{' '}
+                            <time dateTime={selectedIncident.createdAt}>
+                                {new Date(
+                                    selectedIncident.createdAt
+                                ).toLocaleString()}
+                            </time>
+                        </p>
+                        <p>
+                            Updated{' '}
+                            <time dateTime={selectedIncident.updatedAt}>
+                                {new Date(
+                                    selectedIncident.updatedAt
+                                ).toLocaleString()}
+                            </time>
+                        </p>
+                    </article>
+                ) : null}
+            </section>
+        );
+    };
+
     return (
         <PublicPageLayout>
             <main id="main-content" className="public-page__main account-page">
@@ -402,6 +612,7 @@ const AccountPage = (): JSX.Element => {
                     <div className="account-card" aria-live="polite">
                         {renderSessionState()}
                     </div>
+                    {renderAccountIncidents()}
                     {connectionState.status === 'ready' &&
                     connectionState.state === 'none' ? null : (
                         <section

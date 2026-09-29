@@ -102,6 +102,10 @@ test('incident routes are handled in Express with explicit precedence and no spe
             res.statusCode = 200;
             res.end('detail');
         },
+        handleAccountIncidentsRequest: createUnhandledRouteHandler,
+        handleAccountIncidentRequest: async (req, res) =>
+            createUnhandledRouteHandler(req, res),
+        handleAccountIncidentClaimRequest: createUnhandledRouteHandler,
         handleChatRequest: async (_req, res) => {
             res.statusCode = 200;
             res.end('chat');
