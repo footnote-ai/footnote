@@ -899,6 +899,7 @@ const createValidWorkflowMetadataPayload = (
         stepCount: 2,
         maxSteps: 5,
         maxDurationMs: 15000,
+        userMemory: { includedItemCount: 2 },
         effectiveLimits: [
             {
                 key: 'maxWorkflowSteps',
@@ -992,6 +993,36 @@ test('ResponseMetadataSchema accepts workflow lineage metadata', () => {
     );
 
     assert.equal(parsed.success, true);
+});
+
+test('workflow memory provenance permits only a bounded count', () => {
+    const now = new Date().toISOString();
+    const payload = createValidWorkflowMetadataPayload(now);
+    const workflow = payload.workflow;
+    assert.ok(workflow);
+    assert.equal(
+        ResponseMetadataSchema.safeParse({
+            ...payload,
+            workflow: {
+                ...workflow,
+                userMemory: { includedItemCount: 11 },
+            },
+        }).success,
+        false
+    );
+    assert.equal(
+        ResponseMetadataSchema.safeParse({
+            ...payload,
+            workflow: {
+                ...workflow,
+                userMemory: {
+                    includedItemCount: 1,
+                    text: 'PRIVATE_MEMORY_SENTINEL',
+                },
+            },
+        }).success,
+        false
+    );
 });
 
 test('ResponseMetadataSchema accepts a presentation receipt separately from workflow steps', () => {

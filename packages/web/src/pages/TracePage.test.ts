@@ -44,3 +44,11 @@ test('trace page makes partial provenance explicit', async () => {
         /Some stored citations are unavailable and were omitted/
     );
 });
+
+test('trace summary shows included user memory separately from sources', async () => {
+    const source = await readFile(tracePagePath, 'utf8');
+
+    assert.match(source, /label: 'User-saved memory'/);
+    assert.match(source, /includedItemCount/);
+    assert.match(source, /Advisory personalization context only/);
+});

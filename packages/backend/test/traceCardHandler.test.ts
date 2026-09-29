@@ -114,6 +114,11 @@ const createTestServer = async (
             return;
         }
 
+        if (/^\/api\/traces\/[^/]+\/?$/u.test(parsedUrl.pathname)) {
+            void handlers.handleTraceRequest(req, res, parsedUrl);
+            return;
+        }
+
         res.statusCode = 404;
         res.end();
     });
@@ -144,6 +149,53 @@ const createTestServer = async (
         },
     };
 };
+
+test('public GET trace returns the inclusion count without private memory text', async () => {
+    const server = await createTestServer();
+    const responseId = 'user-memory-trace-safe-summary';
+    const metadata: ResponseMetadata = {
+        responseId,
+        provenance: 'Inferred',
+        safetyTier: 'Low',
+        tradeoffCount: 0,
+        chainHash: 'trace_hash',
+        licenseContext: 'Trace test',
+        modelVersion: 'gpt-5-mini',
+        staleAfter: new Date(Date.now() + 60_000).toISOString(),
+        citations: [],
+        trace_target: {},
+        trace_final: {},
+        workflow: {
+            workflowId: 'wf_memory_trace',
+            workflowName: 'message_reviewed',
+            status: 'completed',
+            terminationReason: 'goal_satisfied',
+            stepCount: 0,
+            maxSteps: 8,
+            maxDurationMs: 70_000,
+            userMemory: { includedItemCount: 2 },
+            steps: [],
+        },
+    };
+
+    try {
+        await server.store.upsert(metadata);
+        const response = await fetch(`${server.url}/api/traces/${responseId}`);
+        const body = (await response.json()) as {
+            workflow?: { userMemory?: { includedItemCount?: number } };
+        };
+
+        assert.equal(response.status, 200);
+        assert.equal(body.workflow?.userMemory?.includedItemCount, 2);
+        assert.equal(
+            JSON.stringify(body).includes('PRIVATE_MEMORY_SENTINEL'),
+            false
+        );
+    } finally {
+        await server.close();
+        await server.cleanup();
+    }
+});
 
 test('trace rate limits ignore forged proxy headers from direct Fly traffic', async () => {
     const server = await createTestServer(undefined, {

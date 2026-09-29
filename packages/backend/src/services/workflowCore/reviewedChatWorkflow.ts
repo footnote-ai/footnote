@@ -591,6 +591,7 @@ const buildWorkflowLineage = (input: {
     workflow: Workflow;
     workflowName: string;
     maxDurationMs: number;
+    advisoryUserMemoryCount?: number;
     executionLimits: ExecutionLimits;
     workflowPolicy: WorkflowRunPolicy;
     terminationReason: WorkflowTerminationReason;
@@ -851,6 +852,19 @@ const buildWorkflowLineage = (input: {
         stepCount: records.length,
         maxSteps: input.executionLimits.maxWorkflowSteps,
         maxDurationMs: input.maxDurationMs,
+        ...(input.advisoryUserMemoryCount === undefined ||
+        input.advisoryUserMemoryCount <= 0 ||
+        !records.some(
+            (step) =>
+                step.stepKind === 'generate' &&
+                step.attempts?.some((attempt) => attempt.status === 'succeeded')
+        )
+            ? {}
+            : {
+                  userMemory: {
+                      includedItemCount: input.advisoryUserMemoryCount,
+                  },
+              }),
         effectiveLimits: resolveExecutionLimits({
             limits: input.executionLimits,
             policy: input.workflowPolicy,
@@ -3353,6 +3367,7 @@ export const runBoundedReviewWorkflow = async (
         workflow,
         workflowName: workflowConfig.workflowName,
         maxDurationMs: executionLimits.maxDurationMs,
+        advisoryUserMemoryCount: input.advisoryUserMemories?.length,
         executionLimits,
         workflowPolicy,
         terminationReason,

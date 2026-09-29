@@ -1084,6 +1084,8 @@ export type WorkflowRecord = {
     effectiveLimits?: WorkflowEffectiveLimit[];
     limitStop?: WorkflowLimitStop;
     results?: WorkflowResultRecord[];
+    /** Coarse receipt for successful generation only; excludes memory text and account identity. */
+    userMemory?: { includedItemCount: number };
     steps: StepRecord[];
 };
 
