@@ -181,6 +181,8 @@ export type RunBoundedReviewWorkflowInput = {
     generationRequest: GenerationRequest;
     messagesWithHints: RuntimeMessage[];
     contextEnvelope: ConversationContextEnvelope;
+    /** Explicit user-saved context from the backend account resolver, never request body identity. */
+    advisoryUserMemories?: readonly string[];
     generationStartedAtMs: number;
     workflowConfig: ReviewWorkflowRuntimeConfig;
     workflowPolicy: WorkflowRunPolicy;
@@ -1480,6 +1482,7 @@ export const runBoundedReviewWorkflow = async (
                 initialContextRequests,
                 continuation?.contextStepRequests
             ),
+            advisoryUserMemories: input.advisoryUserMemories,
             openAiNativeSearchFromHintsEnabled:
                 input.openAiNativeSearchFromHintsEnabled,
         });
