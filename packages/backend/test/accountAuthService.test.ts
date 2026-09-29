@@ -402,3 +402,98 @@ test('clearing a session is idempotent', async () => {
     assert.equal(service.clearSession(completed.session.sessionId), true);
     assert.equal(service.clearSession(completed.session.sessionId), false);
 });
+
+test('invalidating an account removes all its sessions but not other accounts', async () => {
+    let tokenIndex = 0;
+    const providerOptions: { callbackPrincipal?: typeof principal } = {
+        callbackPrincipal: principal,
+    };
+    const service = createAccountAuthService({
+        accountStore: createInMemoryAccountStore(),
+        provider: createProvider(providerOptions),
+        randomToken: () => `token-${++tokenIndex}`,
+    });
+    const completeLogin = async (): Promise<string> => {
+        const started = await service.startLogin();
+        assert.equal(started.ok, true);
+        if (!started.ok) throw new Error('login did not start');
+        const completed = await service.completeLogin(
+            started.transactionId,
+            '?code=one'
+        );
+        assert.equal(completed.ok, true);
+        if (!completed.ok) throw new Error('login did not complete');
+        return completed.session.sessionId;
+    };
+
+    const firstSessionId = await completeLogin();
+    const secondSessionId = await completeLogin();
+    providerOptions.callbackPrincipal = {
+        issuer: 'https://identity.example/',
+        subject: 'subject-2',
+        displayName: 'Other',
+    };
+    const otherStarted = await service.startLogin();
+    assert.equal(otherStarted.ok, true);
+    if (!otherStarted.ok) throw new Error('other login did not start');
+    const otherCompleted = await service.completeLogin(
+        otherStarted.transactionId,
+        '?code=other'
+    );
+    assert.equal(otherCompleted.ok, true);
+    if (!otherCompleted.ok) throw new Error('other login did not complete');
+
+    const session = service.getSession(firstSessionId);
+    assert.ok(session);
+    service.invalidateAccountSessions(session.accountId);
+
+    assert.equal(service.getSession(firstSessionId), null);
+    assert.equal(service.getSession(secondSessionId), null);
+    assert.equal(
+        service.getSession(otherCompleted.session.sessionId)?.accountId,
+        otherCompleted.session.accountId
+    );
+});
+
+test('deletion fences an OIDC callback already awaiting the provider', async () => {
+    const accountStore = createInMemoryAccountStore();
+    const account = accountStore.resolveOrCreateAccount({
+        issuer: principal.issuer,
+        subject: principal.subject,
+    });
+    let resolveCallback: ((value: typeof principal) => void) | undefined;
+    let callbackStarted: (() => void) | undefined;
+    const callbackIsStarted = new Promise<void>((resolve) => {
+        callbackStarted = resolve;
+    });
+    const service = createAccountAuthService({
+        accountStore,
+        provider: {
+            startAuthorization: async () => ({
+                authorizationUrl: 'https://identity.example/authorize',
+                state: 'state',
+                nonce: 'nonce',
+                codeVerifier: 'verifier',
+            }),
+            exchangeCallback: async () =>
+                new Promise<typeof principal>((resolve) => {
+                    resolveCallback = resolve;
+                    callbackStarted?.();
+                }),
+        },
+    });
+    const started = await service.startLogin();
+    assert.equal(started.ok, true);
+    if (!started.ok) throw new Error('login did not start');
+
+    const completion = service.completeLogin(started.transactionId, '?code=ok');
+    await callbackIsStarted;
+    service.beginAccountDeletion(account.id);
+    resolveCallback?.(principal);
+
+    assert.deepEqual(await completion, {
+        ok: false,
+        reason: 'invalid_transaction',
+    });
+    service.finishAccountDeletion(account.id);
+});

@@ -33,6 +33,7 @@ export type AccountExportData = {
 
 export type AccountStore = {
     resolveOrCreateAccount: (identity: ExternalIdentityKey) => FootnoteAccount;
+    deleteAccount: (accountId: string) => void;
     findAccountByDiscordUserId: (
         discordUserId: string
     ) => FootnoteAccount | null;
@@ -79,6 +80,25 @@ export const createInMemoryAccountStore = (): AccountStore => {
                 lastSeenAt: now,
             });
             return account;
+        },
+        deleteAccount: (accountId) => {
+            for (const [key, account] of accounts) {
+                if (account.id === accountId) accounts.delete(key);
+            }
+            for (const [key, identity] of identityMappings) {
+                if (identity.accountId === accountId) {
+                    identityMappings.delete(key);
+                }
+            }
+            for (const [
+                discordUserId,
+                linkedAccountId,
+            ] of discordAccountLinks) {
+                if (linkedAccountId === accountId) {
+                    discordAccountLinks.delete(discordUserId);
+                    discordMappingDates.delete(discordUserId);
+                }
+            }
         },
         findAccountByDiscordUserId: (discordUserId) => {
             const accountId = discordAccountLinks.get(discordUserId);
@@ -143,6 +163,7 @@ export class SqliteAccountStore implements AccountStore {
     private readonly getAccountByIdStatement: Database.Statement;
     private readonly getIdentityMappingsByAccountIdStatement: Database.Statement;
     private readonly getDiscordMappingsByAccountIdStatement: Database.Statement;
+    private readonly deleteAccountStatement: Database.Statement;
 
     constructor(config: { dbPath: string }) {
         const resolvedPath = path.resolve(config.dbPath);
@@ -216,6 +237,9 @@ export class SqliteAccountStore implements AccountStore {
             SELECT discord_user_id, created_at FROM discord_account_links
             WHERE account_id = ? ORDER BY created_at, discord_user_id
         `);
+        this.deleteAccountStatement = this.db.prepare(
+            'DELETE FROM accounts WHERE account_id = ?'
+        );
     }
 
     resolveOrCreateAccount({
@@ -329,6 +353,11 @@ export class SqliteAccountStore implements AccountStore {
                 createdAt: row.created_at,
             })),
         };
+    }
+
+    /** Deletes the account and its provider/Discord mappings; missing accounts are already deleted. */
+    deleteAccount(accountId: string): void {
+        this.deleteAccountStatement.run(accountId);
     }
 
     close(): void {

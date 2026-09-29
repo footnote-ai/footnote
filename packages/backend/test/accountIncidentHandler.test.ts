@@ -105,11 +105,16 @@ test('reports stay anonymous until explicitly claimed and remain account-scoped'
     );
     const request: PostIncidentReportRequest = {
         reporterUserId: 'same-observed-discord-id',
+        tags: ['same-observed-discord-id'],
         description: 'private report description',
         contact: 'private-contact@example.com',
         consentedAt: new Date().toISOString(),
     };
     const reported = await incidentService.reportIncident(request);
+    assert.equal(
+        reported.incident.auditEvents[0]?.notes,
+        'description provided; contact provided; tags provided'
+    );
     const accountHeaders = (session: typeof reporter) => ({
         cookie: `footnote_account_session=${session.sessionId}`,
     });

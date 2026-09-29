@@ -123,8 +123,10 @@ An audit event should contain:
 - optional notes
 - a creation timestamp
 
-Audit events are append-only. Status changes create new audit events instead
-of rewriting history.
+Status changes append audit events instead of rewriting history. Account
+deletion clears the reporter actor hash from an explicitly claimed incident's
+`incident.created` event, but keeps the event, action, notes, and timestamp.
+Later operator audit events remain unchanged.
 
 ## Pseudonymization boundary
 
@@ -146,6 +148,12 @@ These values may remain cleartext when needed for debugging or linking:
 - short free-text notes when the user explicitly provides them
 
 Keep the boundary tight. Prefer retaining pointers over content bodies.
+
+Account deletion only changes incidents explicitly linked to the deleted
+account: it clears the reporter hash, description, and contact, and removes the
+reporter actor hash from the creation event. The incident and later operator
+history remain. Unclaimed incidents are never matched by reporter hash and are
+left unchanged.
 
 ## Status model
 

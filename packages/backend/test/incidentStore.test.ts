@@ -265,3 +265,273 @@ test('incident claim capabilities expire and associate once without disclosing o
         await fs.rm(tempRoot, { recursive: true, force: true });
     }
 });
+
+test('deleting account associations removes its claim verifiers but preserves unclaimed and other rows', async () => {
+    const tempRoot = await fs.mkdtemp(
+        path.join(os.tmpdir(), 'incident-account-delete-')
+    );
+    const store = new SqliteIncidentStore({
+        dbPath: path.join(tempRoot, 'incidents.db'),
+        pseudonymizationSecret: SECRET,
+    });
+    try {
+        for (const [capabilityHash, expiresAt] of [
+            ['account-capability', '2026-10-02T00:00:00.000Z'],
+            ['other-capability', '2026-10-02T00:00:00.000Z'],
+            ['unclaimed-capability', '2026-10-02T00:00:00.000Z'],
+        ]) {
+            await store.createIncidentWithAudit({
+                incident: { consentedAt: new Date().toISOString() },
+                auditEvent: { action: 'incident.created' },
+                association: { capabilityHash, expiresAt },
+            });
+        }
+        await store.associateIncident(
+            'account-capability',
+            'account-a',
+            '2026-10-01T00:00:00.000Z'
+        );
+        await store.associateIncident(
+            'other-capability',
+            'account-b',
+            '2026-10-01T00:00:00.000Z'
+        );
+
+        await store.redactAndDeleteAccountAssociations('account-a');
+        await store.redactAndDeleteAccountAssociations('account-a');
+
+        assert.deepEqual(await store.listAssociatedIncidents('account-a'), []);
+        assert.equal(
+            await store.associateIncident(
+                'account-capability',
+                'account-a',
+                '2026-10-01T00:00:00.000Z'
+            ),
+            'unavailable'
+        );
+        assert.equal(
+            await store.associateIncident(
+                'unclaimed-capability',
+                'account-b',
+                '2026-10-01T00:00:00.000Z'
+            ),
+            'associated'
+        );
+        assert.equal(
+            (await store.listAssociatedIncidents('account-b')).length,
+            2
+        );
+    } finally {
+        store.close();
+        await fs.rm(tempRoot, { recursive: true, force: true });
+    }
+});
+
+test('account deletion removes reporter details from claimed incidents but leaves unclaimed reports unchanged', async () => {
+    const tempRoot = await fs.mkdtemp(
+        path.join(os.tmpdir(), 'incident-account-redaction-')
+    );
+    const store = new SqliteIncidentStore({
+        dbPath: path.join(tempRoot, 'incidents.db'),
+        pseudonymizationSecret: SECRET,
+    });
+    const reporterId = 'reporter-discord-id';
+    const consentedAt = '2026-09-28T12:00:00.000Z';
+    try {
+        const claimed = await store.createIncidentWithAudit({
+            incident: {
+                reporterId,
+                tags: ['safety'],
+                description: 'Private reporter details',
+                contact: 'reporter@example.test',
+                consentedAt,
+                pointers: {
+                    guildId: '123456789012345678',
+                    channelId: '234567890123456789',
+                    messageId: '345678901234567890',
+                    responseId: 'response-123',
+                    chainHash: 'chain-abc',
+                    modelVersion: 'model-v1',
+                },
+            },
+            auditEvent: {
+                actorHash: reporterId,
+                action: 'incident.created',
+                notes: 'description provided; contact provided; tags=reporter-discord-id',
+            },
+            association: {
+                capabilityHash: 'claimed-verifier',
+                expiresAt: '2026-10-28T12:00:00.000Z',
+            },
+        });
+        await store.associateIncident(
+            'claimed-verifier',
+            'account-a',
+            '2026-09-28T12:01:00.000Z'
+        );
+        await store.updateStatusWithAudit({
+            incidentId: claimed.id,
+            status: 'under_review',
+            auditEvent: {
+                actorHash: 'operator-id',
+                action: 'incident.status_changed',
+                notes: 'operator review retained',
+            },
+        });
+        await store.updateRemediationWithAudit({
+            incidentId: claimed.id,
+            remediation: {
+                state: 'applied',
+                notes: 'moderation action retained',
+            },
+            auditEvent: {
+                actorHash: 'operator-id',
+                action: 'incident.remediated',
+                notes: 'message marked under review',
+            },
+        });
+
+        const unclaimed = await store.createIncidentWithAudit({
+            incident: {
+                reporterId,
+                description: 'Unclaimed reporter details',
+                contact: 'unclaimed@example.test',
+                consentedAt,
+            },
+            auditEvent: {
+                actorHash: reporterId,
+                action: 'incident.created',
+                notes: 'description provided, contact provided',
+            },
+        });
+
+        await store.redactAndDeleteAccountAssociations('account-a');
+
+        const redacted = await store.getIncident(claimed.id);
+        assert.ok(redacted);
+        assert.equal(redacted.reporterHash, null);
+        assert.equal(redacted.description, null);
+        assert.equal(redacted.contact, null);
+        assert.equal(redacted.status, 'under_review');
+        assert.equal(redacted.consentedAt, consentedAt);
+        assert.equal(redacted.remediationState, 'applied');
+        assert.equal(redacted.remediationNotes, 'moderation action retained');
+        assert.deepEqual(redacted.tags, ['safety']);
+        assert.deepEqual(redacted.pointers, claimed.pointers);
+
+        const claimedAudit = await store.listAuditEvents(claimed.id);
+        assert.equal(claimedAudit.length, 3);
+        assert.equal(claimedAudit[0]?.action, 'incident.created');
+        assert.equal(claimedAudit[0]?.actorHash, null);
+        assert.equal(
+            claimedAudit[0]?.notes,
+            'description provided; contact provided'
+        );
+        assert.equal(
+            claimedAudit[1]?.actorHash,
+            hmacId(SECRET, 'operator-id', 'user')
+        );
+        assert.equal(
+            claimedAudit[2]?.actorHash,
+            hmacId(SECRET, 'operator-id', 'user')
+        );
+        assert.deepEqual(await store.listAssociatedIncidents('account-a'), []);
+        assert.equal(
+            await store.associateIncident(
+                'claimed-verifier',
+                'account-a',
+                '2026-09-28T12:02:00.000Z'
+            ),
+            'unavailable'
+        );
+
+        const untouched = await store.getIncident(unclaimed.id);
+        assert.ok(untouched);
+        assert.equal(
+            untouched.reporterHash,
+            hmacId(SECRET, reporterId, 'user')
+        );
+        assert.equal(untouched.description, 'Unclaimed reporter details');
+        assert.equal(untouched.contact, 'unclaimed@example.test');
+        const unclaimedAudit = await store.listAuditEvents(unclaimed.id);
+        assert.equal(
+            unclaimedAudit[0]?.actorHash,
+            hmacId(SECRET, reporterId, 'user')
+        );
+    } finally {
+        store.close();
+        await fs.rm(tempRoot, { recursive: true, force: true });
+    }
+});
+
+test('account deletion rolls back incident redaction when association removal fails', async () => {
+    const tempRoot = await fs.mkdtemp(
+        path.join(os.tmpdir(), 'incident-account-redaction-rollback-')
+    );
+    const dbPath = path.join(tempRoot, 'incidents.db');
+    const store = new SqliteIncidentStore({
+        dbPath,
+        pseudonymizationSecret: SECRET,
+    });
+    try {
+        const incident = await store.createIncidentWithAudit({
+            incident: {
+                reporterId: 'reporter-discord-id',
+                description: 'Keep until the transaction commits',
+                contact: 'reporter@example.test',
+                consentedAt: new Date().toISOString(),
+            },
+            auditEvent: {
+                actorHash: 'reporter-discord-id',
+                action: 'incident.created',
+            },
+            association: {
+                capabilityHash: 'rollback-verifier',
+                expiresAt: '2026-10-28T12:00:00.000Z',
+            },
+        });
+        await store.associateIncident(
+            'rollback-verifier',
+            'account-a',
+            '2026-09-28T12:01:00.000Z'
+        );
+        const db = new Database(dbPath);
+        try {
+            db.exec(`
+                CREATE TRIGGER fail_account_association_delete
+                BEFORE DELETE ON incident_associations
+                BEGIN
+                    SELECT RAISE(ABORT, 'forced association delete failure');
+                END;
+            `);
+            await assert.rejects(
+                () => store.redactAndDeleteAccountAssociations('account-a'),
+                /forced association delete failure/
+            );
+        } finally {
+            db.close();
+        }
+
+        const retained = await store.getIncident(incident.id);
+        assert.equal(
+            retained?.description,
+            'Keep until the transaction commits'
+        );
+        assert.equal(retained?.contact, 'reporter@example.test');
+        assert.equal(
+            retained?.reporterHash,
+            hmacId(SECRET, 'reporter-discord-id', 'user')
+        );
+        assert.equal(
+            (await store.listAuditEvents(incident.id))[0]?.actorHash,
+            hmacId(SECRET, 'reporter-discord-id', 'user')
+        );
+        assert.equal(
+            (await store.listAssociatedIncidents('account-a')).length,
+            1
+        );
+    } finally {
+        store.close();
+        await fs.rm(tempRoot, { recursive: true, force: true });
+    }
+});

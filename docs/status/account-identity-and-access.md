@@ -92,9 +92,11 @@ submitted/updated times. Account export (#523) includes that reporter-safe
 projection plus the association time, but not capability material or operator
 incident data. The incident remains a separately governed operational record;
 claiming it does not grant review powers or make its notes part of account data.
-Account deletion (#524) should detach the association while leaving the incident
-under its existing incident-retention rules. Unclaimed reports remain
-anonymous.
+Account deletion (#524) removes each claimed-report link and clears that
+report's description, contact, and reporter identifiers. The incident, consent
+record, status, remediation, and operator history remain for safety review.
+Unclaimed reports are not matched by identity and remain unchanged. Deleting a
+Footnote account does not change the user's sign-in or Discord accounts.
 
 ### Account export
 

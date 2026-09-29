@@ -461,6 +461,9 @@ test('regular account sessions cannot use administrator settings routes', async 
                   }
                 : null,
         clearSession: () => false,
+        invalidateAccountSessions: () => undefined,
+        beginAccountDeletion: () => undefined,
+        finishAccountDeletion: () => undefined,
     };
 
     const server = await createAdminSettingsTestServer({

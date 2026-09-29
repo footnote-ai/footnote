@@ -188,6 +188,9 @@ export class SqliteIncidentStore {
     private readonly findIncidentAssociationByCapabilityStatement: Database.Statement;
     private readonly associateIncidentStatement: Database.Statement;
     private readonly listAssociatedIncidentsStatement: Database.Statement;
+    private readonly redactReporterFieldsForAccountStatement: Database.Statement;
+    private readonly redactCreationAuditEventsForAccountStatement: Database.Statement;
+    private readonly deleteAssociationsForAccountStatement: Database.Statement;
     private readonly pseudonymizationSecret: string;
 
     /**
@@ -398,6 +401,29 @@ export class SqliteIncidentStore {
       WHERE incident_associations.account_id = ?
       ORDER BY incidents.created_at DESC, incidents.id DESC
     `);
+        this.redactReporterFieldsForAccountStatement = this.db.prepare(`
+      UPDATE incidents
+      SET reporter_hash = NULL, description = NULL, contact = NULL
+      WHERE id IN (
+        SELECT incident_id FROM incident_associations WHERE account_id = ?
+      )
+    `);
+        this.redactCreationAuditEventsForAccountStatement = this.db.prepare(`
+      UPDATE incident_audit_events
+      SET actor_hash = NULL,
+          notes = CASE
+            WHEN notes LIKE 'tags=%' THEN NULL
+            WHEN instr(notes, '; tags=') > 0 THEN substr(notes, 1, instr(notes, '; tags=') - 1)
+            ELSE notes
+          END
+      WHERE action = 'incident.created'
+        AND incident_id IN (
+          SELECT incident_id FROM incident_associations WHERE account_id = ?
+        )
+    `);
+        this.deleteAssociationsForAccountStatement = this.db.prepare(
+            'DELETE FROM incident_associations WHERE account_id = ?'
+        );
 
         incidentLogger.info(
             `Initialized SQLite incident store at ${resolvedPath}`
@@ -871,6 +897,21 @@ export class SqliteIncidentStore {
                   ]
                 : []
         );
+    }
+
+    /**
+     * Removes reporter identifiers and account links from claimed reports while
+     * preserving incident and operator history. Unclaimed reports are untouched.
+     */
+    async redactAndDeleteAccountAssociations(accountId: string): Promise<void> {
+        const transaction = this.db.transaction((targetAccountId: string) => {
+            this.redactReporterFieldsForAccountStatement.run(targetAccountId);
+            this.redactCreationAuditEventsForAccountStatement.run(
+                targetAccountId
+            );
+            this.deleteAssociationsForAccountStatement.run(targetAccountId);
+        });
+        await this.withRetry(() => transaction.immediate(accountId));
     }
 
     /**

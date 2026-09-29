@@ -103,7 +103,7 @@ const buildIncidentCreatedAuditNotes = (
     const parts = [
         request.description?.trim() ? 'description provided' : null,
         request.contact?.trim() ? 'contact provided' : null,
-        request.tags?.length ? `tags=${request.tags.join(', ')}` : null,
+        request.tags?.length ? 'tags provided' : null,
     ].filter((value): value is string => Boolean(value));
 
     return parts.length > 0 ? parts.join('; ') : null;
@@ -270,6 +270,11 @@ export const createIncidentService = ({
 
         async listAssociatedIncidents(accountId: string) {
             return incidentStore.listAssociatedIncidents(accountId);
+        },
+        async redactAndDeleteAccountAssociations(
+            accountId: string
+        ): Promise<void> {
+            await incidentStore.redactAndDeleteAccountAssociations(accountId);
         },
 
         async listAssociatedIncidentsForExport(accountId: string) {

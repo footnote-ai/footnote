@@ -39,6 +39,7 @@ export type WebApiClient = {
     ) => Promise<GetRuntimeConfigResponse>;
     getAuthSession: (signal?: AbortSignal) => Promise<GetAuthSessionResponse>;
     logoutAccount: (csrfToken: string, signal?: AbortSignal) => Promise<void>;
+    deleteAccount: (csrfToken: string, signal?: AbortSignal) => Promise<void>;
     getAccountIncidents: ReturnType<
         typeof createSharedWebApiClient
     >['getAccountIncidents'];
@@ -83,6 +84,7 @@ export const createWebApiClient = (
     const getRuntimeConfig = shared.getRuntimeConfig;
     const getAuthSession = shared.getAuthSession;
     const logoutAccount = shared.logoutAccount;
+    const deleteAccount = shared.deleteAccount;
     const getAccountIncidents = shared.getAccountIncidents;
     const claimIncident = shared.claimIncident;
     const exchangeDiscordConnection = shared.exchangeDiscordConnection;
@@ -98,6 +100,7 @@ export const createWebApiClient = (
         getRuntimeConfig,
         getAuthSession,
         logoutAccount,
+        deleteAccount,
         getAccountIncidents,
         claimIncident,
         exchangeDiscordConnection,
@@ -144,6 +147,9 @@ export const logoutAccount = (
     csrfToken: string,
     signal?: AbortSignal
 ): Promise<void> => api.logoutAccount(csrfToken, signal);
+
+export const deleteAccount = (csrfToken: string, signal?: AbortSignal) =>
+    api.deleteAccount(csrfToken, signal);
 
 export const getAccountIncidents = (signal?: AbortSignal) =>
     api.getAccountIncidents(signal);

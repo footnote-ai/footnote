@@ -11,6 +11,8 @@ import type { IncomingMessage, ServerResponse } from 'node:http';
 import type { GetAuthSessionResponse } from '@footnote/contracts/web';
 import { sendJson } from './chatResponses.js';
 import type { AccountAuthService } from '../services/accountAuth.js';
+import type { IncidentService } from '../services/incidents.js';
+import type { AccountStore } from '../storage/accounts/sqliteAccountStore.js';
 import { hashAuthenticatedPrincipal } from '../services/adminAuthorization.js';
 import {
     ACCOUNT_SESSION_COOKIE_NAME,
@@ -36,6 +38,11 @@ type RequestHandler = (
 
 type CreateAccountAuthHandlersDeps = {
     accountAuthService: AccountAuthService;
+    accountStore?: AccountStore | null;
+    incidentService?: Pick<
+        IncidentService,
+        'redactAndDeleteAccountAssociations'
+    > | null;
     secureCookies: boolean;
     logger: AccountAuthLogger;
     logRequest: (
@@ -50,6 +57,7 @@ export type AccountAuthHandlers = {
     handleAuthCallbackRequest: RequestHandler;
     handleAuthSessionRequest: RequestHandler;
     handleAuthLogoutRequest: RequestHandler;
+    handleAccountDeletionRequest: RequestHandler;
 };
 
 const readSingleHeader = (
@@ -159,6 +167,8 @@ const constantTimeEquals = (left: string, right: string): boolean => {
  */
 export const createAccountAuthHandlers = ({
     accountAuthService,
+    accountStore,
+    incidentService,
     secureCookies,
     logger,
     logRequest,
@@ -323,10 +333,63 @@ export const createAccountAuthHandlers = ({
         logRequest(req, res, 'account.auth.logout succeeded');
     };
 
+    /** @api.operationId: postAccountDeletion @api.path: POST /api/auth/delete */
+    const handleAccountDeletionRequest: RequestHandler = async (req, res) => {
+        setNoStore(res);
+        const requestId = readSingleHeader(req.headers['x-request-id']);
+        const sessionId = readCookieValue(req, ACCOUNT_SESSION_COOKIE_NAME);
+        const session = sessionId
+            ? accountAuthService.getSession(sessionId)
+            : null;
+        const csrfToken = readSingleHeader(req.headers[AUTH_CSRF_HEADER_NAME]);
+
+        if (!session) {
+            sendJson(res, 401, { error: 'Sign in required' });
+            logRequest(req, res, 'account.auth.delete signed-out');
+            return;
+        }
+        if (!csrfToken || !constantTimeEquals(csrfToken, session.csrfToken)) {
+            sendJson(res, 403, { error: 'Invalid CSRF token' });
+            logRequest(req, res, 'account.auth.delete invalid-csrf');
+            return;
+        }
+        if (!accountStore || !incidentService) {
+            sendJson(res, 503, { error: 'Account deletion unavailable' });
+            logRequest(req, res, 'account.auth.delete unavailable');
+            return;
+        }
+
+        accountAuthService.beginAccountDeletion(session.accountId);
+        try {
+            await incidentService.redactAndDeleteAccountAssociations(
+                session.accountId
+            );
+            accountStore.deleteAccount(session.accountId);
+        } catch {
+            res.setHeader('Set-Cookie', buildSessionClearCookie(secureCookies));
+            sendJson(res, 503, { error: 'Account deletion did not finish' });
+            logger.warn('account.auth.delete.failed', {
+                requestId,
+                reason: 'storage_unavailable',
+            });
+            logRequest(req, res, 'account.auth.delete failed');
+            return;
+        } finally {
+            accountAuthService.finishAccountDeletion(session.accountId);
+        }
+
+        res.statusCode = 204;
+        res.setHeader('Set-Cookie', buildSessionClearCookie(secureCookies));
+        res.end();
+        logger.info('account.auth.delete.succeeded', { requestId });
+        logRequest(req, res, 'account.auth.delete succeeded');
+    };
+
     return {
         handleAuthLoginRequest,
         handleAuthCallbackRequest,
         handleAuthSessionRequest,
         handleAuthLogoutRequest,
+        handleAccountDeletionRequest,
     };
 };
