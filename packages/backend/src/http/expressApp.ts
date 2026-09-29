@@ -89,6 +89,10 @@ type CreateExpressAppDeps = {
         req: http.IncomingMessage,
         res: http.ServerResponse
     ) => Promise<void>;
+    handleAccountExportRequest: (
+        req: http.IncomingMessage,
+        res: http.ServerResponse
+    ) => Promise<void>;
     handleChatRequest: (
         req: http.IncomingMessage,
         res: http.ServerResponse
@@ -237,6 +241,7 @@ const createExpressApp = ({
     handleIncidentDetailRequest,
     handleAccountIncidentsRequest,
     handleAccountIncidentClaimRequest,
+    handleAccountExportRequest,
     handleChatRequest,
     handleInternalTextRequest,
     handleInternalImageRequest,
@@ -324,6 +329,7 @@ const createExpressApp = ({
         normalizePathname,
         handleAccountIncidentsRequest,
         handleAccountIncidentClaimRequest,
+        handleAccountExportRequest,
         logRequest,
     });
     registerIncidentRoutes({

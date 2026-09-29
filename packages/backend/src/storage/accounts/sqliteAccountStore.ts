@@ -23,6 +23,14 @@ export type FootnoteAccount = {
     updatedAt: string;
 };
 
+export type AccountExportData = {
+    account: FootnoteAccount;
+    externalIdentityMappings: Array<
+        ExternalIdentityKey & { createdAt: string; lastSeenAt: string }
+    >;
+    discordMappings: Array<{ discordUserId: string; createdAt: string }>;
+};
+
 export type AccountStore = {
     resolveOrCreateAccount: (identity: ExternalIdentityKey) => FootnoteAccount;
     findAccountByDiscordUserId: (
@@ -32,13 +40,23 @@ export type AccountStore = {
         discordUserId: string,
         accountId: string
     ) => 'linked' | 'already-linked' | 'conflict';
+    getAccountExportData: (accountId: string) => AccountExportData | null;
     close?: () => void;
 };
 
 /** Test-only fallback used when the auth service is constructed without persistence. */
 export const createInMemoryAccountStore = (): AccountStore => {
     const accounts = new Map<string, FootnoteAccount>();
+    const identityMappings = new Map<
+        string,
+        ExternalIdentityKey & {
+            accountId: string;
+            createdAt: string;
+            lastSeenAt: string;
+        }
+    >();
     const discordAccountLinks = new Map<string, string>();
+    const discordMappingDates = new Map<string, string>();
     return {
         resolveOrCreateAccount: ({ issuer, subject }) => {
             const key = buildExternalIdentityKey(issuer, subject);
@@ -53,6 +71,13 @@ export const createInMemoryAccountStore = (): AccountStore => {
                 updatedAt: now,
             };
             accounts.set(key, account);
+            identityMappings.set(key, {
+                issuer,
+                subject,
+                accountId: account.id,
+                createdAt: now,
+                lastSeenAt: now,
+            });
             return account;
         },
         findAccountByDiscordUserId: (discordUserId) => {
@@ -67,7 +92,31 @@ export const createInMemoryAccountStore = (): AccountStore => {
             if (existing)
                 return existing === accountId ? 'already-linked' : 'conflict';
             discordAccountLinks.set(discordUserId, accountId);
+            discordMappingDates.set(discordUserId, new Date().toISOString());
             return 'linked';
+        },
+        getAccountExportData: (accountId) => {
+            const account = [...accounts.values()].find(
+                ({ id }) => id === accountId
+            );
+            if (!account) return null;
+            return {
+                account,
+                externalIdentityMappings: [...identityMappings.values()]
+                    .filter(({ accountId: ownerId }) => ownerId === accountId)
+                    .map(({ issuer, subject, createdAt, lastSeenAt }) => ({
+                        issuer,
+                        subject,
+                        createdAt,
+                        lastSeenAt,
+                    })),
+                discordMappings: [...discordAccountLinks.entries()]
+                    .filter(([, ownerId]) => ownerId === accountId)
+                    .map(([discordUserId]) => ({
+                        discordUserId,
+                        createdAt: discordMappingDates.get(discordUserId) ?? '',
+                    })),
+            };
         },
     };
 };
@@ -91,6 +140,9 @@ export class SqliteAccountStore implements AccountStore {
     private readonly touchIdentityStatement: Database.Statement;
     private readonly findAccountByDiscordUserIdStatement: Database.Statement;
     private readonly linkDiscordUserToAccountStatement: Database.Statement;
+    private readonly getAccountByIdStatement: Database.Statement;
+    private readonly getIdentityMappingsByAccountIdStatement: Database.Statement;
+    private readonly getDiscordMappingsByAccountIdStatement: Database.Statement;
 
     constructor(config: { dbPath: string }) {
         const resolvedPath = path.resolve(config.dbPath);
@@ -152,6 +204,17 @@ export class SqliteAccountStore implements AccountStore {
         this.linkDiscordUserToAccountStatement = this.db.prepare(`
             INSERT INTO discord_account_links(discord_user_id, account_id, created_at)
             VALUES (?, ?, ?)
+        `);
+        this.getAccountByIdStatement = this.db.prepare(`
+            SELECT account_id, created_at, updated_at FROM accounts WHERE account_id = ?
+        `);
+        this.getIdentityMappingsByAccountIdStatement = this.db.prepare(`
+            SELECT issuer, subject, created_at, last_seen_at FROM external_identities
+            WHERE account_id = ? ORDER BY created_at, issuer, subject
+        `);
+        this.getDiscordMappingsByAccountIdStatement = this.db.prepare(`
+            SELECT discord_user_id, created_at FROM discord_account_links
+            WHERE account_id = ? ORDER BY created_at, discord_user_id
         `);
     }
 
@@ -231,6 +294,41 @@ export class SqliteAccountStore implements AccountStore {
                 return 'linked';
             })
             .immediate();
+    }
+
+    /** Returns only retained identity records owned by the requested account. */
+    getAccountExportData(accountId: string): AccountExportData | null {
+        const account = this.getAccountByIdStatement.get(accountId) as
+            AccountRow | undefined;
+        if (!account) return null;
+        const identities = this.getIdentityMappingsByAccountIdStatement.all(
+            accountId
+        ) as Array<{
+            issuer: string;
+            subject: string;
+            created_at: string;
+            last_seen_at: string;
+        }>;
+        const discordMappings = this.getDiscordMappingsByAccountIdStatement.all(
+            accountId
+        ) as Array<{ discord_user_id: string; created_at: string }>;
+        return {
+            account: {
+                id: account.account_id,
+                createdAt: account.created_at,
+                updatedAt: account.updated_at,
+            },
+            externalIdentityMappings: identities.map((row) => ({
+                issuer: row.issuer,
+                subject: row.subject,
+                createdAt: row.created_at,
+                lastSeenAt: row.last_seen_at,
+            })),
+            discordMappings: discordMappings.map((row) => ({
+                discordUserId: row.discord_user_id,
+                createdAt: row.created_at,
+            })),
+        };
     }
 
     close(): void {

@@ -82,17 +82,30 @@ one transaction cover the first-login race, while local sessions remain short-
 lived and process-local.
 
 This stage does not add memory, saved conversations, inferred profiles,
-uploads, preferences, export, deletion, or account merging. Follow-on work is
-ordered in issue #525.
+uploads, preferences, deletion, or account merging. Follow-on work is ordered
+in issue #525.
 
 ### Incident reports
 
 An account association lets its holder see only the report's ID, status, and
-submitted/updated times. The incident remains an operational record; claiming
-it does not grant review powers or make its notes part of account data. Export
-work (#523) should include the association and this reporter-safe view. Account
-deletion (#524) should detach the association while leaving the incident under
-its existing incident-retention rules. Unclaimed reports remain anonymous.
+submitted/updated times. Account export (#523) includes that reporter-safe
+projection plus the association time, but not capability material or operator
+incident data. The incident remains a separately governed operational record;
+claiming it does not grant review powers or make its notes part of account data.
+Account deletion (#524) should detach the association while leaving the incident
+under its existing incident-retention rules. Unclaimed reports remain
+anonymous.
+
+### Account export
+
+`GET /api/account/export` downloads a versioned JSON attachment scoped to the
+signed-in Footnote account. It includes the internal account row, retained OIDC
+issuer/subject mappings, any deliberate Discord mapping, and the account's
+incident associations with reporter-safe summaries. Footnote does not retain
+the identity-provider account itself or model-provider data; the export says so.
+Underlying incident reports remain separately governed operational records,
+and the export excludes claim capability material, operator notes, audit data,
+and incident contact/description fields.
 
 ## Work sequence
 
@@ -101,7 +114,7 @@ its existing incident-retention rules. Unclaimed reports remain anonymous.
 3. #521 — durable Footnote accounts for regular OIDC users (delivered)
 4. #752 — explicit Discord account connection (delivered)
 5. #522 — deliberate incident association and safe user view
-6. #523 — export explicit Footnote-owned account data
+6. #523 — export explicit Footnote-owned account data (delivered)
 7. #524 — delete Footnote account data with documented incident retention
 
 The sequence keeps external authentication, Footnote authorization, and

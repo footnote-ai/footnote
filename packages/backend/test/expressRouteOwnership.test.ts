@@ -97,6 +97,7 @@ const baseAppDeps = (
     },
     handleAccountIncidentsRequest: createUnhandledRouteHandler,
     handleAccountIncidentClaimRequest: createUnhandledRouteHandler,
+    handleAccountExportRequest: createUnhandledRouteHandler,
     handleChatRequest: createUnhandledRouteHandler,
     handleInternalTextRequest: createUnhandledRouteHandler,
     handleInternalImageRequest: createUnhandledRouteHandler,

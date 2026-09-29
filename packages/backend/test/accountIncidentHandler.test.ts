@@ -44,14 +44,16 @@ test('reports stay anonymous until explicitly claimed and remain account-scoped'
             displayName: null,
         }),
     };
+    const accountStore = createInMemoryAccountStore();
     const accountAuthService = createAccountAuthService({
         provider,
-        accountStore: createInMemoryAccountStore(),
+        accountStore,
         randomToken: () => `test-token-${++tokenIndex}`,
     });
     const incidentService = createIncidentService({ incidentStore });
     const handlers = createAccountIncidentHandlers({
         accountAuthService,
+        accountStore,
         incidentService,
         logRequest: () => undefined,
     });
@@ -61,6 +63,8 @@ test('reports stay anonymous until explicitly claimed and remain account-scoped'
             void handlers.handleAccountIncidentsRequest(req, res);
         } else if (pathname === '/api/account/incidents/claim') {
             void handlers.handleAccountIncidentClaimRequest(req, res);
+        } else if (pathname === '/api/account/export') {
+            void handlers.handleAccountExportRequest(req, res);
         } else {
             res.statusCode = 404;
             res.end();
@@ -95,6 +99,10 @@ test('reports stay anonymous until explicitly claimed and remain account-scoped'
     };
     const reporter = await createSession('reporter');
     const otherAccount = await createSession('other-account');
+    accountStore.linkDiscordUserToAccount(
+        'connected-discord-user',
+        reporter.accountId
+    );
     const request: PostIncidentReportRequest = {
         reporterUserId: 'same-observed-discord-id',
         description: 'private report description',
@@ -162,4 +170,93 @@ test('reports stay anonymous until explicitly claimed and remain account-scoped'
         headers: accountHeaders(otherAccount),
     });
     assert.deepEqual(await foreignList.json(), { incidents: [] });
+
+    const anonymousExport = await fetch(`${baseUrl}/api/account/export`);
+    assert.equal(anonymousExport.status, 401);
+
+    const ownerExport = await fetch(`${baseUrl}/api/account/export`, {
+        headers: accountHeaders(reporter),
+    });
+    assert.equal(ownerExport.status, 200);
+    assert.match(
+        ownerExport.headers.get('content-disposition') ?? '',
+        /attachment; filename="footnote-account-export\.json"/
+    );
+    const exportBody = (await ownerExport.json()) as {
+        data: {
+            account: { category: string; id: string };
+            externalIdentityMappings: {
+                category: string;
+                records: Array<{ issuer: string; subject: string }>;
+            };
+            discordMappings: {
+                category: string;
+                records: Array<{ discordUserId: string }>;
+            };
+            incidentAssociations: {
+                category: string;
+                records: Array<{
+                    associatedAt: string;
+                    incident: Record<string, unknown>;
+                }>;
+            };
+        };
+    };
+    assert.equal(exportBody.data.account.category, 'account');
+    assert.equal(exportBody.data.account.id, reporter.accountId);
+    assert.deepEqual(
+        exportBody.data.externalIdentityMappings.records.map(
+            ({ subject: exportedSubject }) => exportedSubject
+        ),
+        ['reporter']
+    );
+    assert.equal(
+        exportBody.data.externalIdentityMappings.category,
+        'external_identity_mappings'
+    );
+    assert.equal(exportBody.data.discordMappings.category, 'discord_mappings');
+    assert.equal(exportBody.data.discordMappings.records.length, 1);
+    assert.equal(
+        exportBody.data.discordMappings.records[0]?.discordUserId,
+        'connected-discord-user'
+    );
+    assert.equal(
+        exportBody.data.incidentAssociations.category,
+        'incident_associations'
+    );
+    assert.equal(exportBody.data.incidentAssociations.records.length, 1);
+    assert.ok(
+        Number.isFinite(
+            Date.parse(
+                exportBody.data.incidentAssociations.records[0]?.associatedAt ??
+                    ''
+            )
+        )
+    );
+    assert.deepEqual(
+        Object.keys(
+            exportBody.data.incidentAssociations.records[0]?.incident ?? {}
+        ).sort(),
+        ['createdAt', 'incidentId', 'status', 'updatedAt']
+    );
+    const exportText = JSON.stringify(exportBody);
+    for (const excluded of [
+        'other-account',
+        'private report description',
+        'private-contact@example.com',
+        'capability_hash',
+        'claimCode',
+        'auditEvents',
+        'remediationNotes',
+    ]) {
+        assert.ok(!exportText.includes(excluded), `export leaked ${excluded}`);
+    }
+    const foreignExport = await fetch(`${baseUrl}/api/account/export`, {
+        headers: accountHeaders(otherAccount),
+    });
+    const foreignExportBody = (await foreignExport.json()) as {
+        data: { incidentAssociations: { records: unknown[] } };
+    };
+    assert.equal(foreignExport.status, 200);
+    assert.equal(foreignExportBody.data.incidentAssociations.records.length, 0);
 });

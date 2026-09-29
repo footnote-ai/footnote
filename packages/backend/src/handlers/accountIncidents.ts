@@ -13,6 +13,7 @@ import {
 } from '@footnote/contracts/web/schemas';
 import type { AccountAuthService } from '../services/accountAuth.js';
 import type { IncidentService } from '../services/incidents.js';
+import type { AccountStore } from '../storage/accounts/sqliteAccountStore.js';
 import {
     ACCOUNT_SESSION_COOKIE_NAME,
     AUTH_CSRF_HEADER_NAME,
@@ -42,18 +43,21 @@ const constantTimeEquals = (left: string, right: string): boolean => {
     );
 };
 
-/** Creates account-scoped reporter handlers; administrator status grants no extra access. */
+/** Creates account-scoped handlers; administrator status grants no extra access. */
 export const createAccountIncidentHandlers = ({
     accountAuthService,
+    accountStore,
     incidentService,
     logRequest,
 }: {
     accountAuthService: AccountAuthService;
+    accountStore: AccountStore | null;
     incidentService: IncidentService | null;
     logRequest: TrustedRouteLogRequest;
 }): {
     handleAccountIncidentsRequest: RequestHandler;
     handleAccountIncidentClaimRequest: RequestHandler;
+    handleAccountExportRequest: RequestHandler;
 } => {
     const readAccountSession = (req: IncomingMessage) => {
         const sessionId = readCookieValue(req, ACCOUNT_SESSION_COOKIE_NAME);
@@ -149,8 +153,74 @@ export const createAccountIncidentHandlers = ({
         logRequest(req, res, 'account incident claim success');
     };
 
+    /** @api.operationId: getAccountExport @api.path: GET /api/account/export */
+    const handleAccountExportRequest: RequestHandler = async (req, res) => {
+        res.setHeader('Cache-Control', 'no-store');
+        if (req.method !== 'GET') {
+            sendJson(res, 405, { error: 'Method not allowed' });
+            logRequest(req, res, 'account export method-not-allowed');
+            return;
+        }
+        const session = readAccountSession(req);
+        if (!session) {
+            sendJson(res, 401, { error: 'Sign in required' });
+            logRequest(req, res, 'account export signed-out');
+            return;
+        }
+        if (!accountStore || !incidentService) {
+            sendJson(res, 503, { error: 'Account export unavailable' });
+            logRequest(req, res, 'account export unavailable');
+            return;
+        }
+        const accountData = accountStore.getAccountExportData(
+            session.accountId
+        );
+        if (!accountData) {
+            sendJson(res, 503, { error: 'Account export unavailable' });
+            logRequest(req, res, 'account export account unavailable');
+            return;
+        }
+        const payload = {
+            format: 'footnote-account-export',
+            version: 1,
+            generatedAt: new Date().toISOString(),
+            retention: {
+                identityProvider:
+                    'This export includes only identity identifiers Footnote retains; it does not export or modify the provider account.',
+                modelProviders:
+                    'Provider-side model data retention is outside Footnote account data and is not represented here.',
+                incidents:
+                    'Incident reports remain separately governed operational records. Only this account’s association time and reporter-safe summary are included.',
+            },
+            data: {
+                account: { category: 'account', ...accountData.account },
+                externalIdentityMappings: {
+                    category: 'external_identity_mappings',
+                    records: accountData.externalIdentityMappings,
+                },
+                discordMappings: {
+                    category: 'discord_mappings',
+                    records: accountData.discordMappings,
+                },
+                incidentAssociations: {
+                    category: 'incident_associations',
+                    records:
+                        await incidentService.listAssociatedIncidentsForExport(
+                            session.accountId
+                        ),
+                },
+            },
+        };
+        sendJson(res, 200, payload, {
+            'Content-Disposition':
+                'attachment; filename="footnote-account-export.json"',
+        });
+        logRequest(req, res, 'account export success');
+    };
+
     return {
         handleAccountIncidentsRequest,
         handleAccountIncidentClaimRequest,
+        handleAccountExportRequest,
     };
 };

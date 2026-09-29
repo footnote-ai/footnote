@@ -9,7 +9,7 @@ openapi: 3.1.0
 info:
     title: Footnote Backend API
     # Versioning: bump when request/response shapes, status codes, or auth requirements change; docs-only edits can skip.
-    version: 1.6.0
+    version: 1.7.0
     license:
         name: MIT + Hippocratic License v3 (HL3-CORE)
         url: docs/LICENSE_STRATEGY.md
@@ -1440,6 +1440,31 @@ paths:
                 '503':
                     $ref: '#/components/responses/ServiceUnavailable'
 
+    /api/account/export:
+        get:
+            operationId: getAccountExport
+            x-codeRefs:
+                - packages/backend/src/handlers/accountIncidents.ts#handleAccountExportRequest
+            summary: Download the signed-in account's retained Footnote data
+            description: Returns a JSON attachment scoped to the signed-in account. Incident records are limited to association time and the reporter-safe summary; capability material and operator incident data are excluded.
+            tags:
+                - Accounts
+            security:
+                - AccountSessionCookie: []
+            responses:
+                '200':
+                    description: Portable JSON account export
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/AccountDataExport'
+                '401':
+                    $ref: '#/components/responses/Unauthorized'
+                '405':
+                    $ref: '#/components/responses/MethodNotAllowed'
+                '503':
+                    $ref: '#/components/responses/ServiceUnavailable'
+
     /api/admin/settings/template:
         get:
             operationId: getAdminSettingsTemplate
@@ -2023,6 +2048,102 @@ components:
                     type: boolean
                     enum: [true]
             required: [success]
+            additionalProperties: false
+        AccountDataExport:
+            type: object
+            properties:
+                format:
+                    type: string
+                    enum: [footnote-account-export]
+                version:
+                    type: integer
+                    enum: [1]
+                generatedAt:
+                    type: string
+                    format: date-time
+                retention:
+                    type: object
+                    properties:
+                        identityProvider: { type: string }
+                        modelProviders: { type: string }
+                        incidents: { type: string }
+                    required: [identityProvider, modelProviders, incidents]
+                    additionalProperties: false
+                data:
+                    type: object
+                    properties:
+                        account:
+                            type: object
+                            properties:
+                                category: { type: string, enum: [account] }
+                                id: { type: string }
+                                createdAt: { type: string, format: date-time }
+                                updatedAt: { type: string, format: date-time }
+                            required: [category, id, createdAt, updatedAt]
+                            additionalProperties: false
+                        externalIdentityMappings:
+                            $ref: '#/components/schemas/AccountExportExternalIdentities'
+                        discordMappings:
+                            $ref: '#/components/schemas/AccountExportDiscordMappings'
+                        incidentAssociations:
+                            $ref: '#/components/schemas/AccountExportIncidentAssociations'
+                    required:
+                        [
+                            account,
+                            externalIdentityMappings,
+                            discordMappings,
+                            incidentAssociations,
+                        ]
+                    additionalProperties: false
+            required: [format, version, generatedAt, retention, data]
+            additionalProperties: false
+        AccountExportExternalIdentities:
+            type: object
+            properties:
+                category: { type: string, enum: [external_identity_mappings] }
+                records:
+                    type: array
+                    items:
+                        type: object
+                        properties:
+                            issuer: { type: string }
+                            subject: { type: string }
+                            createdAt: { type: string, format: date-time }
+                            lastSeenAt: { type: string, format: date-time }
+                        required: [issuer, subject, createdAt, lastSeenAt]
+                        additionalProperties: false
+            required: [category, records]
+            additionalProperties: false
+        AccountExportDiscordMappings:
+            type: object
+            properties:
+                category: { type: string, enum: [discord_mappings] }
+                records:
+                    type: array
+                    items:
+                        type: object
+                        properties:
+                            discordUserId: { type: string }
+                            createdAt: { type: string, format: date-time }
+                        required: [discordUserId, createdAt]
+                        additionalProperties: false
+            required: [category, records]
+            additionalProperties: false
+        AccountExportIncidentAssociations:
+            type: object
+            properties:
+                category: { type: string, enum: [incident_associations] }
+                records:
+                    type: array
+                    items:
+                        type: object
+                        properties:
+                            associatedAt: { type: string, format: date-time }
+                            incident:
+                                $ref: '#/components/schemas/ReporterIncidentSummary'
+                        required: [associatedAt, incident]
+                        additionalProperties: false
+            required: [category, records]
             additionalProperties: false
 
         IncidentListResponse:

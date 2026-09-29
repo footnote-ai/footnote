@@ -149,6 +149,48 @@ test('Discord mapping survives reopen, is idempotent, and never moves', () => {
     }
 });
 
+test('account export storage returns only the requested account mappings', () => {
+    const tempDir = fs.mkdtempSync(
+        path.join(os.tmpdir(), 'footnote-account-export-')
+    );
+    let store: SqliteAccountStore | null = null;
+    try {
+        store = new SqliteAccountStore({
+            dbPath: path.join(tempDir, 'accounts.db'),
+        });
+        const owner = store.resolveOrCreateAccount(identity);
+        const other = store.resolveOrCreateAccount({
+            ...identity,
+            subject: 'other-subject',
+        });
+        store.linkDiscordUserToAccount('discord-owner', owner.id);
+        store.linkDiscordUserToAccount('discord-other', other.id);
+
+        const exported = store.getAccountExportData(owner.id);
+        assert.ok(exported);
+        assert.deepEqual(exported.account, owner);
+        assert.deepEqual(exported.externalIdentityMappings, [
+            {
+                ...identity,
+                createdAt: owner.createdAt,
+                lastSeenAt: owner.createdAt,
+            },
+        ]);
+        assert.equal(exported.discordMappings.length, 1);
+        assert.equal(
+            exported.discordMappings[0]?.discordUserId,
+            'discord-owner'
+        );
+        assert.equal(store.getAccountExportData('not-an-account'), null);
+        const serialized = JSON.stringify(exported);
+        assert.ok(!serialized.includes('other-subject'));
+        assert.ok(!serialized.includes('discord-other'));
+    } finally {
+        store?.close();
+        fs.rmSync(tempDir, { recursive: true, force: true });
+    }
+});
+
 test('concurrent Discord links preserve one account and isolate conflicts', async () => {
     const tempDir = fs.mkdtempSync(
         path.join(os.tmpdir(), 'footnote-discord-race-')
