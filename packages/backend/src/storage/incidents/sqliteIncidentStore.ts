@@ -131,6 +131,11 @@ export type AssociatedIncident = {
     updatedAt: string;
 };
 
+export type ExportAssociatedIncident = {
+    associatedAt: string;
+    incident: AssociatedIncident;
+};
+
 type UpdateStatusWithAuditInput = {
     incidentId: number;
     status: IncidentStatus;
@@ -386,7 +391,8 @@ export class SqliteIncidentStore {
       WHERE capability_hash = ? AND account_id IS NULL AND claim_expires_at > ?
     `);
         this.listAssociatedIncidentsStatement = this.db.prepare(`
-      SELECT incidents.short_id, incidents.status, incidents.created_at, incidents.updated_at
+      SELECT incidents.short_id, incidents.status, incidents.created_at, incidents.updated_at,
+        incident_associations.associated_at
       FROM incident_associations
       INNER JOIN incidents ON incidents.id = incident_associations.incident_id
       WHERE incident_associations.account_id = ?
@@ -835,6 +841,36 @@ export class SqliteIncidentStore {
             createdAt: row.created_at,
             updatedAt: row.updated_at,
         }));
+    }
+
+    /** Exports only association time and the reporter-safe incident projection. */
+    async listAssociatedIncidentsForExport(
+        accountId: string
+    ): Promise<ExportAssociatedIncident[]> {
+        const rows = (await this.withRetry(() =>
+            this.listAssociatedIncidentsStatement.all(accountId)
+        )) as Array<{
+            short_id: string;
+            status: IncidentStatus;
+            created_at: string;
+            updated_at: string;
+            associated_at: string | null;
+        }>;
+        return rows.flatMap((row) =>
+            row.associated_at
+                ? [
+                      {
+                          associatedAt: row.associated_at,
+                          incident: {
+                              incidentId: row.short_id,
+                              status: row.status,
+                              createdAt: row.created_at,
+                              updatedAt: row.updated_at,
+                          },
+                      },
+                  ]
+                : []
+        );
     }
 
     /**

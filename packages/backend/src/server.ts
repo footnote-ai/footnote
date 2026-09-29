@@ -612,12 +612,16 @@ const accountAuthService = createAccountAuthService({
         ? new Set(runtimeConfig.accountAuth.administratorIdentityKeys)
         : undefined,
 });
-const { handleAccountIncidentsRequest, handleAccountIncidentClaimRequest } =
-    createAccountIncidentHandlers({
-        accountAuthService,
-        incidentService,
-        logRequest,
-    });
+const {
+    handleAccountIncidentsRequest,
+    handleAccountIncidentClaimRequest,
+    handleAccountExportRequest,
+} = createAccountIncidentHandlers({
+    accountAuthService,
+    accountStore,
+    incidentService,
+    logRequest,
+});
 
 const handleRuntimeConfigRequest = createRuntimeConfigHandler({
     logRequest,
@@ -790,6 +794,7 @@ const app = createExpressApp({
     handleIncidentDetailRequest,
     handleAccountIncidentsRequest,
     handleAccountIncidentClaimRequest,
+    handleAccountExportRequest,
     handleChatRequest,
     handleInternalTextRequest,
     handleInternalImageRequest,

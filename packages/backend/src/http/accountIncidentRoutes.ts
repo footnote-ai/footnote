@@ -14,17 +14,20 @@ import {
 
 /** @api.operationId: getAccountIncidents @api.path: GET /api/account/incidents */
 /** @api.operationId: postAccountIncidentClaim @api.path: POST /api/account/incidents/claim */
+/** @api.operationId: getAccountExport @api.path: GET /api/account/export */
 export const registerAccountIncidentRoutes = ({
     app,
     normalizePathname,
     handleAccountIncidentsRequest,
     handleAccountIncidentClaimRequest,
+    handleAccountExportRequest,
     logRequest,
 }: {
     app: express.Express;
     normalizePathname: (pathname: string) => string;
     handleAccountIncidentsRequest: RequestHandler;
     handleAccountIncidentClaimRequest: RequestHandler;
+    handleAccountExportRequest: RequestHandler;
     logRequest: LogRequest;
 }): void => {
     const router = createDispatchRouter({
@@ -43,6 +46,10 @@ export const registerAccountIncidentRoutes = ({
                 req.method === 'POST'
             ) {
                 await handleAccountIncidentClaimRequest(req, res);
+                return;
+            }
+            if (normalizedPathname === '/api/account/export') {
+                await handleAccountExportRequest(req, res);
                 return;
             }
             next();
