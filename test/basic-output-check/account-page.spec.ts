@@ -241,9 +241,11 @@ test('account holders can save memories, claim reports, and download their data'
     await expect(page.getByText('Uses keyboard shortcuts.')).toBeVisible();
     await page.getByLabel('Claim code').fill('a'.repeat(43));
     await page.getByRole('button', { name: 'Add report' }).click();
-    await expect(page.getByRole('status')).toContainText(
-        'Report added to your account.'
-    );
+    await expect(
+        page
+            .getByRole('status')
+            .filter({ hasText: 'Report added to your account.' })
+    ).toBeVisible();
     expect(claimRequest).toBe(JSON.stringify({ claimCode: 'a'.repeat(43) }));
 
     const download = page.waitForEvent('download');
@@ -298,7 +300,8 @@ test('account holders can cancel or confirm account deletion', async ({
     await expect(
         page.getByRole('group').getByRole('button', { name: 'Cancel' })
     ).toBeDisabled();
-    expect(deleteRequestCount).toBe(1);
+    await expect.poll(() => deleteRequestCount).toBe(1);
+    await expect.poll(() => completeDelete).not.toBeNull();
     if (!completeDelete) throw new Error('Delete request did not start');
     completeDelete();
     await expect(page.getByRole('status')).toContainText(
