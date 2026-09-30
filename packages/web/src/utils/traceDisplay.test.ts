@@ -57,6 +57,25 @@ test('sanitizeWorkflowForDisplay redacts artifacts and preserves outcome fields'
     assert.equal(sanitized?.terminationReason, 'budget_exhausted_tokens');
 });
 
+test('trace display keeps only the safe user-memory inclusion count', () => {
+    const workflow: WorkflowRecord = {
+        workflowId: 'wf_memory_trace',
+        workflowName: 'message_reviewed',
+        status: 'completed',
+        terminationReason: 'goal_satisfied',
+        stepCount: 1,
+        maxSteps: 8,
+        maxDurationMs: 70_000,
+        userMemory: { includedItemCount: 2 },
+        steps: [],
+    };
+
+    const displayed = sanitizeWorkflowForDisplay(workflow);
+
+    assert.deepEqual(displayed?.userMemory, { includedItemCount: 2 });
+    assert.equal(JSON.stringify(displayed).includes('PRIVATE_MEMORY'), false);
+});
+
 test('sanitizes current candidate-flow presentation metadata', () => {
     const presentation: PresentationMetadata = {
         step: 'presentation',

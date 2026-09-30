@@ -1397,6 +1397,10 @@ const WorkflowRecordSchema = z
             .optional(),
         terminationReason: z.enum(WORKFLOW_TERMINATION_REASONS),
         results: z.array(WorkflowResultRecordSchema).optional(),
+        userMemory: z
+            .object({ includedItemCount: z.number().int().min(1).max(10) })
+            .strict()
+            .optional(),
         steps: z.array(StepRecordSchema),
     })
     .superRefine((value, context) => {

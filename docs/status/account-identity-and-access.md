@@ -2,8 +2,8 @@
 
 Status: provider-neutral OIDC sign-in, durable Footnote accounts, separate
 administrator authorization, explicit Discord connection, and the first
-account lifecycle (incident association, export, and deletion) are implemented.
-User-owned memory remains later work under #605.
+account lifecycle (incident association, export, deletion, and explicit user-owned
+memory) are implemented.
 
 Last updated: 2026-09-29.
 
@@ -83,7 +83,7 @@ one transaction cover the first-login race, while local sessions remain short-
 lived and process-local.
 
 Account lifecycle v1 now covers incident association, export, and deletion.
-It does not add memory, saved conversations, inferred profiles, uploads,
+It does not add saved conversations, inferred profiles, uploads, generalized
 preferences, or account merging. Follow-on work is ordered in issue #525.
 
 ### Incident reports
@@ -110,6 +110,19 @@ Underlying incident reports remain separately governed operational records,
 and the export excludes claim capability material, operator notes, audit data,
 and incident contact/description fields.
 
+### Explicit user-saved memory
+
+Signed-in users can save, inspect, and forget up to 50 memory entries per
+Footnote account. Each entry stores its ID, text (up to 2,000 characters), and
+creation time. Memory text is included in the existing account export and is
+deleted with the account. It is loaded only for authenticated web chats or
+trusted Discord chats whose Discord user was deliberately linked to that same
+Footnote account. A trace can show a coarse included-item count after successful
+generation; it never exposes memory text or account identity.
+
+Memory is advisory personalization context, not evidence, a trusted instruction,
+or authorization. It is not extracted from conversation history.
+
 ## Work sequence
 
 1. #455 — provider-neutral OIDC sign-in (delivered)
@@ -120,7 +133,7 @@ and incident contact/description fields.
 6. #523 — export explicit Footnote-owned account data (delivered by PR #755)
 7. #524 — delete Footnote account data with documented incident retention (delivered by PR #756)
 8. Account lifecycle v1 — complete after #522, #523, and #524.
-9. #605 — explicit user-owned memory, subsequent to this lifecycle boundary.
+9. #605 — explicit user-owned memory (delivered).
 
 The sequence keeps external authentication, Footnote authorization, and
 Footnote-owned data as separate decisions.

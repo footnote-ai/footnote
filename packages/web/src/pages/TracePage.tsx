@@ -817,6 +817,7 @@ const TracePage = (): JSX.Element => {
     const workflowSummary = getWorkflowSummary(traceData);
     const runOutcomeSummary = traceRunOutcomeSummary;
     const presentation = sanitizedTraceData.presentation;
+    const userMemorySummary = sanitizedTraceData.workflow?.userMemory;
     const selectedCandidateIndex =
         responseCandidates?.findIndex(
             (candidate) => candidate.state === 'selected'
@@ -832,6 +833,16 @@ const TracePage = (): JSX.Element => {
             value: groundingEvidenceSummary.value,
             explanation: groundingEvidenceSummary.explanation,
         },
+        ...(userMemorySummary === undefined
+            ? []
+            : [
+                  {
+                      label: 'User-saved memory',
+                      value: `${userMemorySummary.includedItemCount} ${userMemorySummary.includedItemCount === 1 ? 'item' : 'items'} included`,
+                      explanation:
+                          'Advisory personalization context only; it is not evidence, a trusted instruction, or authorization.',
+                  },
+              ]),
         {
             label: 'Safety',
             value: safetySummary.value,

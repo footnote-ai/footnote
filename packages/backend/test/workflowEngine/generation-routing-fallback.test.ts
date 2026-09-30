@@ -80,12 +80,14 @@ const runGeneration = async (input: {
     providerAvailability?: ProviderAvailabilityStore;
     onUsage?: () => void;
     includeDetailedCost?: boolean;
+    advisoryUserMemories?: string[];
 }) =>
     runBoundedReviewWorkflow({
         generationRuntime: input.runtime,
         generationRequest: input.request,
         messagesWithHints: input.request.messages,
         contextEnvelope,
+        advisoryUserMemories: input.advisoryUserMemories,
         generationStartedAtMs: Date.now(),
         workflowConfig: {
             workflowName: 'message_reviewed',
@@ -307,6 +309,40 @@ test('gives a large-prompt generation useful output room and advances after inco
     assert.equal(canonicalJson.includes('A complete answer.'), false);
     assert.equal(canonicalJson.includes('Explain this context.'), false);
     assert.equal(canonicalJson.includes('routingChainAttemptsJson'), false);
+});
+
+test('records only a bounded user-memory inclusion count in generation provenance', async () => {
+    const secretMemory = 'PRIVATE_MEMORY_SENTINEL';
+    let receivedMemory = false;
+    const runtime: GenerationRuntime = {
+        kind: 'test-runtime',
+        async generate(request) {
+            receivedMemory = request.messages.some((message) =>
+                message.content.includes(secretMemory)
+            );
+            return {
+                text: 'answer',
+                model: request.model,
+                completion: { status: 'completed', visibleTextLength: 6 },
+                usage: { promptTokens: 1, completionTokens: 1, totalTokens: 2 },
+                provenance: 'Inferred',
+                citations: [],
+            };
+        },
+    };
+    const result = await runGeneration({
+        runtime,
+        request: { messages: [{ role: 'user', content: 'Reply.' }] },
+        candidates: [makeProfile('memory-profile')],
+        advisoryUserMemories: [secretMemory, 'A second preference.'],
+    });
+
+    const serializedLineage = JSON.stringify(result.workflowLineage);
+    assert.equal(receivedMemory, true);
+    assert.deepEqual(result.workflowLineage.userMemory, {
+        includedItemCount: 2,
+    });
+    assert.equal(serializedLineage.includes(secretMemory), false);
 });
 
 test('does not treat context search as a provider-native search requirement', async () => {
