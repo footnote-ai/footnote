@@ -24,6 +24,26 @@ const mockRuntimeConfig = async (page: Page): Promise<void> => {
     });
 };
 
+const mockAdministratorSession = async (page: Page): Promise<void> => {
+    await page.route('**/api/auth/session', async (route) => {
+        await route.fulfill({
+            contentType: 'application/json',
+            body: JSON.stringify({
+                enabled: true,
+                authenticated: true,
+                principal: {
+                    issuer: 'https://identity.example/',
+                    subject: 'browser-subject',
+                    displayName: 'Browser Administrator',
+                },
+                expiresAt: '2030-01-01T00:00:00.000Z',
+                csrfToken: 'account-csrf-token',
+                isAdministrator: true,
+            }),
+        });
+    });
+};
+
 test('anonymous administrators see a sign-in prompt without settings requests', async ({
     page,
 }) => {
@@ -95,6 +115,7 @@ test('account-session administrators read and validate settings with account CSR
     page,
 }, testInfo) => {
     await mockRuntimeConfig(page);
+    await mockAdministratorSession(page);
     await page.context().addCookies([
         {
             name: ACCOUNT_SESSION_COOKIE,
@@ -103,24 +124,6 @@ test('account-session administrators read and validate settings with account CSR
             path: '/api',
         },
     ]);
-    await page.route('**/api/auth/session', async (route) => {
-        await route.fulfill({
-            contentType: 'application/json',
-            body: JSON.stringify({
-                enabled: true,
-                authenticated: true,
-                principal: {
-                    issuer: 'https://identity.example/',
-                    subject: 'browser-subject',
-                    displayName: 'Browser Administrator',
-                },
-                expiresAt: '2030-01-01T00:00:00.000Z',
-                csrfToken: 'account-csrf-token',
-                isAdministrator: true,
-            }),
-        });
-    });
-
     let readCookie = '';
     let validateCookie = '';
     let validateCsrf = '';
@@ -211,23 +214,7 @@ test('admin save explains a stale settings file without lock terminology', async
     page,
 }) => {
     await mockRuntimeConfig(page);
-    await page.route('**/api/auth/session', async (route) => {
-        await route.fulfill({
-            contentType: 'application/json',
-            body: JSON.stringify({
-                enabled: true,
-                authenticated: true,
-                principal: {
-                    issuer: 'https://identity.example/',
-                    subject: 'browser-subject',
-                    displayName: 'Browser Administrator',
-                },
-                expiresAt: '2030-01-01T00:00:00.000Z',
-                csrfToken: 'account-csrf-token',
-                isAdministrator: true,
-            }),
-        });
-    });
+    await mockAdministratorSession(page);
     await page.route('**/api/admin/settings.yaml', async (route) => {
         if (route.request().method() === 'GET') {
             await route.fulfill({
@@ -260,23 +247,7 @@ test('admin save retains the validator error and its specific guidance', async (
     page,
 }) => {
     await mockRuntimeConfig(page);
-    await page.route('**/api/auth/session', async (route) => {
-        await route.fulfill({
-            contentType: 'application/json',
-            body: JSON.stringify({
-                enabled: true,
-                authenticated: true,
-                principal: {
-                    issuer: 'https://identity.example/',
-                    subject: 'browser-subject',
-                    displayName: 'Browser Administrator',
-                },
-                expiresAt: '2030-01-01T00:00:00.000Z',
-                csrfToken: 'account-csrf-token',
-                isAdministrator: true,
-            }),
-        });
-    });
+    await mockAdministratorSession(page);
     await page.route('**/api/admin/settings.yaml', async (route) => {
         if (route.request().method() === 'GET') {
             await route.fulfill({
