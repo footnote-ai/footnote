@@ -185,7 +185,7 @@ test('chat stays suggestion-free and falls back to an out-of-flow managed challe
         /Ask anything, and see how Footnote responds!/
     );
     assert.match(embedSource, /<Chat \/>/);
-    assert.match(headerSource, /<Link to="\/account">\s*Sign in\s*<\/Link>/);
+    assert.match(headerSource, /<Link to="\/account">\s*Account\s*<\/Link>/);
     assert.match(headerSource, /<a href="\/wiki\/">\s*Docs\s*<\/a>/);
     assert.match(headerSource, /Footnote<sup>\[1\]<\/sup>/);
     assert.doesNotMatch(headerSource, /deepwiki\.com/);

@@ -1,5 +1,5 @@
 /**
- * @description: Shows account sign-in availability, the current backend-owned session, logout, and account deletion.
+ * @description: Lets people manage account sign-in, memories, reports, connections, and account data.
  * @footnote-scope: web
  * @footnote-module: AccountPage
  * @footnote-risk: medium - State mistakes can misrepresent whether a user is signed in or signed out.
@@ -21,6 +21,8 @@ import type {
     GetAuthSessionResponse,
 } from '@footnote/contracts/web';
 import PublicPageLayout from '@components/PublicPageLayout';
+import MemorySection, { type MemoryReadState } from '@components/MemorySection';
+import ReportsSection from '@components/ReportsSection';
 import { Link } from 'react-router-dom';
 import {
     cancelDiscordConnection,
@@ -45,7 +47,6 @@ type SessionState =
 
 type LogoutState = 'idle' | 'submitting' | 'error';
 type DeletionState = 'idle' | 'submitting' | 'error' | 'success';
-type MemoryReadState = 'loading' | 'ready' | 'error';
 type AccountIncidentsState =
     | { status: 'loading'; accountKey: string | null }
     | {
@@ -83,6 +84,7 @@ const AccountPage = (): JSX.Element => {
     const [reloadKey, setReloadKey] = useState(0);
     const [logoutState, setLogoutState] = useState<LogoutState>('idle');
     const [deletionState, setDeletionState] = useState<DeletionState>('idle');
+    const [showDeleteConfirmation, setShowDeleteConfirmation] = useState(false);
     const [connectionState, setConnectionState] = useState<ConnectionState>({
         status: 'loading',
     });
@@ -107,13 +109,13 @@ const AccountPage = (): JSX.Element => {
         'save' | 'forget' | 'limit' | null
     >(null);
     const [memoryBusy, setMemoryBusy] = useState(false);
-    const [selectedIncidentId, setSelectedIncidentId] = useState<{
-        accountKey: string;
-        incidentId: string;
-    } | null>(null);
     const [showCallbackFailure] = useState(hasAuthFailureMarker);
-    const accountStatusHeadingRef = useRef<ComponentRef<'h2'>>(null);
+    const accountTitleRef = useRef<ComponentRef<'h1'>>(null);
+    const deleteConfirmationHeadingRef = useRef<ComponentRef<'h3'>>(null);
+    const deleteAccountTriggerRef = useRef<ComponentRef<'button'>>(null);
     const focusAfterLogoutRef = useRef(false);
+    const focusAfterDeleteCancelRef = useRef(false);
+    const deletionRequestInFlightRef = useRef(false);
     const connectionEffectStartedRef = useRef(false);
     const activeAccountKeyRef = useRef<string | null>(null);
     const accountKey =
@@ -156,7 +158,6 @@ const AccountPage = (): JSX.Element => {
         if (previousAccountKey !== accountKey) {
             setClaimCodeDraft({ accountKey: null, value: '' });
             setClaimMessageDraft({ accountKey: null, value: '' });
-            setSelectedIncidentId(null);
             setMemories([]);
             setMemoryReadState('loading');
             setMemoryText('');
@@ -347,9 +348,18 @@ const AccountPage = (): JSX.Element => {
     useEffect(() => {
         if (focusAfterLogoutRef.current && sessionState.status === 'ready') {
             focusAfterLogoutRef.current = false;
-            accountStatusHeadingRef.current?.focus();
+            accountTitleRef.current?.focus();
         }
     }, [sessionState]);
+
+    useEffect(() => {
+        if (showDeleteConfirmation) {
+            deleteConfirmationHeadingRef.current?.focus();
+        } else if (focusAfterDeleteCancelRef.current) {
+            focusAfterDeleteCancelRef.current = false;
+            deleteAccountTriggerRef.current?.focus();
+        }
+    }, [showDeleteConfirmation]);
 
     const handleLogout = async (
         session: Extract<
@@ -360,7 +370,6 @@ const AccountPage = (): JSX.Element => {
         setLogoutState('submitting');
         setClaimCodeDraft({ accountKey: null, value: '' });
         setClaimMessageDraft({ accountKey: null, value: '' });
-        setSelectedIncidentId(null);
         try {
             await logoutAccount(session.csrfToken);
             focusAfterLogoutRef.current = true;
@@ -377,20 +386,14 @@ const AccountPage = (): JSX.Element => {
         }
     };
 
-    const handleDeleteAccount = async (
+    const confirmAccountDeletion = async (
         session: Extract<
             GetAuthSessionResponse,
             { enabled: true; authenticated: true }
         >
     ): Promise<void> => {
-        if (
-            !window.confirm(
-                'Delete your Footnote account, saved memories, sign-in links, Discord connection, and links to reports you claimed? Your external sign-in and Discord accounts will stay active. Claimed safety reports will remain, but their descriptions, contact information, and details identifying you will be removed. Unclaimed reports will not change. This cannot be undone.'
-            )
-        ) {
-            return;
-        }
-
+        if (deletionRequestInFlightRef.current) return;
+        deletionRequestInFlightRef.current = true;
         setDeletionState('submitting');
         try {
             await deleteAccount(session.csrfToken);
@@ -405,6 +408,8 @@ const AccountPage = (): JSX.Element => {
                 session: { enabled: true, authenticated: false },
             });
             setDeletionState('error');
+        } finally {
+            deletionRequestInFlightRef.current = false;
         }
     };
 
@@ -445,21 +450,17 @@ const AccountPage = (): JSX.Element => {
 
     const renderSessionState = (): JSX.Element => {
         if (sessionState.status === 'loading') {
-            return (
-                <p className="account-card__status" role="status">
-                    Loading account…
-                </p>
-            );
+            return <p role="status">Loading account…</p>;
         }
 
         if (sessionState.status === 'error') {
             return (
-                <div className="account-card__stack">
-                    <p className="account-card__error" role="alert">
+                <div>
+                    <p className="account-page__error" role="alert">
                         Account status could not be loaded. Please try again.
                     </p>
                     <button
-                        className="account-card__button"
+                        className="account-page__action"
                         type="button"
                         onClick={() => {
                             setReloadKey((value) => value + 1);
@@ -473,95 +474,40 @@ const AccountPage = (): JSX.Element => {
 
         if (!sessionState.session.enabled) {
             return (
-                <div className="account-card__stack">
-                    <h2
-                        id="account-status-heading"
-                        ref={accountStatusHeadingRef}
-                        tabIndex={-1}
-                    >
-                        Sign-in is unavailable
-                    </h2>
-                    <p>
-                        This Footnote instance has not enabled account sign-in.
-                        Public Footnote features remain available.
-                    </p>
-                </div>
+                <p>
+                    Account sign-in isn't available on this Footnote instance.
+                </p>
             );
         }
 
         if (!sessionState.session.authenticated) {
             return (
-                <div className="account-card__stack">
-                    <h2
-                        id="account-status-heading"
-                        ref={accountStatusHeadingRef}
-                        tabIndex={-1}
-                    >
-                        Signed out
-                    </h2>
-                    <p>
-                        Sign in through the identity provider configured by this
-                        Footnote instance.
-                    </p>
-                    <a
-                        className="account-card__button account-card__button--primary"
-                        href="/api/auth/login"
-                    >
-                        Sign in
-                    </a>
-                </div>
+                <a
+                    className="account-page__action account-page__action--primary"
+                    href="/api/auth/login"
+                >
+                    Sign in
+                </a>
             );
         }
 
         const authenticatedSession = sessionState.session;
-        const { principal, expiresAt } = authenticatedSession;
-        const displayIdentity = principal.displayName ?? principal.subject;
+        const { principal } = authenticatedSession;
 
         return (
-            <div className="account-card__stack">
-                <h2
-                    id="account-status-heading"
-                    ref={accountStatusHeadingRef}
-                    tabIndex={-1}
-                >
-                    Signed in
+            <div className="account-page__summary">
+                <h2 id="account-status-heading" tabIndex={-1}>
+                    {principal.displayName?.trim()
+                        ? `Signed in as ${principal.displayName.trim()}`
+                        : 'Signed in'}
                 </h2>
-                <dl className="account-card__identity">
-                    <div>
-                        <dt>Account</dt>
-                        <dd>{displayIdentity}</dd>
-                    </div>
-                    <div>
-                        <dt>Subject</dt>
-                        <dd>{principal.subject}</dd>
-                    </div>
-                    <div>
-                        <dt>Issuer</dt>
-                        <dd>{principal.issuer}</dd>
-                    </div>
-                    <div>
-                        <dt>Session expires</dt>
-                        <dd>
-                            <time dateTime={expiresAt}>
-                                {new Date(expiresAt).toLocaleString()}
-                            </time>
-                        </dd>
-                    </div>
-                </dl>
-                <p className="account-card__note">
-                    Signing out ends only this Footnote session. It does not
-                    sign you out of your identity provider.
-                </p>
                 {authenticatedSession.isAdministrator ? (
-                    <Link
-                        className="account-card__button account-card__button--primary"
-                        to="/admin"
-                    >
-                        Open administrator settings
+                    <Link className="account-page__action" to="/admin">
+                        Admin settings
                     </Link>
                 ) : null}
                 <button
-                    className="account-card__button"
+                    className="account-page__action"
                     type="button"
                     disabled={logoutState === 'submitting'}
                     onClick={() => {
@@ -571,28 +517,10 @@ const AccountPage = (): JSX.Element => {
                     {logoutState === 'submitting' ? 'Signing out…' : 'Sign out'}
                 </button>
                 {logoutState === 'error' ? (
-                    <p className="account-card__error" role="alert">
+                    <p className="account-page__error" role="alert">
                         Sign-out could not be completed. Please try again.
                     </p>
                 ) : null}
-                {deletionState === 'error' ? (
-                    <p className="account-card__error" role="alert">
-                        Account deletion could not finish. Sign in again and
-                        retry.
-                    </p>
-                ) : null}
-                <button
-                    className="account-card__button"
-                    type="button"
-                    disabled={deletionState === 'submitting'}
-                    onClick={() => {
-                        void handleDeleteAccount(authenticatedSession);
-                    }}
-                >
-                    {deletionState === 'submitting'
-                        ? 'Deleting account…'
-                        : 'Delete Footnote account'}
-                </button>
             </div>
         );
     };
@@ -606,25 +534,25 @@ const AccountPage = (): JSX.Element => {
             return null;
         if (connectionState.status === 'error')
             return (
-                <p className="account-card__error" role="alert">
+                <p className="account-page__error" role="alert">
                     Discord connection could not be loaded or completed. Start
                     again from Discord.
                 </p>
             );
         if (connectionState.state === 'expired')
             return (
-                <p className="account-card__error" role="alert">
+                <p className="account-page__error" role="alert">
                     This Discord connection expired or was cancelled. Start
                     again with <code>/account connect</code>.
                 </p>
             );
         if (connectionState.state === 'waiting-for-discord-confirmation')
             return (
-                <output className="account-card__status">
+                <p role="status">
                     Run{' '}
                     <code>/account confirm code:{connectionState.code}</code> in
                     the Discord account that started this request.
-                </output>
+                </p>
             );
         if (
             sessionState.status !== 'ready' ||
@@ -632,12 +560,10 @@ const AccountPage = (): JSX.Element => {
             !sessionState.session.authenticated
         ) {
             return (
-                <div className="account-card__stack">
-                    <output>
-                        Sign in to the Footnote account you want to connect.
-                    </output>
+                <div className="account-page__actions">
+                    <p>Sign in to the Footnote account you want to connect.</p>
                     <a
-                        className="account-card__button account-card__button--primary"
+                        className="account-page__action account-page__action--primary"
                         href="/api/auth/login"
                     >
                         Sign in
@@ -647,17 +573,17 @@ const AccountPage = (): JSX.Element => {
         }
         const csrfToken = sessionState.session.csrfToken;
         return (
-            <div className="account-card__stack">
+            <div className="account-page__actions">
                 <p>Connect your Discord account to this Footnote account?</p>
                 <button
-                    className="account-card__button account-card__button--primary"
+                    className="account-page__action account-page__action--primary"
                     type="button"
                     onClick={() => void handleDiscordConsent(csrfToken)}
                 >
                     Approve connection
                 </button>
                 <button
-                    className="account-card__button"
+                    className="account-page__action"
                     type="button"
                     onClick={() => void handleDiscordCancel(csrfToken)}
                 >
@@ -667,272 +593,22 @@ const AccountPage = (): JSX.Element => {
         );
     };
 
-    const renderAccountIncidents = (): JSX.Element | null => {
-        if (sessionState.status !== 'ready' || !sessionState.session.enabled) {
-            return null;
-        }
-        if (!sessionState.session.authenticated) {
-            return (
-                <section
-                    className="account-card account-card__stack"
-                    aria-labelledby="account-incidents-heading"
-                >
-                    <h2 id="account-incidents-heading">Your reports</h2>
-                    <p>
-                        Sign in to add a report to your account or check its
-                        status.
-                    </p>
-                    <a
-                        className="account-card__button account-card__button--primary"
-                        href="/api/auth/login"
-                    >
-                        Sign in
-                    </a>
-                </section>
-            );
-        }
-        const session = sessionState.session;
-        const sessionAccountKey = `${session.principal.issuer}\u0000${session.principal.subject}`;
-        const currentIncidentsState =
-            incidentsState.accountKey === sessionAccountKey
-                ? incidentsState
-                : { status: 'loading' as const, accountKey: sessionAccountKey };
-        const claimCode =
-            claimCodeDraft.accountKey === sessionAccountKey
-                ? claimCodeDraft.value
-                : '';
-        const claimMessage =
-            claimMessageDraft.accountKey === sessionAccountKey
-                ? claimMessageDraft.value
-                : '';
-        const selectedIncident =
-            currentIncidentsState.status === 'ready'
-                ? currentIncidentsState.incidents.find(
-                      (incident) =>
-                          selectedIncidentId?.accountKey ===
-                              sessionAccountKey &&
-                          incident.incidentId === selectedIncidentId.incidentId
-                  )
-                : undefined;
-        return (
-            <section
-                className="account-card account-card__stack"
-                aria-labelledby="account-incidents-heading"
-            >
-                <h2 id="account-incidents-heading">Your reports</h2>
-                <p>Enter the claim code shown after you submitted a report.</p>
-                <form
-                    onSubmit={(event) =>
-                        void handleClaimIncident(
-                            event,
-                            session,
-                            sessionAccountKey
-                        )
-                    }
-                >
-                    <label htmlFor="incident-claim-code">Claim code</label>
-                    <input
-                        id="incident-claim-code"
-                        autoComplete="off"
-                        value={claimCode}
-                        onChange={(event) =>
-                            setClaimCodeDraft({
-                                accountKey: sessionAccountKey,
-                                value: event.target.value,
-                            })
-                        }
-                    />
-                    <button
-                        className="account-card__button account-card__button--primary"
-                        type="submit"
-                        disabled={!claimCode.trim()}
-                    >
-                        Add report
-                    </button>
-                </form>
-                {claimMessage ? <p role="status">{claimMessage}</p> : null}
-                {currentIncidentsState.status === 'loading' ? (
-                    <p role="status">Loading reports…</p>
-                ) : null}
-                {currentIncidentsState.status === 'error' ? (
-                    <p className="account-card__error" role="alert">
-                        Reports could not be loaded. Please try again.
-                    </p>
-                ) : null}
-                {currentIncidentsState.status === 'ready' &&
-                currentIncidentsState.incidents.length === 0 ? (
-                    <p>No reports are linked to this account.</p>
-                ) : null}
-                {currentIncidentsState.status === 'ready' &&
-                currentIncidentsState.incidents.length > 0 ? (
-                    <ul>
-                        {currentIncidentsState.incidents.map((incident) => (
-                            <li key={incident.incidentId}>
-                                <button
-                                    className="account-card__button"
-                                    type="button"
-                                    onClick={() =>
-                                        setSelectedIncidentId({
-                                            accountKey: sessionAccountKey,
-                                            incidentId: incident.incidentId,
-                                        })
-                                    }
-                                >
-                                    View report {incident.incidentId}
-                                </button>
-                            </li>
-                        ))}
-                    </ul>
-                ) : null}
-                {selectedIncident ? (
-                    <article
-                        aria-label={`Report ${selectedIncident.incidentId}`}
-                    >
-                        <h3>Report {selectedIncident.incidentId}</h3>
-                        <p>
-                            Status:{' '}
-                            {selectedIncident.status.replaceAll('_', ' ')}
-                        </p>
-                        <p>
-                            Submitted{' '}
-                            <time dateTime={selectedIncident.createdAt}>
-                                {new Date(
-                                    selectedIncident.createdAt
-                                ).toLocaleString()}
-                            </time>
-                        </p>
-                        <p>
-                            Updated{' '}
-                            <time dateTime={selectedIncident.updatedAt}>
-                                {new Date(
-                                    selectedIncident.updatedAt
-                                ).toLocaleString()}
-                            </time>
-                        </p>
-                    </article>
-                ) : null}
-            </section>
-        );
-    };
-
-    const renderMemories = (): JSX.Element | null => {
-        if (sessionState.status !== 'ready' || !sessionState.session.enabled)
-            return null;
-        if (!sessionState.session.authenticated)
-            return (
-                <section
-                    className="account-card account-card__stack"
-                    aria-labelledby="account-memories-heading"
-                >
-                    <h2 id="account-memories-heading">Your memories</h2>
-                    <p>
-                        Sign in to save and manage information you want Footnote
-                        to remember.
-                    </p>
-                </section>
-            );
-        let memoryWriteErrorMessage: string | null = null;
-        if (memoryWriteError === 'limit') {
-            memoryWriteErrorMessage =
-                'You have reached the 50-memory limit. Forget a saved memory before adding another.';
-        } else if (memoryWriteError === 'save') {
-            memoryWriteErrorMessage =
-                'The memory could not be saved. Please try again.';
-        } else if (memoryWriteError === 'forget') {
-            memoryWriteErrorMessage =
-                'The memory could not be forgotten. Please try again.';
-        }
-
-        let savedMemoryList: JSX.Element | null = null;
-        if (memoryReadState === 'ready' && memories.length === 0) {
-            savedMemoryList = <p>No saved memories.</p>;
-        } else if (memoryReadState === 'ready') {
-            savedMemoryList = (
-                <ul>
-                    {memories.map((memory) => (
-                        <li key={memory.id}>
-                            <p>{memory.text}</p>
-                            <button
-                                className="account-card__button"
-                                type="button"
-                                disabled={memoryBusy}
-                                onClick={() =>
-                                    void handleForgetMemory(memory.id)
-                                }
-                            >
-                                Forget
-                            </button>
-                        </li>
-                    ))}
-                </ul>
-            );
-        }
-        return (
-            <section
-                className="account-card account-card__stack"
-                aria-labelledby="account-memories-heading"
-            >
-                <h2 id="account-memories-heading">Your memories</h2>
-                <p>
-                    Saved memories may be included as advisory context in web
-                    chats while you are signed in, or in Discord chats after you
-                    deliberately link Discord. They are not verified facts,
-                    instructions, or authorization, and you can forget them at
-                    any time. You can save up to 50 memories.
-                </p>
-                <form
-                    className="account-card__stack"
-                    onSubmit={(event) => void handleAddMemory(event)}
-                >
-                    <label htmlFor="account-memory-text">Add a memory</label>
-                    <textarea
-                        id="account-memory-text"
-                        value={memoryText}
-                        maxLength={2000}
-                        required
-                        onChange={(event) => setMemoryText(event.target.value)}
-                    />
-                    <button
-                        className="account-card__button account-card__button--primary"
-                        type="submit"
-                        disabled={
-                            memoryBusy ||
-                            memoryReadState !== 'ready' ||
-                            memoryText.trim().length === 0
-                        }
-                    >
-                        Save memory
-                    </button>
-                </form>
-                {memoryWriteErrorMessage ? (
-                    <p className="account-card__error" role="alert">
-                        {memoryWriteErrorMessage}
-                    </p>
-                ) : null}
-                {memoryReadState === 'loading' ? (
-                    <output>Loading saved memories…</output>
-                ) : null}
-                {memoryReadState === 'error' ? (
-                    <div>
-                        <p className="account-card__error" role="alert">
-                            Saved memories could not be loaded.
-                        </p>
-                        <button
-                            className="account-card__button"
-                            type="button"
-                            onClick={() =>
-                                setMemoryReloadKey((value) => value + 1)
-                            }
-                        >
-                            Try again
-                        </button>
-                    </div>
-                ) : null}
-                {savedMemoryList}
-            </section>
-        );
-    };
-
+    const authenticatedSession =
+        sessionState.status === 'ready' &&
+        sessionState.session.enabled &&
+        sessionState.session.authenticated
+            ? sessionState.session
+            : null;
+    const currentIncidentsState =
+        authenticatedSession && incidentsState.accountKey === accountKey
+            ? incidentsState
+            : { status: 'loading' as const, accountKey };
+    const claimCode =
+        claimCodeDraft.accountKey === accountKey ? claimCodeDraft.value : '';
+    const claimMessage =
+        claimMessageDraft.accountKey === accountKey
+            ? claimMessageDraft.value
+            : '';
     return (
         <PublicPageLayout>
             <main id="main-content" className="public-page__main account-page">
@@ -940,43 +616,198 @@ const AccountPage = (): JSX.Element => {
                     className="public-page__intro"
                     aria-labelledby="account-page-title"
                 >
-                    <h1 id="account-page-title">Account</h1>
-                    <p className="public-page__lede">
-                        View the local session for this Footnote instance.
-                    </p>
+                    <h1
+                        id="account-page-title"
+                        ref={accountTitleRef}
+                        tabIndex={-1}
+                    >
+                        Account
+                    </h1>
+                    {sessionState.status === 'ready' &&
+                    sessionState.session.enabled &&
+                    !sessionState.session.authenticated ? (
+                        <p className="public-page__lede">
+                            Sign in to manage your Footnote account.
+                        </p>
+                    ) : null}
                     {showCallbackFailure ? (
                         <p className="account-page__notice" role="alert">
                             Sign-in could not be completed. Please try again.
                         </p>
                     ) : null}
-                    <div className="account-card" aria-live="polite">
-                        {deletionState === 'success' ? (
-                            <p className="account-card__status" role="status">
-                                Your Footnote account has been deleted. Your
-                                sign-in and Discord accounts were not changed.
-                                Claimed safety reports remain, but their
-                                descriptions, contact information, and details
-                                identifying you were removed. Unclaimed reports
-                                were not changed.
-                            </p>
-                        ) : null}
+                    <div className="account-page__summary" aria-live="polite">
                         {renderSessionState()}
                     </div>
-                    {renderAccountIncidents()}
-                    {renderMemories()}
-                    {connectionState.status === 'ready' &&
-                    connectionState.state === 'none' ? null : (
-                        <section
-                            className="account-card account-card__stack"
-                            aria-labelledby="discord-connection-heading"
-                        >
-                            <h2 id="discord-connection-heading">
-                                Discord account connection
-                            </h2>
-                            {renderDiscordConnection()}
-                        </section>
-                    )}
+                    {deletionState === 'success' ? (
+                        <p className="account-page__notice" role="status">
+                            Your Footnote account was deleted. Claimed safety
+                            reports remain without details that identify you;
+                            your sign-in and Discord accounts were not changed.
+                        </p>
+                    ) : null}
+                    {deletionState === 'error' ? (
+                        <p className="account-page__error" role="alert">
+                            Your account couldn't be deleted. Sign in again and
+                            try once more.
+                        </p>
+                    ) : null}
                 </section>
+                {authenticatedSession ? (
+                    <MemorySection
+                        memories={memories}
+                        text={memoryText}
+                        readState={memoryReadState}
+                        writeError={memoryWriteError}
+                        busy={memoryBusy}
+                        onTextChange={setMemoryText}
+                        onSave={handleAddMemory}
+                        onForget={handleForgetMemory}
+                        onRetry={() => setMemoryReloadKey((value) => value + 1)}
+                    />
+                ) : null}
+                {authenticatedSession ? (
+                    <ReportsSection
+                        incidents={
+                            currentIncidentsState.status === 'ready'
+                                ? currentIncidentsState.incidents
+                                : []
+                        }
+                        readState={currentIncidentsState.status}
+                        claimCode={claimCode}
+                        claimMessage={claimMessage}
+                        onClaimCodeChange={(value) =>
+                            setClaimCodeDraft({ accountKey, value })
+                        }
+                        onClaim={(event) => {
+                            if (!accountKey) return;
+                            void handleClaimIncident(
+                                event,
+                                authenticatedSession,
+                                accountKey
+                            );
+                        }}
+                    />
+                ) : null}
+                {connectionState.status !== 'loading' &&
+                !(
+                    connectionState.status === 'ready' &&
+                    connectionState.state === 'none'
+                ) ? (
+                    <section
+                        className="account-page__section"
+                        aria-labelledby="discord-connection-heading"
+                    >
+                        <h2 id="discord-connection-heading">Connections</h2>
+                        {renderDiscordConnection()}
+                    </section>
+                ) : null}
+                {sessionState.status === 'ready' &&
+                sessionState.session.enabled &&
+                sessionState.session.authenticated ? (
+                    <section
+                        className="account-page__section"
+                        aria-labelledby="account-data-heading"
+                    >
+                        <h2 id="account-data-heading">Account data</h2>
+                        <p>
+                            Download a copy of the information associated with
+                            your account.
+                        </p>
+                        <a
+                            className="account-page__action"
+                            href="/api/account/export"
+                        >
+                            Download account data
+                        </a>
+                        <div className="account-page__delete">
+                            <h3>Delete account</h3>
+                            <p>
+                                Deletes your account, memories, connections, and
+                                links to reports you claimed. Claimed safety
+                                reports remain without details that identify
+                                you.
+                            </p>
+                            {!showDeleteConfirmation ? (
+                                <button
+                                    ref={deleteAccountTriggerRef}
+                                    className="account-page__action account-page__action--danger"
+                                    type="button"
+                                    onClick={() =>
+                                        setShowDeleteConfirmation(true)
+                                    }
+                                >
+                                    Delete account
+                                </button>
+                            ) : (
+                                <div
+                                    className="account-page__confirmation"
+                                    role="group"
+                                    aria-labelledby="delete-confirmation-title"
+                                >
+                                    <h3
+                                        id="delete-confirmation-title"
+                                        ref={deleteConfirmationHeadingRef}
+                                        tabIndex={-1}
+                                    >
+                                        Delete your Footnote account?
+                                    </h3>
+                                    <p>
+                                        Your memories, Discord connection, and
+                                        sign-in links will be deleted. Claimed
+                                        safety reports will remain after
+                                        identifying details and contact
+                                        information are removed. Unclaimed
+                                        reports are unchanged. Your external
+                                        sign-in and Discord accounts won't be
+                                        deleted. This can't be undone.
+                                    </p>
+                                    <div className="account-page__actions">
+                                        <button
+                                            className="account-page__action"
+                                            type="button"
+                                            disabled={
+                                                deletionState === 'submitting'
+                                            }
+                                            onClick={() => {
+                                                focusAfterDeleteCancelRef.current = true;
+                                                setShowDeleteConfirmation(
+                                                    false
+                                                );
+                                            }}
+                                        >
+                                            Cancel
+                                        </button>
+                                        <button
+                                            className="account-page__action account-page__action--danger"
+                                            type="button"
+                                            disabled={
+                                                deletionState === 'submitting'
+                                            }
+                                            onClick={() => {
+                                                if (
+                                                    sessionState.status ===
+                                                        'ready' &&
+                                                    sessionState.session
+                                                        .enabled &&
+                                                    sessionState.session
+                                                        .authenticated
+                                                ) {
+                                                    void confirmAccountDeletion(
+                                                        sessionState.session
+                                                    );
+                                                }
+                                            }}
+                                        >
+                                            {deletionState === 'submitting'
+                                                ? 'Deleting…'
+                                                : 'Delete account'}
+                                        </button>
+                                    </div>
+                                </div>
+                            )}
+                        </div>
+                    </section>
+                ) : null}
             </main>
         </PublicPageLayout>
     );

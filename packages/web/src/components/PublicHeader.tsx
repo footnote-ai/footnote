@@ -1,5 +1,5 @@
 /**
- * @description: Renders the compact public homepage header and its project destinations.
+ * @description: Renders the compact public header and its project destinations.
  * @footnote-scope: web
  * @footnote-module: PublicHeader
  * @footnote-risk: low - Header failures affect navigation but not response or trace data.
@@ -9,12 +9,7 @@
 import { Link } from 'react-router-dom';
 import ThemeToggle from './ThemeToggle';
 
-type PublicHeaderProps = {
-    /** Homepage presentation omits the account link while retaining global controls. */
-    homepage?: boolean;
-};
-
-const PublicHeader = ({ homepage = false }: PublicHeaderProps): JSX.Element => (
+const PublicHeader = (): JSX.Element => (
     <header className="public-header">
         <Link className="public-header__mark" to="/">
             Footnote<sup>[1]</sup>
@@ -29,7 +24,7 @@ const PublicHeader = ({ homepage = false }: PublicHeaderProps): JSX.Element => (
             >
                 GitHub
             </a>
-            {!homepage && <Link to="/account">Sign in</Link>}
+            <Link to="/account">Account</Link>
             <ThemeToggle />
         </nav>
     </header>
