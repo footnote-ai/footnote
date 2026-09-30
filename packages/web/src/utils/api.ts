@@ -59,6 +59,12 @@ export type WebApiClient = {
     getDiscordConnectionState: ReturnType<
         typeof createSharedWebApiClient
     >['getDiscordConnectionState'];
+    getAccountDiscordStatus: ReturnType<
+        typeof createSharedWebApiClient
+    >['getAccountDiscordStatus'];
+    disconnectAccountDiscord: ReturnType<
+        typeof createSharedWebApiClient
+    >['disconnectAccountDiscord'];
     consentDiscordConnection: ReturnType<
         typeof createSharedWebApiClient
     >['consentDiscordConnection'];
@@ -101,6 +107,8 @@ export const createWebApiClient = (
     const forgetAccountMemory = shared.forgetAccountMemory;
     const exchangeDiscordConnection = shared.exchangeDiscordConnection;
     const getDiscordConnectionState = shared.getDiscordConnectionState;
+    const getAccountDiscordStatus = shared.getAccountDiscordStatus;
+    const disconnectAccountDiscord = shared.disconnectAccountDiscord;
     const consentDiscordConnection = shared.consentDiscordConnection;
     const cancelDiscordConnection = shared.cancelDiscordConnection;
     const getTrace = shared.getTrace;
@@ -120,6 +128,8 @@ export const createWebApiClient = (
         forgetAccountMemory,
         exchangeDiscordConnection,
         getDiscordConnectionState,
+        getAccountDiscordStatus,
+        disconnectAccountDiscord,
         consentDiscordConnection,
         cancelDiscordConnection,
         getTrace,
@@ -181,6 +191,10 @@ export const exchangeDiscordConnection = (capability: string) =>
     api.exchangeDiscordConnection(capability);
 export const getDiscordConnectionState = (signal?: AbortSignal) =>
     api.getDiscordConnectionState(signal);
+export const getAccountDiscordStatus = (signal?: AbortSignal) =>
+    api.getAccountDiscordStatus(signal);
+export const disconnectAccountDiscord = (csrfToken: string) =>
+    api.disconnectAccountDiscord(csrfToken);
 export const consentDiscordConnection = (csrfToken: string) =>
     api.consentDiscordConnection(csrfToken);
 export const cancelDiscordConnection = (csrfToken: string) =>

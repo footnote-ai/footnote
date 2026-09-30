@@ -123,6 +123,8 @@ export type DiscordAccountConnectionService = {
         sessionId: string
     ) => string | null;
     cancelDiscordConnection: (connectionSessionId: string) => boolean;
+    /** Cancels approved confirmations owned by an account during disconnect. */
+    cancelDiscordConnectionsForAccount: (accountId: string) => void;
     confirmDiscordConnection: (
         discordUserId: string,
         code: string
@@ -505,6 +507,12 @@ export const createAccountAuthService = ({
         return false;
     };
 
+    const cancelDiscordConnectionsForAccount = (accountId: string): void => {
+        for (const [id, tx] of discordTransactions) {
+            if (tx.approvedAccountId === accountId) clearDiscordTransaction(id);
+        }
+    };
+
     const confirmDiscordConnection = (
         discordUserId: string,
         code: string
@@ -562,6 +570,7 @@ export const createAccountAuthService = ({
         getDiscordConfirmationCode,
         approveDiscordConnection,
         cancelDiscordConnection,
+        cancelDiscordConnectionsForAccount,
         confirmDiscordConnection,
         findAccountByDiscordUserId,
     };

@@ -34,6 +34,8 @@ import {
     addAccountMemory,
     forgetAccountMemory,
     getDiscordConnectionState,
+    getAccountDiscordStatus,
+    disconnectAccountDiscord,
     claimIncident,
     logoutAccount,
     deleteAccount,
@@ -63,6 +65,16 @@ type ConnectionState =
           code?: string;
       }
     | { status: 'error' };
+type AccountDiscordState =
+    | { status: 'loading'; accountKey: string | null }
+    | { status: 'error'; accountKey: string }
+    | {
+          status: 'ready';
+          accountKey: string;
+          connected: boolean;
+          disconnecting: boolean;
+          disconnectError: boolean;
+      };
 
 const hasAuthFailureMarker = (): boolean =>
     new URLSearchParams(window.location.search).get('auth') === 'failed';
@@ -88,6 +100,11 @@ const AccountPage = (): JSX.Element => {
     const [connectionState, setConnectionState] = useState<ConnectionState>({
         status: 'loading',
     });
+    const [accountDiscordState, setAccountDiscordState] =
+        useState<AccountDiscordState>({
+            status: 'loading',
+            accountKey: null,
+        });
     const [incidentsState, setIncidentsState] = useState<AccountIncidentsState>(
         { status: 'loading', accountKey: null }
     );
@@ -231,6 +248,76 @@ const AccountPage = (): JSX.Element => {
             });
         return (): void => controller.abort();
     }, [accountKey, memoryReloadKey]);
+
+    useEffect(() => {
+        if (accountKey === null) {
+            setAccountDiscordState({ status: 'loading', accountKey: null });
+            return;
+        }
+        const controller = new AbortController();
+        setAccountDiscordState({ status: 'loading', accountKey });
+        void getAccountDiscordStatus(controller.signal)
+            .then(({ connected }) => {
+                if (
+                    !controller.signal.aborted &&
+                    activeAccountKeyRef.current === accountKey
+                ) {
+                    setAccountDiscordState({
+                        status: 'ready',
+                        accountKey,
+                        connected,
+                        disconnecting: false,
+                        disconnectError: false,
+                    });
+                }
+            })
+            .catch(() => {
+                if (
+                    !controller.signal.aborted &&
+                    activeAccountKeyRef.current === accountKey
+                ) {
+                    setAccountDiscordState({ status: 'error', accountKey });
+                }
+            });
+        return (): void => controller.abort();
+    }, [accountKey]);
+
+    const handleDiscordDisconnect = async (
+        session: Extract<
+            GetAuthSessionResponse,
+            { enabled: true; authenticated: true }
+        >
+    ): Promise<void> => {
+        if (accountKey === null) return;
+        const submittedAccountKey = accountKey;
+        setAccountDiscordState({
+            status: 'ready',
+            accountKey,
+            connected: true,
+            disconnecting: true,
+            disconnectError: false,
+        });
+        try {
+            await disconnectAccountDiscord(session.csrfToken);
+            if (activeAccountKeyRef.current !== submittedAccountKey) return;
+            setAccountDiscordState({
+                status: 'ready',
+                accountKey,
+                connected: false,
+                disconnecting: false,
+                disconnectError: false,
+            });
+        } catch {
+            if (activeAccountKeyRef.current !== submittedAccountKey) return;
+            setAccountDiscordState({
+                status: 'ready',
+                accountKey,
+                connected: true,
+                disconnecting: false,
+                disconnectError: true,
+            });
+        }
+    };
 
     const handleAddMemory = async (
         event: FormEvent<HTMLFormElement>
@@ -609,6 +696,10 @@ const AccountPage = (): JSX.Element => {
         claimMessageDraft.accountKey === accountKey
             ? claimMessageDraft.value
             : '';
+    const currentAccountDiscordState =
+        authenticatedSession && accountDiscordState.accountKey === accountKey
+            ? accountDiscordState
+            : { status: 'loading' as const, accountKey };
     return (
         <PublicPageLayout>
             <main id="main-content" className="public-page__main account-page">
@@ -688,16 +779,71 @@ const AccountPage = (): JSX.Element => {
                         }}
                     />
                 ) : null}
-                {connectionState.status !== 'loading' &&
-                !(
-                    connectionState.status === 'ready' &&
-                    connectionState.state === 'none'
-                ) ? (
+                {authenticatedSession ? (
                     <section
                         className="account-page__section"
                         aria-labelledby="discord-connection-heading"
                     >
                         <h2 id="discord-connection-heading">Connections</h2>
+                        {currentAccountDiscordState.status === 'loading' ? (
+                            <p role="status">Checking Discord connection…</p>
+                        ) : null}
+                        {currentAccountDiscordState.status === 'error' ? (
+                            <p className="account-page__error" role="alert">
+                                Discord connection status couldn't be loaded.
+                                Refresh the page to try again.
+                            </p>
+                        ) : null}
+                        {currentAccountDiscordState.status === 'ready' ? (
+                            <>
+                                <p role="status">
+                                    {currentAccountDiscordState.connected
+                                        ? 'Connected to Discord.'
+                                        : 'Not connected to Discord.'}
+                                </p>
+                                {currentAccountDiscordState.connected ? (
+                                    <>
+                                        <p>
+                                            Disconnecting removes Discord links
+                                            from this Footnote account. You can
+                                            reconnect from Discord anytime.
+                                        </p>
+                                        <div className="account-page__actions">
+                                            <button
+                                                className="account-page__action"
+                                                type="button"
+                                                disabled={
+                                                    currentAccountDiscordState.disconnecting
+                                                }
+                                                onClick={() =>
+                                                    void handleDiscordDisconnect(
+                                                        authenticatedSession
+                                                    )
+                                                }
+                                            >
+                                                {currentAccountDiscordState.disconnecting
+                                                    ? 'Disconnecting…'
+                                                    : 'Disconnect'}
+                                            </button>
+                                            {currentAccountDiscordState.disconnectError ? (
+                                                <p
+                                                    className="account-page__error"
+                                                    role="alert"
+                                                >
+                                                    Discord couldn't be
+                                                    disconnected. Try again.
+                                                </p>
+                                            ) : null}
+                                        </div>
+                                    </>
+                                ) : (
+                                    <p>
+                                        Start with <code>/account connect</code>{' '}
+                                        in Discord.
+                                    </p>
+                                )}
+                            </>
+                        ) : null}
                         {renderDiscordConnection()}
                     </section>
                 ) : null}

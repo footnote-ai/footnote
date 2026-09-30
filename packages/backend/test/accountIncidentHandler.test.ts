@@ -13,6 +13,7 @@ import path from 'node:path';
 import test from 'node:test';
 import type { PostIncidentReportRequest } from '@footnote/contracts/web';
 import { createAccountIncidentHandlers } from '../src/handlers/accountIncidents.js';
+import { createAccountDiscordConnectionHandlers } from '../src/handlers/accountDiscordConnection.js';
 import { createAccountMemoryHandlers } from '../src/handlers/accountMemories.js';
 import { createAccountAuthService } from '../src/services/accountAuth.js';
 import { createIncidentService } from '../src/services/incidents.js';
@@ -63,9 +64,29 @@ test('reports stay anonymous until explicitly claimed and remain account-scoped'
         accountStore,
         logRequest: () => undefined,
     });
+    const discordHandlers = createAccountDiscordConnectionHandlers({
+        accountAuthService,
+        accountStore,
+        logRequest: () => undefined,
+    });
     const server = http.createServer((req, res) => {
         const pathname = new URL(req.url ?? '/', 'http://localhost').pathname;
-        if (pathname === '/api/account/incidents') {
+        if (pathname === '/api/account/discord-connection') {
+            if (req.method === 'GET') {
+                void discordHandlers.handleAccountDiscordStatusRequest(
+                    req,
+                    res
+                );
+            } else if (req.method === 'DELETE') {
+                void discordHandlers.handleAccountDiscordDisconnectRequest(
+                    req,
+                    res
+                );
+            } else {
+                res.statusCode = 404;
+                res.end();
+            }
+        } else if (pathname === '/api/account/incidents') {
             void handlers.handleAccountIncidentsRequest(req, res);
         } else if (pathname === '/api/account/incidents/claim') {
             void handlers.handleAccountIncidentClaimRequest(req, res);
@@ -123,6 +144,10 @@ test('reports stay anonymous until explicitly claimed and remain account-scoped'
     accountStore.linkDiscordUserToAccount(
         'connected-discord-user',
         reporter.accountId
+    );
+    accountStore.linkDiscordUserToAccount(
+        'other-discord-user',
+        otherAccount.accountId
     );
     const request: PostIncidentReportRequest = {
         reporterUserId: 'same-observed-discord-id',
@@ -453,4 +478,73 @@ test('reports stay anonymous until explicitly claimed and remain account-scoped'
     };
     assert.equal(foreignExport.status, 200);
     assert.equal(foreignExportBody.data.incidentAssociations.records.length, 0);
+
+    const anonymousDiscordStatus = await fetch(
+        `${baseUrl}/api/account/discord-connection`
+    );
+    assert.equal(anonymousDiscordStatus.status, 401);
+    const discordStatus = await fetch(
+        `${baseUrl}/api/account/discord-connection`,
+        { headers: accountHeaders(reporter) }
+    );
+    const discordStatusText = await discordStatus.text();
+    assert.deepEqual(JSON.parse(discordStatusText), { connected: true });
+    assert.ok(!discordStatusText.includes('connected-discord-user'));
+    const noCsrfDisconnect = await fetch(
+        `${baseUrl}/api/account/discord-connection`,
+        { method: 'DELETE', headers: accountHeaders(reporter) }
+    );
+    assert.equal(noCsrfDisconnect.status, 403);
+    const pendingDiscord = accountAuthService.startDiscordConnection(
+        'pending-discord-user'
+    );
+    assert.ok(pendingDiscord);
+    const pendingConnection = accountAuthService.exchangeDiscordCapability(
+        pendingDiscord.capability
+    );
+    assert.ok(pendingConnection);
+    const pendingCode = accountAuthService.approveDiscordConnection(
+        pendingConnection,
+        reporter.accountId,
+        reporter.sessionId
+    );
+    assert.ok(pendingCode);
+    const disconnected = await fetch(
+        `${baseUrl}/api/account/discord-connection`,
+        {
+            method: 'DELETE',
+            headers: {
+                ...accountHeaders(reporter),
+                'x-auth-csrf': reporter.csrfToken,
+            },
+        }
+    );
+    assert.equal(disconnected.status, 204);
+    assert.equal(
+        accountAuthService.confirmDiscordConnection(
+            'pending-discord-user',
+            pendingCode
+        ),
+        'invalid'
+    );
+    const statusAfterDisconnect = await fetch(
+        `${baseUrl}/api/account/discord-connection`,
+        { headers: accountHeaders(reporter) }
+    );
+    assert.deepEqual(await statusAfterDisconnect.json(), { connected: false });
+    assert.equal(
+        accountStore.findAccountByDiscordUserId('connected-discord-user'),
+        null
+    );
+    assert.equal(
+        accountStore.findAccountByDiscordUserId('other-discord-user')?.id,
+        otherAccount.accountId
+    );
+    const otherAccountDiscordStatus = await fetch(
+        `${baseUrl}/api/account/discord-connection`,
+        { headers: accountHeaders(otherAccount) }
+    );
+    assert.deepEqual(await otherAccountDiscordStatus.json(), {
+        connected: true,
+    });
 });

@@ -203,3 +203,66 @@ test('transient storage failure blocks confirmation without losing the approval'
         'linked'
     );
 });
+
+test('disconnect cancellation invalidates only that account’s pending Discord confirmations', async () => {
+    let token = 0;
+    let subject = 'account-a';
+    const store = createInMemoryAccountStore();
+    const service = createAccountAuthService({
+        provider: {
+            ...provider,
+            exchangeCallback: async () => ({
+                issuer: 'https://idp.test',
+                subject,
+                displayName: null,
+            }),
+        },
+        accountStore: store,
+        randomToken: () => `token-${++token}`,
+    });
+    const createSession = async (nextSubject: string) => {
+        subject = nextSubject;
+        const login = await service.startLogin();
+        assert.equal(login.ok, true);
+        if (!login.ok) throw new Error('Test login did not start');
+        const result = await service.completeLogin(
+            login.transactionId,
+            'code=ok&state=s'
+        );
+        assert.equal(result.ok, true);
+        if (!result.ok) throw new Error('Test login did not complete');
+        return result.session;
+    };
+    const accountA = await createSession('account-a');
+    const accountB = await createSession('account-b');
+    const pendingA = service.startDiscordConnection('discord-user-a');
+    const pendingB = service.startDiscordConnection('discord-user-b');
+    assert.ok(pendingA && pendingB);
+    const connectionA = service.exchangeDiscordCapability(pendingA.capability);
+    const connectionB = service.exchangeDiscordCapability(pendingB.capability);
+    assert.ok(connectionA && connectionB);
+    const codeA = service.approveDiscordConnection(
+        connectionA,
+        accountA.accountId,
+        accountA.sessionId
+    );
+    const codeB = service.approveDiscordConnection(
+        connectionB,
+        accountB.accountId,
+        accountB.sessionId
+    );
+    assert.ok(codeA && codeB);
+
+    service.cancelDiscordConnectionsForAccount(accountA.accountId);
+
+    assert.equal(
+        service.confirmDiscordConnection('discord-user-a', codeA),
+        'invalid'
+    );
+    assert.equal(
+        service.confirmDiscordConnection('discord-user-b', codeB),
+        'linked'
+    );
+    assert.equal(store.hasDiscordLinkForAccount(accountA.accountId), false);
+    assert.equal(store.hasDiscordLinkForAccount(accountB.accountId), true);
+});

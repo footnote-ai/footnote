@@ -9,11 +9,13 @@
 import type {
     DiscordConnectionStateResponse,
     DiscordAccountExchangeRequest,
+    DiscordAccountStatusResponse,
     GetAuthSessionResponse,
 } from '@footnote/contracts/web';
 import type { ApiRequester } from './client.js';
 import {
     DiscordConnectionStateResponseSchema,
+    DiscordAccountStatusResponseSchema,
     DiscordAccountConsentResponseSchema,
     createSchemaResponseValidator,
 } from '@footnote/contracts/web/schemas';
@@ -29,6 +31,10 @@ export type AccountAuthApi = {
     getDiscordConnectionState: (
         signal?: AbortSignal
     ) => Promise<DiscordConnectionStateResponse>;
+    getAccountDiscordStatus: (
+        signal?: AbortSignal
+    ) => Promise<DiscordAccountStatusResponse>;
+    disconnectAccountDiscord: (csrfToken: string) => Promise<void>;
     consentDiscordConnection: (csrfToken: string) => Promise<{ code: string }>;
     cancelDiscordConnection: (csrfToken: string) => Promise<void>;
 };
@@ -125,6 +131,33 @@ export const createAccountAuthApi = (
         );
         return response.data;
     };
+    /** @api.operationId: getAccountDiscordConnection @api.path: GET /api/account/discord-connection */
+    const getAccountDiscordStatus = async (
+        signal?: AbortSignal
+    ): Promise<DiscordAccountStatusResponse> => {
+        const response = await requestJson<DiscordAccountStatusResponse>(
+            '/api/account/discord-connection',
+            {
+                method: 'GET',
+                signal,
+                cache: 'no-store',
+                validateResponse: createSchemaResponseValidator(
+                    DiscordAccountStatusResponseSchema
+                ),
+            }
+        );
+        return response.data;
+    };
+    /** @api.operationId: deleteAccountDiscordConnection @api.path: DELETE /api/account/discord-connection */
+    const disconnectAccountDiscord = async (
+        csrfToken: string
+    ): Promise<void> => {
+        await requestJson<unknown>('/api/account/discord-connection', {
+            method: 'DELETE',
+            cache: 'no-store',
+            headers: { 'x-auth-csrf': csrfToken },
+        });
+    };
     /** @api.operationId: postDiscordConnectionConsent @api.path: POST /api/auth/discord-connection/consent */
     const consentDiscordConnection = async (
         csrfToken: string
@@ -161,6 +194,8 @@ export const createAccountAuthApi = (
         deleteAccount,
         exchangeDiscordConnection,
         getDiscordConnectionState,
+        getAccountDiscordStatus,
+        disconnectAccountDiscord,
         consentDiscordConnection,
         cancelDiscordConnection,
     };

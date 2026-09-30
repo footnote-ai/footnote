@@ -149,6 +149,37 @@ test('Discord mapping survives reopen, is idempotent, and never moves', () => {
     }
 });
 
+test('Discord connection controls expose status and unlink only by account', () => {
+    const tempDir = fs.mkdtempSync(
+        path.join(os.tmpdir(), 'footnote-discord-disconnect-')
+    );
+    let store: SqliteAccountStore | null = null;
+    try {
+        store = new SqliteAccountStore({
+            dbPath: path.join(tempDir, 'accounts.db'),
+        });
+        const account = store.resolveOrCreateAccount(identity);
+        const otherAccount = store.resolveOrCreateAccount({
+            ...identity,
+            subject: 'subject-2',
+        });
+        store.linkDiscordUserToAccount('discord-owner', account.id);
+        store.linkDiscordUserToAccount('discord-other', otherAccount.id);
+
+        assert.equal(store.hasDiscordLinkForAccount(account.id), true);
+        store.unlinkDiscordUserFromAccount(account.id);
+        assert.equal(store.hasDiscordLinkForAccount(account.id), false);
+        assert.equal(store.findAccountByDiscordUserId('discord-owner'), null);
+        assert.equal(
+            store.findAccountByDiscordUserId('discord-other')?.id,
+            otherAccount.id
+        );
+    } finally {
+        store?.close();
+        fs.rmSync(tempDir, { recursive: true, force: true });
+    }
+});
+
 test('deleting an account removes its identity and Discord mappings idempotently', () => {
     const tempDir = fs.mkdtempSync(
         path.join(os.tmpdir(), 'footnote-account-delete-')

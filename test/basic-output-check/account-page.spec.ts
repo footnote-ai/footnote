@@ -35,7 +35,10 @@ const mockSignedOut = async (page: Page): Promise<void> => {
     });
 };
 
-const mockSignedIn = async (page: Page): Promise<void> => {
+const mockSignedIn = async (
+    page: Page,
+    discordConnected = false
+): Promise<{ disconnectCsrf: string[] }> => {
     await mockConfig(page);
     await page.route('**/api/auth/session', async (route) => {
         await route.fulfill({
@@ -58,6 +61,18 @@ const mockSignedIn = async (page: Page): Promise<void> => {
         await route.fulfill({
             contentType: 'application/json',
             body: JSON.stringify({ state: 'none' }),
+        });
+    });
+    const disconnectCsrf: string[] = [];
+    await page.route('**/api/account/discord-connection', async (route) => {
+        if (route.request().method() === 'DELETE') {
+            disconnectCsrf.push(route.request().headers()['x-auth-csrf'] ?? '');
+            await route.fulfill({ status: 204 });
+            return;
+        }
+        await route.fulfill({
+            contentType: 'application/json',
+            body: JSON.stringify({ connected: discordConnected }),
         });
     });
     await page.route('**/api/account/incidents', async (route) => {
@@ -113,6 +128,7 @@ const mockSignedIn = async (page: Page): Promise<void> => {
     await page.route('**/api/account/memories/*', async (route) => {
         await route.fulfill({ contentType: 'application/json', body: '{}' });
     });
+    return { disconnectCsrf };
 };
 
 test('signed-out Account offers one sign-in path', async ({
@@ -173,6 +189,11 @@ test('signed-in Account shows manageable data without provider identifiers', asy
     ).toBeVisible();
     await expect(page.getByRole('heading', { name: 'Memory' })).toBeVisible();
     await expect(
+        page.getByRole('heading', { name: 'Connections' })
+    ).toBeVisible();
+    await expect(page.getByText('Not connected to Discord.')).toBeVisible();
+    await expect(page.getByText('/account connect')).toBeVisible();
+    await expect(
         page.getByText(
             "Things you've asked Footnote to remember for future chats."
         )
@@ -198,6 +219,45 @@ test('signed-in Account shows manageable data without provider identifiers', asy
             () => document.documentElement.scrollWidth <= window.innerWidth
         )
     ).toBe(true);
+});
+
+test('account holders can see and disconnect their Discord link without exposing its ID', async ({
+    page,
+}, testInfo) => {
+    const { disconnectCsrf } = await mockSignedIn(page, true);
+    await page.setViewportSize({ width: 1280, height: 900 });
+    await page.goto('/account');
+
+    await expect(page.getByText('Connected to Discord.')).toBeVisible();
+    await expect(page.getByText('connected-discord-user')).toHaveCount(0);
+    await page.screenshot({
+        path: testInfo.outputPath('account-discord-connected.png'),
+        fullPage: true,
+    });
+    await page.getByRole('button', { name: 'Switch to dark mode' }).click();
+    await page.screenshot({
+        path: testInfo.outputPath('account-discord-connected-dark.png'),
+        fullPage: true,
+    });
+    await page.getByRole('button', { name: 'Switch to light mode' }).click();
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.screenshot({
+        path: testInfo.outputPath('account-discord-connected-mobile.png'),
+        fullPage: true,
+    });
+    expect(
+        await page.evaluate(
+            () => document.documentElement.scrollWidth <= window.innerWidth
+        )
+    ).toBe(true);
+    await page.getByRole('button', { name: 'Disconnect' }).click();
+    await expect(page.getByText('Not connected to Discord.')).toBeVisible();
+    await expect(disconnectCsrf).toEqual(['account-csrf-token']);
+    await expect(page.getByText('/account connect')).toBeVisible();
+    await page.screenshot({
+        path: testInfo.outputPath('account-discord-disconnected.png'),
+        fullPage: true,
+    });
 });
 
 test('account holders can save memories, claim reports, and download their data', async ({

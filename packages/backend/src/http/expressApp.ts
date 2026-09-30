@@ -15,6 +15,7 @@ import { registerAuthRoutes } from './authRoutes.js';
 import { registerIncidentRoutes } from './incidentRoutes.js';
 import { registerAccountIncidentRoutes } from './accountIncidentRoutes.js';
 import { registerAccountMemoryRoutes } from './accountMemoryRoutes.js';
+import { registerAccountDiscordConnectionRoutes } from './accountDiscordConnectionRoutes.js';
 import { registerChatRoutes } from './chatRoutes.js';
 import { registerInternalRoutes } from './internalRoutes.js';
 import { registerTraceRoutes } from './traceRoutes.js';
@@ -103,6 +104,14 @@ type CreateExpressAppDeps = {
         res: http.ServerResponse
     ) => void | Promise<void>;
     handleAccountMemoryDeleteRequest?: (
+        req: http.IncomingMessage,
+        res: http.ServerResponse
+    ) => void | Promise<void>;
+    handleAccountDiscordStatusRequest?: (
+        req: http.IncomingMessage,
+        res: http.ServerResponse
+    ) => void | Promise<void>;
+    handleAccountDiscordDisconnectRequest?: (
         req: http.IncomingMessage,
         res: http.ServerResponse
     ) => void | Promise<void>;
@@ -262,6 +271,8 @@ const createExpressApp = ({
     handleAccountMemoriesRequest,
     handleAccountMemoryCreateRequest,
     handleAccountMemoryDeleteRequest,
+    handleAccountDiscordStatusRequest,
+    handleAccountDiscordDisconnectRequest,
     handleChatRequest,
     handleInternalTextRequest,
     handleInternalImageRequest,
@@ -314,6 +325,13 @@ const createExpressApp = ({
         handleAccountMemoryCreateRequest ?? unavailableMemoryHandler;
     const memoryDeleteHandler =
         handleAccountMemoryDeleteRequest ?? unavailableMemoryHandler;
+    const unavailableDiscordConnectionHandler = (
+        _req: http.IncomingMessage,
+        res: http.ServerResponse
+    ): void => {
+        res.statusCode = 503;
+        res.end(JSON.stringify({ error: 'Discord connection unavailable' }));
+    };
     const app = express();
     // Express's generic trust-proxy mode would trust arbitrary X-Forwarded-For.
     // Security consumers use the explicit Fly/Cloudflare resolver instead.
@@ -373,6 +391,17 @@ const createExpressApp = ({
         handleAccountMemoriesRequest: memoryListHandler,
         handleAccountMemoryCreateRequest: memoryCreateHandler,
         handleAccountMemoryDeleteRequest: memoryDeleteHandler,
+        logRequest,
+    });
+    registerAccountDiscordConnectionRoutes({
+        app,
+        normalizePathname,
+        handleAccountDiscordStatusRequest:
+            handleAccountDiscordStatusRequest ??
+            unavailableDiscordConnectionHandler,
+        handleAccountDiscordDisconnectRequest:
+            handleAccountDiscordDisconnectRequest ??
+            unavailableDiscordConnectionHandler,
         logRequest,
     });
     registerIncidentRoutes({

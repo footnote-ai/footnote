@@ -116,3 +116,49 @@ test('deleteAccount posts only the CSRF header without caching', async () => {
     assert.deepEqual(capturedOptions.headers, { 'x-auth-csrf': 'csrf-token' });
     assert.equal(capturedOptions.body, undefined);
 });
+
+test('account Discord status is validated and disconnect sends account CSRF', async () => {
+    const calls: Array<{
+        endpoint: string;
+        options: ApiRequestOptions<unknown>;
+    }> = [];
+    const requestJson: ApiRequester = async <T>(
+        endpoint: string,
+        options: ApiRequestOptions<T> = {}
+    ): Promise<ApiJsonResult<T>> => {
+        calls.push({
+            endpoint,
+            options: options as ApiRequestOptions<unknown>,
+        });
+        return {
+            status: options.method === 'DELETE' ? 204 : 200,
+            data: (endpoint.endsWith('discord-connection') &&
+            options.method === 'GET'
+                ? { connected: true }
+                : null) as T,
+        };
+    };
+    const api = createAccountAuthApi(requestJson);
+
+    assert.deepEqual(await api.getAccountDiscordStatus(), { connected: true });
+    await api.disconnectAccountDiscord('csrf-token');
+
+    assert.equal(calls[0]?.endpoint, '/api/account/discord-connection');
+    assert.equal(calls[0]?.options.method, 'GET');
+    assert.equal(calls[0]?.options.cache, 'no-store');
+    assert.equal(typeof calls[0]?.options.validateResponse, 'function');
+    assert.deepEqual(
+        calls[0]?.options.validateResponse?.({ connected: true }),
+        {
+            success: true,
+            data: { connected: true },
+        }
+    );
+    assert.equal(calls[1]?.endpoint, '/api/account/discord-connection');
+    assert.equal(calls[1]?.options.method, 'DELETE');
+    assert.equal(calls[1]?.options.cache, 'no-store');
+    assert.deepEqual(calls[1]?.options.headers, {
+        'x-auth-csrf': 'csrf-token',
+    });
+    assert.equal(calls[1]?.options.body, undefined);
+});

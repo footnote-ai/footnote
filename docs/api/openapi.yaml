@@ -1114,6 +1114,52 @@ paths:
                             schema:
                                 $ref: '#/components/schemas/ErrorResponse'
 
+    /api/account/discord-connection:
+        get:
+            operationId: getAccountDiscordConnection
+            x-codeRefs:
+                - packages/backend/src/handlers/accountDiscordConnection.ts#createAccountDiscordConnectionHandlers
+                - packages/api-client/src/accountAuth.ts#createAccountAuthApi
+                - packages/contracts/src/web/discordAccounts.ts#DiscordAccountStatusResponseSchema
+            summary: Read the current account's Discord connection status
+            description: Returns whether the signed-in Footnote account has a durable Discord link, without returning a Discord user ID.
+            tags: [Accounts]
+            security: [{ AccountSessionCookie: [] }]
+            responses:
+                '200':
+                    description: Account-scoped connection status.
+                    headers:
+                        Cache-Control:
+                            schema: { type: string, const: no-store }
+                    content:
+                        application/json:
+                            schema:
+                                {
+                                    $ref: '#/components/schemas/DiscordAccountStatusResponse',
+                                }
+                '401': { $ref: '#/components/responses/Unauthorized' }
+                '503': { $ref: '#/components/responses/ServiceUnavailable' }
+        delete:
+            operationId: deleteAccountDiscordConnection
+            x-codeRefs:
+                - packages/backend/src/handlers/accountDiscordConnection.ts#createAccountDiscordConnectionHandlers
+                - packages/api-client/src/accountAuth.ts#createAccountAuthApi
+            summary: Disconnect Discord links from the current Footnote account
+            description: Removes durable Discord links owned by the signed-in account. This does not alter any external Discord account, and the user can reconnect from Discord later.
+            tags: [Accounts]
+            security: [{ AccountSessionCookie: [] }]
+            parameters:
+                - $ref: '#/components/parameters/AuthCsrfHeader'
+            responses:
+                '204':
+                    description: Account-scoped Discord links removed.
+                    headers:
+                        Cache-Control:
+                            schema: { type: string, const: no-store }
+                '401': { $ref: '#/components/responses/Unauthorized' }
+                '403': { $ref: '#/components/responses/Forbidden' }
+                '503': { $ref: '#/components/responses/ServiceUnavailable' }
+
     /api/auth/discord-connection/exchange:
         post:
             operationId: postDiscordConnectionExchange

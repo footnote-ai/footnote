@@ -5,7 +5,7 @@ administrator authorization, explicit Discord connection, and the first
 account lifecycle (incident association, export, deletion, and explicit user-owned
 memory) are implemented.
 
-Last updated: 2026-09-29.
+Last updated: 2026-09-30.
 
 This tracker describes the durable account direction. Each branch should still
 deliver one useful result, preserve public and setup behavior, and avoid
@@ -53,6 +53,12 @@ a link to the same account is harmless. If that ID is linked to another
 Footnote account, Footnote refuses the new link. Unfinished requests expire
 after ten minutes and stay in process memory; a restart clears them. See
 [Discord account connection](../auth/README.md#connect-a-discord-account).
+
+The signed-in `/account` page shows whether the Footnote account has a durable
+Discord link without exposing the Discord user ID. Disconnect requires the
+account-session CSRF token and removes only Discord links owned by that Footnote
+account; it does not alter any external Discord account, and users can reconnect
+from Discord later.
 
 Administrator settings actions may record a deterministic hash of the external
 issuer and subject as a safe actor identifier. Footnote does not retain provider
