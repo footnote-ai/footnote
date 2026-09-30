@@ -15,6 +15,7 @@ import type {
     PutAdminSettingsYamlResponse,
 } from '@footnote/contracts/web';
 import PublicPageLayout from '@components/PublicPageLayout';
+import { Link } from 'react-router-dom';
 import { parseSetupCodeFromHash } from '../utils/setupFlow';
 import { getAuthSession } from '../utils/api';
 
@@ -26,7 +27,11 @@ type ExchangeState =
     | { status: 'idle' }
     | { status: 'loading' }
     | { status: 'ready'; csrfToken: string; expiresAt: string }
-    | { status: 'error'; message: string };
+    | {
+          status: 'error';
+          message: string;
+          action?: 'sign-in' | 'account';
+      };
 
 type LoadYamlState =
     | { status: 'idle' }
@@ -114,7 +119,7 @@ const SetupPage = ({ mode = 'setup' }: SetupPageProps): JSX.Element => {
                         setExchangeState({
                             status: 'error',
                             message:
-                                'Administrator sign-in is unavailable. Public Footnote remains available.',
+                                "Admin sign-in isn't available on this Footnote instance.",
                         });
                         return;
                     }
@@ -122,15 +127,16 @@ const SetupPage = ({ mode = 'setup' }: SetupPageProps): JSX.Element => {
                         setExchangeState({
                             status: 'error',
                             message:
-                                'Sign in to an administrator account before opening Footnote settings.',
+                                'Sign in with an admin account to continue.',
+                            action: 'sign-in',
                         });
                         return;
                     }
                     if (!session.isAdministrator) {
                         setExchangeState({
                             status: 'error',
-                            message:
-                                'This account is not authorized to administer Footnote settings.',
+                            message: "You don't have access to admin settings.",
+                            action: 'account',
                         });
                         return;
                     }
@@ -140,14 +146,12 @@ const SetupPage = ({ mode = 'setup' }: SetupPageProps): JSX.Element => {
                         expiresAt: session.expiresAt,
                     });
                 })
-                .catch((error: unknown) => {
+                .catch(() => {
                     if (!cancelled) {
                         setExchangeState({
                             status: 'error',
                             message:
-                                error instanceof Error
-                                    ? error.message
-                                    : 'Administrator session could not be loaded.',
+                                'Admin session could not be checked. Try reloading.',
                         });
                     }
                 });
@@ -222,7 +226,12 @@ const SetupPage = ({ mode = 'setup' }: SetupPageProps): JSX.Element => {
             if (cancelled) {
                 return;
             }
-            setYamlState({ status: 'error', message });
+            setYamlState({
+                status: 'error',
+                message: isAdministratorMode
+                    ? 'Settings could not be loaded. Try again.'
+                    : message,
+            });
         };
         void (async () => {
             const response = await fetch('/api/admin/settings.yaml', {
@@ -286,8 +295,9 @@ const SetupPage = ({ mode = 'setup' }: SetupPageProps): JSX.Element => {
                     );
                     setYamlText(templateText);
                     setYamlNotice({
-                        message:
-                            'Settings file is empty. Loaded canonical template so you can edit and save.',
+                        message: isAdministratorMode
+                            ? 'The settings file was empty, so a starter configuration has been loaded.'
+                            : 'Settings file is empty. Loaded canonical template so you can edit and save.',
                         kind: 'warning',
                     });
                     setYamlState({ status: 'ready' });
@@ -315,7 +325,7 @@ const SetupPage = ({ mode = 'setup' }: SetupPageProps): JSX.Element => {
         return () => {
             cancelled = true;
         };
-    }, [exchangeState, yamlRetryKey]);
+    }, [exchangeState, isAdministratorMode, yamlRetryKey]);
 
     const handleSave = async (): Promise<void> => {
         if (exchangeState.status !== 'ready' || yamlState.status !== 'ready') {
@@ -357,7 +367,12 @@ const SetupPage = ({ mode = 'setup' }: SetupPageProps): JSX.Element => {
                 const message = await readErrorMessage(validateResponse);
                 setSubmitFeedback((prior) => ({
                     ...prior,
-                    status: { kind: 'error', message },
+                    status: {
+                        kind: 'error',
+                        message: isAdministratorMode
+                            ? 'Settings could not be saved. Try again.'
+                            : message,
+                    },
                 }));
                 return;
             }
@@ -394,8 +409,9 @@ const SetupPage = ({ mode = 'setup' }: SetupPageProps): JSX.Element => {
                     validationWarnings,
                     status: {
                         kind: 'error',
-                        message:
-                            'Save failed because the optimistic lock is stale. Reload setup and try again.',
+                        message: isAdministratorMode
+                            ? 'Settings changed elsewhere. Reload the page and try again.'
+                            : 'Save failed because the optimistic lock is stale. Reload setup and try again.',
                     },
                 }));
                 return;
@@ -405,7 +421,12 @@ const SetupPage = ({ mode = 'setup' }: SetupPageProps): JSX.Element => {
                 setSubmitFeedback((prior) => ({
                     ...prior,
                     validationWarnings,
-                    status: { kind: 'error', message },
+                    status: {
+                        kind: 'error',
+                        message: isAdministratorMode
+                            ? 'Settings could not be saved. Try again.'
+                            : message,
+                    },
                 }));
                 return;
             }
@@ -419,20 +440,85 @@ const SetupPage = ({ mode = 'setup' }: SetupPageProps): JSX.Element => {
                 validationWarnings: [],
                 status: {
                     kind: 'success',
-                    message: 'Settings saved. Restart Footnote to use them.',
+                    message: isAdministratorMode
+                        ? 'Saved. Restart Footnote to apply changes.'
+                        : 'Settings saved. Restart Footnote to use them.',
                 },
             });
         } catch (error) {
-            const message =
-                error instanceof Error
-                    ? `Save request failed: ${error.message}`
-                    : 'Save request failed due to a network or parse error.';
+            const message = isAdministratorMode
+                ? 'Settings could not be saved. Check your connection and try again.'
+                : error instanceof Error
+                  ? `Save request failed: ${error.message}`
+                  : 'Save request failed due to a network or parse error.';
             setSubmitFeedback((prior) => ({
                 ...prior,
                 status: { kind: 'error', message },
             }));
         }
     };
+
+    const settingsEditor = (
+        <>
+            <textarea
+                aria-label="Settings YAML"
+                className="setup-textarea"
+                value={yamlText}
+                onChange={(event) => setYamlText(event.target.value)}
+                spellCheck={false}
+                rows={22}
+            />
+            <div className="setup-actions">
+                <button
+                    type="button"
+                    onClick={() => void handleSave()}
+                    disabled={submitFeedback.status.kind === 'submitting'}
+                >
+                    {submitFeedback.status.kind === 'submitting'
+                        ? isAdministratorMode
+                            ? 'Saving…'
+                            : 'Saving...'
+                        : isAdministratorMode
+                          ? 'Save'
+                          : 'Save settings'}
+                </button>
+            </div>
+            <div className="setup-submit-feedback" aria-live="polite">
+                {submitFeedback.status.kind === 'error' && (
+                    <p className="setup-error">
+                        {submitFeedback.status.message}
+                    </p>
+                )}
+                {submitFeedback.status.kind === 'success' && (
+                    <p className="setup-note">
+                        {submitFeedback.status.message}
+                    </p>
+                )}
+                {submitFeedback.validationWarnings.length > 0 && (
+                    <ul className="setup-warnings">
+                        {submitFeedback.validationWarnings.map(
+                            (warning, index) => (
+                                <li key={`${warning}-${index}`}>{warning}</li>
+                            )
+                        )}
+                    </ul>
+                )}
+                {submitFeedback.validationErrors.length > 0 && (
+                    <ul className="setup-errors">
+                        {submitFeedback.validationErrors.map((error, index) => (
+                            <li
+                                key={`${error.category}-${error.pointer ?? 'root'}-${index}`}
+                            >
+                                <strong>{error.category}</strong>{' '}
+                                {error.pointer ? `[${error.pointer}] ` : ''}
+                                {error.message}
+                            </li>
+                        ))}
+                    </ul>
+                )}
+            </div>
+        </>
+    );
 
     return (
         <PublicPageLayout>
@@ -442,13 +528,21 @@ const SetupPage = ({ mode = 'setup' }: SetupPageProps): JSX.Element => {
                     aria-labelledby="setup-title"
                 >
                     <h1 id="setup-title">
-                        {isAdministratorMode
-                            ? 'Administrator settings'
-                            : 'Settings'}
+                        {isAdministratorMode ? 'Admin' : 'Settings'}
                     </h1>
                     <p className="public-page__lede">
-                        Edit <code>footnote.yaml</code> and save. Settings are
-                        not applied until Footnote restarts.
+                        {isAdministratorMode ? (
+                            <>
+                                Edit <code>footnote.yaml</code>. Restart
+                                Footnote to apply saved changes.
+                            </>
+                        ) : (
+                            <>
+                                Edit <code>footnote.yaml</code> and save.
+                                Settings are not applied until Footnote
+                                restarts.
+                            </>
+                        )}
                     </p>
                 </section>
 
@@ -456,26 +550,47 @@ const SetupPage = ({ mode = 'setup' }: SetupPageProps): JSX.Element => {
                     {exchangeState.status === 'loading' && (
                         <p>
                             {isAdministratorMode
-                                ? 'Checking administrator session...'
+                                ? 'Checking access…'
                                 : 'Exchanging setup code...'}
                         </p>
                     )}
                     {exchangeState.status === 'error' && (
-                        <p className="setup-error">{exchangeState.message}</p>
+                        <div className="setup-error">
+                            <p>{exchangeState.message}</p>
+                            {exchangeState.action === 'sign-in' ? (
+                                <a
+                                    className="public-page__action public-page__action--primary"
+                                    href="/api/auth/login"
+                                >
+                                    Sign in
+                                </a>
+                            ) : null}
+                            {exchangeState.action === 'account' ? (
+                                <Link
+                                    className="public-page__action"
+                                    to="/account"
+                                >
+                                    Account
+                                </Link>
+                            ) : null}
+                        </div>
                     )}
-                    {exchangeState.status === 'ready' && (
-                        <p className="setup-note">
-                            {isAdministratorMode
-                                ? 'Administrator session is active until '
-                                : 'Setup session is active until '}
-                            {exchangeState.expiresAt}.
-                        </p>
-                    )}
+                    {exchangeState.status === 'ready' &&
+                        !isAdministratorMode && (
+                            <p className="setup-note">
+                                Setup session is active until{' '}
+                                {exchangeState.expiresAt}.
+                            </p>
+                        )}
                     {yamlNotice && (
                         <p className="setup-note">{yamlNotice.message}</p>
                     )}
                     {yamlState.status === 'loading' && (
-                        <p>Loading settings...</p>
+                        <p>
+                            {isAdministratorMode
+                                ? 'Loading settings…'
+                                : 'Loading settings...'}
+                        </p>
                     )}
                     {yamlState.status === 'error' && (
                         <>
@@ -500,88 +615,24 @@ const SetupPage = ({ mode = 'setup' }: SetupPageProps): JSX.Element => {
                             className="setup-editor"
                             aria-labelledby="setup-yaml-title"
                         >
-                            <h2 id="setup-yaml-title">Settings YAML</h2>
-                            <details open className="setup-editor-disclosure">
-                                <summary>Settings YAML editor</summary>
-                                <div className="setup-editor-disclosure__content">
-                                    <textarea
-                                        className="setup-textarea"
-                                        value={yamlText}
-                                        onChange={(event) =>
-                                            setYamlText(event.target.value)
-                                        }
-                                        spellCheck={false}
-                                        rows={22}
-                                    />
-                                    <div className="setup-actions">
-                                        <button
-                                            type="button"
-                                            onClick={() => void handleSave()}
-                                            disabled={
-                                                submitFeedback.status.kind ===
-                                                'submitting'
-                                            }
-                                        >
-                                            {submitFeedback.status.kind ===
-                                            'submitting'
-                                                ? 'Saving...'
-                                                : 'Save settings'}
-                                        </button>
+                            <h2 id="setup-yaml-title">
+                                {isAdministratorMode
+                                    ? 'Settings'
+                                    : 'Settings YAML'}
+                            </h2>
+                            {isAdministratorMode ? (
+                                settingsEditor
+                            ) : (
+                                <details
+                                    open
+                                    className="setup-editor-disclosure"
+                                >
+                                    <summary>Settings YAML editor</summary>
+                                    <div className="setup-editor-disclosure__content">
+                                        {settingsEditor}
                                     </div>
-
-                                    <div
-                                        className="setup-submit-feedback"
-                                        aria-live="polite"
-                                    >
-                                        {submitFeedback.status.kind ===
-                                            'error' && (
-                                            <p className="setup-error">
-                                                {submitFeedback.status.message}
-                                            </p>
-                                        )}
-                                        {submitFeedback.status.kind ===
-                                            'success' && (
-                                            <p className="setup-note">
-                                                {submitFeedback.status.message}
-                                            </p>
-                                        )}
-                                        {submitFeedback.validationWarnings
-                                            .length > 0 && (
-                                            <ul className="setup-warnings">
-                                                {submitFeedback.validationWarnings.map(
-                                                    (warning, index) => (
-                                                        <li
-                                                            key={`${warning}-${index}`}
-                                                        >
-                                                            {warning}
-                                                        </li>
-                                                    )
-                                                )}
-                                            </ul>
-                                        )}
-                                        {submitFeedback.validationErrors
-                                            .length > 0 && (
-                                            <ul className="setup-errors">
-                                                {submitFeedback.validationErrors.map(
-                                                    (error, index) => (
-                                                        <li
-                                                            key={`${error.category}-${error.pointer ?? 'root'}-${index}`}
-                                                        >
-                                                            <strong>
-                                                                {error.category}
-                                                            </strong>{' '}
-                                                            {error.pointer
-                                                                ? `[${error.pointer}] `
-                                                                : ''}
-                                                            {error.message}
-                                                        </li>
-                                                    )
-                                                )}
-                                            </ul>
-                                        )}
-                                    </div>
-                                </div>
-                            </details>
+                                </details>
+                            )}
                         </section>
                     )}
             </main>
