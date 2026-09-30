@@ -34,17 +34,18 @@ test('account route is lazy, preloaded, styled, and linked from the public heade
     assert.match(appSource, /path="\/account"/);
     assert.match(appSource, /<AccountPage \/>/);
     assert.match(appSource, /loadAccountPage\(\)/);
-    assert.match(headerSource, /<Link to="\/account">\s*Sign in\s*<\/Link>/);
+    assert.match(headerSource, /<Link to="\/account">\s*Account\s*<\/Link>/);
+    assert.match(headerSource, /<Link to="\/account">Account<\/Link>/);
     assert.doesNotMatch(headerSource, /aria-disabled="true"/);
     assert.doesNotMatch(publicStyles, /public-header__unavailable/);
     assert.match(stylesIndex, /@import '\.\/account\.css';/);
 });
 
 test('account page uses typed session APIs and exposes all public states', async () => {
-    const source = await readFile(
-        `${webSourceDirectory}pages/AccountPage.tsx`,
-        'utf8'
-    );
+    const [source, reports] = await Promise.all([
+        readFile(`${webSourceDirectory}pages/AccountPage.tsx`, 'utf8'),
+        readFile(`${webSourceDirectory}components/ReportsSection.tsx`, 'utf8'),
+    ]);
 
     assert.match(source, /getAuthSession\(controller\.signal\)/);
     assert.match(source, /controller\.abort\(\)/);
@@ -52,25 +53,28 @@ test('account page uses typed session APIs and exposes all public states', async
     assert.match(source, /getAccountIncidents\(controller\.signal\)/);
     assert.match(source, /claimIncident\(submittedCode, session\.csrfToken\)/);
     assert.match(source, /Report added to your account/);
-    assert.match(source, /View report/);
+    assert.match(reports, /Report \{incident\.incidentId\}/);
     assert.match(source, /Loading account…/);
-    assert.match(source, /Sign-in is unavailable/);
-    assert.match(source, /Signed out/);
-    assert.match(source, /Signed in/);
+    assert.match(source, /Sign in to manage your Footnote account/);
+    assert.match(source, /Account sign-in isn't available/);
+    assert.match(source, /Signed in as \$\{principal\.displayName/);
     assert.match(source, /href="\/api\/auth\/login"/);
-    assert.match(source, /principal\.displayName \?\? principal\.subject/);
+    assert.doesNotMatch(
+        source,
+        /principal\.displayName \?\? principal\.subject/
+    );
     assert.match(source, /disabled=\{logoutState === 'submitting'\}/);
-    assert.match(source, /Signing out ends only this Footnote session/);
+    assert.doesNotMatch(source, /Signing out ends only this Footnote session/);
     assert.match(source, /authenticatedSession\.isAdministrator/);
     assert.doesNotMatch(source, /localStorage|sessionStorage/);
     assert.doesNotMatch(source, /accessToken|refreshToken|idToken/);
 });
 
 test('account page exposes explicit memory save, list, and forget controls', async () => {
-    const source = await readFile(
-        `${webSourceDirectory}pages/AccountPage.tsx`,
-        'utf8'
-    );
+    const [source, memorySection] = await Promise.all([
+        readFile(`${webSourceDirectory}pages/AccountPage.tsx`, 'utf8'),
+        readFile(`${webSourceDirectory}components/MemorySection.tsx`, 'utf8'),
+    ]);
     assert.match(source, /getAccountMemories/);
     assert.match(
         source,
@@ -80,21 +84,17 @@ test('account page exposes explicit memory save, list, and forget controls', asy
         source,
         /forgetAccountMemory\([\s\S]*?sessionState\.session\.csrfToken/
     );
-    assert.match(source, /Your memories/);
     assert.match(
-        source,
-        /may be included as advisory context in web\s+chats while you are signed in, or in Discord chats after\s+you\s+deliberately link Discord/
+        memorySection,
+        /Things you've asked Footnote to remember for future chats/
     );
+    assert.match(memorySection, /className="account-page__memory-list"/);
     assert.match(
-        source,
-        /not verified facts,\s+instructions, or authorization, and you can forget them at\s+any time/
+        memorySection,
+        /readState === 'ready' && memories\.length === 0/
     );
-    assert.match(
-        source,
-        /memoryReadState === 'ready' && memories\.length === 0/
-    );
-    assert.match(source, /reached the 50-memory limit/);
-    assert.match(source, /saved memories, sign-in links/);
+    assert.match(memorySection, /Memory limit reached/);
+    assert.match(source, /Download account data/);
 });
 
 test('account page confirms deletion and reports signed-out result', async () => {
@@ -103,40 +103,39 @@ test('account page confirms deletion and reports signed-out result', async () =>
         'utf8'
     );
 
-    assert.match(source, /window\.confirm\(/);
+    assert.match(source, /showDeleteConfirmation/);
+    assert.match(source, /role="group"/);
     assert.match(source, /deleteAccount\(session\.csrfToken\)/);
-    assert.match(source, /Delete Footnote account/);
-    assert.match(source, /Your Footnote account has been deleted/);
-    assert.match(source, /Claimed safety reports will remain/);
-    assert.match(source, /details identifying you will be removed/);
-    assert.match(source, /Unclaimed reports will not change/);
+    assert.match(source, /Delete account/);
+    assert.match(source, /Your Footnote account was deleted/);
+    assert.match(source, /Claimed\s+safety reports will remain/);
     assert.match(
         source,
-        /Your\s+sign-in and Discord accounts were not changed/
+        /identifying details and contact\s+information are removed/
     );
-    assert.match(source, /details\s+identifying you were removed/);
-    assert.match(source, /Claimed safety reports remain/);
+    assert.match(source, /Unclaimed\s+reports are unchanged/);
+    assert.match(
+        source,
+        /Your external\s+sign-in and Discord accounts won't be\s+deleted/
+    );
 });
 
-test('account report selection and claim drafts reset across logout and account changes', async () => {
-    const source = await readFile(
-        `${webSourceDirectory}pages/AccountPage.tsx`,
-        'utf8'
-    );
+test('account report claim drafts reset across logout and account changes', async () => {
+    const [source, reports] = await Promise.all([
+        readFile(`${webSourceDirectory}pages/AccountPage.tsx`, 'utf8'),
+        readFile(`${webSourceDirectory}components/ReportsSection.tsx`, 'utf8'),
+    ]);
 
-    assert.match(source, /incidentsState\.accountKey === sessionAccountKey/);
+    assert.match(source, /incidentsState\.accountKey === accountKey/);
+    assert.match(reports, /Use a claim code to add a report to your account/);
     assert.match(source, /activeAccountKeyRef\.current === accountKey/);
     assert.match(source, /previousAccountKey !== accountKey/);
     assert.match(
         source,
         /setClaimCodeDraft\(\{ accountKey: null, value: '' \}\)/
     );
-    assert.match(source, /setSelectedIncidentId\(null\)/);
-    assert.match(
-        source,
-        /selectedIncidentId\?\.accountKey ===\s+sessionAccountKey/
-    );
     assert.doesNotMatch(source, /getAccountIncident\(/);
+    assert.doesNotMatch(source, /View report/);
     assert.doesNotMatch(source, /already used/);
 });
 
@@ -152,7 +151,7 @@ test('account page reports callback failure without retaining its query marker',
     assert.match(source, /Sign-in could not be completed/);
     assert.match(source, /role="alert"/);
     assert.match(source, /aria-live="polite"/);
-    assert.match(source, /accountStatusHeadingRef\.current\?\.focus\(\)/);
+    assert.match(source, /accountTitleRef\.current\?\.focus\(\)/);
 });
 
 test('Discord connection removes its fragment and offers explicit consent and cancel', async () => {
@@ -169,5 +168,5 @@ test('Discord connection removes its fragment and offers explicit consent and ca
     assert.match(source, /cancelDiscordConnection\(csrfToken\)/);
     assert.match(source, /Approve connection/);
     assert.match(source, /\/account confirm code:/);
-    assert.match(source, /<output/);
+    assert.match(source, /<p role="status">/);
 });

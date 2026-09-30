@@ -162,7 +162,7 @@ const PublicHomePage = (): JSX.Element => {
                 <circle cx="600" cy="1380" r="6" />
                 <circle cx="901" cy="1556" r="6" />
             </svg>
-            <PublicHeader homepage />
+            <PublicHeader />
             <main id="main-content" className="public-home__main">
                 <section aria-labelledby="homepage-title">
                     <header className="public-home__intro">

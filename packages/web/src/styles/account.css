@@ -1,136 +1,226 @@
 /**
- * @description: Styles the standalone account session and sign-in states.
+ * @description: Styles account settings as quiet sections within the public page frame.
  * @footnote-scope: web
  * @footnote-module: AccountPageStyles
  * @footnote-risk: low - Styles affect only account page presentation.
- * @footnote-ethics: medium - Clear session states and controls support informed account use.
+ * @footnote-ethics: medium - Clear account controls support informed account use.
  */
 
-.account-page {
-    max-width: 72rem;
+.account-page__summary {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 0.8rem 1.2rem;
 }
 
-.account-page__notice,
-.account-card {
-    max-width: 42rem;
-}
-
-.account-page__notice {
-    margin: 0 0 1rem;
-    padding: 0.8rem 1rem;
-    border: 1px solid var(--fn-status-error-soft-border);
-    border-radius: 0.35rem;
-    background: var(--fn-status-error-soft-bg);
-    color: var(--fn-status-error);
-}
-
-.account-card {
-    padding: clamp(1.25rem, 3vw, 2rem);
-    border: 1px solid var(--public-rule);
-    border-radius: 0.4rem;
-    background: var(--public-paper-raised);
-}
-
-.account-card__stack {
-    display: grid;
-    justify-items: start;
-    gap: 1rem;
-}
-
-.account-card__stack > * {
+.account-page__summary > *,
+.account-page__section > p,
+.account-page__delete > * {
     margin: 0;
 }
 
-.account-card h2 {
+.account-page__summary h2 {
     font-family: var(--fn-font-display);
-    font-size: clamp(1.5rem, 3vw, 2rem);
+    font-size: clamp(1.35rem, 2.5vw, 1.8rem);
+    line-height: 1.2;
+}
+
+.account-page__section {
+    display: grid;
+    gap: 1rem;
+    padding: 2rem 0;
+    border-top: 1px solid var(--public-rule);
+}
+
+.account-page__section > h2 {
+    margin: 0;
+    font-family: var(--fn-font-display);
+    font-size: clamp(1.7rem, 3vw, 2.35rem);
     line-height: 1.1;
 }
 
-.account-card h2:focus {
-    outline: 2px solid var(--public-focus);
-    outline-offset: 0.25rem;
+.account-page__section > p {
+    max-width: 47.5rem;
 }
 
-.account-card__status {
-    margin: 0;
-    color: var(--public-muted);
-}
-
-.account-card__identity {
-    display: grid;
-    width: 100%;
-    gap: 0.9rem;
-    margin: 0;
-}
-
-.account-card__identity > div {
-    display: grid;
-    grid-template-columns: minmax(7rem, 0.35fr) minmax(0, 1fr);
-    gap: 0.75rem;
-}
-
-.account-card__identity dt {
-    color: var(--public-muted);
-    font-family: var(--fn-font-mono);
-    font-size: 0.78rem;
-    font-weight: 600;
-    text-transform: uppercase;
-    letter-spacing: 0.05em;
-}
-
-.account-card__identity dd {
-    min-width: 0;
-    margin: 0;
-    overflow-wrap: anywhere;
-}
-
-.account-card__button {
+.account-page__action {
     display: inline-flex;
     align-items: center;
     justify-content: center;
+    width: fit-content;
     min-height: 2.75rem;
     padding: 0.65rem 1rem;
     border: 1px solid var(--public-rule);
     border-radius: 0.3rem;
-    background: var(--public-paper);
+    background: var(--public-paper-raised);
     color: var(--public-ink);
-    font: 600 0.9rem var(--fn-font-mono);
+    font: 600 0.95rem var(--fn-font-sans);
     text-decoration: none;
     cursor: pointer;
 }
 
-.account-card__button:hover:not(:disabled) {
+.account-page__action:hover:not(:disabled) {
     border-color: var(--public-focus);
 }
 
-.account-card__button:focus-visible {
+.account-page__action:focus-visible,
+.account-page__confirmation h3:focus {
     outline: 2px solid var(--public-focus);
     outline-offset: 0.2rem;
 }
 
-.account-card__button:disabled {
+.account-page__action:disabled {
     opacity: 0.65;
     cursor: wait;
 }
 
-.account-card__button--primary {
+.account-page__action--primary {
     border-color: var(--public-focus);
     background: var(--public-focus);
-    color: #fff;
+    color: var(--public-paper);
 }
 
-.account-card__note {
+.account-page__action--danger {
+    border-color: var(--fn-status-error-soft-border);
+    color: var(--fn-status-error);
+}
+
+.account-page__claim-form,
+.account-page__memory-form {
+    display: grid;
+    justify-items: start;
+    gap: 0.7rem;
+    width: min(100%, 42rem);
+}
+
+.account-page__claim-form {
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: end;
+}
+
+.account-page__claim-form label {
+    grid-column: 1 / -1;
+}
+
+.account-page__claim-form input,
+.account-page__memory-form textarea {
+    width: 100%;
+    min-width: 0;
+    border: 1px solid var(--public-rule);
+    border-radius: 0.3rem;
+    padding: 0.7rem;
+    background: var(--public-paper);
+    color: var(--public-ink);
+    font: inherit;
+}
+
+.account-page__memory-form textarea {
+    min-height: 5.5rem;
+    resize: vertical;
+}
+
+.account-page__report-list,
+.account-page__memory-list {
+    width: 100%;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+}
+
+.account-page__report-list li,
+.account-page__memory-list li {
+    padding: 0.9rem 0;
+    border-bottom: 1px solid var(--public-rule);
+}
+
+.account-page__report-list li:first-child,
+.account-page__memory-list li:first-child {
+    border-top: 1px solid var(--public-rule);
+}
+
+.account-page__report-list h3,
+.account-page__memory-list p,
+.account-page__report-list p {
+    margin: 0;
+}
+
+.account-page__report-list h3,
+.account-page__delete h3,
+.account-page__confirmation h3 {
+    font-family: var(--fn-font-sans);
+    font-size: 1rem;
+    font-weight: 600;
+}
+
+.account-page__report-list p {
+    margin-top: 0.25rem;
+    color: var(--public-muted);
+    overflow-wrap: anywhere;
+}
+
+.account-page__memory-list li {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 1rem;
+}
+
+.account-page__memory-list p {
+    min-width: 0;
+    overflow-wrap: anywhere;
+}
+
+.account-page__count {
+    margin: 0;
     color: var(--public-muted);
 }
 
-.account-card__error {
+.account-page__delete {
+    display: grid;
+    justify-items: start;
+    gap: 0.75rem;
+    margin-top: 1rem;
+    padding-top: 1.25rem;
+    border-top: 1px solid var(--public-rule);
+}
+
+.account-page__confirmation {
+    display: grid;
+    justify-items: start;
+    gap: 0.8rem;
+    max-width: 42rem;
+    padding-top: 0.4rem;
+}
+
+.account-page__confirmation > * {
+    margin: 0;
+}
+
+.account-page__actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.65rem;
+}
+
+.account-page__notice {
+    margin: 1rem 0 0;
+    color: var(--public-muted);
+}
+
+.account-page__error {
     color: var(--fn-status-error);
 }
 
 @media (max-width: 480px) {
-    .account-card__identity > div {
+    .account-page__memory-list li {
+        flex-direction: column;
+    }
+
+    .account-page__claim-form {
         grid-template-columns: 1fr;
-        gap: 0.2rem;
+    }
+
+    .account-page__claim-form label {
+        grid-column: auto;
     }
 }
