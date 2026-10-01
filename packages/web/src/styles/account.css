@@ -74,6 +74,29 @@
     background: rgb(0 0 0 / 48%);
 }
 
+.account-page__memory-dialog {
+    width: min(32rem, calc(100vw - 2rem));
+    max-height: calc(100dvh - 2rem);
+    margin: auto;
+    padding: 1.5rem;
+    overflow: auto;
+    border: 1px solid var(--public-rule);
+    border-radius: 0.4rem;
+    background: var(--public-paper-raised);
+    color: var(--public-ink);
+    box-shadow: 0 1.5rem 4rem rgb(0 0 0 / 24%);
+}
+
+.account-page__memory-dialog::backdrop {
+    background: rgb(0 0 0 / 48%);
+}
+
+.account-page__memory-dialog h3 {
+    margin: 0 0 1rem;
+    font-family: var(--fn-font-display);
+    font-size: 1.5rem;
+}
+
 .account-page__claim-dialog h3,
 .account-page__claim-dialog p {
     margin: 0;
@@ -144,6 +167,15 @@
     align-items: end;
 }
 
+.account-page__icon-action {
+    min-width: 2.75rem;
+    padding: 0.65rem;
+}
+
+.account-page__icon-action svg {
+    display: block;
+}
+
 .account-page__claim-dialog-actions {
     display: flex;
     grid-column: 1 / -1;
@@ -184,6 +216,12 @@
 .account-page__memory-list li {
     padding: 0.9rem 0;
     border-bottom: 1px solid var(--public-rule);
+}
+
+.account-page__memory-actions {
+    display: flex;
+    flex: 0 0 auto;
+    gap: 0.5rem;
 }
 
 .account-page__report-list li:first-child,
@@ -266,7 +304,7 @@
 
 @media (max-width: 480px) {
     .account-page__memory-list li {
-        flex-direction: column;
+        flex-direction: row;
     }
 
     .account-page__claim-form {

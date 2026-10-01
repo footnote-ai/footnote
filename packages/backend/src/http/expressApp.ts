@@ -103,6 +103,10 @@ type CreateExpressAppDeps = {
         req: http.IncomingMessage,
         res: http.ServerResponse
     ) => void | Promise<void>;
+    handleAccountMemoryUpdateRequest?: (
+        req: http.IncomingMessage,
+        res: http.ServerResponse
+    ) => void | Promise<void>;
     handleAccountMemoryDeleteRequest?: (
         req: http.IncomingMessage,
         res: http.ServerResponse
@@ -270,6 +274,7 @@ const createExpressApp = ({
     handleAccountExportRequest,
     handleAccountMemoriesRequest,
     handleAccountMemoryCreateRequest,
+    handleAccountMemoryUpdateRequest,
     handleAccountMemoryDeleteRequest,
     handleAccountDiscordStatusRequest,
     handleAccountDiscordDisconnectRequest,
@@ -323,6 +328,8 @@ const createExpressApp = ({
         handleAccountMemoriesRequest ?? unavailableMemoryHandler;
     const memoryCreateHandler =
         handleAccountMemoryCreateRequest ?? unavailableMemoryHandler;
+    const memoryUpdateHandler =
+        handleAccountMemoryUpdateRequest ?? unavailableMemoryHandler;
     const memoryDeleteHandler =
         handleAccountMemoryDeleteRequest ?? unavailableMemoryHandler;
     const unavailableDiscordConnectionHandler = (
@@ -390,6 +397,7 @@ const createExpressApp = ({
         normalizePathname,
         handleAccountMemoriesRequest: memoryListHandler,
         handleAccountMemoryCreateRequest: memoryCreateHandler,
+        handleAccountMemoryUpdateRequest: memoryUpdateHandler,
         handleAccountMemoryDeleteRequest: memoryDeleteHandler,
         logRequest,
     });

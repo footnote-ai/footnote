@@ -134,13 +134,16 @@ test('account Discord status is validated and disconnect sends account CSRF', as
             status: options.method === 'DELETE' ? 204 : 200,
             data: (endpoint.endsWith('discord-connection') &&
             options.method === 'GET'
-                ? { connected: true }
+                ? { connected: true, discordUserIds: ['123456789012345678'] }
                 : null) as T,
         };
     };
     const api = createAccountAuthApi(requestJson);
 
-    assert.deepEqual(await api.getAccountDiscordStatus(), { connected: true });
+    assert.deepEqual(await api.getAccountDiscordStatus(), {
+        connected: true,
+        discordUserIds: ['123456789012345678'],
+    });
     await api.disconnectAccountDiscord('csrf-token');
 
     assert.equal(calls[0]?.endpoint, '/api/account/discord-connection');
@@ -148,10 +151,16 @@ test('account Discord status is validated and disconnect sends account CSRF', as
     assert.equal(calls[0]?.options.cache, 'no-store');
     assert.equal(typeof calls[0]?.options.validateResponse, 'function');
     assert.deepEqual(
-        calls[0]?.options.validateResponse?.({ connected: true }),
+        calls[0]?.options.validateResponse?.({
+            connected: true,
+            discordUserIds: ['123456789012345678'],
+        }),
         {
             success: true,
-            data: { connected: true },
+            data: {
+                connected: true,
+                discordUserIds: ['123456789012345678'],
+            },
         }
     );
     assert.equal(calls[1]?.endpoint, '/api/account/discord-connection');

@@ -2862,6 +2862,14 @@ export const PostAccountMemoryRequestSchema = z
 export const PostAccountMemoryResponseSchema = z
     .object({ memory: AccountMemorySchema })
     .strict();
+/** @api.operationId: patchAccountMemory @api.path: PATCH /api/account/memories/{memoryId} */
+export const PatchAccountMemoryRequestSchema = z
+    .object({ text: z.string().trim().min(1).max(2000) })
+    .strict();
+/** @api.operationId: patchAccountMemory @api.path: PATCH /api/account/memories/{memoryId} */
+export const PatchAccountMemoryResponseSchema = z
+    .object({ memory: AccountMemorySchema })
+    .strict();
 /** @api.operationId: deleteAccountMemory @api.path: DELETE /api/account/memories/{memoryId} */
 export const DeleteAccountMemoryResponseSchema = z
     .object({ success: z.literal(true) })

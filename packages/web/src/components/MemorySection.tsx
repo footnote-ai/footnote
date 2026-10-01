@@ -2,80 +2,93 @@
  * @description: Renders saved memories and their account-page controls.
  * @footnote-scope: web
  * @footnote-module: MemorySection
- * @footnote-risk: low - This section presents account-scoped memory controls without owning retrieval authority.
- * @footnote-ethics: high - Clear memory controls preserve user agency over saved personal context.
+ * @footnote-risk: medium - Account-scoped memory controls invoke private write operations.
+ * @footnote-ethics: high - Clear edit and forget controls preserve user agency over personal context.
  */
 
-import type { FormEvent } from 'react';
+import { useRef, useState, type FormEvent } from 'react';
 import type { AccountMemory } from '@footnote/contracts/web';
+import AccountIcon from './AccountIcon.js';
 
 export type MemoryReadState = 'loading' | 'ready' | 'error';
-export type MemoryWriteError = 'save' | 'forget' | 'limit' | null;
+export type MemoryWriteError = 'save' | 'edit' | 'forget' | 'limit' | null;
 
 type MemorySectionProps = {
     memories: AccountMemory[];
-    text: string;
     readState: MemoryReadState;
     writeError: MemoryWriteError;
     busy: boolean;
-    onTextChange: (value: string) => void;
-    onSave: (event: FormEvent<HTMLFormElement>) => Promise<void>;
+    onClearError: () => void;
+    onSave: (text: string) => Promise<boolean>;
+    onEdit: (memoryId: string, text: string) => Promise<boolean>;
     onForget: (memoryId: string) => Promise<void>;
     onRetry: () => void;
 };
 
 const MemorySection = ({
     memories,
-    text,
     readState,
     writeError,
     busy,
-    onTextChange,
+    onClearError,
     onSave,
+    onEdit,
     onForget,
     onRetry,
 }: MemorySectionProps): JSX.Element => {
+    const dialogRef = useRef<HTMLDialogElement>(null);
+    const [editor, setEditor] = useState<{
+        memoryId: string | null;
+        text: string;
+    } | null>(null);
     const errorMessage =
         writeError === 'limit'
             ? 'Memory limit reached. Forget one to save another.'
             : writeError === 'save'
               ? 'The memory could not be saved. Please try again.'
-              : writeError === 'forget'
-                ? 'Memory could not be removed. Please try again.'
-                : null;
+              : writeError === 'edit'
+                ? 'The memory could not be updated. Please try again.'
+                : writeError === 'forget'
+                  ? 'Memory could not be removed. Please try again.'
+                  : null;
+
+    const openEditor = (memoryId: string | null, text = ''): void => {
+        onClearError();
+        setEditor({ memoryId, text });
+        dialogRef.current?.showModal();
+    };
+
+    const handleSubmit = (event: FormEvent<HTMLFormElement>): void => {
+        event.preventDefault();
+        if (!editor || busy) return;
+        const save = editor.memoryId
+            ? onEdit(editor.memoryId, editor.text)
+            : onSave(editor.text);
+        void save.then((saved) => {
+            if (saved) dialogRef.current?.close();
+        });
+    };
 
     return (
         <section
             className="account-page__section"
             aria-labelledby="account-memories-heading"
         >
-            <h2 id="account-memories-heading">Memory</h2>
-            <p>Things you've asked Footnote to remember for future chats.</p>
-            <form
-                className="account-page__memory-form"
-                onSubmit={(event) => void onSave(event)}
-            >
-                <label htmlFor="account-memory-text">Add a memory</label>
-                <textarea
-                    id="account-memory-text"
-                    value={text}
-                    maxLength={2000}
-                    required
-                    onChange={(event) => onTextChange(event.target.value)}
-                />
+            <div className="account-page__section-heading">
+                <h2 id="account-memories-heading">Memory</h2>
                 <button
-                    className="account-page__action account-page__action--primary"
-                    type="submit"
-                    disabled={
-                        busy ||
-                        readState !== 'ready' ||
-                        text.trim().length === 0
-                    }
+                    aria-label="Add memory"
+                    className="account-page__action account-page__icon-action"
+                    disabled={busy || readState !== 'ready'}
+                    title="Add memory"
+                    type="button"
+                    onClick={() => openEditor(null)}
                 >
-                    Save memory
+                    <AccountIcon name="add" />
                 </button>
-            </form>
-            {errorMessage ? (
+            </div>
+            <p>Things you've asked Footnote to remember for future chats.</p>
+            {writeError === 'forget' ? (
                 <p className="account-page__error" role="alert">
                     {errorMessage}
                 </p>
@@ -110,18 +123,85 @@ const MemorySection = ({
                     {memories.map((memory) => (
                         <li key={memory.id}>
                             <p>{memory.text}</p>
-                            <button
-                                className="account-page__action"
-                                type="button"
-                                disabled={busy}
-                                onClick={() => void onForget(memory.id)}
-                            >
-                                Forget
-                            </button>
+                            <div className="account-page__memory-actions">
+                                <button
+                                    aria-label={`Edit memory: ${memory.text}`}
+                                    className="account-page__action account-page__icon-action"
+                                    disabled={busy}
+                                    title="Edit memory"
+                                    type="button"
+                                    onClick={() =>
+                                        openEditor(memory.id, memory.text)
+                                    }
+                                >
+                                    <AccountIcon name="edit" />
+                                </button>
+                                <button
+                                    aria-label={`Forget memory: ${memory.text}`}
+                                    className="account-page__action account-page__icon-action"
+                                    disabled={busy}
+                                    title="Forget memory"
+                                    type="button"
+                                    onClick={() => void onForget(memory.id)}
+                                >
+                                    <AccountIcon name="delete" />
+                                </button>
+                            </div>
                         </li>
                     ))}
                 </ul>
             ) : null}
+            <dialog
+                aria-labelledby="account-memory-dialog-title"
+                className="account-page__memory-dialog"
+                onClose={() => setEditor(null)}
+                ref={dialogRef}
+            >
+                <h3 id="account-memory-dialog-title">
+                    {editor?.memoryId ? 'Edit memory' : 'Add a memory'}
+                </h3>
+                <form
+                    className="account-page__memory-form"
+                    onSubmit={handleSubmit}
+                >
+                    <label htmlFor="account-memory-text">Memory</label>
+                    <textarea
+                        autoFocus
+                        id="account-memory-text"
+                        maxLength={2000}
+                        required
+                        value={editor?.text ?? ''}
+                        onChange={(event) =>
+                            setEditor((current) =>
+                                current
+                                    ? { ...current, text: event.target.value }
+                                    : current
+                            )
+                        }
+                    />
+                    {errorMessage && writeError !== 'forget' ? (
+                        <p className="account-page__error" role="alert">
+                            {errorMessage}
+                        </p>
+                    ) : null}
+                    <div className="account-page__actions">
+                        <button
+                            className="account-page__action account-page__action--primary"
+                            disabled={busy}
+                            type="submit"
+                        >
+                            {editor?.memoryId ? 'Save changes' : 'Save memory'}
+                        </button>
+                        <button
+                            className="account-page__action"
+                            type="button"
+                            onClick={() => dialogRef.current?.close()}
+                        >
+                            Cancel
+                        </button>
+                    </div>
+                </form>
+            </dialog>
         </section>
     );
 };

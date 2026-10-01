@@ -21,6 +21,7 @@ import type {
     GetAuthSessionResponse,
 } from '@footnote/contracts/web';
 import PublicPageLayout from '@components/PublicPageLayout';
+import AccountIcon from '@components/AccountIcon';
 import MemorySection, { type MemoryReadState } from '@components/MemorySection';
 import ReportsSection from '@components/ReportsSection';
 import { Link } from 'react-router-dom';
@@ -32,6 +33,7 @@ import {
     getAccountIncidents,
     getAccountMemories,
     addAccountMemory,
+    updateAccountMemory,
     forgetAccountMemory,
     getDiscordConnectionState,
     getAccountDiscordStatus,
@@ -72,6 +74,7 @@ type AccountDiscordState =
           status: 'ready';
           accountKey: string;
           connected: boolean;
+          discordUserIds: string[];
           disconnecting: boolean;
           disconnectError: boolean;
       };
@@ -118,12 +121,11 @@ const AccountPage = (): JSX.Element => {
     }>({ accountKey: null, value: '' });
     const [incidentReloadKey, setIncidentReloadKey] = useState(0);
     const [memories, setMemories] = useState<AccountMemory[]>([]);
-    const [memoryText, setMemoryText] = useState('');
     const [memoryReadState, setMemoryReadState] =
         useState<MemoryReadState>('loading');
     const [memoryReloadKey, setMemoryReloadKey] = useState(0);
     const [memoryWriteError, setMemoryWriteError] = useState<
-        'save' | 'forget' | 'limit' | null
+        'save' | 'edit' | 'forget' | 'limit' | null
     >(null);
     const [memoryBusy, setMemoryBusy] = useState(false);
     const [showCallbackFailure] = useState(hasAuthFailureMarker);
@@ -177,7 +179,6 @@ const AccountPage = (): JSX.Element => {
             setClaimMessageDraft({ accountKey: null, value: '' });
             setMemories([]);
             setMemoryReadState('loading');
-            setMemoryText('');
             setMemoryWriteError(null);
             setMemoryBusy(false);
         }
@@ -257,7 +258,7 @@ const AccountPage = (): JSX.Element => {
         const controller = new AbortController();
         setAccountDiscordState({ status: 'loading', accountKey });
         void getAccountDiscordStatus(controller.signal)
-            .then(({ connected }) => {
+            .then(({ connected, discordUserIds }) => {
                 if (
                     !controller.signal.aborted &&
                     activeAccountKeyRef.current === accountKey
@@ -266,6 +267,7 @@ const AccountPage = (): JSX.Element => {
                         status: 'ready',
                         accountKey,
                         connected,
+                        discordUserIds,
                         disconnecting: false,
                         disconnectError: false,
                     });
@@ -294,6 +296,10 @@ const AccountPage = (): JSX.Element => {
             status: 'ready',
             accountKey,
             connected: true,
+            discordUserIds:
+                accountDiscordState.status === 'ready'
+                    ? accountDiscordState.discordUserIds
+                    : [],
             disconnecting: true,
             disconnectError: false,
         });
@@ -304,6 +310,7 @@ const AccountPage = (): JSX.Element => {
                 status: 'ready',
                 accountKey,
                 connected: false,
+                discordUserIds: [],
                 disconnecting: false,
                 disconnectError: false,
             });
@@ -313,40 +320,81 @@ const AccountPage = (): JSX.Element => {
                 status: 'ready',
                 accountKey,
                 connected: true,
+                discordUserIds:
+                    accountDiscordState.status === 'ready'
+                        ? accountDiscordState.discordUserIds
+                        : [],
                 disconnecting: false,
                 disconnectError: true,
             });
         }
     };
 
-    const handleAddMemory = async (
-        event: FormEvent<HTMLFormElement>
-    ): Promise<void> => {
-        event.preventDefault();
+    const handleAddMemory = async (text: string): Promise<boolean> => {
         if (
             sessionState.status !== 'ready' ||
             !sessionState.session.authenticated ||
             accountKey === null
         )
-            return;
+            return false;
         const submittedAccountKey = accountKey;
         setMemoryBusy(true);
         setMemoryWriteError(null);
         try {
             const result = await addAccountMemory(
-                memoryText,
+                text,
                 sessionState.session.csrfToken
             );
-            if (activeAccountKeyRef.current !== submittedAccountKey) return;
+            if (activeAccountKeyRef.current !== submittedAccountKey)
+                return false;
             setMemories((current) => [...current, result.memory]);
-            setMemoryText('');
+            return true;
         } catch (error: unknown) {
-            if (activeAccountKeyRef.current !== submittedAccountKey) return;
+            if (activeAccountKeyRef.current !== submittedAccountKey)
+                return false;
             setMemoryWriteError(
                 isApiClientError(error) && error.status === 409
                     ? 'limit'
                     : 'save'
             );
+            return false;
+        } finally {
+            setMemoryBusy(false);
+        }
+    };
+
+    const handleEditMemory = async (
+        memoryId: string,
+        text: string
+    ): Promise<boolean> => {
+        if (
+            sessionState.status !== 'ready' ||
+            !sessionState.session.authenticated ||
+            accountKey === null
+        )
+            return false;
+        const submittedAccountKey = accountKey;
+        setMemoryBusy(true);
+        setMemoryWriteError(null);
+        try {
+            const result = await updateAccountMemory(
+                memoryId,
+                text,
+                sessionState.session.csrfToken
+            );
+            if (activeAccountKeyRef.current !== submittedAccountKey)
+                return false;
+            setMemories((current) =>
+                current.map((memory) =>
+                    memory.id === memoryId ? result.memory : memory
+                )
+            );
+            return true;
+        } catch {
+            if (activeAccountKeyRef.current !== submittedAccountKey)
+                return false;
+            setMemoryWriteError('edit');
+            return false;
         } finally {
             setMemoryBusy(false);
         }
@@ -746,12 +794,12 @@ const AccountPage = (): JSX.Element => {
                 {authenticatedSession ? (
                     <MemorySection
                         memories={memories}
-                        text={memoryText}
                         readState={memoryReadState}
                         writeError={memoryWriteError}
                         busy={memoryBusy}
-                        onTextChange={setMemoryText}
+                        onClearError={() => setMemoryWriteError(null)}
                         onSave={handleAddMemory}
+                        onEdit={handleEditMemory}
                         onForget={handleForgetMemory}
                         onRetry={() => setMemoryReloadKey((value) => value + 1)}
                     />
@@ -798,32 +846,41 @@ const AccountPage = (): JSX.Element => {
                             <>
                                 <p role="status">
                                     {currentAccountDiscordState.connected
-                                        ? 'Connected to Discord.'
-                                        : 'Not connected to Discord.'}
+                                        ? 'Discord connected.'
+                                        : 'Discord not connected.'}
                                 </p>
                                 {currentAccountDiscordState.connected ? (
                                     <>
                                         <p>
-                                            Disconnecting removes Discord links
-                                            from this Footnote account. You can
-                                            reconnect from Discord anytime.
+                                            Discord ID:{' '}
+                                            {currentAccountDiscordState.discordUserIds.join(
+                                                ', '
+                                            )}
+                                        </p>
+                                        <p>
+                                            Disconnecting only removes this
+                                            Footnote link.
                                         </p>
                                         <div className="account-page__actions">
                                             <button
-                                                className="account-page__action"
-                                                type="button"
+                                                aria-label={
+                                                    currentAccountDiscordState.disconnecting
+                                                        ? 'Disconnecting from Discord'
+                                                        : 'Disconnect Discord'
+                                                }
+                                                className="account-page__action account-page__icon-action"
                                                 disabled={
                                                     currentAccountDiscordState.disconnecting
                                                 }
+                                                title="Disconnect Discord"
+                                                type="button"
                                                 onClick={() =>
                                                     void handleDiscordDisconnect(
                                                         authenticatedSession
                                                     )
                                                 }
                                             >
-                                                {currentAccountDiscordState.disconnecting
-                                                    ? 'Disconnecting…'
-                                                    : 'Disconnect'}
+                                                <AccountIcon name="disconnect" />
                                             </button>
                                             {currentAccountDiscordState.disconnectError ? (
                                                 <p
@@ -860,10 +917,15 @@ const AccountPage = (): JSX.Element => {
                             your account.
                         </p>
                         <a
+                            aria-label="Download account data"
                             className="account-page__action"
                             href="/api/account/export"
+                            title="Download account data"
                         >
-                            Download account data
+                            <AccountIcon name="download" />
+                            <span className="sr-only">
+                                Download account data
+                            </span>
                         </a>
                         <div className="account-page__delete">
                             <h3>Delete account</h3>
@@ -882,6 +944,7 @@ const AccountPage = (): JSX.Element => {
                                         setShowDeleteConfirmation(true)
                                     }
                                 >
+                                    <AccountIcon name="delete" />
                                     Delete account
                                 </button>
                             ) : (

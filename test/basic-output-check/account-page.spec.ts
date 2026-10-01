@@ -72,7 +72,10 @@ const mockSignedIn = async (
         }
         await route.fulfill({
             contentType: 'application/json',
-            body: JSON.stringify({ connected: discordConnected }),
+            body: JSON.stringify({
+                connected: discordConnected,
+                discordUserIds: discordConnected ? ['123456789012345678'] : [],
+            }),
         });
     });
     await page.route('**/api/account/incidents', async (route) => {
@@ -191,7 +194,7 @@ test('signed-in Account shows manageable data without provider identifiers', asy
     await expect(
         page.getByRole('heading', { name: 'Connections' })
     ).toBeVisible();
-    await expect(page.getByText('Not connected to Discord.')).toBeVisible();
+    await expect(page.getByText('Discord not connected.')).toBeVisible();
     await expect(page.getByText('/account connect')).toBeVisible();
     await expect(
         page.getByText(
@@ -221,21 +224,24 @@ test('signed-in Account shows manageable data without provider identifiers', asy
     ).toBe(true);
 });
 
-test('account holders can see and disconnect their Discord link without exposing its ID', async ({
+test('account holders can see and disconnect their Discord link', async ({
     page,
 }, testInfo) => {
     const { disconnectCsrf } = await mockSignedIn(page, true);
     await page.setViewportSize({ width: 1280, height: 900 });
     await page.goto('/account');
 
-    await expect(page.getByText('Connected to Discord.')).toBeVisible();
-    await expect(page.getByText('connected-discord-user')).toHaveCount(0);
+    await expect(page.getByText('Discord connected.')).toBeVisible();
+    await expect(
+        page.getByText(/Discord ID:\s*123456789012345678/)
+    ).toBeVisible();
     await page.screenshot({
         path: testInfo.outputPath('account-discord-connected.png'),
         fullPage: true,
     });
-    await page.getByRole('button', { name: 'Disconnect' }).click();
-    await expect(page.getByText('Not connected to Discord.')).toBeVisible();
+    await page.getByRole('button', { name: 'Disconnect Discord' }).click();
+    await expect(page.getByText('Discord not connected.')).toBeVisible();
+    await expect(page.getByText(/Discord ID:/)).toHaveCount(0);
     await expect(disconnectCsrf).toEqual(['account-csrf-token']);
     await expect(page.getByText('/account connect')).toBeVisible();
     await page.screenshot({
@@ -248,9 +254,12 @@ test('account holders can save memories, claim reports, and download their data'
     page,
 }) => {
     await mockSignedIn(page);
+    let failedMemoryEdits = 1;
     let exportRequested = false;
     let claimRequest = '';
     let logoutCsrf = '';
+    let memoryPatch = '';
+    let memoryPatchCsrf = '';
     await page.route('**/api/account/incidents/claim', async (route) => {
         claimRequest = route.request().postData() ?? '';
         await route.fulfill({
@@ -269,20 +278,99 @@ test('account holders can save memories, claim reports, and download their data'
             body: JSON.stringify({ format: 'footnote-account-export' }),
         });
     });
+    await page.route('**/api/account/memories/*', async (route) => {
+        if (route.request().method() === 'PATCH') {
+            if (failedMemoryEdits > 0) {
+                failedMemoryEdits -= 1;
+                await route.fulfill({ status: 500 });
+                return;
+            }
+            memoryPatch = route.request().postData() ?? '';
+            memoryPatchCsrf = route.request().headers()['x-auth-csrf'] ?? '';
+            const body: unknown = JSON.parse(memoryPatch);
+            const text =
+                typeof body === 'object' &&
+                body !== null &&
+                'text' in body &&
+                typeof body.text === 'string'
+                    ? body.text
+                    : '';
+            await route.fulfill({
+                contentType: 'application/json',
+                body: JSON.stringify({
+                    memory: {
+                        id: '00000000-0000-4000-8000-000000000002',
+                        text,
+                        createdAt: '2026-09-20T11:00:00.000Z',
+                    },
+                }),
+            });
+            return;
+        }
+        await route.fulfill({
+            status: 200,
+            body: JSON.stringify({ success: true }),
+        });
+    });
     await page.route('**/api/auth/logout', async (route) => {
         logoutCsrf = route.request().headers()['x-auth-csrf'] ?? '';
         await route.fulfill({ status: 204 });
     });
 
     await page.goto('/account');
-    await page.getByLabel('Add a memory').fill('Uses keyboard shortcuts.');
-    await page.getByRole('button', { name: 'Save memory' }).click();
+    await page.getByRole('button', { name: 'Add memory' }).click();
+    const memoryDialog = page.getByRole('dialog', { name: 'Add a memory' });
+    await expect(memoryDialog).toBeVisible();
+    await memoryDialog.getByLabel('Memory').fill('Uses keyboard shortcuts.');
+    await memoryDialog.getByRole('button', { name: 'Save memory' }).click();
     await expect(page.getByText('Uses keyboard shortcuts.')).toBeVisible();
-    await page.getByRole('button', { name: 'Forget' }).first().click();
+    await page
+        .getByRole('button', { name: 'Edit memory: Uses keyboard shortcuts.' })
+        .click();
+    const editDialog = page.getByRole('dialog', { name: 'Edit memory' });
+    await expect(editDialog.getByLabel('Memory')).toHaveValue(
+        'Uses keyboard shortcuts.'
+    );
+    await editDialog
+        .getByLabel('Memory')
+        .fill('Uses custom keyboard shortcuts.');
+    await editDialog.getByRole('button', { name: 'Save changes' }).click();
+    await expect(editDialog.getByRole('alert')).toContainText(
+        'The memory could not be updated. Please try again.'
+    );
+    await editDialog.getByRole('button', { name: 'Cancel' }).click();
+    await page
+        .getByRole('button', { name: 'Edit memory: Uses keyboard shortcuts.' })
+        .click();
+    await expect(
+        page.getByRole('dialog', { name: 'Edit memory' }).getByRole('alert')
+    ).toHaveCount(0);
+    await page
+        .getByRole('dialog', { name: 'Edit memory' })
+        .getByLabel('Memory')
+        .fill('Uses custom keyboard shortcuts.');
+    await page
+        .getByRole('dialog', { name: 'Edit memory' })
+        .getByRole('button', { name: 'Save changes' })
+        .click();
+    await expect(
+        page.getByText('Uses custom keyboard shortcuts.')
+    ).toBeVisible();
+    expect(memoryPatch).toBe(
+        JSON.stringify({ text: 'Uses custom keyboard shortcuts.' })
+    );
+    expect(memoryPatchCsrf).toBe('account-csrf-token');
+    await page
+        .getByRole('button', {
+            name: 'Forget memory: Prefers concise technical answers.',
+        })
+        .click();
     await expect(
         page.getByText('Prefers concise technical answers.')
     ).toHaveCount(0);
-    await expect(page.getByText('Uses keyboard shortcuts.')).toBeVisible();
+    await expect(
+        page.getByText('Uses custom keyboard shortcuts.')
+    ).toBeVisible();
     await expect(
         page.getByRole('heading', { name: 'Report ABC123' })
     ).toBeVisible();

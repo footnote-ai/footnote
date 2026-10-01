@@ -50,6 +50,9 @@ export type WebApiClient = {
     addAccountMemory: ReturnType<
         typeof createSharedWebApiClient
     >['addAccountMemory'];
+    updateAccountMemory: ReturnType<
+        typeof createSharedWebApiClient
+    >['updateAccountMemory'];
     forgetAccountMemory: ReturnType<
         typeof createSharedWebApiClient
     >['forgetAccountMemory'];
@@ -104,6 +107,7 @@ export const createWebApiClient = (
     const claimIncident = shared.claimIncident;
     const getAccountMemories = shared.getAccountMemories;
     const addAccountMemory = shared.addAccountMemory;
+    const updateAccountMemory = shared.updateAccountMemory;
     const forgetAccountMemory = shared.forgetAccountMemory;
     const exchangeDiscordConnection = shared.exchangeDiscordConnection;
     const getDiscordConnectionState = shared.getDiscordConnectionState;
@@ -125,6 +129,7 @@ export const createWebApiClient = (
         claimIncident,
         getAccountMemories,
         addAccountMemory,
+        updateAccountMemory,
         forgetAccountMemory,
         exchangeDiscordConnection,
         getDiscordConnectionState,
@@ -184,6 +189,12 @@ export const getAccountMemories = (signal?: AbortSignal) =>
     api.getAccountMemories(signal);
 export const addAccountMemory = (text: string, csrfToken: string) =>
     api.addAccountMemory(text, csrfToken);
+/** @api.operationId: patchAccountMemory @api.path: PATCH /api/account/memories/{memoryId} */
+export const updateAccountMemory = (
+    memoryId: string,
+    text: string,
+    csrfToken: string
+) => api.updateAccountMemory(memoryId, text, csrfToken);
 export const forgetAccountMemory = (memoryId: string, csrfToken: string) =>
     api.forgetAccountMemory(memoryId, csrfToken);
 
@@ -191,6 +202,7 @@ export const exchangeDiscordConnection = (capability: string) =>
     api.exchangeDiscordConnection(capability);
 export const getDiscordConnectionState = (signal?: AbortSignal) =>
     api.getDiscordConnectionState(signal);
+/** @api.operationId: getAccountDiscordConnection @api.path: GET /api/account/discord-connection */
 export const getAccountDiscordStatus = (signal?: AbortSignal) =>
     api.getAccountDiscordStatus(signal);
 export const disconnectAccountDiscord = (csrfToken: string) =>

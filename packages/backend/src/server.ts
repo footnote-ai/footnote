@@ -627,6 +627,7 @@ const {
 const {
     handleAccountMemoriesRequest,
     handleAccountMemoryCreateRequest,
+    handleAccountMemoryUpdateRequest,
     handleAccountMemoryDeleteRequest,
 } = createAccountMemoryHandlers({
     accountAuthService,
@@ -821,6 +822,7 @@ const app = createExpressApp({
     handleAccountExportRequest,
     handleAccountMemoriesRequest,
     handleAccountMemoryCreateRequest,
+    handleAccountMemoryUpdateRequest,
     handleAccountMemoryDeleteRequest,
     handleAccountDiscordStatusRequest,
     handleAccountDiscordDisconnectRequest,

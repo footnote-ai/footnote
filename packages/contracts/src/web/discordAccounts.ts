@@ -30,6 +30,13 @@ export const DiscordAccountStartResponseSchema = z
 export const DiscordAccountStatusResponseSchema = z
     .object({ connected: z.boolean() })
     .strict();
+/** @api.operationId: getAccountDiscordConnection @api.path: GET /api/account/discord-connection */
+export const AccountDiscordConnectionResponseSchema = z
+    .object({
+        connected: z.boolean(),
+        discordUserIds: z.array(discordId),
+    })
+    .strict();
 export const DiscordAccountConfirmResponseSchema = z
     .object({
         result: z.enum([
@@ -79,6 +86,11 @@ export type DiscordAccountStartResponse = {
     expiresAt: string;
 };
 export type DiscordAccountStatusResponse = { connected: boolean };
+/** @api.operationId: getAccountDiscordConnection @api.path: GET /api/account/discord-connection */
+export type AccountDiscordConnectionResponse = {
+    connected: boolean;
+    discordUserIds: string[];
+};
 export type DiscordAccountConfirmResponse = {
     result:
         | 'linked'

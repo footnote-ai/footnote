@@ -47,11 +47,18 @@ export type AccountStore = {
     ) => 'linked' | 'already-linked' | 'conflict';
     /** Checks durable link presence without exposing any external Discord IDs. */
     hasDiscordLinkForAccount: (accountId: string) => boolean;
+    /** Lists linked Discord IDs for backend handlers to disclose to their account owner. */
+    listDiscordUserIdsForAccount: (accountId: string) => string[];
     /** Removes only Discord links owned by this Footnote account. */
     unlinkDiscordUserFromAccount: (accountId: string) => void;
     getAccountExportData: (accountId: string) => AccountExportData | null;
     listMemories: (accountId: string) => AccountMemory[];
     addMemory: (accountId: string, text: string) => AccountMemory | null;
+    updateMemory: (
+        accountId: string,
+        memoryId: string,
+        text: string
+    ) => AccountMemory | null;
     forgetMemory: (accountId: string, memoryId: string) => boolean;
     close?: () => void;
 };
@@ -132,6 +139,10 @@ export const createInMemoryAccountStore = (): AccountStore => {
         },
         hasDiscordLinkForAccount: (accountId) =>
             [...discordAccountLinks.values()].includes(accountId),
+        listDiscordUserIdsForAccount: (accountId) =>
+            [...discordAccountLinks.entries()]
+                .filter(([, linkedAccountId]) => linkedAccountId === accountId)
+                .map(([discordUserId]) => discordUserId),
         unlinkDiscordUserFromAccount: (accountId) => {
             for (const [
                 discordUserId,
@@ -198,6 +209,16 @@ export const createInMemoryAccountStore = (): AccountStore => {
                 createdAt: memory.createdAt,
             };
         },
+        updateMemory: (accountId, memoryId, text) => {
+            const memory = memories.get(memoryId);
+            if (!memory || memory.accountId !== accountId) return null;
+            memory.text = text;
+            return {
+                id: memory.id,
+                text: memory.text,
+                createdAt: memory.createdAt,
+            };
+        },
         forgetMemory: (accountId, memoryId) => {
             const memory = memories.get(memoryId);
             return memory?.accountId === accountId
@@ -227,6 +248,7 @@ export class SqliteAccountStore implements AccountStore {
     private readonly findAccountByDiscordUserIdStatement: Database.Statement;
     private readonly linkDiscordUserToAccountStatement: Database.Statement;
     private readonly hasDiscordLinkForAccountStatement: Database.Statement;
+    private readonly listDiscordUserIdsForAccountStatement: Database.Statement;
     private readonly unlinkDiscordUserFromAccountStatement: Database.Statement;
     private readonly getAccountByIdStatement: Database.Statement;
     private readonly getIdentityMappingsByAccountIdStatement: Database.Statement;
@@ -235,6 +257,8 @@ export class SqliteAccountStore implements AccountStore {
     private readonly listMemoriesStatement: Database.Statement;
     private readonly countMemoriesByAccountIdStatement: Database.Statement;
     private readonly addMemoryStatement: Database.Statement;
+    private readonly updateMemoryStatement: Database.Statement;
+    private readonly getMemoryByIdStatement: Database.Statement;
     private readonly forgetMemoryStatement: Database.Statement;
 
     constructor(config: { dbPath: string }) {
@@ -309,6 +333,10 @@ export class SqliteAccountStore implements AccountStore {
         this.hasDiscordLinkForAccountStatement = this.db.prepare(`
             SELECT 1 FROM discord_account_links WHERE account_id = ? LIMIT 1
         `);
+        this.listDiscordUserIdsForAccountStatement = this.db.prepare(`
+            SELECT discord_user_id FROM discord_account_links
+            WHERE account_id = ? ORDER BY created_at, discord_user_id
+        `);
         this.unlinkDiscordUserFromAccountStatement = this.db.prepare(`
             DELETE FROM discord_account_links WHERE account_id = ?
         `);
@@ -334,6 +362,12 @@ export class SqliteAccountStore implements AccountStore {
         );
         this.addMemoryStatement = this.db.prepare(
             'INSERT INTO account_memories(memory_id, account_id, memory_text, created_at) VALUES (?, ?, ?, ?)'
+        );
+        this.updateMemoryStatement = this.db.prepare(
+            'UPDATE account_memories SET memory_text = ? WHERE account_id = ? AND memory_id = ?'
+        );
+        this.getMemoryByIdStatement = this.db.prepare(
+            'SELECT memory_id AS id, memory_text AS text, created_at AS createdAt FROM account_memories WHERE account_id = ? AND memory_id = ?'
         );
         this.forgetMemoryStatement = this.db.prepare(
             'DELETE FROM account_memories WHERE account_id = ? AND memory_id = ?'
@@ -423,6 +457,14 @@ export class SqliteAccountStore implements AccountStore {
         return Boolean(this.hasDiscordLinkForAccountStatement.get(accountId));
     }
 
+    listDiscordUserIdsForAccount(accountId: string): string[] {
+        return (
+            this.listDiscordUserIdsForAccountStatement.all(accountId) as Array<{
+                discord_user_id: string;
+            }>
+        ).map(({ discord_user_id }) => discord_user_id);
+    }
+
     /** Removes every Discord mapping owned by the requested Footnote account. */
     unlinkDiscordUserFromAccount(accountId: string): void {
         this.unlinkDiscordUserFromAccountStatement.run(accountId);
@@ -488,6 +530,27 @@ export class SqliteAccountStore implements AccountStore {
             return true;
         });
         return add.immediate() ? memory : null;
+    }
+
+    updateMemory(
+        accountId: string,
+        memoryId: string,
+        text: string
+    ): AccountMemory | null {
+        return this.db
+            .transaction(() => {
+                if (
+                    this.updateMemoryStatement.run(text, accountId, memoryId)
+                        .changes === 0
+                ) {
+                    return null;
+                }
+                return this.getMemoryByIdStatement.get(
+                    accountId,
+                    memoryId
+                ) as AccountMemory;
+            })
+            .immediate();
     }
 
     forgetMemory(accountId: string, memoryId: string): boolean {

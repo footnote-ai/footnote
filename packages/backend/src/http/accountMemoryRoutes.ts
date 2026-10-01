@@ -16,12 +16,14 @@ type AccountMemoryRequestHandler = (
 
 /** @api.operationId: getAccountMemories @api.path: GET /api/account/memories */
 /** @api.operationId: postAccountMemory @api.path: POST /api/account/memories */
+/** @api.operationId: patchAccountMemory @api.path: PATCH /api/account/memories/{memoryId} */
 /** @api.operationId: deleteAccountMemory @api.path: DELETE /api/account/memories/{memoryId} */
 export const registerAccountMemoryRoutes = ({
     app,
     normalizePathname,
     handleAccountMemoriesRequest,
     handleAccountMemoryCreateRequest,
+    handleAccountMemoryUpdateRequest,
     handleAccountMemoryDeleteRequest,
     logRequest,
 }: {
@@ -29,6 +31,7 @@ export const registerAccountMemoryRoutes = ({
     normalizePathname: (pathname: string) => string;
     handleAccountMemoriesRequest: AccountMemoryRequestHandler;
     handleAccountMemoryCreateRequest: AccountMemoryRequestHandler;
+    handleAccountMemoryUpdateRequest: AccountMemoryRequestHandler;
     handleAccountMemoryDeleteRequest: AccountMemoryRequestHandler;
     logRequest: LogRequest;
 }): void => {
@@ -44,11 +47,12 @@ export const registerAccountMemoryRoutes = ({
                 else next();
                 return;
             }
-            if (
-                /^\/api\/account\/memories\/[^/]+$/.test(normalizedPathname) &&
-                req.method === 'DELETE'
-            ) {
-                await handleAccountMemoryDeleteRequest(req, res);
+            if (/^\/api\/account\/memories\/[^/]+$/.test(normalizedPathname)) {
+                if (req.method === 'PATCH')
+                    await handleAccountMemoryUpdateRequest(req, res);
+                else if (req.method === 'DELETE')
+                    await handleAccountMemoryDeleteRequest(req, res);
+                else next();
                 return;
             }
             next();

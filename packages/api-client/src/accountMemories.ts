@@ -1,5 +1,5 @@
 /**
- * @description: Typed transport for account-owned memory list, add, and forget operations.
+ * @description: Typed transport for account-owned memory list, add, edit, and forget operations.
  * @footnote-scope: interface
  * @footnote-module: AccountMemoryApi
  * @footnote-risk: medium - Request wiring can expose or alter private account memories.
@@ -7,10 +7,12 @@
  */
 import type {
     GetAccountMemoriesResponse,
+    PatchAccountMemoryResponse,
     PostAccountMemoryResponse,
 } from '@footnote/contracts/web';
 import {
     GetAccountMemoriesResponseSchema,
+    PatchAccountMemoryResponseSchema,
     PostAccountMemoryResponseSchema,
     createSchemaResponseValidator,
 } from '@footnote/contracts/web/schemas';
@@ -24,6 +26,11 @@ export type AccountMemoryApi = {
         text: string,
         csrfToken: string
     ) => Promise<PostAccountMemoryResponse>;
+    updateAccountMemory: (
+        memoryId: string,
+        text: string,
+        csrfToken: string
+    ) => Promise<PatchAccountMemoryResponse>;
     forgetAccountMemory: (memoryId: string, csrfToken: string) => Promise<void>;
 };
 
@@ -56,6 +63,22 @@ export const createAccountMemoryApi = (
                     body: { text },
                     validateResponse: createSchemaResponseValidator(
                         PostAccountMemoryResponseSchema
+                    ),
+                }
+            )
+        ).data,
+    /** @api.operationId: patchAccountMemory @api.path: PATCH /api/account/memories/{memoryId} */
+    updateAccountMemory: async (memoryId, text, csrfToken) =>
+        (
+            await requestJson<PatchAccountMemoryResponse>(
+                '/api/account/memories/' + encodeURIComponent(memoryId),
+                {
+                    method: 'PATCH',
+                    cache: 'no-store',
+                    headers: { 'x-auth-csrf': csrfToken },
+                    body: { text },
+                    validateResponse: createSchemaResponseValidator(
+                        PatchAccountMemoryResponseSchema
                     ),
                 }
             )

@@ -37,6 +37,11 @@ test('account memory client uses private reads and CSRF-protected writes', async
 
     await api.getAccountMemories();
     await api.addAccountMemory('concise answers', 'csrf-value');
+    await api.updateAccountMemory(
+        'memory-id',
+        'updated answer style',
+        'csrf-value'
+    );
     await api.forgetAccountMemory('memory-id', 'csrf-value');
 
     assert.deepEqual(
@@ -44,10 +49,14 @@ test('account memory client uses private reads and CSRF-protected writes', async
         [
             ['/api/account/memories', 'GET'],
             ['/api/account/memories', 'POST'],
+            ['/api/account/memories/memory-id', 'PATCH'],
             ['/api/account/memories/memory-id', 'DELETE'],
         ]
     );
     assert.deepEqual(calls[1]?.headers, { 'x-auth-csrf': 'csrf-value' });
     assert.deepEqual(calls[1]?.body, { text: 'concise answers' });
     assert.deepEqual(calls[2]?.headers, { 'x-auth-csrf': 'csrf-value' });
+    assert.deepEqual(calls[2]?.body, { text: 'updated answer style' });
+    assert.deepEqual(calls[2]?.headers, { 'x-auth-csrf': 'csrf-value' });
+    assert.deepEqual(calls[3]?.headers, { 'x-auth-csrf': 'csrf-value' });
 });
