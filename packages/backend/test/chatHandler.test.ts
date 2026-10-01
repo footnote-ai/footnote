@@ -306,11 +306,18 @@ test('ordinary Discord chat accepts a user ID in its surface context', async () 
     const previousTurnstileSecret = env.TURNSTILE_SECRET_KEY;
     const previousTurnstileSite = env.TURNSTILE_SITE_KEY;
     const discordUserId = '12345678901234567';
+    const generationSignals: AbortSignal[] = [];
     env.TRACE_API_TOKEN = 'trace-secret';
     env.TURNSTILE_SECRET_KEY = 'turnstile-secret';
     env.TURNSTILE_SITE_KEY = 'turnstile-site';
 
-    const server = await createTestServer();
+    const server = await createTestServer({
+        onGenerationRequest: (request) => {
+            if (request.signal !== undefined) {
+                generationSignals.push(request.signal);
+            }
+        },
+    });
     try {
         const response = await fetch(`${server.url}/api/chat`, {
             method: 'POST',
@@ -326,11 +333,89 @@ test('ordinary Discord chat accepts a user ID in its surface context', async () 
         });
 
         assert.equal(response.status, 200);
+        assert.ok(generationSignals.length > 0);
+        assert.ok(generationSignals.every((signal) => !signal.aborted));
     } finally {
         await server.close();
         env.TRACE_API_TOKEN = previousTraceToken;
         env.TURNSTILE_SECRET_KEY = previousTurnstileSecret;
         env.TURNSTILE_SITE_KEY = previousTurnstileSite;
+    }
+});
+
+test('chat cancellation reaches provider generation after the client disconnects', async () => {
+    const env = process.env as MutableEnv;
+    const previousTraceToken = env.TRACE_API_TOKEN;
+    env.TRACE_API_TOKEN = 'trace-secret';
+
+    let resolveGenerationStarted: ((signal: AbortSignal) => void) | undefined;
+    let generationCalls = 0;
+    const generationStarted = new Promise<AbortSignal>((resolve) => {
+        resolveGenerationStarted = resolve;
+    });
+    const server = await createTestServer({
+        generationRuntime: {
+            kind: 'test-runtime',
+            generate: (request) => {
+                generationCalls += 1;
+                assert.ok(request.signal);
+                resolveGenerationStarted?.(request.signal);
+                return new Promise((_resolve, reject) => {
+                    request.signal?.addEventListener(
+                        'abort',
+                        () =>
+                            reject(
+                                Object.assign(new Error('aborted'), {
+                                    name: 'AbortError',
+                                })
+                            ),
+                        { once: true }
+                    );
+                });
+            },
+        },
+    });
+    const body = JSON.stringify(
+        createChatRequest({ surface: 'web', trigger: { kind: 'submit' } })
+    );
+    const request = http.request(`${server.url}/api/chat`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'Content-Length': Buffer.byteLength(body),
+            'X-Trace-Token': 'trace-secret',
+        },
+    });
+    request.on('error', () => undefined);
+
+    try {
+        request.end(body);
+        const signal = await generationStarted;
+        request.destroy();
+        if (signal.aborted) {
+            assert.equal(signal.aborted, true);
+        } else {
+            await new Promise<void>((resolve, reject) => {
+                const timeout = setTimeout(
+                    () => reject(new Error('request signal was not aborted')),
+                    2_000
+                );
+                signal.addEventListener(
+                    'abort',
+                    () => {
+                        clearTimeout(timeout);
+                        resolve();
+                    },
+                    { once: true }
+                );
+            });
+        }
+        assert.equal(signal.aborted, true);
+        assert.equal(generationCalls, 1);
+    } finally {
+        request.destroy();
+        await server.close();
+        env.TRACE_API_TOKEN = previousTraceToken;
     }
 });
 

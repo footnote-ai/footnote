@@ -391,6 +391,30 @@ test('chatPlanner accepts structured planner decisions without text JSON parsing
     assert.ok((execution.cost?.totalCostUsd ?? 0) > 0);
 });
 
+test('chatPlanner does not try text compatibility after caller cancellation', async () => {
+    const controller = new AbortController();
+    let compatibilityCalls = 0;
+    const planner = createChatPlanner({
+        signal: controller.signal,
+        executePlannerStructured: async ({ signal }) => {
+            controller.abort();
+            assert.equal(signal?.aborted, true);
+            throw Object.assign(new Error('aborted'), {
+                name: 'AbortError',
+            });
+        },
+        executePlanner: async () => {
+            compatibilityCalls += 1;
+            return { text: '{}', model: 'gpt-5-mini' };
+        },
+    });
+
+    await assert.rejects(planFromWorkflow(planner, createChatRequest()), {
+        name: 'AbortError',
+    });
+    assert.equal(compatibilityCalls, 0);
+});
+
 test('chatPlanner preserves complete planner usage through accounting', async () => {
     const planner = createChatPlanner({
         executePlannerStructured: async () => ({

@@ -273,7 +273,8 @@ export const createChatOrchestrator = ({
         : undefined;
     const createRuntimeChatPlanner = (
         getActivePlannerProfile: () => ModelProfile,
-        safetyIdentifier: string | undefined
+        safetyIdentifier: string | undefined,
+        signal?: AbortSignal
     ) => {
         const hasStructuredPlannerProfile = catalogProfiles.some(
             (profile) =>
@@ -308,7 +309,10 @@ export const createChatOrchestrator = ({
                         request: generationRequest,
                     });
                     const resolvedRequest = applyModelSettings(
-                        generationRequest,
+                        {
+                            ...generationRequest,
+                            ...(signal !== undefined && { signal }),
+                        },
                         settingsResolution.applied
                     );
                     const resolvedMaxOutputTokens =
@@ -603,6 +607,7 @@ export const createChatOrchestrator = ({
                     }
                 },
             }),
+            ...(signal !== undefined && { signal }),
             executePlanner: async ({
                 messages,
                 model: _model,
@@ -630,6 +635,7 @@ export const createChatOrchestrator = ({
                         maxOutputTokens,
                         reasoningEffort,
                         verbosity,
+                        ...(signal !== undefined && { signal }),
                     },
                     settingsResolution.applied
                 );
@@ -737,8 +743,12 @@ export const createChatOrchestrator = ({
      */
     const runChat = async (
         request: PostChatRequest,
-        context?: { advisoryUserMemories: readonly string[] }
+        context?: {
+            advisoryUserMemories?: readonly string[];
+            signal?: AbortSignal;
+        }
     ): Promise<PostChatResponse> => {
+        context?.signal?.throwIfAborted();
         let activePlannerProfile = plannerProfile;
         const safetyIdentifier = deriveOpenAiSafetyIdentifier(
             {
@@ -750,7 +760,8 @@ export const createChatOrchestrator = ({
         );
         const chatPlanner = createRuntimeChatPlanner(
             () => activePlannerProfile,
-            safetyIdentifier
+            safetyIdentifier,
+            context?.signal
         );
         const isWeatherLikeRequest = (input: string): boolean => {
             const normalized = input.trim().toLowerCase();
@@ -980,6 +991,7 @@ export const createChatOrchestrator = ({
                 enabledProfilesById,
                 requiresSearch: false,
                 runWithProfile: async (profile) => {
+                    context?.signal?.throwIfAborted();
                     activePlannerProfile = profile;
                     const plannerResult = await chatPlanner.planChat(
                         input.request,
@@ -1022,6 +1034,7 @@ export const createChatOrchestrator = ({
             }
 
             activePlannerProfile = plannerProfile;
+            context?.signal?.throwIfAborted();
             const fallback = toPlannerStepResult(
                 await chatPlanner.planChat(
                     input.request,
@@ -1488,6 +1501,7 @@ export const createChatOrchestrator = ({
             ...(context?.advisoryUserMemories !== undefined && {
                 advisoryUserMemories: context.advisoryUserMemories,
             }),
+            ...(context?.signal !== undefined && { signal: context.signal }),
             orchestrationStartedAtMs: orchestrationStartedAt,
             safetyTier: evaluatorSafetyTierHint,
             model: defaultResponseProfile.providerModel,

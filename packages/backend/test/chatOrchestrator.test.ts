@@ -49,6 +49,30 @@ test.after(() => {
     logger.debug = originalLoggerDebug;
 });
 
+test('an already-aborted chat request does not start provider work', async () => {
+    let generationCalls = 0;
+    const orchestrator = createChatOrchestrator({
+        generationRuntime: createGenerationRuntime(async () => {
+            generationCalls += 1;
+            throw new Error('provider work should not start');
+        }),
+        storeTrace: async () => undefined,
+        buildResponseMetadata: () => createMetadata(),
+        defaultModel: 'gpt-5-mini',
+        recordUsage: () => undefined,
+    });
+    const controller = new AbortController();
+    controller.abort();
+
+    await assert.rejects(
+        orchestrator.runChat(createChatRequest(), {
+            signal: controller.signal,
+        }),
+        { name: 'AbortError' }
+    );
+    assert.equal(generationCalls, 0);
+});
+
 const createChatRequest = (
     overrides: Partial<PostChatRequest> = {}
 ): PostChatRequest => ({

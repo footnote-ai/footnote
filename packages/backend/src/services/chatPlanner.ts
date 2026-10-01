@@ -217,6 +217,7 @@ type CreateChatPlannerOptions = {
     recordUsage?: (record: BackendLLMCostRecord) => void;
     /** Backend-derived pseudonym; never pass a raw surface identifier. */
     safetyIdentifier?: string;
+    signal?: AbortSignal;
 };
 
 type StructuredPlannerFailureUsage = {
@@ -1696,6 +1697,7 @@ export const createChatPlanner = ({
     availableTrustGraphTargets = [],
     recordUsage = recordBackendLLMUsage,
     safetyIdentifier,
+    signal,
 }: CreateChatPlannerOptions) => {
     if (!executePlanner && !executePlannerStructured) {
         throw new Error(
@@ -1800,6 +1802,7 @@ export const createChatPlanner = ({
                 maxOutputTokens: plannerOutputTokenBudget,
                 reasoningEffort: plannerReasoningEffort,
                 ...(safetyIdentifier !== undefined && { safetyIdentifier }),
+                ...(signal !== undefined && { signal }),
                 ...(mode === 'structured' && {
                     compatibilityMessages: () =>
                         buildPlannerMessages({
@@ -2090,6 +2093,7 @@ export const createChatPlanner = ({
                     diagnostics: initialNormalization.diagnostics,
                 };
             } catch (error) {
+                requestPayload.signal?.throwIfAborted();
                 const timeoutExpansion =
                     error instanceof Error && /timed out/i.test(error.message);
                 return {
@@ -2251,6 +2255,7 @@ export const createChatPlanner = ({
                     : {}),
             });
         } catch (error) {
+            requestPayload.signal?.throwIfAborted();
             let resolvedError: unknown = error;
             const shouldAttemptCompatibilityFallback =
                 executePlannerStructured &&
