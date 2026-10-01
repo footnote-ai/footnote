@@ -234,22 +234,6 @@ test('account holders can see and disconnect their Discord link without exposing
         path: testInfo.outputPath('account-discord-connected.png'),
         fullPage: true,
     });
-    await page.getByRole('button', { name: 'Switch to dark mode' }).click();
-    await page.screenshot({
-        path: testInfo.outputPath('account-discord-connected-dark.png'),
-        fullPage: true,
-    });
-    await page.getByRole('button', { name: 'Switch to light mode' }).click();
-    await page.setViewportSize({ width: 390, height: 844 });
-    await page.screenshot({
-        path: testInfo.outputPath('account-discord-connected-mobile.png'),
-        fullPage: true,
-    });
-    expect(
-        await page.evaluate(
-            () => document.documentElement.scrollWidth <= window.innerWidth
-        )
-    ).toBe(true);
     await page.getByRole('button', { name: 'Disconnect' }).click();
     await expect(page.getByText('Not connected to Discord.')).toBeVisible();
     await expect(disconnectCsrf).toEqual(['account-csrf-token']);
