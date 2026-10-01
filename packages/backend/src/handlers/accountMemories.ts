@@ -1,5 +1,5 @@
 /**
- * @description: Serves explicit, account-owned memory list, add, and forget operations.
+ * @description: Serves explicit, account-owned memory list, add, edit, and forget operations.
  * @footnote-scope: interface
  * @footnote-module: AccountMemoryHandlers
  * @footnote-risk: high - Session and ownership checks protect durable private data.
@@ -8,6 +8,8 @@
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import {
     GetAccountMemoriesResponseSchema,
+    PatchAccountMemoryRequestSchema,
+    PatchAccountMemoryResponseSchema,
     PostAccountMemoryRequestSchema,
     PostAccountMemoryResponseSchema,
 } from '@footnote/contracts/web/schemas';
@@ -40,6 +42,7 @@ export const createAccountMemoryHandlers = ({
 }): {
     handleAccountMemoriesRequest: RequestHandler;
     handleAccountMemoryCreateRequest: RequestHandler;
+    handleAccountMemoryUpdateRequest: RequestHandler;
     handleAccountMemoryDeleteRequest: RequestHandler;
 } => {
     /** @api.operationId: getAccountMemories @api.path: GET /api/account/memories */
@@ -111,6 +114,60 @@ export const createAccountMemoryHandlers = ({
         logRequest(req, res, 'account memory create success');
     };
 
+    /** @api.operationId: patchAccountMemory @api.path: PATCH /api/account/memories/{memoryId} */
+    const handleAccountMemoryUpdateRequest: RequestHandler = async (
+        req,
+        res
+    ) => {
+        res.setHeader('Cache-Control', 'no-store');
+        const session = requireAccountMutationSession({
+            req,
+            res,
+            accountAuthService,
+            logRequest,
+            routeLabel: 'account memory update',
+        });
+        if (!session) return;
+        if (!accountStore) {
+            sendJson(res, 503, { error: 'Account memories unavailable' });
+            logRequest(req, res, 'account memory update unavailable');
+            return;
+        }
+        const memoryId = getMemoryId(
+            req,
+            res,
+            logRequest,
+            'account memory update'
+        );
+        if (!memoryId) return;
+        const payload = await parseTrustedBodyWithSchema(req, res, {
+            logRequest,
+            routeLabel: 'account memory update',
+            maxBodyBytes: 16_384,
+            safeParse: (value) =>
+                PatchAccountMemoryRequestSchema.safeParse(value),
+        });
+        if (!payload) return;
+        const memory = accountStore.updateMemory(
+            session.accountId,
+            memoryId,
+            payload.text
+        );
+        if (!memory) {
+            sendJson(res, 404, { error: 'Memory not found' });
+            logRequest(req, res, 'account memory update not-found');
+            return;
+        }
+        const parsed = PatchAccountMemoryResponseSchema.safeParse({ memory });
+        if (!parsed.success) {
+            sendJson(res, 500, { error: 'Failed to update account memory' });
+            logRequest(req, res, 'account memory update invalid response');
+            return;
+        }
+        sendJson(res, 200, parsed.data);
+        logRequest(req, res, 'account memory update success');
+    };
+
     /** @api.operationId: deleteAccountMemory @api.path: DELETE /api/account/memories/{memoryId} */
     const handleAccountMemoryDeleteRequest: RequestHandler = (req, res) => {
         res.setHeader('Cache-Control', 'no-store');
@@ -127,15 +184,13 @@ export const createAccountMemoryHandlers = ({
             logRequest(req, res, 'account memory delete unavailable');
             return;
         }
-        const memoryId =
-            new URL(req.url ?? '/', 'http://localhost').pathname
-                .split('/')
-                .at(-1) ?? '';
-        if (!/^[0-9a-f-]{36}$/i.test(memoryId)) {
-            sendJson(res, 400, { error: 'Invalid memory id' });
-            logRequest(req, res, 'account memory delete invalid-id');
-            return;
-        }
+        const memoryId = getMemoryId(
+            req,
+            res,
+            logRequest,
+            'account memory delete'
+        );
+        if (!memoryId) return;
         if (!accountStore.forgetMemory(session.accountId, memoryId)) {
             sendJson(res, 404, { error: 'Memory not found' });
             logRequest(req, res, 'account memory delete not-found');
@@ -148,6 +203,23 @@ export const createAccountMemoryHandlers = ({
     return {
         handleAccountMemoriesRequest,
         handleAccountMemoryCreateRequest,
+        handleAccountMemoryUpdateRequest,
         handleAccountMemoryDeleteRequest,
     };
+};
+
+const getMemoryId = (
+    req: IncomingMessage,
+    res: ServerResponse,
+    logRequest: TrustedRouteLogRequest,
+    routeLabel: string
+): string | null => {
+    const memoryId =
+        new URL(req.url ?? '/', 'http://localhost').pathname
+            .split('/')
+            .at(-1) ?? '';
+    if (/^[0-9a-f-]{36}$/i.test(memoryId)) return memoryId;
+    sendJson(res, 400, { error: 'Invalid memory id' });
+    logRequest(req, res, `${routeLabel} invalid-id`);
+    return null;
 };

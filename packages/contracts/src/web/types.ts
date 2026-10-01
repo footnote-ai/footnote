@@ -214,6 +214,10 @@ export type GetAccountMemoriesResponse = { memories: AccountMemory[] };
 export type PostAccountMemoryRequest = { text: string };
 /** @api.operationId: postAccountMemory @api.path: POST /api/account/memories */
 export type PostAccountMemoryResponse = { memory: AccountMemory };
+/** @api.operationId: patchAccountMemory @api.path: PATCH /api/account/memories/{memoryId} */
+export type PatchAccountMemoryRequest = { text: string };
+/** @api.operationId: patchAccountMemory @api.path: PATCH /api/account/memories/{memoryId} */
+export type PatchAccountMemoryResponse = { memory: AccountMemory };
 /** @api.operationId: deleteAccountMemory @api.path: DELETE /api/account/memories/{memoryId} */
 export type DeleteAccountMemoryResponse = { success: true };
 

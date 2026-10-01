@@ -1120,9 +1120,12 @@ paths:
             x-codeRefs:
                 - packages/backend/src/handlers/accountDiscordConnection.ts#createAccountDiscordConnectionHandlers
                 - packages/api-client/src/accountAuth.ts#createAccountAuthApi
-                - packages/contracts/src/web/discordAccounts.ts#DiscordAccountStatusResponseSchema
+                - packages/backend/src/storage/accounts/sqliteAccountStore.ts#listDiscordUserIdsForAccount
+                - packages/contracts/src/web/discordAccounts.ts#AccountDiscordConnectionResponseSchema
+                - packages/contracts/src/web/discordAccounts.ts#AccountDiscordConnectionResponse
+                - packages/web/src/utils/api.ts#getAccountDiscordStatus
             summary: Read the current account's Discord connection status
-            description: Returns whether the signed-in Footnote account has a durable Discord link, without returning a Discord user ID.
+            description: Returns Discord user IDs durably linked to the signed-in Footnote account.
             tags: [Accounts]
             security: [{ AccountSessionCookie: [] }]
             responses:
@@ -1135,7 +1138,7 @@ paths:
                         application/json:
                             schema:
                                 {
-                                    $ref: '#/components/schemas/DiscordAccountStatusResponse',
+                                    $ref: '#/components/schemas/AccountDiscordConnectionResponse',
                                 }
                 '401': { $ref: '#/components/responses/Unauthorized' }
                 '503': { $ref: '#/components/responses/ServiceUnavailable' }
@@ -1594,6 +1597,49 @@ paths:
                 '503': { $ref: '#/components/responses/ServiceUnavailable' }
 
     /api/account/memories/{memoryId}:
+        patch:
+            operationId: patchAccountMemory
+            x-codeRefs:
+                - packages/backend/src/handlers/accountMemories.ts#handleAccountMemoryUpdateRequest
+                - packages/backend/src/http/accountMemoryRoutes.ts#registerAccountMemoryRoutes
+                - packages/api-client/src/accountMemories.ts#updateAccountMemory
+                - packages/web/src/utils/api.ts#updateAccountMemory
+                - packages/backend/src/storage/accounts/sqliteAccountStore.ts#updateMemory
+                - packages/contracts/src/web/types.ts#PatchAccountMemoryRequest
+                - packages/contracts/src/web/types.ts#PatchAccountMemoryResponse
+                - packages/contracts/src/web/schemas.ts#PatchAccountMemoryRequestSchema
+                - packages/contracts/src/web/schemas.ts#PatchAccountMemoryResponseSchema
+            summary: Update a memory owned by the signed-in account
+            tags: [Accounts]
+            security: [{ AccountSessionCookie: [] }]
+            parameters:
+                - name: memoryId
+                  in: path
+                  required: true
+                  schema: { type: string, format: uuid }
+                - $ref: '#/components/parameters/AuthCsrfHeader'
+            requestBody:
+                required: true
+                content:
+                    application/json:
+                        schema:
+                            {
+                                $ref: '#/components/schemas/AccountMemoryUpdateRequest',
+                            }
+            responses:
+                '200':
+                    description: Updated memory
+                    content:
+                        application/json:
+                            schema:
+                                {
+                                    $ref: '#/components/schemas/AccountMemoryUpdateResponse',
+                                }
+                '400': { $ref: '#/components/responses/BadRequest' }
+                '401': { $ref: '#/components/responses/Unauthorized' }
+                '403': { $ref: '#/components/responses/Forbidden' }
+                '404': { $ref: '#/components/responses/NotFound' }
+                '503': { $ref: '#/components/responses/ServiceUnavailable' }
         delete:
             operationId: deleteAccountMemory
             x-codeRefs:
@@ -2257,6 +2303,18 @@ components:
             required: [text]
             additionalProperties: false
         AccountMemoryCreateResponse:
+            type: object
+            properties:
+                memory: { $ref: '#/components/schemas/AccountMemory' }
+            required: [memory]
+            additionalProperties: false
+        AccountMemoryUpdateRequest:
+            type: object
+            properties:
+                text: { type: string, minLength: 1, maxLength: 2000 }
+            required: [text]
+            additionalProperties: false
+        AccountMemoryUpdateResponse:
             type: object
             properties:
                 memory: { $ref: '#/components/schemas/AccountMemory' }
@@ -5712,6 +5770,15 @@ components:
             properties:
                 connected: { type: boolean }
             required: [connected]
+            additionalProperties: false
+        AccountDiscordConnectionResponse:
+            type: object
+            properties:
+                connected: { type: boolean }
+                discordUserIds:
+                    type: array
+                    items: { type: string, pattern: '^\\d{17,20}$' }
+            required: [connected, discordUserIds]
             additionalProperties: false
         DiscordAccountConfirmRequest:
             type: object

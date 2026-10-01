@@ -6,7 +6,7 @@
  * @footnote-ethics: high - Users can inspect and remove their chosen Discord association.
  */
 import type { IncomingMessage, ServerResponse } from 'node:http';
-import { DiscordAccountStatusResponseSchema } from '@footnote/contracts/web/schemas';
+import { AccountDiscordConnectionResponseSchema } from '@footnote/contracts/web/schemas';
 import type {
     AccountAuthService,
     DiscordAccountConnectionService,
@@ -55,8 +55,12 @@ export const createAccountDiscordConnectionHandlers = ({
             logRequest(req, res, 'account Discord connection unavailable');
             return;
         }
-        const parsed = DiscordAccountStatusResponseSchema.safeParse({
-            connected: accountStore.hasDiscordLinkForAccount(session.accountId),
+        const discordUserIds = accountStore.listDiscordUserIdsForAccount(
+            session.accountId
+        );
+        const parsed = AccountDiscordConnectionResponseSchema.safeParse({
+            connected: discordUserIds.length > 0,
+            discordUserIds,
         });
         if (!parsed.success) {
             sendJson(res, 500, { error: 'Failed to load Discord connection' });

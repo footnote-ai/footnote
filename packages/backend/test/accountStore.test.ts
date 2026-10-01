@@ -151,8 +151,12 @@ test('Discord mappings survive reopen and disconnect only by account', () => {
             accountB.id
         );
         assert.equal(store.hasDiscordLinkForAccount(accountA.id), true);
+        assert.deepEqual(store.listDiscordUserIdsForAccount(accountA.id), [
+            'discord-1',
+        ]);
         store.unlinkDiscordUserFromAccount(accountA.id);
         assert.equal(store.hasDiscordLinkForAccount(accountA.id), false);
+        assert.deepEqual(store.listDiscordUserIdsForAccount(accountA.id), []);
         assert.equal(store.findAccountByDiscordUserId('discord-1'), null);
         assert.equal(
             store.findAccountByDiscordUserId('discord-2')?.id,
@@ -262,6 +266,43 @@ test('account memories have a bounded persisted count', () => {
         }
         assert.equal(store.addMemory(account.id, 'over the limit'), null);
         assert.equal(store.listMemories(account.id).length, 50);
+    } finally {
+        store?.close();
+        fs.rmSync(tempDir, { recursive: true, force: true });
+    }
+});
+
+test('account memory edits preserve identity and remain scoped to their owner', () => {
+    const tempDir = fs.mkdtempSync(
+        path.join(os.tmpdir(), 'account-memory-edit-')
+    );
+    let store: SqliteAccountStore | null = null;
+    try {
+        store = new SqliteAccountStore({
+            dbPath: path.join(tempDir, 'accounts.db'),
+        });
+        const owner = store.resolveOrCreateAccount(identity);
+        const other = store.resolveOrCreateAccount({
+            ...identity,
+            subject: 'other-subject',
+        });
+        const memory = store.addMemory(owner.id, 'original text');
+        assert.ok(memory);
+
+        assert.equal(
+            store.updateMemory(other.id, memory.id, 'must not change'),
+            null
+        );
+        assert.deepEqual(
+            store.updateMemory(owner.id, memory.id, 'edited text'),
+            {
+                ...memory,
+                text: 'edited text',
+            }
+        );
+        assert.deepEqual(store.listMemories(owner.id), [
+            { ...memory, text: 'edited text' },
+        ]);
     } finally {
         store?.close();
         fs.rmSync(tempDir, { recursive: true, force: true });

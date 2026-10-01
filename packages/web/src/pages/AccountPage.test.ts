@@ -70,7 +70,7 @@ test('account page uses typed session APIs and exposes all public states', async
     assert.doesNotMatch(source, /accessToken|refreshToken|idToken/);
 });
 
-test('account page exposes explicit memory save, list, and forget controls', async () => {
+test('account page exposes icon-led memory add, edit, list, and forget controls', async () => {
     const [source, memorySection] = await Promise.all([
         readFile(`${webSourceDirectory}pages/AccountPage.tsx`, 'utf8'),
         readFile(`${webSourceDirectory}components/MemorySection.tsx`, 'utf8'),
@@ -82,6 +82,10 @@ test('account page exposes explicit memory save, list, and forget controls', asy
     );
     assert.match(
         source,
+        /updateAccountMemory\([\s\S]*?sessionState\.session\.csrfToken/
+    );
+    assert.match(
+        source,
         /forgetAccountMemory\([\s\S]*?sessionState\.session\.csrfToken/
     );
     assert.match(
@@ -89,12 +93,16 @@ test('account page exposes explicit memory save, list, and forget controls', asy
         /Things you've asked Footnote to remember for future chats/
     );
     assert.match(memorySection, /className="account-page__memory-list"/);
+    assert.match(memorySection, /<AccountIcon name="add" \/>/);
+    assert.match(memorySection, /<AccountIcon name="edit" \/>/);
+    assert.match(memorySection, /<AccountIcon name="delete" \/>/);
+    assert.match(memorySection, /<dialog/);
     assert.match(
         memorySection,
         /readState === 'ready' && memories\.length === 0/
     );
     assert.match(memorySection, /Memory limit reached/);
-    assert.match(source, /Download account data/);
+    assert.match(source, /<AccountIcon name="download" \/>/);
 });
 
 test('account page confirms deletion and reports signed-out result', async () => {
@@ -171,7 +179,9 @@ test('Discord connection removes its fragment and offers explicit consent and ca
     assert.match(source, /<p role="status">/);
     assert.match(source, /getAccountDiscordStatus\(controller\.signal\)/);
     assert.match(source, /disconnectAccountDiscord\(session\.csrfToken\)/);
-    assert.match(source, /Connected to Discord/);
-    assert.match(source, /Not connected to Discord/);
-    assert.match(source, /Disconnecting removes Discord links/);
+    assert.match(source, /Discord connected/);
+    assert.match(source, /Discord not connected/);
+    assert.match(source, /Discord ID:/);
+    assert.match(source, /<AccountIcon name="disconnect" \/>/);
+    assert.match(source, /Disconnecting only removes this/);
 });

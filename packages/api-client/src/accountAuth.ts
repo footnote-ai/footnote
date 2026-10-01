@@ -9,13 +9,13 @@
 import type {
     DiscordConnectionStateResponse,
     DiscordAccountExchangeRequest,
-    DiscordAccountStatusResponse,
+    AccountDiscordConnectionResponse,
     GetAuthSessionResponse,
 } from '@footnote/contracts/web';
 import type { ApiRequester } from './client.js';
 import {
     DiscordConnectionStateResponseSchema,
-    DiscordAccountStatusResponseSchema,
+    AccountDiscordConnectionResponseSchema,
     DiscordAccountConsentResponseSchema,
     createSchemaResponseValidator,
 } from '@footnote/contracts/web/schemas';
@@ -33,7 +33,7 @@ export type AccountAuthApi = {
     ) => Promise<DiscordConnectionStateResponse>;
     getAccountDiscordStatus: (
         signal?: AbortSignal
-    ) => Promise<DiscordAccountStatusResponse>;
+    ) => Promise<AccountDiscordConnectionResponse>;
     disconnectAccountDiscord: (csrfToken: string) => Promise<void>;
     consentDiscordConnection: (csrfToken: string) => Promise<{ code: string }>;
     cancelDiscordConnection: (csrfToken: string) => Promise<void>;
@@ -134,15 +134,15 @@ export const createAccountAuthApi = (
     /** @api.operationId: getAccountDiscordConnection @api.path: GET /api/account/discord-connection */
     const getAccountDiscordStatus = async (
         signal?: AbortSignal
-    ): Promise<DiscordAccountStatusResponse> => {
-        const response = await requestJson<DiscordAccountStatusResponse>(
+    ): Promise<AccountDiscordConnectionResponse> => {
+        const response = await requestJson<AccountDiscordConnectionResponse>(
             '/api/account/discord-connection',
             {
                 method: 'GET',
                 signal,
                 cache: 'no-store',
                 validateResponse: createSchemaResponseValidator(
-                    DiscordAccountStatusResponseSchema
+                    AccountDiscordConnectionResponseSchema
                 ),
             }
         );
