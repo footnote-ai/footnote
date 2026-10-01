@@ -419,6 +419,140 @@ test('chat cancellation reaches provider generation after the client disconnects
     }
 });
 
+test('chat disconnect hides a non-cancellable completed planner result without rewriting its usage', async () => {
+    const env = process.env as MutableEnv;
+    const previousTraceToken = env.TRACE_API_TOKEN;
+    const originalInfo = logger.info;
+    env.TRACE_API_TOKEN = 'trace-secret';
+
+    let resolveGenerationStarted: ((signal: AbortSignal) => void) | undefined;
+    let finishGeneration:
+        | ((result: Awaited<ReturnType<GenerationRuntime['generate']>>) => void)
+        | undefined;
+    let generationCalls = 0;
+    let responseDelivered = false;
+    let resolveUsageRecorded: (() => void) | undefined;
+    const generationStarted = new Promise<AbortSignal>((resolve) => {
+        resolveGenerationStarted = resolve;
+    });
+    const usageRecorded = new Promise<void>((resolve) => {
+        resolveUsageRecorded = resolve;
+    });
+    const costRecords: Array<Record<string, unknown>> = [];
+    logger.info = ((message: unknown) => {
+        if (typeof message === 'string') {
+            try {
+                const record: unknown = JSON.parse(message);
+                if (
+                    typeof record === 'object' &&
+                    record !== null &&
+                    'event' in record &&
+                    record.event === 'backend_llm_cost'
+                ) {
+                    costRecords.push(record as Record<string, unknown>);
+                    resolveUsageRecorded?.();
+                }
+            } catch {
+                // Other human-readable log messages are not usage records.
+            }
+        }
+    }) as unknown as typeof logger.info;
+
+    const server = await createTestServer({
+        generationRuntime: {
+            kind: 'test-runtime',
+            generate: (request) => {
+                generationCalls += 1;
+                assert.ok(request.signal);
+                resolveGenerationStarted?.(request.signal);
+                // This fixture deliberately ignores the AbortSignal and returns normally.
+                return new Promise((resolve) => {
+                    finishGeneration = resolve;
+                });
+            },
+        },
+    });
+    const body = JSON.stringify(
+        createChatRequest({ surface: 'web', trigger: { kind: 'submit' } })
+    );
+    const request = http.request(`${server.url}/api/chat`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'Content-Length': Buffer.byteLength(body),
+            'X-Trace-Token': 'trace-secret',
+        },
+    });
+    request.on('response', () => {
+        responseDelivered = true;
+    });
+    request.on('error', () => undefined);
+
+    try {
+        request.end(body);
+        const signal = await generationStarted;
+        request.destroy();
+        if (!signal.aborted) {
+            await new Promise<void>((resolve, reject) => {
+                const timeout = setTimeout(
+                    () => reject(new Error('request signal was not aborted')),
+                    2_000
+                );
+                signal.addEventListener(
+                    'abort',
+                    () => {
+                        clearTimeout(timeout);
+                        resolve();
+                    },
+                    { once: true }
+                );
+            });
+        }
+        assert.equal(signal.aborted, true);
+
+        finishGeneration?.({
+            text: JSON.stringify({
+                action: 'message',
+                modality: 'text',
+                requestedCapabilityProfile: 'balanced-general',
+                safetyTier: 'Low',
+                reasoning: 'The request expects a reply.',
+                generation: {
+                    reasoningEffort: 'low',
+                    verbosity: 'low',
+                    temperament: {
+                        tightness: 4,
+                        rationale: 3,
+                        attribution: 4,
+                        caution: 3,
+                        extent: 3,
+                    },
+                },
+            }),
+            model: 'gpt-5-mini',
+            usage: {
+                promptTokens: 17,
+                completionTokens: 9,
+                totalTokens: 26,
+            },
+        });
+
+        await usageRecorded;
+        assert.equal(generationCalls, 1);
+        assert.equal(responseDelivered, false);
+        assert.equal(costRecords.length, 1);
+        assert.equal(costRecords[0]?.feature, 'chat_planner');
+        assert.equal(costRecords[0]?.promptTokens, 17);
+        assert.equal(costRecords[0]?.completionTokens, 9);
+        assert.equal(costRecords[0]?.totalTokens, 26);
+    } finally {
+        request.destroy();
+        await server.close();
+        logger.info = originalInfo;
+        env.TRACE_API_TOKEN = previousTraceToken;
+    }
+});
+
 test('validated account memories reach generation and session lookup failures fail open', async () => {
     const env = process.env as MutableEnv;
     const previousTraceToken = env.TRACE_API_TOKEN;

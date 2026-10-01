@@ -399,6 +399,7 @@ const createChatHandler = ({
                 advisoryUserMemories: memoryContext.memories,
                 signal: requestAbortController.signal,
             });
+            // A disconnected client suppresses delivery; work that could not stop keeps its observed outcome.
             requestAbortController.signal.throwIfAborted();
             if (res.destroyed || requestAbortController.signal.aborted) {
                 return;
