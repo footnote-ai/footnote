@@ -3,7 +3,8 @@
 Status: the corpus and its deterministic integrity checks are in place. A
 credential-gated live runner stays deferred until it can drive the normal
 planner, generation, and review seams directly, rather than reconstructing
-chat orchestration around it.
+chat orchestration around it. No live evaluation is currently scheduled; this
+is a deferred evidence note, not active implementation work.
 
 ## Goal
 

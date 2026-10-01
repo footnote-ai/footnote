@@ -2,9 +2,11 @@
 
 Status: repository context selection, preview, manual TrustGraph loading, and
 the guarded multi-target Graph RAG chat integration are implemented. Guided
-setup remains separate follow-up work.
+setup remains open in [#454](https://github.com/footnote-ai/footnote/issues/454).
+Bounded revision-aware source-code retrieval is a separate follow-up in
+[#539](https://github.com/footnote-ai/footnote/issues/539).
 
-Last updated: 2026-08-27.
+Last updated: 2026-10-01.
 
 ## Goal
 

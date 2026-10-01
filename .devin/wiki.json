@@ -769,7 +769,7 @@
                 "packages/backend/src/server.ts",
                 "packages/discord-bot/src/supervisor/serverNodeSupervisor.ts",
                 ".github/workflows/launcher-package.yml",
-                "docs/status/launcher-canary-releases.md"
+                "docs/status/completed/launcher-canary-releases.md"
             ],
             "page_notes": [
                 {
@@ -850,7 +850,7 @@
             "parent": "Foundations",
             "entrypoints": [
                 "docs/auth/README.md",
-                "docs/status/account-sign-in.md",
+                "docs/status/completed/account-sign-in.md",
                 "docs/status/account-identity-and-access.md",
                 "packages/backend/src/handlers/accountAuth.ts",
                 "packages/backend/src/services/accountAuth.ts",

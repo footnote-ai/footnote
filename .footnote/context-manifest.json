@@ -65,8 +65,8 @@
         "priority": 100
     },
     {
-        "path": "docs/status/github-context-status.md",
-        "category": "current_state",
+        "path": "docs/architecture/context-integrations/github.md",
+        "category": "documented_behavior",
         "priority": 95
     },
     {

@@ -13,7 +13,7 @@ docs/architecture/context-integrations/README.md
 docs/architecture/context-integrations/project-context.md
 docs/status/index.md
 docs/status/repository-context-status.md
-docs/status/github-context-status.md
+docs/architecture/context-integrations/github.md
 docs/status/web-search-grounding-recovery-status.md
 
 # Exclude files matched above by prefixing a pattern with !

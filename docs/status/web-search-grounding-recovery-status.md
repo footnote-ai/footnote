@@ -2,7 +2,9 @@
 
 Status: implementation plan agreed; work has not started.
 
-Last updated: 2026-07-22.
+Issue: [#451](https://github.com/footnote-ai/footnote/issues/451)
+
+Last updated: 2026-10-01.
 
 ## Goal
 

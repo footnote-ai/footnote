@@ -6,13 +6,19 @@ work is done.
 
 ## Active Work
 
-- [Account identity and access](./account-identity-and-access.md) — OIDC
-  sign-in and administrator access delivered; #521 is next
-- [Account sign-in](./account-sign-in.md) — completed authentication foundation
-- [GPT-5.6 default rollout](./gpt-5-6-default-rollout-status.md)
-- [Launcher canary releases](./launcher-canary-releases.md)
-- [Repository context and TrustGraph](./repository-context-status.md)
-- [Context retrieval and knowledge reporting](./context-retrieval-knowledge-reporting-status.md)
-- [Web search grounding recovery](./web-search-grounding-recovery-status.md)
-- [GitHub context](./github-context-status.md)
-- [Presentation contract](./presentation-contract-status.md)
+- [Account identity and access](./account-identity-and-access.md) — lifecycle
+  delivered; account UI polish remains in #769
+- [Repository context and TrustGraph](./repository-context-status.md) — guided
+  setup remains in #454; source-code retrieval is tracked separately in #539
+- [Web search grounding recovery](./web-search-grounding-recovery-status.md) —
+  implementation has not started (#451)
+
+## Deferred Evaluation Notes
+
+- [Model behavior baseline](./model-behavior-baseline.md) — live runner deferred;
+  no evaluation run is scheduled
+- [Planner strict-output comparison](./planner-strict-provenance-comparison.md)
+  — no live-provider evidence recorded
+
+The [local Ollama cohort](./local-ollama-model-cohort.md) is experiment setup,
+not an active work tracker.

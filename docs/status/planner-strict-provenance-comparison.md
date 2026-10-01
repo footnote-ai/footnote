@@ -1,7 +1,9 @@
 # Planner strict-output comparison
 
-This file contains redacted transport metrics only. Raw prompts, model outputs,
-secrets, and hidden reasoning are never written.
+This is a deferred evidence record, not an active work tracker. No live
+provider comparison has been run or scheduled. It contains redacted transport
+metrics only; raw prompts, model outputs, secrets, and hidden reasoning are
+never written.
 
 The comparison harness is available at `scripts/planner-comparison.mts` and can
 be run with `pnpm eval:planner -- --live` when provider credentials are present.
