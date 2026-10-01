@@ -1,0 +1,445 @@
+paths:
+    /api/traces:
+        post:
+            operationId: postTraces
+            x-codeRefs:
+                - packages/backend/src/handlers/trace.ts#handleTraceUpsertRequest
+                - packages/discord-bot/src/api/traces.ts#postTraces
+                - packages/contracts/src/web/types.ts#PostTracesRequest
+                - packages/contracts/src/web/types.ts#PostTracesResponse
+                - packages/contracts/src/web/schemas.ts#PostTracesRequestSchema
+                - packages/contracts/src/web/schemas.ts#PresentationMetadataSchema
+                - packages/contracts/src/policy/types.ts#PresentationMetadata
+                - packages/contracts/src/policy/types.ts#PresentationSettingsMetadata
+            summary: Upsert trace metadata
+            description: >
+                Store ResponseMetadata for a responseId.
+
+                TraceToken required; rate limited per client IP.
+
+                Legacy writers may still send presentation `intensity` and `traceConstrained` fields; the backend
+                accepts those fields and normalizes them to `expressionStrength` and `expressionSource: persona_default`
+                before storage.
+            tags:
+                - Traces
+            security:
+                - TraceToken: []
+            requestBody:
+                required: true
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/TraceUpsertRequest'
+            responses:
+                '200':
+                    $ref: '#/components/responses/TraceUpsertOk'
+                '400':
+                    $ref: '#/components/responses/BadRequest'
+                '401':
+                    $ref: '#/components/responses/Unauthorized'
+                '403':
+                    $ref: '#/components/responses/Forbidden'
+                '405':
+                    $ref: '#/components/responses/MethodNotAllowed'
+                '413':
+                    $ref: '#/components/responses/PayloadTooLarge'
+                '429':
+                    $ref: '#/components/responses/TooManyRequests'
+                '500':
+                    $ref: '#/components/responses/InternalServerError'
+                '503':
+                    $ref: '#/components/responses/ServiceUnavailable'
+    /api/trace-cards:
+        post:
+            operationId: postTraceCards
+            x-codeRefs:
+                - packages/backend/src/handlers/trace.ts#handleTraceCardCreateRequest
+                - packages/discord-bot/src/api/traces.ts#postTraceCard
+                - packages/contracts/src/web/types.ts#PostTraceCardRequest
+                - packages/contracts/src/web/types.ts#PostTraceCardResponse
+            summary: Generate and store a trace-card
+            description: |
+                Generate a trace-card from TRACE temperament and score metadata, persist the canonical SVG asset,
+                and return a PNG payload for inline display. The optional variant changes presentation only;
+                canonical is the default and remains the durable SVG representation.
+                TraceToken required.
+            tags:
+                - Traces
+            security:
+                - TraceToken: []
+            requestBody:
+                required: true
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/TraceCardRequest'
+            responses:
+                '200':
+                    $ref: '#/components/responses/TraceCardCreateOk'
+                '400':
+                    $ref: '#/components/responses/BadRequest'
+                '401':
+                    $ref: '#/components/responses/Unauthorized'
+                '403':
+                    $ref: '#/components/responses/Forbidden'
+                '413':
+                    $ref: '#/components/responses/PayloadTooLarge'
+                '429':
+                    $ref: '#/components/responses/TooManyRequests'
+                '500':
+                    $ref: '#/components/responses/InternalServerError'
+                '503':
+                    $ref: '#/components/responses/ServiceUnavailable'
+    /api/trace-cards/from-trace:
+        post:
+            operationId: postTraceCardsFromTrace
+            x-codeRefs:
+                - packages/backend/src/handlers/trace.ts#handleTraceCardFromTraceRequest
+                - packages/discord-bot/src/api/traces.ts#postTraceCardFromTrace
+                - packages/contracts/src/web/types.ts#PostTraceCardFromTraceRequest
+                - packages/contracts/src/web/types.ts#PostTraceCardFromTraceResponse
+            summary: Generate and store a trace-card from an existing trace
+            description: |
+                Load stored trace metadata by response id, use stored final TRACE posture and optional chip scores,
+                regenerate/store the canonical SVG asset, and return a PNG payload for inline display. The optional
+                variant may request a Discord-sized derivative without replacing the canonical stored SVG.
+                TraceToken required.
+            tags:
+                - Traces
+            security:
+                - TraceToken: []
+            requestBody:
+                required: true
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/TraceCardFromTraceRequest'
+            responses:
+                '200':
+                    $ref: '#/components/responses/TraceCardCreateOk'
+                '400':
+                    $ref: '#/components/responses/BadRequest'
+                '401':
+                    $ref: '#/components/responses/Unauthorized'
+                '403':
+                    $ref: '#/components/responses/Forbidden'
+                '404':
+                    $ref: '#/components/responses/NotFound'
+                '413':
+                    $ref: '#/components/responses/PayloadTooLarge'
+                '429':
+                    $ref: '#/components/responses/TooManyRequests'
+                '500':
+                    $ref: '#/components/responses/InternalServerError'
+                '503':
+                    $ref: '#/components/responses/ServiceUnavailable'
+    '/api/traces/{responseId}':
+        get:
+            operationId: getTrace
+            x-codeRefs:
+                - packages/backend/src/handlers/trace.ts#handleTraceRequest
+                - packages/discord-bot/src/api/traces.ts#getTrace
+                - packages/web/src/utils/api.ts#getTrace
+                - packages/contracts/src/web/types.ts#GetTraceResponse
+                - packages/contracts/src/web/types.ts#GetTraceStaleResponse
+                - packages/contracts/src/web/types.ts#TraceDisplayMetadata
+            summary: Fetch a stored trace
+            description: >
+                Return stored trace metadata by response ID. Malformed nested provenance fields are omitted and listed
+                in displayIntegrity; a partial response is never presented as complete.
+
+                Public endpoint; no auth or rate limits.
+            tags:
+                - Traces
+            parameters:
+                - $ref: '#/components/parameters/TraceResponseId'
+            responses:
+                '200':
+                    $ref: '#/components/responses/TraceFetchOk'
+                '400':
+                    $ref: '#/components/responses/BadRequest'
+                '404':
+                    $ref: '#/components/responses/NotFound'
+                '410':
+                    $ref: '#/components/responses/Gone'
+                '500':
+                    $ref: '#/components/responses/InternalServerError'
+                '503':
+                    $ref: '#/components/responses/ServiceUnavailable'
+    '/api/traces/{responseId}/response-versions':
+        get:
+            operationId: getResponseVersions
+            x-codeRefs:
+                - packages/backend/src/handlers/trace.ts#handleResponseVersionsRequest
+                - packages/api-client/src/traces.ts#getResponseVersions
+                - packages/api-client/src/web.ts#getResponseVersions
+                - packages/discord-bot/src/api/traces.ts#getResponseVersions
+                - packages/web/src/utils/api.ts#getResponseVersions
+                - packages/contracts/src/web/types.ts#GetResponseVersionsResponse
+                - packages/contracts/src/web/types.ts#GetResponseVersionsStaleResponse
+            summary: Fetch stored response candidate history
+            description: |
+                Return model-produced response candidates for a stored trace.
+                Candidate text is excluded from the normal trace response.
+                Public endpoint; no auth or rate limits.
+            tags:
+                - Traces
+            parameters:
+                - $ref: '#/components/parameters/TraceResponseId'
+            responses:
+                '200':
+                    $ref: '#/components/responses/ResponseVersionsFetchOk'
+                '400':
+                    $ref: '#/components/responses/BadRequest'
+                '404':
+                    $ref: '#/components/responses/NotFound'
+                '410':
+                    $ref: '#/components/responses/ResponseVersionsStale'
+                '500':
+                    $ref: '#/components/responses/InternalServerError'
+                '503':
+                    $ref: '#/components/responses/ServiceUnavailable'
+    '/api/traces/{responseId}/assets/trace-card.svg':
+        get:
+            operationId: getTraceCardSvg
+            x-codeRefs:
+                - packages/backend/src/handlers/trace.ts#handleTraceCardAssetRequest
+                - packages/contracts/src/web/types.ts#GetTraceCardSvgResponse
+            summary: Fetch trace-card SVG
+            description: |
+                Return the stored trace-card SVG asset by response id.
+                Public endpoint; no auth or rate limits.
+            tags:
+                - Traces
+            parameters:
+                - $ref: '#/components/parameters/TraceResponseId'
+            responses:
+                '200':
+                    $ref: '#/components/responses/TraceCardSvgOk'
+                '400':
+                    $ref: '#/components/responses/BadRequest'
+                '404':
+                    $ref: '#/components/responses/NotFound'
+                '500':
+                    $ref: '#/components/responses/InternalServerError'
+                '503':
+                    $ref: '#/components/responses/ServiceUnavailable'
+components:
+    schemas:
+        TraceDisplayMetadata:
+            description: >-
+                Backend-owned trace-read projection. Complete records have an empty unavailableFields list; partial
+                records explicitly name omitted malformed fields.
+            allOf:
+                - $ref: '#/components/schemas/ResponseMetadata'
+                - type: object
+                  properties:
+                      displayIntegrity:
+                          type: object
+                          properties:
+                              status:
+                                  type: string
+                                  enum:
+                                      - complete
+                                      - partial
+                              unavailableFields:
+                                  type: array
+                                  items:
+                                      type: string
+                          required:
+                              - status
+                              - unavailableFields
+                          additionalProperties: false
+                  required:
+                      - displayIntegrity
+        TraceUpsertRequest:
+            description: ResponseMetadata payload for trace ingestion.
+            allOf:
+                - $ref: '#/components/schemas/ResponseMetadata'
+        TraceCardChips:
+            type: object
+            properties:
+                evidenceScore:
+                    type: integer
+                    minimum: 1
+                    maximum: 5
+                freshnessScore:
+                    type: integer
+                    minimum: 1
+                    maximum: 5
+            additionalProperties: false
+        TraceCardRequest:
+            type: object
+            properties:
+                responseId:
+                    type: string
+                    minLength: 1
+                temperament:
+                    type: object
+                    properties:
+                        tightness:
+                            type: integer
+                            minimum: 1
+                            maximum: 5
+                        rationale:
+                            type: integer
+                            minimum: 1
+                            maximum: 5
+                        attribution:
+                            type: integer
+                            minimum: 1
+                            maximum: 5
+                        caution:
+                            type: integer
+                            minimum: 1
+                            maximum: 5
+                        extent:
+                            type: integer
+                            minimum: 1
+                            maximum: 5
+                    additionalProperties: false
+                chips:
+                    $ref: '#/components/schemas/TraceCardChips'
+                variant:
+                    type: string
+                    enum:
+                        - canonical
+                        - discord
+                    default: canonical
+            additionalProperties: false
+        TraceCardResponse:
+            type: object
+            properties:
+                responseId:
+                    type: string
+                    minLength: 1
+                variant:
+                    type: string
+                    enum:
+                        - canonical
+                        - discord
+                    default: canonical
+                pngBase64:
+                    type: string
+                    minLength: 1
+            required:
+                - responseId
+                - pngBase64
+            additionalProperties: true
+        TraceCardFromTraceRequest:
+            type: object
+            properties:
+                responseId:
+                    type: string
+                    minLength: 1
+            required:
+                - responseId
+            additionalProperties: false
+        Citation:
+            type: object
+            properties:
+                title:
+                    type: string
+                url:
+                    type: string
+                    format: uri
+                snippet:
+                    type: string
+            required:
+                - title
+                - url
+            additionalProperties: false
+        TraceUpsertResponse:
+            type: object
+            properties:
+                ok:
+                    type: boolean
+                responseId:
+                    type: string
+            required:
+                - ok
+                - responseId
+            additionalProperties: false
+        TraceStaleResponse:
+            type: object
+            properties:
+                message:
+                    type: string
+                metadata:
+                    $ref: '#/components/schemas/TraceDisplayMetadata'
+            required:
+                - message
+                - metadata
+            additionalProperties: false
+        ResponseCandidate:
+            type: object
+            description: >-
+                One model-produced response candidate retained with a trace. A presentation_draft is expression-only
+                input to normal answer generation, not evidence, provenance authority, policy, or a deliverable answer.
+                Plans, prompts, internal prose-usability checks, and hidden reasoning are excluded.
+            properties:
+                id:
+                    type: string
+                parentCandidateId:
+                    type: string
+                    description: Response-history and expression-influence ancestry only; never evidence or provenance authority.
+                workflowStepId:
+                    type: string
+                sequence:
+                    type: integer
+                    minimum: 0
+                stage:
+                    type: string
+                    enum:
+                        - initial_generation
+                        - revision
+                        - presentation_draft
+                        - presentation_finalization
+                        - presentation_repair
+                        - fallback
+                state:
+                    type: string
+                    enum:
+                        - selected
+                        - superseded
+                text:
+                    type: string
+            required:
+                - id
+                - workflowStepId
+                - sequence
+                - stage
+                - state
+                - text
+            additionalProperties: false
+        ResponseVersionsResponse:
+            type: object
+            properties:
+                responseId:
+                    type: string
+                candidates:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/ResponseCandidate'
+            required:
+                - responseId
+                - candidates
+            additionalProperties: false
+        ResponseVersionsStaleResponse:
+            type: object
+            properties:
+                message:
+                    type: string
+                    enum:
+                        - Trace is stale
+                responseId:
+                    type: string
+                candidates:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/ResponseCandidate'
+            required:
+                - message
+                - responseId
+                - candidates
+            additionalProperties: false

@@ -2,7 +2,13 @@
 
 ## Location
 
-Canonical OpenAPI spec: `docs/api/openapi.yaml`.
+OpenAPI source: `docs/api/openapi/`. The committed `docs/api/openapi.yaml` is
+the bundled contract for consumers; edit the source modules, not the bundle.
+Run `pnpm openapi:bundle` to refresh it. The validation command and CI reject a
+stale bundle.
+
+The source keeps shared metadata separate and groups paths and schemas by chat,
+media, tasks, traces, incidents, accounts, and setup/admin ownership.
 
 ## Versioning
 
