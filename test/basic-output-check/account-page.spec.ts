@@ -283,8 +283,22 @@ test('account holders can save memories, claim reports, and download their data'
         page.getByText('Prefers concise technical answers.')
     ).toHaveCount(0);
     await expect(page.getByText('Uses keyboard shortcuts.')).toBeVisible();
-    await page.getByLabel('Claim code').fill('a'.repeat(43));
-    await page.getByRole('button', { name: 'Add report' }).click();
+    await expect(
+        page.getByRole('heading', { name: 'Report ABC123' })
+    ).toBeVisible();
+    await expect(page.getByLabel('Claim code')).not.toBeVisible();
+    const claimButton = page.getByRole('button', { name: 'Claim a report' });
+    await claimButton.click();
+    const claimDialog = page.getByRole('dialog', { name: 'Add a report' });
+    await expect(claimDialog).toBeVisible();
+    await claimDialog.getByLabel('Claim code').fill('a'.repeat(43));
+    await claimDialog.getByRole('button', { name: 'Cancel' }).click();
+    await expect(claimDialog).not.toBeVisible();
+    await expect(claimButton).toBeFocused();
+    await claimButton.click();
+    await claimDialog.getByLabel('Claim code').fill('a'.repeat(43));
+    await claimDialog.getByRole('button', { name: 'Add report' }).click();
+    await expect(claimDialog).not.toBeVisible();
     await expect(
         page
             .getByRole('status')
