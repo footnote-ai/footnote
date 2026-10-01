@@ -113,7 +113,10 @@ test('trusted start, browser exchange, OIDC consent, and original-user confirmat
     const address = server.address();
     assert.ok(address && typeof address !== 'string');
     const baseUrl = `http://127.0.0.1:${address.port}`;
-    const startBody = JSON.stringify({ discordUserId: '12345678901234567' });
+    const startBody = JSON.stringify({
+        discordUserId: '12345678901234567',
+        discordUsername: 'jordan',
+    });
     const rejected = await fetch(
         `${baseUrl}/api/internal/discord/account/start`,
         { method: 'POST', body: startBody }
@@ -291,7 +294,7 @@ test('trusted start, browser exchange, OIDC consent, and original-user confirmat
                 'x-service-token': 'trusted-service',
                 'content-type': 'application/json',
             },
-            body: startBody,
+            body: JSON.stringify({ discordUserId: '12345678901234567' }),
         }
     );
     assert.deepEqual(await status.json(), { connected: true });
@@ -305,7 +308,10 @@ test('trusted start, browser exchange, OIDC consent, and original-user confirmat
                 'x-service-token': 'trusted-service',
                 'content-type': 'application/json',
             },
-            body: JSON.stringify({ discordUserId: secondId }),
+            body: JSON.stringify({
+                discordUserId: secondId,
+                discordUsername: 'second-user',
+            }),
         }
     );
     const secondLink = (await secondStart.json()) as { connectionUrl: string };

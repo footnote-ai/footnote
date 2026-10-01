@@ -9,7 +9,10 @@ import { z } from 'zod';
 
 const discordId = z.string().regex(/^\d{17,20}$/);
 export const DiscordAccountStartRequestSchema = z
-    .object({ discordUserId: discordId })
+    .object({
+        discordUserId: discordId,
+        discordUsername: z.string().min(1).max(32),
+    })
     .strict();
 export const DiscordAccountStatusRequestSchema = z
     .object({ discordUserId: discordId })
@@ -34,7 +37,9 @@ export const DiscordAccountStatusResponseSchema = z
 export const AccountDiscordConnectionResponseSchema = z
     .object({
         connected: z.boolean(),
-        discordUserIds: z.array(discordId),
+        accounts: z.array(
+            z.object({ username: z.string().nullable() }).strict()
+        ),
     })
     .strict();
 export const DiscordAccountConfirmResponseSchema = z
@@ -89,7 +94,7 @@ export type DiscordAccountStatusResponse = { connected: boolean };
 /** @api.operationId: getAccountDiscordConnection @api.path: GET /api/account/discord-connection */
 export type AccountDiscordConnectionResponse = {
     connected: boolean;
-    discordUserIds: string[];
+    accounts: Array<{ username: string | null }>;
 };
 export type DiscordAccountConfirmResponse = {
     result:

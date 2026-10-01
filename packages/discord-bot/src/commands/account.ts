@@ -46,6 +46,7 @@ const command: Command = {
             if (subcommand === 'connect') {
                 const result = await botApi.startDiscordAccountConnection({
                     discordUserId: interaction.user.id,
+                    discordUsername: interaction.user.username,
                 });
                 await interaction.editReply(
                     `Open this link to connect your Footnote account. It expires in 10 minutes: ${result.connectionUrl}`

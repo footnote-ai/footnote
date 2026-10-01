@@ -43,7 +43,7 @@ test('Discord linking requires browser approval and the initiating Discord user'
     assert.equal(auth.ok, true);
     if (!auth.ok) return;
 
-    const started = service.startDiscordConnection('discord-user-a');
+    const started = service.startDiscordConnection('discord-user-a', 'jordan');
     assert.ok(started);
     const connectionSessionId = service.exchangeDiscordCapability(
         started.capability
@@ -88,11 +88,19 @@ test('Discord linking requires browser approval and the initiating Discord user'
         auth.session.accountId
     );
     assert.equal(
+        store.listDiscordLinksForAccount(auth.session.accountId)[0]
+            ?.discordUsername,
+        'jordan'
+    );
+    assert.equal(
         service.confirmDiscordConnection('discord-user-a', code ?? ''),
         'invalid'
     );
 
-    const secondStart = service.startDiscordConnection('discord-user-c');
+    const secondStart = service.startDiscordConnection(
+        'discord-user-c',
+        'other'
+    );
     assert.ok(secondStart);
     const secondBrowser = service.exchangeDiscordCapability(
         secondStart.capability
@@ -133,7 +141,7 @@ test('Discord connection expires and invalidates after five wrong codes', async 
     );
     assert.equal(auth.ok, true);
     if (!auth.ok) return;
-    const started = service.startDiscordConnection('discord-user-a');
+    const started = service.startDiscordConnection('discord-user-a', 'jordan');
     assert.ok(started);
     const connectionSessionId = service.exchangeDiscordCapability(
         started.capability
@@ -154,7 +162,7 @@ test('Discord connection expires and invalidates after five wrong codes', async 
         service.confirmDiscordConnection('discord-user-a', '00000000'),
         'attempts-exhausted'
     );
-    const expired = service.startDiscordConnection('discord-user-a');
+    const expired = service.startDiscordConnection('discord-user-a', 'jordan');
     assert.ok(expired);
     now += 10 * 60 * 1_000;
     assert.equal(service.exchangeDiscordCapability(expired.capability), null);
@@ -181,7 +189,7 @@ test('transient storage failure blocks confirmation without losing the approval'
     );
     assert.equal(auth.ok, true);
     if (!auth.ok) return;
-    const started = service.startDiscordConnection('discord-user-a');
+    const started = service.startDiscordConnection('discord-user-a', 'jordan');
     assert.ok(started);
     const connectionSessionId = service.exchangeDiscordCapability(
         started.capability
@@ -235,8 +243,8 @@ test('disconnect cancellation invalidates only that account’s pending Discord 
     };
     const accountA = await createSession('account-a');
     const accountB = await createSession('account-b');
-    const pendingA = service.startDiscordConnection('discord-user-a');
-    const pendingB = service.startDiscordConnection('discord-user-b');
+    const pendingA = service.startDiscordConnection('discord-user-a', 'user-a');
+    const pendingB = service.startDiscordConnection('discord-user-b', 'user-b');
     assert.ok(pendingA && pendingB);
     const connectionA = service.exchangeDiscordCapability(pendingA.capability);
     const connectionB = service.exchangeDiscordCapability(pendingB.capability);

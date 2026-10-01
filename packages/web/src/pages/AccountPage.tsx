@@ -74,7 +74,7 @@ type AccountDiscordState =
           status: 'ready';
           accountKey: string;
           connected: boolean;
-          discordUserIds: string[];
+          discordUsernames: Array<string | null>;
           disconnecting: boolean;
           disconnectError: boolean;
       };
@@ -258,7 +258,7 @@ const AccountPage = (): JSX.Element => {
         const controller = new AbortController();
         setAccountDiscordState({ status: 'loading', accountKey });
         void getAccountDiscordStatus(controller.signal)
-            .then(({ connected, discordUserIds }) => {
+            .then(({ connected, accounts }) => {
                 if (
                     !controller.signal.aborted &&
                     activeAccountKeyRef.current === accountKey
@@ -267,7 +267,9 @@ const AccountPage = (): JSX.Element => {
                         status: 'ready',
                         accountKey,
                         connected,
-                        discordUserIds,
+                        discordUsernames: accounts.map(
+                            ({ username }) => username
+                        ),
                         disconnecting: false,
                         disconnectError: false,
                     });
@@ -296,9 +298,9 @@ const AccountPage = (): JSX.Element => {
             status: 'ready',
             accountKey,
             connected: true,
-            discordUserIds:
+            discordUsernames:
                 accountDiscordState.status === 'ready'
-                    ? accountDiscordState.discordUserIds
+                    ? accountDiscordState.discordUsernames
                     : [],
             disconnecting: true,
             disconnectError: false,
@@ -310,7 +312,7 @@ const AccountPage = (): JSX.Element => {
                 status: 'ready',
                 accountKey,
                 connected: false,
-                discordUserIds: [],
+                discordUsernames: [],
                 disconnecting: false,
                 disconnectError: false,
             });
@@ -320,9 +322,9 @@ const AccountPage = (): JSX.Element => {
                 status: 'ready',
                 accountKey,
                 connected: true,
-                discordUserIds:
+                discordUsernames:
                     accountDiscordState.status === 'ready'
-                        ? accountDiscordState.discordUserIds
+                        ? accountDiscordState.discordUsernames
                         : [],
                 disconnecting: false,
                 disconnectError: true,
@@ -851,12 +853,24 @@ const AccountPage = (): JSX.Element => {
                                 </p>
                                 {currentAccountDiscordState.connected ? (
                                     <>
-                                        <p>
-                                            Discord ID:{' '}
-                                            {currentAccountDiscordState.discordUserIds.join(
-                                                ', '
-                                            )}
-                                        </p>
+                                        {currentAccountDiscordState.discordUsernames.some(
+                                            (username) => username !== null
+                                        ) ? (
+                                            <p>
+                                                {currentAccountDiscordState.discordUsernames
+                                                    .filter(
+                                                        (
+                                                            username
+                                                        ): username is string =>
+                                                            username !== null
+                                                    )
+                                                    .map(
+                                                        (username) =>
+                                                            `@${username}`
+                                                    )
+                                                    .join(', ')}
+                                            </p>
+                                        ) : null}
                                         <p>
                                             Disconnecting only removes this
                                             Footnote link.

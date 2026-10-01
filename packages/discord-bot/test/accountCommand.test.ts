@@ -33,6 +33,11 @@ test('account command uses interaction identity and private start/status/confirm
         'utf8'
     );
     assert.match(source, /interaction\.user\.id/);
+    assert.match(source, /interaction\.user\.username/);
+    assert.match(
+        source,
+        /startDiscordAccountConnection\(\{\s*discordUserId:\s*interaction\.user\.id,\s*discordUsername:\s*interaction\.user\.username/s
+    );
     assert.match(source, /deferReply\(\{ ephemeral: true \}\)/);
     assert.match(source, /startDiscordAccountConnection/);
     assert.match(source, /getDiscordAccountStatus/);

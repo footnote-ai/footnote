@@ -55,12 +55,14 @@ export const createAccountDiscordConnectionHandlers = ({
             logRequest(req, res, 'account Discord connection unavailable');
             return;
         }
-        const discordUserIds = accountStore.listDiscordUserIdsForAccount(
+        const discordLinks = accountStore.listDiscordLinksForAccount(
             session.accountId
         );
         const parsed = AccountDiscordConnectionResponseSchema.safeParse({
-            connected: discordUserIds.length > 0,
-            discordUserIds,
+            connected: discordLinks.length > 0,
+            accounts: discordLinks.map(({ discordUsername }) => ({
+                username: discordUsername,
+            })),
         });
         if (!parsed.success) {
             sendJson(res, 500, { error: 'Failed to load Discord connection' });

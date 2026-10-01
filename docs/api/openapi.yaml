@@ -1120,12 +1120,12 @@ paths:
             x-codeRefs:
                 - packages/backend/src/handlers/accountDiscordConnection.ts#createAccountDiscordConnectionHandlers
                 - packages/api-client/src/accountAuth.ts#createAccountAuthApi
-                - packages/backend/src/storage/accounts/sqliteAccountStore.ts#listDiscordUserIdsForAccount
+                - packages/backend/src/storage/accounts/sqliteAccountStore.ts#listDiscordLinksForAccount
                 - packages/contracts/src/web/discordAccounts.ts#AccountDiscordConnectionResponseSchema
                 - packages/contracts/src/web/discordAccounts.ts#AccountDiscordConnectionResponse
                 - packages/web/src/utils/api.ts#getAccountDiscordStatus
             summary: Read the current account's Discord connection status
-            description: Returns Discord user IDs durably linked to the signed-in Footnote account.
+            description: Returns Discord usernames durably linked to the signed-in Footnote account, without exposing Discord user IDs.
             tags: [Accounts]
             security: [{ AccountSessionCookie: [] }]
             responses:
@@ -1676,6 +1676,7 @@ paths:
             operationId: getAccountExport
             x-codeRefs:
                 - packages/backend/src/handlers/accountIncidents.ts#handleAccountExportRequest
+                - packages/backend/src/storage/accounts/sqliteAccountStore.ts#getAccountExportData
             summary: Download the signed-in account's retained Footnote data
             description: Returns a JSON attachment scoped to the signed-in account. Incident records are limited to association time and the reporter-safe summary; capability material and operator incident data are excluded.
             tags:
@@ -2415,8 +2416,9 @@ components:
                         type: object
                         properties:
                             discordUserId: { type: string }
+                            discordUsername: { type: [string, 'null'] }
                             createdAt: { type: string, format: date-time }
-                        required: [discordUserId, createdAt]
+                        required: [discordUserId, discordUsername, createdAt]
                         additionalProperties: false
             required: [category, records]
             additionalProperties: false
@@ -5744,7 +5746,8 @@ components:
             type: object
             properties:
                 discordUserId: { type: string, pattern: '^\\d{17,20}$' }
-            required: [discordUserId]
+                discordUsername: { type: string, minLength: 1, maxLength: 32 }
+            required: [discordUserId, discordUsername]
             additionalProperties: false
         DiscordAccountExchangeRequest:
             type: object
@@ -5775,10 +5778,15 @@ components:
             type: object
             properties:
                 connected: { type: boolean }
-                discordUserIds:
+                accounts:
                     type: array
-                    items: { type: string, pattern: '^\\d{17,20}$' }
-            required: [connected, discordUserIds]
+                    items:
+                        type: object
+                        properties:
+                            username: { type: [string, 'null'] }
+                        required: [username]
+                        additionalProperties: false
+            required: [connected, accounts]
             additionalProperties: false
         DiscordAccountConfirmRequest:
             type: object

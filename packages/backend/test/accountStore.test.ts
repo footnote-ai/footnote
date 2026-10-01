@@ -125,19 +125,35 @@ test('Discord mappings survive reopen and disconnect only by account', () => {
             subject: 'subject-2',
         });
         assert.equal(
-            store.linkDiscordUserToAccount('discord-1', accountA.id),
+            store.linkDiscordUserToAccount(
+                'discord-1',
+                accountA.id,
+                'first-user'
+            ),
             'linked'
         );
         assert.equal(
-            store.linkDiscordUserToAccount('discord-1', accountA.id),
+            store.linkDiscordUserToAccount(
+                'discord-1',
+                accountA.id,
+                'renamed-user'
+            ),
             'already-linked'
         );
         assert.equal(
-            store.linkDiscordUserToAccount('discord-2', accountB.id),
+            store.linkDiscordUserToAccount(
+                'discord-2',
+                accountB.id,
+                'second-user'
+            ),
             'linked'
         );
         assert.equal(
-            store.linkDiscordUserToAccount('discord-1', accountB.id),
+            store.linkDiscordUserToAccount(
+                'discord-1',
+                accountB.id,
+                'other-user'
+            ),
             'conflict'
         );
         store.close();
@@ -151,17 +167,55 @@ test('Discord mappings survive reopen and disconnect only by account', () => {
             accountB.id
         );
         assert.equal(store.hasDiscordLinkForAccount(accountA.id), true);
-        assert.deepEqual(store.listDiscordUserIdsForAccount(accountA.id), [
-            'discord-1',
-        ]);
+        const [discordLink] = store.listDiscordLinksForAccount(accountA.id);
+        assert.equal(discordLink?.discordUserId, 'discord-1');
+        assert.equal(discordLink?.discordUsername, 'renamed-user');
+        assert.match(discordLink?.createdAt ?? '', /^\d{4}-\d\d-/);
         store.unlinkDiscordUserFromAccount(accountA.id);
         assert.equal(store.hasDiscordLinkForAccount(accountA.id), false);
-        assert.deepEqual(store.listDiscordUserIdsForAccount(accountA.id), []);
+        assert.deepEqual(store.listDiscordLinksForAccount(accountA.id), []);
         assert.equal(store.findAccountByDiscordUserId('discord-1'), null);
         assert.equal(
             store.findAccountByDiscordUserId('discord-2')?.id,
             accountB.id
         );
+    } finally {
+        store?.close();
+        fs.rmSync(tempDir, { recursive: true, force: true });
+    }
+});
+
+test('legacy Discord links migrate in place with no username', () => {
+    const tempDir = fs.mkdtempSync(
+        path.join(os.tmpdir(), 'footnote-discord-legacy-')
+    );
+    const dbPath = path.join(tempDir, 'accounts.db');
+    let store: SqliteAccountStore | null = null;
+    const legacyDb = new Database(dbPath);
+    legacyDb.exec(`
+        CREATE TABLE accounts (
+            account_id TEXT PRIMARY KEY,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL
+        );
+        CREATE TABLE discord_account_links (
+            discord_user_id TEXT PRIMARY KEY,
+            account_id TEXT NOT NULL REFERENCES accounts(account_id) ON DELETE CASCADE,
+            created_at TEXT NOT NULL
+        );
+        INSERT INTO accounts VALUES ('legacy-account', '2026-01-01', '2026-01-01');
+        INSERT INTO discord_account_links VALUES ('123456789012345678', 'legacy-account', '2026-01-01');
+    `);
+    legacyDb.close();
+    try {
+        store = new SqliteAccountStore({ dbPath });
+        assert.deepEqual(store.listDiscordLinksForAccount('legacy-account'), [
+            {
+                discordUserId: '123456789012345678',
+                discordUsername: null,
+                createdAt: '2026-01-01',
+            },
+        ]);
     } finally {
         store?.close();
         fs.rmSync(tempDir, { recursive: true, force: true });
@@ -182,7 +236,7 @@ test('deleting an account removes its identity and Discord mappings idempotently
             ...identity,
             subject: 'subject-2',
         });
-        store.linkDiscordUserToAccount('discord-1', account.id);
+        store.linkDiscordUserToAccount('discord-1', account.id, 'user-one');
         const memory = store.addMemory(account.id, 'remove with owner');
         assert.ok(memory);
 
@@ -220,8 +274,8 @@ test('account export storage returns only the requested account mappings', () =>
             ...identity,
             subject: 'other-subject',
         });
-        store.linkDiscordUserToAccount('discord-owner', owner.id);
-        store.linkDiscordUserToAccount('discord-other', other.id);
+        store.linkDiscordUserToAccount('discord-owner', owner.id, 'owner-name');
+        store.linkDiscordUserToAccount('discord-other', other.id, 'other-name');
         const memory = store.addMemory(owner.id, 'only for owner');
         store.addMemory(other.id, 'not for owner');
 
@@ -235,6 +289,18 @@ test('account export storage returns only the requested account mappings', () =>
                 lastSeenAt: owner.createdAt,
             },
         ]);
+        assert.equal(
+            exported.discordMappings[0]?.discordUserId,
+            'discord-owner'
+        );
+        assert.equal(
+            exported.discordMappings[0]?.discordUsername,
+            'owner-name'
+        );
+        assert.match(
+            exported.discordMappings[0]?.createdAt ?? '',
+            /^\d{4}-\d\d-/
+        );
         assert.deepEqual(exported.memories, [memory]);
         assert.equal(exported.discordMappings.length, 1);
         assert.equal(
@@ -327,7 +393,7 @@ test('concurrent Discord links preserve one account and isolate conflicts', asyn
         const worker = `
             import { SqliteAccountStore } from './packages/backend/src/storage/accounts/sqliteAccountStore.ts';
             const store = new SqliteAccountStore({ dbPath: process.argv[1] });
-            try { console.log(store.linkDiscordUserToAccount(process.argv[2], process.argv[3])); }
+            try { console.log(store.linkDiscordUserToAccount(process.argv[2], process.argv[3], 'worker-name')); }
             finally { store.close(); }
         `;
         const link = (accountId: string) =>

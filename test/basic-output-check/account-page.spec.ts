@@ -37,7 +37,8 @@ const mockSignedOut = async (page: Page): Promise<void> => {
 
 const mockSignedIn = async (
     page: Page,
-    discordConnected = false
+    discordConnected = false,
+    discordUsername: string | null = 'jordan'
 ): Promise<{ disconnectCsrf: string[] }> => {
     await mockConfig(page);
     await page.route('**/api/auth/session', async (route) => {
@@ -74,7 +75,9 @@ const mockSignedIn = async (
             contentType: 'application/json',
             body: JSON.stringify({
                 connected: discordConnected,
-                discordUserIds: discordConnected ? ['123456789012345678'] : [],
+                accounts: discordConnected
+                    ? [{ username: discordUsername }]
+                    : [],
             }),
         });
     });
@@ -232,22 +235,32 @@ test('account holders can see and disconnect their Discord link', async ({
     await page.goto('/account');
 
     await expect(page.getByText('Discord connected.')).toBeVisible();
-    await expect(
-        page.getByText(/Discord ID:\s*123456789012345678/)
-    ).toBeVisible();
+    await expect(page.getByText('@jordan')).toBeVisible();
+    await expect(page.getByText('123456789012345678')).toHaveCount(0);
     await page.screenshot({
         path: testInfo.outputPath('account-discord-connected.png'),
         fullPage: true,
     });
     await page.getByRole('button', { name: 'Disconnect Discord' }).click();
     await expect(page.getByText('Discord not connected.')).toBeVisible();
-    await expect(page.getByText(/Discord ID:/)).toHaveCount(0);
+    await expect(page.getByText('123456789012345678')).toHaveCount(0);
     await expect(disconnectCsrf).toEqual(['account-csrf-token']);
     await expect(page.getByText('/account connect')).toBeVisible();
     await page.screenshot({
         path: testInfo.outputPath('account-discord-disconnected.png'),
         fullPage: true,
     });
+});
+
+test('legacy Discord links remain connected without showing an ID', async ({
+    page,
+}) => {
+    await mockSignedIn(page, true, null);
+    await page.goto('/account');
+
+    await expect(page.getByText('Discord connected.')).toBeVisible();
+    await expect(page.getByText('123456789012345678')).toHaveCount(0);
+    await expect(page.getByText(/^@/)).toHaveCount(0);
 });
 
 test('account holders can save memories, claim reports, and download their data', async ({

@@ -30,6 +30,7 @@ type LoginTransaction = {
 
 type DiscordConnectionTransaction = {
     discordUserId: string;
+    discordUsername: string;
     expiresAtMs: number;
     capability: string | null;
     connectionSessionId: string | null;
@@ -106,7 +107,8 @@ export type AccountAuthService = {
 export type DiscordAccountConnectionService = {
     discordConnectionsEnabled: boolean;
     startDiscordConnection: (
-        discordUserId: string
+        discordUserId: string,
+        discordUsername: string
     ) => { capability: string; expiresAt: string } | null;
     exchangeDiscordCapability: (capability: string) => string | null;
     getDiscordConnectionState: (
@@ -383,7 +385,8 @@ export const createAccountAuthService = ({
     };
 
     const startDiscordConnection = (
-        discordUserId: string
+        discordUserId: string,
+        discordUsername: string
     ): { capability: string; expiresAt: string } | null => {
         if (!provider || !accountStore || maxTransactions <= 0) return null;
         const activeId = transactionByDiscordUserId.get(discordUserId);
@@ -401,6 +404,7 @@ export const createAccountAuthService = ({
         const expiresAtMs = now() + transactionTtlMs;
         discordTransactions.set(id, {
             discordUserId,
+            discordUsername,
             expiresAtMs,
             capability,
             connectionSessionId: null,
@@ -539,7 +543,8 @@ export const createAccountAuthService = ({
         try {
             result = accountStore.linkDiscordUserToAccount(
                 discordUserId,
-                tx.approvedAccountId
+                tx.approvedAccountId,
+                tx.discordUsername
             );
         } catch {
             return 'unavailable';
