@@ -254,6 +254,7 @@ test('account holders can save memories, claim reports, and download their data'
     page,
 }) => {
     await mockSignedIn(page);
+    let failedMemoryEdits = 1;
     let exportRequested = false;
     let claimRequest = '';
     let logoutCsrf = '';
@@ -279,6 +280,11 @@ test('account holders can save memories, claim reports, and download their data'
     });
     await page.route('**/api/account/memories/*', async (route) => {
         if (route.request().method() === 'PATCH') {
+            if (failedMemoryEdits > 0) {
+                failedMemoryEdits -= 1;
+                await route.fulfill({ status: 500 });
+                return;
+            }
             memoryPatch = route.request().postData() ?? '';
             memoryPatchCsrf = route.request().headers()['x-auth-csrf'] ?? '';
             const body: unknown = JSON.parse(memoryPatch);
@@ -329,6 +335,24 @@ test('account holders can save memories, claim reports, and download their data'
         .getByLabel('Memory')
         .fill('Uses custom keyboard shortcuts.');
     await editDialog.getByRole('button', { name: 'Save changes' }).click();
+    await expect(editDialog.getByRole('alert')).toContainText(
+        'The memory could not be updated. Please try again.'
+    );
+    await editDialog.getByRole('button', { name: 'Cancel' }).click();
+    await page
+        .getByRole('button', { name: 'Edit memory: Uses keyboard shortcuts.' })
+        .click();
+    await expect(
+        page.getByRole('dialog', { name: 'Edit memory' }).getByRole('alert')
+    ).toHaveCount(0);
+    await page
+        .getByRole('dialog', { name: 'Edit memory' })
+        .getByLabel('Memory')
+        .fill('Uses custom keyboard shortcuts.');
+    await page
+        .getByRole('dialog', { name: 'Edit memory' })
+        .getByRole('button', { name: 'Save changes' })
+        .click();
     await expect(
         page.getByText('Uses custom keyboard shortcuts.')
     ).toBeVisible();

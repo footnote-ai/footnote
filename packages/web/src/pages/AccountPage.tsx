@@ -797,6 +797,7 @@ const AccountPage = (): JSX.Element => {
                         readState={memoryReadState}
                         writeError={memoryWriteError}
                         busy={memoryBusy}
+                        onClearError={() => setMemoryWriteError(null)}
                         onSave={handleAddMemory}
                         onEdit={handleEditMemory}
                         onForget={handleForgetMemory}

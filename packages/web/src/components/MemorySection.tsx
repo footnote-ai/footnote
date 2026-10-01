@@ -18,6 +18,7 @@ type MemorySectionProps = {
     readState: MemoryReadState;
     writeError: MemoryWriteError;
     busy: boolean;
+    onClearError: () => void;
     onSave: (text: string) => Promise<boolean>;
     onEdit: (memoryId: string, text: string) => Promise<boolean>;
     onForget: (memoryId: string) => Promise<void>;
@@ -29,6 +30,7 @@ const MemorySection = ({
     readState,
     writeError,
     busy,
+    onClearError,
     onSave,
     onEdit,
     onForget,
@@ -51,6 +53,7 @@ const MemorySection = ({
                   : null;
 
     const openEditor = (memoryId: string | null, text = ''): void => {
+        onClearError();
         setEditor({ memoryId, text });
         dialogRef.current?.showModal();
     };
