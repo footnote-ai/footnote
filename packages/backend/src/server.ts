@@ -394,28 +394,37 @@ const initializeServices = () => {
     }
 
     const imageDescriptionConfig = runtimeConfig.imageDescription;
-    const imageDescriptionApiKey =
-        imageDescriptionConfig.provider === 'openai'
-            ? runtimeConfig.openai.apiKey
-            : imageDescriptionConfig.provider === 'ollama'
-              ? runtimeConfig.ollama.apiKey
-              : runtimeConfig.openrouter.apiKey;
+    let imageDescriptionApiKey: string | null = null;
+    let configuredProviderBaseUrl: string;
+    switch (imageDescriptionConfig.provider) {
+        case 'openai':
+            imageDescriptionApiKey = runtimeConfig.openai.apiKey;
+            configuredProviderBaseUrl = 'https://api.openai.com/v1';
+            break;
+        case 'ollama':
+            imageDescriptionApiKey = runtimeConfig.ollama.apiKey;
+            configuredProviderBaseUrl =
+                runtimeConfig.ollama.baseUrl ?? 'http://localhost:11434';
+            break;
+        case 'openrouter':
+            imageDescriptionApiKey = runtimeConfig.openrouter.apiKey;
+            configuredProviderBaseUrl = runtimeConfig.openrouter.baseUrl;
+            break;
+    }
     const imageDescriptionModel =
         imageDescriptionConfig.model ??
         (imageDescriptionConfig.provider === 'openai' ? 'gpt-4o-mini' : null);
-    const configuredProviderBaseUrl =
-        imageDescriptionConfig.provider === 'openai'
-            ? 'https://api.openai.com/v1'
-            : imageDescriptionConfig.provider === 'openrouter'
-              ? runtimeConfig.openrouter.baseUrl
-              : (runtimeConfig.ollama.baseUrl ?? 'http://localhost:11434');
     const selectedImageDescriptionBaseUrl =
         imageDescriptionConfig.baseUrl ?? configuredProviderBaseUrl;
+    let withoutTrailingSlash = selectedImageDescriptionBaseUrl;
+    while (withoutTrailingSlash.endsWith('/')) {
+        withoutTrailingSlash = withoutTrailingSlash.slice(0, -1);
+    }
     const imageDescriptionBaseUrl =
         imageDescriptionConfig.provider === 'ollama' &&
-        !selectedImageDescriptionBaseUrl.replace(/\/+$/, '').endsWith('/v1')
-            ? `${selectedImageDescriptionBaseUrl.replace(/\/+$/, '')}/v1`
-            : selectedImageDescriptionBaseUrl;
+        !withoutTrailingSlash.endsWith('/v1')
+            ? `${withoutTrailingSlash}/v1`
+            : withoutTrailingSlash;
     if (
         imageDescriptionModel &&
         (imageDescriptionConfig.provider === 'ollama' || imageDescriptionApiKey)
@@ -432,8 +441,14 @@ const initializeServices = () => {
             });
     } else {
         internalImageDescriptionTaskService = null;
+        let missingSetting = 'IMAGE_DESCRIPTION_MODEL';
+        if (imageDescriptionConfig.provider === 'openai') {
+            missingSetting = 'OPENAI_API_KEY';
+        } else if (imageDescriptionConfig.provider === 'openrouter') {
+            missingSetting = 'OPENROUTER_API_KEY';
+        }
         logger.warn(
-            `Image-description task is unavailable: configure ${imageDescriptionConfig.provider === 'openai' ? 'OPENAI_API_KEY' : imageDescriptionConfig.provider === 'openrouter' ? 'OPENROUTER_API_KEY' : 'IMAGE_DESCRIPTION_MODEL'} and the selected provider settings.`
+            `Image-description task is unavailable: configure ${missingSetting} and the selected provider settings.`
         );
     }
 

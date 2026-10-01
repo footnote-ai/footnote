@@ -5,7 +5,11 @@
  * @footnote-risk: medium - Incorrect provider settings can disable attachment grounding or route images unexpectedly.
  * @footnote-ethics: high - This setting determines which provider receives user images.
  */
-import { envDefaultValues, envSpecByKey } from '@footnote/config-spec';
+import { envDefaultValues } from '@footnote/config-spec';
+import {
+    supportedProviders,
+    type SupportedProvider,
+} from '@footnote/contracts/providers';
 import {
     parseOptionalTrimmedString,
     parsePositiveIntEnv,
@@ -13,11 +17,7 @@ import {
 } from '../parsers.js';
 import type { RuntimeConfig, WarningSink } from '../types.js';
 
-const providers = new Set<'openai' | 'ollama' | 'openrouter'>(
-    envSpecByKey.IMAGE_DESCRIPTION_PROVIDER.allowedValues as readonly (
-        'openai' | 'ollama' | 'openrouter'
-    )[]
-);
+const providers = new Set<SupportedProvider>(supportedProviders);
 
 export const buildImageDescriptionSection = (
     env: NodeJS.ProcessEnv,

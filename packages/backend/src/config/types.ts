@@ -12,6 +12,7 @@ import type {
     SupportedNodeEnv,
     SupportedOpenAIRealtimeModel,
     SupportedOpenAITtsVoice,
+    SupportedProvider,
     SupportedReasoningEffort,
     SupportedVerbosity,
 } from '@footnote/contracts/providers';
@@ -91,7 +92,7 @@ export type RuntimeConfig = {
         baseUrl: string;
     };
     imageDescription: {
-        provider: 'openai' | 'ollama' | 'openrouter';
+        provider: SupportedProvider;
         baseUrl: string | null;
         model: string | null;
         requestTimeoutMs: number;

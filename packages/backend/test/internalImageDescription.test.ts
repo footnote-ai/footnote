@@ -167,7 +167,7 @@ test('Ollama-compatible scanner uses configured model and tool-call output witho
         lookupImpl: publicLookup,
         fetchImpl: async (url, init) => {
             calls.push({ url: String(url), init });
-            if (String(url).includes('example.com')) {
+            if (new URL(String(url)).hostname === 'example.com') {
                 return new Response(Buffer.from('image'), {
                     headers: { 'content-type': 'image/png' },
                 });

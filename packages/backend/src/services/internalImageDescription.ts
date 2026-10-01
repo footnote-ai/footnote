@@ -7,6 +7,7 @@
  */
 import dns from 'node:dns/promises';
 import net from 'node:net';
+import type { SupportedProvider } from '@footnote/contracts/providers';
 
 import { logger as defaultLogger } from '../utils/logger.js';
 
@@ -81,10 +82,8 @@ export type CreateOpenAiImageDescriptionAdapterOptions = {
     logger?: Pick<typeof defaultLogger, 'warn'>;
 };
 
-export type ImageDescriptionProvider = 'openai' | 'ollama' | 'openrouter';
-
 export type CreateImageDescriptionAdapterOptions = {
-    provider: ImageDescriptionProvider;
+    provider: SupportedProvider;
     model: string;
     baseUrl: string;
     apiKey?: string | null;
@@ -262,10 +261,21 @@ const parseImageDescriptionJson = (
     if (!content) {
         return null;
     }
-    const trimmed = content.trim();
-    const unfenced = trimmed
-        .replace(/^```(?:json)?\s*/i, '')
-        .replace(/\s*```$/, '');
+    let unfenced = content.trim();
+    if (unfenced.startsWith('```')) {
+        unfenced = unfenced.slice(3).trimStart();
+        if (
+            unfenced.startsWith('json') &&
+            (unfenced[4] === '\n' ||
+                unfenced[4] === '\r' ||
+                unfenced[4] === ' ')
+        ) {
+            unfenced = unfenced.slice(4).trimStart();
+        }
+        if (unfenced.endsWith('```')) {
+            unfenced = unfenced.slice(0, -3).trimEnd();
+        }
+    }
     try {
         return normalizeImageDescriptionPayload(
             JSON.parse(unfenced) as unknown
@@ -552,6 +562,54 @@ const createTimeoutSignal = (
     };
 };
 
+const parseProviderImageDescriptionResponse = async ({
+    response,
+    provider,
+    makeRequest,
+    usedJsonFallback,
+    logger,
+}: {
+    response: Response;
+    provider: SupportedProvider;
+    makeRequest: (useTools: boolean) => Promise<Response>;
+    usedJsonFallback: boolean;
+    logger: Pick<typeof defaultLogger, 'warn'>;
+}): Promise<{
+    payload: ImageDescriptionPayload;
+    usage: ImageDescriptionCompletionResponse['usage'];
+}> => {
+    let completion =
+        (await response.json()) as ImageDescriptionCompletionResponse;
+    let payload = parseImageDescriptionToolPayload(
+        completion.choices?.[0]?.message?.tool_calls,
+        logger
+    );
+    if (!payload && provider !== 'openai') {
+        payload = parseImageDescriptionJson(
+            completion.choices?.[0]?.message?.content
+        );
+        if (!payload && !usedJsonFallback) {
+            const fallbackResponse = await makeRequest(false);
+            if (!fallbackResponse.ok) {
+                throw new Error(
+                    `Image-description request failed: ${fallbackResponse.status} ${fallbackResponse.statusText}`
+                );
+            }
+            completion =
+                (await fallbackResponse.json()) as ImageDescriptionCompletionResponse;
+            payload = parseImageDescriptionJson(
+                completion.choices?.[0]?.message?.content
+            );
+        }
+    }
+    if (!payload) {
+        throw new Error(
+            'Internal image-description task did not return a valid tool payload.'
+        );
+    }
+    return { payload, usage: completion.usage };
+};
+
 export const createImageDescriptionAdapter = ({
     provider,
     model,
@@ -574,7 +632,10 @@ export const createImageDescriptionAdapter = ({
                 lookupImpl,
                 abortContext.signal
             );
-            const endpoint = `${baseUrl.replace(/\/+$/, '')}/chat/completions`;
+            const endpoint = new URL(
+                'chat/completions',
+                baseUrl.endsWith('/') ? baseUrl : `${baseUrl}/`
+            ).toString();
             const headers: Record<string, string> = {
                 'Content-Type': 'application/json',
             };
@@ -646,48 +707,22 @@ export const createImageDescriptionAdapter = ({
                 );
             }
 
-            const completion =
-                (await response.json()) as ImageDescriptionCompletionResponse;
-            let payload = parseImageDescriptionToolPayload(
-                completion.choices?.[0]?.message?.tool_calls,
-                logger
-            );
-            if (!payload && provider !== 'openai') {
-                payload = parseImageDescriptionJson(
-                    completion.choices?.[0]?.message?.content
-                );
-                if (!payload && !usedJsonFallback) {
-                    usedJsonFallback = true;
-                    const fallbackResponse = await makeRequest(false);
-                    if (!fallbackResponse.ok) {
-                        throw new Error(
-                            `Image-description request failed: ${fallbackResponse.status} ${fallbackResponse.statusText}`
-                        );
-                    }
-                    const fallbackCompletion =
-                        (await fallbackResponse.json()) as ImageDescriptionCompletionResponse;
-                    payload = parseImageDescriptionJson(
-                        fallbackCompletion.choices?.[0]?.message?.content
-                    );
-                    if (payload) {
-                        completion.usage = fallbackCompletion.usage;
-                    }
-                }
-            }
-            if (!payload) {
-                throw new Error(
-                    'Internal image-description task did not return a valid tool payload.'
-                );
-            }
-
-            const promptTokens = completion.usage?.prompt_tokens ?? 0;
-            const completionTokens = completion.usage?.completion_tokens ?? 0;
+            const parsedResponse = await parseProviderImageDescriptionResponse({
+                response,
+                provider,
+                makeRequest,
+                usedJsonFallback,
+                logger,
+            });
+            const promptTokens = parsedResponse.usage?.prompt_tokens ?? 0;
+            const completionTokens =
+                parsedResponse.usage?.completion_tokens ?? 0;
             const totalTokens =
-                completion.usage?.total_tokens ??
+                parsedResponse.usage?.total_tokens ??
                 promptTokens + completionTokens;
 
             return {
-                description: JSON.stringify(payload),
+                description: JSON.stringify(parsedResponse.payload),
                 model,
                 promptTokens,
                 completionTokens,

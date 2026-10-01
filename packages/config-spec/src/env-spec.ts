@@ -12,6 +12,7 @@ import {
     supportedEngagementIgnoreModes,
     supportedLogLevels,
     supportedNodeEnvs,
+    supportedProviders,
     supportedOpenAIRealtimeModels,
     supportedOpenAIRealtimeTurnDetections,
     supportedOpenAIRealtimeVadEagerness,
@@ -39,6 +40,15 @@ const oidcBootstrapMetadata = {
  * Ordered environment spec entries used for docs, tooling, and runtime config
  * generation.
  */
+const imageDescriptionEnv = {
+    owner: 'backend',
+    stage: 'runtime',
+    section: 'image-description',
+    required: false,
+    secret: false,
+    usedBy: ['packages/backend/src/config.ts'],
+} as const;
+
 export const envEntries = [
     defineEnv({
         key: 'OPENAI_API_KEY',
@@ -99,55 +109,35 @@ export const envEntries = [
     }),
 
     defineEnv({
+        ...imageDescriptionEnv,
         key: 'IMAGE_DESCRIPTION_PROVIDER',
-        owner: 'backend',
-        stage: 'runtime',
-        section: 'image-description',
-        required: false,
-        secret: false,
         kind: 'enum',
         description: 'Provider used for backend image-description tasks.',
         defaultValue: literal('openai'),
-        allowedValues: ['openai', 'ollama', 'openrouter'],
-        usedBy: ['packages/backend/src/config.ts'],
+        allowedValues: supportedProviders,
     }),
     defineEnv({
+        ...imageDescriptionEnv,
         key: 'IMAGE_DESCRIPTION_BASE_URL',
-        owner: 'backend',
-        stage: 'runtime',
-        section: 'image-description',
-        required: false,
-        secret: false,
         kind: 'string',
         description:
             'Optional chat-completions base URL for image description.',
         defaultValue: noDefault(),
-        usedBy: ['packages/backend/src/config.ts'],
     }),
     defineEnv({
+        ...imageDescriptionEnv,
         key: 'IMAGE_DESCRIPTION_MODEL',
-        owner: 'backend',
-        stage: 'runtime',
-        section: 'image-description',
-        required: false,
-        secret: false,
         kind: 'string',
         description: 'Model used for backend image-description tasks.',
         defaultValue: noDefault(),
-        usedBy: ['packages/backend/src/config.ts'],
     }),
     defineEnv({
+        ...imageDescriptionEnv,
         key: 'IMAGE_DESCRIPTION_TIMEOUT_MS',
-        owner: 'backend',
-        stage: 'runtime',
-        section: 'image-description',
-        required: false,
-        secret: false,
         kind: 'integer',
         description:
             'Timeout budget for one image-description provider request.',
         defaultValue: literal(180000),
-        usedBy: ['packages/backend/src/config.ts'],
     }),
 
     defineEnv({
