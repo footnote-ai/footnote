@@ -509,6 +509,37 @@ test('reports stay anonymous until explicitly claimed and remain account-scoped'
         reporter.sessionId
     );
     assert.ok(pendingCode);
+    const unlinkDiscordUserFromAccount =
+        accountStore.unlinkDiscordUserFromAccount;
+    try {
+        accountStore.unlinkDiscordUserFromAccount = () => {
+            throw new Error('database unavailable');
+        };
+        const failedDisconnect = await fetch(
+            `${baseUrl}/api/account/discord-connection`,
+            {
+                method: 'DELETE',
+                headers: {
+                    ...accountHeaders(reporter),
+                    'x-auth-csrf': reporter.csrfToken,
+                },
+            }
+        );
+        assert.equal(failedDisconnect.status, 503);
+        assert.deepEqual(await failedDisconnect.json(), {
+            error: 'Discord connection unavailable',
+        });
+    } finally {
+        accountStore.unlinkDiscordUserFromAccount =
+            unlinkDiscordUserFromAccount;
+    }
+    assert.equal(
+        accountAuthService.getDiscordConfirmationCode(
+            pendingConnection,
+            reporter.sessionId
+        ),
+        pendingCode
+    );
     const disconnected = await fetch(
         `${baseUrl}/api/account/discord-connection`,
         {

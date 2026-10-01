@@ -86,10 +86,16 @@ export const createAccountDiscordConnectionHandlers = ({
             logRequest(req, res, 'account Discord disconnect unavailable');
             return;
         }
+        try {
+            accountStore.unlinkDiscordUserFromAccount(session.accountId);
+        } catch {
+            sendJson(res, 503, { error: 'Discord connection unavailable' });
+            logRequest(req, res, 'account Discord disconnect storage-failed');
+            return;
+        }
         accountAuthService.cancelDiscordConnectionsForAccount(
             session.accountId
         );
-        accountStore.unlinkDiscordUserFromAccount(session.accountId);
         res.statusCode = 204;
         res.end();
         logRequest(req, res, 'account Discord disconnect success');
