@@ -138,7 +138,10 @@ export const createDiscordAccountConnectionHandlers = ({
             DiscordAccountStartRequestSchema
         );
         if (!body) return;
-        const started = service.startDiscordConnection(body.discordUserId);
+        const started = service.startDiscordConnection(
+            body.discordUserId,
+            body.discordUsername
+        );
         if (!started) {
             sendJson(res, 503, { error: 'Account connection unavailable' });
             return;

@@ -28,8 +28,9 @@ not logged or stored. Browser writes require the signed-in session's CSRF
 token; signing out cancels its pending request. The bot's internal service
 credential is required to start, check, or confirm a link. Missing sign-in or
 bot configuration disables linking, not public chat. Linking does not grant
-administrator access or claim a past incident. Discord usernames and provider
-tokens are not retained.
+administrator access or claim a past incident. Footnote stores the Discord
+user ID used for the link and the username shown when the link was confirmed.
+It does not retain Discord tokens or broader profile data.
 
 ## Runtime behavior
 

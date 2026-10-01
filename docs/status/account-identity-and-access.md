@@ -51,13 +51,14 @@ not a durable mapping. `/account confirm` binds the code only when submitted by
 the original Discord user. `/account status` resolves the persisted mapping
 through the backend.
 
-Footnote stores the Discord ID separately from the internal account. Repeating
-a link to the same account is harmless. If that ID is linked to another
+Footnote stores the Discord ID separately from the internal account and keeps
+the username shown when the link was confirmed. Repeating a link to the same
+account refreshes that username. If that ID is linked to another
 Footnote account, Footnote refuses the new link. Unfinished requests expire
 after ten minutes and stay in process memory; a restart clears them. See
 [Discord account connection](../auth/README.md#connect-a-discord-account).
 
-The signed-in `/account` page shows the linked Discord user ID as plain text.
+The signed-in `/account` page shows the linked Discord username, not its ID.
 Disconnect requires the account-session CSRF token and removes only Discord
 links owned by that Footnote account; it does not alter any external Discord
 account, and users can reconnect from Discord later.

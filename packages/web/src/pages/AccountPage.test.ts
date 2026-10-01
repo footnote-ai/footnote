@@ -181,7 +181,8 @@ test('Discord connection removes its fragment and offers explicit consent and ca
     assert.match(source, /disconnectAccountDiscord\(session\.csrfToken\)/);
     assert.match(source, /Discord connected/);
     assert.match(source, /Discord not connected/);
-    assert.match(source, /Discord ID:/);
+    assert.doesNotMatch(source, /Discord ID:/);
+    assert.match(source, /`@\$\{username\}`/);
     assert.match(source, /<AccountIcon name="disconnect" \/>/);
     assert.match(source, /Disconnecting only removes this/);
 });

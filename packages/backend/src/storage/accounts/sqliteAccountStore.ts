@@ -3,7 +3,7 @@
  * @footnote-scope: core
  * @footnote-module: SqliteAccountStore
  * @footnote-risk: high - Identity mapping errors can attach future data to the wrong account.
- * @footnote-ethics: high - This store defines durable ownership without retaining provider claims.
+ * @footnote-ethics: high - Discord usernames are labels only; ownership stays on the stable IDs.
  */
 
 import Database from 'better-sqlite3';
@@ -23,12 +23,18 @@ export type FootnoteAccount = {
     updatedAt: string;
 };
 
+export type DiscordAccountLink = {
+    discordUserId: string;
+    discordUsername: string | null;
+    createdAt: string;
+};
+
 export type AccountExportData = {
     account: FootnoteAccount;
     externalIdentityMappings: Array<
         ExternalIdentityKey & { createdAt: string; lastSeenAt: string }
     >;
-    discordMappings: Array<{ discordUserId: string; createdAt: string }>;
+    discordMappings: DiscordAccountLink[];
     memories: AccountMemory[];
 };
 
@@ -43,12 +49,12 @@ export type AccountStore = {
     ) => FootnoteAccount | null;
     linkDiscordUserToAccount: (
         discordUserId: string,
-        accountId: string
+        accountId: string,
+        discordUsername: string
     ) => 'linked' | 'already-linked' | 'conflict';
     /** Checks durable link presence without exposing any external Discord IDs. */
     hasDiscordLinkForAccount: (accountId: string) => boolean;
-    /** Lists linked Discord IDs for backend handlers to disclose to their account owner. */
-    listDiscordUserIdsForAccount: (accountId: string) => string[];
+    listDiscordLinksForAccount: (accountId: string) => DiscordAccountLink[];
     /** Removes only Discord links owned by this Footnote account. */
     unlinkDiscordUserFromAccount: (accountId: string) => void;
     getAccountExportData: (accountId: string) => AccountExportData | null;
@@ -74,8 +80,10 @@ export const createInMemoryAccountStore = (): AccountStore => {
             lastSeenAt: string;
         }
     >();
-    const discordAccountLinks = new Map<string, string>();
-    const discordMappingDates = new Map<string, string>();
+    const discordAccountLinks = new Map<
+        string,
+        { accountId: string; discordUsername: string | null; createdAt: string }
+    >();
     const memories = new Map<string, AccountMemory & { accountId: string }>();
     return {
         resolveOrCreateAccount: ({ issuer, subject }) => {
@@ -109,13 +117,9 @@ export const createInMemoryAccountStore = (): AccountStore => {
                     identityMappings.delete(key);
                 }
             }
-            for (const [
-                discordUserId,
-                linkedAccountId,
-            ] of discordAccountLinks) {
-                if (linkedAccountId === accountId) {
+            for (const [discordUserId, link] of discordAccountLinks) {
+                if (link.accountId === accountId) {
                     discordAccountLinks.delete(discordUserId);
-                    discordMappingDates.delete(discordUserId);
                 }
             }
             for (const [id, memory] of memories) {
@@ -123,34 +127,47 @@ export const createInMemoryAccountStore = (): AccountStore => {
             }
         },
         findAccountByDiscordUserId: (discordUserId) => {
-            const accountId = discordAccountLinks.get(discordUserId);
-            return accountId
-                ? ([...accounts.values()].find(({ id }) => id === accountId) ??
-                      null)
+            const link = discordAccountLinks.get(discordUserId);
+            return link
+                ? ([...accounts.values()].find(
+                      ({ id }) => id === link.accountId
+                  ) ?? null)
                 : null;
         },
-        linkDiscordUserToAccount: (discordUserId, accountId) => {
+        linkDiscordUserToAccount: (
+            discordUserId,
+            accountId,
+            discordUsername
+        ) => {
             const existing = discordAccountLinks.get(discordUserId);
-            if (existing)
-                return existing === accountId ? 'already-linked' : 'conflict';
-            discordAccountLinks.set(discordUserId, accountId);
-            discordMappingDates.set(discordUserId, new Date().toISOString());
+            if (existing) {
+                if (existing.accountId !== accountId) return 'conflict';
+                existing.discordUsername = discordUsername;
+                return 'already-linked';
+            }
+            discordAccountLinks.set(discordUserId, {
+                accountId,
+                discordUsername,
+                createdAt: new Date().toISOString(),
+            });
             return 'linked';
         },
         hasDiscordLinkForAccount: (accountId) =>
-            [...discordAccountLinks.values()].includes(accountId),
-        listDiscordUserIdsForAccount: (accountId) =>
+            [...discordAccountLinks.values()].some(
+                (link) => link.accountId === accountId
+            ),
+        listDiscordLinksForAccount: (accountId) =>
             [...discordAccountLinks.entries()]
-                .filter(([, linkedAccountId]) => linkedAccountId === accountId)
-                .map(([discordUserId]) => discordUserId),
+                .filter(([, link]) => link.accountId === accountId)
+                .map(([discordUserId, link]) => ({
+                    discordUserId,
+                    discordUsername: link.discordUsername,
+                    createdAt: link.createdAt,
+                })),
         unlinkDiscordUserFromAccount: (accountId) => {
-            for (const [
-                discordUserId,
-                linkedAccountId,
-            ] of discordAccountLinks) {
-                if (linkedAccountId === accountId) {
+            for (const [discordUserId, link] of discordAccountLinks) {
+                if (link.accountId === accountId) {
                     discordAccountLinks.delete(discordUserId);
-                    discordMappingDates.delete(discordUserId);
                 }
             }
         },
@@ -170,10 +187,11 @@ export const createInMemoryAccountStore = (): AccountStore => {
                         lastSeenAt,
                     })),
                 discordMappings: [...discordAccountLinks.entries()]
-                    .filter(([, ownerId]) => ownerId === accountId)
-                    .map(([discordUserId]) => ({
+                    .filter(([, link]) => link.accountId === accountId)
+                    .map(([discordUserId, link]) => ({
                         discordUserId,
-                        createdAt: discordMappingDates.get(discordUserId) ?? '',
+                        discordUsername: link.discordUsername,
+                        createdAt: link.createdAt,
                     })),
                 memories: [...memories.values()]
                     .filter(({ accountId: ownerId }) => ownerId === accountId)
@@ -247,8 +265,9 @@ export class SqliteAccountStore implements AccountStore {
     private readonly touchIdentityStatement: Database.Statement;
     private readonly findAccountByDiscordUserIdStatement: Database.Statement;
     private readonly linkDiscordUserToAccountStatement: Database.Statement;
+    private readonly updateDiscordUsernameStatement: Database.Statement;
     private readonly hasDiscordLinkForAccountStatement: Database.Statement;
-    private readonly listDiscordUserIdsForAccountStatement: Database.Statement;
+    private readonly listDiscordLinksForAccountStatement: Database.Statement;
     private readonly unlinkDiscordUserFromAccountStatement: Database.Statement;
     private readonly getAccountByIdStatement: Database.Statement;
     private readonly getIdentityMappingsByAccountIdStatement: Database.Statement;
@@ -286,7 +305,8 @@ export class SqliteAccountStore implements AccountStore {
             CREATE TABLE IF NOT EXISTS discord_account_links (
                 discord_user_id TEXT PRIMARY KEY,
                 account_id TEXT NOT NULL REFERENCES accounts(account_id) ON DELETE CASCADE,
-                created_at TEXT NOT NULL
+                created_at TEXT NOT NULL,
+                discord_username TEXT
             );
             CREATE INDEX IF NOT EXISTS idx_discord_account_links_account_id
                 ON discord_account_links(account_id);
@@ -299,6 +319,14 @@ export class SqliteAccountStore implements AccountStore {
             CREATE INDEX IF NOT EXISTS idx_account_memories_account_id
                 ON account_memories(account_id, created_at, memory_id);
         `);
+        const discordColumns = this.db.pragma(
+            'table_info(discord_account_links)'
+        ) as Array<{ name: string }>;
+        if (!discordColumns.some(({ name }) => name === 'discord_username')) {
+            this.db.exec(
+                'ALTER TABLE discord_account_links ADD COLUMN discord_username TEXT'
+            );
+        }
 
         this.resolveStatement = this.db.prepare(`
             SELECT a.account_id, a.created_at, a.updated_at
@@ -327,15 +355,21 @@ export class SqliteAccountStore implements AccountStore {
             WHERE discord_link.discord_user_id = ? LIMIT 1
         `);
         this.linkDiscordUserToAccountStatement = this.db.prepare(`
-            INSERT INTO discord_account_links(discord_user_id, account_id, created_at)
-            VALUES (?, ?, ?)
+            INSERT INTO discord_account_links(
+                discord_user_id, account_id, created_at, discord_username
+            ) VALUES (?, ?, ?, ?)
+        `);
+        this.updateDiscordUsernameStatement = this.db.prepare(`
+            UPDATE discord_account_links SET discord_username = ?
+            WHERE discord_user_id = ? AND account_id = ?
         `);
         this.hasDiscordLinkForAccountStatement = this.db.prepare(`
             SELECT 1 FROM discord_account_links WHERE account_id = ? LIMIT 1
         `);
-        this.listDiscordUserIdsForAccountStatement = this.db.prepare(`
-            SELECT discord_user_id FROM discord_account_links
-            WHERE account_id = ? ORDER BY created_at, discord_user_id
+        this.listDiscordLinksForAccountStatement = this.db.prepare(`
+            SELECT discord_user_id, discord_username, created_at
+            FROM discord_account_links WHERE account_id = ?
+            ORDER BY created_at, discord_user_id
         `);
         this.unlinkDiscordUserFromAccountStatement = this.db.prepare(`
             DELETE FROM discord_account_links WHERE account_id = ?
@@ -348,7 +382,7 @@ export class SqliteAccountStore implements AccountStore {
             WHERE account_id = ? ORDER BY created_at, issuer, subject
         `);
         this.getDiscordMappingsByAccountIdStatement = this.db.prepare(`
-            SELECT discord_user_id, created_at FROM discord_account_links
+            SELECT discord_user_id, discord_username, created_at FROM discord_account_links
             WHERE account_id = ? ORDER BY created_at, discord_user_id
         `);
         this.deleteAccountStatement = this.db.prepare(
@@ -428,24 +462,31 @@ export class SqliteAccountStore implements AccountStore {
             : null;
     }
 
-    /** Atomically adds a Discord mapping without moving or merging identities. */
+    /** Links by snowflake and refreshes the username only for the same account. */
     linkDiscordUserToAccount(
         discordUserId: string,
-        accountId: string
+        accountId: string,
+        discordUsername: string
     ): 'linked' | 'already-linked' | 'conflict' {
         return this.db
             .transaction(() => {
                 const existing = this.findAccountByDiscordUserIdStatement.get(
                     discordUserId
                 ) as AccountRow | undefined;
-                if (existing)
-                    return existing.account_id === accountId
-                        ? 'already-linked'
-                        : 'conflict';
+                if (existing) {
+                    if (existing.account_id !== accountId) return 'conflict';
+                    this.updateDiscordUsernameStatement.run(
+                        discordUsername,
+                        discordUserId,
+                        accountId
+                    );
+                    return 'already-linked';
+                }
                 this.linkDiscordUserToAccountStatement.run(
                     discordUserId,
                     accountId,
-                    new Date().toISOString()
+                    new Date().toISOString(),
+                    discordUsername
                 );
                 return 'linked';
             })
@@ -457,12 +498,18 @@ export class SqliteAccountStore implements AccountStore {
         return Boolean(this.hasDiscordLinkForAccountStatement.get(accountId));
     }
 
-    listDiscordUserIdsForAccount(accountId: string): string[] {
+    listDiscordLinksForAccount(accountId: string): DiscordAccountLink[] {
         return (
-            this.listDiscordUserIdsForAccountStatement.all(accountId) as Array<{
+            this.listDiscordLinksForAccountStatement.all(accountId) as Array<{
                 discord_user_id: string;
+                discord_username: string | null;
+                created_at: string;
             }>
-        ).map(({ discord_user_id }) => discord_user_id);
+        ).map(({ discord_user_id, discord_username, created_at }) => ({
+            discordUserId: discord_user_id,
+            discordUsername: discord_username,
+            createdAt: created_at,
+        }));
     }
 
     /** Removes every Discord mapping owned by the requested Footnote account. */
@@ -485,7 +532,11 @@ export class SqliteAccountStore implements AccountStore {
         }>;
         const discordMappings = this.getDiscordMappingsByAccountIdStatement.all(
             accountId
-        ) as Array<{ discord_user_id: string; created_at: string }>;
+        ) as Array<{
+            discord_user_id: string;
+            discord_username: string | null;
+            created_at: string;
+        }>;
         return {
             account: {
                 id: account.account_id,
@@ -500,6 +551,7 @@ export class SqliteAccountStore implements AccountStore {
             })),
             discordMappings: discordMappings.map((row) => ({
                 discordUserId: row.discord_user_id,
+                discordUsername: row.discord_username,
                 createdAt: row.created_at,
             })),
             memories: this.listMemories(accountId),

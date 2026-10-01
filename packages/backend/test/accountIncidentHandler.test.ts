@@ -143,11 +143,13 @@ test('reports stay anonymous until explicitly claimed and remain account-scoped'
     const otherAccount = await createSession('other-account');
     accountStore.linkDiscordUserToAccount(
         'connected-discord-user',
-        reporter.accountId
+        reporter.accountId,
+        'reporter-name'
     );
     accountStore.linkDiscordUserToAccount(
         'other-discord-user',
-        otherAccount.accountId
+        otherAccount.accountId,
+        'other-name'
     );
     const request: PostIncidentReportRequest = {
         reporterUserId: 'same-observed-discord-id',
@@ -385,7 +387,10 @@ test('reports stay anonymous until explicitly claimed and remain account-scoped'
             };
             discordMappings: {
                 category: string;
-                records: Array<{ discordUserId: string }>;
+                records: Array<{
+                    discordUserId: string;
+                    discordUsername: string | null;
+                }>;
             };
             incidentAssociations: {
                 category: string;
@@ -440,6 +445,10 @@ test('reports stay anonymous until explicitly claimed and remain account-scoped'
         'connected-discord-user'
     );
     assert.equal(
+        exportBody.data.discordMappings.records[0]?.discordUsername,
+        'reporter-name'
+    );
+    assert.equal(
         exportBody.data.incidentAssociations.category,
         'incident_associations'
     );
@@ -488,7 +497,10 @@ test('reports stay anonymous until explicitly claimed and remain account-scoped'
         { headers: accountHeaders(reporter) }
     );
     const discordStatusText = await discordStatus.text();
-    assert.deepEqual(JSON.parse(discordStatusText), { connected: true });
+    assert.deepEqual(JSON.parse(discordStatusText), {
+        connected: true,
+        accounts: [{ username: 'reporter-name' }],
+    });
     assert.ok(!discordStatusText.includes('connected-discord-user'));
     const noCsrfDisconnect = await fetch(
         `${baseUrl}/api/account/discord-connection`,
@@ -496,7 +508,8 @@ test('reports stay anonymous until explicitly claimed and remain account-scoped'
     );
     assert.equal(noCsrfDisconnect.status, 403);
     const pendingDiscord = accountAuthService.startDiscordConnection(
-        'pending-discord-user'
+        'pending-discord-user',
+        'pending-name'
     );
     assert.ok(pendingDiscord);
     const pendingConnection = accountAuthService.exchangeDiscordCapability(
@@ -562,7 +575,10 @@ test('reports stay anonymous until explicitly claimed and remain account-scoped'
         `${baseUrl}/api/account/discord-connection`,
         { headers: accountHeaders(reporter) }
     );
-    assert.deepEqual(await statusAfterDisconnect.json(), { connected: false });
+    assert.deepEqual(await statusAfterDisconnect.json(), {
+        connected: false,
+        accounts: [],
+    });
     assert.equal(
         accountStore.findAccountByDiscordUserId('connected-discord-user'),
         null
@@ -577,5 +593,6 @@ test('reports stay anonymous until explicitly claimed and remain account-scoped'
     );
     assert.deepEqual(await otherAccountDiscordStatus.json(), {
         connected: true,
+        accounts: [{ username: 'other-name' }],
     });
 });

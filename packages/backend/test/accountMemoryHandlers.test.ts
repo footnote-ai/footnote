@@ -29,7 +29,7 @@ const provider: OidcAccountClient = {
     }),
 };
 
-test('account memory updates require CSRF and remain owner-scoped; Discord status returns only owned IDs', async (t) => {
+test('account memory updates require CSRF and remain owner-scoped; Discord status returns owned usernames', async (t) => {
     let tokenNumber = 0;
     const accountStore = createInMemoryAccountStore();
     const accountAuthService = createAccountAuthService({
@@ -59,11 +59,13 @@ test('account memory updates require CSRF and remain owner-scoped; Discord statu
     assert.ok(ownedMemory && otherMemory);
     accountStore.linkDiscordUserToAccount(
         '123456789012345678',
-        auth.session.accountId
+        auth.session.accountId,
+        'memory-owner'
     );
     accountStore.linkDiscordUserToAccount(
         '987654321098765432',
-        otherAccount.id
+        otherAccount.id,
+        'memory-other'
     );
 
     const memoryHandlers = createAccountMemoryHandlers({
@@ -114,7 +116,7 @@ test('account memory updates require CSRF and remain owner-scoped; Discord statu
     assert.equal(statusResponse.status, 200);
     assert.deepEqual(await statusResponse.json(), {
         connected: true,
-        discordUserIds: ['123456789012345678'],
+        accounts: [{ username: 'memory-owner' }],
     });
 
     const rejectedUpdate = await fetch(
