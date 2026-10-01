@@ -90,6 +90,11 @@ Use each GitHub feature for one job. The full working model lives in
   work is scheduled. Use the org Project for workflow status.
 - Milestones describe finite outcomes.
 - Link PRs to the issue they deliver.
+- When creating an issue, set its native type and applicable area/concern
+  labels; add active work to the Project and set only known fields. When
+  creating a PR, link the issue and add applicable area/concern labels. Verify
+  the metadata and labels on GitHub before handoff; see
+  `docs/ai/github-work-management.md` for what belongs on each item.
 
 ## Task Completion Requirements
 
