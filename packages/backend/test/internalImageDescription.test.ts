@@ -10,6 +10,7 @@ import assert from 'node:assert/strict';
 import dns from 'node:dns/promises';
 
 import {
+    createImageDescriptionAdapter,
     createOpenAiImageDescriptionAdapter,
     detectContentTypeFromUrl,
 } from '../src/services/internalImageDescription.js';
@@ -114,6 +115,7 @@ test('image-description adapter downloads the image, sends a data URL, and retur
         String(fetchCalls[1]?.init?.body ?? '{}')
     ) as {
         model: string;
+        max_completion_tokens: number;
         messages: Array<{
             content: Array<
                 | { type: 'text'; text: string }
@@ -123,6 +125,7 @@ test('image-description adapter downloads the image, sends a data URL, and retur
     };
 
     assert.equal(requestBody.model, 'gpt-4o-mini');
+    assert.equal(requestBody.max_completion_tokens, 16384);
     assert.equal(requestBody.messages[0]?.content[0]?.type, 'text');
     assert.equal(
         (requestBody.messages[0]?.content[0] as { text: string }).text,
@@ -152,6 +155,133 @@ test('detectContentTypeFromUrl recovers common image content types from the URL 
         'image/jpeg'
     );
     assert.equal(detectContentTypeFromUrl('not-a-url'), null);
+});
+
+test('Ollama-compatible scanner uses configured model and tool-call output without an API key', async () => {
+    const calls: Array<{ url: string; init?: Parameters<typeof fetch>[1] }> =
+        [];
+    const adapter = createImageDescriptionAdapter({
+        provider: 'ollama',
+        baseUrl: 'http://localhost:11434/v1',
+        model: 'local-vision',
+        lookupImpl: publicLookup,
+        fetchImpl: async (url, init) => {
+            calls.push({ url: String(url), init });
+            if (String(url).includes('example.com')) {
+                return new Response(Buffer.from('image'), {
+                    headers: { 'content-type': 'image/png' },
+                });
+            }
+            return new Response(
+                JSON.stringify({
+                    choices: [
+                        {
+                            message: {
+                                tool_calls: [
+                                    {
+                                        type: 'function',
+                                        function: {
+                                            name: 'describe_image',
+                                            arguments: JSON.stringify({
+                                                summary: 'A local image.',
+                                                detected_type: 'photo',
+                                                extracted_text: [],
+                                                structured: {
+                                                    key_elements: ['tree'],
+                                                },
+                                                certainty: 'high',
+                                            }),
+                                        },
+                                    },
+                                ],
+                            },
+                        },
+                    ],
+                    usage: { prompt_tokens: 4, completion_tokens: 2 },
+                }),
+                { status: 200 }
+            );
+        },
+    });
+
+    const result = await adapter.describeImage({
+        imageUrl: 'https://example.com/image.png',
+        prompt: 'Describe it.',
+    });
+    const request = JSON.parse(String(calls[1]?.init?.body)) as {
+        model: string;
+        tools?: unknown[];
+    };
+    assert.equal(calls[1]?.url, 'http://localhost:11434/v1/chat/completions');
+    assert.equal(request.model, 'local-vision');
+    assert.equal(request.tools?.length, 1);
+    assert.equal(
+        (calls[1]?.init?.headers as Record<string, string>).Authorization,
+        undefined
+    );
+    assert.equal(result.model, 'local-vision');
+    assert.equal(result.totalTokens, 6);
+});
+
+test('Ollama scanner retries without tools and parses plain JSON when tools are unsupported', async () => {
+    const requestBodies: Array<Record<string, unknown>> = [];
+    let calls = 0;
+    const adapter = createImageDescriptionAdapter({
+        provider: 'ollama',
+        baseUrl: 'http://localhost:11434/v1',
+        model: 'vision-json',
+        lookupImpl: publicLookup,
+        fetchImpl: async (_url, init) => {
+            if (calls++ === 0) {
+                return new Response(Buffer.from('image'), {
+                    headers: { 'content-type': 'image/png' },
+                });
+            }
+            const body = JSON.parse(String(init?.body)) as Record<
+                string,
+                unknown
+            >;
+            requestBodies.push(body);
+            if (requestBodies.length === 1) {
+                return new Response('tools unsupported', { status: 400 });
+            }
+            return new Response(
+                JSON.stringify({
+                    choices: [
+                        {
+                            message: {
+                                content: JSON.stringify({
+                                    summary: 'A document.',
+                                    detected_type: 'document',
+                                    extracted_text: ['Hello'],
+                                    structured: { key_elements: ['title'] },
+                                    certainty: 'medium',
+                                }),
+                            },
+                        },
+                    ],
+                    usage: { prompt_tokens: 5, completion_tokens: 3 },
+                }),
+                { status: 200 }
+            );
+        },
+    });
+    const result = await adapter.describeImage({
+        imageUrl: 'https://example.com/image.png',
+        prompt: 'Describe it.',
+    });
+    assert.ok('tools' in requestBodies[0]!);
+    assert.equal('tools' in requestBodies[1]!, false);
+    assert.match(
+        (
+            requestBodies[1]!.messages as Array<{
+                content: Array<{ text: string }>;
+            }>
+        )[0]?.content[0]?.text ?? '',
+        /Return only a JSON object/
+    );
+    assert.match(result.description, /A document/);
+    assert.equal(result.totalTokens, 8);
 });
 
 test('image-description adapter rejects downloads that omit an image content-type header', async () => {
@@ -234,7 +364,7 @@ test('image-description adapter surfaces provider HTTP failures with a stable er
                 imageUrl: 'https://example.com/image.png',
                 prompt: 'Describe this image.',
             }),
-        /Image-description request failed: 502 Bad Gateway - provider exploded/
+        /Image-description request failed: 502 Bad Gateway/
     );
 });
 

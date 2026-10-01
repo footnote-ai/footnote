@@ -90,6 +90,12 @@ export type RuntimeConfig = {
         apiKey: string | null;
         baseUrl: string;
     };
+    imageDescription: {
+        provider: 'openai' | 'ollama' | 'openrouter';
+        baseUrl: string | null;
+        model: string | null;
+        requestTimeoutMs: number;
+    };
     modelProfiles: {
         defaultProfileId: string;
         plannerProfileId: string;

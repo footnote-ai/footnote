@@ -64,7 +64,7 @@ import {
     createInternalImageDescriptionTaskService,
     createInternalNewsTaskService,
 } from './services/internalText.js';
-import { createOpenAiImageDescriptionAdapter } from './services/internalImageDescription.js';
+import { createImageDescriptionAdapter } from './services/internalImageDescription.js';
 import { createInternalImageTaskService } from './services/internalImage.js';
 import { createInternalTextHandler } from './handlers/internalText.js';
 import { createInternalImageHandler } from './handlers/internalImage.js';
@@ -361,13 +361,6 @@ const initializeServices = () => {
             apiKey: runtimeConfig.openai.apiKey,
             requestTimeoutMs: runtimeConfig.openai.requestTimeoutMs,
         });
-        internalImageDescriptionTaskService =
-            createInternalImageDescriptionTaskService({
-                adapter: createOpenAiImageDescriptionAdapter({
-                    apiKey: runtimeConfig.openai.apiKey,
-                    requestTimeoutMs: runtimeConfig.openai.requestTimeoutMs,
-                }),
-            });
         internalImageTaskService = createInternalImageTaskService({
             imageGenerationRuntime,
             storeTrace: async (metadata) => {
@@ -392,12 +385,55 @@ const initializeServices = () => {
         });
     } else {
         imageGenerationRuntime = null;
-        internalImageDescriptionTaskService = null;
         internalImageTaskService = null;
         internalVoiceTtsService = null;
         realtimeVoiceRuntime = null;
         logger.warn(
             'OPENAI_API_KEY is missing; OpenAI-only image and voice routes will return 503 until configured.'
+        );
+    }
+
+    const imageDescriptionConfig = runtimeConfig.imageDescription;
+    const imageDescriptionApiKey =
+        imageDescriptionConfig.provider === 'openai'
+            ? runtimeConfig.openai.apiKey
+            : imageDescriptionConfig.provider === 'ollama'
+              ? runtimeConfig.ollama.apiKey
+              : runtimeConfig.openrouter.apiKey;
+    const imageDescriptionModel =
+        imageDescriptionConfig.model ??
+        (imageDescriptionConfig.provider === 'openai' ? 'gpt-4o-mini' : null);
+    const configuredProviderBaseUrl =
+        imageDescriptionConfig.provider === 'openai'
+            ? 'https://api.openai.com/v1'
+            : imageDescriptionConfig.provider === 'openrouter'
+              ? runtimeConfig.openrouter.baseUrl
+              : (runtimeConfig.ollama.baseUrl ?? 'http://localhost:11434');
+    const selectedImageDescriptionBaseUrl =
+        imageDescriptionConfig.baseUrl ?? configuredProviderBaseUrl;
+    const imageDescriptionBaseUrl =
+        imageDescriptionConfig.provider === 'ollama' &&
+        !selectedImageDescriptionBaseUrl.replace(/\/+$/, '').endsWith('/v1')
+            ? `${selectedImageDescriptionBaseUrl.replace(/\/+$/, '')}/v1`
+            : selectedImageDescriptionBaseUrl;
+    if (
+        imageDescriptionModel &&
+        (imageDescriptionConfig.provider === 'ollama' || imageDescriptionApiKey)
+    ) {
+        internalImageDescriptionTaskService =
+            createInternalImageDescriptionTaskService({
+                adapter: createImageDescriptionAdapter({
+                    provider: imageDescriptionConfig.provider,
+                    model: imageDescriptionModel,
+                    baseUrl: imageDescriptionBaseUrl,
+                    apiKey: imageDescriptionApiKey,
+                    requestTimeoutMs: imageDescriptionConfig.requestTimeoutMs,
+                }),
+            });
+    } else {
+        internalImageDescriptionTaskService = null;
+        logger.warn(
+            `Image-description task is unavailable: configure ${imageDescriptionConfig.provider === 'openai' ? 'OPENAI_API_KEY' : imageDescriptionConfig.provider === 'openrouter' ? 'OPENROUTER_API_KEY' : 'IMAGE_DESCRIPTION_MODEL'} and the selected provider settings.`
         );
     }
 
