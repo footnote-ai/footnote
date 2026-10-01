@@ -1,18 +1,23 @@
 # Planner strict-output comparison
 
-This is a deferred evidence record, not an active work tracker. No live
-provider comparison has been run or scheduled. It contains redacted transport
-metrics only; raw prompts, model outputs, secrets, and hidden reasoning are
-never written.
+Generated: 2026-10-01T18:32:43.306Z
 
-The comparison harness is available at `scripts/planner-comparison.mts` and can
-be run with `pnpm eval:planner -- --live` when provider credentials are present.
+This file contains redacted transport metrics only. Raw prompts, model outputs, secrets, and hidden reasoning are never written.
 
-| Mode               | Status  | Valid transport | Normalization/fallback | Latency ms | Tokens (prompt/completion/total) | Cost USD | Actual provider/model | Upstream provider/model | Fallback frequency |
-| ------------------ | ------- | --------------: | ---------------------: | ---------: | -------------------------------- | -------: | --------------------- | ----------------------- | -----------------: |
-| deepseek_strict    | not run |             n/a |                    n/a |        n/a | n/a                              |      n/a | n/a                   | n/a                     |                n/a |
-| deepseek_text_json | not run |             n/a |                    n/a |        n/a | n/a                              |      n/a | n/a                   | n/a                     |                n/a |
-| luna_strict        | not run |             n/a |                    n/a |        n/a | n/a                              |      n/a | n/a                   | n/a                     |                n/a |
+The fixed workload asks for a bounded review plan. Three serial repeats compare OpenRouter DeepSeek strict output with reasoning none/current 2,000-token cap and reasoning low/512-token cap. OpenAI GPT-5.6 Luna is a strict-output baseline when configured. No production setting is changed.
 
-No live-provider evidence was available during this implementation. DeepSeek
-remains the configured planner preference.
+The planner-quality check scores normalized action=message, modality=text, and no search request; it does not claim to score final answer quality. Cost is unknown when backend pricing is unavailable. Missing reasoning usage or provider paths are reported as unavailable.
+
+| Mode               | Repeat | Requested settings | Applied settings | Status/outcome                      | Strict transport | Fallback | Latency ms | Tokens (prompt/completion/reasoning/total) | Backend cost USD   | Actual provider/model             | Upstream provider/model                       | Plan quality (message/text/no search) |
+| ------------------ | -----: | ------------------ | ---------------- | ----------------------------------- | ---------------- | -------: | ---------- | -----------------------------------------: | ------------------ | --------------------------------- | --------------------------------------------- | ------------------------------------- |
+| deepseek_none_2000 |      1 | none/2000          | none/2000        | failed/policy_invalid               | no               |      yes | 9754       |                            2100/263/0/2363 | unknown (unpriced) | openrouter/deepseek-v4-flash-0731 | Inceptron/deepseek/deepseek-v4-flash-20260731 | n/a                                   |
+| deepseek_none_2000 |      2 | none/2000          | none/2000        | executed/strict_success             | yes              |       no | 8099       |                            2100/293/0/2393 | unknown (unpriced) | openrouter/deepseek-v4-flash-0731 | Inceptron/deepseek/deepseek-v4-flash-20260731 | fail                                  |
+| deepseek_none_2000 |      3 | none/2000          | none/2000        | failed/policy_invalid               | no               |      yes | 9343       |                            2100/221/0/2321 | unknown (unpriced) | openrouter/deepseek-v4-flash-0731 | Inceptron/deepseek/deepseek-v4-flash-20260731 | n/a                                   |
+| deepseek_low_512   |      1 | low/512            | low/512          | failed/incomplete_output_other      | no               |      yes | 99689      |                            n/a/n/a/n/a/n/a | unknown (unpriced) | n/a/n/a                           | n/a/n/a                                       | n/a                                   |
+| deepseek_low_512   |      2 | low/512            | low/512          | failed/incomplete_output_length     | no               |      yes | 155080     |                            n/a/n/a/n/a/n/a | unknown (unpriced) | n/a/n/a                           | n/a/n/a                                       | n/a                                   |
+| deepseek_low_512   |      3 | low/512            | low/512          | executed/strict_success             | yes              |       no | 70202      |                          2100/495/314/2595 | unknown (unpriced) | openrouter/deepseek-v4-flash-0731 | Inceptron/deepseek/deepseek-v4-flash-20260731 | pass                                  |
+| luna_strict        |      1 | low/2000           | low/2000         | failed/schema_rejected_unique_items | no               |      yes | 363        |                            n/a/n/a/n/a/n/a | unknown (unpriced) | n/a/n/a                           | n/a/n/a                                       | n/a                                   |
+| luna_strict        |      2 | low/2000           | low/2000         | failed/schema_rejected_unique_items | no               |      yes | 530        |                            n/a/n/a/n/a/n/a | unknown (unpriced) | n/a/n/a                           | n/a/n/a                                       | n/a                                   |
+| luna_strict        |      3 | low/2000           | low/2000         | failed/schema_rejected_unique_items | no               |      yes | 198        |                            n/a/n/a/n/a/n/a | unknown (unpriced) | n/a/n/a                           | n/a/n/a                                       | n/a                                   |
+
+Recommendation: keep current OpenRouter planner settings (none, 2,000 tokens) pending stronger evidence. The lower-cap condition had two incomplete responses and one strict success; the current-cap condition had two policy-invalid results and one strict success that requested disallowed search. This single workload does not justify a production settings change.
