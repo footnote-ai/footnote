@@ -75,6 +75,7 @@ type CreateTestServerOptions = {
         typeof createChatHandler
     >[0]['accountAuthService'];
     accountStore?: Parameters<typeof createChatHandler>[0]['accountStore'];
+    storeTrace?: (metadata: ResponseMetadata) => Promise<void>;
     onGenerationRequest?: (request: GenerationRequest) => void;
     logRequest?: (
         req: http.IncomingMessage,
@@ -268,7 +269,7 @@ const createTestServer = (
                     limit: serviceRateLimit,
                     window: serviceRateLimitWindowMs,
                 }),
-            storeTrace: async () => undefined,
+            storeTrace: options.storeTrace ?? (async () => undefined),
             logRequest: options.logRequest ?? (() => undefined),
             buildResponseMetadata: () => createMetadata(),
             maxChatBodyBytes: 20000,
@@ -431,6 +432,7 @@ test('chat disconnect hides a non-cancellable completed planner result without r
         | undefined;
     let generationCalls = 0;
     let responseDelivered = false;
+    let storedMetadata: ResponseMetadata | undefined;
     let resolveUsageRecorded: (() => void) | undefined;
     const generationStarted = new Promise<AbortSignal>((resolve) => {
         resolveGenerationStarted = resolve;
@@ -459,6 +461,9 @@ test('chat disconnect hides a non-cancellable completed planner result without r
     }) as unknown as typeof logger.info;
 
     const server = await createTestServer({
+        storeTrace: async (metadata) => {
+            storedMetadata = metadata;
+        },
         generationRuntime: {
             kind: 'test-runtime',
             generate: (request) => {
@@ -551,6 +556,9 @@ test('chat disconnect hides a non-cancellable completed planner result without r
         logger.info = originalInfo;
         env.TRACE_API_TOKEN = previousTraceToken;
     }
+    assert.ok(storedMetadata);
+    // Usage is recorded above, but this interrupted path has no WorkflowRecord to assign a Run/Step status.
+    assert.equal(storedMetadata.workflow, undefined);
 });
 
 test('validated account memories reach generation and session lookup failures fail open', async () => {
