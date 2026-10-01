@@ -476,6 +476,7 @@ export const createInternalImageDescriptionTaskService = ({
             recordUsage({
                 feature: 'image_description',
                 model: result.model,
+                provider: result.provider,
                 promptTokens,
                 completionTokens,
                 totalTokens,

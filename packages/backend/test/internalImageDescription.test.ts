@@ -14,6 +14,7 @@ import {
     createOpenAiImageDescriptionAdapter,
     detectContentTypeFromUrl,
 } from '../src/services/internalImageDescription.js';
+import { createInternalImageDescriptionTaskService } from '../src/services/internalText.js';
 
 const publicLookup = (async (_hostname: string, options?: unknown) => {
     const resolvedAddress = {
@@ -101,7 +102,7 @@ test('image-description adapter downloads the image, sends a data URL, and retur
 
     const result = await adapter.describeImage({
         imageUrl: 'https://example.com/image.png',
-        prompt: 'Describe the screenshot.',
+        prompt: 'Describe the screenshot.\n\nReturn ONLY via the describe_image tool call, as valid JSON matching the tool schema.',
     });
 
     assert.equal(fetchCalls.length, 2);
@@ -129,7 +130,7 @@ test('image-description adapter downloads the image, sends a data URL, and retur
     assert.equal(requestBody.messages[0]?.content[0]?.type, 'text');
     assert.equal(
         (requestBody.messages[0]?.content[0] as { text: string }).text,
-        'Describe the screenshot.'
+        'Describe the screenshot.\n\nReturn ONLY via the describe_image tool call, as valid JSON matching the tool schema.'
     );
     assert.equal(requestBody.messages[0]?.content[1]?.type, 'image_url');
     assert.match(
@@ -139,6 +140,7 @@ test('image-description adapter downloads the image, sends a data URL, and retur
     );
 
     assert.equal(result.model, 'gpt-4o-mini');
+    assert.equal(result.provider, 'openai');
     assert.equal(result.promptTokens, 12);
     assert.equal(result.completionTokens, 8);
     assert.equal(result.totalTokens, 20);
@@ -206,7 +208,7 @@ test('Ollama-compatible scanner uses configured model and tool-call output witho
 
     const result = await adapter.describeImage({
         imageUrl: 'https://example.com/image.png',
-        prompt: 'Describe it.',
+        prompt: 'Describe it.\n\nReturn ONLY via the describe_image tool call, as valid JSON matching the tool schema.',
     });
     const request = JSON.parse(String(calls[1]?.init?.body)) as {
         model: string;
@@ -268,7 +270,7 @@ test('Ollama scanner retries without tools and parses plain JSON when tools are 
     });
     const result = await adapter.describeImage({
         imageUrl: 'https://example.com/image.png',
-        prompt: 'Describe it.',
+        prompt: 'Describe it.\n\nReturn ONLY via the describe_image tool call, as valid JSON matching the tool schema.',
     });
     assert.ok('tools' in requestBodies[0]!);
     assert.equal('tools' in requestBodies[1]!, false);
@@ -278,10 +280,53 @@ test('Ollama scanner retries without tools and parses plain JSON when tools are 
                 content: Array<{ text: string }>;
             }>
         )[0]?.content[0]?.text ?? '',
-        /Return only a JSON object/
+        /Return only a JSON object matching this shape as plain response content/
+    );
+    assert.doesNotMatch(
+        (
+            requestBodies[1]!.messages as Array<{
+                content: Array<{ text: string }>;
+            }>
+        )[0]?.content[0]?.text ?? '',
+        /Return ONLY via the describe_image tool call/
     );
     assert.match(result.description, /A document/);
+    assert.equal(result.provider, 'ollama');
     assert.equal(result.totalTokens, 8);
+});
+
+test('image-description usage records the adapter provider', async () => {
+    let recordedProvider: string | undefined;
+    const service = createInternalImageDescriptionTaskService({
+        adapter: {
+            async describeImage() {
+                return {
+                    description: JSON.stringify({
+                        summary: 'A tree.',
+                        detected_type: 'photo',
+                        extracted_text: [],
+                        structured: { key_elements: ['tree'] },
+                        certainty: 'high',
+                    }),
+                    model: 'vision-model',
+                    provider: 'ollama',
+                    promptTokens: 4,
+                    completionTokens: 2,
+                    totalTokens: 6,
+                };
+            },
+        },
+        recordUsage(record) {
+            recordedProvider = record.provider;
+        },
+    });
+
+    await service.runImageDescriptionTask({
+        task: 'image_description',
+        imageUrl: 'https://example.com/image.png',
+    });
+
+    assert.equal(recordedProvider, 'ollama');
 });
 
 test('image-description adapter rejects downloads that omit an image content-type header', async () => {

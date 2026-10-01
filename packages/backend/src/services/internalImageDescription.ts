@@ -63,6 +63,7 @@ export type InternalImageDescriptionAdapterRequest = {
 export type InternalImageDescriptionAdapterResult = {
     description: string;
     model: string;
+    provider: SupportedProvider;
     promptTokens: number;
     completionTokens: number;
     totalTokens: number;
@@ -673,7 +674,10 @@ export const createImageDescriptionAdapter = ({
                                         type: 'text',
                                         text: useTools
                                             ? request.prompt
-                                            : `${request.prompt}\n\nReturn only a JSON object matching this shape: {"summary":"string","detected_type":"string","extracted_text":["string"],"structured":{"key_elements":["string"]},"certainty":"string"}.`,
+                                            : request.prompt.replace(
+                                                  'Return ONLY via the describe_image tool call, as valid JSON matching the tool schema.',
+                                                  'Return only a JSON object matching this shape as plain response content: {"summary":"string","detected_type":"string","extracted_text":["string"],"structured":{"key_elements":["string"]},"certainty":"string"}.'
+                                              ),
                                     },
                                     {
                                         type: 'image_url',
@@ -724,6 +728,7 @@ export const createImageDescriptionAdapter = ({
             return {
                 description: JSON.stringify(parsedResponse.payload),
                 model,
+                provider,
                 promptTokens,
                 completionTokens,
                 totalTokens,
