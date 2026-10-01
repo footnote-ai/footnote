@@ -5,7 +5,10 @@ administrator authorization, explicit Discord connection, and the first
 account lifecycle (incident association, export, deletion, and explicit user-owned
 memory) are implemented.
 
-Last updated: 2026-09-30.
+Last updated: 2026-10-01.
+
+The first account lifecycle is delivered. The only currently identified
+account follow-up is the UI polish tracked in [#769](https://github.com/footnote-ai/footnote/issues/769); it does not change account ownership or lifecycle policy.
 
 This tracker describes the durable account direction. Each branch should still
 deliver one useful result, preserve public and setup behavior, and avoid
@@ -88,9 +91,10 @@ reference the internal account ID, not `issuer + subject`. SQLite uniqueness and
 one transaction cover the first-login race, while local sessions remain short-
 lived and process-local.
 
-Account lifecycle v1 now covers incident association, export, and deletion.
-It does not add saved conversations, inferred profiles, uploads, generalized
-preferences, or account merging. Follow-on work is ordered in issue #525.
+Account lifecycle v1 covers incident association, export, and deletion. It
+does not add saved conversations, inferred profiles, uploads, generalized
+preferences, or account merging. Roadmap issue #525 is closed; #769 is UI
+polish only and does not reopen the lifecycle.
 
 ### Incident reports
 
@@ -140,6 +144,9 @@ or authorization. It is not extracted from conversation history.
 7. #524 — delete Footnote account data with documented incident retention (delivered by PR #756)
 8. Account lifecycle v1 — complete after #522, #523, and #524.
 9. #605 — explicit user-owned memory (delivered).
+
+The sequence above is complete. The current follow-up is #769: compact account
+data controls and readable linked-Discord details.
 
 The sequence keeps external authentication, Footnote authorization, and
 Footnote-owned data as separate decisions.

@@ -39,7 +39,7 @@ guide, a launcher package means the standalone binaries produced by the SEA
 packaging tools.
 
 Implementation and first-release evidence are tracked in
-[Launcher Canary Releases Status](../status/launcher-canary-releases.md).
+[Launcher Canary Releases closeout](../status/completed/launcher-canary-releases.md).
 
 ## Before Opening a PR
 
