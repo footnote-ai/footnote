@@ -53,6 +53,7 @@ import { createSetupSessionHandlers } from './handlers/setupSession.js';
 import { createAccountAuthHandlers } from './handlers/accountAuth.js';
 import { createAccountIncidentHandlers } from './handlers/accountIncidents.js';
 import { createAccountMemoryHandlers } from './handlers/accountMemories.js';
+import { createAccountDiscordConnectionHandlers } from './handlers/accountDiscordConnection.js';
 import { createDiscordAccountConnectionHandlers } from './handlers/discordAccountConnection.js';
 import {
     createIncidentService,
@@ -632,6 +633,14 @@ const {
     accountStore,
     logRequest,
 });
+const {
+    handleAccountDiscordStatusRequest,
+    handleAccountDiscordDisconnectRequest,
+} = createAccountDiscordConnectionHandlers({
+    accountAuthService,
+    accountStore,
+    logRequest,
+});
 
 const handleRuntimeConfigRequest = createRuntimeConfigHandler({
     logRequest,
@@ -813,6 +822,8 @@ const app = createExpressApp({
     handleAccountMemoriesRequest,
     handleAccountMemoryCreateRequest,
     handleAccountMemoryDeleteRequest,
+    handleAccountDiscordStatusRequest,
+    handleAccountDiscordDisconnectRequest,
     handleChatRequest,
     handleInternalTextRequest,
     handleInternalImageRequest,

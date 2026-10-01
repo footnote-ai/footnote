@@ -169,4 +169,9 @@ test('Discord connection removes its fragment and offers explicit consent and ca
     assert.match(source, /Approve connection/);
     assert.match(source, /\/account confirm code:/);
     assert.match(source, /<p role="status">/);
+    assert.match(source, /getAccountDiscordStatus\(controller\.signal\)/);
+    assert.match(source, /disconnectAccountDiscord\(session\.csrfToken\)/);
+    assert.match(source, /Connected to Discord/);
+    assert.match(source, /Not connected to Discord/);
+    assert.match(source, /Disconnecting removes Discord links/);
 });

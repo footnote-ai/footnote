@@ -45,6 +45,10 @@ export type AccountStore = {
         discordUserId: string,
         accountId: string
     ) => 'linked' | 'already-linked' | 'conflict';
+    /** Checks durable link presence without exposing any external Discord IDs. */
+    hasDiscordLinkForAccount: (accountId: string) => boolean;
+    /** Removes only Discord links owned by this Footnote account. */
+    unlinkDiscordUserFromAccount: (accountId: string) => void;
     getAccountExportData: (accountId: string) => AccountExportData | null;
     listMemories: (accountId: string) => AccountMemory[];
     addMemory: (accountId: string, text: string) => AccountMemory | null;
@@ -125,6 +129,19 @@ export const createInMemoryAccountStore = (): AccountStore => {
             discordAccountLinks.set(discordUserId, accountId);
             discordMappingDates.set(discordUserId, new Date().toISOString());
             return 'linked';
+        },
+        hasDiscordLinkForAccount: (accountId) =>
+            [...discordAccountLinks.values()].includes(accountId),
+        unlinkDiscordUserFromAccount: (accountId) => {
+            for (const [
+                discordUserId,
+                linkedAccountId,
+            ] of discordAccountLinks) {
+                if (linkedAccountId === accountId) {
+                    discordAccountLinks.delete(discordUserId);
+                    discordMappingDates.delete(discordUserId);
+                }
+            }
         },
         getAccountExportData: (accountId) => {
             const account = [...accounts.values()].find(
@@ -209,6 +226,8 @@ export class SqliteAccountStore implements AccountStore {
     private readonly touchIdentityStatement: Database.Statement;
     private readonly findAccountByDiscordUserIdStatement: Database.Statement;
     private readonly linkDiscordUserToAccountStatement: Database.Statement;
+    private readonly hasDiscordLinkForAccountStatement: Database.Statement;
+    private readonly unlinkDiscordUserFromAccountStatement: Database.Statement;
     private readonly getAccountByIdStatement: Database.Statement;
     private readonly getIdentityMappingsByAccountIdStatement: Database.Statement;
     private readonly getDiscordMappingsByAccountIdStatement: Database.Statement;
@@ -286,6 +305,12 @@ export class SqliteAccountStore implements AccountStore {
         this.linkDiscordUserToAccountStatement = this.db.prepare(`
             INSERT INTO discord_account_links(discord_user_id, account_id, created_at)
             VALUES (?, ?, ?)
+        `);
+        this.hasDiscordLinkForAccountStatement = this.db.prepare(`
+            SELECT 1 FROM discord_account_links WHERE account_id = ? LIMIT 1
+        `);
+        this.unlinkDiscordUserFromAccountStatement = this.db.prepare(`
+            DELETE FROM discord_account_links WHERE account_id = ?
         `);
         this.getAccountByIdStatement = this.db.prepare(`
             SELECT account_id, created_at, updated_at FROM accounts WHERE account_id = ?
@@ -391,6 +416,16 @@ export class SqliteAccountStore implements AccountStore {
                 return 'linked';
             })
             .immediate();
+    }
+
+    /** Reports only whether the signed-in account has a durable Discord mapping. */
+    hasDiscordLinkForAccount(accountId: string): boolean {
+        return Boolean(this.hasDiscordLinkForAccountStatement.get(accountId));
+    }
+
+    /** Removes every Discord mapping owned by the requested Footnote account. */
+    unlinkDiscordUserFromAccount(accountId: string): void {
+        this.unlinkDiscordUserFromAccountStatement.run(accountId);
     }
 
     /** Returns only retained identity records owned by the requested account. */

@@ -111,7 +111,7 @@ test('two stores resolving the same first identity converge on one account', () 
     }
 });
 
-test('Discord mapping survives reopen, is idempotent, and never moves', () => {
+test('Discord mappings survive reopen and disconnect only by account', () => {
     const tempDir = fs.mkdtempSync(
         path.join(os.tmpdir(), 'footnote-discord-account-')
     );
@@ -133,6 +133,10 @@ test('Discord mapping survives reopen, is idempotent, and never moves', () => {
             'already-linked'
         );
         assert.equal(
+            store.linkDiscordUserToAccount('discord-2', accountB.id),
+            'linked'
+        );
+        assert.equal(
             store.linkDiscordUserToAccount('discord-1', accountB.id),
             'conflict'
         );
@@ -142,7 +146,18 @@ test('Discord mapping survives reopen, is idempotent, and never moves', () => {
             store.findAccountByDiscordUserId('discord-1')?.id,
             accountA.id
         );
-        assert.equal(store.findAccountByDiscordUserId('discord-2'), null);
+        assert.equal(
+            store.findAccountByDiscordUserId('discord-2')?.id,
+            accountB.id
+        );
+        assert.equal(store.hasDiscordLinkForAccount(accountA.id), true);
+        store.unlinkDiscordUserFromAccount(accountA.id);
+        assert.equal(store.hasDiscordLinkForAccount(accountA.id), false);
+        assert.equal(store.findAccountByDiscordUserId('discord-1'), null);
+        assert.equal(
+            store.findAccountByDiscordUserId('discord-2')?.id,
+            accountB.id
+        );
     } finally {
         store?.close();
         fs.rmSync(tempDir, { recursive: true, force: true });
