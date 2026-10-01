@@ -1,23 +1,27 @@
 # Planner strict-output comparison
 
-Generated: 2026-10-01T18:32:43.306Z
+Generated: 2026-10-01T19:42:40.222Z
 
 This file contains redacted transport metrics only. Raw prompts, model outputs, secrets, and hidden reasoning are never written.
 
-The fixed workload asks for a bounded review plan. Three serial repeats compare OpenRouter DeepSeek strict output with reasoning none/current 2,000-token cap and reasoning low/512-token cap. OpenAI GPT-5.6 Luna is a strict-output baseline when configured. No production setting is changed.
+The synthetic workload is fixed in `scripts/planner-comparison.mts`:
+
+> Please draft three concise checks I can use when reviewing a small change that fixes Markdown table alignment and adds a regression test. Keep it self-contained; do not use search or tools.
+
+It expects `message`/`text` with no search because the user requests a direct written checklist about a self-contained change and explicitly rules out search and tools. Three serial repeats compare OpenRouter DeepSeek strict output with reasoning `none`/the current 2,000-token cap and `low`/512 tokens. OpenAI GPT-5.6 Luna (`low`/2,000 tokens) is the existing strict-output baseline. No production setting is changed.
 
 The planner-quality check scores normalized action=message, modality=text, and no search request; it does not claim to score final answer quality. Cost is unknown when backend pricing is unavailable. Missing reasoning usage or provider paths are reported as unavailable.
 
-| Mode               | Repeat | Requested settings | Applied settings | Status/outcome                      | Strict transport | Fallback | Latency ms | Tokens (prompt/completion/reasoning/total) | Backend cost USD   | Actual provider/model             | Upstream provider/model                       | Plan quality (message/text/no search) |
-| ------------------ | -----: | ------------------ | ---------------- | ----------------------------------- | ---------------- | -------: | ---------- | -----------------------------------------: | ------------------ | --------------------------------- | --------------------------------------------- | ------------------------------------- |
-| deepseek_none_2000 |      1 | none/2000          | none/2000        | failed/policy_invalid               | no               |      yes | 9754       |                            2100/263/0/2363 | unknown (unpriced) | openrouter/deepseek-v4-flash-0731 | Inceptron/deepseek/deepseek-v4-flash-20260731 | n/a                                   |
-| deepseek_none_2000 |      2 | none/2000          | none/2000        | executed/strict_success             | yes              |       no | 8099       |                            2100/293/0/2393 | unknown (unpriced) | openrouter/deepseek-v4-flash-0731 | Inceptron/deepseek/deepseek-v4-flash-20260731 | fail                                  |
-| deepseek_none_2000 |      3 | none/2000          | none/2000        | failed/policy_invalid               | no               |      yes | 9343       |                            2100/221/0/2321 | unknown (unpriced) | openrouter/deepseek-v4-flash-0731 | Inceptron/deepseek/deepseek-v4-flash-20260731 | n/a                                   |
-| deepseek_low_512   |      1 | low/512            | low/512          | failed/incomplete_output_other      | no               |      yes | 99689      |                            n/a/n/a/n/a/n/a | unknown (unpriced) | n/a/n/a                           | n/a/n/a                                       | n/a                                   |
-| deepseek_low_512   |      2 | low/512            | low/512          | failed/incomplete_output_length     | no               |      yes | 155080     |                            n/a/n/a/n/a/n/a | unknown (unpriced) | n/a/n/a                           | n/a/n/a                                       | n/a                                   |
-| deepseek_low_512   |      3 | low/512            | low/512          | executed/strict_success             | yes              |       no | 70202      |                          2100/495/314/2595 | unknown (unpriced) | openrouter/deepseek-v4-flash-0731 | Inceptron/deepseek/deepseek-v4-flash-20260731 | pass                                  |
-| luna_strict        |      1 | low/2000           | low/2000         | failed/schema_rejected_unique_items | no               |      yes | 363        |                            n/a/n/a/n/a/n/a | unknown (unpriced) | n/a/n/a                           | n/a/n/a                                       | n/a                                   |
-| luna_strict        |      2 | low/2000           | low/2000         | failed/schema_rejected_unique_items | no               |      yes | 530        |                            n/a/n/a/n/a/n/a | unknown (unpriced) | n/a/n/a                           | n/a/n/a                                       | n/a                                   |
-| luna_strict        |      3 | low/2000           | low/2000         | failed/schema_rejected_unique_items | no               |      yes | 198        |                            n/a/n/a/n/a/n/a | unknown (unpriced) | n/a/n/a                           | n/a/n/a                                       | n/a                                   |
+| Mode | Repeat | Requested settings | Applied settings | Status/outcome | Strict transport | Fallback | Latency ms | Tokens (prompt/completion/reasoning/total) | Backend cost USD | Actual provider/model | Upstream provider/model | Plan quality (message/text/no search) |
+| --- | ---: | --- | --- | --- | --- | ---: | --- | ---: | --- | --- | --- |
+| deepseek_none_2000 | 1 | none/2000 | none/2000 | executed/strict_success | yes | no | 9075 | 3482/209/0/3691 | unknown (unpriced) | openrouter/deepseek-v4-flash-0731 | Sail Research/deepseek/deepseek-v4-flash-20260731 | pass |
+| deepseek_none_2000 | 2 | none/2000 | none/2000 | executed/strict_success | yes | no | 6301 | 2095/255/0/2350 | unknown (unpriced) | openrouter/deepseek-v4-flash-0731 | Inceptron/deepseek/deepseek-v4-flash-20260731 | pass |
+| deepseek_none_2000 | 3 | none/2000 | none/2000 | executed/strict_success | yes | no | 9296 | 2095/244/0/2339 | unknown (unpriced) | openrouter/deepseek-v4-flash-0731 | Together/deepseek/deepseek-v4-flash-20260731 | pass |
+| deepseek_low_512 | 1 | low/512 | low/512 | executed/strict_success | yes | no | 54839 | 3482/420/186/3902 | unknown (unpriced) | openrouter/deepseek-v4-flash-0731 | Sail Research/deepseek/deepseek-v4-flash-20260731 | pass |
+| deepseek_low_512 | 2 | low/512 | low/512 | executed/strict_success | yes | no | 11577 | 3482/422/215/3904 | unknown (unpriced) | openrouter/deepseek-v4-flash-0731 | Sail Research/deepseek/deepseek-v4-flash-20260731 | pass |
+| deepseek_low_512 | 3 | low/512 | low/512 | executed/strict_success | yes | no | 24124 | 3482/408/188/3890 | unknown (unpriced) | openrouter/deepseek-v4-flash-0731 | Sail Research/deepseek/deepseek-v4-flash-20260731 | pass |
+| luna_strict | 1 | low/2000 | low/2000 | failed/runtime_failure | no | yes | 691 | n/a/n/a/n/a/n/a | unknown (unpriced) | n/a/n/a | n/a/n/a | n/a |
+| luna_strict | 2 | low/2000 | low/2000 | failed/runtime_failure | no | yes | 280 | n/a/n/a/n/a/n/a | unknown (unpriced) | n/a/n/a | n/a/n/a | n/a |
+| luna_strict | 3 | low/2000 | low/2000 | failed/runtime_failure | no | yes | 170 | n/a/n/a/n/a/n/a | unknown (unpriced) | n/a/n/a | n/a/n/a | n/a |
 
-Recommendation: keep current OpenRouter planner settings (none, 2,000 tokens) pending stronger evidence. The lower-cap condition had two incomplete responses and one strict success; the current-cap condition had two policy-invalid results and one strict success that requested disallowed search. This single workload does not justify a production settings change.
+Recommendation: make no production change from this experiment. On this fixed workload both DeepSeek conditions had three strict successes and passed the planning check; the lower-cap condition did not establish superior reliability. The earlier run used an unretained transient prompt and recorded two policy-invalid current-cap results and two incomplete lower-cap results, so those failures cannot be attributed to this reproducible workload. The Luna baseline was rejected before a model response because the provider schema does not permit `uniqueItems`.

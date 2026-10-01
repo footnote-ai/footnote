@@ -91,7 +91,8 @@ const invocationContext: Omit<ChatPlannerInvocationContext, 'maxOutputTokens'> =
         purpose: 'chat_orchestrator_action_selection',
     };
 
-const comparisonPrompt = process.env.PLANNER_COMPARISON_PROMPT?.trim() ?? '';
+const comparisonPrompt =
+    'Please draft three concise checks I can use when reviewing a small change that fixes Markdown table alignment and adds a regression test. Keep it self-contained; do not use search or tools.';
 
 const comparisonRequest: PostChatRequest = {
     surface: 'web',
@@ -345,11 +346,6 @@ const main = async (): Promise<void> => {
             'Planner comparison not run. Pass --live with provider credentials to collect redacted metrics.'
         );
         return;
-    }
-    if (!comparisonPrompt) {
-        throw new Error(
-            'Set PLANNER_COMPARISON_PROMPT to a bounded planner workload; it is not stored by this script.'
-        );
     }
     const metrics: ComparisonMetric[] = [];
     for (const mode of [
