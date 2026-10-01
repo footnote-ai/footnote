@@ -76,6 +76,7 @@ export default [
                 HTMLDivElement: 'readonly',
                 HTMLInputElement: 'readonly',
                 HTMLFormElement: 'readonly',
+                HTMLDialogElement: 'readonly',
                 HTMLButtonElement: 'readonly',
                 HTMLImageElement: 'readonly',
                 Audio: 'readonly',
