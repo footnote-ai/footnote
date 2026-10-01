@@ -12,7 +12,10 @@ import os from 'node:os';
 import path from 'node:path';
 import type { ModelProfile } from '@footnote/contracts';
 import { classifyModelProfileTextPricingCoverage } from '@footnote/contracts/pricing';
-import { buildModelProfilesSection } from '../src/config/sections/modelProfiles.js';
+import {
+    buildModelProfilesSection,
+    isOllamaBaseUrlAvailable,
+} from '../src/config/sections/modelProfiles.js';
 import { createModelProfileResolver } from '../src/services/modelProfileResolver.js';
 
 const createCatalog = (): ModelProfile[] => [
@@ -330,6 +333,22 @@ test('buildModelProfilesSection disables local ollama profiles when local infere
     } finally {
         fs.rmSync(tempDir, { recursive: true, force: true });
     }
+});
+
+test('Ollama endpoints use the local-inference gate', () => {
+    assert.equal(
+        isOllamaBaseUrlAvailable('http://localhost:11434/v1', false),
+        false
+    );
+    assert.equal(
+        isOllamaBaseUrlAvailable('http://localhost:11434/v1', true),
+        true
+    );
+    assert.equal(
+        isOllamaBaseUrlAvailable('https://ollama.example/v1', false),
+        true
+    );
+    assert.equal(isOllamaBaseUrlAvailable('not a URL', true), false);
 });
 
 test('buildModelProfilesSection keeps ollama profiles enabled for cloud ollama endpoints', () => {

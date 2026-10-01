@@ -295,6 +295,62 @@ test('Ollama scanner retries without tools and parses plain JSON when tools are 
     assert.equal(result.totalTokens, 8);
 });
 
+test('Ollama scanner includes usage from both successful tool and JSON requests', async () => {
+    const requestBodies: Array<Record<string, unknown>> = [];
+    const responses: Array<Record<string, unknown>> = [
+        {
+            choices: [{ message: { content: 'not JSON' } }],
+            usage: { prompt_tokens: 7, completion_tokens: 4, total_tokens: 11 },
+        },
+        {
+            choices: [
+                {
+                    message: {
+                        content: JSON.stringify({
+                            summary: 'A document.',
+                            detected_type: 'document',
+                            extracted_text: [],
+                            structured: { key_elements: ['title'] },
+                            certainty: 'high',
+                        }),
+                    },
+                },
+            ],
+            usage: { prompt_tokens: 5, completion_tokens: 3, total_tokens: 8 },
+        },
+    ];
+    const adapter = createImageDescriptionAdapter({
+        provider: 'ollama',
+        baseUrl: 'http://localhost:11434/v1',
+        model: 'vision-json',
+        lookupImpl: publicLookup,
+        fetchImpl: async (url, init) => {
+            if (new URL(String(url)).hostname === 'example.com') {
+                return new Response(Buffer.from('image'), {
+                    headers: { 'content-type': 'image/png' },
+                });
+            }
+            requestBodies.push(
+                JSON.parse(String(init?.body)) as Record<string, unknown>
+            );
+            return new Response(JSON.stringify(responses.shift()), {
+                status: 200,
+            });
+        },
+    });
+
+    const result = await adapter.describeImage({
+        imageUrl: 'https://example.com/image.png',
+        prompt: 'Describe it.\n\nReturn ONLY via the describe_image tool call, as valid JSON matching the tool schema.',
+    });
+
+    assert.ok('tools' in requestBodies[0]!);
+    assert.equal('tools' in requestBodies[1]!, false);
+    assert.equal(result.promptTokens, 12);
+    assert.equal(result.completionTokens, 7);
+    assert.equal(result.totalTokens, 19);
+});
+
 test('image-description usage records the adapter provider', async () => {
     let recordedProvider: string | undefined;
     const service = createInternalImageDescriptionTaskService({

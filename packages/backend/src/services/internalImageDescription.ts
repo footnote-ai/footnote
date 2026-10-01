@@ -581,6 +581,7 @@ const parseProviderImageDescriptionResponse = async ({
 }> => {
     let completion =
         (await response.json()) as ImageDescriptionCompletionResponse;
+    let usage = completion.usage;
     let payload = parseImageDescriptionToolPayload(
         completion.choices?.[0]?.message?.tool_calls,
         logger
@@ -590,6 +591,7 @@ const parseProviderImageDescriptionResponse = async ({
             completion.choices?.[0]?.message?.content
         );
         if (!payload && !usedJsonFallback) {
+            const firstUsage = completion.usage;
             const fallbackResponse = await makeRequest(false);
             if (!fallbackResponse.ok) {
                 throw new Error(
@@ -598,6 +600,35 @@ const parseProviderImageDescriptionResponse = async ({
             }
             completion =
                 (await fallbackResponse.json()) as ImageDescriptionCompletionResponse;
+            const fallbackUsage = completion.usage;
+            const reportedTotal = (
+                responseUsage: ImageDescriptionCompletionResponse['usage']
+            ): number | undefined =>
+                responseUsage?.total_tokens ??
+                (responseUsage?.prompt_tokens !== undefined &&
+                responseUsage.completion_tokens !== undefined
+                    ? responseUsage.prompt_tokens +
+                      responseUsage.completion_tokens
+                    : undefined);
+            const firstTotal = reportedTotal(firstUsage);
+            const fallbackTotal = reportedTotal(fallbackUsage);
+            usage = {
+                prompt_tokens:
+                    firstUsage?.prompt_tokens !== undefined &&
+                    fallbackUsage?.prompt_tokens !== undefined
+                        ? firstUsage.prompt_tokens + fallbackUsage.prompt_tokens
+                        : undefined,
+                completion_tokens:
+                    firstUsage?.completion_tokens !== undefined &&
+                    fallbackUsage?.completion_tokens !== undefined
+                        ? firstUsage.completion_tokens +
+                          fallbackUsage.completion_tokens
+                        : undefined,
+                total_tokens:
+                    firstTotal !== undefined && fallbackTotal !== undefined
+                        ? firstTotal + fallbackTotal
+                        : undefined,
+            };
             payload = parseImageDescriptionJson(
                 completion.choices?.[0]?.message?.content
             );
@@ -608,7 +639,7 @@ const parseProviderImageDescriptionResponse = async ({
             'Internal image-description task did not return a valid tool payload.'
         );
     }
-    return { payload, usage: completion.usage };
+    return { payload, usage };
 };
 
 export const createImageDescriptionAdapter = ({

@@ -84,6 +84,7 @@ import { createAccountAuthService } from './services/accountAuth.js';
 import { createOidcAccountClient } from './services/oidcClient.js';
 import { settingsSpecEntries } from './config/settings-spec.js';
 import { SqliteAccountStore } from './storage/accounts/sqliteAccountStore.js';
+import { isOllamaBaseUrlAvailable } from './config/sections/modelProfiles.js';
 
 /**
  * @footnote-logger: openAiRealtimeVoiceRuntime
@@ -425,8 +426,15 @@ const initializeServices = () => {
         !withoutTrailingSlash.endsWith('/v1')
             ? `${withoutTrailingSlash}/v1`
             : withoutTrailingSlash;
+    const imageDescriptionOllamaAvailable =
+        imageDescriptionConfig.provider !== 'ollama' ||
+        isOllamaBaseUrlAvailable(
+            imageDescriptionBaseUrl,
+            runtimeConfig.ollama.localInferenceEnabled
+        );
     if (
         imageDescriptionModel &&
+        imageDescriptionOllamaAvailable &&
         (imageDescriptionConfig.provider === 'ollama' || imageDescriptionApiKey)
     ) {
         internalImageDescriptionTaskService =
@@ -441,15 +449,21 @@ const initializeServices = () => {
             });
     } else {
         internalImageDescriptionTaskService = null;
-        let missingSetting = 'IMAGE_DESCRIPTION_MODEL';
-        if (imageDescriptionConfig.provider === 'openai') {
-            missingSetting = 'OPENAI_API_KEY';
-        } else if (imageDescriptionConfig.provider === 'openrouter') {
-            missingSetting = 'OPENROUTER_API_KEY';
+        if (!imageDescriptionOllamaAvailable) {
+            logger.warn(
+                'Image-description task is unavailable: the Ollama URL is invalid or local inference is disabled.'
+            );
+        } else {
+            let missingSetting = 'IMAGE_DESCRIPTION_MODEL';
+            if (imageDescriptionConfig.provider === 'openai') {
+                missingSetting = 'OPENAI_API_KEY';
+            } else if (imageDescriptionConfig.provider === 'openrouter') {
+                missingSetting = 'OPENROUTER_API_KEY';
+            }
+            logger.warn(
+                `Image-description task is unavailable: configure ${missingSetting} and the selected provider settings.`
+            );
         }
-        logger.warn(
-            `Image-description task is unavailable: configure ${missingSetting} and the selected provider settings.`
-        );
     }
 
     // --- Rate limiter configuration ---
