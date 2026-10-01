@@ -317,6 +317,29 @@ const formatPlanQuality = (metric: ComparisonMetric): string => {
 
 const writeStatus = (metrics: ComparisonMetric[]): void => {
     const generatedAt = new Date().toISOString();
+    const summarizeDeepSeek = (
+        mode: 'deepseek_none_2000' | 'deepseek_low_512'
+    ): {
+        attempts: number;
+        strictSuccesses: number;
+        planningPasses: number;
+    } => {
+        const rows = metrics.filter((metric) => metric.mode === mode);
+        return {
+            attempts: rows.length,
+            strictSuccesses: rows.filter((metric) => metric.validTransport)
+                .length,
+            planningPasses: rows.filter(
+                (metric) => formatPlanQuality(metric) === 'pass'
+            ).length,
+        };
+    };
+    const currentCap = summarizeDeepSeek('deepseek_none_2000');
+    const lowerCap = summarizeDeepSeek('deepseek_low_512');
+    const lowerCapImproved =
+        lowerCap.strictSuccesses > currentCap.strictSuccesses ||
+        (lowerCap.strictSuccesses === currentCap.strictSuccesses &&
+            lowerCap.planningPasses > currentCap.planningPasses);
     const lines = [
         '# Planner strict-output comparison',
         '',
@@ -324,7 +347,11 @@ const writeStatus = (metrics: ComparisonMetric[]): void => {
         '',
         'This file contains redacted transport metrics only. Raw prompts, model outputs, secrets, and hidden reasoning are never written.',
         '',
-        'The fixed workload asks for a bounded review plan. Three serial repeats compare OpenRouter DeepSeek strict output with reasoning none/current 2,000-token cap and reasoning low/512-token cap. OpenAI GPT-5.6 Luna is a strict-output baseline when configured. No production setting is changed.',
+        'The synthetic workload is fixed in `scripts/planner-comparison.mts`:',
+        '',
+        `> ${comparisonPrompt}`,
+        '',
+        'It expects `message`/`text` with no search because the user requests a direct written checklist about a self-contained change and explicitly rules out search and tools. Three serial repeats compare OpenRouter DeepSeek strict output with reasoning `none`/the current 2,000-token cap and `low`/512 tokens. OpenAI GPT-5.6 Luna (`low`/2,000 tokens) is the existing strict-output baseline. No production setting is changed.',
         '',
         'The planner-quality check scores normalized action=message, modality=text, and no search request; it does not claim to score final answer quality. Cost is unknown when backend pricing is unavailable. Missing reasoning usage or provider paths are reported as unavailable.',
         '',
@@ -335,7 +362,11 @@ const writeStatus = (metrics: ComparisonMetric[]): void => {
                 `| ${metric.mode} | ${metric.repeat} | ${metric.requestedReasoningEffort}/${metric.requestedMaxOutputTokens} | ${metric.appliedReasoningEffort ?? 'n/a'}/${metric.appliedMaxOutputTokens ?? 'n/a'} | ${metric.status}/${metric.outcome} | ${metric.validTransport ? 'yes' : 'no'} | ${metric.normalizationFallback ? 'yes' : 'no'} | ${metric.latencyMs ?? 'n/a'} | ${metric.promptTokens ?? 'n/a'}/${metric.completionTokens ?? 'n/a'}/${metric.reasoningTokens ?? 'n/a'}/${metric.totalTokens ?? 'n/a'} | ${metric.costUsd ?? 'unknown (unpriced)'} | ${metric.actualProvider ?? 'n/a'}/${metric.actualModel ?? 'n/a'} | ${metric.upstreamProvider ?? 'n/a'}/${metric.upstreamModel ?? 'n/a'} | ${formatPlanQuality(metric)} |`
         ),
         '',
-        'Recommendation: keep current OpenRouter planner settings (none, 2,000 tokens) pending stronger evidence. The lower-cap condition had two incomplete responses and one strict success; the current-cap condition had two policy-invalid results and one strict success that requested disallowed search. This single workload does not justify a production settings change.',
+        `On this fixed workload, the current none/2,000 condition had ${currentCap.strictSuccesses}/${currentCap.attempts} strict successes and ${currentCap.planningPasses}/${currentCap.attempts} planning passes; the low/512 condition had ${lowerCap.strictSuccesses}/${lowerCap.attempts} strict successes and ${lowerCap.planningPasses}/${lowerCap.attempts} planning passes. ${lowerCapImproved ? 'The lower-cap condition showed stronger outcomes on this workload, but one synthetic workload does not justify a production change.' : 'The lower-cap condition did not establish superior reliability, so this experiment supports no production change.'}`,
+        '',
+        'An earlier run used an unretained transient prompt and recorded two policy-invalid current-cap results and two incomplete lower-cap results. Those failures are noted for context and are not attributed to this reproducible workload.',
+        '',
+        'The Luna baseline was rejected before a model response because the provider schema does not permit `uniqueItems`.',
     ];
     fs.writeFileSync(statusPath, `${lines.join('\n')}\n`, 'utf8');
 };
