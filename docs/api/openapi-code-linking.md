@@ -1,11 +1,14 @@
 # OpenAPI Code Linking
 
 This document defines the lightweight convention for linking code to the
-authoritative API spec at [openapi.yaml](./openapi.yaml).
+OpenAPI source in [`openapi/`](./openapi/) and its committed bundle at
+[openapi.yaml](./openapi.yaml).
 
 ## Goal
 
-- Keep `docs/api/openapi.yaml` as the source of truth for the wire contract.
+- Keep `docs/api/openapi/` as the source of truth for the wire contract.
+- Keep `docs/api/openapi.yaml` reproducible with `pnpm openapi:bundle`; validate
+  it with `pnpm openapi:check` before publishing.
 - Make code navigation fast in IDEs and PR reviews.
 - Reduce drift between route implementations, client usage, and contracts.
 

@@ -1,0 +1,1108 @@
+paths:
+    /api/auth/login:
+        get:
+            operationId: getAuthLogin
+            x-codeRefs:
+                - packages/backend/src/handlers/accountAuth.ts#createAccountAuthHandlers
+            summary: Start account sign-in
+            description: |
+                Starts OIDC authorization code flow with PKCE. Sign-in may be
+                disabled or temporarily unavailable without affecting public Footnote.
+            tags:
+                - Accounts
+            responses:
+                '302':
+                    description: Redirect to the configured identity provider.
+                    headers:
+                        Location:
+                            schema:
+                                type: string
+                                format: uri
+                        Set-Cookie:
+                            description: 'Opaque, HttpOnly, SameSite=Lax one-time login transaction cookie.'
+                            schema:
+                                type: string
+                        Cache-Control:
+                            schema:
+                                type: string
+                                const: no-store
+                '429':
+                    $ref: '#/components/responses/TooManyRequests'
+                '503':
+                    $ref: '#/components/responses/ServiceUnavailable'
+    /api/auth/callback:
+        get:
+            operationId: getAuthCallback
+            x-codeRefs:
+                - packages/backend/src/handlers/accountAuth.ts#createAccountAuthHandlers
+            summary: Complete account sign-in
+            description: |
+                Consumes the one-time transaction, validates state, nonce, PKCE,
+                and the ID token, then creates a short-lived local Footnote session.
+                Failures redirect with only a generic marker.
+            tags:
+                - Accounts
+            responses:
+                '302':
+                    description: Redirect to /account after success or generic failure.
+                    headers:
+                        Location:
+                            schema:
+                                type: string
+                        Set-Cookie:
+                            description: Clears the transaction cookie and sets a session cookie only after validation succeeds.
+                            schema:
+                                type: string
+                        Cache-Control:
+                            schema:
+                                type: string
+                                const: no-store
+    /api/auth/session:
+        get:
+            operationId: getAuthSession
+            x-codeRefs:
+                - packages/backend/src/handlers/accountAuth.ts#createAccountAuthHandlers
+                - packages/contracts/src/web/types.ts#GetAuthSessionResponse
+                - packages/contracts/src/web/schemas.ts#GetAuthSessionResponseSchema
+            summary: Read local account session
+            tags:
+                - Accounts
+            security:
+                - {}
+                - AccountSessionCookie: []
+            responses:
+                '200':
+                    description: Sign-in availability and current local session state.
+                    headers:
+                        Cache-Control:
+                            schema:
+                                type: string
+                                const: no-store
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/AuthSessionResponse'
+    /api/auth/logout:
+        post:
+            operationId: postAuthLogout
+            x-codeRefs:
+                - packages/backend/src/handlers/accountAuth.ts#createAccountAuthHandlers
+            summary: End local Footnote account session
+            description: |
+                Revokes only the local Footnote session. A valid session requires
+                its CSRF token. Provider-wide logout is intentionally not performed.
+            tags:
+                - Accounts
+            security:
+                - {}
+                - AccountSessionCookie: []
+            parameters:
+                - $ref: '#/components/parameters/AuthCsrfHeader'
+            responses:
+                '204':
+                    description: Local session cleared or no valid session existed.
+                    headers:
+                        Set-Cookie:
+                            description: Expires the local account-session cookie.
+                            schema:
+                                type: string
+                        Cache-Control:
+                            schema:
+                                type: string
+                                const: no-store
+                '403':
+                    $ref: '#/components/responses/Forbidden'
+    /api/auth/delete:
+        post:
+            operationId: postAccountDeletion
+            x-codeRefs:
+                - packages/backend/src/handlers/accountAuth.ts#createAccountAuthHandlers
+                - packages/api-client/src/accountAuth.ts#createAccountAuthApi
+            summary: Delete the current Footnote account
+            description: |
+                Requires the signed-in account session and its CSRF token.
+                Deletes Footnote's account and external identity mappings, and
+                removes the account's incident associations. External identity
+                provider accounts are not changed.
+            tags:
+                - Accounts
+            security:
+                - {}
+                - AccountSessionCookie: []
+            parameters:
+                - $ref: '#/components/parameters/AuthCsrfHeader'
+            responses:
+                '204':
+                    description: Footnote account deleted and local session cleared.
+                    headers:
+                        Set-Cookie:
+                            description: Expires the local account-session cookie.
+                            schema:
+                                type: string
+                        Cache-Control:
+                            schema:
+                                type: string
+                                const: no-store
+                '401':
+                    $ref: '#/components/responses/Unauthorized'
+                '403':
+                    $ref: '#/components/responses/Forbidden'
+                '503':
+                    description: Account deletion could not complete.
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ErrorResponse'
+    /api/account/discord-connection:
+        get:
+            operationId: getAccountDiscordConnection
+            x-codeRefs:
+                - packages/backend/src/handlers/accountDiscordConnection.ts#createAccountDiscordConnectionHandlers
+                - packages/api-client/src/accountAuth.ts#createAccountAuthApi
+                - packages/backend/src/storage/accounts/sqliteAccountStore.ts#listDiscordLinksForAccount
+                - packages/contracts/src/web/discordAccounts.ts#AccountDiscordConnectionResponseSchema
+                - packages/contracts/src/web/discordAccounts.ts#AccountDiscordConnectionResponse
+                - packages/web/src/utils/api.ts#getAccountDiscordStatus
+            summary: Read the current account's Discord connection status
+            description: Returns Discord usernames durably linked to the signed-in Footnote account, without exposing Discord user IDs.
+            tags:
+                - Accounts
+            security:
+                - AccountSessionCookie: []
+            responses:
+                '200':
+                    description: Account-scoped connection status.
+                    headers:
+                        Cache-Control:
+                            schema:
+                                type: string
+                                const: no-store
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/AccountDiscordConnectionResponse'
+                '401':
+                    $ref: '#/components/responses/Unauthorized'
+                '503':
+                    $ref: '#/components/responses/ServiceUnavailable'
+        delete:
+            operationId: deleteAccountDiscordConnection
+            x-codeRefs:
+                - packages/backend/src/handlers/accountDiscordConnection.ts#createAccountDiscordConnectionHandlers
+                - packages/api-client/src/accountAuth.ts#createAccountAuthApi
+            summary: Disconnect Discord links from the current Footnote account
+            description: >-
+                Removes durable Discord links owned by the signed-in account. This does not alter any external Discord
+                account, and the user can reconnect from Discord later.
+            tags:
+                - Accounts
+            security:
+                - AccountSessionCookie: []
+            parameters:
+                - $ref: '#/components/parameters/AuthCsrfHeader'
+            responses:
+                '204':
+                    description: Account-scoped Discord links removed.
+                    headers:
+                        Cache-Control:
+                            schema:
+                                type: string
+                                const: no-store
+                '401':
+                    $ref: '#/components/responses/Unauthorized'
+                '403':
+                    $ref: '#/components/responses/Forbidden'
+                '503':
+                    $ref: '#/components/responses/ServiceUnavailable'
+    /api/auth/discord-connection/exchange:
+        post:
+            operationId: postDiscordConnectionExchange
+            x-codeRefs:
+                - packages/backend/src/handlers/discordAccountConnection.ts#createDiscordAccountConnectionHandlers
+                - packages/contracts/src/web/discordAccounts.ts#DiscordAccountExchangeRequestSchema
+            summary: Exchange the fragment capability for a browser-bound transaction
+            tags:
+                - Accounts
+            requestBody:
+                required: true
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/DiscordAccountExchangeRequest'
+            responses:
+                '200':
+                    description: The HttpOnly transaction cookie is set; response contains current state.
+                    headers:
+                        Cache-Control:
+                            schema:
+                                type: string
+                                const: no-store
+                        Set-Cookie:
+                            schema:
+                                type: string
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/DiscordConnectionStateResponse'
+                '410':
+                    $ref: '#/components/responses/NotFound'
+    /api/auth/discord-connection:
+        get:
+            operationId: getDiscordConnectionState
+            x-codeRefs:
+                - packages/backend/src/handlers/discordAccountConnection.ts#createDiscordAccountConnectionHandlers
+            summary: Read the current browser-bound Discord connection state
+            tags:
+                - Accounts
+            security:
+                - DiscordConnectionCookie: []
+            responses:
+                '200':
+                    description: Current transaction state without-store.
+                    headers:
+                        Cache-Control:
+                            schema:
+                                type: string
+                                const: no-store
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/DiscordConnectionStateResponse'
+    /api/auth/discord-connection/consent:
+        post:
+            operationId: postDiscordConnectionConsent
+            x-codeRefs:
+                - packages/backend/src/handlers/discordAccountConnection.ts#createDiscordAccountConnectionHandlers
+                - packages/contracts/src/web/discordAccounts.ts#DiscordAccountConsentRequestSchema
+            summary: Explicitly approve connecting this browser transaction
+            tags:
+                - Accounts
+            security:
+                - AccountSessionCookie: []
+                  DiscordConnectionCookie: []
+            parameters:
+                - $ref: '#/components/parameters/AuthCsrfHeader'
+            responses:
+                '200':
+                    description: Confirmation code bound to the signed-in account and browser transaction.
+                    headers:
+                        Cache-Control:
+                            schema:
+                                type: string
+                                const: no-store
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/DiscordConnectionConsentResponse'
+                '403':
+                    $ref: '#/components/responses/Forbidden'
+                '409':
+                    $ref: '#/components/responses/Conflict'
+    /api/auth/discord-connection/cancel:
+        post:
+            operationId: postDiscordConnectionCancel
+            x-codeRefs:
+                - packages/backend/src/handlers/discordAccountConnection.ts#createDiscordAccountConnectionHandlers
+            summary: Cancel a browser-bound Discord connection transaction
+            tags:
+                - Accounts
+            security:
+                - AccountSessionCookie: []
+                  DiscordConnectionCookie: []
+            parameters:
+                - $ref: '#/components/parameters/AuthCsrfHeader'
+            responses:
+                '200':
+                    description: Transaction cancelled
+                    if still active.: null
+                '403':
+                    $ref: '#/components/responses/Forbidden'
+    /api/internal/discord/account/start:
+        post:
+            operationId: postInternalDiscordAccountStart
+            x-codeRefs:
+                - packages/backend/src/handlers/discordAccountConnection.ts#createDiscordAccountConnectionHandlers
+                - packages/api-client/src/discordAccounts.ts#createDiscordAccountApi
+                - packages/contracts/src/web/discordAccounts.ts#DiscordAccountStartRequestSchema
+            summary: Start a trusted Discord account connection
+            tags:
+                - Accounts
+            security:
+                - TrustedServiceToken: []
+                - TraceToken: []
+            requestBody:
+                required: true
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/DiscordAccountStartRequest'
+            responses:
+                '200':
+                    description: Short-lived connection URL; the capability is placed in its fragment.
+                    headers:
+                        Cache-Control:
+                            schema:
+                                type: string
+                                const: no-store
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/DiscordAccountStartResponse'
+                '401':
+                    $ref: '#/components/responses/Unauthorized'
+                '503':
+                    $ref: '#/components/responses/ServiceUnavailable'
+    /api/internal/discord/account/status:
+        post:
+            operationId: postInternalDiscordAccountStatus
+            x-codeRefs:
+                - packages/backend/src/handlers/discordAccountConnection.ts#createDiscordAccountConnectionHandlers
+                - packages/api-client/src/discordAccounts.ts#createDiscordAccountApi
+                - packages/contracts/src/web/discordAccounts.ts#DiscordAccountStatusRequestSchema
+            summary: Resolve whether a trusted Discord user has a Footnote account
+            tags:
+                - Accounts
+            security:
+                - TrustedServiceToken: []
+                - TraceToken: []
+            requestBody:
+                required: true
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/DiscordAccountStatusRequest'
+            responses:
+                '200':
+                    description: Whether backend ownership resolution found a mapping.
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/DiscordAccountStatusResponse'
+                '401':
+                    $ref: '#/components/responses/Unauthorized'
+                '503':
+                    $ref: '#/components/responses/ServiceUnavailable'
+    /api/internal/discord/account/confirm:
+        post:
+            operationId: postInternalDiscordAccountConfirm
+            x-codeRefs:
+                - packages/backend/src/handlers/discordAccountConnection.ts#createDiscordAccountConnectionHandlers
+                - packages/api-client/src/discordAccounts.ts#createDiscordAccountApi
+                - packages/contracts/src/web/discordAccounts.ts#DiscordAccountConfirmRequestSchema
+            summary: Confirm a Discord connection with its code
+            tags:
+                - Accounts
+            security:
+                - TrustedServiceToken: []
+                - TraceToken: []
+            requestBody:
+                required: true
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/DiscordAccountConfirmRequest'
+            responses:
+                '200':
+                    description: Generic linking outcome without disclosing any other account.
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/DiscordAccountConfirmResponse'
+                '401':
+                    $ref: '#/components/responses/Unauthorized'
+                '503':
+                    $ref: '#/components/responses/ServiceUnavailable'
+    /api/account/incidents:
+        get:
+            operationId: getAccountIncidents
+            x-codeRefs:
+                - packages/backend/src/handlers/accountIncidents.ts#handleAccountIncidentsRequest
+                - packages/api-client/src/accountIncidents.ts#getAccountIncidents
+                - packages/web/src/utils/api.ts#getAccountIncidents
+                - packages/contracts/src/web/types.ts#GetAccountIncidentsResponse
+                - packages/contracts/src/web/schemas.ts#GetAccountIncidentsResponseSchema
+            summary: List reports associated with the signed-in account
+            tags:
+                - Accounts
+            security:
+                - AccountSessionCookie: []
+            responses:
+                '200':
+                    description: Reporter-safe incident summaries only
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/AccountIncidentListResponse'
+                '401':
+                    $ref: '#/components/responses/Unauthorized'
+                '503':
+                    $ref: '#/components/responses/ServiceUnavailable'
+    /api/account/incidents/claim:
+        post:
+            operationId: postAccountIncidentClaim
+            x-codeRefs:
+                - packages/backend/src/handlers/accountIncidents.ts#handleAccountIncidentClaimRequest
+                - packages/api-client/src/accountIncidents.ts#claimIncident
+                - packages/web/src/utils/api.ts#claimIncident
+                - packages/contracts/src/web/types.ts#PostAccountIncidentClaimRequest
+                - packages/contracts/src/web/types.ts#PostAccountIncidentClaimResponse
+                - packages/contracts/src/web/schemas.ts#PostAccountIncidentClaimRequestSchema
+                - packages/contracts/src/web/schemas.ts#PostAccountIncidentClaimResponseSchema
+            summary: Explicitly associate a report with the signed-in account
+            description: >-
+                Requires the account session cookie and its CSRF header. Invalid, expired, and
+                already-associated-by-another-account codes have the same response.
+            tags:
+                - Accounts
+            security:
+                - AccountSessionCookie: []
+            parameters:
+                - $ref: '#/components/parameters/AuthCsrfHeader'
+            requestBody:
+                required: true
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/AccountIncidentClaimRequest'
+            responses:
+                '200':
+                    description: 'Report associated, or already associated with this account'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/AccountIncidentClaimResponse'
+                '400':
+                    $ref: '#/components/responses/BadRequest'
+                '401':
+                    $ref: '#/components/responses/Unauthorized'
+                '403':
+                    $ref: '#/components/responses/Forbidden'
+                '404':
+                    $ref: '#/components/responses/NotFound'
+                '503':
+                    $ref: '#/components/responses/ServiceUnavailable'
+    /api/account/memories:
+        get:
+            operationId: getAccountMemories
+            x-codeRefs:
+                - packages/backend/src/handlers/accountMemories.ts#handleAccountMemoriesRequest
+                - packages/api-client/src/accountMemories.ts#getAccountMemories
+                - packages/web/src/utils/api.ts#getAccountMemories
+                - packages/contracts/src/web/types.ts#GetAccountMemoriesResponse
+                - packages/contracts/src/web/schemas.ts#GetAccountMemoriesResponseSchema
+            summary: List memories explicitly saved to the signed-in account
+            tags:
+                - Accounts
+            security:
+                - AccountSessionCookie: []
+            responses:
+                '200':
+                    description: Account-owned memories
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/AccountMemoriesResponse'
+                '401':
+                    $ref: '#/components/responses/Unauthorized'
+                '503':
+                    $ref: '#/components/responses/ServiceUnavailable'
+        post:
+            operationId: postAccountMemory
+            x-codeRefs:
+                - packages/backend/src/handlers/accountMemories.ts#handleAccountMemoryCreateRequest
+                - packages/api-client/src/accountMemories.ts#addAccountMemory
+                - packages/web/src/utils/api.ts#addAccountMemory
+                - packages/contracts/src/web/types.ts#PostAccountMemoryRequest
+                - packages/contracts/src/web/types.ts#PostAccountMemoryResponse
+                - packages/contracts/src/web/schemas.ts#PostAccountMemoryRequestSchema
+                - packages/contracts/src/web/schemas.ts#PostAccountMemoryResponseSchema
+            summary: Save a memory to the signed-in account
+            tags:
+                - Accounts
+            security:
+                - AccountSessionCookie: []
+            parameters:
+                - $ref: '#/components/parameters/AuthCsrfHeader'
+            requestBody:
+                required: true
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/AccountMemoryCreateRequest'
+            responses:
+                '201':
+                    description: Saved memory
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/AccountMemoryCreateResponse'
+                '400':
+                    $ref: '#/components/responses/BadRequest'
+                '401':
+                    $ref: '#/components/responses/Unauthorized'
+                '403':
+                    $ref: '#/components/responses/Forbidden'
+                '409':
+                    description: The account already has the maximum of 50 saved memories
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ErrorResponse'
+                '503':
+                    $ref: '#/components/responses/ServiceUnavailable'
+    '/api/account/memories/{memoryId}':
+        patch:
+            operationId: patchAccountMemory
+            x-codeRefs:
+                - packages/backend/src/handlers/accountMemories.ts#handleAccountMemoryUpdateRequest
+                - packages/backend/src/http/accountMemoryRoutes.ts#registerAccountMemoryRoutes
+                - packages/api-client/src/accountMemories.ts#updateAccountMemory
+                - packages/web/src/utils/api.ts#updateAccountMemory
+                - packages/backend/src/storage/accounts/sqliteAccountStore.ts#updateMemory
+                - packages/contracts/src/web/types.ts#PatchAccountMemoryRequest
+                - packages/contracts/src/web/types.ts#PatchAccountMemoryResponse
+                - packages/contracts/src/web/schemas.ts#PatchAccountMemoryRequestSchema
+                - packages/contracts/src/web/schemas.ts#PatchAccountMemoryResponseSchema
+            summary: Update a memory owned by the signed-in account
+            tags:
+                - Accounts
+            security:
+                - AccountSessionCookie: []
+            parameters:
+                - name: memoryId
+                  in: path
+                  required: true
+                  schema:
+                      type: string
+                      format: uuid
+                - $ref: '#/components/parameters/AuthCsrfHeader'
+            requestBody:
+                required: true
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/AccountMemoryUpdateRequest'
+            responses:
+                '200':
+                    description: Updated memory
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/AccountMemoryUpdateResponse'
+                '400':
+                    $ref: '#/components/responses/BadRequest'
+                '401':
+                    $ref: '#/components/responses/Unauthorized'
+                '403':
+                    $ref: '#/components/responses/Forbidden'
+                '404':
+                    $ref: '#/components/responses/NotFound'
+                '503':
+                    $ref: '#/components/responses/ServiceUnavailable'
+        delete:
+            operationId: deleteAccountMemory
+            x-codeRefs:
+                - packages/backend/src/handlers/accountMemories.ts#handleAccountMemoryDeleteRequest
+                - packages/api-client/src/accountMemories.ts#forgetAccountMemory
+                - packages/web/src/utils/api.ts#forgetAccountMemory
+                - packages/contracts/src/web/types.ts#DeleteAccountMemoryResponse
+            summary: Forget a memory owned by the signed-in account
+            tags:
+                - Accounts
+            security:
+                - AccountSessionCookie: []
+            parameters:
+                - name: memoryId
+                  in: path
+                  required: true
+                  schema:
+                      type: string
+                      format: uuid
+                - $ref: '#/components/parameters/AuthCsrfHeader'
+            responses:
+                '200':
+                    description: Memory deleted
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/AccountMemoryDeleteResponse'
+                '400':
+                    $ref: '#/components/responses/BadRequest'
+                '401':
+                    $ref: '#/components/responses/Unauthorized'
+                '403':
+                    $ref: '#/components/responses/Forbidden'
+                '404':
+                    $ref: '#/components/responses/NotFound'
+                '503':
+                    $ref: '#/components/responses/ServiceUnavailable'
+    /api/account/export:
+        get:
+            operationId: getAccountExport
+            x-codeRefs:
+                - packages/backend/src/handlers/accountIncidents.ts#handleAccountExportRequest
+                - packages/backend/src/storage/accounts/sqliteAccountStore.ts#getAccountExportData
+            summary: Download the signed-in account's retained Footnote data
+            description: >-
+                Returns a JSON attachment scoped to the signed-in account. Incident records are limited to association
+                time and the reporter-safe summary; capability material and operator incident data are excluded.
+            tags:
+                - Accounts
+            security:
+                - AccountSessionCookie: []
+            responses:
+                '200':
+                    description: Portable JSON account export
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/AccountDataExport'
+                '401':
+                    $ref: '#/components/responses/Unauthorized'
+                '405':
+                    $ref: '#/components/responses/MethodNotAllowed'
+                '503':
+                    $ref: '#/components/responses/ServiceUnavailable'
+components:
+    schemas:
+        AccountMemory:
+            type: object
+            properties:
+                id:
+                    type: string
+                    format: uuid
+                text:
+                    type: string
+                createdAt:
+                    type: string
+                    format: date-time
+            required:
+                - id
+                - text
+                - createdAt
+            additionalProperties: false
+        AccountMemoryCreateRequest:
+            type: object
+            properties:
+                text:
+                    type: string
+                    minLength: 1
+                    maxLength: 2000
+            required:
+                - text
+            additionalProperties: false
+        AccountMemoryCreateResponse:
+            type: object
+            properties:
+                memory:
+                    $ref: '#/components/schemas/AccountMemory'
+            required:
+                - memory
+            additionalProperties: false
+        AccountMemoryUpdateRequest:
+            type: object
+            properties:
+                text:
+                    type: string
+                    minLength: 1
+                    maxLength: 2000
+            required:
+                - text
+            additionalProperties: false
+        AccountMemoryUpdateResponse:
+            type: object
+            properties:
+                memory:
+                    $ref: '#/components/schemas/AccountMemory'
+            required:
+                - memory
+            additionalProperties: false
+        AccountMemoryDeleteResponse:
+            type: object
+            properties:
+                success:
+                    type: boolean
+                    enum:
+                        - true
+            required:
+                - success
+            additionalProperties: false
+        AccountDataExport:
+            type: object
+            properties:
+                format:
+                    type: string
+                    enum:
+                        - footnote-account-export
+                version:
+                    type: integer
+                    enum:
+                        - 1
+                generatedAt:
+                    type: string
+                    format: date-time
+                retention:
+                    type: object
+                    properties:
+                        identityProvider:
+                            type: string
+                        modelProviders:
+                            type: string
+                        incidents:
+                            type: string
+                        memories:
+                            type: string
+                    required:
+                        - identityProvider
+                        - modelProviders
+                        - incidents
+                        - memories
+                    additionalProperties: false
+                data:
+                    type: object
+                    properties:
+                        account:
+                            type: object
+                            properties:
+                                category:
+                                    type: string
+                                    enum:
+                                        - account
+                                id:
+                                    type: string
+                                createdAt:
+                                    type: string
+                                    format: date-time
+                                updatedAt:
+                                    type: string
+                                    format: date-time
+                            required:
+                                - category
+                                - id
+                                - createdAt
+                                - updatedAt
+                            additionalProperties: false
+                        externalIdentityMappings:
+                            $ref: '#/components/schemas/AccountExportExternalIdentities'
+                        discordMappings:
+                            $ref: '#/components/schemas/AccountExportDiscordMappings'
+                        incidentAssociations:
+                            $ref: '#/components/schemas/AccountExportIncidentAssociations'
+                        memories:
+                            $ref: '#/components/schemas/AccountExportMemories'
+                    required:
+                        - account
+                        - externalIdentityMappings
+                        - discordMappings
+                        - incidentAssociations
+                        - memories
+                    additionalProperties: false
+            required:
+                - format
+                - version
+                - generatedAt
+                - retention
+                - data
+            additionalProperties: false
+        AccountExportMemories:
+            type: object
+            properties:
+                category:
+                    type: string
+                    enum:
+                        - user_memories
+                records:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/AccountMemory'
+            required:
+                - category
+                - records
+            additionalProperties: false
+        AccountExportExternalIdentities:
+            type: object
+            properties:
+                category:
+                    type: string
+                    enum:
+                        - external_identity_mappings
+                records:
+                    type: array
+                    items:
+                        type: object
+                        properties:
+                            issuer:
+                                type: string
+                            subject:
+                                type: string
+                            createdAt:
+                                type: string
+                                format: date-time
+                            lastSeenAt:
+                                type: string
+                                format: date-time
+                        required:
+                            - issuer
+                            - subject
+                            - createdAt
+                            - lastSeenAt
+                        additionalProperties: false
+            required:
+                - category
+                - records
+            additionalProperties: false
+        AccountExportDiscordMappings:
+            type: object
+            properties:
+                category:
+                    type: string
+                    enum:
+                        - discord_mappings
+                records:
+                    type: array
+                    items:
+                        type: object
+                        properties:
+                            discordUserId:
+                                type: string
+                            discordUsername:
+                                type:
+                                    - string
+                                    - 'null'
+                            createdAt:
+                                type: string
+                                format: date-time
+                        required:
+                            - discordUserId
+                            - discordUsername
+                            - createdAt
+                        additionalProperties: false
+            required:
+                - category
+                - records
+            additionalProperties: false
+        AccountExportIncidentAssociations:
+            type: object
+            properties:
+                category:
+                    type: string
+                    enum:
+                        - incident_associations
+                records:
+                    type: array
+                    items:
+                        type: object
+                        properties:
+                            associatedAt:
+                                type: string
+                                format: date-time
+                            incident:
+                                $ref: '#/components/schemas/ReporterIncidentSummary'
+                        required:
+                            - associatedAt
+                            - incident
+                        additionalProperties: false
+            required:
+                - category
+                - records
+            additionalProperties: false
+        DiscordAccountStartRequest:
+            type: object
+            properties:
+                discordUserId:
+                    type: string
+                    pattern: '^\\d{17,20}$'
+                discordUsername:
+                    type: string
+                    minLength: 1
+                    maxLength: 32
+            required:
+                - discordUserId
+                - discordUsername
+            additionalProperties: false
+        DiscordAccountExchangeRequest:
+            type: object
+            properties:
+                capability:
+                    type: string
+                    minLength: 32
+                    maxLength: 128
+            required:
+                - capability
+            additionalProperties: false
+        DiscordAccountStartResponse:
+            type: object
+            properties:
+                connectionUrl:
+                    type: string
+                    format: uri
+                expiresAt:
+                    type: string
+                    format: date-time
+            required:
+                - connectionUrl
+                - expiresAt
+            additionalProperties: false
+        DiscordAccountStatusRequest:
+            type: object
+            properties:
+                discordUserId:
+                    type: string
+                    pattern: '^\\d{17,20}$'
+            required:
+                - discordUserId
+            additionalProperties: false
+        DiscordAccountStatusResponse:
+            type: object
+            properties:
+                connected:
+                    type: boolean
+            required:
+                - connected
+            additionalProperties: false
+        AccountDiscordConnectionResponse:
+            type: object
+            properties:
+                connected:
+                    type: boolean
+                accounts:
+                    type: array
+                    items:
+                        type: object
+                        properties:
+                            username:
+                                type:
+                                    - string
+                                    - 'null'
+                        required:
+                            - username
+                        additionalProperties: false
+            required:
+                - connected
+                - accounts
+            additionalProperties: false
+        DiscordAccountConfirmRequest:
+            type: object
+            properties:
+                discordUserId:
+                    type: string
+                    pattern: '^\\d{17,20}$'
+                code:
+                    type: string
+                    pattern: '^\\d{8}$'
+            required:
+                - discordUserId
+                - code
+            additionalProperties: false
+        DiscordAccountConfirmResponse:
+            type: object
+            properties:
+                result:
+                    type: string
+                    enum:
+                        - linked
+                        - already-linked
+                        - conflict
+                        - invalid
+                        - wrong-code
+                        - attempts-exhausted
+                        - unavailable
+            required:
+                - result
+            additionalProperties: false
+        DiscordConnectionStateResponse:
+            type: object
+            properties:
+                state:
+                    type: string
+                    enum:
+                        - waiting-for-sign-in
+                        - waiting-for-approval
+                        - waiting-for-discord-confirmation
+                        - expired
+                        - none
+                code:
+                    type: string
+                    pattern: '^\\d{8}$'
+            required:
+                - state
+            additionalProperties: false
+        DiscordConnectionConsentResponse:
+            type: object
+            properties:
+                code:
+                    type: string
+                    pattern: '^\\d{8}$'
+            required:
+                - code
+            additionalProperties: false
+        AuthenticatedPrincipal:
+            type: object
+            properties:
+                issuer:
+                    type: string
+                    minLength: 1
+                subject:
+                    type: string
+                    minLength: 1
+                displayName:
+                    type:
+                        - string
+                        - 'null'
+            required:
+                - issuer
+                - subject
+                - displayName
+            additionalProperties: false
+        AuthSessionResponse:
+            oneOf:
+                - type: object
+                  properties:
+                      enabled:
+                          type: boolean
+                          const: false
+                      authenticated:
+                          type: boolean
+                          const: false
+                  required:
+                      - enabled
+                      - authenticated
+                  additionalProperties: false
+                - type: object
+                  properties:
+                      enabled:
+                          type: boolean
+                          const: true
+                      authenticated:
+                          type: boolean
+                          const: false
+                  required:
+                      - enabled
+                      - authenticated
+                  additionalProperties: false
+                - type: object
+                  properties:
+                      enabled:
+                          type: boolean
+                          const: true
+                      authenticated:
+                          type: boolean
+                          const: true
+                      principal:
+                          $ref: '#/components/schemas/AuthenticatedPrincipal'
+                      isAdministrator:
+                          type: boolean
+                      expiresAt:
+                          type: string
+                          format: date-time
+                      csrfToken:
+                          type: string
+                          minLength: 1
+                  required:
+                      - enabled
+                      - authenticated
+                      - principal
+                      - isAdministrator
+                      - expiresAt
+                      - csrfToken
+                  additionalProperties: false

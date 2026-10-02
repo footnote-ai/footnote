@@ -1,0 +1,1472 @@
+paths: {}
+components:
+    schemas:
+        ErrorResponse:
+            type: object
+            properties:
+                error:
+                    type: string
+                details:
+                    type: string
+                retryAfter:
+                    type: integer
+                    description: Seconds until retry is allowed.
+            required:
+                - error
+            additionalProperties: false
+        AccountMemoriesResponse:
+            type: object
+            properties:
+                memories:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/AccountMemory'
+            required:
+                - memories
+            additionalProperties: false
+        PresentationGenerationSettings:
+            description: Serializable provider-neutral settings used only by the backend presentation evaluation/profile seam.
+            x-codeRefs:
+                - packages/contracts/src/model-profiles.ts#PresentationGenerationSettings
+                - packages/contracts/src/model-profiles.ts#PresentationGenerationSettingsSchema
+                - packages/backend/src/services/runtimeRequestControls.ts#resolvePresentationGenerationSettings
+            type: object
+            properties:
+                promptVariant:
+                    type: string
+                    enum:
+                        - current
+                        - compact
+                maxOutputTokens:
+                    type: integer
+                    minimum: 1
+                reasoningEffort:
+                    type: string
+                    enum:
+                        - none
+                        - low
+                        - medium
+                        - high
+                        - xhigh
+                        - max
+                verbosity:
+                    type: string
+                    enum:
+                        - low
+                        - medium
+                        - high
+                temperature:
+                    type: number
+                    minimum: 0
+                    maximum: 2
+                topP:
+                    type: number
+                    minimum: 0
+                    maximum: 1
+            additionalProperties: false
+        ResponseMetadataBase:
+            type: object
+            properties:
+                provenance:
+                    type: string
+                    description: 'Expected values are Retrieved, Inferred, or Speculative.'
+                safetyTier:
+                    type: string
+                    description: 'Expected values are Low, Medium, or High.'
+                tradeoffCount:
+                    type: number
+                    description: Expected minimum is 0.
+                chainHash:
+                    type: string
+                licenseContext:
+                    type: string
+                modelVersion:
+                    type: string
+                    deprecated: true
+                    description: 'Deprecated compatibility mirror of the final generation model. Prefer execution[].'
+                staleAfter:
+                    type: string
+                    format: date-time
+                citations:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/Citation'
+                execution:
+                    type: array
+                    items:
+                        type: object
+                        required:
+                            - kind
+                            - status
+                        properties:
+                            kind:
+                                type: string
+                                enum:
+                                    - planner
+                                    - evaluator
+                                    - tool
+                                    - generation
+                            status:
+                                type: string
+                                enum:
+                                    - executed
+                                    - skipped
+                                    - failed
+                            purpose:
+                                type: string
+                                enum:
+                                    - chat_orchestrator_action_selection
+                                description: >-
+                                    Required for planner events. Canonical bounded planner invocation purpose; not
+                                    policy ownership.
+                            contractType:
+                                type: string
+                                enum:
+                                    - structured
+                                    - text_json
+                                    - fallback
+                                description: >-
+                                    Required for planner events. Planner decision contract execution style used by
+                                    backend-owned orchestration.
+                            structuredOutputOutcome:
+                                type: string
+                                enum:
+                                    - strict_success
+                                    - unsupported_route
+                                    - refusal
+                                    - incomplete
+                                    - no_output
+                                    - schema_rejected
+                                    - parse_failure
+                                    - policy_invalid
+                                    - runtime_failure
+                                    - text_json_compatibility
+                                    - safe_default_fallback
+                                description: >-
+                                    Sanitized planner transport outcome. This is diagnostic metadata, not policy
+                                    authority.
+                            upstreamAttribution:
+                                type: object
+                                properties:
+                                    resolvedModel:
+                                        type: string
+                                    inferenceProvider:
+                                        type: string
+                                    routingAttempt:
+                                        type: integer
+                                        minimum: 1
+                                    routingAttemptCount:
+                                        type: integer
+                                        minimum: 1
+                                    upstreamReportedCostUsd:
+                                        type: number
+                                        minimum: 0
+                                additionalProperties: false
+                            applyOutcome:
+                                type: string
+                                enum:
+                                    - applied
+                                    - adjusted_by_policy
+                                    - not_applied
+                                description: >-
+                                    Required for planner events. Indicates whether planner output became execution input
+                                    as-is, was adjusted by workflow policy, or was not applied.
+                            mattered:
+                                type: boolean
+                                description: >-
+                                    Required for planner events. Observable planner influence signal, not a claim of
+                                    policy authority.
+                            matteredControlIds:
+                                type: array
+                                description: >-
+                                    Required for planner events. Control IDs that explain where planner influence
+                                    materially affected execution.
+                                items:
+                                    type: string
+                            originalProfileId:
+                                type: string
+                            effectiveProfileId:
+                                type: string
+                            profileId:
+                                type: string
+                            provider:
+                                type: string
+                            model:
+                                type: string
+                            usage:
+                                type: object
+                                properties:
+                                    promptTokens:
+                                        type: integer
+                                        minimum: 0
+                                    cachedInputTokens:
+                                        type: integer
+                                        minimum: 0
+                                    cacheWriteTokens:
+                                        type: integer
+                                        minimum: 0
+                                    completionTokens:
+                                        type: integer
+                                        minimum: 0
+                                    totalTokens:
+                                        type: integer
+                                        minimum: 0
+                                    reasoningTokens:
+                                        type: integer
+                                        minimum: 0
+                                additionalProperties: false
+                            routingChainAttempts:
+                                type: array
+                                items:
+                                    type: object
+                                    properties:
+                                        index:
+                                            type: integer
+                                            minimum: 0
+                                        profileId:
+                                            type: string
+                                        provider:
+                                            type: string
+                                        model:
+                                            type: string
+                                        status:
+                                            type: string
+                                        reasonCode:
+                                            type: string
+                                        finishReason:
+                                            type: string
+                                            maxLength: 100
+                                        completion:
+                                            type: object
+                                            properties:
+                                                status:
+                                                    type: string
+                                                    enum:
+                                                        - completed
+                                                        - incomplete
+                                                        - failed
+                                                        - unknown
+                                                reason:
+                                                    type: string
+                                                    maxLength: 100
+                                                visibleTextLength:
+                                                    type: integer
+                                                    minimum: 0
+                                            required:
+                                                - status
+                                                - visibleTextLength
+                                            additionalProperties: false
+                                        usage:
+                                            type: object
+                                            properties:
+                                                promptTokens:
+                                                    type: integer
+                                                    minimum: 0
+                                                cachedInputTokens:
+                                                    type: integer
+                                                    minimum: 0
+                                                cacheWriteTokens:
+                                                    type: integer
+                                                    minimum: 0
+                                                completionTokens:
+                                                    type: integer
+                                                    minimum: 0
+                                                totalTokens:
+                                                    type: integer
+                                                    minimum: 0
+                                                reasoningTokens:
+                                                    type: integer
+                                                    minimum: 0
+                                            additionalProperties: false
+                                        chooseOneUsed:
+                                            type: boolean
+                                        chooseOneSelectedIndex:
+                                            type: integer
+                                            minimum: 0
+                                        seedKeyType:
+                                            type: string
+                                    required:
+                                        - index
+                                        - profileId
+                                        - status
+                                        - chooseOneUsed
+                                    additionalProperties: false
+                            toolName:
+                                type: string
+                            evaluator:
+                                type: object
+                                description: Evaluator outcome payload for kind=evaluator execution events.
+                                properties:
+                                    authorityLevel:
+                                        type: string
+                                        enum:
+                                            - observe
+                                            - influence
+                                            - enforce
+                                    mode:
+                                        type: string
+                                        enum:
+                                            - observe_only
+                                            - enforced
+                                    provenance:
+                                        type: string
+                                        enum:
+                                            - Retrieved
+                                            - Inferred
+                                            - Speculative
+                                    safetyDecision:
+                                        type: object
+                                        properties:
+                                            action:
+                                                type: string
+                                                enum:
+                                                    - allow
+                                                    - block
+                                                    - redirect
+                                                    - safe_partial
+                                                    - human_review
+                                            safetyTier:
+                                                type: string
+                                                enum:
+                                                    - Low
+                                                    - Medium
+                                                    - High
+                                            ruleId:
+                                                type: string
+                                                nullable: true
+                                            reasonCode:
+                                                type: string
+                                                enum:
+                                                    - self_harm_crisis_intent
+                                                    - weaponization_request
+                                                    - professional_advice_guardrail
+                                            reason:
+                                                type: string
+                                        required:
+                                            - action
+                                            - safetyTier
+                                            - ruleId
+                                        additionalProperties: false
+                                required:
+                                    - mode
+                                    - provenance
+                                    - safetyDecision
+                                additionalProperties: false
+                            reasonCode:
+                                type: string
+                                enum:
+                                    - planner_runtime_error
+                                    - planner_invalid_output
+                                    - evaluator_runtime_error
+                                    - generation_runtime_error
+                                    - generation_empty_output
+                                    - generation_failed_output
+                                    - generation_incomplete_before_output
+                                    - tool_not_requested
+                                    - tool_not_used
+                                    - search_rerouted_to_fallback_profile
+                                    - search_reroute_not_permitted_by_selection_source
+                                    - search_reroute_no_tool_capable_fallback_available
+                                    - tool_unavailable
+                                    - tool_execution_error
+                                    - tool_timeout
+                                    - tool_http_error
+                                    - tool_network_error
+                                    - tool_invalid_response
+                                    - location_not_resolved
+                                    - search_not_supported_by_selected_profile
+                                    - unspecified_tool_outcome
+                                    - routing_chain_exhausted
+                                    - routing_chain_entry_ineligible
+                                    - routing_chain_transient_error
+                                    - routing_chain_non_transient_error
+                            durationMs:
+                                type: integer
+                                minimum: 0
+                        additionalProperties: false
+                workflow:
+                    $ref: '#/components/schemas/WorkflowRecord'
+                presentation:
+                    description: >-
+                        Optional backend-owned presentation receipt. In the current flow, an optional presentation model
+                        drafts wording and style, Footnote checks that the draft is usable prose, normal answer
+                        generation uses it only as a style suggestion while working from authoritative context, and
+                        normal assessment/revision reviews the answer. No separate presentation-validator model call
+                        runs. Old traces remain readable through the legacy branch, but new runs do not create
+                        validator/audit records. Trace upserts that omit flow but contain old finalizer/audit or
+                        caution-derived fields are read as legacy data without inventing observed model data.
+                    oneOf:
+                        - type: object
+                          description: >-
+                              Current flow. A presentation model may suggest wording and style. Footnote checks only
+                              that its draft is usable prose; normal answer generation and assessment/revision make
+                              and review the answer from authoritative context.
+                          properties:
+                              step:
+                                  type: string
+                                  enum:
+                                      - presentation
+                              flow:
+                                  type: string
+                                  enum:
+                                      - candidate_review
+                              outcome:
+                                  type: string
+                                  enum:
+                                      - candidate_generated
+                                      - candidate_unavailable
+                              attempted:
+                                  type: boolean
+                              reasonCode:
+                                  type: string
+                                  enum:
+                                      - candidate_generated
+                                      - budget_skipped
+                                      - disabled
+                                      - profile_not_configured
+                                      - candidate_not_admissible
+                                      - draft_timeout
+                                      - draft_provider_error
+                              personaId:
+                                  type: string
+                              presentationSettings:
+                                  description: >-
+                                      Backend-owned presentation setting resolution. Unsupported settings are omitted
+                                      fail-open and never become user-facing controls.
+                                  x-codeRefs:
+                                      - packages/contracts/src/policy/types.ts#PresentationSettingsMetadata
+                                      - packages/contracts/src/web/schemas.ts#PresentationSettingsMetadataSchema
+                                      - >-
+                                          packages/backend/src/services/runtimeRequestControls.ts#resolvePresentationGenerationSettings
+                                  type: object
+                                  properties:
+                                      requested:
+                                          $ref: '#/components/schemas/PresentationGenerationSettings'
+                                      forwarded:
+                                          $ref: '#/components/schemas/PresentationGenerationSettings'
+                                      omitted:
+                                          type: array
+                                          items:
+                                              type: object
+                                              properties:
+                                                  setting:
+                                                      type: string
+                                                      enum:
+                                                          - promptVariant
+                                                          - maxOutputTokens
+                                                          - reasoningEffort
+                                                          - verbosity
+                                                          - temperature
+                                                          - topP
+                                                  requested:
+                                                      oneOf:
+                                                          - type: string
+                                                          - type: number
+                                                  reasonCode:
+                                                      type: string
+                                                      enum:
+                                                          - sampling_control_not_supported
+                                                          - verbosity_not_supported
+                                                          - reasoning_effort_not_supported
+                                                          - output_limit_exceeds_profile_maximum
+                                                          - sampling_controls_mutually_exclusive
+                                              required:
+                                                  - setting
+                                                  - requested
+                                                  - reasonCode
+                                              additionalProperties: false
+                                      providerObserved:
+                                          $ref: '#/components/schemas/PresentationGenerationSettings'
+                                  required:
+                                      - requested
+                                      - forwarded
+                                      - omitted
+                                  additionalProperties: false
+                              draftProfileId:
+                                  type: string
+                              draftRequestedProvider:
+                                  type: string
+                              draftRequestedModel:
+                                  type: string
+                              draftObservedProvider:
+                                  type: string
+                                  description: >-
+                                      Provider observed after a style-draft generation result returned. Absent when
+                                      the draft failed or timed out before returning.
+                              draftObservedModel:
+                                  type: string
+                                  description: >-
+                                      Model observed after a style-draft generation result returned. Absent when the
+                                      draft failed or timed out before returning.
+                              upstreamInferenceProvider:
+                                  type: string
+                                  description: >-
+                                      Upstream-reported style-draft inference provider. Footnote does not
+                                      independently verify this value.
+                              upstreamResolvedModel:
+                                  type: string
+                              upstreamRoutingAttempt:
+                                  type: integer
+                                  minimum: 1
+                              upstreamRoutingAttemptCount:
+                                  type: integer
+                                  minimum: 1
+                              backendEstimatedCostUsd:
+                                  type: number
+                                  minimum: 0
+                                  description: Backend-calculated estimate for the presentation candidate only.
+                              upstreamReportedCostUsd:
+                                  type: number
+                                  minimum: 0
+                              durationMs:
+                                  type: integer
+                                  minimum: 0
+                              draftAttemptCount:
+                                  type: integer
+                                  enum:
+                                      - 0
+                                      - 1
+                              draftHmacId:
+                                  type: string
+                                  pattern: '^[a-f0-9]{64}$'
+                              caution:
+                                  type: integer
+                                  enum:
+                                      - 1
+                                      - 2
+                                      - 3
+                                      - 4
+                                      - 5
+                              expressionStrength:
+                                  type: string
+                                  enum:
+                                      - subtle
+                                      - balanced
+                                      - strong
+                                  description: Resolved persona expression strength.
+                              expressionSource:
+                                  type: string
+                                  enum:
+                                      - request
+                                      - profile
+                                      - persona_default
+                                  description: Resolution source for the expression preference.
+                          required:
+                              - step
+                              - flow
+                              - outcome
+                              - attempted
+                              - reasonCode
+                              - personaId
+                              - draftAttemptCount
+                              - expressionStrength
+                              - expressionSource
+                          additionalProperties: false
+                        - type: object
+                          description: >-
+                              Old presentation receipt retained so existing traces remain readable. The current
+                              runtime never emits this validator/audit record.
+                          properties:
+                              step:
+                                  type: string
+                                  enum:
+                                      - presentation
+                              flow:
+                                  type: string
+                                  enum:
+                                      - legacy_finalizer_audit
+                              outcome:
+                                  type: string
+                                  enum:
+                                      - finalized
+                                      - finalized_after_evidence_repair
+                                      - finalized_after_presentation_repair
+                                      - finalized_with_audit_unavailable
+                                      - fallback
+                              attempted:
+                                  type: boolean
+                              reasonCode:
+                                  type: string
+                                  enum:
+                                      - finalized
+                                      - evidence_repaired
+                                      - presentation_repaired
+                                      - audit_unavailable
+                                      - audit_invalid
+                                      - presentation_repair_unavailable
+                                      - evidence_repair_unavailable
+                                      - disabled
+                                      - profile_not_configured
+                                      - structured_output
+                                      - mechanical_preservation_failed
+                                      - draft_timeout
+                                      - draft_provider_error
+                                      - finalizer_timeout
+                                      - finalizer_provider_error
+                              personaId:
+                                  type: string
+                              draftProfileId:
+                                  type: string
+                              draftRequestedProvider:
+                                  type: string
+                              draftRequestedModel:
+                                  type: string
+                              draftObservedProvider:
+                                  type: string
+                              draftObservedModel:
+                                  type: string
+                              auditProfileId:
+                                  type: string
+                              auditProvider:
+                                  type: string
+                              auditModel:
+                                  type: string
+                              upstreamInferenceProvider:
+                                  type: string
+                              upstreamResolvedModel:
+                                  type: string
+                              upstreamRoutingAttempt:
+                                  type: integer
+                                  minimum: 1
+                              upstreamRoutingAttemptCount:
+                                  type: integer
+                                  minimum: 1
+                              backendEstimatedCostUsd:
+                                  type: number
+                                  minimum: 0
+                              upstreamReportedCostUsd:
+                                  type: number
+                                  minimum: 0
+                              durationMs:
+                                  type: integer
+                                  minimum: 0
+                              auditOutcome:
+                                  type: string
+                                  enum:
+                                      - not_attempted
+                                      - clear
+                                      - evidence_issue
+                                      - presentation_flattened
+                                      - invalid
+                              auditFailureCategory:
+                                  type: string
+                                  description: >-
+                                      Safe category only; raw audit feedback and provider errors are never stored
+                                      here.
+                                  enum:
+                                      - timeout
+                                      - provider_failure
+                                      - invalid_structured_output
+                                      - unavailable
+                              draftAttemptCount:
+                                  type: integer
+                                  enum:
+                                      - 0
+                                      - 1
+                              finalizerAttemptCount:
+                                  type: integer
+                                  enum:
+                                      - 0
+                                      - 1
+                                      - 2
+                              auditAttemptCount:
+                                  type: integer
+                                  enum:
+                                      - 0
+                                      - 1
+                              draftHmacId:
+                                  type: string
+                                  pattern: '^[a-f0-9]{64}$'
+                              finalHmacId:
+                                  type: string
+                                  pattern: '^[a-f0-9]{64}$'
+                              styledDraftRetentionRatio:
+                                  type: number
+                                  minimum: 0
+                                  maximum: 1
+                              caution:
+                                  type: integer
+                                  enum:
+                                      - 1
+                                      - 2
+                                      - 3
+                                      - 4
+                                      - 5
+                              intensity:
+                                  type: string
+                                  deprecated: true
+                                  description: >-
+                                      Legacy caution-derived field accepted only while normalizing historical trace
+                                      upserts; it is not accepted on current candidate-flow writes.
+                              traceConstrained:
+                                  type: boolean
+                                  deprecated: true
+                                  description: >-
+                                      Legacy caution-derived field accepted only while normalizing historical trace
+                                      upserts; it is not accepted on current candidate-flow writes.
+                              expressionStrength:
+                                  type: string
+                                  enum:
+                                      - subtle
+                                      - balanced
+                                      - strong
+                                  description: >-
+                                      Normalized legacy expression strength; old caution fields do not prove a request
+                                      or profile preference.
+                              expressionSource:
+                                  type: string
+                                  enum:
+                                      - request
+                                      - profile
+                                      - persona_default
+                                  description: >-
+                                      Normalized legacy source. Old caution fields default this to persona_default
+                                      when no current source is present.
+                          required:
+                              - step
+                              - flow
+                              - outcome
+                              - attempted
+                              - reasonCode
+                              - personaId
+                              - auditOutcome
+                              - draftAttemptCount
+                              - finalizerAttemptCount
+                              - auditAttemptCount
+                              - expressionStrength
+                              - expressionSource
+                          additionalProperties: false
+                reviewRuntime:
+                    $ref: '#/components/schemas/ReviewRuntimeSummary'
+                imageDescriptions:
+                    type: array
+                    items:
+                        type: string
+                evidenceScore:
+                    type: integer
+                    minimum: 1
+                    maximum: 5
+                    description: Optional TRACE evidence chip score.
+                freshnessScore:
+                    type: integer
+                    minimum: 1
+                    maximum: 5
+                    description: Optional TRACE freshness chip score.
+                trace_target:
+                    type: object
+                    description: Current summary field for intended TRACE answer posture (partial 1-5 axis map).
+                    properties:
+                        tightness:
+                            type: integer
+                            description: '1 to 5, where higher means stronger concision and structural efficiency.'
+                            minimum: 1
+                            maximum: 5
+                        rationale:
+                            type: integer
+                            description: '1 to 5, where higher means more visible rationale and trade-off explanation.'
+                            minimum: 1
+                            maximum: 5
+                        attribution:
+                            type: integer
+                            description: '1 to 5, where higher means clearer sourced vs inferred boundaries.'
+                            minimum: 1
+                            maximum: 5
+                        caution:
+                            type: integer
+                            description: '1 to 5, where higher means stronger safeguards and overclaim restraint.'
+                            minimum: 1
+                            maximum: 5
+                        extent:
+                            type: integer
+                            description: '1 to 5, where higher means broader options and perspectives.'
+                            minimum: 1
+                            maximum: 5
+                    additionalProperties: false
+                trace_final:
+                    type: object
+                    description: Current summary field for delivered TRACE answer posture (partial 1-5 axis map).
+                    properties:
+                        tightness:
+                            type: integer
+                            description: '1 to 5, where higher means stronger concision and structural efficiency.'
+                            minimum: 1
+                            maximum: 5
+                        rationale:
+                            type: integer
+                            description: '1 to 5, where higher means more visible rationale and trade-off explanation.'
+                            minimum: 1
+                            maximum: 5
+                        attribution:
+                            type: integer
+                            description: '1 to 5, where higher means clearer sourced vs inferred boundaries.'
+                            minimum: 1
+                            maximum: 5
+                        caution:
+                            type: integer
+                            description: '1 to 5, where higher means stronger safeguards and overclaim restraint.'
+                            minimum: 1
+                            maximum: 5
+                        extent:
+                            type: integer
+                            description: '1 to 5, where higher means broader options and perspectives.'
+                            minimum: 1
+                            maximum: 5
+                    additionalProperties: false
+                trace_final_reason_code:
+                    type: string
+                    description: Required when trace_final differs from trace_target.
+                    enum:
+                        - runtime_posture_adjustment
+                        - assess_trace_misalignment
+                trustGraph:
+                    type: object
+                    properties:
+                        adapterStatus:
+                            type: string
+                            enum:
+                                - 'off'
+                                - scope_denied
+                                - success
+                                - timeout
+                                - error
+                        scopeValidation:
+                            oneOf:
+                                - type: object
+                                  properties:
+                                      ok:
+                                          type: boolean
+                                          enum:
+                                              - true
+                                      normalizedScope:
+                                          type: object
+                                          properties:
+                                              userId:
+                                                  type: string
+                                                  minLength: 1
+                                              projectId:
+                                                  type: string
+                                                  minLength: 1
+                                              collectionId:
+                                                  type: string
+                                                  minLength: 1
+                                          required:
+                                              - userId
+                                          additionalProperties: false
+                                  required:
+                                      - ok
+                                      - normalizedScope
+                                  additionalProperties: false
+                                - type: object
+                                  properties:
+                                      ok:
+                                          type: boolean
+                                          enum:
+                                              - false
+                                      reasonCode:
+                                          type: string
+                                          enum:
+                                              - external_scope_validation_failed
+                                      details:
+                                          type: string
+                                          minLength: 1
+                                  required:
+                                      - ok
+                                      - reasonCode
+                                      - details
+                                  additionalProperties: false
+                        terminalAuthority:
+                            type: string
+                            enum:
+                                - backend_execution_contract
+                        failOpenBehavior:
+                            type: string
+                            enum:
+                                - local_behavior
+                        verificationRequired:
+                            type: boolean
+                            enum:
+                                - true
+                        advisoryEvidenceItemCount:
+                            type: integer
+                            minimum: 0
+                        droppedEvidenceCount:
+                            type: integer
+                            minimum: 0
+                        droppedEvidenceIds:
+                            type: array
+                            items:
+                                type: string
+                                minLength: 1
+                        provenanceReasonCodes:
+                            type: array
+                            items:
+                                type: string
+                                enum:
+                                    - external_scope_validation_failed
+                                    - adapter_scope_mismatch
+                                    - adapter_disabled
+                                    - adapter_timeout
+                                    - adapter_timeout_cancellation_requested
+                                    - adapter_error
+                                    - adapter_processing_failed
+                                    - poisoned_evidence_dropped
+                                    - aggregate_signals_neutralized_after_filtering
+                                    - ownership_validation_explicitly_none_denied
+                                    - ownership_validation_explicitly_none_allowed_non_production
+                        sufficiencyView:
+                            type: object
+                            properties:
+                                coverageValue:
+                                    type: number
+                                    minimum: 0
+                                coverageEvaluationUnit:
+                                    type: string
+                                    enum:
+                                        - claim
+                                        - subquestion
+                                        - source
+                                conflictSignals:
+                                    type: array
+                                    items:
+                                        type: string
+                                        minLength: 1
+                            required:
+                                - conflictSignals
+                            additionalProperties: false
+                        evidenceView:
+                            type: object
+                            properties:
+                                sourceRefs:
+                                    type: array
+                                    items:
+                                        type: string
+                                        minLength: 1
+                                provenancePathRefs:
+                                    type: array
+                                    items:
+                                        type: string
+                                        minLength: 1
+                                traceRefs:
+                                    type: array
+                                    items:
+                                        type: string
+                                        minLength: 1
+                            required:
+                                - sourceRefs
+                                - provenancePathRefs
+                                - traceRefs
+                            additionalProperties: false
+                        provenanceJoin:
+                            type: object
+                            properties:
+                                externalEvidenceBundleId:
+                                    type: string
+                                    minLength: 1
+                                externalTraceRefs:
+                                    type: array
+                                    items:
+                                        type: string
+                                        minLength: 1
+                                adapterVersion:
+                                    type: string
+                                    minLength: 1
+                                consumedGovernedFieldPaths:
+                                    type: array
+                                    items:
+                                        type: string
+                                        minLength: 1
+                                consumedByConsumers:
+                                    type: array
+                                    items:
+                                        type: string
+                                        enum:
+                                            - P_SUFF
+                                            - P_EVID
+                                droppedEvidenceIds:
+                                    type: array
+                                    items:
+                                        type: string
+                                        minLength: 1
+                                reasonCodes:
+                                    type: array
+                                    items:
+                                        type: string
+                                        enum:
+                                            - external_scope_validation_failed
+                                            - adapter_scope_mismatch
+                                            - adapter_disabled
+                                            - adapter_timeout
+                                            - adapter_timeout_cancellation_requested
+                                            - adapter_error
+                                            - adapter_processing_failed
+                                            - poisoned_evidence_dropped
+                                            - aggregate_signals_neutralized_after_filtering
+                                            - ownership_validation_explicitly_none_denied
+                                            - ownership_validation_explicitly_none_allowed_non_production
+                            required:
+                                - externalEvidenceBundleId
+                                - externalTraceRefs
+                                - adapterVersion
+                                - consumedGovernedFieldPaths
+                                - consumedByConsumers
+                                - droppedEvidenceIds
+                                - reasonCodes
+                            additionalProperties: false
+                    required:
+                        - adapterStatus
+                        - scopeValidation
+                        - terminalAuthority
+                        - failOpenBehavior
+                        - verificationRequired
+                        - advisoryEvidenceItemCount
+                        - droppedEvidenceCount
+                        - droppedEvidenceIds
+                        - provenanceReasonCodes
+                        - sufficiencyView
+                        - evidenceView
+                    additionalProperties: false
+                githubContext:
+                    $ref: '#/components/schemas/GitHubContextMetadata'
+                projectContext:
+                    $ref: '#/components/schemas/ProjectContextMetadata'
+            required:
+                - provenance
+                - safetyTier
+                - tradeoffCount
+                - chainHash
+                - licenseContext
+                - modelVersion
+                - staleAfter
+                - citations
+                - trace_target
+                - trace_final
+            additionalProperties: true
+        ResponseMetadata:
+            allOf:
+                - $ref: '#/components/schemas/ResponseMetadataBase'
+                - type: object
+                  properties:
+                      responseId:
+                          type: string
+                  required:
+                      - responseId
+    securitySchemes:
+        TraceToken:
+            type: apiKey
+            in: header
+            name: x-trace-token
+            description: Shared secret for trusted trace ingestion.
+        TrustedServiceToken:
+            type: apiKey
+            in: header
+            name: x-service-token
+            description: Shared secret for trusted internal service callers.
+        AgentToken:
+            type: apiKey
+            in: header
+            name: x-agent-token
+            description: Dedicated trusted credential for agent chat callers.
+        AdminSettingsToken:
+            type: apiKey
+            in: header
+            name: x-admin-token
+            description: Dedicated trusted admin token for settings endpoints.
+        SetupSessionCookie:
+            type: apiKey
+            in: cookie
+            name: footnote_setup_session
+            description: Short-lived setup session cookie accepted while the session remains valid.
+        AccountSessionCookie:
+            type: apiKey
+            in: cookie
+            name: footnote_account_session
+            description: Opaque local account session cookie. It contains no identity claims or provider tokens.
+        DiscordConnectionCookie:
+            type: apiKey
+            in: cookie
+            name: footnote_discord_connection
+            description: 'Opaque, short-lived browser binding for one Discord connection transaction.'
+    parameters:
+        SessionIdHeader:
+            name: X-Session-Id
+            in: header
+            required: false
+            description: >-
+                Optional client-generated session id used for per-session rate limiting; when omitted, the server falls
+                back to IP.
+            schema:
+                type: string
+        TurnstileTokenHeader:
+            name: X-Turnstile-Token
+            in: header
+            required: false
+            description: Turnstile CAPTCHA token header when enabled.
+            schema:
+                type: string
+        IfMatchHeader:
+            name: If-Match
+            in: header
+            required: true
+            description: >-
+                Required optimistic concurrency token from latest GET /api/admin/settings.yaml ETag, or
+                `"footnote-settings-missing"` only while settings file is absent.
+            schema:
+                type: string
+        SetupCsrfHeader:
+            name: x-setup-csrf
+            in: header
+            required: false
+            description: Required for non-GET admin settings calls when authenticated with setup session cookie.
+            schema:
+                type: string
+        AuthCsrfHeader:
+            name: x-auth-csrf
+            in: header
+            required: false
+            description: Required when a valid account session posts local logout.
+            schema:
+                type: string
+                minLength: 1
+        TraceResponseId:
+            name: responseId
+            in: path
+            required: true
+            description: Response id used to fetch a trace.
+            schema:
+                type: string
+        IncidentId:
+            name: incidentId
+            in: path
+            required: true
+            description: Operator-safe incident short ID.
+            schema:
+                type: string
+                minLength: 1
+    requestBodies: {}
+    responses:
+        PreflightAccepted:
+            description: Preflight accepted.
+        ChatOk:
+            description: Chat response with metadata.
+            content:
+                application/json:
+                    schema:
+                        $ref: '#/components/schemas/ChatResponse'
+        InternalTextTaskOk:
+            description: Structured response for a trusted internal text task.
+            content:
+                application/json:
+                    schema:
+                        $ref: '#/components/schemas/InternalTextResponse'
+        InternalImageTaskOk:
+            description: >-
+                Structured response for a trusted internal image task. Returns JSON by default or NDJSON stream events
+                when `stream` is true.
+            content:
+                application/json:
+                    schema:
+                        $ref: '#/components/schemas/InternalImageResponse'
+                application/x-ndjson:
+                    schema:
+                        $ref: '#/components/schemas/InternalImageStreamEvent'
+        InternalVoiceTtsOk:
+            description: Structured response for a trusted internal voice TTS task.
+            content:
+                application/json:
+                    schema:
+                        $ref: '#/components/schemas/InternalVoiceTtsResponse'
+        IncidentReportOk:
+            description: Incident created.
+            content:
+                application/json:
+                    schema:
+                        $ref: '#/components/schemas/IncidentReportResponse'
+                    example:
+                        incident:
+                            incidentId: 1a2b3c4d
+                            status: new
+                            tags:
+                                - safety
+                                - review
+                            description: The assistant gave risky instructions.
+                            contact: moderator@example.com
+                            createdAt: '2026-03-13T17:00:00.000Z'
+                            updatedAt: '2026-03-13T17:00:00.000Z'
+                            consentedAt: '2026-03-13T17:00:00.000Z'
+                            pointers:
+                                responseId: response_123
+                                guildId: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+                                channelId: bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
+                                messageId: cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc
+                                modelVersion: gpt-5-mini
+                                chainHash: hash_abc
+                            remediation:
+                                state: pending
+                                applied: false
+                                notes: null
+                                updatedAt: null
+                            auditEvents:
+                                - action: incident.created
+                                  actorHash: dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd
+                                  notes: 'description provided; contact provided; tags=safety, review'
+                                  createdAt: '2026-03-13T17:00:00.000Z'
+                        remediation:
+                            state: pending
+        IncidentListOk:
+            description: Incident summaries.
+            content:
+                application/json:
+                    schema:
+                        $ref: '#/components/schemas/IncidentListResponse'
+                    example:
+                        incidents:
+                            - incidentId: 1a2b3c4d
+                              status: under_review
+                              tags:
+                                  - safety
+                                  - review
+                              description: The assistant gave risky instructions.
+                              contact: moderator@example.com
+                              createdAt: '2026-03-13T17:00:00.000Z'
+                              updatedAt: '2026-03-13T17:05:00.000Z'
+                              consentedAt: '2026-03-13T17:00:00.000Z'
+                              pointers:
+                                  responseId: response_123
+                                  guildId: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+                                  channelId: bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
+                                  messageId: cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc
+                                  modelVersion: gpt-5-mini
+                                  chainHash: hash_abc
+                              remediation:
+                                  state: applied
+                                  applied: true
+                                  notes: Warning banner applied with spoiler wrapping.
+                                  updatedAt: '2026-03-13T17:01:00.000Z'
+        IncidentDetailOk:
+            description: Incident detail.
+            content:
+                application/json:
+                    schema:
+                        $ref: '#/components/schemas/IncidentDetailResponse'
+                    example:
+                        incident:
+                            incidentId: 1a2b3c4d
+                            status: under_review
+                            tags:
+                                - safety
+                                - review
+                            description: The assistant gave risky instructions.
+                            contact: moderator@example.com
+                            createdAt: '2026-03-13T17:00:00.000Z'
+                            updatedAt: '2026-03-13T17:05:00.000Z'
+                            consentedAt: '2026-03-13T17:00:00.000Z'
+                            pointers:
+                                responseId: response_123
+                                guildId: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+                                channelId: bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
+                                messageId: cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc
+                                modelVersion: gpt-5-mini
+                                chainHash: hash_abc
+                            remediation:
+                                state: applied
+                                applied: true
+                                notes: Warning banner applied with spoiler wrapping.
+                                updatedAt: '2026-03-13T17:01:00.000Z'
+                            auditEvents:
+                                - action: incident.created
+                                  actorHash: dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd
+                                  notes: 'description provided; contact provided; tags=safety, review'
+                                  createdAt: '2026-03-13T17:00:00.000Z'
+                                - action: incident.status_changed
+                                  actorHash: eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee
+                                  notes: Reviewing report context now.
+                                  createdAt: '2026-03-13T17:03:00.000Z'
+        TraceUpsertOk:
+            description: Trace stored.
+            content:
+                application/json:
+                    schema:
+                        $ref: '#/components/schemas/TraceUpsertResponse'
+        TraceFetchOk:
+            description: Trace metadata.
+            content:
+                application/json:
+                    schema:
+                        $ref: '#/components/schemas/TraceDisplayMetadata'
+        ResponseVersionsFetchOk:
+            description: Ordered model-produced response candidate history.
+            content:
+                application/json:
+                    schema:
+                        $ref: '#/components/schemas/ResponseVersionsResponse'
+        ResponseVersionsStale:
+            description: Trace has expired; candidate history is included with the stale envelope.
+            content:
+                application/json:
+                    schema:
+                        $ref: '#/components/schemas/ResponseVersionsStaleResponse'
+        TraceCardCreateOk:
+            description: Trace-card generated and stored.
+            content:
+                application/json:
+                    schema:
+                        $ref: '#/components/schemas/TraceCardResponse'
+        TraceCardSvgOk:
+            description: Trace-card SVG asset.
+            content:
+                image/svg+xml:
+                    schema:
+                        type: string
+        RuntimeConfigOk:
+            description: Runtime config.
+            content:
+                application/json:
+                    schema:
+                        $ref: '#/components/schemas/RuntimeConfig'
+        SetupSessionOk:
+            description: Setup session established.
+            headers:
+                Set-Cookie:
+                    description: httpOnly setup-session cookie with short TTL and SameSite=Strict.
+                    schema:
+                        type: string
+            content:
+                application/json:
+                    schema:
+                        $ref: '#/components/schemas/SetupSessionResponse'
+        SetupOperatorLinkOk:
+            description: Short-lived operator setup/settings link issued.
+            content:
+                application/json:
+                    schema:
+                        $ref: '#/components/schemas/SetupOperatorLinkResponse'
+        AdminSettingsSchemaOk:
+            description: Admin settings schema metadata.
+            content:
+                application/json:
+                    schema:
+                        $ref: '#/components/schemas/AdminSettingsSchemaResponse'
+        AdminSettingsTemplateOk:
+            description: Canonical commented settings template YAML.
+            content:
+                text/yaml:
+                    schema:
+                        type: string
+        AdminSettingsYamlOk:
+            description: Canonical settings YAML.
+            headers:
+                ETag:
+                    description: Strong ETag used for If-Match optimistic concurrency on PUT.
+                    schema:
+                        type: string
+            content:
+                text/yaml:
+                    schema:
+                        type: string
+        AdminSettingsValidateOk:
+            description: Settings YAML validated successfully.
+            content:
+                application/json:
+                    schema:
+                        $ref: '#/components/schemas/AdminSettingsValidateResponse'
+        AdminSettingsYamlPutOk:
+            description: Canonical settings YAML replaced successfully.
+            content:
+                application/json:
+                    schema:
+                        $ref: '#/components/schemas/AdminSettingsYamlPutResponse'
+        AdminSettingsValidationFailed:
+            description: Settings YAML failed validation.
+            content:
+                application/json:
+                    schema:
+                        $ref: '#/components/schemas/AdminSettingsValidationFailureResponse'
+        BadRequest:
+            description: Bad request.
+            content:
+                application/json:
+                    schema:
+                        $ref: '#/components/schemas/ErrorResponse'
+        Unauthorized:
+            description: Missing or invalid credentials.
+            content:
+                application/json:
+                    schema:
+                        $ref: '#/components/schemas/ErrorResponse'
+        Forbidden:
+            description: Request was refused.
+            content:
+                application/json:
+                    schema:
+                        $ref: '#/components/schemas/ErrorResponse'
+        Conflict:
+            description: Request conflicts with current resource/setup state.
+            content:
+                application/json:
+                    schema:
+                        $ref: '#/components/schemas/ErrorResponse'
+        PreconditionFailed:
+            description: Optimistic concurrency check failed (stale If-Match).
+            content:
+                application/json:
+                    schema:
+                        $ref: '#/components/schemas/ErrorResponse'
+        PreconditionRequired:
+            description: Missing required optimistic concurrency header (If-Match).
+            content:
+                application/json:
+                    schema:
+                        $ref: '#/components/schemas/ErrorResponse'
+        MethodNotAllowed:
+            description: Method not allowed.
+            content:
+                application/json:
+                    schema:
+                        $ref: '#/components/schemas/ErrorResponse'
+        NotFound:
+            description: Resource not found.
+            content:
+                application/json:
+                    schema:
+                        $ref: '#/components/schemas/ErrorResponse'
+        TooManyRequests:
+            description: Rate limit exceeded.
+            headers:
+                Retry-After:
+                    description: Seconds until retry allowed.
+                    schema:
+                        type: integer
+            content:
+                application/json:
+                    schema:
+                        $ref: '#/components/schemas/ErrorResponse'
+        InternalServerError:
+            description: Unexpected server error.
+            content:
+                application/json:
+                    schema:
+                        $ref: '#/components/schemas/ErrorResponse'
+        PayloadTooLarge:
+            description: Request payload too large.
+            content:
+                application/json:
+                    schema:
+                        $ref: '#/components/schemas/ErrorResponse'
+        ServiceUnavailable:
+            description: Service unavailable or not configured.
+            content:
+                application/json:
+                    schema:
+                        $ref: '#/components/schemas/ErrorResponse'
+        BadGateway:
+            description: Upstream service error.
+            content:
+                application/json:
+                    schema:
+                        $ref: '#/components/schemas/ErrorResponse'
+        Gone:
+            description: Trace has expired.
+            content:
+                application/json:
+                    schema:
+                        $ref: '#/components/schemas/TraceStaleResponse'
