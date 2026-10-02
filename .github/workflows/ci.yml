@@ -25,6 +25,7 @@ jobs:
             - uses: pnpm/action-setup@v6
             - run: pnpm install --frozen-lockfile
             - run: pnpm review
+            - run: pnpm exec tsx --test scripts/planner-comparison-table.test.ts
             - run: pnpm -r build
 
     turnstile_browser:

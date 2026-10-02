@@ -356,7 +356,7 @@ const writeStatus = (metrics: ComparisonMetric[]): void => {
         'The planner-quality check scores normalized action=message, modality=text, and no search request; it does not claim to score final answer quality. Cost is unknown when backend pricing is unavailable. Missing reasoning usage or provider paths are reported as unavailable.',
         '',
         '| Mode | Repeat | Requested settings | Applied settings | Status/outcome | Strict transport | Fallback | Latency ms | Tokens (prompt/completion/reasoning/total) | Backend cost USD | Actual provider/model | Upstream provider/model | Plan quality (message/text/no search) |',
-        '| --- | ---: | --- | --- | --- | --- | ---: | --- | ---: | --- | --- | --- |',
+        '| --- | ---: | --- | --- | --- | --- | ---: | --- | --- | ---: | --- | --- | --- |',
         ...metrics.map(
             (metric) =>
                 `| ${metric.mode} | ${metric.repeat} | ${metric.requestedReasoningEffort}/${metric.requestedMaxOutputTokens} | ${metric.appliedReasoningEffort ?? 'n/a'}/${metric.appliedMaxOutputTokens ?? 'n/a'} | ${metric.status}/${metric.outcome} | ${metric.validTransport ? 'yes' : 'no'} | ${metric.normalizationFallback ? 'yes' : 'no'} | ${metric.latencyMs ?? 'n/a'} | ${metric.promptTokens ?? 'n/a'}/${metric.completionTokens ?? 'n/a'}/${metric.reasoningTokens ?? 'n/a'}/${metric.totalTokens ?? 'n/a'} | ${metric.costUsd ?? 'unknown (unpriced)'} | ${metric.actualProvider ?? 'n/a'}/${metric.actualModel ?? 'n/a'} | ${metric.upstreamProvider ?? 'n/a'}/${metric.upstreamModel ?? 'n/a'} | ${formatPlanQuality(metric)} |`
