@@ -49,6 +49,7 @@ import { createTraceHandlers } from './handlers/trace.js';
 import { createIncidentHandlers } from './handlers/incidents.js';
 import { createRuntimeConfigHandler } from './handlers/config.js';
 import { createAdminSettingsHandlers } from './handlers/adminSettings.js';
+import { createOperatorExecutionHandler } from './handlers/operatorExecution.js';
 import { createSetupSessionHandlers } from './handlers/setupSession.js';
 import { createAccountAuthHandlers } from './handlers/accountAuth.js';
 import { createAccountIncidentHandlers } from './handlers/accountIncidents.js';
@@ -729,6 +730,11 @@ const {
     logger,
     logRequest,
 });
+const handleOperatorExecutionRequest = createOperatorExecutionHandler({
+    accountAuthService,
+    traceStore,
+    logRequest,
+});
 const {
     handleSetupSessionPostRequest,
     handleSetupSessionDeleteRequest,
@@ -909,6 +915,7 @@ const app = createExpressApp({
     handleAdminSettingsYamlRequest,
     handleAdminSettingsValidateRequest,
     handleAdminSettingsYamlPutRequest,
+    handleOperatorExecutionRequest,
     handleSetupSessionPostRequest,
     handleSetupSessionDeleteRequest,
     handleSetupOperatorLinkPostRequest,

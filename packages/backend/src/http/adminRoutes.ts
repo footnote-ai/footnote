@@ -22,6 +22,7 @@ type RegisterAdminRoutesDeps = {
     handleAdminSettingsYamlRequest: RequestHandler;
     handleAdminSettingsValidateRequest: RequestHandler;
     handleAdminSettingsYamlPutRequest: RequestHandler;
+    handleOperatorExecutionRequest?: RequestHandler;
     logRequest: LogRequest;
 };
 
@@ -33,12 +34,42 @@ const registerAdminRoutes = ({
     handleAdminSettingsYamlRequest,
     handleAdminSettingsValidateRequest,
     handleAdminSettingsYamlPutRequest,
+    handleOperatorExecutionRequest,
     logRequest,
 }: RegisterAdminRoutesDeps): void => {
     const adminRouter = createDispatchRouter({
         normalizePathname,
         logRequest,
         matcher: async ({ req, res, next, normalizedPathname }) => {
+            if (
+                /^\/api\/admin\/executions\/[^/]+\/?$/u.test(normalizedPathname)
+            ) {
+                if (req.method !== 'GET') {
+                    res.statusCode = 405;
+                    res.setHeader(
+                        'Content-Type',
+                        'application/json; charset=utf-8'
+                    );
+                    res.setHeader('Cache-Control', 'no-store');
+                    res.end(JSON.stringify({ error: 'Method not allowed' }));
+                } else if (handleOperatorExecutionRequest) {
+                    await handleOperatorExecutionRequest(req, res);
+                } else {
+                    res.statusCode = 503;
+                    res.setHeader(
+                        'Content-Type',
+                        'application/json; charset=utf-8'
+                    );
+                    res.setHeader('Cache-Control', 'no-store');
+                    res.end(
+                        JSON.stringify({
+                            error: 'Execution records unavailable',
+                        })
+                    );
+                }
+                return;
+            }
+
             if (
                 req.method === 'GET' &&
                 normalizedPathname === '/api/admin/settings/schema'
