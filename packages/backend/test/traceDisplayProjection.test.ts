@@ -76,3 +76,68 @@ test('trace display projection marks a fully valid record complete', () => {
         unavailableFields: [],
     });
 });
+
+test('public trace display omits attempt records, result references, and artifact bodies', () => {
+    const projected = projectTraceMetadataForDisplay(
+        {
+            ...baseTrace,
+            provenanceAssessment: undefined,
+            trace_target: {},
+            trace_final: {},
+            workflow: {
+                workflowId: 'workflow-1',
+                workflowName: 'chat_orchestration',
+                status: 'completed',
+                terminationReason: 'goal_satisfied',
+                stepCount: 1,
+                maxSteps: 4,
+                maxDurationMs: 10_000,
+                results: [
+                    {
+                        resultId: 'private-result',
+                        name: 'answer',
+                        status: 'produced',
+                        producedByStepId: 'step-1',
+                        producedByAttempt: 1,
+                    },
+                ],
+                steps: [
+                    {
+                        stepId: 'step-1',
+                        attempt: 1,
+                        stepKind: 'generate',
+                        startedAt: new Date().toISOString(),
+                        finishedAt: new Date().toISOString(),
+                        durationMs: 0,
+                        inputRefs: [{ name: 'private-input' }],
+                        resultRefs: [{ name: 'private-result' }],
+                        attempts: [
+                            {
+                                attempt: 1,
+                                status: 'succeeded',
+                                startedAt: new Date().toISOString(),
+                                finishedAt: new Date().toISOString(),
+                                durationMs: 0,
+                            },
+                        ],
+                        outcome: {
+                            status: 'executed',
+                            summary: 'Generated a response.',
+                            artifacts: ['private artifact body'],
+                        },
+                    },
+                ],
+            },
+        },
+        baseTrace.responseId
+    );
+
+    assert.ok(projected?.workflow);
+    assert.equal('results' in projected.workflow, false);
+    assert.equal('attempts' in projected.workflow.steps[0]!, false);
+    assert.equal('inputRefs' in projected.workflow.steps[0]!, false);
+    assert.equal('resultRefs' in projected.workflow.steps[0]!, false);
+    assert.deepEqual(projected.workflow.steps[0]?.outcome.artifacts, [
+        '[redacted:21 chars]',
+    ]);
+});

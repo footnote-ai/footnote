@@ -113,6 +113,37 @@ const readValidOptionalField = (
     return parsed.success ? parsed.data[field] : undefined;
 };
 
+const projectPublicWorkflow = (value: unknown): unknown => {
+    if (!isRecord(value) || !Array.isArray(value.steps)) {
+        return value;
+    }
+
+    const workflow = { ...value };
+    const steps = value.steps;
+    delete workflow.results;
+    return {
+        ...workflow,
+        steps: steps.map((step: unknown) => {
+            if (!isRecord(step)) return step;
+            const publicStep = { ...step };
+            delete publicStep.attempts;
+            delete publicStep.inputRefs;
+            delete publicStep.resultRefs;
+            const outcome = isRecord(publicStep.outcome)
+                ? { ...publicStep.outcome }
+                : publicStep.outcome;
+            if (isRecord(outcome) && Array.isArray(outcome.artifacts)) {
+                outcome.artifacts = outcome.artifacts.map((artifact) =>
+                    typeof artifact === 'string'
+                        ? `[redacted:${artifact.length} chars]`
+                        : artifact
+                );
+            }
+            return { ...publicStep, outcome };
+        }),
+    };
+};
+
 const projectKnownMetadata = (
     raw: Record<string, unknown>,
     unavailableFields: string[]
@@ -193,7 +224,8 @@ const projectKnownMetadata = (
             citations,
         });
         if (value !== undefined) {
-            projected[field] = value;
+            projected[field] =
+                field === 'workflow' ? projectPublicWorkflow(value) : value;
         } else if (raw[field] !== undefined) {
             unavailableFields.push(field);
         }

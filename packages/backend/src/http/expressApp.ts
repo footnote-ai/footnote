@@ -197,6 +197,10 @@ type CreateExpressAppDeps = {
         req: http.IncomingMessage,
         res: http.ServerResponse
     ) => Promise<void>;
+    handleOperatorExecutionRequest?: (
+        req: http.IncomingMessage,
+        res: http.ServerResponse
+    ) => Promise<void>;
     handleSetupSessionPostRequest: (
         req: http.IncomingMessage,
         res: http.ServerResponse
@@ -296,6 +300,7 @@ const createExpressApp = ({
     handleAdminSettingsYamlRequest,
     handleAdminSettingsValidateRequest,
     handleAdminSettingsYamlPutRequest,
+    handleOperatorExecutionRequest,
     handleSetupSessionPostRequest,
     handleSetupSessionDeleteRequest,
     handleSetupOperatorLinkPostRequest,
@@ -360,6 +365,7 @@ const createExpressApp = ({
         handleAdminSettingsYamlRequest,
         handleAdminSettingsValidateRequest,
         handleAdminSettingsYamlPutRequest,
+        handleOperatorExecutionRequest,
         logRequest,
     });
     registerSetupRoutes({
