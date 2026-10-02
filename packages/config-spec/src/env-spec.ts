@@ -12,6 +12,7 @@ import {
     supportedEngagementIgnoreModes,
     supportedLogLevels,
     supportedNodeEnvs,
+    supportedProviders,
     supportedOpenAIRealtimeModels,
     supportedOpenAIRealtimeTurnDetections,
     supportedOpenAIRealtimeVadEagerness,
@@ -39,6 +40,15 @@ const oidcBootstrapMetadata = {
  * Ordered environment spec entries used for docs, tooling, and runtime config
  * generation.
  */
+const imageDescriptionEnv = {
+    owner: 'backend',
+    stage: 'runtime',
+    section: 'image-description',
+    required: false,
+    secret: false,
+    usedBy: ['packages/backend/src/config.ts'],
+} as const;
+
 export const envEntries = [
     defineEnv({
         key: 'OPENAI_API_KEY',
@@ -96,6 +106,38 @@ export const envEntries = [
             'OpenRouter API base URL. Use an OpenRouter regional endpoint only when your account supports it.',
         defaultValue: literal('https://openrouter.ai/api/v1'),
         usedBy: ['packages/backend/src/config.ts'],
+    }),
+
+    defineEnv({
+        ...imageDescriptionEnv,
+        key: 'IMAGE_DESCRIPTION_PROVIDER',
+        kind: 'enum',
+        description: 'Provider used for backend image-description tasks.',
+        defaultValue: literal('openai'),
+        allowedValues: supportedProviders,
+    }),
+    defineEnv({
+        ...imageDescriptionEnv,
+        key: 'IMAGE_DESCRIPTION_BASE_URL',
+        kind: 'string',
+        description:
+            'Optional chat-completions base URL for image description.',
+        defaultValue: noDefault(),
+    }),
+    defineEnv({
+        ...imageDescriptionEnv,
+        key: 'IMAGE_DESCRIPTION_MODEL',
+        kind: 'string',
+        description: 'Model used for backend image-description tasks.',
+        defaultValue: noDefault(),
+    }),
+    defineEnv({
+        ...imageDescriptionEnv,
+        key: 'IMAGE_DESCRIPTION_TIMEOUT_MS',
+        kind: 'integer',
+        description:
+            'Timeout budget for one image-description provider request.',
+        defaultValue: literal(180000),
     }),
 
     defineEnv({

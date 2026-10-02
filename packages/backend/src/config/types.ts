@@ -12,6 +12,7 @@ import type {
     SupportedNodeEnv,
     SupportedOpenAIRealtimeModel,
     SupportedOpenAITtsVoice,
+    SupportedProvider,
     SupportedReasoningEffort,
     SupportedVerbosity,
 } from '@footnote/contracts/providers';
@@ -89,6 +90,12 @@ export type RuntimeConfig = {
     openrouter: {
         apiKey: string | null;
         baseUrl: string;
+    };
+    imageDescription: {
+        provider: SupportedProvider;
+        baseUrl: string | null;
+        model: string | null;
+        requestTimeoutMs: number;
     };
     modelProfiles: {
         defaultProfileId: string;

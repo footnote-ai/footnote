@@ -7,11 +7,11 @@
  */
 import dns from 'node:dns/promises';
 import net from 'node:net';
+import type { SupportedProvider } from '@footnote/contracts/providers';
 
 import { logger as defaultLogger } from '../utils/logger.js';
 
 const IMAGE_DESCRIPTION_TOOL_NAME = 'describe_image';
-const IMAGE_DESCRIPTION_MODEL = 'gpt-4o-mini';
 const IMAGE_DESCRIPTION_DETAIL = 'auto';
 const IMAGE_DESCRIPTION_MAX_TOKENS = 16384;
 const IMAGE_DESCRIPTION_DEFAULT_CONTENT_TYPE = 'image/jpeg';
@@ -45,6 +45,7 @@ type ImageDescriptionCompletionResponse = {
     choices?: Array<{
         message?: {
             tool_calls?: ImageDescriptionToolCall[];
+            content?: string;
         };
     }>;
     usage?: {
@@ -62,6 +63,7 @@ export type InternalImageDescriptionAdapterRequest = {
 export type InternalImageDescriptionAdapterResult = {
     description: string;
     model: string;
+    provider: SupportedProvider;
     promptTokens: number;
     completionTokens: number;
     totalTokens: number;
@@ -75,6 +77,17 @@ export type InternalImageDescriptionAdapter = {
 
 export type CreateOpenAiImageDescriptionAdapterOptions = {
     apiKey: string;
+    requestTimeoutMs?: number;
+    fetchImpl?: typeof fetch;
+    lookupImpl?: typeof dns.lookup;
+    logger?: Pick<typeof defaultLogger, 'warn'>;
+};
+
+export type CreateImageDescriptionAdapterOptions = {
+    provider: SupportedProvider;
+    model: string;
+    baseUrl: string;
+    apiKey?: string | null;
     requestTimeoutMs?: number;
     fetchImpl?: typeof fetch;
     lookupImpl?: typeof dns.lookup;
@@ -239,6 +252,36 @@ const parseImageDescriptionToolPayload = (
         logger.warn(
             `Internal image-description adapter returned invalid tool JSON: ${error instanceof Error ? error.message : String(error)}`
         );
+        return null;
+    }
+};
+
+const parseImageDescriptionJson = (
+    content: string | undefined
+): ImageDescriptionPayload | null => {
+    if (!content) {
+        return null;
+    }
+    let unfenced = content.trim();
+    if (unfenced.startsWith('```')) {
+        unfenced = unfenced.slice(3).trimStart();
+        if (
+            unfenced.startsWith('json') &&
+            (unfenced[4] === '\n' ||
+                unfenced[4] === '\r' ||
+                unfenced[4] === ' ')
+        ) {
+            unfenced = unfenced.slice(4).trimStart();
+        }
+        if (unfenced.endsWith('```')) {
+            unfenced = unfenced.slice(0, -3).trimEnd();
+        }
+    }
+    try {
+        return normalizeImageDescriptionPayload(
+            JSON.parse(unfenced) as unknown
+        );
+    } catch {
         return null;
     }
 };
@@ -520,13 +563,95 @@ const createTimeoutSignal = (
     };
 };
 
-export const createOpenAiImageDescriptionAdapter = ({
+const parseProviderImageDescriptionResponse = async ({
+    response,
+    provider,
+    makeRequest,
+    usedJsonFallback,
+    logger,
+}: {
+    response: Response;
+    provider: SupportedProvider;
+    makeRequest: (useTools: boolean) => Promise<Response>;
+    usedJsonFallback: boolean;
+    logger: Pick<typeof defaultLogger, 'warn'>;
+}): Promise<{
+    payload: ImageDescriptionPayload;
+    usage: ImageDescriptionCompletionResponse['usage'];
+}> => {
+    let completion =
+        (await response.json()) as ImageDescriptionCompletionResponse;
+    let usage = completion.usage;
+    let payload = parseImageDescriptionToolPayload(
+        completion.choices?.[0]?.message?.tool_calls,
+        logger
+    );
+    if (!payload && provider !== 'openai') {
+        payload = parseImageDescriptionJson(
+            completion.choices?.[0]?.message?.content
+        );
+        if (!payload && !usedJsonFallback) {
+            const firstUsage = completion.usage;
+            const fallbackResponse = await makeRequest(false);
+            if (!fallbackResponse.ok) {
+                throw new Error(
+                    `Image-description request failed: ${fallbackResponse.status} ${fallbackResponse.statusText}`
+                );
+            }
+            completion =
+                (await fallbackResponse.json()) as ImageDescriptionCompletionResponse;
+            const fallbackUsage = completion.usage;
+            const reportedTotal = (
+                responseUsage: ImageDescriptionCompletionResponse['usage']
+            ): number | undefined =>
+                responseUsage?.total_tokens ??
+                (responseUsage?.prompt_tokens !== undefined &&
+                responseUsage.completion_tokens !== undefined
+                    ? responseUsage.prompt_tokens +
+                      responseUsage.completion_tokens
+                    : undefined);
+            const firstTotal = reportedTotal(firstUsage);
+            const fallbackTotal = reportedTotal(fallbackUsage);
+            usage = {
+                prompt_tokens:
+                    firstUsage?.prompt_tokens !== undefined &&
+                    fallbackUsage?.prompt_tokens !== undefined
+                        ? firstUsage.prompt_tokens + fallbackUsage.prompt_tokens
+                        : undefined,
+                completion_tokens:
+                    firstUsage?.completion_tokens !== undefined &&
+                    fallbackUsage?.completion_tokens !== undefined
+                        ? firstUsage.completion_tokens +
+                          fallbackUsage.completion_tokens
+                        : undefined,
+                total_tokens:
+                    firstTotal !== undefined && fallbackTotal !== undefined
+                        ? firstTotal + fallbackTotal
+                        : undefined,
+            };
+            payload = parseImageDescriptionJson(
+                completion.choices?.[0]?.message?.content
+            );
+        }
+    }
+    if (!payload) {
+        throw new Error(
+            'Internal image-description task did not return a valid tool payload.'
+        );
+    }
+    return { payload, usage };
+};
+
+export const createImageDescriptionAdapter = ({
+    provider,
+    model,
+    baseUrl,
     apiKey,
     requestTimeoutMs = 30_000,
     fetchImpl = fetch,
     lookupImpl = dns.lookup,
     logger = defaultLogger,
-}: CreateOpenAiImageDescriptionAdapterOptions): InternalImageDescriptionAdapter => ({
+}: CreateImageDescriptionAdapterOptions): InternalImageDescriptionAdapter => ({
     async describeImage(
         request: InternalImageDescriptionAdapterRequest
     ): Promise<InternalImageDescriptionAdapterResult> {
@@ -539,31 +664,51 @@ export const createOpenAiImageDescriptionAdapter = ({
                 lookupImpl,
                 abortContext.signal
             );
-            const response = await fetchImpl(
-                'https://api.openai.com/v1/chat/completions',
-                {
+            const endpoint = new URL(
+                'chat/completions',
+                baseUrl.endsWith('/') ? baseUrl : `${baseUrl}/`
+            ).toString();
+            const headers: Record<string, string> = {
+                'Content-Type': 'application/json',
+            };
+            if (apiKey) {
+                headers.Authorization = `Bearer ${apiKey}`;
+            }
+            const makeRequest = (useTools: boolean): Promise<Response> =>
+                fetchImpl(endpoint, {
                     method: 'POST',
-                    headers: {
-                        Authorization: `Bearer ${apiKey}`,
-                        'Content-Type': 'application/json',
-                    },
+                    headers,
                     body: JSON.stringify({
-                        model: IMAGE_DESCRIPTION_MODEL,
-                        max_completion_tokens: IMAGE_DESCRIPTION_MAX_TOKENS,
-                        tools: [IMAGE_DESCRIPTION_TOOL_SCHEMA],
-                        tool_choice: {
-                            type: 'function',
-                            function: {
-                                name: IMAGE_DESCRIPTION_TOOL_NAME,
-                            },
-                        },
+                        model,
+                        ...(provider === 'openai'
+                            ? {
+                                  max_completion_tokens:
+                                      IMAGE_DESCRIPTION_MAX_TOKENS,
+                              }
+                            : { max_tokens: IMAGE_DESCRIPTION_MAX_TOKENS }),
+                        ...(useTools
+                            ? {
+                                  tools: [IMAGE_DESCRIPTION_TOOL_SCHEMA],
+                                  tool_choice: {
+                                      type: 'function',
+                                      function: {
+                                          name: IMAGE_DESCRIPTION_TOOL_NAME,
+                                      },
+                                  },
+                              }
+                            : {}),
                         messages: [
                             {
                                 role: 'user',
                                 content: [
                                     {
                                         type: 'text',
-                                        text: request.prompt,
+                                        text: useTools
+                                            ? request.prompt
+                                            : request.prompt.replace(
+                                                  'Return ONLY via the describe_image tool call, as valid JSON matching the tool schema.',
+                                                  'Return only a JSON object matching this shape as plain response content: {"summary":"string","detected_type":"string","extracted_text":["string"],"structured":{"key_elements":["string"]},"certainty":"string"}.'
+                                              ),
                                     },
                                     {
                                         type: 'image_url',
@@ -577,37 +722,44 @@ export const createOpenAiImageDescriptionAdapter = ({
                         ],
                     }),
                     signal: abortContext.signal,
-                }
-            );
+                });
+
+            let usedJsonFallback = false;
+            let response = await makeRequest(true);
+            if (
+                !response.ok &&
+                provider !== 'openai' &&
+                [400, 404, 422].includes(response.status)
+            ) {
+                usedJsonFallback = true;
+                await response.body?.cancel();
+                response = await makeRequest(false);
+            }
 
             if (!response.ok) {
-                const errorText = await response.text();
                 throw new Error(
-                    `Image-description request failed: ${response.status} ${response.statusText} - ${errorText}`
+                    `Image-description request failed: ${response.status} ${response.statusText}`
                 );
             }
 
-            const completion =
-                (await response.json()) as ImageDescriptionCompletionResponse;
-            const payload = parseImageDescriptionToolPayload(
-                completion.choices?.[0]?.message?.tool_calls,
-                logger
-            );
-            if (!payload) {
-                throw new Error(
-                    'Internal image-description task did not return a valid tool payload.'
-                );
-            }
-
-            const promptTokens = completion.usage?.prompt_tokens ?? 0;
-            const completionTokens = completion.usage?.completion_tokens ?? 0;
+            const parsedResponse = await parseProviderImageDescriptionResponse({
+                response,
+                provider,
+                makeRequest,
+                usedJsonFallback,
+                logger,
+            });
+            const promptTokens = parsedResponse.usage?.prompt_tokens ?? 0;
+            const completionTokens =
+                parsedResponse.usage?.completion_tokens ?? 0;
             const totalTokens =
-                completion.usage?.total_tokens ??
+                parsedResponse.usage?.total_tokens ??
                 promptTokens + completionTokens;
 
             return {
-                description: JSON.stringify(payload),
-                model: IMAGE_DESCRIPTION_MODEL,
+                description: JSON.stringify(parsedResponse.payload),
+                model,
+                provider,
                 promptTokens,
                 completionTokens,
                 totalTokens,
@@ -625,5 +777,23 @@ export const createOpenAiImageDescriptionAdapter = ({
         }
     },
 });
+
+export const createOpenAiImageDescriptionAdapter = ({
+    apiKey,
+    requestTimeoutMs,
+    fetchImpl,
+    lookupImpl,
+    logger,
+}: CreateOpenAiImageDescriptionAdapterOptions): InternalImageDescriptionAdapter =>
+    createImageDescriptionAdapter({
+        provider: 'openai',
+        apiKey,
+        model: 'gpt-4o-mini',
+        baseUrl: 'https://api.openai.com/v1',
+        requestTimeoutMs,
+        fetchImpl,
+        lookupImpl,
+        logger,
+    });
 
 export { detectContentTypeFromUrl };

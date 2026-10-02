@@ -23,6 +23,7 @@ import { buildStorageSection } from './sections/storage.js';
 import { buildTurnstileSection } from './sections/turnstile.js';
 import { buildVoltAgentSection } from './sections/voltagent.js';
 import { buildWebSection } from './sections/web.js';
+import { buildImageDescriptionSection } from './sections/imageDescription.js';
 import type { RuntimeConfig, WarningSink } from './types.js';
 import { buildEffectiveConfigEnv, loadServerSettings } from './settings.js';
 
@@ -45,6 +46,7 @@ export const buildRuntimeConfig = (
     const openai = buildOpenAISection(effectiveEnv, warn);
     const ollama = buildOllamaSection(effectiveEnv, warn);
     const openrouter = buildOpenRouterSection(effectiveEnv);
+    const imageDescription = buildImageDescriptionSection(effectiveEnv, warn);
     const modelProfiles = buildModelProfilesSection(
         effectiveEnv,
         runtime.projectRoot,
@@ -83,6 +85,7 @@ export const buildRuntimeConfig = (
         openai,
         ollama,
         openrouter,
+        imageDescription,
         modelProfiles,
         voltagent,
         cors: web.cors,

@@ -64,7 +64,7 @@ import {
     createInternalImageDescriptionTaskService,
     createInternalNewsTaskService,
 } from './services/internalText.js';
-import { createOpenAiImageDescriptionAdapter } from './services/internalImageDescription.js';
+import { createImageDescriptionAdapter } from './services/internalImageDescription.js';
 import { createInternalImageTaskService } from './services/internalImage.js';
 import { createInternalTextHandler } from './handlers/internalText.js';
 import { createInternalImageHandler } from './handlers/internalImage.js';
@@ -84,6 +84,7 @@ import { createAccountAuthService } from './services/accountAuth.js';
 import { createOidcAccountClient } from './services/oidcClient.js';
 import { settingsSpecEntries } from './config/settings-spec.js';
 import { SqliteAccountStore } from './storage/accounts/sqliteAccountStore.js';
+import { isOllamaBaseUrlAvailable } from './config/sections/modelProfiles.js';
 
 /**
  * @footnote-logger: openAiRealtimeVoiceRuntime
@@ -361,13 +362,6 @@ const initializeServices = () => {
             apiKey: runtimeConfig.openai.apiKey,
             requestTimeoutMs: runtimeConfig.openai.requestTimeoutMs,
         });
-        internalImageDescriptionTaskService =
-            createInternalImageDescriptionTaskService({
-                adapter: createOpenAiImageDescriptionAdapter({
-                    apiKey: runtimeConfig.openai.apiKey,
-                    requestTimeoutMs: runtimeConfig.openai.requestTimeoutMs,
-                }),
-            });
         internalImageTaskService = createInternalImageTaskService({
             imageGenerationRuntime,
             storeTrace: async (metadata) => {
@@ -392,13 +386,84 @@ const initializeServices = () => {
         });
     } else {
         imageGenerationRuntime = null;
-        internalImageDescriptionTaskService = null;
         internalImageTaskService = null;
         internalVoiceTtsService = null;
         realtimeVoiceRuntime = null;
         logger.warn(
             'OPENAI_API_KEY is missing; OpenAI-only image and voice routes will return 503 until configured.'
         );
+    }
+
+    const imageDescriptionConfig = runtimeConfig.imageDescription;
+    let imageDescriptionApiKey: string | null = null;
+    let configuredProviderBaseUrl: string;
+    switch (imageDescriptionConfig.provider) {
+        case 'openai':
+            imageDescriptionApiKey = runtimeConfig.openai.apiKey;
+            configuredProviderBaseUrl = 'https://api.openai.com/v1';
+            break;
+        case 'ollama':
+            imageDescriptionApiKey = runtimeConfig.ollama.apiKey;
+            configuredProviderBaseUrl =
+                runtimeConfig.ollama.baseUrl ?? 'http://localhost:11434';
+            break;
+        case 'openrouter':
+            imageDescriptionApiKey = runtimeConfig.openrouter.apiKey;
+            configuredProviderBaseUrl = runtimeConfig.openrouter.baseUrl;
+            break;
+    }
+    const imageDescriptionModel =
+        imageDescriptionConfig.model ??
+        (imageDescriptionConfig.provider === 'openai' ? 'gpt-4o-mini' : null);
+    const selectedImageDescriptionBaseUrl =
+        imageDescriptionConfig.baseUrl ?? configuredProviderBaseUrl;
+    let withoutTrailingSlash = selectedImageDescriptionBaseUrl;
+    while (withoutTrailingSlash.endsWith('/')) {
+        withoutTrailingSlash = withoutTrailingSlash.slice(0, -1);
+    }
+    const imageDescriptionBaseUrl =
+        imageDescriptionConfig.provider === 'ollama' &&
+        !withoutTrailingSlash.endsWith('/v1')
+            ? `${withoutTrailingSlash}/v1`
+            : withoutTrailingSlash;
+    const imageDescriptionOllamaAvailable =
+        imageDescriptionConfig.provider !== 'ollama' ||
+        isOllamaBaseUrlAvailable(
+            imageDescriptionBaseUrl,
+            runtimeConfig.ollama.localInferenceEnabled
+        );
+    if (
+        imageDescriptionModel &&
+        imageDescriptionOllamaAvailable &&
+        (imageDescriptionConfig.provider === 'ollama' || imageDescriptionApiKey)
+    ) {
+        internalImageDescriptionTaskService =
+            createInternalImageDescriptionTaskService({
+                adapter: createImageDescriptionAdapter({
+                    provider: imageDescriptionConfig.provider,
+                    model: imageDescriptionModel,
+                    baseUrl: imageDescriptionBaseUrl,
+                    apiKey: imageDescriptionApiKey,
+                    requestTimeoutMs: imageDescriptionConfig.requestTimeoutMs,
+                }),
+            });
+    } else {
+        internalImageDescriptionTaskService = null;
+        if (!imageDescriptionOllamaAvailable) {
+            logger.warn(
+                'Image-description task is unavailable: the Ollama URL is invalid or local inference is disabled.'
+            );
+        } else {
+            let missingSetting = 'IMAGE_DESCRIPTION_MODEL';
+            if (imageDescriptionConfig.provider === 'openai') {
+                missingSetting = 'OPENAI_API_KEY';
+            } else if (imageDescriptionConfig.provider === 'openrouter') {
+                missingSetting = 'OPENROUTER_API_KEY';
+            }
+            logger.warn(
+                `Image-description task is unavailable: configure ${missingSetting} and the selected provider settings.`
+            );
+        }
     }
 
     // --- Rate limiter configuration ---

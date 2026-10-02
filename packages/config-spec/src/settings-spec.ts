@@ -39,6 +39,10 @@ const toKebabCase = (value: string): string =>
     value.replace(/_/g, '-').replace(/\s+/g, '-').toLowerCase();
 
 const ENV_PATH_OVERRIDES: Record<string, string[]> = {
+    IMAGE_DESCRIPTION_PROVIDER: ['image-description', 'provider'],
+    IMAGE_DESCRIPTION_BASE_URL: ['image-description', 'base-url'],
+    IMAGE_DESCRIPTION_MODEL: ['image-description', 'model'],
+    IMAGE_DESCRIPTION_TIMEOUT_MS: ['image-description', 'timeout-ms'],
     HOST: ['server', 'host'],
     PORT: ['server', 'port'],
     DATA_DIR: ['server', 'data-dir'],

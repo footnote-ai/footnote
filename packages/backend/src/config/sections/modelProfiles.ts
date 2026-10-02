@@ -113,6 +113,17 @@ const isLocalOllamaHost = (hostname: string): boolean =>
     hostname === '::1' ||
     hostname === 'host.docker.internal';
 
+export const isOllamaBaseUrlAvailable = (
+    baseUrl: string,
+    localInferenceEnabled: boolean
+): boolean => {
+    const hostname = parseUrlHostname(baseUrl);
+    return (
+        hostname !== null &&
+        (!isLocalOllamaHost(hostname) || localInferenceEnabled)
+    );
+};
+
 const buildProviderAvailability = (
     env: NodeJS.ProcessEnv,
     warn: WarningSink
@@ -136,8 +147,10 @@ const buildProviderAvailability = (
                 `Ignoring OLLAMA_BASE_URL "${ollamaBaseUrl}" because it is not a valid URL.`
             );
         } else if (
-            isLocalOllamaHost(hostname) &&
-            !ollamaLocalInferenceEnabled
+            !isOllamaBaseUrlAvailable(
+                ollamaBaseUrl,
+                ollamaLocalInferenceEnabled
+            )
         ) {
             warn(
                 `OLLAMA_BASE_URL points to local inference host "${hostname}" but OLLAMA_LOCAL_INFERENCE_ENABLED is not true. Ollama profiles will be disabled.`
