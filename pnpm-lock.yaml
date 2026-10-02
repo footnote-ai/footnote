@@ -134,8 +134,8 @@ catalogs:
       specifier: ^3.3.2
       version: 3.3.2
     nodemailer:
-      specifier: ^9.1.1
-      version: 9.1.1
+      specifier: ^10.0.9
+      version: 10.0.13
     only:
       specifier: ^0.0.2
       version: 0.0.2
@@ -389,7 +389,7 @@ importers:
         version: 8.2.0
       nodemailer:
         specifier: 'catalog:'
-        version: 9.1.1
+        version: 10.0.13
       openid-client:
         specifier: 'catalog:'
         version: 6.8.4
@@ -4421,9 +4421,9 @@ packages:
   node-rsa@1.1.1:
     resolution: {integrity: sha512-Jd4cvbJMryN21r5HgxQOpMEqv+ooke/korixNNK3mGqfGJmy0M77WDDzo/05969+OkMy3XW1UuZsSmW9KQm7Fw==}
 
-  nodemailer@9.1.1:
-    resolution: {integrity: sha512-izw9mVKFix6YSnC9eLgV6g1opl9DUlRio9ZNcq+Wu9Ujn2UwF+8Nl0B8nz22kEC+CTZCvinkxwJ0DeFbb6NwcQ==}
-    engines: {node: '>=6.0.0'}
+  nodemailer@10.0.13:
+    resolution: {integrity: sha512-SzG86OlvcW/NNhUFC6uROMwRTL4n7MswfQqC/T8mhkmnY1YVa23zUEMYi4ijSeXSl9GLz9ZeTJDUatEDuY5FeQ==}
+    engines: {node: '>=20.0.0'}
 
   nopt@5.0.0:
     resolution: {integrity: sha512-Tbj67rffqceeLpcRXrT7vKAN8CwfPeIBgM7E6iBkmKLV7bEMwpGgYLGv0jACUsECaa/vuxP0IjEont6umdMgtQ==}
@@ -10014,7 +10014,7 @@ snapshots:
     dependencies:
       asn1: 0.2.6
 
-  nodemailer@9.1.1: {}
+  nodemailer@10.0.13: {}
 
   nopt@5.0.0:
     dependencies:
