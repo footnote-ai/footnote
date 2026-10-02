@@ -9,7 +9,12 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 
 import type { PostChatRequest } from '@footnote/contracts/web';
-import { buildExecutionContractScopeTuple } from '../src/services/chatOrchestrator/requestNormalization.js';
+import {
+    buildExecutionContractScopeTuple,
+    normalizeRequest,
+} from '../src/services/chatOrchestrator/requestNormalization.js';
+
+const logger = { warn: () => undefined, debug: () => undefined };
 
 const request: PostChatRequest = {
     surface: 'discord',
@@ -45,4 +50,34 @@ test('scope normalization keeps existing caller mapping without deployment defau
         userId: 'user_1',
         projectId: 'caller-selected-project',
     });
+});
+
+test('web normalization gives planner and generation the same bounded conversation', () => {
+    const conversation = Array.from({ length: 14 }, (_, index) => ({
+        role: index % 2 === 0 ? ('user' as const) : ('assistant' as const),
+        content: `turn-${index}`,
+    }));
+    const normalized = normalizeRequest(
+        {
+            ...request,
+            surface: 'web',
+            latestUserInput: 'turn-12',
+            conversation,
+        },
+        logger
+    );
+
+    assert.deepEqual(
+        normalized.normalizedConversation,
+        normalized.normalizedRequest.conversation
+    );
+    assert.deepEqual(
+        normalized.normalizedConversation.map((message) => message.content),
+        conversation.slice(2).map((message) => message.content)
+    );
+    assert.equal(normalized.contextEnvelope.diagnostics.trimmedMessageCount, 2);
+    assert.equal(
+        normalized.contextEnvelope.diagnostics.policy,
+        'web_recent_12_v1'
+    );
 });
