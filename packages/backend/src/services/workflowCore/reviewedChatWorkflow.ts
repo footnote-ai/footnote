@@ -2259,6 +2259,7 @@ export const runBoundedReviewWorkflow = async (
                       providerAvailability:
                           stepRoutingChainSet.providerAvailability,
                       runWithProfile: async (profile, attemptIndex) => {
+                          boundedRequest.signal?.throwIfAborted();
                           const settingsResolution = resolveModelSettings({
                               profile,
                               request: boundedRequest,
@@ -2586,10 +2587,12 @@ export const runBoundedReviewWorkflow = async (
                 };
                 const startedAtMs = Date.now();
                 try {
+                    generationInput.request.signal?.throwIfAborted();
                     return normalizeGenerationResultEvidence(
                         await generationRuntime.generate(requestForOutput)
                     );
                 } catch (error) {
+                    generationInput.request.signal?.throwIfAborted();
                     const finishedAtMs = Date.now();
                     const nextOutputPath: TypedModelOutputPath | undefined =
                         outputPath === 'native_schema'

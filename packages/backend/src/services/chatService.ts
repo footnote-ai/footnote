@@ -976,6 +976,7 @@ export type RunChatMessagesInput = {
     contextEnvelope: ConversationContextEnvelope;
     /** Backend-resolved explicit memories; model input keeps them user-level advisory data. */
     advisoryUserMemories?: readonly string[];
+    signal?: AbortSignal;
     orchestrationStartedAtMs?: number;
     plannerTemperament?: PartialResponseTemperament;
     safetyTier?: SafetyTier;
@@ -1222,6 +1223,7 @@ export const createChatService = ({
         conversationSnapshot,
         contextEnvelope,
         advisoryUserMemories,
+        signal,
         orchestrationStartedAtMs,
         plannerTemperament,
         safetyTier,
@@ -1249,6 +1251,7 @@ export const createChatService = ({
         presentationPersona,
         outputBoundary,
     }: RunChatMessagesInput): Promise<RunChatMessagesResult> => {
+        signal?.throwIfAborted();
         if (!contextEnvelope) {
             throw new Error(
                 'contextEnvelope is required for runChatMessagesWithOutcome.'
@@ -1306,6 +1309,7 @@ export const createChatService = ({
             const generationRequest: GenerationRequest = {
                 messages: messagesWithHints,
                 model: model ?? defaultModel,
+                ...(signal !== undefined && { signal }),
                 ...((provider ?? defaultProvider) !== undefined && {
                     provider: provider ?? defaultProvider,
                 }),
@@ -1406,6 +1410,7 @@ export const createChatService = ({
                     requiresSearch:
                         nativeSearchRequired && request.search !== undefined,
                     runWithProfile: async (profile, attemptIndex) => {
+                        request.signal?.throwIfAborted();
                         const settingsResolution = resolveModelSettings({
                             profile,
                             request,

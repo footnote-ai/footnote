@@ -201,7 +201,19 @@ const createChatHandler = ({
      * @api.path: OPTIONS /api/chat
      */
     return async (req: IncomingMessage, res: ServerResponse): Promise<void> => {
+        const requestAbortController = new AbortController();
+        if (req.aborted) {
+            requestAbortController.abort();
+        } else {
+            req.once('aborted', () => requestAbortController.abort());
+        }
+        res.once('close', () => {
+            if (!res.writableFinished) {
+                requestAbortController.abort();
+            }
+        });
         try {
+            requestAbortController.signal.throwIfAborted();
             // Apply CORS before any early return so browsers get consistent headers on failures too.
             setCorsHeaders(res, req);
 
@@ -385,7 +397,13 @@ const createChatHandler = ({
             // From here on, the request is fully normalized and can delegate to the shared workflow.
             const chatResponse = await chatOrchestrator.runChat(chatRequest, {
                 advisoryUserMemories: memoryContext.memories,
+                signal: requestAbortController.signal,
             });
+            // A disconnected client suppresses delivery; work that could not stop keeps its observed outcome.
+            requestAbortController.signal.throwIfAborted();
+            if (res.destroyed || requestAbortController.signal.aborted) {
+                return;
+            }
             sendJson(res, 200, chatResponse);
             logRequest(
                 req,
@@ -393,6 +411,9 @@ const createChatHandler = ({
                 `chat success surface=${parsedRequestResult.data.surface} latestUserInputLength=${parsedRequestResult.data.latestUserInput.length}`
             );
         } catch (generationError) {
+            if (res.destroyed || requestAbortController.signal.aborted) {
+                return;
+            }
             const errorMessage =
                 generationError instanceof Error
                     ? generationError.message

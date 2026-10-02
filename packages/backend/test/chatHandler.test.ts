@@ -75,6 +75,7 @@ type CreateTestServerOptions = {
         typeof createChatHandler
     >[0]['accountAuthService'];
     accountStore?: Parameters<typeof createChatHandler>[0]['accountStore'];
+    storeTrace?: (metadata: ResponseMetadata) => Promise<void>;
     onGenerationRequest?: (request: GenerationRequest) => void;
     logRequest?: (
         req: http.IncomingMessage,
@@ -268,7 +269,7 @@ const createTestServer = (
                     limit: serviceRateLimit,
                     window: serviceRateLimitWindowMs,
                 }),
-            storeTrace: async () => undefined,
+            storeTrace: options.storeTrace ?? (async () => undefined),
             logRequest: options.logRequest ?? (() => undefined),
             buildResponseMetadata: () => createMetadata(),
             maxChatBodyBytes: 20000,
@@ -306,11 +307,18 @@ test('ordinary Discord chat accepts a user ID in its surface context', async () 
     const previousTurnstileSecret = env.TURNSTILE_SECRET_KEY;
     const previousTurnstileSite = env.TURNSTILE_SITE_KEY;
     const discordUserId = '12345678901234567';
+    const generationSignals: AbortSignal[] = [];
     env.TRACE_API_TOKEN = 'trace-secret';
     env.TURNSTILE_SECRET_KEY = 'turnstile-secret';
     env.TURNSTILE_SITE_KEY = 'turnstile-site';
 
-    const server = await createTestServer();
+    const server = await createTestServer({
+        onGenerationRequest: (request) => {
+            if (request.signal !== undefined) {
+                generationSignals.push(request.signal);
+            }
+        },
+    });
     try {
         const response = await fetch(`${server.url}/api/chat`, {
             method: 'POST',
@@ -326,12 +334,231 @@ test('ordinary Discord chat accepts a user ID in its surface context', async () 
         });
 
         assert.equal(response.status, 200);
+        assert.ok(generationSignals.length > 0);
+        assert.ok(generationSignals.every((signal) => !signal.aborted));
     } finally {
         await server.close();
         env.TRACE_API_TOKEN = previousTraceToken;
         env.TURNSTILE_SECRET_KEY = previousTurnstileSecret;
         env.TURNSTILE_SITE_KEY = previousTurnstileSite;
     }
+});
+
+test('chat cancellation reaches provider generation after the client disconnects', async () => {
+    const env = process.env as MutableEnv;
+    const previousTraceToken = env.TRACE_API_TOKEN;
+    env.TRACE_API_TOKEN = 'trace-secret';
+
+    let resolveGenerationStarted: ((signal: AbortSignal) => void) | undefined;
+    let generationCalls = 0;
+    const generationStarted = new Promise<AbortSignal>((resolve) => {
+        resolveGenerationStarted = resolve;
+    });
+    const server = await createTestServer({
+        generationRuntime: {
+            kind: 'test-runtime',
+            generate: (request) => {
+                generationCalls += 1;
+                assert.ok(request.signal);
+                resolveGenerationStarted?.(request.signal);
+                return new Promise((_resolve, reject) => {
+                    request.signal?.addEventListener(
+                        'abort',
+                        () =>
+                            reject(
+                                Object.assign(new Error('aborted'), {
+                                    name: 'AbortError',
+                                })
+                            ),
+                        { once: true }
+                    );
+                });
+            },
+        },
+    });
+    const body = JSON.stringify(
+        createChatRequest({ surface: 'web', trigger: { kind: 'submit' } })
+    );
+    const request = http.request(`${server.url}/api/chat`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'Content-Length': Buffer.byteLength(body),
+            'X-Trace-Token': 'trace-secret',
+        },
+    });
+    request.on('error', () => undefined);
+
+    try {
+        request.end(body);
+        const signal = await generationStarted;
+        request.destroy();
+        if (signal.aborted) {
+            assert.equal(signal.aborted, true);
+        } else {
+            await new Promise<void>((resolve, reject) => {
+                const timeout = setTimeout(
+                    () => reject(new Error('request signal was not aborted')),
+                    2_000
+                );
+                signal.addEventListener(
+                    'abort',
+                    () => {
+                        clearTimeout(timeout);
+                        resolve();
+                    },
+                    { once: true }
+                );
+            });
+        }
+        assert.equal(signal.aborted, true);
+        assert.equal(generationCalls, 1);
+    } finally {
+        request.destroy();
+        await server.close();
+        env.TRACE_API_TOKEN = previousTraceToken;
+    }
+});
+
+test('chat disconnect hides a non-cancellable completed planner result without rewriting its usage', async () => {
+    const env = process.env as MutableEnv;
+    const previousTraceToken = env.TRACE_API_TOKEN;
+    const originalInfo = logger.info;
+    env.TRACE_API_TOKEN = 'trace-secret';
+
+    let resolveGenerationStarted: ((signal: AbortSignal) => void) | undefined;
+    let finishGeneration:
+        | ((result: Awaited<ReturnType<GenerationRuntime['generate']>>) => void)
+        | undefined;
+    let generationCalls = 0;
+    let responseDelivered = false;
+    let storedMetadata: ResponseMetadata | undefined;
+    let resolveUsageRecorded: (() => void) | undefined;
+    const generationStarted = new Promise<AbortSignal>((resolve) => {
+        resolveGenerationStarted = resolve;
+    });
+    const usageRecorded = new Promise<void>((resolve) => {
+        resolveUsageRecorded = resolve;
+    });
+    const costRecords: Array<Record<string, unknown>> = [];
+    logger.info = ((message: unknown) => {
+        if (typeof message === 'string') {
+            try {
+                const record: unknown = JSON.parse(message);
+                if (
+                    typeof record === 'object' &&
+                    record !== null &&
+                    'event' in record &&
+                    record.event === 'backend_llm_cost'
+                ) {
+                    costRecords.push(record as Record<string, unknown>);
+                    resolveUsageRecorded?.();
+                }
+            } catch {
+                // Other human-readable log messages are not usage records.
+            }
+        }
+    }) as unknown as typeof logger.info;
+
+    const server = await createTestServer({
+        storeTrace: async (metadata) => {
+            storedMetadata = metadata;
+        },
+        generationRuntime: {
+            kind: 'test-runtime',
+            generate: (request) => {
+                generationCalls += 1;
+                assert.ok(request.signal);
+                resolveGenerationStarted?.(request.signal);
+                // This fixture deliberately ignores the AbortSignal and returns normally.
+                return new Promise((resolve) => {
+                    finishGeneration = resolve;
+                });
+            },
+        },
+    });
+    const body = JSON.stringify(
+        createChatRequest({ surface: 'web', trigger: { kind: 'submit' } })
+    );
+    const request = http.request(`${server.url}/api/chat`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'Content-Length': Buffer.byteLength(body),
+            'X-Trace-Token': 'trace-secret',
+        },
+    });
+    request.on('response', () => {
+        responseDelivered = true;
+    });
+    request.on('error', () => undefined);
+
+    try {
+        request.end(body);
+        const signal = await generationStarted;
+        request.destroy();
+        if (!signal.aborted) {
+            await new Promise<void>((resolve, reject) => {
+                const timeout = setTimeout(
+                    () => reject(new Error('request signal was not aborted')),
+                    2_000
+                );
+                signal.addEventListener(
+                    'abort',
+                    () => {
+                        clearTimeout(timeout);
+                        resolve();
+                    },
+                    { once: true }
+                );
+            });
+        }
+        assert.equal(signal.aborted, true);
+
+        finishGeneration?.({
+            text: JSON.stringify({
+                action: 'message',
+                modality: 'text',
+                requestedCapabilityProfile: 'balanced-general',
+                safetyTier: 'Low',
+                reasoning: 'The request expects a reply.',
+                generation: {
+                    reasoningEffort: 'low',
+                    verbosity: 'low',
+                    temperament: {
+                        tightness: 4,
+                        rationale: 3,
+                        attribution: 4,
+                        caution: 3,
+                        extent: 3,
+                    },
+                },
+            }),
+            model: 'gpt-5-mini',
+            usage: {
+                promptTokens: 17,
+                completionTokens: 9,
+                totalTokens: 26,
+            },
+        });
+
+        await usageRecorded;
+        assert.equal(generationCalls, 1);
+        assert.equal(responseDelivered, false);
+        assert.equal(costRecords.length, 1);
+        assert.equal(costRecords[0]?.feature, 'chat_planner');
+        assert.equal(costRecords[0]?.promptTokens, 17);
+        assert.equal(costRecords[0]?.completionTokens, 9);
+        assert.equal(costRecords[0]?.totalTokens, 26);
+    } finally {
+        request.destroy();
+        await server.close();
+        logger.info = originalInfo;
+        env.TRACE_API_TOKEN = previousTraceToken;
+    }
+    assert.ok(storedMetadata);
+    // Usage is recorded above, but this interrupted path has no WorkflowRecord to assign a Run/Step status.
+    assert.equal(storedMetadata.workflow, undefined);
 });
 
 test('validated account memories reach generation and session lookup failures fail open', async () => {
