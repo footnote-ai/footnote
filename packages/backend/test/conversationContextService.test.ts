@@ -12,6 +12,7 @@ import {
     buildConversationContext,
     ConversationContextAssemblyError,
     projectConversationMessages,
+    toSnapshotContextEnvelope,
 } from '../src/services/conversationContextService.js';
 
 const logger = {
@@ -60,6 +61,103 @@ test('buildConversationContext returns canonical messages and envelope metadata'
     assert.equal(result.messages[1]?.content, 'Doing well.');
     assert.equal(result.contextEnvelope.turns.length, 2);
     assert.equal(result.contextEnvelope.diagnostics.projectedMessageCount, 2);
+});
+
+test('web conversation context keeps messages under the six-exchange window', () => {
+    const conversation = Array.from({ length: 12 }, (_, index) => ({
+        role: index % 2 === 0 ? ('user' as const) : ('assistant' as const),
+        content: `turn-${index}`,
+    }));
+    const result = buildConversationContext(
+        createRequest({ surface: 'web', conversation }),
+        logger
+    );
+
+    assert.deepEqual(
+        result.messages.map((message) => message.content),
+        conversation.map((message) => message.content)
+    );
+    assert.equal(result.contextEnvelope.diagnostics.totalInputMessages, 12);
+    assert.equal(result.contextEnvelope.diagnostics.projectedMessageCount, 12);
+    assert.equal(result.contextEnvelope.diagnostics.trimmedMessageCount, 0);
+});
+
+test('web conversation context retains the latest twelve non-system messages in order', () => {
+    const conversation = [
+        { role: 'system' as const, content: 'system context' },
+        ...Array.from({ length: 14 }, (_, index) => ({
+            role: index % 2 === 0 ? ('user' as const) : ('assistant' as const),
+            content: `turn-${index}`,
+        })),
+    ];
+    const result = buildConversationContext(
+        createRequest({
+            surface: 'web',
+            latestUserInput: 'turn-12',
+            conversation,
+        }),
+        logger
+    );
+
+    assert.deepEqual(
+        result.messages.map((message) => `${message.role}:${message.content}`),
+        [
+            'system:system context',
+            ...conversation
+                .slice(3)
+                .map((message) => `${message.role}:${message.content}`),
+        ]
+    );
+    assert.equal(result.messages.at(-1)?.content, 'turn-13');
+    assert.equal(result.contextEnvelope.diagnostics.totalInputMessages, 15);
+    assert.equal(result.contextEnvelope.diagnostics.projectedMessageCount, 13);
+    assert.equal(result.contextEnvelope.diagnostics.trimmedMessageCount, 2);
+});
+
+test('web context diagnostics identify the bounded policy without message content', () => {
+    const result = buildConversationContext(
+        createRequest({
+            surface: 'web',
+            conversation: [{ role: 'user', content: 'private message body' }],
+        }),
+        logger
+    );
+
+    assert.deepEqual(result.contextEnvelope.diagnostics, {
+        surface: 'web',
+        policy: 'web_recent_12_v1',
+        totalInputMessages: 1,
+        projectedMessageCount: 1,
+        trimmedMessageCount: 0,
+        sanitizedTimestampCount: 0,
+        projectedSpeakerLabelCount: 0,
+    });
+    const snapshot = toSnapshotContextEnvelope(result.contextEnvelope);
+    assert.equal(snapshot.diagnostics.policy, 'web_recent_12_v1');
+    assert.equal(
+        JSON.stringify(snapshot.diagnostics).includes('private message body'),
+        false
+    );
+});
+
+test('Discord keeps its existing 24 non-system-message window', () => {
+    const conversation = Array.from({ length: 25 }, (_, index) => ({
+        role: index % 2 === 0 ? ('user' as const) : ('assistant' as const),
+        content: `turn-${index}`,
+    }));
+    const result = buildConversationContext(
+        createRequest({ conversation }),
+        logger
+    );
+
+    assert.equal(result.messages.length, 24);
+    assert.equal(result.messages[0]?.content, 'turn-1');
+    assert.equal(result.messages.at(-1)?.content, 'turn-24');
+    assert.equal(result.contextEnvelope.diagnostics.trimmedMessageCount, 1);
+    assert.equal(
+        result.contextEnvelope.diagnostics.policy,
+        'discord_recent_24_v1'
+    );
 });
 
 test('buildConversationContext projects speaker labels only for multi-human windows', () => {
