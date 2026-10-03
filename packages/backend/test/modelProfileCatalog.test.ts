@@ -14,6 +14,7 @@ import type { ModelProfile } from '@footnote/contracts';
 import { classifyModelProfileTextPricingCoverage } from '@footnote/contracts/pricing';
 import {
     buildModelProfilesSection,
+    getOllamaInferenceLocation,
     isOllamaBaseUrlAvailable,
 } from '../src/config/sections/modelProfiles.js';
 import { createModelProfileResolver } from '../src/services/modelProfileResolver.js';
@@ -349,6 +350,14 @@ test('Ollama endpoints use the local-inference gate', () => {
         true
     );
     assert.equal(isOllamaBaseUrlAvailable('not a URL', true), false);
+    assert.equal(getOllamaInferenceLocation('http://localhost:11434'), 'local');
+    assert.equal(getOllamaInferenceLocation('http://[::1]:11434'), 'local');
+    assert.equal(
+        getOllamaInferenceLocation('https://ollama.example'),
+        'remote'
+    );
+    assert.equal(getOllamaInferenceLocation('not a URL'), 'unknown');
+    assert.equal(getOllamaInferenceLocation(null), 'unknown');
 });
 
 test('buildModelProfilesSection keeps ollama profiles enabled for cloud ollama endpoints', () => {

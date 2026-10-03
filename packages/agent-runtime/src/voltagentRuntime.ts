@@ -898,20 +898,12 @@ const buildVoltAgentProviderOptions = (
     const searchContextSize = request.search?.contextSize;
     const safetyIdentifier = request.safetyIdentifier;
 
-    if (
-        !reasoningEffort &&
-        !verbosity &&
-        !searchContextSize &&
-        !safetyIdentifier
-    ) {
-        return undefined;
-    }
-
     return {
         ...(reasoningEffort !== undefined && { reasoningEffort }),
         ...(verbosity !== undefined && { verbosity }),
         ...(searchContextSize !== undefined && { searchContextSize }),
         ...(safetyIdentifier !== undefined && { safetyIdentifier }),
+        providerHints: { openai: { store: false } },
     };
 };
 

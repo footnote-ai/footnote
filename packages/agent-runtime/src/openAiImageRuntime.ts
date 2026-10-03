@@ -565,6 +565,9 @@ const createOpenAiImageRuntime = ({
                     }),
                 ],
                 tool_choice: toolChoice,
+                // Discord offers response IDs for later variation calls, so
+                // even the first image request must retain this response.
+                store: true,
                 previous_response_id: request.followUpResponseId ?? null,
                 ...(request.reasoningEffort !== undefined && {
                     reasoning: { effort: request.reasoningEffort },

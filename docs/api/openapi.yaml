@@ -6489,6 +6489,52 @@ components:
                     $ref: '#/components/schemas/GitHubContextMetadata'
                 projectContext:
                     $ref: '#/components/schemas/ProjectContextMetadata'
+                providerRetention:
+                    type: array
+                    description: >-
+                        Configured/request-side provider posture only. This does not verify provider retention or
+                        describe Footnote-owned storage.
+                    items:
+                        type: object
+                        required:
+                            - provider
+                            - model
+                            - requestStorage
+                            - providerDataCollection
+                            - zeroDataRetention
+                            - inferenceLocation
+                        properties:
+                            provider:
+                                type: string
+                            model:
+                                type: string
+                            requestStorage:
+                                type: string
+                                enum:
+                                    - disabled
+                                    - provider_state
+                                    - unknown
+                                    - unsupported
+                            providerDataCollection:
+                                type: string
+                                enum:
+                                    - allow
+                                    - deny
+                                    - unknown
+                                    - unsupported
+                            zeroDataRetention:
+                                type: string
+                                enum:
+                                    - requested
+                                    - not_requested
+                                    - unknown
+                                    - unsupported
+                            inferenceLocation:
+                                type: string
+                                enum:
+                                    - local
+                                    - remote
+                                    - unknown
             required:
                 - provenance
                 - safetyTier
