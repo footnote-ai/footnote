@@ -10,6 +10,7 @@ import assert from 'node:assert/strict';
 import type {
     ToolInvocationReasonCode,
     TraceAxisScore,
+    WorkflowAttemptRecord,
 } from '@footnote/contracts/policy';
 import { ResponseMetadataSchema } from '@footnote/contracts/web';
 
@@ -35,6 +36,33 @@ const baseRuntimeContext = (
     modelVersion: 'gpt-5-mini',
     conversationSnapshot: 'snapshot',
     ...overrides,
+});
+
+const retentionWorkflow = (
+    attempt: WorkflowAttemptRecord
+): NonNullable<ResponseMetadataRuntimeContext['workflow']> => ({
+    workflowId: 'wf_retention',
+    workflowName: 'Retention metadata test',
+    status: 'completed',
+    terminationReason: 'goal_satisfied',
+    stepCount: 1,
+    maxSteps: 1,
+    maxDurationMs: 1000,
+    steps: [
+        {
+            stepId: 'step_1',
+            attempt: 1,
+            stepKind: 'generate',
+            startedAt: '2026-10-01T00:00:00.000Z',
+            finishedAt: '2026-10-01T00:00:00.001Z',
+            durationMs: 1,
+            attempts: [attempt],
+            outcome: {
+                status: 'executed',
+                summary: 'Generation completed.',
+            },
+        },
+    ],
 });
 
 test('buildResponseMetadata derives conservative chips for retrieved current-facts responses with no citations', () => {
@@ -69,43 +97,19 @@ test('buildResponseMetadata derives conservative chips for retrieved current-fac
 });
 
 test('buildResponseMetadata reports request-side OpenAI posture without claiming provider verification', () => {
-    const workflow: NonNullable<ResponseMetadataRuntimeContext['workflow']> = {
-        workflowId: 'wf_retention',
-        workflowName: 'Retention metadata test',
-        status: 'completed',
-        terminationReason: 'goal_satisfied',
-        stepCount: 1,
-        maxSteps: 1,
-        maxDurationMs: 1000,
-        steps: [
-            {
-                stepId: 'step_1',
+    const metadata = buildResponseMetadata(
+        baseGenerationMetadata(),
+        baseRuntimeContext({
+            workflow: retentionWorkflow({
                 attempt: 1,
-                stepKind: 'generate',
+                status: 'succeeded',
                 startedAt: '2026-10-01T00:00:00.000Z',
                 finishedAt: '2026-10-01T00:00:00.001Z',
                 durationMs: 1,
-                attempts: [
-                    {
-                        attempt: 1,
-                        status: 'succeeded',
-                        startedAt: '2026-10-01T00:00:00.000Z',
-                        finishedAt: '2026-10-01T00:00:00.001Z',
-                        durationMs: 1,
-                        requestedProvider: 'openai',
-                        requestedModel: 'gpt-5-mini',
-                    },
-                ],
-                outcome: {
-                    status: 'executed',
-                    summary: 'Generation completed.',
-                },
-            },
-        ],
-    };
-    const metadata = buildResponseMetadata(
-        baseGenerationMetadata(),
-        baseRuntimeContext({ workflow })
+                requestedProvider: 'openai',
+                requestedModel: 'gpt-5-mini',
+            }),
+        })
     );
 
     assert.deepEqual(metadata.providerRetention, [
@@ -122,42 +126,18 @@ test('buildResponseMetadata reports request-side OpenAI posture without claiming
 });
 
 test('buildResponseMetadata reports configured OpenRouter options without claiming provider verification', () => {
-    const workflow: NonNullable<ResponseMetadataRuntimeContext['workflow']> = {
-        workflowId: 'wf_retention',
-        workflowName: 'Retention metadata test',
-        status: 'completed',
-        terminationReason: 'goal_satisfied',
-        stepCount: 1,
-        maxSteps: 1,
-        maxDurationMs: 1000,
-        steps: [
-            {
-                stepId: 'step_1',
+    const metadata = buildResponseMetadata(
+        baseGenerationMetadata(),
+        baseRuntimeContext({
+            workflow: retentionWorkflow({
                 attempt: 1,
-                stepKind: 'generate',
+                status: 'succeeded',
                 startedAt: '2026-10-01T00:00:00.000Z',
                 finishedAt: '2026-10-01T00:00:00.001Z',
                 durationMs: 1,
-                attempts: [
-                    {
-                        attempt: 1,
-                        status: 'succeeded',
-                        startedAt: '2026-10-01T00:00:00.000Z',
-                        finishedAt: '2026-10-01T00:00:00.001Z',
-                        durationMs: 1,
-                        profileId: 'openrouter-cydonia-24b-v4-1',
-                    },
-                ],
-                outcome: {
-                    status: 'executed',
-                    summary: 'Generation completed.',
-                },
-            },
-        ],
-    };
-    const metadata = buildResponseMetadata(
-        baseGenerationMetadata(),
-        baseRuntimeContext({ workflow })
+                profileId: 'openrouter-cydonia-24b-v4-1',
+            }),
+        })
     );
 
     assert.deepEqual(metadata.providerRetention, [

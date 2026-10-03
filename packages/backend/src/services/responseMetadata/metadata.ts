@@ -12,6 +12,8 @@ import type {
     ProviderRetentionMetadata,
     ResponseMetadata,
     SafetyTier,
+    WorkflowAttemptRecord,
+    WorkflowStepKind,
 } from '@footnote/contracts/policy';
 import { deriveReviewRuntimeSummary } from '@footnote/contracts/policy';
 import { runtimeConfig } from '../../config.js';
@@ -35,53 +37,68 @@ const buildProviderRetentionMetadata = (
     const records = new Map<string, ProviderRetentionMetadata>();
     for (const step of workflow?.steps ?? []) {
         for (const attempt of step.attempts ?? []) {
-            const profile = runtimeConfig.modelProfiles.catalog.find(
-                (candidate) => candidate.id === attempt.profileId
-            );
-            const provider =
-                attempt.requestedProvider ??
-                profile?.provider ??
-                attempt.actualProvider ??
-                '';
-            const model =
-                attempt.requestedModel ??
-                profile?.providerModel ??
-                attempt.actualModel ??
-                '';
-            if (!provider || !model) continue;
-
-            const routing = profile?.providerRouting?.openrouter;
-            const record: ProviderRetentionMetadata = {
-                provider,
-                model,
-                requestStorage: provider === 'openai' ? 'disabled' : 'unknown',
-                providerDataCollection:
-                    provider === 'openrouter'
-                        ? (routing?.dataCollection ?? 'unknown')
-                        : 'unknown',
-                zeroDataRetention:
-                    provider === 'openrouter'
-                        ? routing?.zdr === undefined
-                            ? 'unknown'
-                            : routing.zdr
-                              ? 'requested'
-                              : 'not_requested'
-                        : provider === 'ollama'
-                          ? 'unsupported'
-                          : 'unknown',
-                inferenceLocation:
-                    provider === 'ollama'
-                        ? getOllamaInferenceLocation(
-                              runtimeConfig.ollama.baseUrl
-                          )
-                        : provider === 'openai' || provider === 'openrouter'
-                          ? 'remote'
-                          : 'unknown',
-            };
+            const record = buildProviderRetentionRecord(step.stepKind, attempt);
+            if (!record) continue;
             records.set(JSON.stringify(record), record);
         }
     }
     return [...records.values()];
+};
+
+const buildProviderRetentionRecord = (
+    stepKind: WorkflowStepKind,
+    attempt: WorkflowAttemptRecord
+): ProviderRetentionMetadata | undefined => {
+    const profile = runtimeConfig.modelProfiles.catalog.find(
+        (candidate) => candidate.id === attempt.profileId
+    );
+    const provider =
+        attempt.requestedProvider ??
+        profile?.provider ??
+        attempt.actualProvider ??
+        '';
+    const model =
+        attempt.requestedModel ??
+        profile?.providerModel ??
+        attempt.actualModel ??
+        '';
+    if (!provider || !model) return undefined;
+
+    const routing = profile?.providerRouting?.openrouter;
+    let zeroDataRetention: ProviderRetentionMetadata['zeroDataRetention'] =
+        'unknown';
+    if (provider === 'ollama') zeroDataRetention = 'unsupported';
+    if (provider === 'openrouter' && routing?.zdr !== undefined) {
+        zeroDataRetention = routing.zdr ? 'requested' : 'not_requested';
+    }
+
+    let inferenceLocation: ProviderRetentionMetadata['inferenceLocation'] =
+        'unknown';
+    if (provider === 'ollama') {
+        inferenceLocation = getOllamaInferenceLocation(
+            runtimeConfig.ollama.baseUrl
+        );
+    } else if (provider === 'openai' || provider === 'openrouter') {
+        inferenceLocation = 'remote';
+    }
+
+    return {
+        provider,
+        model,
+        // Workflow model steps use VoltAgent's store:false option. Other step
+        // kinds stay unknown; image generation records its stateful posture in
+        // the separate image trace path.
+        requestStorage:
+            provider === 'openai' && stepKind !== 'tool'
+                ? 'disabled'
+                : 'unknown',
+        providerDataCollection:
+            provider === 'openrouter'
+                ? (routing?.dataCollection ?? 'unknown')
+                : 'unknown',
+        zeroDataRetention,
+        inferenceLocation,
+    };
 };
 
 // Owns: response metadata assembly and normalization of execution metadata fields.

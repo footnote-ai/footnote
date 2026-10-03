@@ -119,11 +119,8 @@ export const getOllamaInferenceLocation = (
 ): 'local' | 'remote' | 'unknown' => {
     if (!baseUrl) return 'unknown';
     const hostname = parseUrlHostname(baseUrl);
-    return hostname === null
-        ? 'unknown'
-        : isLocalOllamaHost(hostname)
-          ? 'local'
-          : 'remote';
+    if (hostname === null) return 'unknown';
+    return isLocalOllamaHost(hostname) ? 'local' : 'remote';
 };
 
 export const isOllamaBaseUrlAvailable = (
