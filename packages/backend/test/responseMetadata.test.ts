@@ -68,6 +68,110 @@ test('buildResponseMetadata derives conservative chips for retrieved current-fac
     ]);
 });
 
+test('buildResponseMetadata reports request-side OpenAI posture without claiming provider verification', () => {
+    const workflow: NonNullable<ResponseMetadataRuntimeContext['workflow']> = {
+        workflowId: 'wf_retention',
+        workflowName: 'Retention metadata test',
+        status: 'completed',
+        terminationReason: 'goal_satisfied',
+        stepCount: 1,
+        maxSteps: 1,
+        maxDurationMs: 1000,
+        steps: [
+            {
+                stepId: 'step_1',
+                attempt: 1,
+                stepKind: 'generate',
+                startedAt: '2026-10-01T00:00:00.000Z',
+                finishedAt: '2026-10-01T00:00:00.001Z',
+                durationMs: 1,
+                attempts: [
+                    {
+                        attempt: 1,
+                        status: 'succeeded',
+                        startedAt: '2026-10-01T00:00:00.000Z',
+                        finishedAt: '2026-10-01T00:00:00.001Z',
+                        durationMs: 1,
+                        requestedProvider: 'openai',
+                        requestedModel: 'gpt-5-mini',
+                    },
+                ],
+                outcome: {
+                    status: 'executed',
+                    summary: 'Generation completed.',
+                },
+            },
+        ],
+    };
+    const metadata = buildResponseMetadata(
+        baseGenerationMetadata(),
+        baseRuntimeContext({ workflow })
+    );
+
+    assert.deepEqual(metadata.providerRetention, [
+        {
+            provider: 'openai',
+            model: 'gpt-5-mini',
+            requestStorage: 'disabled',
+            providerDataCollection: 'unknown',
+            zeroDataRetention: 'unknown',
+            inferenceLocation: 'remote',
+        },
+    ]);
+    assert.equal(ResponseMetadataSchema.safeParse(metadata).success, true);
+});
+
+test('buildResponseMetadata reports configured OpenRouter options without claiming provider verification', () => {
+    const workflow: NonNullable<ResponseMetadataRuntimeContext['workflow']> = {
+        workflowId: 'wf_retention',
+        workflowName: 'Retention metadata test',
+        status: 'completed',
+        terminationReason: 'goal_satisfied',
+        stepCount: 1,
+        maxSteps: 1,
+        maxDurationMs: 1000,
+        steps: [
+            {
+                stepId: 'step_1',
+                attempt: 1,
+                stepKind: 'generate',
+                startedAt: '2026-10-01T00:00:00.000Z',
+                finishedAt: '2026-10-01T00:00:00.001Z',
+                durationMs: 1,
+                attempts: [
+                    {
+                        attempt: 1,
+                        status: 'succeeded',
+                        startedAt: '2026-10-01T00:00:00.000Z',
+                        finishedAt: '2026-10-01T00:00:00.001Z',
+                        durationMs: 1,
+                        profileId: 'openrouter-cydonia-24b-v4-1',
+                    },
+                ],
+                outcome: {
+                    status: 'executed',
+                    summary: 'Generation completed.',
+                },
+            },
+        ],
+    };
+    const metadata = buildResponseMetadata(
+        baseGenerationMetadata(),
+        baseRuntimeContext({ workflow })
+    );
+
+    assert.deepEqual(metadata.providerRetention, [
+        {
+            provider: 'openrouter',
+            model: 'thedrummer/cydonia-24b-v4.1',
+            requestStorage: 'unknown',
+            providerDataCollection: 'deny',
+            zeroDataRetention: 'unknown',
+            inferenceLocation: 'remote',
+        },
+    ]);
+});
+
 test('buildResponseMetadata derives chips for retrieved current-facts responses with one citation', () => {
     const metadata = buildResponseMetadata(
         baseGenerationMetadata(),

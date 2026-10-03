@@ -262,6 +262,7 @@ test('voltagent runtime maps transcript and generation settings into executor op
         reasoningEffort: 'max',
         verbosity: 'high',
         safetyIdentifier: 'derived-safety-id',
+        providerHints: { openai: { store: false } },
     });
     assert.equal(result.text, 'voltagent reply');
     assert.equal(result.model, 'gpt-5.1');
@@ -294,6 +295,29 @@ test('voltagent runtime prefixes model with requested provider when model id is 
 
     assert.equal(seenModel, 'openai/claude-3-5-sonnet');
     assert.equal(result.model, 'claude-3-5-sonnet');
+});
+
+test('voltagent runtime disables OpenAI response storage for plain text calls', async () => {
+    let seenOptions: VoltAgentGenerateTextOptions | undefined;
+    const runtime = createVoltAgentRuntime({
+        defaultModel: 'openai/gpt-5-mini',
+        createExecutor: () => ({
+            async generateText(_messages, options) {
+                seenOptions = options;
+                return { text: 'A concise answer.' };
+            },
+        }),
+    });
+
+    await runtime.generate({
+        messages: [{ role: 'user', content: 'Answer briefly.' }],
+        model: 'gpt-5-mini',
+        provider: 'openai',
+    });
+
+    assert.deepEqual(seenOptions?.providerOptions, {
+        providerHints: { openai: { store: false } },
+    });
 });
 
 test('voltagent runtime carries explicit OpenRouter routing and reported attribution', async () => {
@@ -339,6 +363,7 @@ test('voltagent runtime carries explicit OpenRouter routing and reported attribu
                 only: ['parasail'],
                 allowFallbacks: false,
                 dataCollection: 'deny',
+                zdr: true,
             },
         },
     });
@@ -351,6 +376,7 @@ test('voltagent runtime carries explicit OpenRouter routing and reported attribu
                     only: ['parasail'],
                     allow_fallbacks: false,
                     data_collection: 'deny',
+                    zdr: true,
                 },
             },
         },
@@ -1386,6 +1412,45 @@ test('default VoltAgent executor maps structured output to a validated JSON resu
 
     assert.equal(sawJsonOutput, true);
     assert.equal(jsonResult.text, '{"verdict":"clear","feedback":""}');
+});
+
+test('default VoltAgent executor forwards OpenAI store:false to AI SDK provider options', async () => {
+    let seenProviderOptions: unknown;
+    const fakeAgent = {
+        async generateText(
+            _messages: Parameters<Agent['generateText']>[0],
+            options: Parameters<Agent['generateText']>[1]
+        ): Promise<AgentGenerateTextResult> {
+            seenProviderOptions = options?.providerOptions;
+            return {
+                text: 'A concise answer.',
+                response: { modelId: 'openai/gpt-5-mini' },
+                finishReason: 'stop',
+                usage: {
+                    inputTokens: 1,
+                    inputTokenDetails: {
+                        noCacheTokens: 1,
+                        cacheReadTokens: 0,
+                        cacheWriteTokens: 0,
+                    },
+                    outputTokens: 1,
+                    outputTokenDetails: { textTokens: 1, reasoningTokens: 0 },
+                    totalTokens: 2,
+                },
+            } as unknown as AgentGenerateTextResult;
+        },
+    } satisfies Pick<Agent, 'generateText'>;
+    const executor = createDefaultVoltAgentExecutor({
+        model: 'openai/gpt-5-mini',
+        agentFactory: () => fakeAgent,
+    });
+
+    await executor.generateText(
+        [{ role: 'user', content: 'Answer briefly.' }],
+        { providerOptions: { providerHints: { openai: { store: false } } } }
+    );
+
+    assert.deepEqual(seenProviderOptions, { openai: { store: false } });
 });
 
 test('default VoltAgent executor maps usage from the installed AI SDK token fields', async () => {

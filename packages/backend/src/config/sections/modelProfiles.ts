@@ -111,7 +111,20 @@ const isLocalOllamaHost = (hostname: string): boolean =>
     hostname === 'localhost' ||
     hostname === '127.0.0.1' ||
     hostname === '::1' ||
+    hostname === '[::1]' ||
     hostname === 'host.docker.internal';
+
+export const getOllamaInferenceLocation = (
+    baseUrl: string | null | undefined
+): 'local' | 'remote' | 'unknown' => {
+    if (!baseUrl) return 'unknown';
+    const hostname = parseUrlHostname(baseUrl);
+    return hostname === null
+        ? 'unknown'
+        : isLocalOllamaHost(hostname)
+          ? 'local'
+          : 'remote';
+};
 
 export const isOllamaBaseUrlAvailable = (
     baseUrl: string,

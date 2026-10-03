@@ -614,6 +614,7 @@ test('internal image task service stores trace metadata for image responses', as
     let storedPrompt: string | null = null;
     let storedActivePrompt: string | null = null;
     let storedFollowUpResponseId: string | null = null;
+    let storedProviderRetention: ResponseMetadata['providerRetention'];
     let storedCostComponents:
         | NonNullable<ResponseMetadata['imageGeneration']>['costComponents']
         | undefined;
@@ -665,6 +666,7 @@ test('internal image task service stores trace metadata for image responses', as
                 metadata.imageGeneration?.prompts.active ?? null;
             storedFollowUpResponseId =
                 metadata.imageGeneration?.linkage.followUpResponseId ?? null;
+            storedProviderRetention = metadata.providerRetention;
             storedCostComponents = metadata.imageGeneration?.costComponents;
         },
     });
@@ -679,6 +681,16 @@ test('internal image task service stores trace metadata for image responses', as
     assert.equal(storedPrompt, 'draw a reflective skyline');
     assert.equal(storedActivePrompt, 'draw a reflective skyline at dusk');
     assert.equal(storedFollowUpResponseId, 'resp_prev_123');
+    assert.deepEqual(storedProviderRetention, [
+        {
+            provider: 'openai',
+            model: 'gpt-image-1-mini',
+            requestStorage: 'provider_state',
+            providerDataCollection: 'unknown',
+            zeroDataRetention: 'unknown',
+            inferenceLocation: 'remote',
+        },
+    ]);
     assert.equal(storedCostComponents?.prompt.model, 'gpt-5.6-luna');
     assert.equal(storedCostComponents?.prompt.reasoningEffort, 'low');
     assert.equal(storedCostComponents?.prompt.cachedInputTokens, 2);

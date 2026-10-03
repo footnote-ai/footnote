@@ -8,9 +8,14 @@
  */
 
 import crypto from 'node:crypto';
-import type { ResponseMetadata, SafetyTier } from '@footnote/contracts/policy';
+import type {
+    ProviderRetentionMetadata,
+    ResponseMetadata,
+    SafetyTier,
+} from '@footnote/contracts/policy';
 import { deriveReviewRuntimeSummary } from '@footnote/contracts/policy';
 import { runtimeConfig } from '../../config.js';
+import { getOllamaInferenceLocation } from '../../config/sections/modelProfiles.js';
 import { logger } from '../../utils/logger.js';
 import { resolveTradeoffCount } from '../responseMetadataHeuristics.js';
 import {
@@ -23,6 +28,61 @@ import type {
     ResponseMetadataGenerationInput,
     ResponseMetadataRuntimeContext,
 } from './types.js';
+
+const buildProviderRetentionMetadata = (
+    workflow: ResponseMetadataRuntimeContext['workflow']
+): ProviderRetentionMetadata[] => {
+    const records = new Map<string, ProviderRetentionMetadata>();
+    for (const step of workflow?.steps ?? []) {
+        for (const attempt of step.attempts ?? []) {
+            const profile = runtimeConfig.modelProfiles.catalog.find(
+                (candidate) => candidate.id === attempt.profileId
+            );
+            const provider =
+                attempt.requestedProvider ??
+                profile?.provider ??
+                attempt.actualProvider ??
+                '';
+            const model =
+                attempt.requestedModel ??
+                profile?.providerModel ??
+                attempt.actualModel ??
+                '';
+            if (!provider || !model) continue;
+
+            const routing = profile?.providerRouting?.openrouter;
+            const record: ProviderRetentionMetadata = {
+                provider,
+                model,
+                requestStorage: provider === 'openai' ? 'disabled' : 'unknown',
+                providerDataCollection:
+                    provider === 'openrouter'
+                        ? (routing?.dataCollection ?? 'unknown')
+                        : 'unknown',
+                zeroDataRetention:
+                    provider === 'openrouter'
+                        ? routing?.zdr === undefined
+                            ? 'unknown'
+                            : routing.zdr
+                              ? 'requested'
+                              : 'not_requested'
+                        : provider === 'ollama'
+                          ? 'unsupported'
+                          : 'unknown',
+                inferenceLocation:
+                    provider === 'ollama'
+                        ? getOllamaInferenceLocation(
+                              runtimeConfig.ollama.baseUrl
+                          )
+                        : provider === 'openai' || provider === 'openrouter'
+                          ? 'remote'
+                          : 'unknown',
+            };
+            records.set(JSON.stringify(record), record);
+        }
+    }
+    return [...records.values()];
+};
 
 // Owns: response metadata assembly and normalization of execution metadata fields.
 // Does not own: making provider calls or deciding chat policy.
@@ -155,6 +215,11 @@ const buildResponseMetadata = (
         }),
         ...(runtimeContext.projectContext !== undefined && {
             projectContext: runtimeContext.projectContext,
+        }),
+        ...(runtimeContext.workflow !== undefined && {
+            providerRetention: buildProviderRetentionMetadata(
+                runtimeContext.workflow
+            ),
         }),
         ...(evaluatorExecution?.outcome !== undefined && {
             evaluator: evaluatorExecution.outcome,

@@ -92,6 +92,41 @@ const createResponseStream = (
     };
 };
 
+test('openai image runtime retains responses used by the variation flow', async () => {
+    let seenPayload: Record<string, unknown> | undefined;
+    const runtime = createOpenAiImageRuntime({
+        client: {
+            async createResponse(payload) {
+                seenPayload = payload as unknown as Record<string, unknown>;
+                return {
+                    id: 'resp_123',
+                    output: [
+                        {
+                            type: 'image_generation_call',
+                            result: 'base64-image',
+                        },
+                    ],
+                    usage: {
+                        input_tokens: 1,
+                        output_tokens: 1,
+                        total_tokens: 2,
+                    },
+                    error: null,
+                } as unknown as Awaited<
+                    ReturnType<
+                        OpenAiImageRuntimeResponseClient['createResponse']
+                    >
+                >;
+            },
+        },
+    });
+
+    await runtime.generateImage(createRequest());
+
+    assert.equal(seenPayload?.store, true);
+    assert.equal(seenPayload?.previous_response_id, null);
+});
+
 test('openai image runtime maps request payload and normalizes response artifacts', async () => {
     let seenPayload: Record<string, unknown> | undefined;
     const imageResponse: Awaited<
@@ -153,6 +188,7 @@ test('openai image runtime maps request payload and normalizes response artifact
 
     assert.equal(seenPayload?.model, 'gpt-5.6-luna');
     assert.equal(seenPayload?.previous_response_id, 'resp_previous');
+    assert.equal(seenPayload?.store, true);
     assert.deepEqual(seenPayload?.reasoning, { effort: 'low' });
     assert.equal(result.responseId, 'resp_123');
     assert.equal(result.finalImageBase64, 'base64-image');

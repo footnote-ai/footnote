@@ -1958,6 +1958,35 @@ const responseMetadataShape = {
     trustGraph: TrustGraphMetadataSchema.optional(),
     githubContext: GitHubContextMetadataSchema.optional(),
     projectContext: ProjectContextMetadataSchema.optional(),
+    providerRetention: z
+        .array(
+            z
+                .object({
+                    provider: z.string().min(1),
+                    model: z.string().min(1),
+                    requestStorage: z.enum([
+                        'disabled',
+                        'provider_state',
+                        'unknown',
+                        'unsupported',
+                    ]),
+                    providerDataCollection: z.enum([
+                        'allow',
+                        'deny',
+                        'unknown',
+                        'unsupported',
+                    ]),
+                    zeroDataRetention: z.enum([
+                        'requested',
+                        'not_requested',
+                        'unknown',
+                        'unsupported',
+                    ]),
+                    inferenceLocation: z.enum(['local', 'remote', 'unknown']),
+                })
+                .strict()
+        )
+        .optional(),
     // TODO(auth-memory-governance): Apply user opt-in auth/memory/governance
     // policy before broad prompt-rich image metadata exposure/retention.
     imageGeneration: ImageGenerationMetadataSchema.optional(),
