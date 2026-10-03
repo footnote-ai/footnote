@@ -39,10 +39,10 @@ export const createOperatorExecutionHandler = ({
     });
 
     return async (req, res): Promise<void> => {
-        const responseId = new URL(
-            req.url ?? '/',
-            'http://localhost'
-        ).pathname.match(/^\/api\/admin\/executions\/([^/]+)\/?$/)?.[1];
+        const pathMatch = /^\/api\/admin\/executions\/([^/]+)\/?$/u.exec(
+            new URL(req.url ?? '/', 'http://localhost').pathname
+        );
+        const responseId = pathMatch?.[1];
         res.setHeader('Cache-Control', 'no-store');
         if (req.method !== 'GET' || !responseId) {
             sendJson(res, 400, { error: 'Invalid execution request' });
