@@ -162,6 +162,14 @@ test('runBoundedReviewWorkflow normalizes invalid config bounds and keeps lineag
     assert.equal(result.outcome, 'generated');
     assert.equal(result.workflowLineage.status, 'completed');
     assert.equal(result.workflowLineage.terminationReason, 'goal_satisfied');
+    assert.ok(result.workflowLineage.startedAt);
+    assert.ok(result.workflowLineage.finishedAt);
+    assert.equal(
+        result.workflowLineage.durationMs,
+        Date.parse(result.workflowLineage.finishedAt) -
+            Date.parse(result.workflowLineage.startedAt)
+    );
+    assert.ok((result.workflowLineage.durationMs ?? -1) >= 0);
     assert.equal(result.workflowLineage.maxSteps, 1);
     assert.ok(result.workflowLineage.maxDurationMs > 0);
     assert.equal(result.workflowLineage.stepCount, 1);

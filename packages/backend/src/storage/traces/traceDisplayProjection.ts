@@ -278,6 +278,13 @@ const projectPublicStep = (step: StepRecord): StepRecord => ({
 const projectPublicWorkflow = (workflow: WorkflowRecord): WorkflowRecord => ({
     ...(workflow.runId !== undefined && { runId: workflow.runId }),
     ...(workflow.runStatus !== undefined && { runStatus: workflow.runStatus }),
+    ...(workflow.startedAt !== undefined && { startedAt: workflow.startedAt }),
+    ...(workflow.finishedAt !== undefined && {
+        finishedAt: workflow.finishedAt,
+    }),
+    ...(workflow.durationMs !== undefined && {
+        durationMs: workflow.durationMs,
+    }),
     workflowId: workflow.workflowId,
     workflowName: workflow.workflowName,
     status: workflow.status,
