@@ -11,8 +11,10 @@ import { Turnstile } from '@marsidev/react-turnstile';
 import MarkdownResponse from './MarkdownResponse';
 import CanonicalResponseFootnote from './CanonicalResponseFootnote';
 import type { ResponseMetadata } from '@footnote/contracts/policy';
+import type { ChatConversationMessage } from '@footnote/contracts/web';
 import { loadRuntimeConfig } from '../config';
 import { api, isApiClientError } from '../utils/api';
+import { buildChatConversation } from '../utils/chatConversation';
 import { notifyEmbedLayoutChanged } from '../utils/embedHeight';
 import { useTheme } from '../theme';
 import { useChatCaptcha } from '../hooks/useChatCaptcha';
@@ -49,6 +51,8 @@ const Chat = (): JSX.Element => {
     const [isLoading, setIsLoading] = useState(false);
     const [turnstileSiteKey, setTurnstileSiteKey] = useState('');
     const abortRef = useRef<AbortController | null>(null);
+    const conversationRef = useRef<ChatConversationMessage[]>([]);
+    const sessionIdRef = useRef<string | null>(null);
     const inputRef = useRef<HTMLTextAreaElement | null>(null);
     const formRef = useRef<HTMLFormElement | null>(null);
     const hasInteractedRef = useRef(false); // Track if user has interacted to prevent initial status flash
@@ -180,18 +184,20 @@ const Chat = (): JSX.Element => {
         setMetadata(null);
         setAnswerProvenanceEligible(undefined);
 
+        const sessionId = sessionIdRef.current ?? window.crypto.randomUUID();
+        sessionIdRef.current = sessionId;
+
         try {
             const payload = await api.chatQuestion(
                 {
                     surface: 'web',
                     trigger: { kind: 'submit' },
                     latestUserInput: trimmedQuestion,
-                    conversation: [
-                        {
-                            role: 'user',
-                            content: trimmedQuestion,
-                        },
-                    ],
+                    conversation: buildChatConversation(
+                        conversationRef.current,
+                        trimmedQuestion
+                    ),
+                    sessionId,
                     capabilities: {
                         canReact: false,
                         canGenerateImages: false,
@@ -243,6 +249,13 @@ const Chat = (): JSX.Element => {
 
             setStatus(null);
             setAnswer(chat);
+            conversationRef.current = [
+                ...buildChatConversation(
+                    conversationRef.current,
+                    trimmedQuestion
+                ),
+                { role: 'assistant', content: chat },
+            ];
 
             // Normalize backend metadata to ResponseMetadata format
             setMetadata(backendMetadata ?? null);
