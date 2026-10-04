@@ -41,12 +41,10 @@ const assertCurrentUserTurn = (
     >,
     latestUserInput: string
 ): void => {
-    const currentTurns = messages.filter(
-        (message) =>
-            message.role === 'user' && message.content === latestUserInput
-    );
-    assert.equal(currentTurns.length, 1);
-    assert.deepEqual(messages.at(-1), currentTurns[0]);
+    assert.deepEqual(messages.at(-1), {
+        role: 'user',
+        content: latestUserInput,
+    });
 };
 
 test('buildConversationContext returns canonical messages and envelope metadata', () => {
@@ -88,13 +86,19 @@ test('web context does not duplicate the latest user turn when it is already las
     );
 
     assertCurrentUserTurn(result.messages, 'hello');
+    assert.equal(
+        result.messages.filter(
+            (message) => message.role === 'user' && message.content === 'hello'
+        ).length,
+        1
+    );
     assert.deepEqual(result.messages, [{ role: 'user', content: 'hello' }]);
     assert.equal(result.contextEnvelope.diagnostics.totalInputMessages, 1);
     assert.equal(result.contextEnvelope.diagnostics.projectedMessageCount, 1);
     assert.equal(result.contextEnvelope.diagnostics.trimmedMessageCount, 0);
 });
 
-test('web context moves only the current turn when user text repeats in history', () => {
+test('web context appends the current turn without reordering repeated history', () => {
     const conversation = [
         { role: 'user' as const, content: 'repeat this' },
         { role: 'assistant' as const, content: 'older reply' },
@@ -111,13 +115,11 @@ test('web context moves only the current turn when user text repeats in history'
     );
 
     assert.deepEqual(result.messages, [
-        conversation[0],
-        conversation[1],
-        conversation[3],
-        conversation[2],
+        ...conversation,
+        { role: 'user', content: 'repeat this' },
     ]);
     assert.equal(result.contextEnvelope.diagnostics.totalInputMessages, 4);
-    assert.equal(result.contextEnvelope.diagnostics.projectedMessageCount, 4);
+    assert.equal(result.contextEnvelope.diagnostics.projectedMessageCount, 5);
     assert.equal(result.contextEnvelope.diagnostics.trimmedMessageCount, 0);
 });
 
@@ -140,9 +142,13 @@ test('web context keeps the authoritative current turn even when it falls outsid
 
     assert.equal(result.messages.length, 12);
     assertCurrentUserTurn(result.messages, 'current request');
+    assert.deepEqual(result.messages, [
+        ...conversation.slice(-11),
+        { role: 'user', content: 'current request' },
+    ]);
     assert.equal(result.contextEnvelope.diagnostics.totalInputMessages, 14);
     assert.equal(result.contextEnvelope.diagnostics.projectedMessageCount, 12);
-    assert.equal(result.contextEnvelope.diagnostics.trimmedMessageCount, 2);
+    assert.equal(result.contextEnvelope.diagnostics.trimmedMessageCount, 3);
 });
 
 test('web context appends an omitted current turn and counts dropped input separately', () => {

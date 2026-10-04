@@ -13,6 +13,7 @@ import type {
 
 const DISCORD_CONTEXT_WINDOW_SIZE = 24;
 // Six exchanges sit between the planner's 6-message current and 20-message expanded windows.
+// This bounds history by message count; it does not guarantee provider token fit.
 const WEB_CONTEXT_WINDOW_SIZE = 12;
 
 type ConversationContextLogger = {
@@ -158,36 +159,22 @@ const ensureCurrentWebUserTurn = (
         return conversation;
     }
 
-    const isCurrentTurn = (
-        message: ChatConversationMessage | undefined
-    ): boolean =>
-        message?.role === 'user' &&
-        typeof message.content === 'string' &&
-        message.content.trim() === currentInput;
-    if (isCurrentTurn(conversation.at(-1))) {
-        return conversation;
-    }
-
-    let currentTurnIndex = -1;
-    for (let index = 0; index < conversation.length; index += 1) {
+    for (let index = conversation.length - 1; index >= 0; index -= 1) {
         const message = conversation[index];
         if (!message || typeof message !== 'object') {
             continue;
         }
-        if (isCurrentTurn(message)) {
-            currentTurnIndex = index;
+        if (message.role === 'system') {
+            continue;
         }
-    }
-
-    if (currentTurnIndex >= 0) {
-        const currentTurn = conversation[currentTurnIndex];
-        if (currentTurn) {
-            return [
-                ...conversation.slice(0, currentTurnIndex),
-                ...conversation.slice(currentTurnIndex + 1),
-                currentTurn,
-            ];
+        if (
+            message.role === 'user' &&
+            typeof message.content === 'string' &&
+            message.content.trim() === currentInput
+        ) {
+            return conversation;
         }
+        break;
     }
 
     return [...conversation, { role: 'user', content: currentInput }];

@@ -73,13 +73,9 @@ test('web normalization gives planner and generation the same bounded conversati
     );
     assert.deepEqual(
         normalized.normalizedConversation.map((message) => message.content),
-        [
-            ...conversation.slice(2, 12).map((message) => message.content),
-            'turn-13',
-            'turn-12',
-        ]
+        [...conversation.slice(3).map((message) => message.content), 'turn-12']
     );
-    assert.equal(normalized.contextEnvelope.diagnostics.trimmedMessageCount, 2);
+    assert.equal(normalized.contextEnvelope.diagnostics.trimmedMessageCount, 3);
     assert.equal(
         normalized.contextEnvelope.diagnostics.policy,
         'web_recent_12_v1'
