@@ -1661,6 +1661,20 @@ export type GitHubContextMetadata = {
     >;
 };
 
+/**
+ * Configured/request-side provider posture. This is not provider-verified
+ * retention or a claim about Footnote-owned storage.
+ */
+export type ProviderRetentionMetadata = {
+    provider: string;
+    model: string;
+    requestStorage: 'disabled' | 'provider_state' | 'unknown' | 'unsupported';
+    providerDataCollection: 'allow' | 'deny' | 'unknown' | 'unsupported';
+    zeroDataRetention:
+        'requested' | 'not_requested' | 'unknown' | 'unsupported';
+    inferenceLocation: 'local' | 'remote' | 'unknown';
+};
+
 export type ResponseMetadata = {
     // TODO(metadata-stability-tiers): Publish explicit stability tiers
     // (structural, heuristic, transitional) in one machine-readable contract
@@ -1699,6 +1713,8 @@ export type ResponseMetadata = {
     trustGraph?: TrustGraphMetadata;
     githubContext?: GitHubContextMetadata;
     projectContext?: ProjectContextMetadata;
+    /** Configured/request-side posture only; never provider verification. */
+    providerRetention?: ProviderRetentionMetadata[];
     imageGeneration?: ImageGenerationMetadata;
     // Optional presentation record. It never stores either answer text.
     presentation?: PresentationMetadata | LegacyPresentationMetadata;

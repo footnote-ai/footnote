@@ -218,6 +218,16 @@ export const buildInternalImageTraceMetadata = (input: {
                 durationMs: input.response.result.generationTimeMs,
             },
         ],
+        providerRetention: [
+            {
+                provider: 'openai',
+                model: input.response.result.imageModel,
+                requestStorage: 'provider_state',
+                providerDataCollection: 'unknown',
+                zeroDataRetention: 'unknown',
+                inferenceLocation: 'remote',
+            },
+        ],
         imageGeneration,
     };
 };

@@ -143,6 +143,7 @@ export type {
     ImageGenerationMetadata,
     GitHubContextMetadata,
     GitHubContextSection,
+    ProviderRetentionMetadata,
     ResponseMetadata,
 } from './types.js';
 export { PersonaExpressionStrengthSchema } from './schemas.js';
