@@ -12,6 +12,7 @@ import {
     buildConversationContext,
     ConversationContextAssemblyError,
     projectConversationMessages,
+    toSnapshotContextEnvelope,
 } from '../src/services/conversationContextService.js';
 
 const logger = {
@@ -33,6 +34,46 @@ const createRequest = (
     },
     ...overrides,
 });
+
+const assertCurrentUserTurn = (
+    messages: Array<
+        Pick<PostChatRequest['conversation'][number], 'role' | 'content'>
+    >,
+    latestUserInput: string
+): void => {
+    assert.deepEqual(messages.at(-1), {
+        role: 'user',
+        content: latestUserInput,
+    });
+};
+
+const buildWebContext = (
+    latestUserInput: string,
+    conversation: PostChatRequest['conversation']
+) =>
+    buildConversationContext(
+        createRequest({ surface: 'web', latestUserInput, conversation }),
+        logger
+    );
+
+const assertMessageCounts = (
+    result: ReturnType<typeof buildConversationContext>,
+    totalInputMessages: number,
+    projectedMessageCount: number,
+    trimmedMessageCount: number
+): void => {
+    assert.deepEqual(
+        {
+            totalInputMessages:
+                result.contextEnvelope.diagnostics.totalInputMessages,
+            projectedMessageCount:
+                result.contextEnvelope.diagnostics.projectedMessageCount,
+            trimmedMessageCount:
+                result.contextEnvelope.diagnostics.trimmedMessageCount,
+        },
+        { totalInputMessages, projectedMessageCount, trimmedMessageCount }
+    );
+};
 
 test('buildConversationContext returns canonical messages and envelope metadata', () => {
     const result = buildConversationContext(
@@ -60,6 +101,140 @@ test('buildConversationContext returns canonical messages and envelope metadata'
     assert.equal(result.messages[1]?.content, 'Doing well.');
     assert.equal(result.contextEnvelope.turns.length, 2);
     assert.equal(result.contextEnvelope.diagnostics.projectedMessageCount, 2);
+});
+
+test('web context does not duplicate the latest user turn when it is already last', () => {
+    const result = buildWebContext('hello', [
+        { role: 'user', content: 'hello' },
+    ]);
+
+    assertCurrentUserTurn(result.messages, 'hello');
+    assert.equal(
+        result.messages.filter(
+            (message) => message.role === 'user' && message.content === 'hello'
+        ).length,
+        1
+    );
+    assert.deepEqual(result.messages, [{ role: 'user', content: 'hello' }]);
+    assertMessageCounts(result, 1, 1, 0);
+});
+
+test('web context appends the current turn without reordering repeated history', () => {
+    const conversation = [
+        { role: 'user' as const, content: 'repeat this' },
+        { role: 'assistant' as const, content: 'older reply' },
+        { role: 'user' as const, content: 'repeat this' },
+        { role: 'assistant' as const, content: 'intervening reply' },
+    ];
+    const result = buildWebContext('repeat this', conversation);
+
+    assert.deepEqual(result.messages, [
+        ...conversation,
+        { role: 'user', content: 'repeat this' },
+    ]);
+    assertMessageCounts(result, 4, 5, 0);
+});
+
+test('web context keeps the authoritative current turn even when it falls outside the recent window', () => {
+    const conversation = [
+        { role: 'user' as const, content: 'current request' },
+        ...Array.from({ length: 13 }, (_, index) => ({
+            role: index % 2 === 0 ? ('assistant' as const) : ('user' as const),
+            content: `history-${index}`,
+        })),
+    ];
+    const result = buildWebContext('current request', conversation);
+
+    assert.equal(result.messages.length, 12);
+    assertCurrentUserTurn(result.messages, 'current request');
+    assert.deepEqual(result.messages, [
+        ...conversation.slice(-11),
+        { role: 'user', content: 'current request' },
+    ]);
+    assertMessageCounts(result, 14, 12, 3);
+});
+
+test('web context appends an omitted current turn and counts dropped input separately', () => {
+    const conversation = Array.from({ length: 14 }, (_, index) => ({
+        role: index % 2 === 0 ? ('user' as const) : ('assistant' as const),
+        content: `history-${index}`,
+    }));
+    const result = buildWebContext('new current request', conversation);
+
+    assert.equal(result.messages.length, 12);
+    assertCurrentUserTurn(result.messages, 'new current request');
+    assertMessageCounts(result, 14, 12, 3);
+});
+
+test('web context retains system messages and the latest twelve history turns in order', () => {
+    const conversation = [
+        { role: 'system' as const, content: 'system context' },
+        ...Array.from({ length: 13 }, (_, index) => ({
+            role: index % 2 === 0 ? ('user' as const) : ('assistant' as const),
+            content: `turn-${index}`,
+        })),
+    ];
+    const result = buildWebContext('turn-12', conversation);
+
+    assert.deepEqual(
+        result.messages.map((message) => `${message.role}:${message.content}`),
+        [
+            'system:system context',
+            ...conversation
+                .slice(2, 13)
+                .map((message) => `${message.role}:${message.content}`),
+            'user:turn-12',
+        ]
+    );
+    assert.equal(result.messages.at(-1)?.content, 'turn-12');
+    assertMessageCounts(result, 14, 13, 1);
+});
+
+test('web context diagnostics identify the bounded policy without message content', () => {
+    const result = buildConversationContext(
+        createRequest({
+            surface: 'web',
+            latestUserInput: 'private message body',
+            conversation: [{ role: 'user', content: 'private message body' }],
+        }),
+        logger
+    );
+
+    assert.deepEqual(result.contextEnvelope.diagnostics, {
+        surface: 'web',
+        policy: 'web_recent_12_v1',
+        totalInputMessages: 1,
+        projectedMessageCount: 1,
+        trimmedMessageCount: 0,
+        sanitizedTimestampCount: 0,
+        projectedSpeakerLabelCount: 0,
+    });
+    const snapshot = toSnapshotContextEnvelope(result.contextEnvelope);
+    assert.equal(snapshot.diagnostics.policy, 'web_recent_12_v1');
+    assert.equal(
+        JSON.stringify(snapshot.diagnostics).includes('private message body'),
+        false
+    );
+});
+
+test('Discord keeps its existing 24 non-system-message window', () => {
+    const conversation = Array.from({ length: 25 }, (_, index) => ({
+        role: index % 2 === 0 ? ('user' as const) : ('assistant' as const),
+        content: `turn-${index}`,
+    }));
+    const result = buildConversationContext(
+        createRequest({ conversation }),
+        logger
+    );
+
+    assert.equal(result.messages.length, 24);
+    assert.equal(result.messages[0]?.content, 'turn-1');
+    assert.equal(result.messages.at(-1)?.content, 'turn-24');
+    assert.equal(result.contextEnvelope.diagnostics.trimmedMessageCount, 1);
+    assert.equal(
+        result.contextEnvelope.diagnostics.policy,
+        'discord_recent_24_v1'
+    );
 });
 
 test('buildConversationContext projects speaker labels only for multi-human windows', () => {

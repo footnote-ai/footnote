@@ -12,6 +12,9 @@ import type {
 } from '@footnote/contracts/web';
 
 const DISCORD_CONTEXT_WINDOW_SIZE = 24;
+// Six exchanges sit between the planner's 6-message current and 20-message expanded windows.
+// This bounds history by message count; it does not guarantee provider token fit.
+const WEB_CONTEXT_WINDOW_SIZE = 12;
 
 type ConversationContextLogger = {
     warn: (message: string, meta?: Record<string, unknown>) => void;
@@ -19,11 +22,9 @@ type ConversationContextLogger = {
 };
 
 export type ConversationContextVisibility = 'model_visible' | 'backend_only';
+type ConversationContextPolicy = 'web_recent_12_v1' | 'discord_recent_24_v1';
 export type ConversationContextAuthority =
-    | 'conversation'
-    | 'instructional'
-    | 'advisory'
-    | 'internal';
+    'conversation' | 'instructional' | 'advisory' | 'internal';
 
 export type ConversationContextEnvelope = {
     participants: Array<{
@@ -43,6 +44,7 @@ export type ConversationContextEnvelope = {
     }>;
     diagnostics: {
         surface: PostChatRequest['surface'];
+        policy?: ConversationContextPolicy;
         totalInputMessages: number;
         projectedMessageCount: number;
         trimmedMessageCount: number;
@@ -120,8 +122,9 @@ const parseCreatedAt = (value: unknown): string | undefined => {
     return date.toISOString();
 };
 
-const trimDiscordConversationWindow = (
-    conversation: PostChatRequest['conversation']
+const trimRecentConversationWindow = (
+    conversation: PostChatRequest['conversation'],
+    windowSize: number
 ): PostChatRequest['conversation'] => {
     const retainedReverse: PostChatRequest['conversation'] = [];
     let nonSystemCount = 0;
@@ -137,7 +140,7 @@ const trimDiscordConversationWindow = (
             retainedReverse.push(message);
             continue;
         }
-        if (nonSystemCount >= DISCORD_CONTEXT_WINDOW_SIZE) {
+        if (nonSystemCount >= windowSize) {
             continue;
         }
         retainedReverse.push(message);
@@ -146,26 +149,73 @@ const trimDiscordConversationWindow = (
     return retainedReverse.reverse();
 };
 
+const ensureCurrentWebUserTurn = (
+    conversation: PostChatRequest['conversation'],
+    latestUserInput: string
+): PostChatRequest['conversation'] => {
+    const currentInput = latestUserInput.trim();
+    if (currentInput.length === 0) {
+        // Empty input may be an attachment-only turn; do not synthesize a blank message.
+        return conversation;
+    }
+
+    for (let index = conversation.length - 1; index >= 0; index -= 1) {
+        const message = conversation[index];
+        if (!message || typeof message !== 'object') {
+            continue;
+        }
+        if (message.role === 'system') {
+            continue;
+        }
+        if (
+            message.role === 'user' &&
+            typeof message.content === 'string' &&
+            message.content.trim() === currentInput
+        ) {
+            return conversation;
+        }
+        break;
+    }
+
+    return [...conversation, { role: 'user', content: currentInput }];
+};
+
 const normalizeConversationWindow = (
     request: PostChatRequest
 ): {
     conversation: PostChatRequest['conversation'];
     trimmedMessageCount: number;
+    policy: ConversationContextPolicy;
 } => {
-    if (request.surface !== 'discord') {
-        return {
-            conversation: request.conversation,
-            trimmedMessageCount: 0,
-        };
-    }
-    const trimmedConversation = trimDiscordConversationWindow(
-        request.conversation
+    const policy =
+        request.surface === 'discord'
+            ? 'discord_recent_24_v1'
+            : 'web_recent_12_v1';
+    const windowSize =
+        request.surface === 'discord'
+            ? DISCORD_CONTEXT_WINDOW_SIZE
+            : WEB_CONTEXT_WINDOW_SIZE;
+    const currentConversation =
+        request.surface === 'web'
+            ? ensureCurrentWebUserTurn(
+                  request.conversation,
+                  request.latestUserInput
+              )
+            : request.conversation;
+    const trimmedConversation = trimRecentConversationWindow(
+        currentConversation,
+        windowSize
     );
+    const originalMessages = new Set(request.conversation);
+    const retainedInputMessageCount = trimmedConversation.filter((message) =>
+        originalMessages.has(message)
+    ).length;
     return {
         conversation: trimmedConversation,
+        policy,
         trimmedMessageCount: Math.max(
             0,
-            request.conversation.length - trimmedConversation.length
+            request.conversation.length - retainedInputMessageCount
         ),
     };
 };
@@ -205,7 +255,7 @@ export const buildConversationContext = (
     request: PostChatRequest,
     logger: ConversationContextLogger
 ): ConversationContextServiceOutput => {
-    const { conversation, trimmedMessageCount } =
+    const { conversation, trimmedMessageCount, policy } =
         normalizeConversationWindow(request);
     const participants = new Map<
         string,
@@ -334,6 +384,7 @@ export const buildConversationContext = (
             turns: envelopeTurns,
             diagnostics: {
                 surface: request.surface,
+                policy,
                 totalInputMessages: request.conversation.length,
                 projectedMessageCount: messages.length,
                 trimmedMessageCount,
