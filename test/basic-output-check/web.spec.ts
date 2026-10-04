@@ -44,6 +44,7 @@ test('shows one ordinary answer with its provenance', async ({
         trigger: { kind: 'submit' },
         latestUserInput: outputCase.question,
         conversation: [{ role: 'user', content: outputCase.question }],
+        sessionId: expect.any(String),
         capabilities: {
             canReact: false,
             canGenerateImages: false,

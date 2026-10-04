@@ -30,24 +30,31 @@ declare global {
     }
 }
 
-// Provide a stable fallback response in case the backend is unavailable so the space stays welcoming.
-const FALLBACK_REFLECTION =
-    'I was unable to generate a response - please try again later.';
 const EMPTY_RESPONSE_MESSAGE = 'No answer was returned. Please try again.';
 const INVALID_RESPONSE_MESSAGE =
     'The server returned a response I could not display. Please try again.';
 type ChatStatusKind = 'error' | 'info';
 type ChatStatus = { kind: ChatStatusKind; message: string };
+type CompletedChatTurn = {
+    userMessage: string;
+    assistantMessage: string;
+    metadata: ResponseMetadata | null;
+    answerProvenanceEligible: boolean | undefined;
+};
+type CurrentChatRequest = {
+    userMessage: string;
+    status: 'pending' | 'failed';
+};
 
 const Chat = (): JSX.Element => {
     const { theme } = useTheme();
     const [question, setQuestion] = useState('');
     const [status, setStatus] = useState<ChatStatus | null>(null);
-    const [answer, setAnswer] = useState('');
-    const [metadata, setMetadata] = useState<ResponseMetadata | null>(null);
-    const [answerProvenanceEligible, setAnswerProvenanceEligible] = useState<
-        boolean | undefined
-    >(undefined);
+    const [completedTurns, setCompletedTurns] = useState<CompletedChatTurn[]>(
+        []
+    );
+    const [currentRequest, setCurrentRequest] =
+        useState<CurrentChatRequest | null>(null);
     const [isLoading, setIsLoading] = useState(false);
     const [turnstileSiteKey, setTurnstileSiteKey] = useState('');
     const abortRef = useRef<AbortController | null>(null);
@@ -120,9 +127,9 @@ const Chat = (): JSX.Element => {
     useEffect(() => {
         notifyEmbedLayoutChanged('interaction-state-change');
     }, [
-        answer,
+        completedTurns,
+        currentRequest,
         isLoading,
-        metadata,
         status,
         captcha.error,
         captcha.isManagedChallengeVisible,
@@ -177,12 +184,13 @@ const Chat = (): JSX.Element => {
             controller.abort();
         }, 60000);
 
-        // Clear previous status and answer when starting a new submission
+        // Keep completed turns visible while the new request is pending.
         setStatus(null);
         setIsLoading(true);
-        setAnswer('');
-        setMetadata(null);
-        setAnswerProvenanceEligible(undefined);
+        setCurrentRequest({
+            userMessage: trimmedQuestion,
+            status: 'pending',
+        });
 
         const sessionId = sessionIdRef.current ?? window.crypto.randomUUID();
         sessionIdRef.current = sessionId;
@@ -241,14 +249,14 @@ const Chat = (): JSX.Element => {
 
             if (chat.length === 0) {
                 showStatus(EMPTY_RESPONSE_MESSAGE);
-                setAnswer('');
-                setMetadata(null);
-                setAnswerProvenanceEligible(undefined);
+                setCurrentRequest({
+                    userMessage: trimmedQuestion,
+                    status: 'failed',
+                });
                 return;
             }
 
             setStatus(null);
-            setAnswer(chat);
             conversationRef.current = [
                 ...buildChatConversation(
                     conversationRef.current,
@@ -256,17 +264,26 @@ const Chat = (): JSX.Element => {
                 ),
                 { role: 'assistant', content: chat },
             ];
-
-            // Normalize backend metadata to ResponseMetadata format
-            setMetadata(backendMetadata ?? null);
-            setAnswerProvenanceEligible(
-                payload.answerProvenanceEligible !== false
-            );
+            setCompletedTurns((previous) => [
+                ...previous,
+                {
+                    userMessage: trimmedQuestion,
+                    assistantMessage: chat,
+                    metadata: backendMetadata ?? null,
+                    answerProvenanceEligible:
+                        payload.answerProvenanceEligible !== false,
+                },
+            ]);
+            setCurrentRequest(null);
         } catch (error) {
             // A superseded request must not overwrite the newer request's status or answer.
             if (abortRef.current !== controller) {
                 return;
             }
+            setCurrentRequest({
+                userMessage: trimmedQuestion,
+                status: 'failed',
+            });
 
             const isWrappedRequestAbort =
                 isApiClientError(error) &&
@@ -290,8 +307,6 @@ const Chat = (): JSX.Element => {
             if (isApiClientError(error)) {
                 if (error.code === 'invalid_payload') {
                     showStatus(INVALID_RESPONSE_MESSAGE);
-                    setAnswer('');
-                    setMetadata(null);
                     return;
                 }
 
@@ -354,10 +369,9 @@ const Chat = (): JSX.Element => {
                 }
             }
 
-            setStatus(null);
-            setAnswer(FALLBACK_REFLECTION);
-            setMetadata(null);
-            setAnswerProvenanceEligible(false);
+            showStatus(
+                'Unable to generate a response. Please try again later.'
+            );
         } finally {
             clearTimeout(timeoutId); // Ensure timeout is cleared in all cases
             if (abortRef.current === controller) {
@@ -485,9 +499,49 @@ const Chat = (): JSX.Element => {
                     <span>{status.message}</span>
                 </div>
             )}
-            {answer && (
-                <div className="interaction-output" aria-live="polite">
-                    <MarkdownResponse markdown={answer} />
+            {(completedTurns.length > 0 || currentRequest) && (
+                <div className="interaction-transcript">
+                    {completedTurns.map((turn, index) => (
+                        <div className="interaction-turn" key={index}>
+                            <p className="public-message public-message--person">
+                                {turn.userMessage}
+                            </p>
+                            <article className="public-message public-message--assistant">
+                                <MarkdownResponse
+                                    markdown={turn.assistantMessage}
+                                />
+                            </article>
+                            <CanonicalResponseFootnote
+                                metadata={turn.metadata}
+                                artifacts={{
+                                    trace: 'unknown',
+                                    report: 'unavailable',
+                                }}
+                                answerProvenanceEligible={
+                                    turn.answerProvenanceEligible
+                                }
+                            />
+                        </div>
+                    ))}
+                    {currentRequest && (
+                        <div className="interaction-turn">
+                            <p className="public-message public-message--person">
+                                {currentRequest.userMessage}
+                            </p>
+                            <div
+                                className="interaction-request-state"
+                                role={
+                                    currentRequest.status === 'pending'
+                                        ? 'status'
+                                        : undefined
+                                }
+                            >
+                                {currentRequest.status === 'pending'
+                                    ? 'Preparing a response…'
+                                    : 'No assistant response was added.'}
+                            </div>
+                        </div>
+                    )}
                 </div>
             )}
             {/* The background widget is absolutely positioned so it never reserves layout space. */}
@@ -542,13 +596,6 @@ const Chat = (): JSX.Element => {
                         )}
                     </div>
                 )}
-            {answer && (
-                <CanonicalResponseFootnote
-                    metadata={metadata ?? null}
-                    artifacts={{ trace: 'unknown', report: 'unavailable' }}
-                    answerProvenanceEligible={answerProvenanceEligible}
-                />
-            )}
         </div>
     );
 };
