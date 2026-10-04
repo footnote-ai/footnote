@@ -148,6 +148,35 @@ const trimRecentConversationWindow = (
     return retainedReverse.reverse();
 };
 
+const ensureCurrentWebUserTurn = (
+    conversation: PostChatRequest['conversation'],
+    latestUserInput: string
+): PostChatRequest['conversation'] => {
+    const currentInput = latestUserInput.trim();
+    if (currentInput.length === 0) {
+        // Empty input may be an attachment-only turn; do not synthesize a blank message.
+        return conversation;
+    }
+
+    let currentTurn: ChatConversationMessage | undefined;
+    const history = conversation.filter((message) => {
+        if (!message || typeof message !== 'object') {
+            return true;
+        }
+        if (
+            message.role === 'user' &&
+            typeof message.content === 'string' &&
+            message.content.trim() === currentInput
+        ) {
+            currentTurn = message;
+            return false;
+        }
+        return true;
+    });
+
+    return [...history, currentTurn ?? { role: 'user', content: currentInput }];
+};
+
 const normalizeConversationWindow = (
     request: PostChatRequest
 ): {
@@ -163,16 +192,27 @@ const normalizeConversationWindow = (
         request.surface === 'discord'
             ? DISCORD_CONTEXT_WINDOW_SIZE
             : WEB_CONTEXT_WINDOW_SIZE;
+    const currentConversation =
+        request.surface === 'web'
+            ? ensureCurrentWebUserTurn(
+                  request.conversation,
+                  request.latestUserInput
+              )
+            : request.conversation;
     const trimmedConversation = trimRecentConversationWindow(
-        request.conversation,
+        currentConversation,
         windowSize
     );
+    const originalMessages = new Set(request.conversation);
+    const retainedInputMessageCount = trimmedConversation.filter((message) =>
+        originalMessages.has(message)
+    ).length;
     return {
         conversation: trimmedConversation,
         policy,
         trimmedMessageCount: Math.max(
             0,
-            request.conversation.length - trimmedConversation.length
+            request.conversation.length - retainedInputMessageCount
         ),
     };
 };

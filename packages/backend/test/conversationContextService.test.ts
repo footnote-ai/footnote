@@ -63,29 +63,91 @@ test('buildConversationContext returns canonical messages and envelope metadata'
     assert.equal(result.contextEnvelope.diagnostics.projectedMessageCount, 2);
 });
 
-test('web conversation context keeps messages under the six-exchange window', () => {
-    const conversation = Array.from({ length: 12 }, (_, index) => ({
-        role: index % 2 === 0 ? ('user' as const) : ('assistant' as const),
-        content: `turn-${index}`,
-    }));
+test('web context does not duplicate the latest user turn when it is already last', () => {
     const result = buildConversationContext(
-        createRequest({ surface: 'web', conversation }),
+        createRequest({
+            surface: 'web',
+            latestUserInput: 'hello',
+            conversation: [{ role: 'user', content: 'hello' }],
+        }),
         logger
     );
 
-    assert.deepEqual(
-        result.messages.map((message) => message.content),
-        conversation.map((message) => message.content)
+    assert.deepEqual(result.messages, [{ role: 'user', content: 'hello' }]);
+    assert.equal(
+        result.messages.filter((message) => message.content === 'hello').length,
+        1
     );
-    assert.equal(result.contextEnvelope.diagnostics.totalInputMessages, 12);
-    assert.equal(result.contextEnvelope.diagnostics.projectedMessageCount, 12);
+    assert.equal(result.contextEnvelope.diagnostics.totalInputMessages, 1);
+    assert.equal(result.contextEnvelope.diagnostics.projectedMessageCount, 1);
     assert.equal(result.contextEnvelope.diagnostics.trimmedMessageCount, 0);
 });
 
-test('web conversation context retains the latest twelve non-system messages in order', () => {
+test('web context keeps the authoritative current turn even when it falls outside the recent window', () => {
+    const conversation = [
+        { role: 'user' as const, content: 'current request' },
+        ...Array.from({ length: 13 }, (_, index) => ({
+            role: index % 2 === 0 ? ('assistant' as const) : ('user' as const),
+            content: `history-${index}`,
+        })),
+    ];
+    const result = buildConversationContext(
+        createRequest({
+            surface: 'web',
+            latestUserInput: 'current request',
+            conversation,
+        }),
+        logger
+    );
+
+    assert.equal(result.messages.length, 12);
+    assert.equal(result.messages.at(-1)?.role, 'user');
+    assert.equal(result.messages.at(-1)?.content, 'current request');
+    assert.equal(
+        result.messages.filter(
+            (message) => message.content === 'current request'
+        ).length,
+        1
+    );
+    assert.equal(result.contextEnvelope.diagnostics.totalInputMessages, 14);
+    assert.equal(result.contextEnvelope.diagnostics.projectedMessageCount, 12);
+    assert.equal(result.contextEnvelope.diagnostics.trimmedMessageCount, 2);
+});
+
+test('web context appends an omitted current turn and counts dropped input separately', () => {
+    const conversation = Array.from({ length: 14 }, (_, index) => ({
+        role: index % 2 === 0 ? ('user' as const) : ('assistant' as const),
+        content: `history-${index}`,
+    }));
+    const result = buildConversationContext(
+        createRequest({
+            surface: 'web',
+            latestUserInput: 'new current request',
+            conversation,
+        }),
+        logger
+    );
+
+    assert.equal(result.messages.length, 12);
+    assert.deepEqual(result.messages.at(-1), {
+        role: 'user',
+        content: 'new current request',
+    });
+    assert.equal(
+        result.messages.filter(
+            (message) => message.content === 'new current request'
+        ).length,
+        1
+    );
+    assert.equal(result.contextEnvelope.diagnostics.totalInputMessages, 14);
+    assert.equal(result.contextEnvelope.diagnostics.projectedMessageCount, 12);
+    assert.equal(result.contextEnvelope.diagnostics.trimmedMessageCount, 3);
+});
+
+test('web context retains system messages and the latest twelve history turns in order', () => {
     const conversation = [
         { role: 'system' as const, content: 'system context' },
-        ...Array.from({ length: 14 }, (_, index) => ({
+        ...Array.from({ length: 13 }, (_, index) => ({
             role: index % 2 === 0 ? ('user' as const) : ('assistant' as const),
             content: `turn-${index}`,
         })),
@@ -104,20 +166,22 @@ test('web conversation context retains the latest twelve non-system messages in 
         [
             'system:system context',
             ...conversation
-                .slice(3)
+                .slice(2, 13)
                 .map((message) => `${message.role}:${message.content}`),
+            'user:turn-12',
         ]
     );
-    assert.equal(result.messages.at(-1)?.content, 'turn-13');
-    assert.equal(result.contextEnvelope.diagnostics.totalInputMessages, 15);
+    assert.equal(result.messages.at(-1)?.content, 'turn-12');
+    assert.equal(result.contextEnvelope.diagnostics.totalInputMessages, 14);
     assert.equal(result.contextEnvelope.diagnostics.projectedMessageCount, 13);
-    assert.equal(result.contextEnvelope.diagnostics.trimmedMessageCount, 2);
+    assert.equal(result.contextEnvelope.diagnostics.trimmedMessageCount, 1);
 });
 
 test('web context diagnostics identify the bounded policy without message content', () => {
     const result = buildConversationContext(
         createRequest({
             surface: 'web',
+            latestUserInput: 'private message body',
             conversation: [{ role: 'user', content: 'private message body' }],
         }),
         logger
