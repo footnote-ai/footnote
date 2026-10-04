@@ -1368,6 +1368,9 @@ const WorkflowRecordSchema = z
         runStatus: z
             .enum(['completed', 'degraded', 'limited', 'failed', 'rejected'])
             .optional(),
+        startedAt: z.string().datetime().optional(),
+        finishedAt: z.string().datetime().optional(),
+        durationMs: z.number().int().nonnegative().optional(),
         workflowId: z.string().min(1),
         workflowName: z.string().min(1),
         status: z.enum(['completed', 'degraded']),

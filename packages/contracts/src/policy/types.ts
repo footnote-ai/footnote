@@ -1074,6 +1074,10 @@ export type StepRecord = {
 export type WorkflowRecord = {
     runId?: string;
     runStatus?: 'completed' | 'degraded' | 'limited' | 'failed' | 'rejected';
+    /** Backend-observed wall-clock run bounds; `durationMs` is elapsed milliseconds, not provider compute time. */
+    startedAt?: string;
+    finishedAt?: string;
+    durationMs?: number;
     workflowId: string;
     workflowName: string;
     status: 'completed' | 'degraded';

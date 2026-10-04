@@ -89,6 +89,9 @@ test('public trace display allowlists workflow receipts while omitting operator 
                 workflowName: 'chat_orchestration',
                 status: 'completed',
                 terminationReason: 'goal_satisfied',
+                startedAt: '2026-10-04T00:00:00.000Z',
+                finishedAt: '2026-10-04T00:00:00.025Z',
+                durationMs: 25,
                 stepCount: 1,
                 maxSteps: 4,
                 maxDurationMs: 10_000,
@@ -160,6 +163,9 @@ test('public trace display allowlists workflow receipts while omitting operator 
     );
 
     assert.ok(projected?.workflow);
+    assert.equal(projected.workflow.startedAt, '2026-10-04T00:00:00.000Z');
+    assert.equal(projected.workflow.finishedAt, '2026-10-04T00:00:00.025Z');
+    assert.equal(projected.workflow.durationMs, 25);
     assert.equal('results' in projected.workflow, false);
     assert.equal('attempts' in projected.workflow.steps[0]!, false);
     assert.equal('inputRefs' in projected.workflow.steps[0]!, false);

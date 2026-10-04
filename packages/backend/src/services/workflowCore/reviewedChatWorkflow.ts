@@ -841,6 +841,12 @@ const buildWorkflowLineage = (input: {
         workflowId: input.execution.run.workflowId,
         runId: input.execution.run.runId,
         runStatus: input.execution.status,
+        startedAt: new Date(input.execution.run.startedAtMs).toISOString(),
+        finishedAt: new Date(input.execution.run.finishedAtMs).toISOString(),
+        durationMs: Math.max(
+            0,
+            input.execution.run.finishedAtMs - input.execution.run.startedAtMs
+        ),
         workflowName: input.workflowName,
         status:
             input.terminationReason === 'goal_satisfied' &&
