@@ -9,7 +9,10 @@
 import type {
     PartialResponseTemperament,
     ResponseMetadata,
+    StepOutcome,
+    StepRecord,
     TraceAxisScore,
+    WorkflowRecord,
 } from '@footnote/contracts/policy';
 import type { TraceDisplayMetadata } from '@footnote/contracts/web';
 import {
@@ -25,6 +28,69 @@ const TRACE_AXES = [
     'caution',
     'extent',
 ] as const;
+
+const PUBLIC_STEP_SIGNAL_KEYS = new Set([
+    'action',
+    'appliedModuleCount',
+    'appliedModuleIdsCsv',
+    'applyOutcome',
+    'assessRoutingHintsCsv',
+    'clarificationOptionCount',
+    'clarificationReasonCode',
+    'contractType',
+    'evidenceConcern',
+    'effectiveProfileId',
+    'finalTemperamentAttribution',
+    'finalTemperamentCaution',
+    'finalTemperamentExtent',
+    'finalTemperamentRationale',
+    'finalTemperamentTightness',
+    'lengthConcern',
+    'mattered',
+    'matteredControlCount',
+    'modality',
+    'moduleHintCount',
+    'moduleHintIdsCsv',
+    'originalProfileId',
+    'profileId',
+    'provider',
+    'purpose',
+    'refinementApplied',
+    'refinementRequested',
+    'refinementSourceStepId',
+    'reentryAttempt',
+    'reviewDecision',
+    'reviewParseFailureMessage',
+    'reviewParseFailureReason',
+    'reviewParseFirstIssueCode',
+    'reviewParseFirstIssuePath',
+    'reviewParseIssueCount',
+    'reviewParseOutputLength',
+    'reviewParseStatus',
+    'reviewReason',
+    'routingChainAttemptCount',
+    'routingChainAttemptsJson',
+    'routingHintApplied',
+    'routingHintConflictResolved',
+    'routedModel',
+    'routedProfileId',
+    'routedProvider',
+    'selectedCapabilityProfile',
+    'selectedModel',
+    'selectedProfileId',
+    'selectedProvider',
+    'structuredOutputOutcome',
+    'styleConcern',
+    'terminalAction',
+    'traceAlignment',
+    'traceAlignmentReason',
+    'upstreamModel',
+    'upstreamProvider',
+    'upstreamReportedCostUsd',
+    'upstreamRoutingAttempt',
+    'upstreamRoutingAttemptCount',
+    'requestedCapabilityProfile',
+]);
 
 const OPTIONAL_METADATA_FIELDS = [
     'totalDurationMs',
@@ -96,6 +162,36 @@ const buildValidationBase = (
     trace_final: final,
 });
 
+const omitUnknownWorkflowSignals = (workflow: unknown): unknown => {
+    if (!isRecord(workflow) || !Array.isArray(workflow.steps)) {
+        return workflow;
+    }
+
+    return {
+        ...workflow,
+        steps: workflow.steps.map((step) => {
+            if (!isRecord(step) || !isRecord(step.outcome)) {
+                return step;
+            }
+            const signals = step.outcome.signals;
+            if (!isRecord(signals)) {
+                return step;
+            }
+            return {
+                ...step,
+                outcome: {
+                    ...step.outcome,
+                    signals: Object.fromEntries(
+                        Object.entries(signals).filter(([key]) =>
+                            PUBLIC_STEP_SIGNAL_KEYS.has(key)
+                        )
+                    ),
+                },
+            };
+        }),
+    };
+};
+
 const readValidOptionalField = (
     raw: Record<string, unknown>,
     field: MetadataField,
@@ -104,14 +200,118 @@ const readValidOptionalField = (
     if (raw[field] === undefined) {
         return undefined;
     }
+    const value =
+        field === 'workflow'
+            ? omitUnknownWorkflowSignals(raw[field])
+            : raw[field];
     const parsed = ResponseMetadataSchema.safeParse({
         ...base,
         trace_target: {},
         trace_final: {},
-        [field]: raw[field],
+        [field]: value,
     });
     return parsed.success ? parsed.data[field] : undefined;
 };
+
+const projectPublicOutcome = (outcome: StepOutcome): StepOutcome => ({
+    status: outcome.status,
+    summary: outcome.summary,
+    ...(outcome.artifacts !== undefined && {
+        artifacts: outcome.artifacts.map(
+            (artifact) => `[redacted:${artifact.length} chars]`
+        ),
+    }),
+    ...(outcome.signals !== undefined && {
+        signals: Object.fromEntries(
+            Object.entries(outcome.signals).filter(([key]) =>
+                PUBLIC_STEP_SIGNAL_KEYS.has(key)
+            )
+        ),
+    }),
+    ...(outcome.recommendations !== undefined && {
+        recommendations: [...outcome.recommendations],
+    }),
+});
+
+const projectPublicStep = (step: StepRecord): StepRecord => ({
+    stepId: step.stepId,
+    ...(step.parentStepId !== undefined && { parentStepId: step.parentStepId }),
+    attempt: step.attempt,
+    stepKind: step.stepKind,
+    ...(step.reasonCode !== undefined && { reasonCode: step.reasonCode }),
+    startedAt: step.startedAt,
+    finishedAt: step.finishedAt,
+    durationMs: step.durationMs,
+    ...(step.model !== undefined && { model: step.model }),
+    ...(step.usage !== undefined && {
+        usage: {
+            ...(step.usage.promptTokens !== undefined && {
+                promptTokens: step.usage.promptTokens,
+            }),
+            ...(step.usage.cachedInputTokens !== undefined && {
+                cachedInputTokens: step.usage.cachedInputTokens,
+            }),
+            ...(step.usage.cacheWriteTokens !== undefined && {
+                cacheWriteTokens: step.usage.cacheWriteTokens,
+            }),
+            ...(step.usage.completionTokens !== undefined && {
+                completionTokens: step.usage.completionTokens,
+            }),
+            ...(step.usage.totalTokens !== undefined && {
+                totalTokens: step.usage.totalTokens,
+            }),
+            ...(step.usage.reasoningTokens !== undefined && {
+                reasoningTokens: step.usage.reasoningTokens,
+            }),
+        },
+    }),
+    ...(step.cost !== undefined && {
+        cost: {
+            inputCostUsd: step.cost.inputCostUsd,
+            outputCostUsd: step.cost.outputCostUsd,
+            totalCostUsd: step.cost.totalCostUsd,
+        },
+    }),
+    outcome: projectPublicOutcome(step.outcome),
+});
+
+const projectPublicWorkflow = (workflow: WorkflowRecord): WorkflowRecord => ({
+    ...(workflow.runId !== undefined && { runId: workflow.runId }),
+    ...(workflow.runStatus !== undefined && { runStatus: workflow.runStatus }),
+    workflowId: workflow.workflowId,
+    workflowName: workflow.workflowName,
+    status: workflow.status,
+    terminationReason: workflow.terminationReason,
+    stepCount: workflow.stepCount,
+    maxSteps: workflow.maxSteps,
+    maxDurationMs: workflow.maxDurationMs,
+    ...(workflow.effectiveLimits !== undefined && {
+        effectiveLimits: workflow.effectiveLimits.map((limit) => ({
+            key: limit.key,
+            state: limit.state,
+            ...(limit.value !== undefined && { value: limit.value }),
+            stoppedRun: limit.stoppedRun,
+        })),
+    }),
+    ...(workflow.limitStop !== undefined && {
+        limitStop: {
+            stoppedByLimit: workflow.limitStop.stoppedByLimit,
+            terminationReason: workflow.limitStop.terminationReason,
+            ...(workflow.limitStop.exhaustedLimitKey !== undefined && {
+                exhaustedLimitKey: workflow.limitStop.exhaustedLimitKey,
+            }),
+            ...(workflow.limitStop.stoppedBeforeStepKind !== undefined && {
+                stoppedBeforeStepKind: workflow.limitStop.stoppedBeforeStepKind,
+            }),
+        },
+    }),
+    ...(workflow.userMemory !== undefined && {
+        userMemory: {
+            includedItemCount: workflow.userMemory.includedItemCount,
+        },
+    }),
+    steps: workflow.steps.map(projectPublicStep),
+});
 
 const projectKnownMetadata = (
     raw: Record<string, unknown>,
@@ -193,7 +393,10 @@ const projectKnownMetadata = (
             citations,
         });
         if (value !== undefined) {
-            projected[field] = value;
+            projected[field] =
+                field === 'workflow'
+                    ? projectPublicWorkflow(value as WorkflowRecord)
+                    : value;
         } else if (raw[field] !== undefined) {
             unavailableFields.push(field);
         }

@@ -486,7 +486,16 @@ test('GET /api/traces/:responseId/response-versions returns ordered candidates a
             responseId: string;
             candidates: Array<{ id: string; text: string; state: string }>;
         };
+        assert.deepEqual(Object.keys(payload).sort(), [
+            'candidates',
+            'responseId',
+        ]);
         assert.equal(payload.responseId, responseId);
+        assert.equal('workflow' in payload, false);
+        assert.equal(
+            payload.candidates.some((candidate) => 'attempts' in candidate),
+            false
+        );
         assert.deepEqual(payload.candidates, [
             {
                 id: 'candidate_earlier',

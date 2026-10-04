@@ -76,3 +76,158 @@ test('trace display projection marks a fully valid record complete', () => {
         unavailableFields: [],
     });
 });
+
+test('public trace display allowlists workflow receipts while omitting operator detail', () => {
+    const projected = projectTraceMetadataForDisplay(
+        {
+            ...baseTrace,
+            provenanceAssessment: undefined,
+            trace_target: {},
+            trace_final: {},
+            workflow: {
+                workflowId: 'workflow-1',
+                workflowName: 'chat_orchestration',
+                status: 'completed',
+                terminationReason: 'goal_satisfied',
+                stepCount: 1,
+                maxSteps: 4,
+                maxDurationMs: 10_000,
+                effectiveLimits: [
+                    {
+                        key: 'maxWorkflowSteps',
+                        state: 'enforced',
+                        value: 4,
+                        stoppedRun: false,
+                    },
+                ],
+                limitStop: {
+                    stoppedByLimit: false,
+                    terminationReason: 'goal_satisfied',
+                },
+                userMemory: { includedItemCount: 1 },
+                results: [
+                    {
+                        resultId: 'private-result',
+                        name: 'answer',
+                        status: 'produced',
+                        producedByStepId: 'step-1',
+                        producedByAttempt: 1,
+                    },
+                ],
+                steps: [
+                    {
+                        stepId: 'step-1',
+                        attempt: 1,
+                        stepKind: 'generate',
+                        startedAt: new Date().toISOString(),
+                        finishedAt: new Date().toISOString(),
+                        durationMs: 0,
+                        model: 'model-public-summary',
+                        usage: { promptTokens: 12, completionTokens: 4 },
+                        cost: {
+                            inputCostUsd: 0.01,
+                            outputCostUsd: 0.02,
+                            totalCostUsd: 0.03,
+                        },
+                        inputRefs: [{ name: 'private-input' }],
+                        resultRefs: [{ name: 'private-result' }],
+                        attempts: [
+                            {
+                                attempt: 1,
+                                status: 'succeeded',
+                                startedAt: new Date().toISOString(),
+                                finishedAt: new Date().toISOString(),
+                                durationMs: 0,
+                            },
+                        ],
+                        outcome: {
+                            status: 'executed',
+                            summary: 'Generated a response.',
+                            artifacts: ['private artifact body'],
+                            signals: {
+                                action: 'message',
+                                routingChainAttemptCount: 1,
+                                routingChainAttemptsJson: '[]',
+                                privateSignal: 'private signal value',
+                            },
+                            recommendations: ['Keep the answer concise.'],
+                        },
+                    },
+                ],
+            },
+        },
+        baseTrace.responseId
+    );
+
+    assert.ok(projected?.workflow);
+    assert.equal('results' in projected.workflow, false);
+    assert.equal('attempts' in projected.workflow.steps[0]!, false);
+    assert.equal('inputRefs' in projected.workflow.steps[0]!, false);
+    assert.equal('resultRefs' in projected.workflow.steps[0]!, false);
+    assert.equal(projected.workflow.results, undefined);
+    assert.equal(projected.workflow.userMemory?.includedItemCount, 1);
+    assert.equal(
+        projected.workflow.effectiveLimits?.[0]?.key,
+        'maxWorkflowSteps'
+    );
+    assert.deepEqual(projected.workflow.steps[0]?.usage, {
+        promptTokens: 12,
+        completionTokens: 4,
+    });
+    assert.deepEqual(projected.workflow.steps[0]?.outcome.signals, {
+        action: 'message',
+        routingChainAttemptCount: 1,
+        routingChainAttemptsJson: '[]',
+    });
+    assert.equal(
+        'privateSignal' in (projected.workflow.steps[0]?.outcome.signals ?? {}),
+        false
+    );
+    assert.deepEqual(projected.workflow.steps[0]?.outcome.artifacts, [
+        '[redacted:21 chars]',
+    ]);
+});
+
+test('public trace display omits malformed workflow with unknown fields', () => {
+    const projected = projectTraceMetadataForDisplay(
+        {
+            ...baseTrace,
+            provenanceAssessment: undefined,
+            trace_target: {},
+            trace_final: {},
+            workflow: {
+                workflowId: 'workflow-1',
+                workflowName: 'chat_orchestration',
+                status: 'completed',
+                terminationReason: 'goal_satisfied',
+                stepCount: 1,
+                maxSteps: 4,
+                maxDurationMs: 10_000,
+                privateWorkflowField: 'private workflow value',
+                steps: [
+                    {
+                        stepId: 'step-1',
+                        attempt: 1,
+                        stepKind: 'generate',
+                        startedAt: new Date().toISOString(),
+                        finishedAt: new Date().toISOString(),
+                        durationMs: 0,
+                        privateStepField: 'private step value',
+                        outcome: {
+                            status: 'executed',
+                            summary: 'Generated a response.',
+                            privateOutcomeField: 'private outcome value',
+                        },
+                    },
+                ],
+            },
+        },
+        baseTrace.responseId
+    );
+
+    assert.ok(projected);
+    assert.equal(projected.workflow, undefined);
+    assert.ok(
+        projected.displayIntegrity.unavailableFields.includes('workflow')
+    );
+});
