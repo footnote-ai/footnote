@@ -1074,7 +1074,10 @@ export type StepRecord = {
 export type WorkflowRecord = {
     runId?: string;
     runStatus?: 'completed' | 'degraded' | 'limited' | 'failed' | 'rejected';
-    /** Backend-observed wall-clock run bounds; `durationMs` is elapsed milliseconds, not provider compute time. */
+    /**
+     * Backend-observed Run wall-clock bounds. `durationMs` is derived as
+     * `finishedAt - startedAt`; it is not provider compute time, TTFT, or decode time.
+     */
     startedAt?: string;
     finishedAt?: string;
     durationMs?: number;
