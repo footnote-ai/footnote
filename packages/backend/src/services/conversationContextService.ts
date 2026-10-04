@@ -158,23 +158,39 @@ const ensureCurrentWebUserTurn = (
         return conversation;
     }
 
-    let currentTurn: ChatConversationMessage | undefined;
-    const history = conversation.filter((message) => {
-        if (!message || typeof message !== 'object') {
-            return true;
-        }
-        if (
-            message.role === 'user' &&
-            typeof message.content === 'string' &&
-            message.content.trim() === currentInput
-        ) {
-            currentTurn = message;
-            return false;
-        }
-        return true;
-    });
+    const isCurrentTurn = (
+        message: ChatConversationMessage | undefined
+    ): boolean =>
+        message?.role === 'user' &&
+        typeof message.content === 'string' &&
+        message.content.trim() === currentInput;
+    if (isCurrentTurn(conversation.at(-1))) {
+        return conversation;
+    }
 
-    return [...history, currentTurn ?? { role: 'user', content: currentInput }];
+    let currentTurnIndex = -1;
+    for (let index = 0; index < conversation.length; index += 1) {
+        const message = conversation[index];
+        if (!message || typeof message !== 'object') {
+            continue;
+        }
+        if (isCurrentTurn(message)) {
+            currentTurnIndex = index;
+        }
+    }
+
+    if (currentTurnIndex >= 0) {
+        const currentTurn = conversation[currentTurnIndex];
+        if (currentTurn) {
+            return [
+                ...conversation.slice(0, currentTurnIndex),
+                ...conversation.slice(currentTurnIndex + 1),
+                currentTurn,
+            ];
+        }
+    }
+
+    return [...conversation, { role: 'user', content: currentInput }];
 };
 
 const normalizeConversationWindow = (
