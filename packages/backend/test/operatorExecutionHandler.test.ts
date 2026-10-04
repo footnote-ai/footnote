@@ -117,12 +117,40 @@ test('operator execution reads deny missing, expired, and ordinary account sessi
                             durationMs: 0,
                         },
                     ],
-                    outcome: { status: 'executed', summary: 'generated' },
+                    inputRefs: [{ name: 'private-input' }],
+                    resultRefs: [{ resultId: 'result-1', name: 'answer' }],
+                    outcome: {
+                        status: 'executed',
+                        summary: 'generated',
+                        artifacts: ['private artifact body'],
+                        signals: {
+                            action: 'message',
+                            privateSignal: 'private signal value',
+                        },
+                    },
                 },
             ],
         },
     };
     await traceStore.upsert(trace);
+    const canonicalTrace = await traceStore.retrieve(trace.responseId);
+    assert.deepEqual(canonicalTrace?.workflow, trace.workflow);
+    assert.equal(canonicalTrace?.workflow?.results?.length, 1);
+    assert.equal(canonicalTrace?.workflow?.steps[0]?.attempts?.length, 1);
+
+    const displayTrace = await traceStore.retrieveForDisplay(trace.responseId);
+    const displayWorkflow = displayTrace?.workflow;
+    assert.ok(displayWorkflow);
+    assert.equal(displayWorkflow.results, undefined);
+    assert.equal(displayWorkflow.steps[0]?.attempts, undefined);
+    assert.equal(displayWorkflow.steps[0]?.inputRefs, undefined);
+    assert.equal(displayWorkflow.steps[0]?.resultRefs, undefined);
+    assert.deepEqual(displayWorkflow.steps[0]?.outcome.artifacts, [
+        '[redacted:21 chars]',
+    ]);
+    assert.deepEqual(displayWorkflow.steps[0]?.outcome.signals, {
+        action: 'message',
+    });
     const logs: Array<Record<string, unknown>> = [];
     const handler = createOperatorExecutionHandler({
         accountAuthService,
@@ -180,10 +208,21 @@ test('operator execution reads deny missing, expired, and ordinary account sessi
         },
     });
     assert.equal(response.status, 200);
-    assert.deepEqual(await response.json(), {
+    const operatorPayload = await response.json();
+    assert.deepEqual(operatorPayload, {
         responseId: trace.responseId,
         workflow: trace.workflow,
     });
+    assert.equal(
+        (operatorPayload as { workflow: ResponseMetadata['workflow'] }).workflow
+            ?.steps[0]?.attempts?.length,
+        1
+    );
+    assert.equal(
+        (operatorPayload as { workflow: ResponseMetadata['workflow'] }).workflow
+            ?.results?.length,
+        1
+    );
     const missing = await fetch(
         `http://127.0.0.1:${address.port}/api/admin/executions/missing`,
         {
