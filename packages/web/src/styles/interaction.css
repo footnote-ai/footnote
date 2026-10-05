@@ -159,6 +159,23 @@
     color: var(--public-muted);
 }
 
+.interaction-retry,
+.interaction-new-chat {
+    width: fit-content;
+    border: 1px solid var(--public-rule);
+    border-radius: 0.3rem;
+    padding: 0.4rem 0.65rem;
+    background: var(--public-paper-raised);
+    color: var(--public-ink);
+    cursor: pointer;
+    font-family: var(--fn-font-mono);
+}
+
+.interaction-retry:hover,
+.interaction-new-chat:hover {
+    background: color-mix(in srgb, var(--public-rule) 25%, transparent);
+}
+
 .interaction-captcha {
     min-height: 0;
 }

@@ -155,6 +155,10 @@ test('keeps a failed request outside assistant markdown', async ({ page }) => {
     await expect(page.getByRole('status')).toContainText(
         'Unable to connect to the server.'
     );
+    await expect(page.getByRole('status')).toHaveAttribute(
+        'data-request-state',
+        'network'
+    );
     await expect(turn.locator('.interaction-request-state')).toHaveText(
         'No assistant response was added.'
     );

@@ -105,7 +105,10 @@ test('shows one ordinary answer with its provenance', async ({
     );
     await expect(
         traceDrawer.getByRole('link', { name: 'Open full Trace' })
-    ).toHaveCount(0);
+    ).toHaveAttribute(
+        'href',
+        `/traces/${outputCase.response.metadata.responseId}`
+    );
     await page.screenshot({
         animations: 'disabled',
         fullPage: true,

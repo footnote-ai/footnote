@@ -34,7 +34,19 @@ const EMPTY_RESPONSE_MESSAGE = 'No answer was returned. Please try again.';
 const INVALID_RESPONSE_MESSAGE =
     'The server returned a response I could not display. Please try again.';
 type ChatStatusKind = 'error' | 'info';
-type ChatStatus = { kind: ChatStatusKind; message: string };
+type ChatRequestState =
+    | 'backend'
+    | 'captcha'
+    | 'invalid-response'
+    | 'network'
+    | 'superseded'
+    | 'timeout'
+    | 'unsupported';
+type ChatStatus = {
+    kind: ChatStatusKind;
+    message: string;
+    requestState?: ChatRequestState;
+};
 type CompletedChatTurn = {
     id: number;
     userMessage: string;
@@ -58,8 +70,10 @@ const Chat = (): JSX.Element => {
     const [currentRequest, setCurrentRequest] =
         useState<CurrentChatRequest | null>(null);
     const [isLoading, setIsLoading] = useState(false);
+    const [isPreparingSubmission, setIsPreparingSubmission] = useState(false);
     const [turnstileSiteKey, setTurnstileSiteKey] = useState('');
     const abortRef = useRef<AbortController | null>(null);
+    const submissionGenerationRef = useRef(0);
     const conversationRef = useRef<ChatConversationMessage[]>([]);
     const sessionIdRef = useRef<string | null>(null);
     const inputRef = useRef<HTMLTextAreaElement | null>(null);
@@ -88,9 +102,10 @@ const Chat = (): JSX.Element => {
 
     const showStatus = (
         message: string,
-        kind: ChatStatusKind = 'error'
+        kind: ChatStatusKind = 'error',
+        requestState?: ChatRequestState
     ): void => {
-        setStatus({ kind, message });
+        setStatus({ kind, message, requestState });
     };
 
     const clearInformationalStatus = useCallback((): void => {
@@ -132,23 +147,49 @@ const Chat = (): JSX.Element => {
         completedTurns,
         currentRequest,
         isLoading,
+        isPreparingSubmission,
         status,
         captcha.error,
         captcha.isManagedChallengeVisible,
     ]);
 
-    const onSubmit = async (event: FormEvent<HTMLFormElement>) => {
-        event.preventDefault();
-
+    const submitUserMessage = async (
+        submittedMessage: string,
+        isRetry = false
+    ): Promise<void> => {
         // Mark that user has interacted
         hasInteractedRef.current = true;
-        abortRef.current?.abort();
-
-        const trimmedQuestion = question.trim();
+        const trimmedQuestion = submittedMessage.trim();
 
         if (!trimmedQuestion) {
             showStatus('Please share a question, even a small one.', 'info');
             return;
+        }
+
+        const submissionGeneration = ++submissionGenerationRef.current;
+        const supersededActiveRequest = Boolean(
+            abortRef.current && currentRequest?.status === 'pending'
+        );
+        abortRef.current?.abort();
+        abortRef.current = null;
+        setStatus(
+            supersededActiveRequest
+                ? {
+                      kind: 'info',
+                      message:
+                          'The previous request was superseded. No assistant response was added.',
+                      requestState: 'superseded',
+                  }
+                : null
+        );
+        setIsLoading(false);
+        setIsPreparingSubmission(true);
+        setCurrentRequest({
+            userMessage: trimmedQuestion,
+            status: 'pending',
+        });
+        if (!isRetry) {
+            setQuestion('');
         }
 
         // Load runtime config lazily on interaction to avoid noisy startup 404s
@@ -158,26 +199,36 @@ const Chat = (): JSX.Element => {
             runtimeSiteKey = await ensureRuntimeConfigLoaded();
         }
 
+        if (submissionGenerationRef.current !== submissionGeneration) {
+            return;
+        }
+
         const captchaDisabledForRequest = !(
             runtimeSiteKey && runtimeSiteKey.trim().length > 0
         );
 
         const resolvedToken = captcha.token;
         if (!captchaDisabledForRequest && !resolvedToken) {
+            setIsPreparingSubmission(false);
+            setCurrentRequest({
+                userMessage: trimmedQuestion,
+                status: 'failed',
+            });
             if (!captcha.isManagedChallengeVisible) {
                 captcha.showManagedChallenge();
             }
             showStatus(
                 'Please complete the visible CAPTCHA verification.',
-                'info'
+                'info',
+                'captcha'
             );
             return;
         }
 
-        // Abort any in-flight request when a new one starts to avoid race conditions.
-        abortRef.current?.abort();
         const controller = new AbortController();
         abortRef.current = controller;
+        setIsPreparingSubmission(false);
+        setIsLoading(true);
 
         // Set a timeout for the fetch request (60 seconds)
         let didRequestTimeout = false;
@@ -185,14 +236,6 @@ const Chat = (): JSX.Element => {
             didRequestTimeout = true;
             controller.abort();
         }, 60000);
-
-        // Keep completed turns visible while the new request is pending.
-        setStatus(null);
-        setIsLoading(true);
-        setCurrentRequest({
-            userMessage: trimmedQuestion,
-            status: 'pending',
-        });
 
         const sessionId = sessionIdRef.current ?? window.crypto.randomUUID();
         sessionIdRef.current = sessionId;
@@ -230,14 +273,21 @@ const Chat = (): JSX.Element => {
                 }
             );
 
-            if (payload.action !== 'message') {
-                throw new Error(
-                    `Chat API returned unsupported action for web surface: ${payload.action}`
-                );
+            // A superseded response cannot change the active request's state.
+            if (abortRef.current !== controller) {
+                return;
             }
 
-            // Ignore a response that finished after a newer submission replaced it.
-            if (abortRef.current !== controller) {
+            if (payload.action !== 'message') {
+                setCurrentRequest({
+                    userMessage: trimmedQuestion,
+                    status: 'failed',
+                });
+                showStatus(
+                    'This chat response used an action that the web chat cannot display.',
+                    'error',
+                    'unsupported'
+                );
                 return;
             }
 
@@ -250,7 +300,7 @@ const Chat = (): JSX.Element => {
                 ResponseMetadata | null | undefined;
 
             if (chat.length === 0) {
-                showStatus(EMPTY_RESPONSE_MESSAGE);
+                showStatus(EMPTY_RESPONSE_MESSAGE, 'error', 'invalid-response');
                 setCurrentRequest({
                     userMessage: trimmedQuestion,
                     status: 'failed',
@@ -303,14 +353,32 @@ const Chat = (): JSX.Element => {
                             error.code === 'timeout_error')) &&
                     abortRef.current === controller
                 ) {
-                    showStatus('The request timed out. Please try again.');
+                    showStatus(
+                        'The request timed out. Please try again.',
+                        'error',
+                        'timeout'
+                    );
+                } else if (abortRef.current === controller) {
+                    setCurrentRequest({
+                        userMessage: trimmedQuestion,
+                        status: 'failed',
+                    });
+                    showStatus(
+                        'This request was superseded. No assistant response was added.',
+                        'info',
+                        'superseded'
+                    );
                 }
                 return;
             }
 
             if (isApiClientError(error)) {
                 if (error.code === 'invalid_payload') {
-                    showStatus(INVALID_RESPONSE_MESSAGE);
+                    showStatus(
+                        INVALID_RESPONSE_MESSAGE,
+                        'error',
+                        'invalid-response'
+                    );
                     return;
                 }
 
@@ -321,7 +389,7 @@ const Chat = (): JSX.Element => {
                         : 'CAPTCHA verification failed. Please refresh and try again.';
 
                     setIsLoading(false);
-                    showStatus(errorMessage);
+                    showStatus(errorMessage, 'error', 'captcha');
                     captcha.showManagedChallenge(
                         'Please complete the visible CAPTCHA and try again.'
                     );
@@ -340,7 +408,9 @@ const Chat = (): JSX.Element => {
                 ) {
                     setIsLoading(false);
                     showStatus(
-                        'CAPTCHA service is unavailable. Please try again shortly.'
+                        'CAPTCHA service is unavailable. Please try again shortly.',
+                        'error',
+                        'captcha'
                     );
                     captcha.showManagedChallenge(
                         'Please complete the visible CAPTCHA and try again.'
@@ -351,7 +421,9 @@ const Chat = (): JSX.Element => {
                 // Check for network errors
                 if (error.code === 'network_error') {
                     showStatus(
-                        'Unable to connect to the server. Please check your connection and try again.'
+                        'Unable to connect to the server. Please check your connection and try again.',
+                        'error',
+                        'network'
                     );
                     setIsLoading(false);
                     return;
@@ -363,7 +435,9 @@ const Chat = (): JSX.Element => {
                     error.message.includes('403')
                 ) {
                     showStatus(
-                        'CAPTCHA verification failed. Please refresh and try again.'
+                        'CAPTCHA verification failed. Please refresh and try again.',
+                        'error',
+                        'captcha'
                     );
                     captcha.showManagedChallenge(
                         'Please complete the visible CAPTCHA and try again.'
@@ -373,8 +447,13 @@ const Chat = (): JSX.Element => {
                 }
             }
 
+            const message = isApiClientError(error)
+                ? 'The server could not complete this request. Please try again.'
+                : 'Unable to generate a response. Please try again later.';
             showStatus(
-                'Unable to generate a response. Please try again later.'
+                message,
+                'error',
+                isApiClientError(error) ? 'backend' : undefined
             );
         } finally {
             clearTimeout(timeoutId); // Ensure timeout is cleared in all cases
@@ -383,6 +462,27 @@ const Chat = (): JSX.Element => {
                 setIsLoading(false);
             }
         }
+    };
+
+    const onSubmit = (event: FormEvent<HTMLFormElement>): void => {
+        event.preventDefault();
+        void submitUserMessage(question);
+    };
+
+    const startNewChat = (): void => {
+        submissionGenerationRef.current += 1;
+        abortRef.current?.abort();
+        abortRef.current = null;
+        sessionIdRef.current = window.crypto.randomUUID();
+        conversationRef.current = [];
+        setCompletedTurns([]);
+        setCurrentRequest(null);
+        setQuestion('');
+        setStatus(null);
+        setIsLoading(false);
+        setIsPreparingSubmission(false);
+        captcha.consumeTokenAfterSubmission();
+        inputRef.current?.focus();
     };
 
     return (
@@ -464,19 +564,22 @@ const Chat = (): JSX.Element => {
                         className="interaction-submit"
                         disabled={
                             isLoading ||
+                            isPreparingSubmission ||
                             (captcha.isManagedChallengeVisible &&
                                 !captcha.token)
                         }
                         aria-label={
                             isLoading
                                 ? 'Submitting question'
-                                : captcha.isManagedChallengeVisible &&
-                                    !captcha.token
-                                  ? 'Complete CAPTCHA to submit'
-                                  : 'Submit question'
+                                : isPreparingSubmission
+                                  ? 'Preparing request'
+                                  : captcha.isManagedChallengeVisible &&
+                                      !captcha.token
+                                    ? 'Complete CAPTCHA to submit'
+                                    : 'Submit question'
                         }
                     >
-                        {isLoading ? (
+                        {isLoading || isPreparingSubmission ? (
                             <>
                                 <span className="spinner" aria-hidden="true" />
                             </>
@@ -495,10 +598,22 @@ const Chat = (): JSX.Element => {
                 </div>
             </form>
 
+            {(completedTurns.length > 0 ||
+                currentRequest ||
+                isPreparingSubmission) && (
+                <button
+                    type="button"
+                    className="interaction-new-chat"
+                    onClick={startNewChat}
+                >
+                    New chat
+                </button>
+            )}
             {hasInteractedRef.current && status && (
                 <div
                     className="interaction-status interaction-status-visible"
                     role="status"
+                    data-request-state={status.requestState}
                 >
                     <span>{status.message}</span>
                 </div>
@@ -539,11 +654,27 @@ const Chat = (): JSX.Element => {
                                         ? 'status'
                                         : undefined
                                 }
+                                data-request-state={currentRequest.status}
                             >
                                 {currentRequest.status === 'pending'
                                     ? 'Preparing a response…'
                                     : 'No assistant response was added.'}
                             </div>
+                            {currentRequest.status === 'failed' && (
+                                <button
+                                    type="button"
+                                    className="interaction-retry"
+                                    onClick={() =>
+                                        void submitUserMessage(
+                                            currentRequest.userMessage,
+                                            true
+                                        )
+                                    }
+                                    disabled={isLoading}
+                                >
+                                    Retry question
+                                </button>
+                            )}
                         </div>
                     )}
                 </div>
