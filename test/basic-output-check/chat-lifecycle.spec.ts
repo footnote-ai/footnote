@@ -11,6 +11,8 @@ import ordinaryAnswer from './fixtures/ordinary-text-answer.json';
 declare global {
     interface Window {
         __chatCaptchaCallbacks?: Array<(token: string) => void>;
+        __chatFetchCount?: number;
+        __resolveSupersededAction?: () => void;
     }
 }
 
@@ -99,7 +101,9 @@ test('keeps prior turns after failure and retries the failed turn once', async (
         page.getByRole('button', { name: 'Retry question' })
     ).toBeVisible();
 
+    await input.fill('A separate draft');
     await page.getByRole('button', { name: 'Retry question' }).click();
+    await expect(input).toHaveValue('A separate draft');
     await expect(page.locator('.interaction-turn')).toHaveCount(2);
     await expect(page.locator('.public-message--person')).toHaveText([
         'First question',
@@ -164,6 +168,51 @@ test('new chat rotates its session and ignores the aborted response', async ({
     expect(firstSessionId).not.toBe('');
     expect(secondSessionId).not.toBe('');
     expect(secondSessionId).not.toBe(firstSessionId);
+});
+
+test('new chat invalidates a submission waiting for runtime configuration', async ({
+    page,
+}) => {
+    const pendingConfig = deferred();
+    let configRequestCount = 0;
+    await page.route('**/config.json', async (route) => {
+        configRequestCount += 1;
+        await pendingConfig.promise;
+        await route.fulfill({
+            contentType: 'application/json',
+            body: JSON.stringify({
+                turnstileSiteKey: '',
+                setup: { required: false, routePath: '/setup' },
+            }),
+        });
+    });
+    let chatRequestCount = 0;
+    await page.route('**/api/chat', async (route) => {
+        chatRequestCount += 1;
+        await route.fulfill({
+            contentType: 'application/json',
+            body: JSON.stringify(response('First answer')),
+        });
+    });
+
+    await page.goto('/chat');
+    await page.getByLabel('Ask a question').focus();
+    await expect.poll(() => configRequestCount).toBe(1);
+    await page.getByLabel('Ask a question').fill('Waiting request');
+    await page.getByRole('button', { name: 'Submit question' }).click();
+    await expect(page.locator('.public-message--person')).toHaveText(
+        'Waiting request'
+    );
+    await expect(
+        page.locator('.interaction-request-state[data-request-state="pending"]')
+    ).toBeVisible();
+    await expect(page.getByRole('button', { name: 'New chat' })).toBeVisible();
+    await page.getByRole('button', { name: 'New chat' }).click();
+    pendingConfig.resolve();
+
+    await expect(page.locator('.interaction-turn')).toHaveCount(0);
+    await expect(page.getByLabel('Ask a question')).toHaveValue('');
+    await expect.poll(() => chatRequestCount).toBe(0);
 });
 
 test('retry after CAPTCHA rejection uses a fresh token and the same turn', async ({
@@ -291,6 +340,87 @@ test('keeps a supported but web-incompatible action out of assistant content', a
     await expect(
         page.getByRole('button', { name: 'Retry question' })
     ).toBeVisible();
+});
+
+test('ignores an unsupported action returned after its request was superseded', async ({
+    page,
+}) => {
+    await page.addInitScript(() => {
+        const originalFetch = window.fetch.bind(window);
+        window.fetch = ((input: RequestInfo | URL, init?: RequestInit) => {
+            const url =
+                typeof input === 'string'
+                    ? input
+                    : input instanceof Request
+                      ? input.url
+                      : input.toString();
+            if (url.includes('/api/chat')) {
+                window.__chatFetchCount = (window.__chatFetchCount ?? 0) + 1;
+                if (window.__chatFetchCount === 1) {
+                    return new Promise<Response>((resolve) => {
+                        window.__resolveSupersededAction = () =>
+                            resolve(
+                                new Response(
+                                    JSON.stringify({
+                                        action: 'react',
+                                        reaction: '👋',
+                                        metadata: null,
+                                    }),
+                                    {
+                                        status: 200,
+                                        headers: {
+                                            'content-type': 'application/json',
+                                        },
+                                    }
+                                )
+                            );
+                    });
+                }
+            }
+            return originalFetch(input, init);
+        }) as typeof fetch;
+    });
+    await configureRuntime(page);
+    const currentResponse = deferred();
+    await page.route('**/api/chat', async (route) => {
+        await currentResponse.promise;
+        await route.fulfill({
+            contentType: 'application/json',
+            body: JSON.stringify(response('Current answer')),
+        });
+    });
+
+    await page.goto('/chat');
+    await page.getByLabel('Ask a question').fill('Older request');
+    await page.getByRole('button', { name: 'Submit question' }).click();
+    await expect
+        .poll(() => page.evaluate(() => window.__chatFetchCount))
+        .toBe(1);
+
+    await page.getByLabel('Ask a question').fill('Current request');
+    const activeRequest = page.waitForRequest('**/api/chat');
+    await page.locator('form').evaluate((form) => form.requestSubmit());
+    await activeRequest;
+    await expect(page.locator('.interaction-status')).toHaveAttribute(
+        'data-request-state',
+        'superseded'
+    );
+
+    await page.evaluate(() => window.__resolveSupersededAction?.());
+    await expect(page.locator('.interaction-status')).toHaveAttribute(
+        'data-request-state',
+        'superseded'
+    );
+    await expect(
+        page.locator('.interaction-request-state[data-request-state="pending"]')
+    ).toBeVisible();
+    await expect(page.locator('.public-message--assistant')).toHaveCount(0);
+
+    currentResponse.resolve();
+    await expect(page.getByText('Current answer')).toBeVisible();
+    await expect(
+        page.getByText('This chat response used an action')
+    ).toHaveCount(0);
 });
 
 test('keeps Enter available for multiline and ignores composing modified Enter', async ({

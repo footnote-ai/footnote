@@ -70,8 +70,10 @@ const Chat = (): JSX.Element => {
     const [currentRequest, setCurrentRequest] =
         useState<CurrentChatRequest | null>(null);
     const [isLoading, setIsLoading] = useState(false);
+    const [isPreparingSubmission, setIsPreparingSubmission] = useState(false);
     const [turnstileSiteKey, setTurnstileSiteKey] = useState('');
     const abortRef = useRef<AbortController | null>(null);
+    const submissionGenerationRef = useRef(0);
     const conversationRef = useRef<ChatConversationMessage[]>([]);
     const sessionIdRef = useRef<string | null>(null);
     const inputRef = useRef<HTMLTextAreaElement | null>(null);
@@ -145,13 +147,15 @@ const Chat = (): JSX.Element => {
         completedTurns,
         currentRequest,
         isLoading,
+        isPreparingSubmission,
         status,
         captcha.error,
         captcha.isManagedChallengeVisible,
     ]);
 
     const submitUserMessage = async (
-        submittedMessage: string
+        submittedMessage: string,
+        isRetry = false
     ): Promise<void> => {
         // Mark that user has interacted
         hasInteractedRef.current = true;
@@ -162,11 +166,41 @@ const Chat = (): JSX.Element => {
             return;
         }
 
+        const submissionGeneration = ++submissionGenerationRef.current;
+        const supersededActiveRequest = Boolean(
+            abortRef.current && currentRequest?.status === 'pending'
+        );
+        abortRef.current?.abort();
+        abortRef.current = null;
+        setStatus(
+            supersededActiveRequest
+                ? {
+                      kind: 'info',
+                      message:
+                          'The previous request was superseded. No assistant response was added.',
+                      requestState: 'superseded',
+                  }
+                : null
+        );
+        setIsLoading(false);
+        setIsPreparingSubmission(true);
+        setCurrentRequest({
+            userMessage: trimmedQuestion,
+            status: 'pending',
+        });
+        if (!isRetry) {
+            setQuestion('');
+        }
+
         // Load runtime config lazily on interaction to avoid noisy startup 404s
         // when the backend is not present.
         let runtimeSiteKey = turnstileSiteKey;
         if (!runtimeSiteKey) {
             runtimeSiteKey = await ensureRuntimeConfigLoaded();
+        }
+
+        if (submissionGenerationRef.current !== submissionGeneration) {
+            return;
         }
 
         const captchaDisabledForRequest = !(
@@ -175,6 +209,11 @@ const Chat = (): JSX.Element => {
 
         const resolvedToken = captcha.token;
         if (!captchaDisabledForRequest && !resolvedToken) {
+            setIsPreparingSubmission(false);
+            setCurrentRequest({
+                userMessage: trimmedQuestion,
+                status: 'failed',
+            });
             if (!captcha.isManagedChallengeVisible) {
                 captcha.showManagedChallenge();
             }
@@ -186,13 +225,10 @@ const Chat = (): JSX.Element => {
             return;
         }
 
-        const supersededActiveRequest = Boolean(
-            abortRef.current && currentRequest?.status === 'pending'
-        );
-        // The retry reuses the failed turn; only an active request is superseded.
-        abortRef.current?.abort();
         const controller = new AbortController();
         abortRef.current = controller;
+        setIsPreparingSubmission(false);
+        setIsLoading(true);
 
         // Set a timeout for the fetch request (60 seconds)
         let didRequestTimeout = false;
@@ -200,24 +236,6 @@ const Chat = (): JSX.Element => {
             didRequestTimeout = true;
             controller.abort();
         }, 60000);
-
-        // Keep completed turns visible while the new request is pending.
-        setStatus(
-            supersededActiveRequest
-                ? {
-                      kind: 'info',
-                      message:
-                          'The previous request was superseded. No assistant response was added.',
-                      requestState: 'superseded',
-                  }
-                : null
-        );
-        setIsLoading(true);
-        setCurrentRequest({
-            userMessage: trimmedQuestion,
-            status: 'pending',
-        });
-        setQuestion('');
 
         const sessionId = sessionIdRef.current ?? window.crypto.randomUUID();
         sessionIdRef.current = sessionId;
@@ -255,6 +273,11 @@ const Chat = (): JSX.Element => {
                 }
             );
 
+            // A superseded response cannot change the active request's state.
+            if (abortRef.current !== controller) {
+                return;
+            }
+
             if (payload.action !== 'message') {
                 setCurrentRequest({
                     userMessage: trimmedQuestion,
@@ -265,11 +288,6 @@ const Chat = (): JSX.Element => {
                     'error',
                     'unsupported'
                 );
-                return;
-            }
-
-            // Ignore a response that finished after a newer submission replaced it.
-            if (abortRef.current !== controller) {
                 return;
             }
 
@@ -452,6 +470,7 @@ const Chat = (): JSX.Element => {
     };
 
     const startNewChat = (): void => {
+        submissionGenerationRef.current += 1;
         abortRef.current?.abort();
         abortRef.current = null;
         sessionIdRef.current = window.crypto.randomUUID();
@@ -461,6 +480,7 @@ const Chat = (): JSX.Element => {
         setQuestion('');
         setStatus(null);
         setIsLoading(false);
+        setIsPreparingSubmission(false);
         captcha.consumeTokenAfterSubmission();
         inputRef.current?.focus();
     };
@@ -544,19 +564,22 @@ const Chat = (): JSX.Element => {
                         className="interaction-submit"
                         disabled={
                             isLoading ||
+                            isPreparingSubmission ||
                             (captcha.isManagedChallengeVisible &&
                                 !captcha.token)
                         }
                         aria-label={
                             isLoading
                                 ? 'Submitting question'
-                                : captcha.isManagedChallengeVisible &&
-                                    !captcha.token
-                                  ? 'Complete CAPTCHA to submit'
-                                  : 'Submit question'
+                                : isPreparingSubmission
+                                  ? 'Preparing request'
+                                  : captcha.isManagedChallengeVisible &&
+                                      !captcha.token
+                                    ? 'Complete CAPTCHA to submit'
+                                    : 'Submit question'
                         }
                     >
-                        {isLoading ? (
+                        {isLoading || isPreparingSubmission ? (
                             <>
                                 <span className="spinner" aria-hidden="true" />
                             </>
@@ -575,7 +598,9 @@ const Chat = (): JSX.Element => {
                 </div>
             </form>
 
-            {(completedTurns.length > 0 || currentRequest) && (
+            {(completedTurns.length > 0 ||
+                currentRequest ||
+                isPreparingSubmission) && (
                 <button
                     type="button"
                     className="interaction-new-chat"
@@ -641,7 +666,8 @@ const Chat = (): JSX.Element => {
                                     className="interaction-retry"
                                     onClick={() =>
                                         void submitUserMessage(
-                                            currentRequest.userMessage
+                                            currentRequest.userMessage,
+                                            true
                                         )
                                     }
                                     disabled={isLoading}

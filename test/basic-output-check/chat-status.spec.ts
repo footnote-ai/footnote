@@ -600,6 +600,9 @@ test('CAPTCHA verification preserves an error status with different wording', as
 
     await page.goto('/chat');
     await page.getByLabel('Ask a question').focus();
+    const initialCaptchaCallbackCount = await page.evaluate(
+        () => window.__footnoteTurnstileCallbacks?.length ?? 0
+    );
     await expect
         .poll(() =>
             page.evaluate(
@@ -618,8 +621,15 @@ test('CAPTCHA verification preserves an error status with different wording', as
 
     const expectedError = 'The request timed out. Please try again.';
     await expect(page.getByRole('status')).toHaveText(expectedError);
+    await expect
+        .poll(() =>
+            page.evaluate(
+                () => window.__footnoteTurnstileCallbacks?.length ?? 0
+            )
+        )
+        .toBeGreaterThan(initialCaptchaCallbackCount);
     await page.evaluate(() => {
-        const callback = window.__footnoteTurnstileCallbacks?.[0];
+        const callback = window.__footnoteTurnstileCallbacks?.at(-1);
         callback?.('XXXX.DUMMY.TOKEN.XXXX');
     });
 
