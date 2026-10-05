@@ -995,6 +995,11 @@ components:
                         - outputCostUsd
                         - totalCostUsd
                     additionalProperties: false
+                attempts:
+                    type: array
+                    description: Per-attempt execution facts, including bounded TrustGraph boundary measurements.
+                    items:
+                        $ref: '#/components/schemas/WorkflowAttemptRecord'
                 outcome:
                     $ref: '#/components/schemas/WorkflowStepOutcome'
             required:
@@ -1006,6 +1011,123 @@ components:
                 - durationMs
                 - outcome
             additionalProperties: false
+        WorkflowTrustGraphTargetExecution:
+            x-codeRefs:
+                - packages/contracts/src/policy/types.ts#WorkflowTrustGraphTargetExecution
+                - packages/contracts/src/web/schemas.ts#WorkflowTrustGraphTargetExecutionSchema
+            type: object
+            properties:
+                targetId:
+                    type: string
+                    minLength: 1
+                flow:
+                    type: string
+                    minLength: 1
+                collection:
+                    type: string
+                    minLength: 1
+                outcome:
+                    type: string
+                    enum:
+                        - requested
+                        - executed
+                        - skipped
+                        - failed
+                reasonCode:
+                    type: string
+                    enum:
+                        - not_requested
+                        - adapter_unavailable
+                        - scope_denied
+                        - timeout
+                        - aborted
+                        - request_failed
+                measurements:
+                    type: object
+                    properties:
+                        provenance:
+                            type: string
+                            enum:
+                                - footnote_measured
+                        requestDurationMs:
+                            type: number
+                            minimum: 0
+                        returnedSourceCount:
+                            type: integer
+                            minimum: 0
+                        retainedSourceCount:
+                            type: integer
+                            minimum: 0
+                        responseCodeUnitsBeforeBounds:
+                            type: integer
+                            minimum: 0
+                        responseCodeUnitsAfterBounds:
+                            type: integer
+                            minimum: 0
+                        sourceTextCodeUnitsBeforeBounds:
+                            type: integer
+                            minimum: 0
+                        sourceTextCodeUnitsAfterBounds:
+                            type: integer
+                            minimum: 0
+                    required:
+                        - provenance
+                    additionalProperties: false
+                bounds:
+                    type: object
+                    properties:
+                        provenance:
+                            type: string
+                            enum:
+                                - derived
+                        sourcesTruncated:
+                            type: boolean
+                        responseTruncated:
+                            type: boolean
+                    required:
+                        - provenance
+                    additionalProperties: false
+            required:
+                - targetId
+                - flow
+                - collection
+                - outcome
+            additionalProperties: false
+        WorkflowAttemptRecord:
+            x-codeRefs:
+                - packages/contracts/src/policy/types.ts#WorkflowAttemptRecord
+                - packages/contracts/src/web/schemas.ts#WorkflowAttemptRecordSchema
+            type: object
+            properties:
+                attempt:
+                    type: integer
+                    minimum: 1
+                status:
+                    type: string
+                    enum:
+                        - succeeded
+                        - failed
+                        - rejected
+                startedAt:
+                    type: string
+                    format: date-time
+                finishedAt:
+                    type: string
+                    format: date-time
+                durationMs:
+                    type: integer
+                    minimum: 0
+                trustGraphTargets:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/WorkflowTrustGraphTargetExecution'
+            required:
+                - attempt
+                - status
+                - startedAt
+                - finishedAt
+                - durationMs
+            additionalProperties: true
         WorkflowRecord:
             x-codeRefs:
                 - packages/contracts/src/policy/types.ts#WorkflowRecord
