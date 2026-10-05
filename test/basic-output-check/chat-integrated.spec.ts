@@ -10,6 +10,7 @@ import type { PostChatRequest } from '@footnote/contracts/web';
 import {
     configureRuntime,
     deferred,
+    expectTurnSource,
     latestEmbedHeight,
     mountSizedEmbed,
     readEmbedHeights,
@@ -139,34 +140,20 @@ test('keeps request assembly, retries, provenance, and reset coherent on /chat',
 
     const firstTurn = page.locator('.interaction-turn').nth(0);
     const secondTurn = page.locator('.interaction-turn').nth(1);
-    const firstFootnote = firstTurn.locator('.canonical-response-footnote');
-    const secondFootnote = secondTurn.locator('.canonical-response-footnote');
-    await expect(firstFootnote).toHaveAttribute(
-        'data-response-id',
-        'integrated-response-1'
+    const firstFootnote = await expectTurnSource(
+        firstTurn,
+        'integrated-response-1',
+        'Integrated source 1',
+        'https://example.org/integrated-1',
+        'Integrated source 2'
     );
-    await expect(secondFootnote).toHaveAttribute(
-        'data-response-id',
-        'integrated-response-2'
+    const secondFootnote = await expectTurnSource(
+        secondTurn,
+        'integrated-response-2',
+        'Integrated source 2',
+        'https://example.org/integrated-2',
+        'Integrated source 1'
     );
-    await firstFootnote
-        .getByRole('button', { name: 'Sources', exact: true })
-        .click();
-    await expect(
-        firstFootnote.getByRole('link', { name: 'Integrated source 1' })
-    ).toHaveAttribute('href', 'https://example.org/integrated-1');
-    await expect(
-        firstFootnote.getByRole('link', { name: 'Integrated source 2' })
-    ).toHaveCount(0);
-    await secondFootnote
-        .getByRole('button', { name: 'Sources', exact: true })
-        .click();
-    await expect(
-        secondFootnote.getByRole('link', { name: 'Integrated source 2' })
-    ).toHaveAttribute('href', 'https://example.org/integrated-2');
-    await expect(
-        secondFootnote.getByRole('link', { name: 'Integrated source 1' })
-    ).toHaveCount(0);
     await secondFootnote
         .getByRole('button', { name: 'Trace', exact: true })
         .click();

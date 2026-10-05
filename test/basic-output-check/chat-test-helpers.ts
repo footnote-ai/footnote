@@ -5,7 +5,12 @@
  * @footnote-risk: low - Helpers only prepare controlled browser requests.
  * @footnote-ethics: low - Fixtures use public synthetic response data.
  */
-import type { FrameLocator, Page } from '@playwright/test';
+import {
+    expect,
+    type FrameLocator,
+    type Locator,
+    type Page,
+} from '@playwright/test';
 import ordinaryAnswer from './fixtures/ordinary-text-answer.json';
 
 export const deferred = (): { promise: Promise<void>; resolve: () => void } => {
@@ -49,7 +54,28 @@ export const responseWithCitation = (
     },
 });
 
-export const readEmbedHeights = async (page: Page): Promise<number[]> =>
+export const expectTurnSource = async (
+    turn: Locator,
+    responseId: string,
+    sourceTitle: string,
+    sourceUrl: string,
+    otherTurnSourceTitle: string
+): Promise<Locator> => {
+    const footnote = turn.locator('.canonical-response-footnote');
+    await expect(footnote).toHaveAttribute('data-response-id', responseId);
+    await footnote
+        .getByRole('button', { name: 'Sources', exact: true })
+        .click();
+    await expect(
+        footnote.getByRole('link', { name: sourceTitle })
+    ).toHaveAttribute('href', sourceUrl);
+    await expect(
+        footnote.getByRole('link', { name: otherTurnSourceTitle })
+    ).toHaveCount(0);
+    return footnote;
+};
+
+export const readEmbedHeights = (page: Page): Promise<number[]> =>
     page.evaluate(
         () =>
             (window as Window & { __footnoteEmbedHeights?: number[] })
@@ -85,6 +111,7 @@ export const mountSizedEmbed = async (
         const parent = window as Window & { __footnoteEmbedHeights?: number[] };
         parent.__footnoteEmbedHeights = [];
         window.addEventListener('message', (event: MessageEvent) => {
+            if (event.origin !== window.location.origin) return;
             const data = event.data as { type?: string; height?: number };
             if (data.type !== 'footnote-embed-height' || !data.height) {
                 return;

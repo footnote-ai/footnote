@@ -7,7 +7,7 @@
  */
 
 import { expect, test } from '@playwright/test';
-import { responseWithCitation } from './chat-test-helpers';
+import { expectTurnSource, responseWithCitation } from './chat-test-helpers';
 
 test('keeps each successful exchange and its provenance after a follow-up', async ({
     page,
@@ -63,33 +63,20 @@ test('keeps each successful exchange and its provenance after a follow-up', asyn
         secondTurn.locator('.public-message--assistant')
     ).toContainText('Answer for turn 2.');
 
-    const firstFootnote = firstTurn.locator('.canonical-response-footnote');
-    const secondFootnote = secondTurn.locator('.canonical-response-footnote');
-    await expect(firstFootnote).toHaveAttribute(
-        'data-response-id',
-        'transcript-response-1'
+    const firstFootnote = await expectTurnSource(
+        firstTurn,
+        'transcript-response-1',
+        'Source for turn 1',
+        'https://example.org/source-1',
+        'Source for turn 2'
     );
-    await expect(secondFootnote).toHaveAttribute(
-        'data-response-id',
-        'transcript-response-2'
+    const secondFootnote = await expectTurnSource(
+        secondTurn,
+        'transcript-response-2',
+        'Source for turn 2',
+        'https://example.org/source-2',
+        'Source for turn 1'
     );
-
-    await firstFootnote
-        .getByRole('button', { name: 'Sources', exact: true })
-        .click();
-    await expect(
-        firstFootnote.getByRole('link', { name: 'Source for turn 1' })
-    ).toHaveAttribute('href', 'https://example.org/source-1');
-    await expect(
-        firstFootnote.getByRole('link', { name: 'Source for turn 2' })
-    ).toHaveCount(0);
-
-    await secondFootnote
-        .getByRole('button', { name: 'Sources', exact: true })
-        .click();
-    await expect(
-        secondFootnote.getByRole('link', { name: 'Source for turn 2' })
-    ).toHaveAttribute('href', 'https://example.org/source-2');
     await expect(firstTurn.locator('.public-message--assistant')).toContainText(
         'Answer for turn 1.'
     );
