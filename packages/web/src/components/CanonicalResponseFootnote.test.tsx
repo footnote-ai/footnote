@@ -276,7 +276,7 @@ test('rendered prepared fixture exposes sources and controls but no Trace href',
     assert.match(markup, /Reporting is not available on this surface\./);
 });
 
-test('rendered live fixture keeps unknown Trace action honest and Report disabled', () => {
+test('rendered live fixture keeps unknown Trace linkable and unconfirmed', () => {
     const markup = render(
         toFootnote(fixture.complete),
         'unknown',
@@ -285,10 +285,7 @@ test('rendered live fixture keeps unknown Trace action honest and Report disable
 
     assert.match(markup, /<span>Trace<\/span>/);
     assert.match(markup, /aria-expanded="false"/);
-    assert.doesNotMatch(
-        markup,
-        /href="\/traces\/response-footnote-fixture-complete"/
-    );
+    assert.match(markup, /href="\/traces\/response-footnote-fixture-complete"/);
     assert.match(
         markup,
         /Trace availability is not confirmed by the chat response\./

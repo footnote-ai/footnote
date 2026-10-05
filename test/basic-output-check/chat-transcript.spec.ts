@@ -111,7 +111,7 @@ test('keeps each successful exchange and its provenance after a follow-up', asyn
     );
     await expect(
         firstTrace.getByRole('link', { name: 'Open full Trace' })
-    ).toHaveCount(0);
+    ).toHaveAttribute('href', '/traces/transcript-response-1');
 
     await secondFootnote
         .getByRole('button', { name: 'Trace', exact: true })
@@ -120,6 +120,9 @@ test('keeps each successful exchange and its provenance after a follow-up', asyn
     await expect(secondTrace).toContainText(
         'Trace availability is not confirmed by the chat response.'
     );
+    await expect(
+        secondTrace.getByRole('link', { name: 'Open full Trace' })
+    ).toHaveAttribute('href', '/traces/transcript-response-2');
     await page.screenshot({
         animations: 'disabled',
         fullPage: true,
