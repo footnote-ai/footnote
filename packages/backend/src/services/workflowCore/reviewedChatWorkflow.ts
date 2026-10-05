@@ -32,6 +32,7 @@ import type {
     WorkflowAttemptRoutingRecord,
     WorkflowAttemptCapabilities,
     WorkflowAttemptSettings,
+    WorkflowTrustGraphTargetExecution,
     WorkflowResultRecord,
     WorkflowResultReference,
     WorkflowRecord,
@@ -353,7 +354,25 @@ type ChatStepMetadata = {
     terminationReason?: WorkflowTerminationReason;
     presentation?: PresentationMetadata;
     candidateId?: string;
+    trustGraphTargets?: WorkflowTrustGraphTargetExecution[];
 };
+
+const trustGraphExecutionsFromContextResults = (
+    results: readonly ContextStepResult[]
+): WorkflowTrustGraphTargetExecution[] =>
+    results.flatMap((result) => {
+        if (result.integrationContext?.kind !== 'trustgraph') return [];
+        const payload = result.integrationContext.payload;
+        if (
+            !isPlainRecord(payload) ||
+            !Array.isArray(payload.targetExecutions)
+        ) {
+            return [];
+        }
+        // The executor writes this allowlisted summary; retrieved evidence stays
+        // in its existing integration result and is not copied into Attempt metadata.
+        return payload.targetExecutions as WorkflowTrustGraphTargetExecution[];
+    });
 
 const toWorkflowSettingRecord = (
     value: object | undefined
@@ -724,6 +743,12 @@ const buildWorkflowLineage = (input: {
                     ...(attemptMetadata?.routingAttempts === undefined
                         ? {}
                         : { routingAttempts: attemptMetadata.routingAttempts }),
+                    ...(attemptMetadata?.trustGraphTargets === undefined
+                        ? {}
+                        : {
+                              trustGraphTargets:
+                                  attemptMetadata.trustGraphTargets,
+                          }),
                 };
             }
         );
@@ -1856,6 +1881,8 @@ export const runBoundedReviewWorkflow = async (
                 ? (result.evidence?.content ?? [])
                 : []
         );
+        const trustGraphTargets =
+            trustGraphExecutionsFromContextResults(evidenceResults);
         const toolCalls = executable.length;
         return {
             status: 'succeeded',
@@ -1894,6 +1921,9 @@ export const runBoundedReviewWorkflow = async (
                                   : 'ambiguous_location',
                       }
                     : { contextStepCount: evidenceResults.length },
+                ...(trustGraphTargets.length === 0
+                    ? {}
+                    : { trustGraphTargets }),
             }),
         };
     };

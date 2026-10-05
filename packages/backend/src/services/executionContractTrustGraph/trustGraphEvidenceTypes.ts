@@ -7,6 +7,22 @@
  * @footnote-ethics: high - Evidence and provenance contract clarity directly affects reviewability and trust.
  */
 
+import type { WorkflowTrustGraphTargetExecution } from '@footnote/contracts/policy';
+
+/** Safe failure envelope for target requests that all failed at the boundary. */
+export class TrustGraphTargetRequestFailuresError extends Error {
+    public readonly targetExecutions: WorkflowTrustGraphTargetExecution[];
+
+    public constructor(
+        targetExecutions: WorkflowTrustGraphTargetExecution[],
+        message = 'trustgraph_all_target_requests_failed'
+    ) {
+        super(message);
+        this.name = 'TrustGraphTargetRequestFailuresError';
+        this.targetExecutions = targetExecutions;
+    }
+}
+
 export type ScopeTuple = {
     userId: string;
     projectId?: string;
@@ -85,6 +101,8 @@ export type EvidenceBundle = {
     adapterVersion: string;
     /** Failed configured targets are observable without exposing transport details. */
     partialTargetFailureIds?: string[];
+    /** Safe target-boundary facts; bodies and provider-internal timings are excluded. */
+    targetExecutions?: WorkflowTrustGraphTargetExecution[];
 };
 
 export type ScopeValidationResult =
@@ -252,6 +270,8 @@ export type TrustGraphEvidenceIngestionResult = {
     droppedEvidenceCount: number;
     droppedEvidenceIds: string[];
     provenanceReasonCodes: TrustGraphProvenanceReasonCode[];
+    /** Safe target-boundary facts; absent measurements are unavailable. */
+    targetExecutions?: WorkflowTrustGraphTargetExecution[];
     predicateViews: GovernedPredicateViews;
     provenanceJoin?: ExternalArtifactJoin;
 };

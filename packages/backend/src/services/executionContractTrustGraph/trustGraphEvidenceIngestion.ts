@@ -20,6 +20,7 @@ import {
 import {
     TrustGraphOwnershipBypassCapability,
     TrustGraphOwnershipValidationPolicy,
+    TrustGraphTargetRequestFailuresError,
 } from './trustGraphEvidenceTypes.js';
 import type {
     Budget,
@@ -268,6 +269,97 @@ const toAdvisoryEvidenceItems = (
         ...(item.sourceTitle !== undefined && {
             sourceTitle: item.sourceTitle,
         }),
+    }));
+
+const toSafeTargetExecutions = (
+    executions: EvidenceBundle['targetExecutions']
+): TrustGraphEvidenceIngestionResult['targetExecutions'] =>
+    executions?.map((execution) => ({
+        targetId: execution.targetId,
+        flow: execution.flow,
+        collection: execution.collection,
+        outcome: execution.outcome,
+        ...(execution.reasonCode === undefined
+            ? {}
+            : { reasonCode: execution.reasonCode }),
+        ...(execution.measurements === undefined
+            ? {}
+            : {
+                  measurements: {
+                      provenance: 'footnote_measured' as const,
+                      ...(execution.measurements.requestDurationMs === undefined
+                          ? {}
+                          : {
+                                requestDurationMs:
+                                    execution.measurements.requestDurationMs,
+                            }),
+                      ...(execution.measurements.returnedSourceCount ===
+                      undefined
+                          ? {}
+                          : {
+                                returnedSourceCount:
+                                    execution.measurements.returnedSourceCount,
+                            }),
+                      ...(execution.measurements.retainedSourceCount ===
+                      undefined
+                          ? {}
+                          : {
+                                retainedSourceCount:
+                                    execution.measurements.retainedSourceCount,
+                            }),
+                      ...(execution.measurements
+                          .responseCodeUnitsBeforeBounds === undefined
+                          ? {}
+                          : {
+                                responseCodeUnitsBeforeBounds:
+                                    execution.measurements
+                                        .responseCodeUnitsBeforeBounds,
+                            }),
+                      ...(execution.measurements
+                          .responseCodeUnitsAfterBounds === undefined
+                          ? {}
+                          : {
+                                responseCodeUnitsAfterBounds:
+                                    execution.measurements
+                                        .responseCodeUnitsAfterBounds,
+                            }),
+                      ...(execution.measurements
+                          .sourceTextCodeUnitsBeforeBounds === undefined
+                          ? {}
+                          : {
+                                sourceTextCodeUnitsBeforeBounds:
+                                    execution.measurements
+                                        .sourceTextCodeUnitsBeforeBounds,
+                            }),
+                      ...(execution.measurements
+                          .sourceTextCodeUnitsAfterBounds === undefined
+                          ? {}
+                          : {
+                                sourceTextCodeUnitsAfterBounds:
+                                    execution.measurements
+                                        .sourceTextCodeUnitsAfterBounds,
+                            }),
+                  },
+              }),
+        ...(execution.bounds === undefined
+            ? {}
+            : {
+                  bounds: {
+                      provenance: 'derived' as const,
+                      ...(execution.bounds.sourcesTruncated === undefined
+                          ? {}
+                          : {
+                                sourcesTruncated:
+                                    execution.bounds.sourcesTruncated,
+                            }),
+                      ...(execution.bounds.responseTruncated === undefined
+                          ? {}
+                          : {
+                                responseTruncated:
+                                    execution.bounds.responseTruncated,
+                            }),
+                  },
+              }),
     }));
 
 const defaultLocalExecutionContractOutcome = (): LocalTerminalOutcome =>
@@ -674,6 +766,13 @@ export const runEvidenceIngestion = async (
             droppedEvidenceCount: 0,
             droppedEvidenceIds: [],
             provenanceReasonCodes,
+            ...(error instanceof TrustGraphTargetRequestFailuresError
+                ? {
+                      targetExecutions: toSafeTargetExecutions(
+                          error.targetExecutions
+                      ),
+                  }
+                : {}),
             predicateViews: createEmptyConsumerViews(),
         };
     }
@@ -746,6 +845,13 @@ export const runEvidenceIngestion = async (
             droppedEvidenceCount,
             droppedEvidenceIds,
             provenanceReasonCodes,
+            ...(adapterBundle.targetExecutions === undefined
+                ? {}
+                : {
+                      targetExecutions: toSafeTargetExecutions(
+                          adapterBundle.targetExecutions
+                      ),
+                  }),
             predicateViews,
             provenanceJoin,
         };

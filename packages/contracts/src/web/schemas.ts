@@ -28,6 +28,7 @@ import {
     type SteerabilityControls,
     type TraceAxisScore,
     type TrustGraphMetadata,
+    type WorkflowTrustGraphTargetExecution,
 } from '../policy/index.js';
 import {
     PersonaExpressionStrengthSchema,
@@ -1132,6 +1133,74 @@ const WorkflowAttemptCapabilitiesSchema = z
     })
     .strict();
 
+const WorkflowTrustGraphTargetExecutionSchema = z
+    .object({
+        targetId: z.string().min(1),
+        flow: z.string().min(1),
+        collection: z.string().min(1),
+        outcome: z.enum(['requested', 'executed', 'skipped', 'failed']),
+        reasonCode: z
+            .enum([
+                'not_requested',
+                'adapter_unavailable',
+                'scope_denied',
+                'timeout',
+                'aborted',
+                'request_failed',
+            ])
+            .optional(),
+        measurements: z
+            .object({
+                provenance: z.literal('footnote_measured'),
+                requestDurationMs: z.number().nonnegative().optional(),
+                returnedSourceCount: z.number().int().nonnegative().optional(),
+                retainedSourceCount: z.number().int().nonnegative().optional(),
+                responseCodeUnitsBeforeBounds: z
+                    .number()
+                    .int()
+                    .nonnegative()
+                    .optional(),
+                responseCodeUnitsAfterBounds: z
+                    .number()
+                    .int()
+                    .nonnegative()
+                    .optional(),
+                sourceTextCodeUnitsBeforeBounds: z
+                    .number()
+                    .int()
+                    .nonnegative()
+                    .optional(),
+                sourceTextCodeUnitsAfterBounds: z
+                    .number()
+                    .int()
+                    .nonnegative()
+                    .optional(),
+            })
+            .strict()
+            .optional(),
+        bounds: z
+            .object({
+                provenance: z.literal('derived'),
+                sourcesTruncated: z.boolean().optional(),
+                responseTruncated: z.boolean().optional(),
+            })
+            .strict()
+            .optional(),
+    })
+    .strict();
+type _AssertWorkflowTrustGraphTargetExecution =
+    z.infer<
+        typeof WorkflowTrustGraphTargetExecutionSchema
+    > extends WorkflowTrustGraphTargetExecution
+        ? WorkflowTrustGraphTargetExecution extends z.infer<
+              typeof WorkflowTrustGraphTargetExecutionSchema
+          >
+            ? true
+            : never
+        : never;
+const _assertWorkflowTrustGraphTargetExecution: _AssertWorkflowTrustGraphTargetExecution = true;
+void _assertWorkflowTrustGraphTargetExecution;
+
 const WorkflowAttemptRecordSchema = z
     .object({
         attempt: z.number().int().positive(),
@@ -1159,6 +1228,9 @@ const WorkflowAttemptRecordSchema = z
         reasonCode: z.string().min(1).optional(),
         terminationReason: z.string().min(1).optional(),
         routingAttempts: z.array(WorkflowAttemptRoutingRecordSchema).optional(),
+        trustGraphTargets: z
+            .array(WorkflowTrustGraphTargetExecutionSchema)
+            .optional(),
     })
     .strict();
 

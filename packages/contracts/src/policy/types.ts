@@ -1017,9 +1017,45 @@ export type WorkflowAttemptCapabilities = {
     nativeSearch: ModelCapabilitySupport;
 };
 
+/**
+ * TrustGraph request-boundary facts observed by Footnote. Missing measurements
+ * are unavailable; this record never represents TrustGraph internal timing.
+ */
+export type WorkflowTrustGraphTargetExecution = {
+    targetId: string;
+    flow: string;
+    collection: string;
+    outcome: 'requested' | 'executed' | 'skipped' | 'failed';
+    reasonCode?:
+        | 'not_requested'
+        | 'adapter_unavailable'
+        | 'scope_denied'
+        | 'timeout'
+        | 'aborted'
+        | 'request_failed';
+    /** Footnote measurements in milliseconds, source counts, or UTF-16 code units; omitted values are unavailable. */
+    measurements?: {
+        provenance: 'footnote_measured';
+        requestDurationMs?: number;
+        returnedSourceCount?: number;
+        retainedSourceCount?: number;
+        responseCodeUnitsBeforeBounds?: number;
+        responseCodeUnitsAfterBounds?: number;
+        sourceTextCodeUnitsBeforeBounds?: number;
+        sourceTextCodeUnitsAfterBounds?: number;
+    };
+    /** Truncation flags derived from Footnote's observed bounds, not TrustGraph reports. */
+    bounds?: {
+        provenance: 'derived';
+        sourcesTruncated?: boolean;
+        responseTruncated?: boolean;
+    };
+};
+
 export type WorkflowAttemptRecord = {
     attempt: number;
     status: 'succeeded' | 'failed' | 'rejected';
+    /** Backend-observed attempt wall-clock bounds; `durationMs` is their difference, not provider compute time. */
     startedAt: string;
     finishedAt: string;
     durationMs: number;
@@ -1040,6 +1076,7 @@ export type WorkflowAttemptRecord = {
     reasonCode?: string;
     terminationReason?: string;
     routingAttempts?: WorkflowAttemptRoutingRecord[];
+    trustGraphTargets?: WorkflowTrustGraphTargetExecution[];
 };
 
 export type StepRecord = {
@@ -1048,6 +1085,7 @@ export type StepRecord = {
     attempt: number;
     stepKind: WorkflowStepKind;
     reasonCode?: ExecutionReasonCode;
+    /** Backend-observed Step bounds; `durationMs` is derived from these timestamps. */
     startedAt: string;
     finishedAt: string;
     durationMs: number;

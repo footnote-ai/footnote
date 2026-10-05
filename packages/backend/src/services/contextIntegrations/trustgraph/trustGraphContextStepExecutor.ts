@@ -6,6 +6,7 @@
  * @footnote-ethics: high - TrustGraph evidence signals can influence response framing and reviewer oversight.
  */
 import type { Citation } from '@footnote/contracts/policy';
+import type { WorkflowTrustGraphTargetExecution } from '@footnote/contracts/policy';
 import { runEvidenceIngestion } from '../../executionContractTrustGraph/trustGraphEvidenceIngestion.js';
 import type {
     ScopeTuple,
@@ -13,6 +14,7 @@ import type {
     TrustGraphEvidenceIngestionResult,
     TrustGraphOwnershipValidationPolicy,
     ScopeOwnershipValidator,
+    TrustGraphTargetConfig,
 } from '../../executionContractTrustGraph/trustGraphEvidenceTypes.js';
 import type { ScopeValidationPolicy } from '../../executionContractTrustGraph/scopeValidator.js';
 import type {
@@ -33,6 +35,7 @@ type TrustGraphContextStepInput = {
 
 export type TrustGraphContextStepRuntimeOptions = {
     adapter?: TrustGraphEvidenceAdapter;
+    targets?: readonly TrustGraphTargetConfig[];
     budget: {
         timeoutMs: number;
         maxCalls: number;
@@ -47,6 +50,69 @@ export type TrustGraphContextStepRuntimeOptions = {
             | 'ownershipValidationTimeoutMs'
         >
     >;
+};
+
+const targetExecutionsForOutcome = (input: {
+    targets: readonly TrustGraphTargetConfig[] | undefined;
+    requestedTargetIds: readonly string[];
+    status: TrustGraphEvidenceIngestionResult['adapterStatus'];
+    executions?: readonly WorkflowTrustGraphTargetExecution[];
+}): WorkflowTrustGraphTargetExecution[] => {
+    const knownExecutions = new Map(
+        (input.executions ?? []).map((execution) => [
+            execution.targetId,
+            execution,
+        ])
+    );
+    return (input.targets ?? []).map((target) => {
+        const known = knownExecutions.get(target.id);
+        if (known !== undefined) return known;
+        if (!input.requestedTargetIds.includes(target.id)) {
+            return {
+                targetId: target.id,
+                flow: target.flow,
+                collection: target.collection,
+                outcome: 'skipped',
+                reasonCode: 'not_requested',
+            };
+        }
+        if (input.status === 'timeout') {
+            return {
+                targetId: target.id,
+                flow: target.flow,
+                collection: target.collection,
+                outcome: 'failed',
+                reasonCode: 'timeout',
+            };
+        }
+        if (input.status === 'error') {
+            return {
+                targetId: target.id,
+                flow: target.flow,
+                collection: target.collection,
+                outcome: 'failed',
+                reasonCode: 'request_failed',
+            };
+        }
+        if (input.status === 'scope_denied') {
+            return {
+                targetId: target.id,
+                flow: target.flow,
+                collection: target.collection,
+                outcome: 'skipped',
+                reasonCode: 'scope_denied',
+            };
+        }
+        return {
+            targetId: target.id,
+            flow: target.flow,
+            collection: target.collection,
+            outcome: 'requested',
+            ...(input.status === 'off'
+                ? { reasonCode: 'adapter_unavailable' as const }
+                : {}),
+        };
+    });
 };
 
 const parseTrustGraphContextStepInput = (
@@ -265,12 +331,14 @@ export const createTrustGraphContextStepExecutor = ({
             });
         }
         const parsed = parseTrustGraphContextStepInput(request.input);
+        const requestedTargetIds =
+            parsed === undefined ? undefined : parseTargetIds(parsed.targetIds);
         if (
             parsed === undefined ||
             typeof parsed.queryIntent !== 'string' ||
             parsed.queryIntent.trim().length === 0 ||
             !isScopeTuple(parsed.scopeTuple) ||
-            parseTargetIds(parsed.targetIds) === undefined
+            requestedTargetIds === undefined
         ) {
             return buildSkippedContextStepResult({
                 toolName: request.integrationName,
@@ -281,13 +349,19 @@ export const createTrustGraphContextStepExecutor = ({
             const trustGraphResult = await runEvidenceIngestion({
                 queryIntent: parsed.queryIntent,
                 scopeTuple: parsed.scopeTuple,
-                targetIds: parseTargetIds(parsed.targetIds),
+                targetIds: requestedTargetIds,
                 budget: runtimeOptions.budget,
                 ownershipValidationPolicy:
                     runtimeOptions.ownershipValidationPolicy,
                 scopeOwnershipValidator: runtimeOptions.scopeOwnershipValidator,
                 scopeValidationPolicy: runtimeOptions.scopeValidationPolicy,
                 adapter: runtimeOptions.adapter,
+            });
+            const targetExecutions = targetExecutionsForOutcome({
+                targets: runtimeOptions.targets,
+                requestedTargetIds,
+                status: trustGraphResult.adapterStatus,
+                executions: trustGraphResult.targetExecutions,
             });
             if (trustGraphResult.adapterStatus === 'timeout') {
                 return buildFailedContextStepResult({
@@ -298,7 +372,7 @@ export const createTrustGraphContextStepExecutor = ({
                     integrationContext: {
                         kind: 'trustgraph',
                         version: 'v1',
-                        payload: { trustGraphResult },
+                        payload: { trustGraphResult, targetExecutions },
                     },
                 });
             }
@@ -311,7 +385,7 @@ export const createTrustGraphContextStepExecutor = ({
                     integrationContext: {
                         kind: 'trustgraph',
                         version: 'v1',
-                        payload: { trustGraphResult },
+                        payload: { trustGraphResult, targetExecutions },
                     },
                 });
             }
@@ -326,6 +400,7 @@ export const createTrustGraphContextStepExecutor = ({
                     version: 'v1',
                     payload: {
                         trustGraphResult,
+                        targetExecutions,
                     },
                 },
             });
@@ -341,6 +416,21 @@ export const createTrustGraphContextStepExecutor = ({
                 toolName: request.integrationName,
                 reasonCode: 'tool_execution_error',
                 trustedInstructions: [TRUSTGRAPH_FAILURE_GUIDANCE],
+                ...(runtimeOptions.targets === undefined
+                    ? {}
+                    : {
+                          integrationContext: {
+                              kind: 'trustgraph',
+                              version: 'v1',
+                              payload: {
+                                  targetExecutions: targetExecutionsForOutcome({
+                                      targets: runtimeOptions.targets,
+                                      requestedTargetIds,
+                                      status: 'error',
+                                  }),
+                              },
+                          },
+                      }),
             });
         }
     };

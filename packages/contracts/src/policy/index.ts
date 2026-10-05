@@ -104,6 +104,7 @@ export type {
     WorkflowAttemptRecord,
     WorkflowAttemptSettings,
     WorkflowAttemptCapabilities,
+    WorkflowTrustGraphTargetExecution,
     EvaluatorAuthorityLevel,
     WorkflowModeId,
     WorkflowModeSelectionSource,
