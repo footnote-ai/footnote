@@ -7,23 +7,7 @@
  */
 
 import { expect, test } from '@playwright/test';
-import ordinaryAnswer from './fixtures/ordinary-text-answer.json';
-
-const responseForTurn = (turn: number) => ({
-    ...ordinaryAnswer.response,
-    message: `Answer for turn ${turn}.`,
-    metadata: {
-        ...ordinaryAnswer.response.metadata,
-        responseId: `transcript-response-${turn}`,
-        citations: [
-            {
-                title: `Source for turn ${turn}`,
-                url: `https://example.org/source-${turn}`,
-                snippet: `Evidence for turn ${turn}.`,
-            },
-        ],
-    },
-});
+import { responseWithCitation } from './chat-test-helpers';
 
 test('keeps each successful exchange and its provenance after a follow-up', async ({
     page,
@@ -42,7 +26,15 @@ test('keeps each successful exchange and its provenance after a follow-up', asyn
         responseNumber += 1;
         await route.fulfill({
             contentType: 'application/json',
-            body: JSON.stringify(responseForTurn(responseNumber)),
+            body: JSON.stringify(
+                responseWithCitation(
+                    `Answer for turn ${responseNumber}.`,
+                    `transcript-response-${responseNumber}`,
+                    `Source for turn ${responseNumber}`,
+                    `https://example.org/source-${responseNumber}`,
+                    `Evidence for turn ${responseNumber}.`
+                )
+            ),
         });
     });
 

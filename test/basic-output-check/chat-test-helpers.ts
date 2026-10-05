@@ -5,7 +5,7 @@
  * @footnote-risk: low - Helpers only prepare controlled browser requests.
  * @footnote-ethics: low - Fixtures use public synthetic response data.
  */
-import type { Page } from '@playwright/test';
+import type { FrameLocator, Page } from '@playwright/test';
 import ordinaryAnswer from './fixtures/ordinary-text-answer.json';
 
 export const deferred = (): { promise: Promise<void>; resolve: () => void } => {
@@ -32,3 +32,80 @@ export const response = (message: string) => ({
     ...ordinaryAnswer.response,
     message,
 });
+
+export const responseWithCitation = (
+    message: string,
+    responseId: string,
+    title: string,
+    url: string,
+    snippet: string
+) => ({
+    ...ordinaryAnswer.response,
+    message,
+    metadata: {
+        ...ordinaryAnswer.response.metadata,
+        responseId,
+        citations: [{ title, url, snippet }],
+    },
+});
+
+export const readEmbedHeights = async (page: Page): Promise<number[]> =>
+    page.evaluate(
+        () =>
+            (window as Window & { __footnoteEmbedHeights?: number[] })
+                .__footnoteEmbedHeights ?? []
+    );
+
+export const latestEmbedHeight = async (page: Page): Promise<number> =>
+    Math.max(...(await readEmbedHeights(page)));
+
+export type EmbedHostContent = {
+    beforeFrameHeight?: number;
+    afterFrameHeight?: number;
+};
+
+export const mountSizedEmbed = async (
+    page: Page,
+    content: EmbedHostContent = {}
+): Promise<FrameLocator> => {
+    await page.goto('/');
+    await page.evaluate((hostContent) => {
+        const addHostContent = (height: number, label: string): void => {
+            const content = document.createElement('div');
+            content.style.height = `${height}px`;
+            content.textContent = label;
+            document.body.append(content);
+        };
+        const beforeHeight = hostContent.beforeFrameHeight ?? 0;
+        const afterHeight = hostContent.afterFrameHeight ?? 0;
+        if (beforeHeight > 0) {
+            addHostContent(beforeHeight, 'Host content before the chat');
+        }
+
+        const parent = window as Window & { __footnoteEmbedHeights?: number[] };
+        parent.__footnoteEmbedHeights = [];
+        window.addEventListener('message', (event: MessageEvent) => {
+            const data = event.data as { type?: string; height?: number };
+            if (data.type !== 'footnote-embed-height' || !data.height) {
+                return;
+            }
+            parent.__footnoteEmbedHeights?.push(data.height);
+            const frame = document.getElementById(
+                'footnote-chat-frame'
+            ) as HTMLIFrameElement | null;
+            if (frame) frame.style.height = `${data.height}px`;
+        });
+        const frame = document.createElement('iframe');
+        frame.id = 'footnote-chat-frame';
+        frame.title = 'Footnote chat';
+        frame.src = '/embed';
+        frame.style.width = '100%';
+        frame.style.height = '300px';
+        document.body.append(frame);
+
+        if (afterHeight > 0) {
+            addHostContent(afterHeight, 'Host content after the chat');
+        }
+    }, content);
+    return page.frameLocator('#footnote-chat-frame');
+};

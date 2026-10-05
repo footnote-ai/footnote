@@ -7,37 +7,15 @@
  */
 import { expect, test } from '@playwright/test';
 import type { PostChatRequest } from '@footnote/contracts/web';
-import ordinaryAnswer from './fixtures/ordinary-text-answer.json';
-import { configureRuntime, deferred, response } from './chat-test-helpers';
-
-const responseForTurn = (turn: number, message: string) => ({
-    ...ordinaryAnswer.response,
-    message,
-    metadata: {
-        ...ordinaryAnswer.response.metadata,
-        responseId: `integrated-response-${turn}`,
-        citations: [
-            {
-                title: `Integrated source ${turn}`,
-                url: `https://example.org/integrated-${turn}`,
-                snippet: `Evidence for integrated turn ${turn}.`,
-            },
-        ],
-    },
-});
-
-const readEmbedHeights = async (
-    page: import('@playwright/test').Page
-): Promise<number[]> =>
-    page.evaluate(
-        () =>
-            (window as Window & { __footnoteEmbedHeights?: number[] })
-                .__footnoteEmbedHeights ?? []
-    );
-
-const latestEmbedHeight = async (
-    page: import('@playwright/test').Page
-): Promise<number> => Math.max(...(await readEmbedHeights(page)));
+import {
+    configureRuntime,
+    deferred,
+    latestEmbedHeight,
+    mountSizedEmbed,
+    readEmbedHeights,
+    response,
+    responseWithCitation,
+} from './chat-test-helpers';
 
 test('keeps request assembly, retries, provenance, and reset coherent on /chat', async ({
     page,
@@ -57,7 +35,13 @@ test('keeps request assembly, retries, provenance, and reset coherent on /chat',
             await route.fulfill({
                 contentType: 'application/json',
                 body: JSON.stringify(
-                    responseForTurn(1, 'First answer with **bounded context**.')
+                    responseWithCitation(
+                        'First answer with **bounded context**.',
+                        'integrated-response-1',
+                        'Integrated source 1',
+                        'https://example.org/integrated-1',
+                        'Evidence for integrated turn 1.'
+                    )
                 ),
             });
             return;
@@ -73,9 +57,12 @@ test('keeps request assembly, retries, provenance, and reset coherent on /chat',
         await route.fulfill({
             contentType: 'application/json',
             body: JSON.stringify(
-                responseForTurn(
-                    requestCount - 1,
-                    'Second answer with **source-local evidence**.'
+                responseWithCitation(
+                    'Second answer with **source-local evidence**.',
+                    `integrated-response-${requestCount - 1}`,
+                    `Integrated source ${requestCount - 1}`,
+                    `https://example.org/integrated-${requestCount - 1}`,
+                    `Evidence for integrated turn ${requestCount - 1}.`
                 )
             ),
         });
@@ -222,13 +209,16 @@ test('settles embed height after a successful turn, provenance, and failure', as
             await route.fulfill({
                 contentType: 'application/json',
                 body: JSON.stringify(
-                    responseForTurn(
-                        1,
+                    responseWithCitation(
                         Array.from(
                             { length: 8 },
                             (_, index) =>
                                 `Embedded paragraph ${index + 1} remains visible with its response.`
-                        ).join('\n\n')
+                        ).join('\n\n'),
+                        'integrated-response-1',
+                        'Integrated source 1',
+                        'https://example.org/integrated-1',
+                        'Evidence for integrated turn 1.'
                     )
                 ),
             });
@@ -241,29 +231,7 @@ test('settles embed height after a successful turn, provenance, and failure', as
         });
     });
 
-    await page.goto('/');
-    await page.evaluate(() => {
-        const parent = window as Window & { __footnoteEmbedHeights?: number[] };
-        parent.__footnoteEmbedHeights = [];
-        window.addEventListener('message', (event: MessageEvent) => {
-            const data = event.data as { type?: string; height?: number };
-            if (data.type !== 'footnote-embed-height' || !data.height) return;
-            parent.__footnoteEmbedHeights?.push(data.height);
-            const frame = document.getElementById(
-                'footnote-chat-frame'
-            ) as HTMLIFrameElement | null;
-            if (frame) frame.style.height = `${data.height}px`;
-        });
-        const frame = document.createElement('iframe');
-        frame.id = 'footnote-chat-frame';
-        frame.title = 'Footnote chat';
-        frame.src = '/embed';
-        frame.style.width = '100%';
-        frame.style.height = '300px';
-        document.body.append(frame);
-    });
-
-    const embed = page.frameLocator('#footnote-chat-frame');
+    const embed = await mountSizedEmbed(page);
     await expect(embed.getByLabel('Ask a question')).toBeVisible();
     await expect.poll(() => readEmbedHeights(page)).not.toHaveLength(0);
     const input = embed.getByLabel('Ask a question');

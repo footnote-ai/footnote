@@ -6,20 +6,14 @@
  * @footnote-ethics: medium - It protects keyboard and screen-reader access to new chat content.
  */
 import { expect, test } from '@playwright/test';
-import { configureRuntime, deferred, response } from './chat-test-helpers';
-
-const readEmbedHeights = async (
-    page: import('@playwright/test').Page
-): Promise<number[]> =>
-    page.evaluate(
-        () =>
-            (window as Window & { __footnoteEmbedHeights?: number[] })
-                .__footnoteEmbedHeights ?? []
-    );
-
-const latestEmbedHeight = async (
-    page: import('@playwright/test').Page
-): Promise<number> => Math.max(...(await readEmbedHeights(page)));
+import {
+    configureRuntime,
+    deferred,
+    latestEmbedHeight,
+    mountSizedEmbed,
+    readEmbedHeights,
+    response,
+} from './chat-test-helpers';
 
 test('follows new transcript content at the end and offers a jump when scrolled up', async ({
     page,
@@ -177,33 +171,7 @@ test('embed height follows long responses and provenance drawers without horizon
         });
     });
 
-    await page.goto('/');
-    await page.evaluate(() => {
-        const parent = window as Window & { __footnoteEmbedHeights?: number[] };
-        parent.__footnoteEmbedHeights = [];
-        window.addEventListener('message', (event: MessageEvent) => {
-            const data = event.data as { type?: string; height?: number };
-            if (data.type !== 'footnote-embed-height' || !data.height) {
-                return;
-            }
-            parent.__footnoteEmbedHeights?.push(data.height);
-            const frame = document.getElementById(
-                'footnote-chat-frame'
-            ) as HTMLIFrameElement | null;
-            if (frame) {
-                frame.style.height = `${data.height}px`;
-            }
-        });
-        const frame = document.createElement('iframe');
-        frame.id = 'footnote-chat-frame';
-        frame.title = 'Footnote chat';
-        frame.src = '/embed';
-        frame.style.width = '100%';
-        frame.style.height = '300px';
-        document.body.append(frame);
-    });
-
-    const embed = page.frameLocator('#footnote-chat-frame');
+    const embed = await mountSizedEmbed(page);
     await expect(embed.getByLabel('Ask a question')).toBeVisible();
     await expect.poll(() => readEmbedHeights(page)).not.toHaveLength(0);
     const initialHeight = await latestEmbedHeight(page);
@@ -258,42 +226,10 @@ test('embedded response growth does not move the independently scrolled host pag
         });
     });
 
-    await page.goto('/');
-    await page.evaluate(() => {
-        const root = document.getElementById('root');
-        const before = document.createElement('div');
-        before.style.height = '1200px';
-        before.textContent = 'Host content before the chat';
-        document.body.insertBefore(before, root);
-
-        const after = document.createElement('div');
-        after.style.height = '1600px';
-        after.textContent = 'Host content after the chat';
-
-        const parent = window as Window & { __footnoteEmbedHeights?: number[] };
-        parent.__footnoteEmbedHeights = [];
-        window.addEventListener('message', (event: MessageEvent) => {
-            const data = event.data as { type?: string; height?: number };
-            if (data.type !== 'footnote-embed-height' || !data.height) {
-                return;
-            }
-            parent.__footnoteEmbedHeights?.push(data.height);
-            const frame = document.getElementById(
-                'footnote-chat-frame'
-            ) as HTMLIFrameElement | null;
-            if (frame) frame.style.height = `${data.height}px`;
-        });
-        const frame = document.createElement('iframe');
-        frame.id = 'footnote-chat-frame';
-        frame.title = 'Footnote chat';
-        frame.src = '/embed';
-        frame.style.width = '100%';
-        frame.style.height = '300px';
-        document.body.append(frame);
-        document.body.append(after);
+    const embed = await mountSizedEmbed(page, {
+        beforeFrameHeight: 1200,
+        afterFrameHeight: 1600,
     });
-
-    const embed = page.frameLocator('#footnote-chat-frame');
     await expect(embed.getByLabel('Ask a question')).toBeVisible();
     await expect.poll(() => readEmbedHeights(page)).not.toHaveLength(0);
     const initialHeight = await latestEmbedHeight(page);
