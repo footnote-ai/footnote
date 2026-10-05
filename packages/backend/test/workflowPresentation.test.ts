@@ -45,7 +45,10 @@ const generated = (text: string): GenerationResult => ({
     provenance: 'Inferred',
     citations: [],
 });
-const usage = (value: GenerationResult): ReviewWorkflowUsageSummary => ({
+const usage = (
+    value: GenerationResult,
+    costCompleteness: 'complete' | 'partial' | 'unknown' = 'complete'
+): ReviewWorkflowUsageSummary => ({
     model: value.model ?? 'gpt-5-mini',
     promptTokens: value.usage?.promptTokens ?? 0,
     completionTokens: value.usage?.completionTokens ?? 0,
@@ -54,6 +57,10 @@ const usage = (value: GenerationResult): ReviewWorkflowUsageSummary => ({
         inputCostUsd: 0.001,
         outputCostUsd: 0.002,
         totalCostUsd: 0.003,
+        costCompleteness,
+        costAppliedRules: [],
+        costIncompleteReasons:
+            costCompleteness === 'unknown' ? ['unpriced_model'] : [],
     },
 });
 const contextEnvelope: ConversationContextEnvelope = {
@@ -107,6 +114,7 @@ const runScenario = async (
         maxTokensTotal?: number;
         handoffVariant?: 'preserve-candidate' | 'style-reference';
         generationRequest?: GenerationRequest;
+        costCompleteness?: 'complete' | 'partial' | 'unknown';
     }
 ) => {
     const calls: GenerationRequest[] = [];
@@ -139,7 +147,7 @@ const runScenario = async (
             },
         },
         workflowPolicy: options?.workflowPolicy ?? policy,
-        captureUsage: usage,
+        captureUsage: (value) => usage(value, options?.costCompleteness),
         presentation: {
             config: {
                 ...config,
@@ -150,7 +158,7 @@ const runScenario = async (
             captureUsage: (value, _profile, feature) => {
                 presentationFeatures.push(feature);
                 assert.equal(feature, 'chat_presentation_draft');
-                return usage(value);
+                return usage(value, options?.costCompleteness);
             },
         },
         personaExpressionGuidance: presentationPersona.expressionGuidance,
@@ -229,6 +237,35 @@ test('runs candidate, authoritative generation, and ordinary assessment in order
                 parentCandidateId: result.responseCandidates?.[0]?.id,
             },
         ]
+    );
+});
+
+test('workflow attempts and their step retain cost completeness evidence', async () => {
+    const { result } = await runScenario(
+        async (_request, call) =>
+            call === 1
+                ? generated('A presentation candidate.')
+                : generated('The answer.'),
+        {
+            workflowPolicy: { ...policy, enableAssessment: false },
+            costCompleteness: 'unknown',
+        }
+    );
+
+    assert.equal(result.outcome, 'generated');
+    if (result.outcome !== 'generated') return;
+
+    const generationStep = result.workflowLineage.steps.find(
+        (step) => step.stepKind === 'generate'
+    );
+    assert.equal(generationStep?.cost?.costCompleteness, 'unknown');
+    assert.equal(
+        generationStep?.attempts?.[0]?.cost?.costCompleteness,
+        'unknown'
+    );
+    assert.deepEqual(
+        generationStep?.attempts?.[0]?.cost?.costIncompleteReasons,
+        ['unpriced_model']
     );
 });
 

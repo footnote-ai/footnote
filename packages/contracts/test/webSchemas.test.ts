@@ -995,6 +995,42 @@ test('ResponseMetadataSchema accepts workflow lineage metadata', () => {
     assert.equal(parsed.success, true);
 });
 
+test('workflow cost schema preserves completeness and accepts historical cost records without it', () => {
+    const now = new Date().toISOString();
+    const historical = createValidWorkflowMetadataPayload(now);
+    const historicalParsed = ResponseMetadataSchema.safeParse(historical);
+    assert.equal(historicalParsed.success, true);
+
+    const current = createValidWorkflowMetadataPayload(now);
+    const generateStep = current.workflow.steps[0];
+    generateStep.cost = {
+        inputCostUsd: 0,
+        outputCostUsd: 0,
+        totalCostUsd: 0,
+        costCompleteness: 'unknown',
+        costAppliedRules: [],
+        costIncompleteReasons: ['unpriced_model'],
+    };
+    generateStep.attempts = [
+        {
+            attempt: 1,
+            status: 'succeeded',
+            startedAt: now,
+            finishedAt: now,
+            durationMs: 0,
+            actualModel: 'local-unpriced',
+            cost: { ...generateStep.cost },
+        },
+    ];
+
+    const parsed = ResponseMetadataSchema.safeParse(current);
+    assert.equal(parsed.success, true);
+    if (!parsed.success) return;
+    const cost = parsed.data.workflow?.steps[0]?.attempts?.[0]?.cost;
+    assert.equal(cost?.costCompleteness, 'unknown');
+    assert.deepEqual(cost?.costIncompleteReasons, ['unpriced_model']);
+});
+
 test('workflow memory provenance permits only a bounded count', () => {
     const now = new Date().toISOString();
     const payload = createValidWorkflowMetadataPayload(now);

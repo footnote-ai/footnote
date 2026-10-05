@@ -41,6 +41,10 @@ import type {
 } from '@footnote/contracts/policy';
 import type { ResponseCandidate } from '@footnote/contracts/web';
 import { logger } from '../../utils/logger.js';
+import {
+    combineBackendTextCostEstimates,
+    type BackendTextCostEstimate,
+} from '../llmCostRecorder.js';
 import type { ConversationContextEnvelope } from '../conversationContextService.js';
 import {
     buildAuthoritativeGenerationRequest,
@@ -156,11 +160,7 @@ export type ReviewWorkflowUsageSummary = {
     promptTokens: number;
     completionTokens: number;
     totalTokens: number;
-    estimatedCost: {
-        inputCostUsd: number;
-        outputCostUsd: number;
-        totalCostUsd: number;
-    };
+    estimatedCost: BackendTextCostEstimate;
 };
 
 export type ContextStepRequest = ContractContextStepRequest;
@@ -599,11 +599,7 @@ const metadataFromAttempt = (
 
 const toWorkflowCost = (
     estimatedCost: ReviewWorkflowUsageSummary['estimatedCost']
-): ReviewWorkflowUsageSummary['estimatedCost'] => ({
-    inputCostUsd: estimatedCost.inputCostUsd,
-    outputCostUsd: estimatedCost.outputCostUsd,
-    totalCostUsd: estimatedCost.totalCostUsd,
-});
+): ReviewWorkflowUsageSummary['estimatedCost'] => ({ ...estimatedCost });
 
 const buildWorkflowLineage = (input: {
     execution: Awaited<ReturnType<typeof executeWorkflow>>;
@@ -776,6 +772,17 @@ const buildWorkflowLineage = (input: {
                 latestResultByName.set(resultRecord.name, resultRecord);
             }
         }
+        const modelAttemptCosts = attemptRecords
+            .filter(
+                (attempt) =>
+                    attempt.requestedModel !== undefined ||
+                    attempt.actualModel !== undefined
+            )
+            .map((attempt) => attempt.cost);
+        const stepCost =
+            modelAttemptCosts.length > 0
+                ? combineBackendTextCostEstimates(modelAttemptCosts)
+                : metadata.estimatedCost;
         records.push({
             stepId,
             ...(parent === undefined ? {} : { parentStepId: parent.stepId }),
@@ -803,9 +810,9 @@ const buildWorkflowLineage = (input: {
             ),
             ...(metadata.model === undefined ? {} : { model: metadata.model }),
             ...(metadata.usage === undefined ? {} : { usage: metadata.usage }),
-            ...(metadata.estimatedCost === undefined
+            ...(stepCost === undefined
                 ? {}
-                : { cost: toWorkflowCost(metadata.estimatedCost) }),
+                : { cost: toWorkflowCost(stepCost) }),
             ...(inputRefs === undefined ? {} : { inputRefs }),
             ...(resultRecord === undefined
                 ? {}
@@ -1080,20 +1087,9 @@ const combineGenerationUsage = (
             (total, summary) => total + summary.totalTokens,
             0
         ),
-        estimatedCost: {
-            inputCostUsd: summaries.reduce(
-                (total, summary) => total + summary.estimatedCost.inputCostUsd,
-                0
-            ),
-            outputCostUsd: summaries.reduce(
-                (total, summary) => total + summary.estimatedCost.outputCostUsd,
-                0
-            ),
-            totalCostUsd: summaries.reduce(
-                (total, summary) => total + summary.estimatedCost.totalCostUsd,
-                0
-            ),
-        },
+        estimatedCost: combineBackendTextCostEstimates(
+            summaries.map((summary) => summary.estimatedCost)
+        ),
     };
 };
 
