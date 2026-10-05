@@ -100,7 +100,7 @@ test('keeps request assembly, retries, provenance, and reset coherent on /chat',
     ).toBeVisible();
     await expect(page.locator('.interaction-turn')).toHaveCount(1);
     const firstSessionId = requests[0]?.sessionId;
-    expect(requests[0]).toMatchObject({
+    expect(requests[0]).toEqual({
         surface: 'web',
         trigger: { kind: 'submit' },
         latestUserInput: 'First question',
@@ -168,6 +168,18 @@ test('keeps request assembly, retries, provenance, and reset coherent on /chat',
     await expect(
         firstFootnote.getByRole('link', { name: 'Integrated source 1' })
     ).toHaveAttribute('href', 'https://example.org/integrated-1');
+    await expect(
+        firstFootnote.getByRole('link', { name: 'Integrated source 2' })
+    ).toHaveCount(0);
+    await secondFootnote
+        .getByRole('button', { name: 'Sources', exact: true })
+        .click();
+    await expect(
+        secondFootnote.getByRole('link', { name: 'Integrated source 2' })
+    ).toHaveAttribute('href', 'https://example.org/integrated-2');
+    await expect(
+        secondFootnote.getByRole('link', { name: 'Integrated source 1' })
+    ).toHaveCount(0);
     await secondFootnote
         .getByRole('button', { name: 'Trace', exact: true })
         .click();
