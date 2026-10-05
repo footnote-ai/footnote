@@ -1036,7 +1036,7 @@ export type WorkflowTrustGraphTargetExecution = {
     /** Footnote measurements in milliseconds, source counts, or UTF-16 code units; omitted values are unavailable. */
     measurements?: {
         provenance: 'footnote_measured';
-        /** End-to-end target adapter elapsed time through response receipt, validation, and bounds; not provider compute time. */
+        /** Footnote-observed per-target adapter elapsed time through response receipt, validation, and bounds; not TrustGraph compute, model latency, or provider-reported timing. */
         requestDurationMs?: number;
         returnedSourceCount?: number;
         retainedSourceCount?: number;
