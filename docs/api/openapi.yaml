@@ -2765,12 +2765,43 @@ components:
                         inputCostUsd:
                             type: number
                             minimum: 0
+                            description: Backend-computed cost estimate in USD.
                         outputCostUsd:
                             type: number
                             minimum: 0
+                            description: Backend-computed cost estimate in USD.
                         totalCostUsd:
                             type: number
                             minimum: 0
+                            description: Backend-computed cost estimate in USD.
+                        costCompleteness:
+                            type: string
+                            enum:
+                                - complete
+                                - partial
+                                - unknown
+                            description: >-
+                                Whether the estimate is fully supported by available pricing and usage facts. Unknown
+                                remains distinct from a complete numeric zero.
+                        costAppliedRules:
+                            type: array
+                            items:
+                                type: string
+                                enum:
+                                    - prompt_cache_read_discount
+                                    - prompt_cache_write_multiplier
+                                    - gpt_5_6_long_context_input_multiplier
+                                    - gpt_5_6_long_context_output_multiplier
+                        costIncompleteReasons:
+                            type: array
+                            items:
+                                type: string
+                                enum:
+                                    - unpriced_model
+                                    - cached_input_tokens_unavailable
+                                    - cache_write_tokens_unavailable
+                                    - invalid_input_token_breakdown
+                                    - provider_usage_unavailable
                     required:
                         - inputCostUsd
                         - outputCostUsd
@@ -2874,12 +2905,43 @@ components:
                         inputCostUsd:
                             type: number
                             minimum: 0
+                            description: Backend-computed cost estimate in USD.
                         outputCostUsd:
                             type: number
                             minimum: 0
+                            description: Backend-computed cost estimate in USD.
                         totalCostUsd:
                             type: number
                             minimum: 0
+                            description: Backend-computed cost estimate in USD.
+                        costCompleteness:
+                            type: string
+                            enum:
+                                - complete
+                                - partial
+                                - unknown
+                            description: >-
+                                Whether the estimate is fully supported by available pricing and usage facts. Unknown
+                                remains distinct from a complete numeric zero.
+                        costAppliedRules:
+                            type: array
+                            items:
+                                type: string
+                                enum:
+                                    - prompt_cache_read_discount
+                                    - prompt_cache_write_multiplier
+                                    - gpt_5_6_long_context_input_multiplier
+                                    - gpt_5_6_long_context_output_multiplier
+                        costIncompleteReasons:
+                            type: array
+                            items:
+                                type: string
+                                enum:
+                                    - unpriced_model
+                                    - cached_input_tokens_unavailable
+                                    - cache_write_tokens_unavailable
+                                    - invalid_input_token_breakdown
+                                    - provider_usage_unavailable
                     required:
                         - inputCostUsd
                         - outputCostUsd
@@ -3137,12 +3199,43 @@ components:
                         inputCostUsd:
                             type: number
                             minimum: 0
+                            description: Backend-computed cost estimate in USD.
                         outputCostUsd:
                             type: number
                             minimum: 0
+                            description: Backend-computed cost estimate in USD.
                         totalCostUsd:
                             type: number
                             minimum: 0
+                            description: Backend-computed cost estimate in USD.
+                        costCompleteness:
+                            type: string
+                            enum:
+                                - complete
+                                - partial
+                                - unknown
+                            description: >-
+                                Whether the estimate is fully supported by available pricing and usage facts. Unknown
+                                remains distinct from a complete numeric zero.
+                        costAppliedRules:
+                            type: array
+                            items:
+                                type: string
+                                enum:
+                                    - prompt_cache_read_discount
+                                    - prompt_cache_write_multiplier
+                                    - gpt_5_6_long_context_input_multiplier
+                                    - gpt_5_6_long_context_output_multiplier
+                        costIncompleteReasons:
+                            type: array
+                            items:
+                                type: string
+                                enum:
+                                    - unpriced_model
+                                    - cached_input_tokens_unavailable
+                                    - cache_write_tokens_unavailable
+                                    - invalid_input_token_breakdown
+                                    - provider_usage_unavailable
                     required:
                         - inputCostUsd
                         - outputCostUsd

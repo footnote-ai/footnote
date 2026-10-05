@@ -84,6 +84,10 @@ const openApiSource = fs.readFileSync(
     path.join(repoRoot, 'docs/api/openapi.yaml'),
     'utf-8'
 );
+const authoredChatOpenApiSource = fs.readFileSync(
+    path.join(repoRoot, 'docs/api/openapi/chat.yaml'),
+    'utf-8'
+);
 
 test('account session schemas accept only the three public session states', () => {
     assert.equal(
@@ -1029,6 +1033,40 @@ test('workflow cost schema preserves completeness and accepts historical cost re
     const cost = parsed.data.workflow?.steps[0]?.attempts?.[0]?.cost;
     assert.equal(cost?.costCompleteness, 'unknown');
     assert.deepEqual(cost?.costIncompleteReasons, ['unpriced_model']);
+});
+
+test('authored workflow cost contract includes the optional Zod completeness fields', () => {
+    for (const field of [
+        'costCompleteness',
+        'costAppliedRules',
+        'costIncompleteReasons',
+    ]) {
+        assert.equal(
+            authoredChatOpenApiSource.match(new RegExp(`^\\s+${field}:`, 'gm'))
+                ?.length,
+            3,
+            `${field} must appear in Attempt, routing-attempt, and Step costs`
+        );
+    }
+    for (const value of [
+        'complete',
+        'partial',
+        'unknown',
+        'prompt_cache_read_discount',
+        'prompt_cache_write_multiplier',
+        'gpt_5_6_long_context_input_multiplier',
+        'gpt_5_6_long_context_output_multiplier',
+        'unpriced_model',
+        'cached_input_tokens_unavailable',
+        'cache_write_tokens_unavailable',
+        'invalid_input_token_breakdown',
+        'provider_usage_unavailable',
+    ]) {
+        assert.ok(
+            authoredChatOpenApiSource.includes(value),
+            `${value} is documented`
+        );
+    }
 });
 
 test('workflow memory provenance permits only a bounded count', () => {
