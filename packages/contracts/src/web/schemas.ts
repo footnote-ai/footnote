@@ -28,7 +28,6 @@ import {
     type SteerabilityControls,
     type TraceAxisScore,
     type TrustGraphMetadata,
-    type WorkflowTrustGraphTargetExecution,
 } from '../policy/index.js';
 import {
     PersonaExpressionStrengthSchema,
@@ -1188,19 +1187,6 @@ const WorkflowTrustGraphTargetExecutionSchema = z
             .optional(),
     })
     .strict();
-type _AssertWorkflowTrustGraphTargetExecution =
-    z.infer<
-        typeof WorkflowTrustGraphTargetExecutionSchema
-    > extends WorkflowTrustGraphTargetExecution
-        ? WorkflowTrustGraphTargetExecution extends z.infer<
-              typeof WorkflowTrustGraphTargetExecutionSchema
-          >
-            ? true
-            : never
-        : never;
-const _assertWorkflowTrustGraphTargetExecution: _AssertWorkflowTrustGraphTargetExecution = true;
-void _assertWorkflowTrustGraphTargetExecution;
-
 const WorkflowAttemptRecordSchema = z
     .object({
         attempt: z.number().int().positive(),

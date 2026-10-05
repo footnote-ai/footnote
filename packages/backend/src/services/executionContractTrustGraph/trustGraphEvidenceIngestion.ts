@@ -271,6 +271,69 @@ const toAdvisoryEvidenceItems = (
         }),
     }));
 
+const toSafeTargetMeasurements = (
+    measurements: NonNullable<
+        NonNullable<EvidenceBundle['targetExecutions']>[number]['measurements']
+    >
+): NonNullable<
+    NonNullable<
+        TrustGraphEvidenceIngestionResult['targetExecutions']
+    >[number]['measurements']
+> => ({
+    provenance: 'footnote_measured',
+    ...(measurements.requestDurationMs === undefined
+        ? {}
+        : { requestDurationMs: measurements.requestDurationMs }),
+    ...(measurements.returnedSourceCount === undefined
+        ? {}
+        : { returnedSourceCount: measurements.returnedSourceCount }),
+    ...(measurements.retainedSourceCount === undefined
+        ? {}
+        : { retainedSourceCount: measurements.retainedSourceCount }),
+    ...(measurements.responseCodeUnitsBeforeBounds === undefined
+        ? {}
+        : {
+              responseCodeUnitsBeforeBounds:
+                  measurements.responseCodeUnitsBeforeBounds,
+          }),
+    ...(measurements.responseCodeUnitsAfterBounds === undefined
+        ? {}
+        : {
+              responseCodeUnitsAfterBounds:
+                  measurements.responseCodeUnitsAfterBounds,
+          }),
+    ...(measurements.sourceTextCodeUnitsBeforeBounds === undefined
+        ? {}
+        : {
+              sourceTextCodeUnitsBeforeBounds:
+                  measurements.sourceTextCodeUnitsBeforeBounds,
+          }),
+    ...(measurements.sourceTextCodeUnitsAfterBounds === undefined
+        ? {}
+        : {
+              sourceTextCodeUnitsAfterBounds:
+                  measurements.sourceTextCodeUnitsAfterBounds,
+          }),
+});
+
+const toSafeTargetBounds = (
+    bounds: NonNullable<
+        NonNullable<EvidenceBundle['targetExecutions']>[number]['bounds']
+    >
+): NonNullable<
+    NonNullable<
+        TrustGraphEvidenceIngestionResult['targetExecutions']
+    >[number]['bounds']
+> => ({
+    provenance: 'derived',
+    ...(bounds.sourcesTruncated === undefined
+        ? {}
+        : { sourcesTruncated: bounds.sourcesTruncated }),
+    ...(bounds.responseTruncated === undefined
+        ? {}
+        : { responseTruncated: bounds.responseTruncated }),
+});
+
 const toSafeTargetExecutions = (
     executions: EvidenceBundle['targetExecutions']
 ): TrustGraphEvidenceIngestionResult['targetExecutions'] =>
@@ -285,81 +348,13 @@ const toSafeTargetExecutions = (
         ...(execution.measurements === undefined
             ? {}
             : {
-                  measurements: {
-                      provenance: 'footnote_measured' as const,
-                      ...(execution.measurements.requestDurationMs === undefined
-                          ? {}
-                          : {
-                                requestDurationMs:
-                                    execution.measurements.requestDurationMs,
-                            }),
-                      ...(execution.measurements.returnedSourceCount ===
-                      undefined
-                          ? {}
-                          : {
-                                returnedSourceCount:
-                                    execution.measurements.returnedSourceCount,
-                            }),
-                      ...(execution.measurements.retainedSourceCount ===
-                      undefined
-                          ? {}
-                          : {
-                                retainedSourceCount:
-                                    execution.measurements.retainedSourceCount,
-                            }),
-                      ...(execution.measurements
-                          .responseCodeUnitsBeforeBounds === undefined
-                          ? {}
-                          : {
-                                responseCodeUnitsBeforeBounds:
-                                    execution.measurements
-                                        .responseCodeUnitsBeforeBounds,
-                            }),
-                      ...(execution.measurements
-                          .responseCodeUnitsAfterBounds === undefined
-                          ? {}
-                          : {
-                                responseCodeUnitsAfterBounds:
-                                    execution.measurements
-                                        .responseCodeUnitsAfterBounds,
-                            }),
-                      ...(execution.measurements
-                          .sourceTextCodeUnitsBeforeBounds === undefined
-                          ? {}
-                          : {
-                                sourceTextCodeUnitsBeforeBounds:
-                                    execution.measurements
-                                        .sourceTextCodeUnitsBeforeBounds,
-                            }),
-                      ...(execution.measurements
-                          .sourceTextCodeUnitsAfterBounds === undefined
-                          ? {}
-                          : {
-                                sourceTextCodeUnitsAfterBounds:
-                                    execution.measurements
-                                        .sourceTextCodeUnitsAfterBounds,
-                            }),
-                  },
+                  measurements: toSafeTargetMeasurements(
+                      execution.measurements
+                  ),
               }),
         ...(execution.bounds === undefined
             ? {}
-            : {
-                  bounds: {
-                      provenance: 'derived' as const,
-                      ...(execution.bounds.sourcesTruncated === undefined
-                          ? {}
-                          : {
-                                sourcesTruncated:
-                                    execution.bounds.sourcesTruncated,
-                            }),
-                      ...(execution.bounds.responseTruncated === undefined
-                          ? {}
-                          : {
-                                responseTruncated:
-                                    execution.bounds.responseTruncated,
-                            }),
-                  },
-              }),
+            : { bounds: toSafeTargetBounds(execution.bounds) }),
     }));
 
 const defaultLocalExecutionContractOutcome = (): LocalTerminalOutcome =>

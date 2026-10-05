@@ -683,6 +683,8 @@ const buildWorkflowLineage = (input: {
                 const attemptMetadata = readAs<ChatStepMetadata>(
                     attempt.metadata
                 );
+                const reasonCode =
+                    attemptMetadata?.reasonCode ?? attempt.errorCode;
                 return {
                     attempt: attempt.attempt,
                     status: attempt.status,
@@ -729,11 +731,7 @@ const buildWorkflowLineage = (input: {
                                   attemptMetadata.estimatedCost
                               ),
                           }),
-                    ...(attemptMetadata?.reasonCode === undefined
-                        ? attempt.errorCode === undefined
-                            ? {}
-                            : { reasonCode: attempt.errorCode }
-                        : { reasonCode: attemptMetadata.reasonCode }),
+                    ...(reasonCode === undefined ? {} : { reasonCode }),
                     ...(attemptMetadata?.terminationReason === undefined
                         ? {}
                         : {
