@@ -1036,13 +1036,16 @@ export type WorkflowTrustGraphTargetExecution = {
     /** Footnote measurements in milliseconds, source counts, or UTF-16 code units; omitted values are unavailable. */
     measurements?: {
         provenance: 'footnote_measured';
+        /** End-to-end target adapter elapsed time through response receipt, validation, and bounds; not provider compute time. */
         requestDurationMs?: number;
         returnedSourceCount?: number;
         retainedSourceCount?: number;
         responseCodeUnitsBeforeBounds?: number;
         responseCodeUnitsAfterBounds?: number;
-        sourceTextCodeUnitsBeforeBounds?: number;
-        sourceTextCodeUnitsAfterBounds?: number;
+        /** Sum for final retained Document RAG sources before per-source text bounds. */
+        retainedSourceTextCodeUnitsBeforeTextBounds?: number;
+        /** Sum of those same retained sources after per-source text bounds. */
+        retainedSourceTextCodeUnitsAfterTextBounds?: number;
     };
     /** Truncation flags derived from Footnote's observed bounds, not TrustGraph reports. */
     bounds?: {

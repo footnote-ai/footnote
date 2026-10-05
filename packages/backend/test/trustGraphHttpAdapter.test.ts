@@ -338,11 +338,13 @@ test('Document RAG adapter requests evidence-only output and preserves source me
         const targetExecution = bundle.targetExecutions?.[0];
         assert.equal(targetExecution?.outcome, 'executed');
         assert.equal(
-            targetExecution?.measurements?.sourceTextCodeUnitsBeforeBounds,
+            targetExecution?.measurements
+                ?.retainedSourceTextCodeUnitsBeforeTextBounds,
             'The source describes a building inspection.'.length
         );
         assert.equal(
-            targetExecution?.measurements?.sourceTextCodeUnitsAfterBounds,
+            targetExecution?.measurements
+                ?.retainedSourceTextCodeUnitsAfterTextBounds,
             'The source describes a building inspection.'.length
         );
         assert.equal(targetExecution?.measurements?.returnedSourceCount, 1);
@@ -499,11 +501,13 @@ test('mixed TrustGraph results keep graph aggregate and document text bounds', a
             (execution) => execution.targetId === 'document-target'
         );
         assert.equal(
-            boundedDocument?.measurements?.sourceTextCodeUnitsBeforeBounds,
+            boundedDocument?.measurements
+                ?.retainedSourceTextCodeUnitsBeforeTextBounds,
             mixedLimits.maxResponseChars + 1
         );
         assert.equal(
-            boundedDocument?.measurements?.sourceTextCodeUnitsAfterBounds,
+            boundedDocument?.measurements
+                ?.retainedSourceTextCodeUnitsAfterTextBounds,
             mixedLimits.maxResponseChars
         );
         assert.equal(boundedDocument?.bounds?.sourcesTruncated, true);
@@ -518,6 +522,102 @@ test('mixed TrustGraph results keep graph aggregate and document text bounds', a
                     ref.startsWith('trustgraph://graph-rag/') &&
                     ref.includes('/target/document-target/')
             ),
+            false
+        );
+    } finally {
+        await closeServer(server);
+    }
+});
+
+test('document source-size measurements cover only the final retained sources', async () => {
+    const limits: TrustGraphGraphRagLimits = {
+        ...TEST_LIMITS,
+        maxSources: 5,
+        maxResponseChars: 5,
+    };
+    const targets: TrustGraphTargetConfig[] = [
+        ...['one', 'two', 'three'].map((id) => ({
+            id,
+            flow: `${id}-flow`,
+            collection: id,
+            description: `${id} graph target.`,
+        })),
+        {
+            id: 'documents',
+            flow: 'document-flow',
+            collection: 'documents',
+            description: 'Document target.',
+            service: 'document-rag',
+        },
+    ];
+    const { server, baseUrl } = await startServer((request, response) => {
+        response.setHeader('content-type', 'application/json');
+        if (request.url?.endsWith('/document-rag') === true) {
+            response.end(
+                JSON.stringify({
+                    message_type: 'evidence',
+                    evidence: [
+                        {
+                            'chunk-id': 'first',
+                            text: '  alpha-long  ',
+                            rank: 1,
+                            'source-uri': 'https://example.test/first',
+                        },
+                        {
+                            'chunk-id': 'second',
+                            text: ' beta-longer ',
+                            rank: 2,
+                            'source-uri': 'https://example.test/second',
+                        },
+                        {
+                            'chunk-id': 'discarded',
+                            text: 'discarded-source-body',
+                            rank: 3,
+                            'source-uri': 'https://example.test/discarded',
+                        },
+                    ],
+                })
+            );
+            return;
+        }
+        response.end(
+            JSON.stringify({
+                response: 'g',
+                sources: [{ uri: `https://example.test/${request.url}` }],
+            })
+        );
+    });
+
+    try {
+        const bundle = await createAdapter(
+            baseUrl,
+            targets,
+            limits
+        ).getEvidenceBundle({
+            queryIntent: 'query',
+            scopeTuple: { userId: 'user-1', projectId: 'project-1' },
+            budget: { timeoutMs: 100, maxCalls: 1 },
+            targetIds: targets.map((target) => target.id),
+        });
+        const documentExecution = bundle.targetExecutions?.find(
+            (execution) => execution.targetId === 'documents'
+        );
+
+        assert.equal(documentExecution?.measurements?.returnedSourceCount, 3);
+        assert.equal(documentExecution?.measurements?.retainedSourceCount, 2);
+        assert.equal(
+            documentExecution?.measurements
+                ?.retainedSourceTextCodeUnitsBeforeTextBounds,
+            'alpha-long'.length + 'beta-longer'.length
+        );
+        assert.equal(
+            documentExecution?.measurements
+                ?.retainedSourceTextCodeUnitsAfterTextBounds,
+            limits.maxResponseChars * 2
+        );
+        assert.equal(documentExecution?.bounds?.sourcesTruncated, true);
+        assert.equal(
+            JSON.stringify(documentExecution).includes('discarded-source-body'),
             false
         );
     } finally {

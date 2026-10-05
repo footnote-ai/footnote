@@ -302,17 +302,17 @@ const toSafeTargetMeasurements = (
               responseCodeUnitsAfterBounds:
                   measurements.responseCodeUnitsAfterBounds,
           }),
-    ...(measurements.sourceTextCodeUnitsBeforeBounds === undefined
+    ...(measurements.retainedSourceTextCodeUnitsBeforeTextBounds === undefined
         ? {}
         : {
-              sourceTextCodeUnitsBeforeBounds:
-                  measurements.sourceTextCodeUnitsBeforeBounds,
+              retainedSourceTextCodeUnitsBeforeTextBounds:
+                  measurements.retainedSourceTextCodeUnitsBeforeTextBounds,
           }),
-    ...(measurements.sourceTextCodeUnitsAfterBounds === undefined
+    ...(measurements.retainedSourceTextCodeUnitsAfterTextBounds === undefined
         ? {}
         : {
-              sourceTextCodeUnitsAfterBounds:
-                  measurements.sourceTextCodeUnitsAfterBounds,
+              retainedSourceTextCodeUnitsAfterTextBounds:
+                  measurements.retainedSourceTextCodeUnitsAfterTextBounds,
           }),
 });
 

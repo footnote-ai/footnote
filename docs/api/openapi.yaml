@@ -2963,6 +2963,9 @@ components:
                         requestDurationMs:
                             type: number
                             minimum: 0
+                            description: >-
+                                End-to-end target adapter elapsed time through response receipt, validation, and bounds;
+                                not provider or internal compute time.
                         returnedSourceCount:
                             type: integer
                             minimum: 0
@@ -2975,12 +2978,16 @@ components:
                         responseCodeUnitsAfterBounds:
                             type: integer
                             minimum: 0
-                        sourceTextCodeUnitsBeforeBounds:
+                        retainedSourceTextCodeUnitsBeforeTextBounds:
                             type: integer
                             minimum: 0
-                        sourceTextCodeUnitsAfterBounds:
+                            description: >-
+                                Sum of normalized text lengths for final retained Document RAG sources before per-source
+                                text bounds.
+                        retainedSourceTextCodeUnitsAfterTextBounds:
                             type: integer
                             minimum: 0
+                            description: Sum of bounded text lengths for those same final retained sources.
                     required:
                         - provenance
                     additionalProperties: false

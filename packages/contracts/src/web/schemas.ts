@@ -1151,7 +1151,13 @@ const WorkflowTrustGraphTargetExecutionSchema = z
         measurements: z
             .object({
                 provenance: z.literal('footnote_measured'),
-                requestDurationMs: z.number().nonnegative().optional(),
+                requestDurationMs: z
+                    .number()
+                    .nonnegative()
+                    .optional()
+                    .describe(
+                        'End-to-end target adapter elapsed time through response receipt, validation, and bounds; not provider or internal compute time.'
+                    ),
                 returnedSourceCount: z.number().int().nonnegative().optional(),
                 retainedSourceCount: z.number().int().nonnegative().optional(),
                 responseCodeUnitsBeforeBounds: z
@@ -1164,16 +1170,22 @@ const WorkflowTrustGraphTargetExecutionSchema = z
                     .int()
                     .nonnegative()
                     .optional(),
-                sourceTextCodeUnitsBeforeBounds: z
+                retainedSourceTextCodeUnitsBeforeTextBounds: z
                     .number()
                     .int()
                     .nonnegative()
-                    .optional(),
-                sourceTextCodeUnitsAfterBounds: z
+                    .optional()
+                    .describe(
+                        'Sum for final retained Document RAG sources before per-source text bounds.'
+                    ),
+                retainedSourceTextCodeUnitsAfterTextBounds: z
                     .number()
                     .int()
                     .nonnegative()
-                    .optional(),
+                    .optional()
+                    .describe(
+                        'Sum of those same retained sources after per-source text bounds.'
+                    ),
             })
             .strict()
             .optional(),

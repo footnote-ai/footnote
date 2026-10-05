@@ -706,7 +706,7 @@ type GraphRagTargetResult = {
     sourceTruncated: boolean;
     originalResponseChars: number;
     responseTruncated: boolean;
-    requestDurationMs: number;
+    requestStartedAtMs: number;
 };
 
 type DocumentRagTargetResult = {
@@ -715,13 +715,13 @@ type DocumentRagTargetResult = {
     evidence: DocumentRagEvidence[];
     originalEvidenceCount: number;
     evidenceTruncated: boolean;
-    requestDurationMs: number;
+    requestStartedAtMs: number;
 };
 
 type TargetResult = GraphRagTargetResult | DocumentRagTargetResult;
 type TargetResponse =
-    | Omit<GraphRagTargetResult, 'requestDurationMs'>
-    | Omit<DocumentRagTargetResult, 'requestDurationMs'>;
+    | Omit<GraphRagTargetResult, 'requestStartedAtMs'>
+    | Omit<DocumentRagTargetResult, 'requestStartedAtMs'>;
 
 const classifyTargetFailure = (
     error: unknown
@@ -961,24 +961,9 @@ export class HttpTrustGraphEvidenceAdapter implements TrustGraphEvidenceAdapter 
                         query,
                         abortSignal: input.abortSignal,
                     });
-                    const requestDurationMs = Math.max(
-                        0,
-                        performance.now() - startedAt
-                    );
-                    logger.info(
-                        'chat.execution_contract_trustgraph.target_completed',
-                        {
-                            event: 'chat.execution_contract_trustgraph.target_completed',
-                            targetId: target.id,
-                            flow: target.flow,
-                            collection: target.collection,
-                            status: 'success',
-                            durationMs: requestDurationMs,
-                        }
-                    );
                     return {
                         status: 'success' as const,
-                        result: { ...result, requestDurationMs },
+                        result: { ...result, requestStartedAtMs: startedAt },
                     };
                 } catch (error) {
                     const requestDurationMs = Math.max(
@@ -1114,6 +1099,17 @@ export class HttpTrustGraphEvidenceAdapter implements TrustGraphEvidenceAdapter 
                 : result
         );
         for (const result of boundedResults) {
+            logger.info('chat.execution_contract_trustgraph.target_completed', {
+                event: 'chat.execution_contract_trustgraph.target_completed',
+                targetId: result.target.id,
+                flow: result.target.flow,
+                collection: result.target.collection,
+                status: 'success',
+                durationMs: Math.max(
+                    0,
+                    performance.now() - result.requestStartedAtMs
+                ),
+            });
             if (result.kind === 'graph' && result.sourceTruncated) {
                 logTargetSourcesTruncated(result.target, {
                     originalSourceCount: result.originalSourceCount,
@@ -1182,7 +1178,10 @@ export class HttpTrustGraphEvidenceAdapter implements TrustGraphEvidenceAdapter 
                         outcome: 'executed',
                         measurements: {
                             provenance: 'footnote_measured',
-                            requestDurationMs: original.requestDurationMs,
+                            requestDurationMs: Math.max(
+                                0,
+                                performance.now() - original.requestStartedAtMs
+                            ),
                             returnedSourceCount: original.originalSourceCount,
                             retainedSourceCount: retained?.sources.length ?? 0,
                             responseCodeUnitsBeforeBounds:
@@ -1211,16 +1210,19 @@ export class HttpTrustGraphEvidenceAdapter implements TrustGraphEvidenceAdapter 
                     outcome: 'executed',
                     measurements: {
                         provenance: 'footnote_measured',
-                        requestDurationMs: original.requestDurationMs,
+                        requestDurationMs: Math.max(
+                            0,
+                            performance.now() - original.requestStartedAtMs
+                        ),
                         returnedSourceCount: original.originalEvidenceCount,
                         retainedSourceCount: retained?.evidence.length ?? 0,
-                        sourceTextCodeUnitsBeforeBounds:
-                            original.evidence.reduce(
-                                (total, item) =>
-                                    total + item.originalTextCodeUnits,
-                                0
-                            ),
-                        sourceTextCodeUnitsAfterBounds:
+                        retainedSourceTextCodeUnitsBeforeTextBounds: (
+                            retained?.evidence ?? []
+                        ).reduce(
+                            (total, item) => total + item.originalTextCodeUnits,
+                            0
+                        ),
+                        retainedSourceTextCodeUnitsAfterTextBounds:
                             retained?.evidence.reduce(
                                 (total, item) => total + item.text.length,
                                 0
