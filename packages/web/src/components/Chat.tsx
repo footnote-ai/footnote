@@ -36,6 +36,7 @@ const INVALID_RESPONSE_MESSAGE =
 type ChatStatusKind = 'error' | 'info';
 type ChatStatus = { kind: ChatStatusKind; message: string };
 type CompletedChatTurn = {
+    id: number;
     userMessage: string;
     assistantMessage: string;
     metadata: ResponseMetadata | null;
@@ -53,6 +54,7 @@ const Chat = (): JSX.Element => {
     const [completedTurns, setCompletedTurns] = useState<CompletedChatTurn[]>(
         []
     );
+    const nextCompletedTurnIdRef = useRef(0);
     const [currentRequest, setCurrentRequest] =
         useState<CurrentChatRequest | null>(null);
     const [isLoading, setIsLoading] = useState(false);
@@ -264,9 +266,11 @@ const Chat = (): JSX.Element => {
                 ),
                 { role: 'assistant', content: chat },
             ];
+            const id = nextCompletedTurnIdRef.current++;
             setCompletedTurns((previous) => [
                 ...previous,
                 {
+                    id,
                     userMessage: trimmedQuestion,
                     assistantMessage: chat,
                     metadata: backendMetadata ?? null,
@@ -501,8 +505,8 @@ const Chat = (): JSX.Element => {
             )}
             {(completedTurns.length > 0 || currentRequest) && (
                 <div className="interaction-transcript">
-                    {completedTurns.map((turn, index) => (
-                        <div className="interaction-turn" key={index}>
+                    {completedTurns.map((turn) => (
+                        <div className="interaction-turn" key={turn.id}>
                             <p className="public-message public-message--person">
                                 {turn.userMessage}
                             </p>

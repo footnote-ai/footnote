@@ -126,3 +126,37 @@ test('keeps each successful exchange and its provenance after a follow-up', asyn
         path: testInfo.outputPath('chat-transcript.png'),
     });
 });
+
+test('keeps a failed request outside assistant markdown', async ({ page }) => {
+    await page.route('**/config.json', async (route) => {
+        await route.fulfill({
+            contentType: 'application/json',
+            body: JSON.stringify({
+                turnstileSiteKey: '',
+                setup: { required: false, routePath: '/setup' },
+            }),
+        });
+    });
+    await page.route('**/api/chat', async (route) => {
+        await route.abort('failed');
+    });
+
+    await page.goto('/chat');
+    const prompt = 'Please explain the failed request.';
+    await page.getByLabel('Ask a question').fill(prompt);
+    await page.getByRole('button', { name: 'Submit question' }).click();
+
+    const turn = page.locator('.interaction-turn');
+    await expect(turn).toHaveCount(1);
+    await expect(turn.locator('.public-message--person')).toHaveText(prompt);
+    await expect(page.getByRole('status')).toContainText(
+        'Unable to connect to the server.'
+    );
+    await expect(turn.locator('.interaction-request-state')).toHaveText(
+        'No assistant response was added.'
+    );
+    await expect(turn.locator('.public-message--assistant')).toHaveCount(0);
+    await expect(page.locator('body')).not.toContainText(
+        'I was unable to generate a response - please try again later.'
+    );
+});
