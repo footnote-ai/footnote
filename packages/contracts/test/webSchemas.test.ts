@@ -84,6 +84,10 @@ const openApiSource = fs.readFileSync(
     path.join(repoRoot, 'docs/api/openapi.yaml'),
     'utf-8'
 );
+const authoredChatOpenApiSource = fs.readFileSync(
+    path.join(repoRoot, 'docs/api/openapi/chat.yaml'),
+    'utf-8'
+);
 
 test('account session schemas accept only the three public session states', () => {
     assert.equal(
@@ -993,6 +997,76 @@ test('ResponseMetadataSchema accepts workflow lineage metadata', () => {
     );
 
     assert.equal(parsed.success, true);
+});
+
+test('workflow cost schema preserves completeness and accepts historical cost records without it', () => {
+    const now = new Date().toISOString();
+    const historical = createValidWorkflowMetadataPayload(now);
+    const historicalParsed = ResponseMetadataSchema.safeParse(historical);
+    assert.equal(historicalParsed.success, true);
+
+    const current = createValidWorkflowMetadataPayload(now);
+    const generateStep = current.workflow.steps[0];
+    generateStep.cost = {
+        inputCostUsd: 0,
+        outputCostUsd: 0,
+        totalCostUsd: 0,
+        costCompleteness: 'unknown',
+        costAppliedRules: [],
+        costIncompleteReasons: ['unpriced_model'],
+    };
+    generateStep.attempts = [
+        {
+            attempt: 1,
+            status: 'succeeded',
+            startedAt: now,
+            finishedAt: now,
+            durationMs: 0,
+            actualModel: 'local-unpriced',
+            cost: { ...generateStep.cost },
+        },
+    ];
+
+    const parsed = ResponseMetadataSchema.safeParse(current);
+    assert.equal(parsed.success, true);
+    if (!parsed.success) return;
+    const cost = parsed.data.workflow?.steps[0]?.attempts?.[0]?.cost;
+    assert.equal(cost?.costCompleteness, 'unknown');
+    assert.deepEqual(cost?.costIncompleteReasons, ['unpriced_model']);
+});
+
+test('authored workflow cost contract includes the optional Zod completeness fields', () => {
+    for (const field of [
+        'costCompleteness',
+        'costAppliedRules',
+        'costIncompleteReasons',
+    ]) {
+        assert.equal(
+            authoredChatOpenApiSource.match(new RegExp(`^\\s+${field}:`, 'gm'))
+                ?.length,
+            3,
+            `${field} must appear in Attempt, routing-attempt, and Step costs`
+        );
+    }
+    for (const value of [
+        'complete',
+        'partial',
+        'unknown',
+        'prompt_cache_read_discount',
+        'prompt_cache_write_multiplier',
+        'gpt_5_6_long_context_input_multiplier',
+        'gpt_5_6_long_context_output_multiplier',
+        'unpriced_model',
+        'cached_input_tokens_unavailable',
+        'cache_write_tokens_unavailable',
+        'invalid_input_token_breakdown',
+        'provider_usage_unavailable',
+    ]) {
+        assert.ok(
+            authoredChatOpenApiSource.includes(value),
+            `${value} is documented`
+        );
+    }
 });
 
 test('workflow memory provenance permits only a bounded count', () => {

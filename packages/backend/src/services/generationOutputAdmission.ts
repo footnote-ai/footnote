@@ -17,6 +17,7 @@ import type {
     GenerationCompletion,
     WorkflowRoutingChainAttemptSignal,
 } from '@footnote/contracts/policy';
+import type { BackendTextCostEstimate } from './llmCostRecorder.js';
 import type { RoutingChainAttemptLog } from './stepRoutingExecutor.js';
 
 const MAX_GENERATION_EVIDENCE_STRING_LENGTH = 100;
@@ -138,11 +139,7 @@ export const attachGenerationAttemptEvidence = (
         captureCost?: (
             result: GenerationResult,
             requestedModel: string | undefined
-        ) => {
-            inputCostUsd: number;
-            outputCostUsd: number;
-            totalCostUsd: number;
-        };
+        ) => BackendTextCostEstimate;
     }
 ): RoutingChainAttemptLog[] =>
     attempts.map((attempt) => {

@@ -216,6 +216,18 @@ export const buildPlannerStepRecord = ({
                   inputCostUsd: validatedCostInput,
                   outputCostUsd: validatedCostOutput,
                   totalCostUsd: validatedCostTotal,
+                  ...(summary.cost?.costCompleteness === undefined
+                      ? {}
+                      : { costCompleteness: summary.cost.costCompleteness }),
+                  ...(summary.cost?.costAppliedRules === undefined
+                      ? {}
+                      : { costAppliedRules: summary.cost.costAppliedRules }),
+                  ...(summary.cost?.costIncompleteReasons === undefined
+                      ? {}
+                      : {
+                            costIncompleteReasons:
+                                summary.cost.costIncompleteReasons,
+                        }),
               }
             : undefined;
 

@@ -8,7 +8,10 @@
 
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { estimateBackendTextCost } from '../src/services/llmCostRecorder.js';
+import {
+    combineBackendTextCostEstimates,
+    estimateBackendTextCost,
+} from '../src/services/llmCostRecorder.js';
 import { logger } from '../src/utils/logger.js';
 
 test('estimateBackendTextCost does not warn for known versioned OpenAI model ids', () => {
@@ -75,6 +78,33 @@ test('estimateBackendTextCost warns with canonicalization outcome for unknown id
     } finally {
         logger.warn = originalWarn;
     }
+});
+
+test('cost completeness distinguishes complete zero from unknown zero and stays conservative when combined', () => {
+    const knownZero = estimateBackendTextCost('gpt-5-mini', 0, 0);
+    const unknownZero = estimateBackendTextCost('unlisted-local-model', 0, 0);
+    const partial = estimateBackendTextCost('gpt-5.6-sol', 200_000, 100_000);
+
+    assert.equal(knownZero.totalCostUsd, 0);
+    assert.equal(knownZero.costCompleteness, 'complete');
+    assert.equal(unknownZero.totalCostUsd, 0);
+    assert.equal(unknownZero.costCompleteness, 'unknown');
+    assert.equal(partial.costCompleteness, 'partial');
+    assert.equal(
+        combineBackendTextCostEstimates([knownZero, partial]).costCompleteness,
+        'partial'
+    );
+    assert.equal(
+        combineBackendTextCostEstimates([knownZero, unknownZero])
+            .costCompleteness,
+        'unknown'
+    );
+    assert.equal(
+        combineBackendTextCostEstimates([
+            { inputCostUsd: 0, outputCostUsd: 0, totalCostUsd: 0 },
+        ]).costCompleteness,
+        'unknown'
+    );
 });
 
 test('estimateBackendTextCost reports complete GPT-5.6 cache-aware pricing', () => {

@@ -12,6 +12,11 @@ import type {
 import type { ProjectContextMetadata } from './projectContext.js';
 import type { PresentationGenerationSettings } from '../model-profiles.js';
 import type { ModelCapabilitySupport } from '../model-capabilities.js';
+import type {
+    OpenAITextCostAppliedRule,
+    OpenAITextCostCompleteness,
+    OpenAITextCostIncompleteReason,
+} from '../pricing.js';
 
 // This file is the single source of truth for cross-package metadata shapes.
 // It primarily defines types and narrow pure helpers for contract-safe checks.
@@ -991,6 +996,9 @@ export type WorkflowAttemptRoutingRecord = {
         inputCostUsd: number;
         outputCostUsd: number;
         totalCostUsd: number;
+        costCompleteness?: OpenAITextCostCompleteness;
+        costAppliedRules?: OpenAITextCostAppliedRule[];
+        costIncompleteReasons?: OpenAITextCostIncompleteReason[];
     };
     /** Footnote-observed routing-attempt wall-clock bounds, when available. */
     startedAt?: string;
@@ -1081,6 +1089,9 @@ export type WorkflowAttemptRecord = {
         inputCostUsd: number;
         outputCostUsd: number;
         totalCostUsd: number;
+        costCompleteness?: OpenAITextCostCompleteness;
+        costAppliedRules?: OpenAITextCostAppliedRule[];
+        costIncompleteReasons?: OpenAITextCostIncompleteReason[];
     };
     reasonCode?: string;
     terminationReason?: string;
@@ -1113,6 +1124,9 @@ export type StepRecord = {
         inputCostUsd: number;
         outputCostUsd: number;
         totalCostUsd: number;
+        costCompleteness?: OpenAITextCostCompleteness;
+        costAppliedRules?: OpenAITextCostAppliedRule[];
+        costIncompleteReasons?: OpenAITextCostIncompleteReason[];
     };
     inputRefs?: WorkflowResultReference[];
     resultRefs?: WorkflowResultReference[];

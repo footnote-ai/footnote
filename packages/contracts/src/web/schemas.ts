@@ -1063,6 +1063,36 @@ const WorkflowResultRecordSchema = z
     })
     .strict();
 
+const WorkflowCostSchema = z
+    .object({
+        inputCostUsd: z.number().nonnegative(),
+        outputCostUsd: z.number().nonnegative(),
+        totalCostUsd: z.number().nonnegative(),
+        costCompleteness: z.enum(['complete', 'partial', 'unknown']).optional(),
+        costAppliedRules: z
+            .array(
+                z.enum([
+                    'prompt_cache_read_discount',
+                    'prompt_cache_write_multiplier',
+                    'gpt_5_6_long_context_input_multiplier',
+                    'gpt_5_6_long_context_output_multiplier',
+                ])
+            )
+            .optional(),
+        costIncompleteReasons: z
+            .array(
+                z.enum([
+                    'unpriced_model',
+                    'cached_input_tokens_unavailable',
+                    'cache_write_tokens_unavailable',
+                    'invalid_input_token_breakdown',
+                    'provider_usage_unavailable',
+                ])
+            )
+            .optional(),
+    })
+    .strict();
+
 const WorkflowAttemptRoutingRecordSchema = z
     .object({
         index: z.number().int().nonnegative(),
@@ -1078,17 +1108,9 @@ const WorkflowAttemptRoutingRecordSchema = z
         usage: GenerationUsageSchema.optional().describe(
             'Provider/runtime-reported token counts for this routing attempt. Omitted counts are unavailable.'
         ),
-        cost: z
-            .object({
-                inputCostUsd: z.number().nonnegative(),
-                outputCostUsd: z.number().nonnegative(),
-                totalCostUsd: z.number().nonnegative(),
-            })
-            .strict()
-            .describe(
-                'Backend-computed cost estimate from available attempt usage and pricing data; not a provider-reported bill.'
-            )
-            .optional(),
+        cost: WorkflowCostSchema.describe(
+            'Backend-computed cost estimate from available attempt usage and pricing data; not a provider-reported bill.'
+        ).optional(),
         startedAt: z
             .string()
             .datetime()
@@ -1249,17 +1271,9 @@ const WorkflowAttemptRecordSchema = z
         usage: GenerationUsageSchema.optional().describe(
             'Provider/runtime-reported token counts for this attempt. Omitted counts are unavailable.'
         ),
-        cost: z
-            .object({
-                inputCostUsd: z.number().nonnegative(),
-                outputCostUsd: z.number().nonnegative(),
-                totalCostUsd: z.number().nonnegative(),
-            })
-            .strict()
-            .describe(
-                'Backend-computed cost estimate from available usage and pricing data; not a provider-reported bill.'
-            )
-            .optional(),
+        cost: WorkflowCostSchema.describe(
+            'Backend-computed cost estimate from available usage and pricing data; not a provider-reported bill.'
+        ).optional(),
         reasonCode: z.string().min(1).optional(),
         terminationReason: z.string().min(1).optional(),
         routingAttempts: z.array(WorkflowAttemptRoutingRecordSchema).optional(),
@@ -1306,17 +1320,9 @@ const StepRecordSchema = z
                 'Aggregated from provider/runtime-reported Attempt usage. Omitted counts are unavailable, not zero.'
             )
             .optional(),
-        cost: z
-            .object({
-                inputCostUsd: z.number().nonnegative(),
-                outputCostUsd: z.number().nonnegative(),
-                totalCostUsd: z.number().nonnegative(),
-            })
-            .strict()
-            .describe(
-                'Backend-computed estimate summed from available Attempt costs; not a provider-reported bill.'
-            )
-            .optional(),
+        cost: WorkflowCostSchema.describe(
+            'Backend-computed estimate summed from available Attempt costs; not a provider-reported bill.'
+        ).optional(),
         inputRefs: z.array(WorkflowResultReferenceSchema).optional(),
         resultRefs: z.array(WorkflowResultReferenceSchema).optional(),
         attempts: z.array(WorkflowAttemptRecordSchema).optional(),

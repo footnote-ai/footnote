@@ -61,8 +61,60 @@ export type BackendTextCostEstimate = Pick<
     | 'totalCostUsd'
     | 'costCompleteness'
     | 'costAppliedRules'
-    | 'costIncompleteReasons'
->;
+> & {
+    costIncompleteReasons?: OpenAITextCostIncompleteReason[];
+};
+
+/** Conservatively combines per-call estimates without upgrading unknown costs. */
+export const combineBackendTextCostEstimates = (
+    estimates: readonly (BackendTextCostEstimate | undefined)[]
+): BackendTextCostEstimate => {
+    const available = estimates.filter(
+        (estimate): estimate is BackendTextCostEstimate =>
+            estimate !== undefined
+    );
+    const completeness =
+        estimates.length === 0 ||
+        available.length !== estimates.length ||
+        available.some(
+            (estimate) =>
+                estimate.costCompleteness === undefined ||
+                estimate.costCompleteness === 'unknown'
+        )
+            ? 'unknown'
+            : available.some(
+                    (estimate) => estimate.costCompleteness === 'partial'
+                )
+              ? 'partial'
+              : 'complete';
+    return {
+        inputCostUsd: available.reduce(
+            (total, estimate) => total + estimate.inputCostUsd,
+            0
+        ),
+        outputCostUsd: available.reduce(
+            (total, estimate) => total + estimate.outputCostUsd,
+            0
+        ),
+        totalCostUsd: available.reduce(
+            (total, estimate) => total + estimate.totalCostUsd,
+            0
+        ),
+        costCompleteness: completeness,
+        costAppliedRules: [
+            ...new Set(
+                available.flatMap((estimate) => estimate.costAppliedRules ?? [])
+            ),
+        ],
+        costIncompleteReasons: [
+            ...new Set(
+                available.flatMap(
+                    (estimate) => estimate.costIncompleteReasons ?? []
+                )
+            ),
+        ],
+    };
+};
 
 const backendCostTotals: LLMCostTotals = {
     totalCostUsd: 0,

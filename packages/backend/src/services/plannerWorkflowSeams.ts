@@ -34,6 +34,7 @@ import type {
     ChatPlannerCapabilityProfileOption,
     PlannerToolIntentDiagnostics,
 } from './chatPlanner.js';
+import type { BackendTextCostEstimate } from './llmCostRecorder.js';
 import type { ChatPlannerInvocationContext } from './chatPlannerInvocation.js';
 import type { ChatGenerationPlan } from './chatGenerationTypes.js';
 import type { ChatSurfacePolicyCoercion } from './chatSurfacePolicy.js';
@@ -67,11 +68,7 @@ export type PlannerStepResult = {
         provider?: string;
         model?: string;
         usage?: GenerationUsage;
-        cost?: {
-            inputCostUsd: number;
-            outputCostUsd: number;
-            totalCostUsd: number;
-        };
+        cost?: BackendTextCostEstimate;
         structuredOutputOutcome?: PlannerStructuredOutputOutcome;
         upstreamAttribution?: {
             resolvedModel?: string;

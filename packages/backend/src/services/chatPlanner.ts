@@ -34,9 +34,11 @@ import type {
 } from '@footnote/contracts/policy';
 import { renderPrompt } from './prompts/promptRegistry.js';
 import {
+    combineBackendTextCostEstimates,
     estimateBackendTextCost,
     recordBackendLLMUsage,
     type BackendLLMCostRecord,
+    type BackendTextCostEstimate,
 } from './llmCostRecorder.js';
 import type {
     ChatGenerationPlan,
@@ -101,11 +103,7 @@ export type ChatPlannerExecution = {
     purpose: PlannerExecutionPurpose;
     contractType: PlannerExecutionContractType;
     usage?: GenerationUsage;
-    cost?: {
-        inputCostUsd: number;
-        outputCostUsd: number;
-        totalCostUsd: number;
-    };
+    cost?: BackendTextCostEstimate;
     structuredOutputOutcome?: PlannerStructuredOutputOutcome;
     provider?: string;
     model?: string;
@@ -1821,6 +1819,7 @@ export const createChatPlanner = ({
             'current_window'
         );
         let plannerUsageRecorded = false;
+        const plannerCostEstimates: BackendTextCostEstimate[] = [];
         const plannerUsageTotals: {
             promptTokens: number;
             cachedInputTokens?: number;
@@ -1828,16 +1827,10 @@ export const createChatPlanner = ({
             completionTokens: number;
             totalTokens: number;
             reasoningTokens?: number;
-            inputCostUsd: number;
-            outputCostUsd: number;
-            totalCostUsd: number;
         } = {
             promptTokens: 0,
             completionTokens: 0,
             totalTokens: 0,
-            inputCostUsd: 0,
-            outputCostUsd: 0,
-            totalCostUsd: 0,
         };
 
         // This is the single authoritative point for attaching backend-computed
@@ -1867,11 +1860,7 @@ export const createChatPlanner = ({
                         reasoningTokens: plannerUsageTotals.reasoningTokens,
                     }),
                 },
-                cost: {
-                    inputCostUsd: plannerUsageTotals.inputCostUsd,
-                    outputCostUsd: plannerUsageTotals.outputCostUsd,
-                    totalCostUsd: plannerUsageTotals.totalCostUsd,
-                },
+                cost: combineBackendTextCostEstimates(plannerCostEstimates),
             }),
         });
 
@@ -1917,9 +1906,7 @@ export const createChatPlanner = ({
                         (plannerUsageTotals.reasoningTokens ?? 0) +
                         normalizedUsage.reasoningTokens;
                 }
-                plannerUsageTotals.inputCostUsd += estimatedCost.inputCostUsd;
-                plannerUsageTotals.outputCostUsd += estimatedCost.outputCostUsd;
-                plannerUsageTotals.totalCostUsd += estimatedCost.totalCostUsd;
+                plannerCostEstimates.push(estimatedCost);
             }
             if (recordUsage) {
                 try {

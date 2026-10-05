@@ -126,15 +126,18 @@ const runGeneration = async (input: {
                           totalCostUsd: 0,
                       },
                       {
-                          costCompleteness: 'unknown',
+                          costCompleteness: 'unknown' as const,
                           costAppliedRules: [],
-                          costIncompleteReasons: ['unpriced_model'],
+                          costIncompleteReasons: ['unpriced_model' as const],
                       }
                   )
                 : {
                       inputCostUsd: 0,
                       outputCostUsd: 0,
                       totalCostUsd: 0,
+                      costCompleteness: 'unknown' as const,
+                      costAppliedRules: [],
+                      costIncompleteReasons: ['unpriced_model' as const],
                   },
         stepRoutingChainSet: {
             enabledProfilesById: new Map(
@@ -268,10 +271,14 @@ test('gives a large-prompt generation useful output room and advances after inco
     assert.ok((attempts[0]?.durationMs ?? -1) >= 0);
     assert.ok((attempts[0]?.cost?.totalCostUsd ?? -1) >= 0);
     assert.deepEqual(Object.keys(attempts[0]?.cost ?? {}).sort(), [
+        'costAppliedRules',
+        'costCompleteness',
+        'costIncompleteReasons',
         'inputCostUsd',
         'outputCostUsd',
         'totalCostUsd',
     ]);
+    assert.equal(attempts[0]?.cost?.costCompleteness, 'unknown');
 
     assert.deepEqual(
         generateStep.attempts?.[0]?.routingAttempts?.map((attempt) => [

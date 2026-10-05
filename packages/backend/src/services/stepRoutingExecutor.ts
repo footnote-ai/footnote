@@ -20,6 +20,7 @@ import type {
     ResolvedStepRoutingCandidate,
     WorkflowModelStep,
 } from './stepRoutingChains.js';
+import type { BackendTextCostEstimate } from './llmCostRecorder.js';
 import {
     defaultProviderAvailabilityStore,
     type ProviderAvailabilityStore,
@@ -48,11 +49,7 @@ export type RoutingChainAttemptLog = {
     finishReason?: string;
     completion?: GenerationCompletion;
     usage?: GenerationExecutionUsage;
-    cost?: {
-        inputCostUsd: number;
-        outputCostUsd: number;
-        totalCostUsd: number;
-    };
+    cost?: BackendTextCostEstimate;
     startedAtMs?: number;
     finishedAtMs?: number;
     actualProvider?: string;
