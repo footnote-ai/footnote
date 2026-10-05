@@ -71,6 +71,9 @@ const Chat = (): JSX.Element => {
         useState<CurrentChatRequest | null>(null);
     const [isLoading, setIsLoading] = useState(false);
     const [isPreparingSubmission, setIsPreparingSubmission] = useState(false);
+    const [hasNewTranscriptContent, setHasNewTranscriptContent] =
+        useState(false);
+    const [liveAnnouncement, setLiveAnnouncement] = useState('');
     const [turnstileSiteKey, setTurnstileSiteKey] = useState('');
     const abortRef = useRef<AbortController | null>(null);
     const submissionGenerationRef = useRef(0);
@@ -78,6 +81,8 @@ const Chat = (): JSX.Element => {
     const sessionIdRef = useRef<string | null>(null);
     const inputRef = useRef<HTMLTextAreaElement | null>(null);
     const formRef = useRef<HTMLFormElement | null>(null);
+    const transcriptEndRef = useRef<HTMLDivElement | null>(null);
+    const nearTranscriptEndRef = useRef(true);
     const hasInteractedRef = useRef(false); // Track if user has interacted to prevent initial status flash
 
     const ensureRuntimeConfigLoaded = async (): Promise<string> => {
@@ -110,6 +115,56 @@ const Chat = (): JSX.Element => {
 
     const clearInformationalStatus = useCallback((): void => {
         setStatus((previous) => (previous?.kind === 'error' ? previous : null));
+    }, []);
+
+    const scrollToTranscriptEnd = (): void => {
+        transcriptEndRef.current?.scrollIntoView({
+            block: 'end',
+            behavior: window.matchMedia('(prefers-reduced-motion: reduce)')
+                .matches
+                ? 'auto'
+                : 'smooth',
+        });
+        nearTranscriptEndRef.current = true;
+        setHasNewTranscriptContent(false);
+    };
+
+    const noteNewTranscriptContent = (): void => {
+        const shouldFollow = nearTranscriptEndRef.current;
+        window.requestAnimationFrame(() => {
+            if (shouldFollow) {
+                scrollToTranscriptEnd();
+            } else {
+                setHasNewTranscriptContent(true);
+            }
+        });
+    };
+
+    useEffect(() => {
+        const updateTranscriptPosition = (): void => {
+            const marker = transcriptEndRef.current;
+            if (!marker) {
+                nearTranscriptEndRef.current = true;
+                return;
+            }
+            const bounds = marker.getBoundingClientRect();
+            const nearEnd =
+                bounds.top <= window.innerHeight + 120 && bounds.bottom >= -80;
+            nearTranscriptEndRef.current = nearEnd;
+            if (nearEnd) {
+                setHasNewTranscriptContent(false);
+            }
+        };
+
+        window.addEventListener('scroll', updateTranscriptPosition, {
+            passive: true,
+        });
+        window.addEventListener('resize', updateTranscriptPosition);
+        updateTranscriptPosition();
+        return () => {
+            window.removeEventListener('scroll', updateTranscriptPosition);
+            window.removeEventListener('resize', updateTranscriptPosition);
+        };
     }, []);
     const captcha = useChatCaptcha({
         siteKey: turnstileSiteKey,
@@ -184,10 +239,13 @@ const Chat = (): JSX.Element => {
         );
         setIsLoading(false);
         setIsPreparingSubmission(true);
+        setLiveAnnouncement('');
         setCurrentRequest({
             userMessage: trimmedQuestion,
             status: 'pending',
         });
+        inputRef.current?.focus({ preventScroll: true });
+        noteNewTranscriptContent();
         if (!isRetry) {
             setQuestion('');
         }
@@ -222,6 +280,7 @@ const Chat = (): JSX.Element => {
                 'info',
                 'captcha'
             );
+            noteNewTranscriptContent();
             return;
         }
 
@@ -288,6 +347,7 @@ const Chat = (): JSX.Element => {
                     'error',
                     'unsupported'
                 );
+                noteNewTranscriptContent();
                 return;
             }
 
@@ -305,6 +365,7 @@ const Chat = (): JSX.Element => {
                     userMessage: trimmedQuestion,
                     status: 'failed',
                 });
+                noteNewTranscriptContent();
                 return;
             }
 
@@ -329,6 +390,8 @@ const Chat = (): JSX.Element => {
                 },
             ]);
             setCurrentRequest(null);
+            setLiveAnnouncement('New response received.');
+            noteNewTranscriptContent();
         } catch (error) {
             // A superseded request must not overwrite the newer request's status or answer.
             if (abortRef.current !== controller) {
@@ -338,6 +401,7 @@ const Chat = (): JSX.Element => {
                 userMessage: trimmedQuestion,
                 status: 'failed',
             });
+            noteNewTranscriptContent();
 
             const isWrappedRequestAbort =
                 isApiClientError(error) &&
@@ -479,6 +543,8 @@ const Chat = (): JSX.Element => {
         setCurrentRequest(null);
         setQuestion('');
         setStatus(null);
+        setHasNewTranscriptContent(false);
+        setLiveAnnouncement('');
         setIsLoading(false);
         setIsPreparingSubmission(false);
         captcha.consumeTokenAfterSubmission();
@@ -677,6 +743,33 @@ const Chat = (): JSX.Element => {
                             )}
                         </div>
                     )}
+                    <div
+                        ref={transcriptEndRef}
+                        className="interaction-transcript-end"
+                        aria-hidden="true"
+                    />
+                </div>
+            )}
+            {hasNewTranscriptContent && (
+                <button
+                    type="button"
+                    className="interaction-latest-button"
+                    onClick={() => {
+                        inputRef.current?.focus({ preventScroll: true });
+                        scrollToTranscriptEnd();
+                    }}
+                >
+                    Jump to latest
+                </button>
+            )}
+            {liveAnnouncement && (
+                <div
+                    className="sr-only"
+                    role="status"
+                    aria-live="polite"
+                    aria-atomic="true"
+                >
+                    {liveAnnouncement}
                 </div>
             )}
             {/* The background widget is absolutely positioned so it never reserves layout space. */}
