@@ -984,14 +984,18 @@ export type WorkflowAttemptRoutingRecord = {
     reasonCode?: string;
     finishReason?: string;
     completion?: GenerationCompletion;
+    /** Provider/runtime-reported counts for this routing attempt; omitted counts are unavailable. */
     usage?: GenerationExecutionUsage;
+    /** Backend-computed cost estimate from the available attempt usage and pricing data. */
     cost?: {
         inputCostUsd: number;
         outputCostUsd: number;
         totalCostUsd: number;
     };
+    /** Footnote-observed routing-attempt wall-clock bounds, when available. */
     startedAt?: string;
     finishedAt?: string;
+    /** Derived from the available `startedAt` and `finishedAt` bounds. */
     durationMs?: number;
     chooseOneUsed: boolean;
     chooseOneSelectedIndex?: number;
@@ -1070,7 +1074,9 @@ export type WorkflowAttemptRecord = {
     settings?: WorkflowAttemptSettings;
     capabilities?: WorkflowAttemptCapabilities;
     completion?: GenerationCompletion;
+    /** Provider/runtime-reported counts for this attempt; omitted counts are unavailable. */
     usage?: GenerationExecutionUsage;
+    /** Backend-computed cost estimate from available usage and pricing data, not a provider bill. */
     cost?: {
         inputCostUsd: number;
         outputCostUsd: number;
@@ -1093,6 +1099,7 @@ export type StepRecord = {
     finishedAt: string;
     durationMs: number;
     model?: string;
+    /** Aggregated from provider/runtime-reported Attempt usage; omitted counts are unavailable, not zero. */
     usage?: {
         promptTokens?: number;
         cachedInputTokens?: number;
@@ -1101,6 +1108,7 @@ export type StepRecord = {
         totalTokens?: number;
         reasoningTokens?: number;
     };
+    /** Backend-computed estimate summed from available Attempt costs, not a provider bill. */
     cost?: {
         inputCostUsd: number;
         outputCostUsd: number;
