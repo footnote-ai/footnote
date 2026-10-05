@@ -524,7 +524,9 @@ const TraceDrawerContent = ({
             </p>
         )}
         <p>TRACE describes posture, not answer quality.</p>
-        {state === 'available' && href && <a href={href}>Open full Trace</a>}
+        {(state === 'available' || state === 'unknown') && href && (
+            <a href={href}>Open full Trace</a>
+        )}
     </div>
 );
 
@@ -1094,7 +1096,8 @@ const CanonicalResponseFootnote = ({
                 >
                     <TraceDrawerContent
                         href={
-                            projection.actions.trace.state === 'available'
+                            projection.actions.trace.state === 'available' ||
+                            projection.actions.trace.state === 'unknown'
                                 ? traceHref
                                 : undefined
                         }

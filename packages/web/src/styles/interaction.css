@@ -137,6 +137,28 @@
     vertical-align: top;
 }
 
+.interaction-transcript {
+    display: grid;
+    gap: 0.9rem;
+}
+
+.interaction-turn {
+    display: grid;
+    gap: 0.35rem;
+}
+
+.interaction-transcript .public-message--assistant {
+    margin-top: 0;
+}
+
+.interaction-request-state {
+    width: 86%;
+    margin-left: 4%;
+    border-left: 3px solid var(--public-rule);
+    padding: 0.6rem 0.75rem;
+    color: var(--public-muted);
+}
+
 .interaction-captcha {
     min-height: 0;
 }
