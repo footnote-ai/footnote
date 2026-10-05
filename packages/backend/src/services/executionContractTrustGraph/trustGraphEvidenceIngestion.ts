@@ -20,6 +20,7 @@ import {
 import {
     TrustGraphOwnershipBypassCapability,
     TrustGraphOwnershipValidationPolicy,
+    TrustGraphTargetRequestFailuresError,
 } from './trustGraphEvidenceTypes.js';
 import type {
     Budget,
@@ -268,6 +269,92 @@ const toAdvisoryEvidenceItems = (
         ...(item.sourceTitle !== undefined && {
             sourceTitle: item.sourceTitle,
         }),
+    }));
+
+const toSafeTargetMeasurements = (
+    measurements: NonNullable<
+        NonNullable<EvidenceBundle['targetExecutions']>[number]['measurements']
+    >
+): NonNullable<
+    NonNullable<
+        TrustGraphEvidenceIngestionResult['targetExecutions']
+    >[number]['measurements']
+> => ({
+    provenance: 'footnote_measured',
+    ...(measurements.requestDurationMs === undefined
+        ? {}
+        : { requestDurationMs: measurements.requestDurationMs }),
+    ...(measurements.returnedSourceCount === undefined
+        ? {}
+        : { returnedSourceCount: measurements.returnedSourceCount }),
+    ...(measurements.retainedSourceCount === undefined
+        ? {}
+        : { retainedSourceCount: measurements.retainedSourceCount }),
+    ...(measurements.responseCodeUnitsBeforeBounds === undefined
+        ? {}
+        : {
+              responseCodeUnitsBeforeBounds:
+                  measurements.responseCodeUnitsBeforeBounds,
+          }),
+    ...(measurements.responseCodeUnitsAfterBounds === undefined
+        ? {}
+        : {
+              responseCodeUnitsAfterBounds:
+                  measurements.responseCodeUnitsAfterBounds,
+          }),
+    ...(measurements.retainedSourceTextCodeUnitsBeforeTextBounds === undefined
+        ? {}
+        : {
+              retainedSourceTextCodeUnitsBeforeTextBounds:
+                  measurements.retainedSourceTextCodeUnitsBeforeTextBounds,
+          }),
+    ...(measurements.retainedSourceTextCodeUnitsAfterTextBounds === undefined
+        ? {}
+        : {
+              retainedSourceTextCodeUnitsAfterTextBounds:
+                  measurements.retainedSourceTextCodeUnitsAfterTextBounds,
+          }),
+});
+
+const toSafeTargetBounds = (
+    bounds: NonNullable<
+        NonNullable<EvidenceBundle['targetExecutions']>[number]['bounds']
+    >
+): NonNullable<
+    NonNullable<
+        TrustGraphEvidenceIngestionResult['targetExecutions']
+    >[number]['bounds']
+> => ({
+    provenance: 'derived',
+    ...(bounds.sourcesTruncated === undefined
+        ? {}
+        : { sourcesTruncated: bounds.sourcesTruncated }),
+    ...(bounds.responseTruncated === undefined
+        ? {}
+        : { responseTruncated: bounds.responseTruncated }),
+});
+
+const toSafeTargetExecutions = (
+    executions: EvidenceBundle['targetExecutions']
+): TrustGraphEvidenceIngestionResult['targetExecutions'] =>
+    executions?.map((execution) => ({
+        targetId: execution.targetId,
+        flow: execution.flow,
+        collection: execution.collection,
+        outcome: execution.outcome,
+        ...(execution.reasonCode === undefined
+            ? {}
+            : { reasonCode: execution.reasonCode }),
+        ...(execution.measurements === undefined
+            ? {}
+            : {
+                  measurements: toSafeTargetMeasurements(
+                      execution.measurements
+                  ),
+              }),
+        ...(execution.bounds === undefined
+            ? {}
+            : { bounds: toSafeTargetBounds(execution.bounds) }),
     }));
 
 const defaultLocalExecutionContractOutcome = (): LocalTerminalOutcome =>
@@ -674,6 +761,13 @@ export const runEvidenceIngestion = async (
             droppedEvidenceCount: 0,
             droppedEvidenceIds: [],
             provenanceReasonCodes,
+            ...(error instanceof TrustGraphTargetRequestFailuresError
+                ? {
+                      targetExecutions: toSafeTargetExecutions(
+                          error.targetExecutions
+                      ),
+                  }
+                : {}),
             predicateViews: createEmptyConsumerViews(),
         };
     }
@@ -746,6 +840,13 @@ export const runEvidenceIngestion = async (
             droppedEvidenceCount,
             droppedEvidenceIds,
             provenanceReasonCodes,
+            ...(adapterBundle.targetExecutions === undefined
+                ? {}
+                : {
+                      targetExecutions: toSafeTargetExecutions(
+                          adapterBundle.targetExecutions
+                      ),
+                  }),
             predicateViews,
             provenanceJoin,
         };

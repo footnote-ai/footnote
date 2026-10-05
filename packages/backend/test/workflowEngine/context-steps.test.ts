@@ -119,6 +119,99 @@ test('runBoundedReviewWorkflow does not emit concrete tool steps in current engi
     );
 });
 
+test('canonical context Attempt metadata retains bounded TrustGraph facts without retrieved content', async () => {
+    const targetExecution = {
+        targetId: 'archive',
+        flow: 'archive-flow',
+        collection: 'archive-collection',
+        outcome: 'executed' as const,
+        measurements: {
+            provenance: 'footnote_measured' as const,
+            requestDurationMs: 12.5,
+            returnedSourceCount: 3,
+            retainedSourceCount: 2,
+        },
+        bounds: {
+            provenance: 'derived' as const,
+            sourcesTruncated: true,
+        },
+    };
+    const result = await runBoundedReviewWorkflowForTest({
+        generationRuntime: {
+            kind: 'test-runtime',
+            async generate() {
+                return {
+                    text: 'answer',
+                    model: 'gpt-5-mini',
+                    provenance: 'Inferred',
+                    citations: [],
+                };
+            },
+        },
+        generationRequest: {
+            model: 'gpt-5-mini',
+            messages: [{ role: 'user', content: 'Question' }],
+        },
+        messagesWithHints: [{ role: 'user', content: 'Question' }],
+        generationStartedAtMs: Date.now(),
+        workflowConfig: {
+            workflowName: 'message_reviewed',
+            maxIterations: 1,
+            maxDurationMs: 15000,
+        },
+        workflowPolicy: {
+            enablePlanning: false,
+            enableToolUse: true,
+            enableReplanning: false,
+            enableGeneration: true,
+            enableAssessment: false,
+            enableRevision: false,
+        },
+        contextStepRequests: [
+            { integrationName: 'trustgraph', requested: true, eligible: true },
+        ],
+        contextStepExecutorRegistry: {
+            trustgraph: async () => ({
+                outcome: 'executed',
+                executionContext: {
+                    toolName: 'trustgraph',
+                    status: 'executed',
+                },
+                integrationContext: {
+                    kind: 'trustgraph',
+                    version: 'v1',
+                    payload: {
+                        targetExecutions: [targetExecution],
+                        retrievedContent: 'private retrieved source body',
+                    },
+                },
+            }),
+        },
+        captureUsage: (generationResult) => ({
+            model: generationResult.model ?? 'gpt-5-mini',
+            promptTokens: 0,
+            completionTokens: 0,
+            totalTokens: 0,
+            estimatedCost: {
+                inputCostUsd: 0,
+                outputCostUsd: 0,
+                totalCostUsd: 0,
+            },
+        }),
+    });
+
+    const toolStep = result.workflowLineage.steps.find(
+        (step) => step.stepKind === 'tool'
+    );
+    assert.ok(toolStep);
+    const attempt = toolStep.attempts?.[0];
+    assert.deepEqual(attempt?.trustGraphTargets, [targetExecution]);
+    assert.equal(
+        JSON.stringify(attempt).includes('private retrieved source body'),
+        false
+    );
+});
+
 test('runBoundedReviewWorkflow executes injected context step and records context artifacts before generation', async () => {
     const generationRuntime: GenerationRuntime = {
         kind: 'test-runtime',

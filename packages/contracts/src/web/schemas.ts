@@ -1132,6 +1132,73 @@ const WorkflowAttemptCapabilitiesSchema = z
     })
     .strict();
 
+const WorkflowTrustGraphTargetExecutionSchema = z
+    .object({
+        targetId: z.string().min(1),
+        flow: z.string().min(1),
+        collection: z.string().min(1),
+        outcome: z.enum(['requested', 'executed', 'skipped', 'failed']),
+        reasonCode: z
+            .enum([
+                'not_requested',
+                'adapter_unavailable',
+                'scope_denied',
+                'timeout',
+                'aborted',
+                'request_failed',
+            ])
+            .optional(),
+        measurements: z
+            .object({
+                provenance: z.literal('footnote_measured'),
+                requestDurationMs: z
+                    .number()
+                    .nonnegative()
+                    .optional()
+                    .describe(
+                        'End-to-end target adapter elapsed time through response receipt, validation, and bounds; not provider or internal compute time.'
+                    ),
+                returnedSourceCount: z.number().int().nonnegative().optional(),
+                retainedSourceCount: z.number().int().nonnegative().optional(),
+                responseCodeUnitsBeforeBounds: z
+                    .number()
+                    .int()
+                    .nonnegative()
+                    .optional(),
+                responseCodeUnitsAfterBounds: z
+                    .number()
+                    .int()
+                    .nonnegative()
+                    .optional(),
+                retainedSourceTextCodeUnitsBeforeTextBounds: z
+                    .number()
+                    .int()
+                    .nonnegative()
+                    .optional()
+                    .describe(
+                        'Sum for final retained Document RAG sources before per-source text bounds.'
+                    ),
+                retainedSourceTextCodeUnitsAfterTextBounds: z
+                    .number()
+                    .int()
+                    .nonnegative()
+                    .optional()
+                    .describe(
+                        'Sum of those same retained sources after per-source text bounds.'
+                    ),
+            })
+            .strict()
+            .optional(),
+        bounds: z
+            .object({
+                provenance: z.literal('derived'),
+                sourcesTruncated: z.boolean().optional(),
+                responseTruncated: z.boolean().optional(),
+            })
+            .strict()
+            .optional(),
+    })
+    .strict();
 const WorkflowAttemptRecordSchema = z
     .object({
         attempt: z.number().int().positive(),
@@ -1159,6 +1226,9 @@ const WorkflowAttemptRecordSchema = z
         reasonCode: z.string().min(1).optional(),
         terminationReason: z.string().min(1).optional(),
         routingAttempts: z.array(WorkflowAttemptRoutingRecordSchema).optional(),
+        trustGraphTargets: z
+            .array(WorkflowTrustGraphTargetExecutionSchema)
+            .optional(),
     })
     .strict();
 

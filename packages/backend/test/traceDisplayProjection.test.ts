@@ -141,6 +141,20 @@ test('public trace display allowlists workflow receipts while omitting operator 
                                 startedAt: new Date().toISOString(),
                                 finishedAt: new Date().toISOString(),
                                 durationMs: 0,
+                                trustGraphTargets: [
+                                    {
+                                        targetId: 'private-target',
+                                        flow: 'private-flow',
+                                        collection: 'private-collection',
+                                        outcome: 'executed',
+                                        measurements: {
+                                            provenance: 'footnote_measured',
+                                            requestDurationMs: 12,
+                                            returnedSourceCount: 2,
+                                            retainedSourceCount: 1,
+                                        },
+                                    },
+                                ],
                             },
                         ],
                         outcome: {
@@ -168,6 +182,14 @@ test('public trace display allowlists workflow receipts while omitting operator 
     assert.equal(projected.workflow.durationMs, 25);
     assert.equal('results' in projected.workflow, false);
     assert.equal('attempts' in projected.workflow.steps[0]!, false);
+    assert.equal(
+        JSON.stringify(projected.workflow).includes('private-target'),
+        false
+    );
+    assert.equal(
+        JSON.stringify(projected.workflow).includes('private-flow'),
+        false
+    );
     assert.equal('inputRefs' in projected.workflow.steps[0]!, false);
     assert.equal('resultRefs' in projected.workflow.steps[0]!, false);
     assert.equal(projected.workflow.results, undefined);

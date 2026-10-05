@@ -152,6 +152,36 @@ test('Graph RAG adapter sends the native request and maps one aggregate item', a
         ]);
         assert.equal(bundle.items[0]?.confidenceScore, 0);
         assert.equal(bundle.scopeTuple.projectId, 'project-1');
+        const targetExecution = bundle.targetExecutions?.[0];
+        assert.equal(targetExecution?.targetId, 'default-target');
+        assert.equal(targetExecution?.flow, 'default');
+        assert.equal(
+            targetExecution?.collection,
+            'footnote-repository-context'
+        );
+        assert.equal(targetExecution?.outcome, 'executed');
+        assert.equal(
+            targetExecution?.measurements?.provenance,
+            'footnote_measured'
+        );
+        assert.ok(
+            (targetExecution?.measurements?.requestDurationMs ?? -1) >= 0
+        );
+        assert.equal(targetExecution?.measurements?.returnedSourceCount, 2);
+        assert.equal(targetExecution?.measurements?.retainedSourceCount, 2);
+        assert.equal(
+            targetExecution?.measurements?.responseCodeUnitsBeforeBounds,
+            'The repository uses a bounded context loader.'.length
+        );
+        assert.equal(
+            targetExecution?.measurements?.responseCodeUnitsAfterBounds,
+            'The repository uses a bounded context loader.'.length
+        );
+        assert.deepEqual(targetExecution?.bounds, {
+            provenance: 'derived',
+            sourcesTruncated: false,
+            responseTruncated: false,
+        });
         assert.equal(
             JSON.stringify(requestBody).includes('workspaceRef'),
             false
@@ -305,6 +335,24 @@ test('Document RAG adapter requests evidence-only output and preserves source me
             'page-number:14',
             'https://archive.example/record.pdf',
         ]);
+        const targetExecution = bundle.targetExecutions?.[0];
+        assert.equal(targetExecution?.outcome, 'executed');
+        assert.equal(
+            targetExecution?.measurements
+                ?.retainedSourceTextCodeUnitsBeforeTextBounds,
+            'The source describes a building inspection.'.length
+        );
+        assert.equal(
+            targetExecution?.measurements
+                ?.retainedSourceTextCodeUnitsAfterTextBounds,
+            'The source describes a building inspection.'.length
+        );
+        assert.equal(targetExecution?.measurements?.returnedSourceCount, 1);
+        assert.equal(targetExecution?.measurements?.retainedSourceCount, 1);
+        assert.deepEqual(targetExecution?.bounds, {
+            provenance: 'derived',
+            sourcesTruncated: false,
+        });
     } finally {
         await closeServer(server);
     }
@@ -437,6 +485,32 @@ test('mixed TrustGraph results keep graph aggregate and document text bounds', a
                 item.retrievalReason.endsWith('_truncated')
             )
         );
+        const boundedGraph = bundle.targetExecutions?.find(
+            (execution) => execution.targetId === 'one'
+        );
+        assert.equal(
+            boundedGraph?.measurements?.responseCodeUnitsBeforeBounds,
+            mixedLimits.maxResponseChars
+        );
+        assert.ok(
+            (boundedGraph?.measurements?.responseCodeUnitsAfterBounds ??
+                mixedLimits.maxResponseChars) < mixedLimits.maxResponseChars
+        );
+        assert.equal(boundedGraph?.bounds?.responseTruncated, true);
+        const boundedDocument = bundle.targetExecutions?.find(
+            (execution) => execution.targetId === 'document-target'
+        );
+        assert.equal(
+            boundedDocument?.measurements
+                ?.retainedSourceTextCodeUnitsBeforeTextBounds,
+            mixedLimits.maxResponseChars + 1
+        );
+        assert.equal(
+            boundedDocument?.measurements
+                ?.retainedSourceTextCodeUnitsAfterTextBounds,
+            mixedLimits.maxResponseChars
+        );
+        assert.equal(boundedDocument?.bounds?.sourcesTruncated, true);
         assert.ok(
             bundle.traceRefs.some((ref) =>
                 ref.startsWith('trustgraph://document-rag/')
@@ -448,6 +522,102 @@ test('mixed TrustGraph results keep graph aggregate and document text bounds', a
                     ref.startsWith('trustgraph://graph-rag/') &&
                     ref.includes('/target/document-target/')
             ),
+            false
+        );
+    } finally {
+        await closeServer(server);
+    }
+});
+
+test('document source-size measurements cover only the final retained sources', async () => {
+    const limits: TrustGraphGraphRagLimits = {
+        ...TEST_LIMITS,
+        maxSources: 5,
+        maxResponseChars: 5,
+    };
+    const targets: TrustGraphTargetConfig[] = [
+        ...['one', 'two', 'three'].map((id) => ({
+            id,
+            flow: `${id}-flow`,
+            collection: id,
+            description: `${id} graph target.`,
+        })),
+        {
+            id: 'documents',
+            flow: 'document-flow',
+            collection: 'documents',
+            description: 'Document target.',
+            service: 'document-rag',
+        },
+    ];
+    const { server, baseUrl } = await startServer((request, response) => {
+        response.setHeader('content-type', 'application/json');
+        if (request.url?.endsWith('/document-rag') === true) {
+            response.end(
+                JSON.stringify({
+                    message_type: 'evidence',
+                    evidence: [
+                        {
+                            'chunk-id': 'first',
+                            text: '  alpha-long  ',
+                            rank: 1,
+                            'source-uri': 'https://example.test/first',
+                        },
+                        {
+                            'chunk-id': 'second',
+                            text: ' beta-longer ',
+                            rank: 2,
+                            'source-uri': 'https://example.test/second',
+                        },
+                        {
+                            'chunk-id': 'discarded',
+                            text: 'discarded-source-body',
+                            rank: 3,
+                            'source-uri': 'https://example.test/discarded',
+                        },
+                    ],
+                })
+            );
+            return;
+        }
+        response.end(
+            JSON.stringify({
+                response: 'g',
+                sources: [{ uri: `https://example.test/${request.url}` }],
+            })
+        );
+    });
+
+    try {
+        const bundle = await createAdapter(
+            baseUrl,
+            targets,
+            limits
+        ).getEvidenceBundle({
+            queryIntent: 'query',
+            scopeTuple: { userId: 'user-1', projectId: 'project-1' },
+            budget: { timeoutMs: 100, maxCalls: 1 },
+            targetIds: targets.map((target) => target.id),
+        });
+        const documentExecution = bundle.targetExecutions?.find(
+            (execution) => execution.targetId === 'documents'
+        );
+
+        assert.equal(documentExecution?.measurements?.returnedSourceCount, 3);
+        assert.equal(documentExecution?.measurements?.retainedSourceCount, 2);
+        assert.equal(
+            documentExecution?.measurements
+                ?.retainedSourceTextCodeUnitsBeforeTextBounds,
+            'alpha-long'.length + 'beta-longer'.length
+        );
+        assert.equal(
+            documentExecution?.measurements
+                ?.retainedSourceTextCodeUnitsAfterTextBounds,
+            limits.maxResponseChars * 2
+        );
+        assert.equal(documentExecution?.bounds?.sourcesTruncated, true);
+        assert.equal(
+            JSON.stringify(documentExecution).includes('discarded-source-body'),
             false
         );
     } finally {
@@ -744,6 +914,20 @@ test('Graph RAG adapter rejects malformed JSON and non-success responses without
                     false
                 );
                 assert.match(String(error), /http_status_503/);
+                if (
+                    typeof error !== 'object' ||
+                    error === null ||
+                    !('targetExecutions' in error)
+                ) {
+                    return false;
+                }
+                const executions = error.targetExecutions;
+                assert.ok(Array.isArray(executions));
+                assert.equal(executions[0]?.outcome, 'failed');
+                assert.equal(executions[0]?.reasonCode, 'request_failed');
+                assert.ok(
+                    (executions[0]?.measurements?.requestDurationMs ?? -1) >= 0
+                );
                 return true;
             }
         );
@@ -997,7 +1181,23 @@ test('Graph RAG adapter enforces transport bounds and honors cancellation', asyn
             abortSignal: abortController.signal,
         });
         abortController.abort();
-        await assert.rejects(request);
+        await assert.rejects(request, (error: unknown) => {
+            if (
+                typeof error !== 'object' ||
+                error === null ||
+                !('targetExecutions' in error)
+            ) {
+                return false;
+            }
+            const executions = error.targetExecutions;
+            assert.ok(Array.isArray(executions));
+            assert.equal(executions[0]?.outcome, 'failed');
+            assert.equal(executions[0]?.reasonCode, 'aborted');
+            assert.ok(
+                (executions[0]?.measurements?.requestDurationMs ?? -1) >= 0
+            );
+            return true;
+        });
     } finally {
         await closeServer(slow.server);
     }

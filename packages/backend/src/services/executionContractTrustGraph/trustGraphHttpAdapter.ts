@@ -8,9 +8,11 @@
  */
 
 import { randomUUID } from 'node:crypto';
+import { performance } from 'node:perf_hooks';
 import { TextDecoder } from 'node:util';
 
 import { logger } from '../../utils/logger.js';
+import type { WorkflowTrustGraphTargetExecution } from '@footnote/contracts/policy';
 import type {
     Budget,
     EvidenceBundle,
@@ -19,6 +21,7 @@ import type {
     TrustGraphEvidenceAdapter,
     TrustGraphTargetConfig,
 } from './trustGraphEvidenceTypes.js';
+import { TrustGraphTargetRequestFailuresError } from './trustGraphEvidenceTypes.js';
 
 export type TrustGraphGraphRagLimits = {
     maxQueryChars: number;
@@ -56,6 +59,7 @@ type DocumentRagEvidence = {
     chunkId: string;
     text: string;
     textTruncated: boolean;
+    originalTextCodeUnits: number;
     rank: number;
     score?: number;
     pageId?: string;
@@ -541,6 +545,7 @@ const parseDocumentRagPayload = (
             chunkId: chunkId.trim(),
             text: boundedText.response,
             textTruncated: boundedText.truncated,
+            originalTextCodeUnits: normalizedText.length,
             rank,
             ...(score !== undefined && { score }),
             ...(pageId !== undefined && { pageId: pageId.trim() }),
@@ -579,6 +584,7 @@ const toEvidenceBundle = (input: {
     scopeTuple: ScopeTuple;
     partialTargetFailureIds?: string[];
     results: TargetResult[];
+    targetExecutions: WorkflowTrustGraphTargetExecution[];
 }): EvidenceBundle => {
     const items: EvidenceItem[] = input.results.flatMap(
         (result): EvidenceItem[] => {
@@ -683,6 +689,7 @@ const toEvidenceBundle = (input: {
         ],
         scopeTuple: input.scopeTuple,
         adapterVersion,
+        targetExecutions: input.targetExecutions,
         ...(input.partialTargetFailureIds !== undefined &&
             input.partialTargetFailureIds.length > 0 && {
                 partialTargetFailureIds: input.partialTargetFailureIds,
@@ -699,6 +706,7 @@ type GraphRagTargetResult = {
     sourceTruncated: boolean;
     originalResponseChars: number;
     responseTruncated: boolean;
+    requestDurationMs: number;
 };
 
 type DocumentRagTargetResult = {
@@ -707,9 +715,31 @@ type DocumentRagTargetResult = {
     evidence: DocumentRagEvidence[];
     originalEvidenceCount: number;
     evidenceTruncated: boolean;
+    requestDurationMs: number;
 };
 
 type TargetResult = GraphRagTargetResult | DocumentRagTargetResult;
+type TargetResponse =
+    | Omit<GraphRagTargetResult, 'requestDurationMs'>
+    | Omit<DocumentRagTargetResult, 'requestDurationMs'>;
+
+const classifyTargetFailure = (
+    error: unknown
+): WorkflowTrustGraphTargetExecution['reasonCode'] => {
+    if (
+        error instanceof Error &&
+        (error.name === 'AbortError' || error.name === 'TimeoutError')
+    ) {
+        return error.name === 'TimeoutError' ? 'timeout' : 'aborted';
+    }
+    if (
+        error instanceof Error &&
+        /(?:timeout|timed_out)/iu.test(error.message)
+    ) {
+        return 'timeout';
+    }
+    return 'request_failed';
+};
 
 const applyAggregateResponseLimit = (
     results: readonly GraphRagTargetResult[],
@@ -807,7 +837,7 @@ export class HttpTrustGraphEvidenceAdapter implements TrustGraphEvidenceAdapter 
         target: TrustGraphTargetConfig;
         query: string;
         abortSignal?: AbortSignal;
-    }): Promise<TargetResult> {
+    }): Promise<TargetResponse> {
         const workspaceRef =
             input.target.workspaceRef !== undefined
                 ? isNonEmptyString(input.target.workspaceRef)
@@ -922,65 +952,118 @@ export class HttpTrustGraphEvidenceAdapter implements TrustGraphEvidenceAdapter 
             throw new Error('trustgraph_graph_rag_no_admitted_targets');
         }
 
-        const settled = await Promise.allSettled(
-            selectedTargets.map((target) =>
-                (async () => {
-                    const startedAt = Date.now();
-                    try {
-                        const result = await this.fetchTarget({
-                            target,
-                            query,
-                            abortSignal: input.abortSignal,
-                        });
-                        logger.info(
-                            'chat.execution_contract_trustgraph.target_completed',
-                            {
-                                event: 'chat.execution_contract_trustgraph.target_completed',
-                                targetId: target.id,
-                                flow: target.flow,
-                                collection: target.collection,
-                                status: 'success',
-                                durationMs: Math.max(0, Date.now() - startedAt),
-                            }
-                        );
-                        return result;
-                    } catch (error) {
-                        logger.info(
-                            'chat.execution_contract_trustgraph.target_completed',
-                            {
-                                event: 'chat.execution_contract_trustgraph.target_completed',
-                                targetId: target.id,
-                                flow: target.flow,
-                                collection: target.collection,
-                                status: 'failed',
-                                durationMs: Math.max(0, Date.now() - startedAt),
-                            }
-                        );
-                        throw error;
-                    }
-                })()
-            )
+        const settled = await Promise.all(
+            selectedTargets.map(async (target) => {
+                const startedAt = performance.now();
+                try {
+                    const result = await this.fetchTarget({
+                        target,
+                        query,
+                        abortSignal: input.abortSignal,
+                    });
+                    const requestDurationMs = Math.max(
+                        0,
+                        performance.now() - startedAt
+                    );
+                    logger.info(
+                        'chat.execution_contract_trustgraph.target_completed',
+                        {
+                            event: 'chat.execution_contract_trustgraph.target_completed',
+                            targetId: target.id,
+                            flow: target.flow,
+                            collection: target.collection,
+                            status: 'success',
+                            durationMs: requestDurationMs,
+                        }
+                    );
+                    return {
+                        status: 'success' as const,
+                        result: { ...result, requestDurationMs },
+                    };
+                } catch (error) {
+                    const requestDurationMs = Math.max(
+                        0,
+                        performance.now() - startedAt
+                    );
+                    logger.info(
+                        'chat.execution_contract_trustgraph.target_completed',
+                        {
+                            event: 'chat.execution_contract_trustgraph.target_completed',
+                            targetId: target.id,
+                            flow: target.flow,
+                            collection: target.collection,
+                            status: 'failed',
+                            durationMs: requestDurationMs,
+                        }
+                    );
+                    return {
+                        status: 'failed' as const,
+                        target,
+                        error,
+                        requestDurationMs,
+                    };
+                }
+            })
         );
         const successful: TargetResult[] = [];
         const failures: Array<{
             target: TrustGraphTargetConfig;
             error: unknown;
+            requestDurationMs: number;
         }> = [];
-        for (const [index, result] of settled.entries()) {
-            const target = selectedTargets[index];
-            if (result.status === 'fulfilled') {
-                successful.push(result.value);
-            } else if (target !== undefined) {
-                failures.push({ target, error: result.reason });
-                logTargetFailure(target, result.reason);
+        for (const result of settled) {
+            if (result.status === 'success') {
+                successful.push(result.result);
+            } else {
+                failures.push({
+                    target: result.target,
+                    error: result.error,
+                    requestDurationMs: result.requestDurationMs,
+                });
+                logTargetFailure(result.target, result.error);
             }
         }
 
         if (successful.length === 0) {
-            if (failures.length === 1) {
-                throw failures[0].error;
-            }
-            throw new Error('trustgraph_graph_rag_all_targets_failed');
+            const failuresById = new Map(
+                failures.map((failure) => [failure.target.id, failure] as const)
+            );
+            throw new TrustGraphTargetRequestFailuresError(
+                this.targets.map((target) => {
+                    if (!requestedTargetIds.has(target.id)) {
+                        return {
+                            targetId: target.id,
+                            flow: target.flow,
+                            collection: target.collection,
+                            outcome: 'skipped',
+                            reasonCode: 'not_requested',
+                        };
+                    }
+                    const failure = failuresById.get(target.id);
+                    return {
+                        targetId: target.id,
+                        flow: target.flow,
+                        collection: target.collection,
+                        outcome: 'failed',
+                        reasonCode:
+                            failure === undefined
+                                ? 'request_failed'
+                                : classifyTargetFailure(failure.error),
+                        ...(failure === undefined
+                            ? {}
+                            : {
+                                  measurements: {
+                                      provenance: 'footnote_measured' as const,
+                                      requestDurationMs:
+                                          failure.requestDurationMs,
+                                  },
+                              }),
+                    };
+                }),
+                failures.length === 1 && failures[0]?.error instanceof Error
+                    ? failures[0].error.message
+                    : undefined
+            );
         }
 
         let remainingSources = this.limits.maxSources;
@@ -1045,6 +1128,116 @@ export class HttpTrustGraphEvidenceAdapter implements TrustGraphEvidenceAdapter 
             }
         }
 
+        const successfulById = new Map(
+            successful.map((result) => [result.target.id, result] as const)
+        );
+        const boundedById = new Map(
+            boundedResults.map((result) => [result.target.id, result] as const)
+        );
+        const failuresById = new Map(
+            failures.map((failure) => [failure.target.id, failure] as const)
+        );
+        const targetExecutions: WorkflowTrustGraphTargetExecution[] =
+            this.targets.map((target) => {
+                if (!requestedTargetIds.has(target.id)) {
+                    return {
+                        targetId: target.id,
+                        flow: target.flow,
+                        collection: target.collection,
+                        outcome: 'skipped',
+                        reasonCode: 'not_requested',
+                    };
+                }
+                const failure = failuresById.get(target.id);
+                if (failure !== undefined) {
+                    return {
+                        targetId: target.id,
+                        flow: target.flow,
+                        collection: target.collection,
+                        outcome: 'failed',
+                        reasonCode: classifyTargetFailure(failure.error),
+                        measurements: {
+                            provenance: 'footnote_measured',
+                            requestDurationMs: failure.requestDurationMs,
+                        },
+                    };
+                }
+                const original = successfulById.get(target.id);
+                const bounded = boundedById.get(target.id);
+                if (original === undefined) {
+                    return {
+                        targetId: target.id,
+                        flow: target.flow,
+                        collection: target.collection,
+                        outcome: 'requested',
+                    };
+                }
+                if (original.kind === 'graph') {
+                    const retained =
+                        bounded?.kind === 'graph' ? bounded : undefined;
+                    return {
+                        targetId: target.id,
+                        flow: target.flow,
+                        collection: target.collection,
+                        outcome: 'executed',
+                        measurements: {
+                            provenance: 'footnote_measured',
+                            requestDurationMs: original.requestDurationMs,
+                            returnedSourceCount: original.originalSourceCount,
+                            retainedSourceCount: retained?.sources.length ?? 0,
+                            responseCodeUnitsBeforeBounds:
+                                original.originalResponseChars,
+                            responseCodeUnitsAfterBounds:
+                                retained?.response.length ?? 0,
+                        },
+                        bounds: {
+                            provenance: 'derived',
+                            sourcesTruncated:
+                                original.sourceTruncated ||
+                                (retained?.sourceTruncated ?? true),
+                            responseTruncated:
+                                original.responseTruncated ||
+                                retained === undefined ||
+                                (retained?.responseTruncated ?? false),
+                        },
+                    };
+                }
+                const retained =
+                    bounded?.kind === 'document' ? bounded : undefined;
+                return {
+                    targetId: target.id,
+                    flow: target.flow,
+                    collection: target.collection,
+                    outcome: 'executed',
+                    measurements: {
+                        provenance: 'footnote_measured',
+                        requestDurationMs: original.requestDurationMs,
+                        returnedSourceCount: original.originalEvidenceCount,
+                        retainedSourceCount: retained?.evidence.length ?? 0,
+                        retainedSourceTextCodeUnitsBeforeTextBounds: (
+                            retained?.evidence ?? []
+                        ).reduce(
+                            (total, item) => total + item.originalTextCodeUnits,
+                            0
+                        ),
+                        retainedSourceTextCodeUnitsAfterTextBounds:
+                            retained?.evidence.reduce(
+                                (total, item) => total + item.text.length,
+                                0
+                            ) ?? 0,
+                    },
+                    bounds: {
+                        provenance: 'derived',
+                        sourcesTruncated:
+                            original.evidenceTruncated ||
+                            original.evidence.some(
+                                (item) => item.textTruncated
+                            ) ||
+                            (retained?.evidenceTruncated ?? true),
+                    },
+                };
+            });
+
         return toEvidenceBundle({
             queryIntent: query,
             scopeTuple: input.scopeTuple,
@@ -1052,6 +1245,7 @@ export class HttpTrustGraphEvidenceAdapter implements TrustGraphEvidenceAdapter 
                 (failure) => failure.target.id
             ),
             results: boundedResults,
+            targetExecutions,
         });
     }
 }
