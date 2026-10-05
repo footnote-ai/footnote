@@ -220,6 +220,13 @@ test('a superseded request cannot clear newer loading state or replace its answe
     await expect(
         page.getByRole('button', { name: 'Submitting question' })
     ).toBeDisabled();
+    await expect(page.locator('.interaction-status')).toHaveAttribute(
+        'data-request-state',
+        'superseded'
+    );
+    await expect(page.locator('.interaction-status')).toContainText(
+        'The previous request was superseded.'
+    );
 
     secondResponse.resolve(undefined);
     await expect(page.getByText(CHAT_RESPONSE.message)).toBeVisible();
@@ -272,7 +279,7 @@ test('CAPTCHA verification preserves an existing API error message', async ({
         () => window.__footnoteTurnstileCallbacks?.length ?? 0
     );
     await page.evaluate(() => {
-        const callback = window.__footnoteTurnstileCallbacks?.[0];
+        const callback = window.__footnoteTurnstileCallbacks?.at(-1);
         callback?.('XXXX.DUMMY.TOKEN.XXXX');
     });
     await submitQuestion(page, 'Please reject this request');
@@ -355,7 +362,7 @@ test('a whitespace-only response shows an explicit unavailable state', async ({
         )
         .toBeGreaterThan(0);
     await page.evaluate(() => {
-        const callback = window.__footnoteTurnstileCallbacks?.[0];
+        const callback = window.__footnoteTurnstileCallbacks?.at(-1);
         callback?.('XXXX.DUMMY.TOKEN.XXXX');
     });
 
@@ -426,8 +433,11 @@ test('CAPTCHA expiration keeps the managed challenge available for retry', async
             )
         )
         .toBeGreaterThan(0);
+    const initialExpirationCallbackCount = await page.evaluate(
+        () => window.__footnoteTurnstileExpireCallbacks?.length ?? 0
+    );
     await page.evaluate(() => {
-        const callback = window.__footnoteTurnstileCallbacks?.[0];
+        const callback = window.__footnoteTurnstileCallbacks?.at(-1);
         callback?.('XXXX.DUMMY.TOKEN.XXXX');
     });
     await submitQuestion(page, 'Expire this challenge');
@@ -435,6 +445,13 @@ test('CAPTCHA expiration keeps the managed challenge available for retry', async
     await expect(
         page.getByLabel('Complete CAPTCHA verification to submit your question')
     ).toBeVisible();
+    await expect
+        .poll(() =>
+            page.evaluate(
+                () => window.__footnoteTurnstileExpireCallbacks?.length ?? 0
+            )
+        )
+        .toBeGreaterThan(initialExpirationCallbackCount);
     await page.evaluate(() => {
         const callback = window.__footnoteTurnstileExpireCallbacks?.at(-1);
         callback?.();
@@ -471,7 +488,7 @@ test('a successful response mounts a fresh invisible CAPTCHA challenge', async (
         )
         .toBeGreaterThan(0);
     await page.evaluate(() => {
-        const callback = window.__footnoteTurnstileCallbacks?.[0];
+        const callback = window.__footnoteTurnstileCallbacks?.at(-1);
         callback?.('XXXX.DUMMY.TOKEN.XXXX');
     });
     await submitQuestion(page, 'Refresh the challenge after success');
@@ -526,7 +543,9 @@ test('a schema-invalid response consumes the token and reports a truthful client
         )
         .toBeGreaterThan(0);
     await page.evaluate(() => {
-        window.__footnoteTurnstileCallbacks?.[0]?.('XXXX.DUMMY.TOKEN.1.XXXX');
+        window.__footnoteTurnstileCallbacks?.at(-1)?.(
+            'XXXX.DUMMY.TOKEN.1.XXXX'
+        );
     });
 
     await submitQuestion(page, 'Return a contract-invalid response');
@@ -589,7 +608,7 @@ test('CAPTCHA verification preserves an error status with different wording', as
         )
         .toBeGreaterThan(0);
     await page.evaluate(() => {
-        const callback = window.__footnoteTurnstileCallbacks?.[0];
+        const callback = window.__footnoteTurnstileCallbacks?.at(-1);
         callback?.('XXXX.DUMMY.TOKEN.XXXX');
     });
 

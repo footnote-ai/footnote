@@ -149,9 +149,12 @@ test('new chat rotates its session and ignores the aborted response', async ({
     await page.getByRole('button', { name: 'Submit question' }).click();
     await expect.poll(() => requestCount).toBe(1);
     await expect(page.getByRole('button', { name: 'New chat' })).toBeVisible();
+    await page.getByLabel('Ask a question').fill('Unsaved draft');
     await page.getByRole('button', { name: 'New chat' }).click();
     await expect(page.locator('.interaction-turn')).toHaveCount(0);
     await expect(page.getByLabel('Ask a question')).toBeFocused();
+    await expect(page.getByLabel('Ask a question')).toHaveValue('');
+    await expect(page.locator('.interaction-status')).toHaveCount(0);
 
     await page.getByLabel('Ask a question').fill('Fresh question');
     await page.getByRole('button', { name: 'Submit question' }).click();

@@ -186,6 +186,9 @@ const Chat = (): JSX.Element => {
             return;
         }
 
+        const supersededActiveRequest = Boolean(
+            abortRef.current && currentRequest?.status === 'pending'
+        );
         // The retry reuses the failed turn; only an active request is superseded.
         abortRef.current?.abort();
         const controller = new AbortController();
@@ -199,7 +202,16 @@ const Chat = (): JSX.Element => {
         }, 60000);
 
         // Keep completed turns visible while the new request is pending.
-        setStatus(null);
+        setStatus(
+            supersededActiveRequest
+                ? {
+                      kind: 'info',
+                      message:
+                          'The previous request was superseded. No assistant response was added.',
+                      requestState: 'superseded',
+                  }
+                : null
+        );
         setIsLoading(true);
         setCurrentRequest({
             userMessage: trimmedQuestion,
