@@ -1011,6 +1011,143 @@ components:
                 - durationMs
                 - outcome
             additionalProperties: false
+        WorkflowSettingValues:
+            type: object
+            additionalProperties:
+                oneOf:
+                    - type: string
+                    - type: number
+        WorkflowCapabilitySupport:
+            type: string
+            enum:
+                - supported
+                - unsupported
+                - unknown
+        WorkflowCapabilitySupportMap:
+            type: object
+            additionalProperties:
+                $ref: '#/components/schemas/WorkflowCapabilitySupport'
+        WorkflowGenerationUsage:
+            type: object
+            properties:
+                promptTokens:
+                    type: integer
+                    minimum: 0
+                cachedInputTokens:
+                    type: integer
+                    minimum: 0
+                cacheWriteTokens:
+                    type: integer
+                    minimum: 0
+                completionTokens:
+                    type: integer
+                    minimum: 0
+                totalTokens:
+                    type: integer
+                    minimum: 0
+                reasoningTokens:
+                    type: integer
+                    minimum: 0
+            additionalProperties: false
+        WorkflowAttemptRoutingRecord:
+            type: object
+            properties:
+                index:
+                    type: integer
+                    minimum: 0
+                profileId:
+                    type: string
+                    minLength: 1
+                requestedProvider:
+                    type: string
+                    minLength: 1
+                requestedModel:
+                    type: string
+                    minLength: 1
+                actualProvider:
+                    type: string
+                    minLength: 1
+                actualModel:
+                    type: string
+                    minLength: 1
+                status:
+                    type: string
+                    minLength: 1
+                reasonCode:
+                    type: string
+                    minLength: 1
+                finishReason:
+                    type: string
+                    minLength: 1
+                completion:
+                    $ref: '#/components/schemas/WorkflowAttemptCompletion'
+                usage:
+                    $ref: '#/components/schemas/WorkflowGenerationUsage'
+                cost:
+                    type: object
+                    properties:
+                        inputCostUsd:
+                            type: number
+                            minimum: 0
+                        outputCostUsd:
+                            type: number
+                            minimum: 0
+                        totalCostUsd:
+                            type: number
+                            minimum: 0
+                    required:
+                        - inputCostUsd
+                        - outputCostUsd
+                        - totalCostUsd
+                    additionalProperties: false
+                startedAt:
+                    type: string
+                    format: date-time
+                finishedAt:
+                    type: string
+                    format: date-time
+                durationMs:
+                    type: integer
+                    minimum: 0
+                chooseOneUsed:
+                    type: boolean
+                chooseOneSelectedIndex:
+                    type: integer
+                    minimum: 0
+                temporaryUnavailableReason:
+                    type: string
+                    minLength: 1
+                selectionSource:
+                    type: string
+                    enum:
+                        - explicit
+                        - configured
+            required:
+                - index
+                - profileId
+                - status
+                - chooseOneUsed
+            additionalProperties: false
+        WorkflowAttemptCompletion:
+            type: object
+            properties:
+                status:
+                    type: string
+                    enum:
+                        - completed
+                        - incomplete
+                        - failed
+                        - unknown
+                reason:
+                    type: string
+                    maxLength: 100
+                visibleTextLength:
+                    type: integer
+                    minimum: 0
+            required:
+                - status
+                - visibleTextLength
+            additionalProperties: false
         WorkflowTrustGraphTargetExecution:
             x-codeRefs:
                 - packages/contracts/src/policy/types.ts#WorkflowTrustGraphTargetExecution
@@ -1117,6 +1254,106 @@ components:
                 durationMs:
                     type: integer
                     minimum: 0
+                profileId:
+                    type: string
+                    minLength: 1
+                requestedProvider:
+                    type: string
+                    minLength: 1
+                requestedModel:
+                    type: string
+                    minLength: 1
+                actualProvider:
+                    type: string
+                    minLength: 1
+                actualModel:
+                    type: string
+                    minLength: 1
+                settings:
+                    type: object
+                    properties:
+                        requested:
+                            $ref: '#/components/schemas/WorkflowSettingValues'
+                        applied:
+                            $ref: '#/components/schemas/WorkflowSettingValues'
+                        ignored:
+                            type: array
+                            items:
+                                type: object
+                                properties:
+                                    setting:
+                                        type: string
+                                        minLength: 1
+                                    reasonCode:
+                                        type: string
+                                        minLength: 1
+                                required:
+                                    - setting
+                                    - reasonCode
+                                additionalProperties: false
+                        observed:
+                            $ref: '#/components/schemas/WorkflowSettingValues'
+                    additionalProperties: false
+                capabilities:
+                    type: object
+                    properties:
+                        reasoningEfforts:
+                            $ref: '#/components/schemas/WorkflowCapabilitySupportMap'
+                        verbosity:
+                            $ref: '#/components/schemas/WorkflowCapabilitySupportMap'
+                        temperature:
+                            $ref: '#/components/schemas/WorkflowCapabilitySupport'
+                        topP:
+                            $ref: '#/components/schemas/WorkflowCapabilitySupport'
+                        outputLimit:
+                            $ref: '#/components/schemas/WorkflowCapabilitySupport'
+                        structuredOutput:
+                            $ref: '#/components/schemas/WorkflowCapabilitySupport'
+                        jsonMode:
+                            $ref: '#/components/schemas/WorkflowCapabilitySupport'
+                        nativeSearch:
+                            $ref: '#/components/schemas/WorkflowCapabilitySupport'
+                    required:
+                        - reasoningEfforts
+                        - verbosity
+                        - temperature
+                        - topP
+                        - outputLimit
+                        - structuredOutput
+                        - jsonMode
+                        - nativeSearch
+                    additionalProperties: false
+                completion:
+                    $ref: '#/components/schemas/WorkflowAttemptCompletion'
+                usage:
+                    $ref: '#/components/schemas/WorkflowGenerationUsage'
+                cost:
+                    type: object
+                    properties:
+                        inputCostUsd:
+                            type: number
+                            minimum: 0
+                        outputCostUsd:
+                            type: number
+                            minimum: 0
+                        totalCostUsd:
+                            type: number
+                            minimum: 0
+                    required:
+                        - inputCostUsd
+                        - outputCostUsd
+                        - totalCostUsd
+                    additionalProperties: false
+                reasonCode:
+                    type: string
+                    minLength: 1
+                terminationReason:
+                    type: string
+                    minLength: 1
+                routingAttempts:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/WorkflowAttemptRoutingRecord'
                 trustGraphTargets:
                     type: array
                     items:
@@ -1127,7 +1364,7 @@ components:
                 - startedAt
                 - finishedAt
                 - durationMs
-            additionalProperties: true
+            additionalProperties: false
         WorkflowRecord:
             x-codeRefs:
                 - packages/contracts/src/policy/types.ts#WorkflowRecord
