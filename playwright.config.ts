@@ -26,5 +26,8 @@ export default defineConfig({
             'pnpm --filter @footnote/contracts build && pnpm --filter @footnote/api-client build && pnpm --filter @footnote/web exec vite --host 127.0.0.1 --port 4173 --strictPort',
         url: 'http://127.0.0.1:4173',
         reuseExistingServer: false,
+        env: {
+            FRAME_ANCESTORS: 'http://output-check.localhost:4173',
+        },
     },
 });

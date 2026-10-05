@@ -142,6 +142,10 @@
     gap: 0.9rem;
 }
 
+.interaction-transcript-end {
+    height: 1px;
+}
+
 .interaction-turn {
     display: grid;
     gap: 0.35rem;
@@ -174,6 +178,32 @@
 .interaction-retry:hover,
 .interaction-new-chat:hover {
     background: color-mix(in srgb, var(--public-rule) 25%, transparent);
+}
+
+.interaction-latest-button {
+    position: fixed;
+    z-index: var(--fn-z-sticky);
+    right: 1rem;
+    bottom: 1rem;
+    border: 1px solid var(--public-rule);
+    border-radius: 0.3rem;
+    padding: 0.5rem 0.75rem;
+    background: var(--public-paper-raised);
+    color: var(--public-ink);
+    box-shadow: var(--fn-shadow-soft);
+    cursor: pointer;
+    font-family: var(--fn-font-mono);
+}
+
+.interaction-latest-button:hover {
+    background: color-mix(in srgb, var(--public-rule) 25%, var(--public-paper-raised));
+}
+
+.interaction-retry:focus-visible,
+.interaction-new-chat:focus-visible,
+.interaction-latest-button:focus-visible {
+    outline: 2px solid var(--public-focus);
+    outline-offset: 2px;
 }
 
 .interaction-captcha {

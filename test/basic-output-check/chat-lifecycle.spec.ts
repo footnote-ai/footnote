@@ -6,7 +6,7 @@
  * @footnote-ethics: medium - These checks keep request failures separate from assistant speech.
  */
 import { expect, test } from '@playwright/test';
-import ordinaryAnswer from './fixtures/ordinary-text-answer.json';
+import { configureRuntime, deferred, response } from './chat-test-helpers';
 
 declare global {
     interface Window {
@@ -15,32 +15,6 @@ declare global {
         __resolveSupersededAction?: () => void;
     }
 }
-
-const response = (message: string) => ({
-    ...ordinaryAnswer.response,
-    action: 'message',
-    message,
-});
-
-const deferred = (): { promise: Promise<void>; resolve: () => void } => {
-    let resolve!: () => void;
-    const promise = new Promise<void>((resolvePromise) => {
-        resolve = resolvePromise;
-    });
-    return { promise, resolve };
-};
-
-const configureRuntime = async (page: import('@playwright/test').Page) => {
-    await page.route('**/config.json', async (route) => {
-        await route.fulfill({
-            contentType: 'application/json',
-            body: JSON.stringify({
-                turnstileSiteKey: '',
-                setup: { required: false, routePath: '/setup' },
-            }),
-        });
-    });
-};
 
 test('keeps prior turns after failure and retries the failed turn once', async ({
     page,
