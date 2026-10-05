@@ -33,6 +33,19 @@ const response = (message: string) => ({
     message,
 });
 
+const readEmbedHeights = async (
+    page: import('@playwright/test').Page
+): Promise<number[]> =>
+    page.evaluate(
+        () =>
+            (window as Window & { __footnoteEmbedHeights?: number[] })
+                .__footnoteEmbedHeights ?? []
+    );
+
+const latestEmbedHeight = async (
+    page: import('@playwright/test').Page
+): Promise<number> => Math.max(...(await readEmbedHeights(page)));
+
 test('follows new transcript content at the end and offers a jump when scrolled up', async ({
     page,
 }) => {
@@ -79,7 +92,15 @@ test('follows new transcript content at the end and offers a jump when scrolled 
         .toBe(true);
 
     await page.evaluate(() => window.scrollTo(0, 0));
-    await page.waitForTimeout(50);
+    await expect
+        .poll(() =>
+            transcriptEnd.evaluate(
+                (element) =>
+                    element.getBoundingClientRect().bottom >
+                    window.innerHeight + 120
+            )
+        )
+        .toBe(true);
     await input.fill('Follow-up question');
     await page.getByRole('button', { name: 'Submit question' }).click();
     await expect(
@@ -175,7 +196,9 @@ test('embed height follows long responses and provenance drawers without horizon
         (_, index) =>
             `Response paragraph ${index + 1} adds readable content to the embedded transcript.`
     ).join('\n\n');
+    const pendingResponse = deferred();
     await page.route('**/api/chat', async (route) => {
+        await pendingResponse.promise;
         await route.fulfill({
             contentType: 'application/json',
             body: JSON.stringify(response(longAnswer)),
@@ -210,56 +233,27 @@ test('embed height follows long responses and provenance drawers without horizon
 
     const embed = page.frameLocator('#footnote-chat-frame');
     await expect(embed.getByLabel('Ask a question')).toBeVisible();
-    await expect
-        .poll(() =>
-            page.evaluate(
-                () =>
-                    (
-                        window as Window & {
-                            __footnoteEmbedHeights?: number[];
-                        }
-                    ).__footnoteEmbedHeights?.length ?? 0
-            )
-        )
-        .toBeGreaterThan(0);
-    const initialHeight = await page.evaluate(() => {
-        const heights =
-            (window as Window & { __footnoteEmbedHeights?: number[] })
-                .__footnoteEmbedHeights ?? [];
-        return Math.max(...heights);
-    });
+    await expect.poll(() => readEmbedHeights(page)).not.toHaveLength(0);
+    const initialHeight = await latestEmbedHeight(page);
 
     await embed.getByLabel('Ask a question').fill('Explain the embed height.');
     await embed.getByRole('button', { name: 'Submit question' }).click();
+    await expect(embed.getByText('Preparing a response…')).toBeVisible();
+    await expect
+        .poll(() => latestEmbedHeight(page))
+        .toBeGreaterThan(initialHeight);
+    const pendingHeight = await latestEmbedHeight(page);
+    pendingResponse.resolve();
     await expect(embed.getByText('Response paragraph 18')).toBeVisible();
     await expect
-        .poll(() =>
-            page.evaluate(() => {
-                const heights =
-                    (window as Window & { __footnoteEmbedHeights?: number[] })
-                        .__footnoteEmbedHeights ?? [];
-                return Math.max(...heights);
-            })
-        )
-        .toBeGreaterThan(initialHeight);
+        .poll(() => latestEmbedHeight(page))
+        .toBeGreaterThan(pendingHeight);
 
-    const responseHeight = await page.evaluate(() => {
-        const heights =
-            (window as Window & { __footnoteEmbedHeights?: number[] })
-                .__footnoteEmbedHeights ?? [];
-        return Math.max(...heights);
-    });
+    const responseHeight = await latestEmbedHeight(page);
     await embed.getByRole('button', { name: 'Sources', exact: true }).click();
     await expect(embed.getByRole('region', { name: 'Sources' })).toBeVisible();
     await expect
-        .poll(() =>
-            page.evaluate(() => {
-                const heights =
-                    (window as Window & { __footnoteEmbedHeights?: number[] })
-                        .__footnoteEmbedHeights ?? [];
-                return Math.max(...heights);
-            })
-        )
+        .poll(() => latestEmbedHeight(page))
         .toBeGreaterThan(responseHeight);
 
     const embedWidthState = await embed.locator('body').evaluate((body) => ({
