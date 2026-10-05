@@ -34,7 +34,19 @@ const EMPTY_RESPONSE_MESSAGE = 'No answer was returned. Please try again.';
 const INVALID_RESPONSE_MESSAGE =
     'The server returned a response I could not display. Please try again.';
 type ChatStatusKind = 'error' | 'info';
-type ChatStatus = { kind: ChatStatusKind; message: string };
+type ChatRequestState =
+    | 'backend'
+    | 'captcha'
+    | 'invalid-response'
+    | 'network'
+    | 'superseded'
+    | 'timeout'
+    | 'unsupported';
+type ChatStatus = {
+    kind: ChatStatusKind;
+    message: string;
+    requestState?: ChatRequestState;
+};
 type CompletedChatTurn = {
     id: number;
     userMessage: string;
@@ -88,9 +100,10 @@ const Chat = (): JSX.Element => {
 
     const showStatus = (
         message: string,
-        kind: ChatStatusKind = 'error'
+        kind: ChatStatusKind = 'error',
+        requestState?: ChatRequestState
     ): void => {
-        setStatus({ kind, message });
+        setStatus({ kind, message, requestState });
     };
 
     const clearInformationalStatus = useCallback((): void => {
@@ -137,14 +150,12 @@ const Chat = (): JSX.Element => {
         captcha.isManagedChallengeVisible,
     ]);
 
-    const onSubmit = async (event: FormEvent<HTMLFormElement>) => {
-        event.preventDefault();
-
+    const submitUserMessage = async (
+        submittedMessage: string
+    ): Promise<void> => {
         // Mark that user has interacted
         hasInteractedRef.current = true;
-        abortRef.current?.abort();
-
-        const trimmedQuestion = question.trim();
+        const trimmedQuestion = submittedMessage.trim();
 
         if (!trimmedQuestion) {
             showStatus('Please share a question, even a small one.', 'info');
@@ -169,12 +180,13 @@ const Chat = (): JSX.Element => {
             }
             showStatus(
                 'Please complete the visible CAPTCHA verification.',
-                'info'
+                'info',
+                'captcha'
             );
             return;
         }
 
-        // Abort any in-flight request when a new one starts to avoid race conditions.
+        // The retry reuses the failed turn; only an active request is superseded.
         abortRef.current?.abort();
         const controller = new AbortController();
         abortRef.current = controller;
@@ -193,6 +205,7 @@ const Chat = (): JSX.Element => {
             userMessage: trimmedQuestion,
             status: 'pending',
         });
+        setQuestion('');
 
         const sessionId = sessionIdRef.current ?? window.crypto.randomUUID();
         sessionIdRef.current = sessionId;
@@ -231,9 +244,16 @@ const Chat = (): JSX.Element => {
             );
 
             if (payload.action !== 'message') {
-                throw new Error(
-                    `Chat API returned unsupported action for web surface: ${payload.action}`
+                setCurrentRequest({
+                    userMessage: trimmedQuestion,
+                    status: 'failed',
+                });
+                showStatus(
+                    'This chat response used an action that the web chat cannot display.',
+                    'error',
+                    'unsupported'
                 );
+                return;
             }
 
             // Ignore a response that finished after a newer submission replaced it.
@@ -250,7 +270,7 @@ const Chat = (): JSX.Element => {
                 ResponseMetadata | null | undefined;
 
             if (chat.length === 0) {
-                showStatus(EMPTY_RESPONSE_MESSAGE);
+                showStatus(EMPTY_RESPONSE_MESSAGE, 'error', 'invalid-response');
                 setCurrentRequest({
                     userMessage: trimmedQuestion,
                     status: 'failed',
@@ -303,14 +323,32 @@ const Chat = (): JSX.Element => {
                             error.code === 'timeout_error')) &&
                     abortRef.current === controller
                 ) {
-                    showStatus('The request timed out. Please try again.');
+                    showStatus(
+                        'The request timed out. Please try again.',
+                        'error',
+                        'timeout'
+                    );
+                } else if (abortRef.current === controller) {
+                    setCurrentRequest({
+                        userMessage: trimmedQuestion,
+                        status: 'failed',
+                    });
+                    showStatus(
+                        'This request was superseded. No assistant response was added.',
+                        'info',
+                        'superseded'
+                    );
                 }
                 return;
             }
 
             if (isApiClientError(error)) {
                 if (error.code === 'invalid_payload') {
-                    showStatus(INVALID_RESPONSE_MESSAGE);
+                    showStatus(
+                        INVALID_RESPONSE_MESSAGE,
+                        'error',
+                        'invalid-response'
+                    );
                     return;
                 }
 
@@ -321,7 +359,7 @@ const Chat = (): JSX.Element => {
                         : 'CAPTCHA verification failed. Please refresh and try again.';
 
                     setIsLoading(false);
-                    showStatus(errorMessage);
+                    showStatus(errorMessage, 'error', 'captcha');
                     captcha.showManagedChallenge(
                         'Please complete the visible CAPTCHA and try again.'
                     );
@@ -340,7 +378,9 @@ const Chat = (): JSX.Element => {
                 ) {
                     setIsLoading(false);
                     showStatus(
-                        'CAPTCHA service is unavailable. Please try again shortly.'
+                        'CAPTCHA service is unavailable. Please try again shortly.',
+                        'error',
+                        'captcha'
                     );
                     captcha.showManagedChallenge(
                         'Please complete the visible CAPTCHA and try again.'
@@ -351,7 +391,9 @@ const Chat = (): JSX.Element => {
                 // Check for network errors
                 if (error.code === 'network_error') {
                     showStatus(
-                        'Unable to connect to the server. Please check your connection and try again.'
+                        'Unable to connect to the server. Please check your connection and try again.',
+                        'error',
+                        'network'
                     );
                     setIsLoading(false);
                     return;
@@ -363,7 +405,9 @@ const Chat = (): JSX.Element => {
                     error.message.includes('403')
                 ) {
                     showStatus(
-                        'CAPTCHA verification failed. Please refresh and try again.'
+                        'CAPTCHA verification failed. Please refresh and try again.',
+                        'error',
+                        'captcha'
                     );
                     captcha.showManagedChallenge(
                         'Please complete the visible CAPTCHA and try again.'
@@ -373,8 +417,13 @@ const Chat = (): JSX.Element => {
                 }
             }
 
+            const message = isApiClientError(error)
+                ? 'The server could not complete this request. Please try again.'
+                : 'Unable to generate a response. Please try again later.';
             showStatus(
-                'Unable to generate a response. Please try again later.'
+                message,
+                'error',
+                isApiClientError(error) ? 'backend' : undefined
             );
         } finally {
             clearTimeout(timeoutId); // Ensure timeout is cleared in all cases
@@ -383,6 +432,25 @@ const Chat = (): JSX.Element => {
                 setIsLoading(false);
             }
         }
+    };
+
+    const onSubmit = (event: FormEvent<HTMLFormElement>): void => {
+        event.preventDefault();
+        void submitUserMessage(question);
+    };
+
+    const startNewChat = (): void => {
+        abortRef.current?.abort();
+        abortRef.current = null;
+        sessionIdRef.current = window.crypto.randomUUID();
+        conversationRef.current = [];
+        setCompletedTurns([]);
+        setCurrentRequest(null);
+        setQuestion('');
+        setStatus(null);
+        setIsLoading(false);
+        captcha.consumeTokenAfterSubmission();
+        inputRef.current?.focus();
     };
 
     return (
@@ -495,10 +563,20 @@ const Chat = (): JSX.Element => {
                 </div>
             </form>
 
+            {(completedTurns.length > 0 || currentRequest) && (
+                <button
+                    type="button"
+                    className="interaction-new-chat"
+                    onClick={startNewChat}
+                >
+                    New chat
+                </button>
+            )}
             {hasInteractedRef.current && status && (
                 <div
                     className="interaction-status interaction-status-visible"
                     role="status"
+                    data-request-state={status.requestState}
                 >
                     <span>{status.message}</span>
                 </div>
@@ -539,11 +617,26 @@ const Chat = (): JSX.Element => {
                                         ? 'status'
                                         : undefined
                                 }
+                                data-request-state={currentRequest.status}
                             >
                                 {currentRequest.status === 'pending'
                                     ? 'Preparing a response…'
                                     : 'No assistant response was added.'}
                             </div>
+                            {currentRequest.status === 'failed' && (
+                                <button
+                                    type="button"
+                                    className="interaction-retry"
+                                    onClick={() =>
+                                        void submitUserMessage(
+                                            currentRequest.userMessage
+                                        )
+                                    }
+                                    disabled={isLoading}
+                                >
+                                    Retry question
+                                </button>
+                            )}
                         </div>
                     )}
                 </div>

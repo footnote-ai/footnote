@@ -168,6 +168,10 @@ test('reports an actual timeout and clears the timed-out request loading state',
     await expect(page.getByRole('status')).toHaveText(
         'The request timed out. Please try again.'
     );
+    await expect(page.getByRole('status')).toHaveAttribute(
+        'data-request-state',
+        'timeout'
+    );
 
     pendingResponse.resolve(undefined);
 });
@@ -528,6 +532,10 @@ test('a schema-invalid response consumes the token and reports a truthful client
     await submitQuestion(page, 'Return a contract-invalid response');
     await expect(page.getByRole('status')).toHaveText(
         'The server returned a response I could not display. Please try again.'
+    );
+    await expect(page.getByRole('status')).toHaveAttribute(
+        'data-request-state',
+        'invalid-response'
     );
     await expect(
         page.getByText(
