@@ -238,3 +238,111 @@ test('embed height follows long responses and provenance drawers without horizon
     );
     expect(embedWidthState.nestedFrames).toBe(0);
 });
+
+test('embedded response growth does not move the independently scrolled host page', async ({
+    page,
+}) => {
+    await page.setViewportSize({ width: 800, height: 600 });
+    await configureRuntime(page);
+    const longAnswer = Array.from(
+        { length: 18 },
+        (_, index) =>
+            `Host scroll response paragraph ${index + 1} keeps the embedded answer visible.`
+    ).join('\n\n');
+    const pendingResponse = deferred();
+    await page.route('**/api/chat', async (route) => {
+        await pendingResponse.promise;
+        await route.fulfill({
+            contentType: 'application/json',
+            body: JSON.stringify(response(longAnswer)),
+        });
+    });
+
+    await page.goto('/');
+    await page.evaluate(() => {
+        const root = document.getElementById('root');
+        const before = document.createElement('div');
+        before.style.height = '1200px';
+        before.textContent = 'Host content before the chat';
+        document.body.insertBefore(before, root);
+
+        const after = document.createElement('div');
+        after.style.height = '1600px';
+        after.textContent = 'Host content after the chat';
+
+        const parent = window as Window & { __footnoteEmbedHeights?: number[] };
+        parent.__footnoteEmbedHeights = [];
+        window.addEventListener('message', (event: MessageEvent) => {
+            const data = event.data as { type?: string; height?: number };
+            if (data.type !== 'footnote-embed-height' || !data.height) {
+                return;
+            }
+            parent.__footnoteEmbedHeights?.push(data.height);
+            const frame = document.getElementById(
+                'footnote-chat-frame'
+            ) as HTMLIFrameElement | null;
+            if (frame) frame.style.height = `${data.height}px`;
+        });
+        const frame = document.createElement('iframe');
+        frame.id = 'footnote-chat-frame';
+        frame.title = 'Footnote chat';
+        frame.src = '/embed';
+        frame.style.width = '100%';
+        frame.style.height = '300px';
+        document.body.append(frame);
+        document.body.append(after);
+    });
+
+    const embed = page.frameLocator('#footnote-chat-frame');
+    await expect(embed.getByLabel('Ask a question')).toBeVisible();
+    await expect.poll(() => readEmbedHeights(page)).not.toHaveLength(0);
+    const initialHeight = await latestEmbedHeight(page);
+
+    await embed
+        .getByLabel('Ask a question')
+        .fill('Explain the embedded answer.');
+    await embed.getByRole('button', { name: 'Submit question' }).click();
+    await expect(embed.getByText('Preparing a response…')).toBeVisible();
+    await expect
+        .poll(() => latestEmbedHeight(page))
+        .toBeGreaterThan(initialHeight);
+    const pendingHeight = await latestEmbedHeight(page);
+
+    await page.evaluate(() => window.scrollTo(0, 0));
+    await expect.poll(() => page.evaluate(() => window.scrollY)).toBe(0);
+    const hostScrollBeforeResponse = await page.evaluate(() => window.scrollY);
+
+    pendingResponse.resolve();
+    await expect(
+        embed.getByText('Host scroll response paragraph 18')
+    ).toBeVisible();
+    await expect
+        .poll(() => latestEmbedHeight(page))
+        .toBeGreaterThan(pendingHeight);
+
+    const embedLayout = await embed.locator('body').evaluate((body) => ({
+        bodyHeight: body.scrollHeight,
+        documentHeight: document.documentElement.scrollHeight,
+        viewportHeight: window.innerHeight,
+        horizontalOverflow: body.scrollWidth > window.innerWidth,
+    }));
+    expect(embedLayout.bodyHeight).toBeLessThanOrEqual(
+        embedLayout.viewportHeight + 4
+    );
+    expect(embedLayout.documentHeight).toBeLessThanOrEqual(
+        embedLayout.viewportHeight + 4
+    );
+    expect(embedLayout.horizontalOverflow).toBe(false);
+    await expect(
+        embed.getByText('Host scroll response paragraph 18')
+    ).toBeVisible();
+    const finalParagraphBottom = await embed
+        .getByText('Host scroll response paragraph 18')
+        .evaluate((element) => element.getBoundingClientRect().bottom);
+    expect(finalParagraphBottom).toBeLessThanOrEqual(
+        embedLayout.viewportHeight + 1
+    );
+    await expect
+        .poll(() => page.evaluate(() => window.scrollY))
+        .toBe(hostScrollBeforeResponse);
+});

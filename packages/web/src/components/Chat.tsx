@@ -118,13 +118,16 @@ const Chat = (): JSX.Element => {
     }, []);
 
     const scrollToTranscriptEnd = (): void => {
-        transcriptEndRef.current?.scrollIntoView({
-            block: 'end',
-            behavior: window.matchMedia('(prefers-reduced-motion: reduce)')
-                .matches
-                ? 'auto'
-                : 'smooth',
-        });
+        // The embedding page owns scrolling; the child cannot see its position.
+        if (window.location.pathname !== '/embed') {
+            transcriptEndRef.current?.scrollIntoView({
+                block: 'end',
+                behavior: window.matchMedia('(prefers-reduced-motion: reduce)')
+                    .matches
+                    ? 'auto'
+                    : 'smooth',
+            });
+        }
         nearTranscriptEndRef.current = true;
         setHasNewTranscriptContent(false);
     };
