@@ -35,6 +35,18 @@ type TrustGraphContextStepInput = {
     targetIds: unknown;
 };
 
+const targetExecution = (
+    target: TrustGraphTargetConfig,
+    outcome: WorkflowTrustGraphTargetExecution['outcome'],
+    reasonCode?: WorkflowTrustGraphTargetExecution['reasonCode']
+): WorkflowTrustGraphTargetExecution => ({
+    targetId: target.id,
+    flow: target.flow,
+    collection: target.collection,
+    outcome,
+    ...(reasonCode === undefined ? {} : { reasonCode }),
+});
+
 export type TrustGraphContextStepRuntimeOptions = {
     adapter?: TrustGraphEvidenceAdapter;
     targets?: readonly TrustGraphTargetConfig[];
@@ -70,50 +82,20 @@ const targetExecutionsForOutcome = (input: {
         const known = knownExecutions.get(target.id);
         if (known !== undefined) return known;
         if (!input.requestedTargetIds.includes(target.id)) {
-            return {
-                targetId: target.id,
-                flow: target.flow,
-                collection: target.collection,
-                outcome: 'skipped',
-                reasonCode: 'not_requested',
-            };
+            return targetExecution(target, 'skipped', 'not_requested');
         }
         if (input.status === 'timeout') {
-            return {
-                targetId: target.id,
-                flow: target.flow,
-                collection: target.collection,
-                outcome: 'failed',
-                reasonCode: 'timeout',
-            };
+            return targetExecution(target, 'failed', 'timeout');
         }
         if (input.status === 'error') {
-            return {
-                targetId: target.id,
-                flow: target.flow,
-                collection: target.collection,
-                outcome: 'failed',
-                reasonCode: 'request_failed',
-            };
+            return targetExecution(target, 'failed', 'request_failed');
         }
         if (input.status === 'scope_denied') {
-            return {
-                targetId: target.id,
-                flow: target.flow,
-                collection: target.collection,
-                outcome: 'skipped',
-                reasonCode: 'scope_denied',
-            };
+            return targetExecution(target, 'skipped', 'scope_denied');
         }
-        return {
-            targetId: target.id,
-            flow: target.flow,
-            collection: target.collection,
-            outcome: 'requested',
-            ...(input.status === 'off'
-                ? { reasonCode: 'adapter_unavailable' as const }
-                : {}),
-        };
+        return input.status === 'off'
+            ? targetExecution(target, 'requested', 'adapter_unavailable')
+            : targetExecution(target, 'requested');
     });
 };
 
