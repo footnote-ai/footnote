@@ -1075,7 +1075,9 @@ const WorkflowAttemptRoutingRecordSchema = z
         reasonCode: z.string().min(1).optional(),
         finishReason: z.string().min(1).optional(),
         completion: GenerationCompletionSchema.optional(),
-        usage: GenerationUsageSchema.optional(),
+        usage: GenerationUsageSchema.optional().describe(
+            'Provider/runtime-reported token counts for this routing attempt. Omitted counts are unavailable.'
+        ),
         cost: z
             .object({
                 inputCostUsd: z.number().nonnegative(),
@@ -1083,10 +1085,28 @@ const WorkflowAttemptRoutingRecordSchema = z
                 totalCostUsd: z.number().nonnegative(),
             })
             .strict()
+            .describe(
+                'Backend-computed cost estimate from available attempt usage and pricing data; not a provider-reported bill.'
+            )
             .optional(),
-        startedAt: z.string().datetime().optional(),
-        finishedAt: z.string().datetime().optional(),
-        durationMs: z.number().int().nonnegative().optional(),
+        startedAt: z
+            .string()
+            .datetime()
+            .optional()
+            .describe('Footnote-observed routing-attempt wall-clock start.'),
+        finishedAt: z
+            .string()
+            .datetime()
+            .optional()
+            .describe('Footnote-observed routing-attempt wall-clock finish.'),
+        durationMs: z
+            .number()
+            .int()
+            .nonnegative()
+            .optional()
+            .describe(
+                'Derived from available Footnote-observed routing-attempt timestamps; not provider or internal compute time.'
+            ),
         chooseOneUsed: z.boolean(),
         chooseOneSelectedIndex: z.number().int().nonnegative().optional(),
         temporaryUnavailableReason: z.string().min(1).optional(),
@@ -1203,9 +1223,21 @@ const WorkflowAttemptRecordSchema = z
     .object({
         attempt: z.number().int().positive(),
         status: z.enum(['succeeded', 'failed', 'rejected']),
-        startedAt: z.string().datetime(),
-        finishedAt: z.string().datetime(),
-        durationMs: z.number().int().nonnegative(),
+        startedAt: z
+            .string()
+            .datetime()
+            .describe('Footnote-observed attempt wall-clock start.'),
+        finishedAt: z
+            .string()
+            .datetime()
+            .describe('Footnote-observed attempt wall-clock finish.'),
+        durationMs: z
+            .number()
+            .int()
+            .nonnegative()
+            .describe(
+                'Derived from Footnote-observed attempt timestamps; not provider or internal compute time.'
+            ),
         profileId: z.string().min(1).optional(),
         requestedProvider: z.string().min(1).optional(),
         requestedModel: z.string().min(1).optional(),
@@ -1214,7 +1246,9 @@ const WorkflowAttemptRecordSchema = z
         settings: WorkflowAttemptSettingsSchema.optional(),
         capabilities: WorkflowAttemptCapabilitiesSchema.optional(),
         completion: GenerationCompletionSchema.optional(),
-        usage: GenerationUsageSchema.optional(),
+        usage: GenerationUsageSchema.optional().describe(
+            'Provider/runtime-reported token counts for this attempt. Omitted counts are unavailable.'
+        ),
         cost: z
             .object({
                 inputCostUsd: z.number().nonnegative(),
@@ -1222,6 +1256,9 @@ const WorkflowAttemptRecordSchema = z
                 totalCostUsd: z.number().nonnegative(),
             })
             .strict()
+            .describe(
+                'Backend-computed cost estimate from available usage and pricing data; not a provider-reported bill.'
+            )
             .optional(),
         reasonCode: z.string().min(1).optional(),
         terminationReason: z.string().min(1).optional(),
@@ -1239,9 +1276,21 @@ const StepRecordSchema = z
         attempt: z.number().int().positive(),
         stepKind: z.enum(WORKFLOW_STEP_KINDS),
         reasonCode: ExecutionReasonCodeSchema.optional(),
-        startedAt: z.string().datetime(),
-        finishedAt: z.string().datetime(),
-        durationMs: z.number().int().nonnegative(),
+        startedAt: z
+            .string()
+            .datetime()
+            .describe('Footnote-observed Step wall-clock start.'),
+        finishedAt: z
+            .string()
+            .datetime()
+            .describe('Footnote-observed Step wall-clock finish.'),
+        durationMs: z
+            .number()
+            .int()
+            .nonnegative()
+            .describe(
+                'Derived from Footnote-observed Step timestamps; not provider or internal compute time.'
+            ),
         model: z.string().min(1).optional(),
         usage: z
             .object({
@@ -1253,6 +1302,9 @@ const StepRecordSchema = z
                 reasoningTokens: z.number().int().nonnegative().optional(),
             })
             .strict()
+            .describe(
+                'Aggregated from provider/runtime-reported Attempt usage. Omitted counts are unavailable, not zero.'
+            )
             .optional(),
         cost: z
             .object({
@@ -1261,6 +1313,9 @@ const StepRecordSchema = z
                 totalCostUsd: z.number().nonnegative(),
             })
             .strict()
+            .describe(
+                'Backend-computed estimate summed from available Attempt costs; not a provider-reported bill.'
+            )
             .optional(),
         inputRefs: z.array(WorkflowResultReferenceSchema).optional(),
         resultRefs: z.array(WorkflowResultReferenceSchema).optional(),
@@ -1438,9 +1493,24 @@ const WorkflowRecordSchema = z
         runStatus: z
             .enum(['completed', 'degraded', 'limited', 'failed', 'rejected'])
             .optional(),
-        startedAt: z.string().datetime().optional(),
-        finishedAt: z.string().datetime().optional(),
-        durationMs: z.number().int().nonnegative().optional(),
+        startedAt: z
+            .string()
+            .datetime()
+            .optional()
+            .describe('Footnote-observed Run wall-clock start.'),
+        finishedAt: z
+            .string()
+            .datetime()
+            .optional()
+            .describe('Footnote-observed Run wall-clock finish.'),
+        durationMs: z
+            .number()
+            .int()
+            .nonnegative()
+            .optional()
+            .describe(
+                'Derived from Footnote-observed Run timestamps; not provider compute, TTFT, decode, or internal timing.'
+            ),
         workflowId: z.string().min(1),
         workflowName: z.string().min(1),
         status: z.enum(['completed', 'degraded']),

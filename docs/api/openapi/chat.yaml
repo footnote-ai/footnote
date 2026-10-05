@@ -948,15 +948,19 @@ components:
                 startedAt:
                     type: string
                     format: date-time
+                    description: Footnote-observed Step wall-clock start.
                 finishedAt:
                     type: string
                     format: date-time
+                    description: Footnote-observed Step wall-clock finish.
                 durationMs:
                     type: integer
                     minimum: 0
+                    description: Derived from Footnote-observed Step timestamps; not provider or internal compute time.
                 model:
                     type: string
                 usage:
+                    description: Aggregated from provider/runtime-reported Attempt usage. Omitted counts are unavailable, not zero.
                     type: object
                     properties:
                         promptTokens:
@@ -979,6 +983,7 @@ components:
                             minimum: 0
                     additionalProperties: false
                 cost:
+                    description: Backend-computed estimate summed from available Attempt costs; not a provider-reported bill.
                     type: object
                     properties:
                         inputCostUsd:
@@ -1082,8 +1087,10 @@ components:
                 completion:
                     $ref: '#/components/schemas/WorkflowAttemptCompletion'
                 usage:
+                    description: Provider/runtime-reported token counts for this routing attempt. Omitted counts are unavailable.
                     $ref: '#/components/schemas/WorkflowGenerationUsage'
                 cost:
+                    description: Backend-computed cost estimate from available attempt usage and pricing data; not a provider-reported bill.
                     type: object
                     properties:
                         inputCostUsd:
@@ -1103,12 +1110,15 @@ components:
                 startedAt:
                     type: string
                     format: date-time
+                    description: Footnote-observed routing-attempt wall-clock start.
                 finishedAt:
                     type: string
                     format: date-time
+                    description: Footnote-observed routing-attempt wall-clock finish.
                 durationMs:
                     type: integer
                     minimum: 0
+                    description: Derived from available Footnote-observed routing-attempt timestamps; not provider or internal compute time.
                 chooseOneUsed:
                     type: boolean
                 chooseOneSelectedIndex:
@@ -1251,12 +1261,15 @@ components:
                 startedAt:
                     type: string
                     format: date-time
+                    description: Footnote-observed attempt wall-clock start.
                 finishedAt:
                     type: string
                     format: date-time
+                    description: Footnote-observed attempt wall-clock finish.
                 durationMs:
                     type: integer
                     minimum: 0
+                    description: Derived from Footnote-observed attempt timestamps; not provider or internal compute time.
                 profileId:
                     type: string
                     minLength: 1
@@ -1329,8 +1342,10 @@ components:
                 completion:
                     $ref: '#/components/schemas/WorkflowAttemptCompletion'
                 usage:
+                    description: Provider/runtime-reported token counts for this attempt. Omitted counts are unavailable.
                     $ref: '#/components/schemas/WorkflowGenerationUsage'
                 cost:
+                    description: Backend-computed cost estimate from available usage and pricing data; not a provider-reported bill.
                     type: object
                     properties:
                         inputCostUsd:
@@ -1374,6 +1389,18 @@ components:
                 - packages/contracts/src/web/schemas.ts#WorkflowRecordSchema
             type: object
             properties:
+                startedAt:
+                    type: string
+                    format: date-time
+                    description: Footnote-observed Run wall-clock start.
+                finishedAt:
+                    type: string
+                    format: date-time
+                    description: Footnote-observed Run wall-clock finish.
+                durationMs:
+                    type: integer
+                    minimum: 0
+                    description: Derived from Footnote-observed Run timestamps; not provider compute, TTFT, decode, or internal timing.
                 workflowId:
                     type: string
                     minLength: 1
