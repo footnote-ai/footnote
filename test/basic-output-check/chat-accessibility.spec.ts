@@ -6,32 +6,7 @@
  * @footnote-ethics: medium - It protects keyboard and screen-reader access to new chat content.
  */
 import { expect, test } from '@playwright/test';
-import ordinaryAnswer from './fixtures/ordinary-text-answer.json';
-
-const deferred = (): { promise: Promise<void>; resolve: () => void } => {
-    let resolve!: () => void;
-    const promise = new Promise<void>((resolvePromise) => {
-        resolve = resolvePromise;
-    });
-    return { promise, resolve };
-};
-
-const configureRuntime = async (page: import('@playwright/test').Page) => {
-    await page.route('**/config.json', async (route) => {
-        await route.fulfill({
-            contentType: 'application/json',
-            body: JSON.stringify({
-                turnstileSiteKey: '',
-                setup: { required: false, routePath: '/setup' },
-            }),
-        });
-    });
-};
-
-const response = (message: string) => ({
-    ...ordinaryAnswer.response,
-    message,
-});
+import { configureRuntime, deferred, response } from './chat-test-helpers';
 
 const readEmbedHeights = async (
     page: import('@playwright/test').Page
@@ -67,10 +42,7 @@ test('follows new transcript content at the end and offers a jump when scrolled 
                 : 'The follow-up answer is ready.';
         await route.fulfill({
             contentType: 'application/json',
-            body: JSON.stringify({
-                ...ordinaryAnswer.response,
-                message,
-            }),
+            body: JSON.stringify(response(message)),
         });
     });
 
