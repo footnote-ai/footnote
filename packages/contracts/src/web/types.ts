@@ -11,6 +11,7 @@ import type {
     PartialResponseTemperament,
     ResponseMetadata,
     TraceAxisScore,
+    WorkflowRecord,
     WorkflowModeId,
 } from '../policy/index.js';
 import type {
@@ -63,6 +64,17 @@ export type GetAuthSessionResponse =
           expiresAt: string;
           csrfToken: string;
       };
+
+/**
+ * Bounded operator-only view of one canonical workflow execution.
+ *
+ * @api.operationId: getOperatorExecution
+ * @api.path: GET /api/admin/executions/{responseId}
+ */
+export type GetOperatorExecutionResponse = {
+    responseId: string;
+    workflow: WorkflowRecord;
+};
 
 /**
  * Review lifecycle used by operators while investigating one report.

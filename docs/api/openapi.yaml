@@ -1621,6 +1621,8 @@ paths:
             x-codeRefs:
                 - packages/backend/src/handlers/operatorExecution.ts#createOperatorExecutionHandler
                 - packages/contracts/src/policy/types.ts#WorkflowRecord
+                - packages/contracts/src/web/types.ts#GetOperatorExecutionResponse
+                - packages/web/src/utils/api.ts#getOperatorExecution
             summary: Read one bounded execution record as an account operator
             description: >-
                 Returns the canonical workflow record for one response. Requires a live Footnote account session
@@ -5742,6 +5744,7 @@ components:
             x-codeRefs:
                 - packages/backend/src/handlers/operatorExecution.ts#createOperatorExecutionHandler
                 - packages/contracts/src/policy/types.ts#WorkflowRecord
+                - packages/contracts/src/web/types.ts#GetOperatorExecutionResponse
         RuntimeConfig:
             type: object
             properties:

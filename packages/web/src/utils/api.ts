@@ -19,6 +19,7 @@ import type {
     GetRuntimeConfigResponse,
     GetTraceResponse,
     GetTraceStaleResponse,
+    GetOperatorExecutionResponse,
     GetResponseVersionsResponse,
     GetResponseVersionsStaleResponse,
     PostChatRequest,
@@ -232,5 +233,18 @@ export const getResponseVersions = (
         GetResponseVersionsResponse | GetResponseVersionsStaleResponse
     >
 > => api.getResponseVersions(responseId, signal);
+
+/** Reads the bounded canonical execution record through the backend operator boundary. */
+/** @api.operationId: getOperatorExecution @api.path: GET /api/admin/executions/{responseId} */
+export const getOperatorExecution = async (
+    responseId: string,
+    signal?: AbortSignal
+): Promise<GetOperatorExecutionResponse> => {
+    const response = await api.requestJson<GetOperatorExecutionResponse>(
+        `/api/admin/executions/${encodeURIComponent(responseId)}`,
+        { method: 'GET', signal, cache: 'no-store' }
+    );
+    return response.data;
+};
 
 export type { ApiClientError, ApiErrorResponse };

@@ -37,6 +37,9 @@ const loadAccountPage = (): Promise<typeof import('@pages/AccountPage')> =>
     import('@pages/AccountPage');
 const loadAdminPage = (): Promise<typeof import('@pages/AdminPage')> =>
     import('@pages/AdminPage');
+const loadOperatorExecutionPage = (): Promise<
+    typeof import('@pages/OperatorExecutionPage')
+> => import('@pages/OperatorExecutionPage');
 
 const TracePage = lazy(loadTracePage);
 const EmbedPage = lazy(loadEmbedPage);
@@ -44,6 +47,7 @@ const SetupPage = lazy(loadSetupPage);
 const ChatPage = lazy(loadChatPage);
 const AccountPage = lazy(loadAccountPage);
 const AdminPage = lazy(loadAdminPage);
+const OperatorExecutionPage = lazy(loadOperatorExecutionPage);
 
 const routeFallback = (
     <PublicPageLayout>
@@ -128,6 +132,14 @@ const App = (): JSX.Element => {
                     element={
                         <Suspense fallback={routeFallback}>
                             <AdminPage />
+                        </Suspense>
+                    }
+                />
+                <Route
+                    path="/admin/executions/:responseId"
+                    element={
+                        <Suspense fallback={routeFallback}>
+                            <OperatorExecutionPage />
                         </Suspense>
                     }
                 />

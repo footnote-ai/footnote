@@ -1,0 +1,99 @@
+/**
+ * @description: Keeps the operator execution report compact and readable within the public page frame.
+ * @footnote-scope: web
+ * @footnote-module: OperatorExecutionStyles
+ * @footnote-risk: low - Styles affect only the execution report surface.
+ * @footnote-ethics: low - Clear labels support accurate reading of operational facts.
+ */
+
+.operator-execution {
+    display: grid;
+    gap: 2rem;
+    padding-block: clamp(2.5rem, 6vw, 5rem);
+}
+
+.operator-execution__header,
+.operator-execution__facts {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.75rem 1.5rem;
+}
+
+.operator-execution__header {
+    align-items: end;
+    justify-content: space-between;
+    padding-bottom: 1.25rem;
+    border-bottom: 1px solid var(--public-rule);
+}
+
+.operator-execution h1,
+.operator-execution h2,
+.operator-execution h3,
+.operator-execution h4,
+.operator-execution p {
+    margin: 0;
+}
+
+.operator-execution h1,
+.operator-execution h2 {
+    font-family: var(--fn-font-display);
+}
+
+.operator-execution h1 {
+    font-size: clamp(2rem, 4vw, 3rem);
+}
+
+.operator-execution h2 {
+    margin-bottom: 0.8rem;
+    font-size: clamp(1.4rem, 2.5vw, 2rem);
+}
+
+.operator-execution h3,
+.operator-execution h4 {
+    margin-bottom: 0.75rem;
+}
+
+.operator-execution__facts > div {
+    min-width: min(10rem, 100%);
+}
+
+.operator-execution dt {
+    color: var(--public-muted);
+    font-size: 0.85rem;
+}
+
+.operator-execution dd {
+    margin: 0.15rem 0 0;
+    overflow-wrap: anywhere;
+    font-family: var(--fn-font-mono);
+    font-size: 0.88rem;
+}
+
+.operator-execution__steps,
+.operator-execution__attempts {
+    display: grid;
+    gap: 0.9rem;
+    padding-left: 1.4rem;
+}
+
+.operator-execution__step {
+    display: grid;
+    gap: 0.8rem;
+    padding: 1rem;
+    border: 1px solid var(--public-rule);
+    border-radius: 0.35rem;
+    background: var(--public-paper-raised);
+}
+
+.operator-execution details summary {
+    cursor: pointer;
+}
+
+.operator-execution details ol,
+.operator-execution details ul,
+.operator-execution__limits {
+    display: grid;
+    gap: 0.4rem;
+    margin-block: 0.6rem 0;
+    padding-left: 1.25rem;
+}

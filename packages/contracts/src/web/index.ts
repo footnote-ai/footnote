@@ -17,6 +17,7 @@ export * from './discordAccounts.js';
 export type {
     AuthenticatedPrincipal,
     GetAuthSessionResponse,
+    GetOperatorExecutionResponse,
 } from './types.js';
 
 /**
