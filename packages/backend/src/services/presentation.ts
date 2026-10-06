@@ -326,6 +326,7 @@ export const runPresentationCandidate = async (input: {
                     provider: input.config.profile?.provider,
                     capabilities: input.config.profile?.capabilities,
                     providerRouting: input.config.profile?.providerRouting,
+                    providerOptions: input.config.profile?.providerOptions,
                     signal,
                 }),
             'presentation_draft_timeout'

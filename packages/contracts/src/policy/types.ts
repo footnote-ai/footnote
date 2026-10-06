@@ -1012,10 +1012,28 @@ export type WorkflowAttemptRoutingRecord = {
 };
 
 export type WorkflowAttemptSettings = {
-    requested?: Record<string, string | number>;
-    applied?: Record<string, string | number>;
+    requested?: Record<string, string | number | boolean>;
+    applied?: Record<string, string | number | boolean>;
     ignored?: Array<{ setting: string; reasonCode: string }>;
-    observed?: Record<string, string | number>;
+    observed?: Record<string, string | number | boolean>;
+};
+
+/**
+ * Allowlisted facts from an Ollama response. These remain provider-reported,
+ * separate from Footnote's attempt timestamps, and never contain thinking text.
+ */
+export type OllamaRuntimeObservations = {
+    source: 'ollama';
+    authority: 'provider_reported';
+    resolvedModel?: string;
+    digest?: string;
+    totalDurationNs?: number;
+    loadDurationNs?: number;
+    promptEvalDurationNs?: number;
+    evalDurationNs?: number;
+    promptEvalCount?: number;
+    evalCount?: number;
+    thinkingPresent?: boolean;
 };
 
 export type WorkflowAttemptCapabilities = {
@@ -1080,6 +1098,7 @@ export type WorkflowAttemptRecord = {
     actualProvider?: string;
     actualModel?: string;
     settings?: WorkflowAttemptSettings;
+    providerObservations?: OllamaRuntimeObservations;
     capabilities?: WorkflowAttemptCapabilities;
     completion?: GenerationCompletion;
     /** Provider/runtime-reported counts for this attempt; omitted counts are unavailable. */

@@ -104,6 +104,7 @@ export type {
     WorkflowAttemptRecord,
     WorkflowAttemptSettings,
     WorkflowAttemptCapabilities,
+    OllamaRuntimeObservations,
     WorkflowTrustGraphTargetExecution,
     EvaluatorAuthorityLevel,
     WorkflowModeId,

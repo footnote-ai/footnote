@@ -15,9 +15,11 @@ import type {
     PlannerExecutionContractType,
     PlannerExecutionPurpose,
     PlannerStructuredOutputOutcome,
+    OllamaRuntimeObservations,
     SteerabilityControlId,
     ToolExecutionContext,
     ToolInvocationRequest,
+    WorkflowAttemptSettings,
 } from '@footnote/contracts/policy';
 import type { ModelProfile } from '@footnote/contracts';
 import type {
@@ -77,6 +79,8 @@ export type PlannerStepResult = {
             routingAttemptCount?: number;
             upstreamReportedCostUsd?: number;
         };
+        providerSettingResolution?: WorkflowAttemptSettings;
+        providerObservations?: OllamaRuntimeObservations;
         routingChainAttempts?: RoutingChainAttemptLog[];
     };
     ingestion: {
@@ -95,6 +99,8 @@ export type PlannerExecutionSummaryExtras = {
     cost?: PlannerStepResult['execution']['cost'];
     structuredOutputOutcome?: PlannerStepResult['execution']['structuredOutputOutcome'];
     upstreamAttribution?: PlannerStepResult['execution']['upstreamAttribution'];
+    providerSettingResolution?: PlannerStepResult['execution']['providerSettingResolution'];
+    providerObservations?: PlannerStepResult['execution']['providerObservations'];
     routingChainAttempts?: PlannerStepResult['execution']['routingChainAttempts'];
 };
 
@@ -113,6 +119,12 @@ export const buildPlannerExecutionSummaryExtras = (
     }),
     ...(execution.upstreamAttribution !== undefined && {
         upstreamAttribution: execution.upstreamAttribution,
+    }),
+    ...(execution.providerSettingResolution !== undefined && {
+        providerSettingResolution: execution.providerSettingResolution,
+    }),
+    ...(execution.providerObservations !== undefined && {
+        providerObservations: execution.providerObservations,
     }),
     ...(execution.routingChainAttempts !== undefined && {
         routingChainAttempts: execution.routingChainAttempts,

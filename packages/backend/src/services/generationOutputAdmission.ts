@@ -15,6 +15,7 @@ import {
 import type {
     ExecutionReasonCode,
     GenerationCompletion,
+    OllamaRuntimeObservations,
     WorkflowRoutingChainAttemptSignal,
 } from '@footnote/contracts/policy';
 import type { BackendTextCostEstimate } from './llmCostRecorder.js';
@@ -60,6 +61,59 @@ const normalizeGenerationCompletion = (
     };
 };
 
+const normalizeOllamaRuntimeObservations = (
+    value: unknown
+): OllamaRuntimeObservations | undefined => {
+    if (
+        !isRecord(value) ||
+        value.source !== 'ollama' ||
+        value.authority !== 'provider_reported'
+    ) {
+        return undefined;
+    }
+    const boundedString = (candidate: unknown): string | undefined =>
+        typeof candidate === 'string' && candidate.length <= 256
+            ? candidate
+            : undefined;
+    const nonNegativeInteger = (candidate: unknown): number | undefined =>
+        isNonNegativeSafeInteger(candidate) ? candidate : undefined;
+    return {
+        source: 'ollama',
+        authority: 'provider_reported',
+        ...(boundedString(value.resolvedModel) === undefined
+            ? {}
+            : { resolvedModel: boundedString(value.resolvedModel) }),
+        ...(boundedString(value.digest) === undefined
+            ? {}
+            : { digest: boundedString(value.digest) }),
+        ...(nonNegativeInteger(value.totalDurationNs) === undefined
+            ? {}
+            : { totalDurationNs: nonNegativeInteger(value.totalDurationNs) }),
+        ...(nonNegativeInteger(value.loadDurationNs) === undefined
+            ? {}
+            : { loadDurationNs: nonNegativeInteger(value.loadDurationNs) }),
+        ...(nonNegativeInteger(value.promptEvalDurationNs) === undefined
+            ? {}
+            : {
+                  promptEvalDurationNs: nonNegativeInteger(
+                      value.promptEvalDurationNs
+                  ),
+              }),
+        ...(nonNegativeInteger(value.evalDurationNs) === undefined
+            ? {}
+            : { evalDurationNs: nonNegativeInteger(value.evalDurationNs) }),
+        ...(nonNegativeInteger(value.promptEvalCount) === undefined
+            ? {}
+            : { promptEvalCount: nonNegativeInteger(value.promptEvalCount) }),
+        ...(nonNegativeInteger(value.evalCount) === undefined
+            ? {}
+            : { evalCount: nonNegativeInteger(value.evalCount) }),
+        ...(typeof value.thinkingPresent === 'boolean'
+            ? { thinkingPresent: value.thinkingPresent }
+            : {}),
+    };
+};
+
 /**
  * Normalizes provider-controlled generation evidence before it reaches cost,
  * workflow, or response-metadata serialization. Invalid individual facts are
@@ -80,11 +134,15 @@ export const normalizeGenerationResultEvidence = (
         result.usage === undefined
             ? undefined
             : normalizeGenerationUsage(result.usage);
+    const providerObservations = normalizeOllamaRuntimeObservations(
+        result.providerObservations
+    );
     return {
         ...result,
         finishReason,
         completion,
         usage,
+        providerObservations,
     };
 };
 

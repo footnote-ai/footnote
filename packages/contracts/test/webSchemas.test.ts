@@ -999,6 +999,62 @@ test('ResponseMetadataSchema accepts workflow lineage metadata', () => {
     assert.equal(parsed.success, true);
 });
 
+test('workflow Attempt schema accepts native Ollama observations without raw thinking text', () => {
+    const now = new Date().toISOString();
+    const payload = createValidWorkflowMetadataPayload(now);
+    payload.workflow.steps[0].attempts = [
+        {
+            attempt: 1,
+            status: 'succeeded',
+            startedAt: now,
+            finishedAt: now,
+            durationMs: 25,
+            requestedProvider: 'ollama',
+            requestedModel: 'qwen3:8b',
+            settings: {
+                requested: { think: false },
+                applied: { think: false },
+            },
+            providerObservations: {
+                source: 'ollama',
+                authority: 'provider_reported',
+                resolvedModel: 'qwen3:8b',
+                totalDurationNs: 1200,
+                thinkingPresent: true,
+            },
+        },
+    ];
+    assert.equal(ResponseMetadataSchema.safeParse(payload).success, true);
+
+    const invalid = {
+        ...payload,
+        workflow: {
+            ...payload.workflow,
+            steps: [
+                {
+                    ...payload.workflow.steps[0],
+                    attempts: [
+                        {
+                            attempt: 1,
+                            status: 'succeeded',
+                            startedAt: now,
+                            finishedAt: now,
+                            durationMs: 25,
+                            providerObservations: {
+                                source: 'ollama',
+                                authority: 'provider_reported',
+                                thinking: 'PRIVATE_REASONING_SENTINEL',
+                            },
+                        },
+                    ],
+                },
+                ...payload.workflow.steps.slice(1),
+            ],
+        },
+    };
+    assert.equal(ResponseMetadataSchema.safeParse(invalid).success, false);
+});
+
 test('workflow cost schema preserves completeness and accepts historical cost records without it', () => {
     const now = new Date().toISOString();
     const historical = createValidWorkflowMetadataPayload(now);

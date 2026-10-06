@@ -108,6 +108,30 @@ test('retains valid evidence and omits malformed provider facts', () => {
         totalTokens: 14,
     });
 
+    const normalizedOllama = normalizeGenerationResultEvidence({
+        ...result('answer'),
+        providerObservations: {
+            source: 'ollama',
+            authority: 'provider_reported',
+            resolvedModel: 'qwen3:8b',
+            totalDurationNs: 1200,
+            thinkingPresent: true,
+            thinking: 'PRIVATE_REASONING_SENTINEL',
+            evalCount: Number.NaN,
+        },
+    } as unknown as GenerationResult);
+    assert.deepEqual(normalizedOllama.providerObservations, {
+        source: 'ollama',
+        authority: 'provider_reported',
+        resolvedModel: 'qwen3:8b',
+        totalDurationNs: 1200,
+        thinkingPresent: true,
+    });
+    assert.equal(
+        JSON.stringify(normalizedOllama).includes('PRIVATE_REASONING_SENTINEL'),
+        false
+    );
+
     const attempts = attachGenerationAttemptEvidence(
         [
             {

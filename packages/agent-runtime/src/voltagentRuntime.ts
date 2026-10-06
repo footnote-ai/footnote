@@ -13,6 +13,7 @@ import {
     type ProviderTool,
 } from '@voltagent/core';
 import { createOpenAICompatible } from '@ai-sdk/openai-compatible';
+import { createOllama } from 'ollama-ai-provider-v2';
 import { APICallError, jsonSchema, Output } from 'ai';
 import {
     isNonNegativeSafeInteger,
@@ -38,11 +39,14 @@ import {
     resolveModelProfileCapabilityFacts,
     type ModelCapabilityFacts,
     type ModelProfileCapabilities,
+    type OllamaThinkingControl,
     type ModelProfileProviderRouting,
 } from '@footnote/contracts';
 import type {
     GenerationCompletion,
+    OllamaRuntimeObservations,
     ToolExecutionContext,
+    WorkflowAttemptSettings,
 } from '@footnote/contracts/policy';
 
 type VoltAgentOpenAiProviderOptions = {
@@ -177,6 +181,8 @@ export type VoltAgentExecutorOllamaConfig = {
     baseUrl?: string;
     apiKey?: string;
     localInferenceEnabled: boolean;
+    /** Named native values require the provider's per-call fetch seam. */
+    think?: string;
 };
 
 export type VoltAgentExecutorOpenRouterConfig = {
@@ -344,6 +350,21 @@ const normalizeOllamaCloudBaseUrl = (baseUrl: string): string | undefined => {
     }
 };
 
+const normalizeOllamaNativeBaseUrl = (baseUrl: string): string | undefined => {
+    try {
+        const parsed = new URL(baseUrl);
+        const normalizedPath = parsed.pathname.replace(/\/+$/, '');
+        if (!normalizedPath.endsWith('/api')) {
+            parsed.pathname = `${normalizedPath}/api`.replace(/\/{2,}/g, '/');
+        } else {
+            parsed.pathname = normalizedPath;
+        }
+        return parsed.toString().replace(/\/+$/, '');
+    } catch {
+        return undefined;
+    }
+};
+
 const resolveVoltAgentProviderOverride = ({
     provider,
     ollama,
@@ -377,7 +398,8 @@ const resolveVoltAgentProviderOverride = ({
 
 const resolveExecutorOllamaConfig = (
     provider: string,
-    ollama: CreateVoltAgentRuntimeOptions['ollama'] | undefined
+    ollama: CreateVoltAgentRuntimeOptions['ollama'] | undefined,
+    think: OllamaThinkingControl | undefined
 ): VoltAgentExecutorOllamaConfig | undefined => {
     if (provider !== 'ollama' && provider !== 'ollama-cloud') {
         return undefined;
@@ -405,6 +427,7 @@ const resolveExecutorOllamaConfig = (
         baseUrl: configuredBaseUrl,
         apiKey: normalizedApiKey,
         localInferenceEnabled: normalizedLocalInferenceEnabled,
+        ...(typeof think === 'string' && { think }),
     };
 };
 
@@ -804,6 +827,42 @@ const allVerbosityStates = (
 });
 
 /**
+ * Applies an Ollama think value only when the selected profile explicitly
+ * declares that exact control; missing support is recorded and fails open.
+ */
+const resolveOllamaThinkControl = (
+    request: GenerationRequest,
+    provider: string
+): {
+    applied?: OllamaThinkingControl;
+    resolution?: WorkflowAttemptSettings;
+} => {
+    const requested = request.providerOptions?.ollama?.think;
+    if (requested === undefined) return {};
+
+    const supportedValues =
+        request.capabilities?.supportedOllamaThinkingControls;
+    const reasonCode =
+        provider !== 'ollama'
+            ? 'provider_not_supported'
+            : supportedValues === undefined
+              ? 'capability_unknown'
+              : supportedValues.includes(requested)
+                ? undefined
+                : 'capability_unsupported';
+    const setting = 'ollama.think';
+    return {
+        ...(reasonCode === undefined && { applied: requested }),
+        resolution: {
+            requested: { [setting]: requested },
+            ...(reasonCode === undefined
+                ? { applied: { [setting]: requested } }
+                : { ignored: [{ setting, reasonCode }] }),
+        },
+    };
+};
+
+/**
  * Describes controls the active VoltAgent adapter can request for one provider.
  * This intentionally reports adapter ability, not whether a concrete model will
  * accept a control; callers intersect it with selected-profile facts first.
@@ -887,7 +946,10 @@ const buildVoltAgentProviderOptions = (
         };
     }
     if (provider === 'ollama') {
-        return undefined;
+        const think = resolveOllamaThinkControl(request, provider).applied;
+        return typeof think === 'boolean'
+            ? { providerHints: { ollama: { think } } }
+            : undefined;
     }
     if (provider !== 'openai') {
         return undefined;
@@ -917,6 +979,82 @@ const nonEmptyString = (value: unknown): string | undefined =>
 
 const finiteNumber = (value: unknown): number | undefined =>
     typeof value === 'number' && Number.isFinite(value) ? value : undefined;
+
+const boundedOllamaString = (value: unknown): string | undefined => {
+    const normalized = nonEmptyString(value);
+    return normalized === undefined ? undefined : normalized.slice(0, 256);
+};
+
+const extractOllamaRuntimeObservations = (
+    value: unknown
+): OllamaRuntimeObservations | undefined => {
+    const body = asRecord(value);
+    if (body === undefined) return undefined;
+    const message = asRecord(body.message);
+    const thinkingFieldPresent =
+        typeof message?.thinking === 'string' ||
+        typeof body.thinking === 'string';
+    const resolvedModel = boundedOllamaString(body.model);
+    const digest = boundedOllamaString(body.digest);
+    const observations: OllamaRuntimeObservations = {
+        source: 'ollama',
+        authority: 'provider_reported',
+        ...(resolvedModel !== undefined && { resolvedModel }),
+        ...(digest !== undefined && { digest }),
+        ...(isNonNegativeSafeInteger(body.total_duration) && {
+            totalDurationNs: body.total_duration,
+        }),
+        ...(isNonNegativeSafeInteger(body.load_duration) && {
+            loadDurationNs: body.load_duration,
+        }),
+        ...(isNonNegativeSafeInteger(body.prompt_eval_duration) && {
+            promptEvalDurationNs: body.prompt_eval_duration,
+        }),
+        ...(isNonNegativeSafeInteger(body.eval_duration) && {
+            evalDurationNs: body.eval_duration,
+        }),
+        ...(isNonNegativeSafeInteger(body.prompt_eval_count) && {
+            promptEvalCount: body.prompt_eval_count,
+        }),
+        ...(isNonNegativeSafeInteger(body.eval_count) && {
+            evalCount: body.eval_count,
+        }),
+        ...(thinkingFieldPresent && { thinkingPresent: true }),
+    };
+    return Object.keys(observations).length > 2 ? observations : undefined;
+};
+
+/**
+ * The pinned Ollama provider types `think` as boolean-only. For a profile-
+ * declared native string, patch just the chat request body and otherwise leave
+ * fetch behavior untouched so provider errors and response handling stay on
+ * the ordinary VoltAgent executor path.
+ */
+const createOllamaThinkingFetch =
+    (think: string) =>
+    async (
+        input: Parameters<typeof fetch>[0],
+        init?: Parameters<typeof fetch>[1]
+    ): Promise<Response> => {
+        if (typeof init?.body !== 'string') return fetch(input, init);
+        let requestBody: unknown;
+        try {
+            requestBody = JSON.parse(init.body) as unknown;
+        } catch {
+            return fetch(input, init);
+        }
+        if (
+            !isRecord(requestBody) ||
+            typeof requestBody.model !== 'string' ||
+            !Array.isArray(requestBody.messages)
+        ) {
+            return fetch(input, init);
+        }
+        return fetch(input, {
+            ...init,
+            body: JSON.stringify({ ...requestBody, think }),
+        });
+    };
 
 /**
  * Keeps only stable, text-free OpenRouter routing and charging signals. The
@@ -1219,17 +1357,31 @@ const normalizeVoltAgentResult = (
     fallbackToolExecution?: ToolExecutionContext
 ): GenerationResult => {
     const responseBody = asRecord(result.response?.body);
+    const providerSettingResolution = resolveOllamaThinkControl(
+        request,
+        getVoltAgentProvider(executedModel)
+    ).resolution;
     const responseStatus = readString(responseBody?.status);
     const incompleteDetails = asRecord(responseBody?.incomplete_details);
     const incompleteReason = readBoundedString(incompleteDetails?.reason);
     const responseUsage = asRecord(responseBody?.usage);
     const outputTokenDetails = asRecord(responseUsage?.output_tokens_details);
     const runtimeUsage = normalizeGenerationUsage(result.usage);
-    const reasoningTokens =
-        runtimeUsage?.reasoningTokens ??
-        (isNonNegativeSafeInteger(outputTokenDetails?.reasoning_tokens)
-            ? outputTokenDetails.reasoning_tokens
-            : undefined);
+    const ollamaProvider = getVoltAgentProvider(executedModel) === 'ollama';
+    if (ollamaProvider && runtimeUsage !== undefined) {
+        // Ollama's native response has evaluation counts, not reasoning-token counts.
+        // The AI SDK may provide a zero placeholder; do not turn that into a provider fact.
+        delete runtimeUsage.reasoningTokens;
+    }
+    const providerObservations = ollamaProvider
+        ? extractOllamaRuntimeObservations(result.response?.body)
+        : undefined;
+    const reasoningTokens = ollamaProvider
+        ? undefined
+        : (runtimeUsage?.reasoningTokens ??
+          (isNonNegativeSafeInteger(outputTokenDetails?.reasoning_tokens)
+              ? outputTokenDetails.reasoning_tokens
+              : undefined));
     const promptTokens =
         runtimeUsage?.promptTokens ??
         (isNonNegativeSafeInteger(responseUsage?.input_tokens)
@@ -1255,7 +1407,7 @@ const normalizeVoltAgentResult = (
         result.providerMetadata
     );
     const usage: GenerationUsage | undefined =
-        runtimeUsage !== undefined ||
+        (runtimeUsage !== undefined && Object.keys(runtimeUsage).length > 0) ||
         promptTokens !== undefined ||
         completionTokens !== undefined ||
         totalTokens !== undefined ||
@@ -1298,6 +1450,10 @@ const normalizeVoltAgentResult = (
         text: result.text,
         model: toFootnoteModel(responseModel),
         ...(upstreamAttribution !== undefined && { upstreamAttribution }),
+        ...(providerSettingResolution !== undefined && {
+            providerSettingResolution,
+        }),
+        ...(providerObservations !== undefined && { providerObservations }),
         finishReason: result.finishReason,
         ...(completionStatus !== undefined && {
             completion: {
@@ -1335,7 +1491,7 @@ const createDefaultVoltAgentExecutor = ({
     model,
     logger,
     voltOpsClient,
-    ollama: _ollama,
+    ollama,
     openrouter,
     openrouterRouting,
     agentFactory = ({
@@ -1383,12 +1539,26 @@ const createDefaultVoltAgentExecutor = ({
                       ),
               })(model.slice('openrouter/'.length))
             : undefined;
+    const normalizedOllamaBaseUrl = ollama?.baseUrl
+        ? normalizeOllamaNativeBaseUrl(ollama.baseUrl)
+        : undefined;
+    const ollamaModel =
+        getVoltAgentProvider(model) === 'ollama' &&
+        typeof ollama?.think === 'string'
+            ? createOllama({
+                  ...(normalizedOllamaBaseUrl !== undefined && {
+                      baseURL: normalizedOllamaBaseUrl,
+                  }),
+                  compatibility: 'strict',
+                  fetch: createOllamaThinkingFetch(ollama.think),
+              })(model.slice('ollama/'.length))
+            : undefined;
     const createAgent = (
         instructions: string | undefined,
         tools?: NonNullable<AgentOptions['tools']>
     ) =>
         agentFactory({
-            model: openRouterModel ?? model,
+            model: openRouterModel ?? ollamaModel ?? model,
             ...(instructions !== undefined && { instructions }),
             ...(logger !== undefined && { logger }),
             ...(voltOpsClient !== undefined && { voltOpsClient }),
@@ -1596,9 +1766,14 @@ const createVoltAgentRuntime = ({
                 requestedProvider ?? inferredProvider
             );
             const provider = getVoltAgentProvider(executedModel);
+            const ollamaThinkResolution = resolveOllamaThinkControl(
+                request,
+                provider
+            );
             const executorOllamaConfig = resolveExecutorOllamaConfig(
                 provider,
-                ollama
+                ollama,
+                ollamaThinkResolution.applied
             );
             const executorOpenRouterConfig =
                 provider === 'openrouter' && openrouter?.apiKey?.trim()

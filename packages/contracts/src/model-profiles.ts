@@ -69,6 +69,8 @@ export interface ModelProfileCapabilities {
     canUseSearch: boolean;
     /** Reasoning levels the concrete provider model accepts. */
     supportedReasoningEfforts?: SupportedReasoningEffort[];
+    /** Exact native Ollama `think` values advertised by the selected model. */
+    supportedOllamaThinkingControls?: OllamaThinkingControl[];
     /** Common sampling controls the concrete provider model accepts. */
     supportedSamplingControls?: PresentationSamplingControl[];
     /** Verbosity levels the concrete provider model accepts. */
@@ -90,6 +92,16 @@ export interface ModelProfileProviderRouting {
     };
 }
 
+/** Ollama's provider-local `think` setting; string values come from `/api/show`. */
+export type OllamaThinkingControl = boolean | string;
+
+/** Provider-specific call settings configured on one model profile. */
+export interface ModelProfileProviderOptions {
+    ollama?: {
+        think?: OllamaThinkingControl;
+    };
+}
+
 /**
  * One catalog entry describing how backend routing should target a concrete
  * provider model.
@@ -103,6 +115,8 @@ export interface ModelProfile {
     tierBindings: ModelTierAlias[];
     capabilities: ModelProfileCapabilities;
     providerRouting?: ModelProfileProviderRouting;
+    /** Provider-native settings applied only when the profile advertises support. */
+    providerOptions?: ModelProfileProviderOptions;
     /** Fallback effort used only when the caller does not request one. */
     defaultReasoningEffort?: SupportedReasoningEffort;
     /** Optional backend-owned presentation settings for this profile. */
@@ -161,6 +175,9 @@ export const ModelProfileCapabilitiesSchema = z
         supportedReasoningEfforts: z
             .array(z.enum(supportedReasoningEfforts))
             .optional(),
+        supportedOllamaThinkingControls: z
+            .array(z.union([z.boolean(), z.string().min(1).max(64)]))
+            .optional(),
         supportedSamplingControls: z
             .array(z.enum(presentationSamplingControls))
             .optional(),
@@ -212,6 +229,20 @@ export const ModelProfileProviderRoutingSchema: z.ZodType<ModelProfileProviderRo
         })
         .strict();
 
+export const ModelProfileProviderOptionsSchema: z.ZodType<ModelProfileProviderOptions> =
+    z
+        .object({
+            ollama: z
+                .object({
+                    think: z
+                        .union([z.boolean(), z.string().min(1).max(64)])
+                        .optional(),
+                })
+                .strict()
+                .optional(),
+        })
+        .strict();
+
 /**
  * Schema for one model profile entry.
  */
@@ -225,6 +256,7 @@ export const ModelProfileSchema: z.ZodType<ModelProfile> = z
         tierBindings: z.array(z.enum(modelTierAliases)).default([]),
         capabilities: ModelProfileCapabilitiesSchema,
         providerRouting: ModelProfileProviderRoutingSchema.optional(),
+        providerOptions: ModelProfileProviderOptionsSchema.optional(),
         defaultReasoningEffort: z.enum(supportedReasoningEfforts).optional(),
         presentationGeneration: PresentationGenerationSettingsSchema.optional(),
         maxInputTokens: z.number().int().positive().optional(),
@@ -234,6 +266,19 @@ export const ModelProfileSchema: z.ZodType<ModelProfile> = z
     })
     .strict()
     .superRefine((profile, context) => {
+        if (
+            profile.provider !== 'ollama' &&
+            (profile.providerOptions?.ollama !== undefined ||
+                profile.capabilities.supportedOllamaThinkingControls !==
+                    undefined)
+        ) {
+            context.addIssue({
+                code: z.ZodIssueCode.custom,
+                path: ['providerOptions', 'ollama'],
+                message:
+                    'Ollama thinking controls can only be set on an Ollama profile.',
+            });
+        }
         const supported = profile.capabilities.supportedReasoningEfforts;
         if (
             profile.defaultReasoningEffort !== undefined &&

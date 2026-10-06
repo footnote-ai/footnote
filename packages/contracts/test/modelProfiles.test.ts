@@ -91,6 +91,53 @@ test('ModelProfileCatalogSchema accepts arbitrary OpenRouter IDs with explicit r
     });
 });
 
+test('Ollama profile declares native think controls separately from common reasoning efforts', () => {
+    const parsed = ModelProfileCatalogSchema.parse([
+        {
+            id: 'ollama-thinking-test',
+            description: 'Ollama profile with known native thinking values',
+            provider: 'ollama',
+            providerModel: 'qwen3',
+            enabled: true,
+            tierBindings: [],
+            capabilities: {
+                canUseSearch: false,
+                supportedOllamaThinkingControls: [false, 'low', 'medium'],
+            },
+            providerOptions: { ollama: { think: false } },
+        },
+    ]);
+
+    assert.deepEqual(parsed[0]?.capabilities.supportedOllamaThinkingControls, [
+        false,
+        'low',
+        'medium',
+    ]);
+    assert.deepEqual(parsed[0]?.providerOptions, {
+        ollama: { think: false },
+    });
+});
+
+test('ModelProfileCatalogSchema rejects Ollama-only options on other providers', () => {
+    const parsed = ModelProfileCatalogSchema.safeParse([
+        {
+            id: 'openai-ollama-settings-test',
+            description: 'Invalid cross-provider option',
+            provider: 'openai',
+            providerModel: 'gpt-5.6-sol',
+            enabled: true,
+            tierBindings: [],
+            capabilities: {
+                canUseSearch: false,
+                supportedOllamaThinkingControls: ['low'],
+            },
+            providerOptions: { ollama: { think: 'low' } },
+        },
+    ]);
+
+    assert.equal(parsed.success, false);
+});
+
 test('presentation settings support one sampling control and declared capabilities', () => {
     const parsed = ModelProfileCatalogSchema.parse([
         {

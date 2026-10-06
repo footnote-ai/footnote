@@ -1139,10 +1139,10 @@ const WorkflowAttemptRoutingRecordSchema = z
 const WorkflowAttemptSettingsSchema = z
     .object({
         requested: z
-            .record(z.string(), z.union([z.string(), z.number()]))
+            .record(z.string(), z.union([z.string(), z.number(), z.boolean()]))
             .optional(),
         applied: z
-            .record(z.string(), z.union([z.string(), z.number()]))
+            .record(z.string(), z.union([z.string(), z.number(), z.boolean()]))
             .optional(),
         ignored: z
             .array(
@@ -1155,8 +1155,24 @@ const WorkflowAttemptSettingsSchema = z
             )
             .optional(),
         observed: z
-            .record(z.string(), z.union([z.string(), z.number()]))
+            .record(z.string(), z.union([z.string(), z.number(), z.boolean()]))
             .optional(),
+    })
+    .strict();
+
+const OllamaRuntimeObservationsSchema = z
+    .object({
+        source: z.literal('ollama'),
+        authority: z.literal('provider_reported'),
+        resolvedModel: z.string().max(256).optional(),
+        digest: z.string().max(256).optional(),
+        totalDurationNs: z.number().int().nonnegative().optional(),
+        loadDurationNs: z.number().int().nonnegative().optional(),
+        promptEvalDurationNs: z.number().int().nonnegative().optional(),
+        evalDurationNs: z.number().int().nonnegative().optional(),
+        promptEvalCount: z.number().int().nonnegative().optional(),
+        evalCount: z.number().int().nonnegative().optional(),
+        thinkingPresent: z.boolean().optional(),
     })
     .strict();
 
@@ -1266,6 +1282,7 @@ const WorkflowAttemptRecordSchema = z
         actualProvider: z.string().min(1).optional(),
         actualModel: z.string().min(1).optional(),
         settings: WorkflowAttemptSettingsSchema.optional(),
+        providerObservations: OllamaRuntimeObservationsSchema.optional(),
         capabilities: WorkflowAttemptCapabilitiesSchema.optional(),
         completion: GenerationCompletionSchema.optional(),
         usage: GenerationUsageSchema.optional().describe(

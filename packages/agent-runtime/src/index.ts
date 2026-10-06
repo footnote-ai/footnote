@@ -12,6 +12,7 @@ import type {
     ImageGenerationSize as ContractImageGenerationSize,
     ModelCapabilityFacts,
     ModelProfileCapabilities,
+    ModelProfileProviderOptions,
     ModelProfileProviderRouting,
     PresentationGenerationSettings,
     SupportedImageOutputFormat,
@@ -20,8 +21,12 @@ import type {
     SupportedProvider,
     SupportedReasoningEffort,
 } from '@footnote/contracts';
-import type { ToolExecutionContext } from '@footnote/contracts/policy';
-import type { GenerationCompletion } from '@footnote/contracts/policy';
+import type {
+    GenerationCompletion,
+    OllamaRuntimeObservations,
+    ToolExecutionContext,
+    WorkflowAttemptSettings,
+} from '@footnote/contracts/policy';
 import type {
     InternalTtsCosts,
     InternalTtsOptions,
@@ -158,6 +163,8 @@ export interface GenerationRequest {
     capabilities?: ModelProfileCapabilities;
     /** Provider routing policy resolved from the selected backend profile. */
     providerRouting?: ModelProfileProviderRouting;
+    /** Provider-specific controls resolved from the selected model profile. */
+    providerOptions?: ModelProfileProviderOptions;
     /**
      * Optional max token/output budget hint for the runtime.
      */
@@ -371,6 +378,10 @@ export interface GenerationResult {
     };
     /** Provider-reported presentation controls, when the adapter exposes them verbatim. */
     providerObservedSettings?: PresentationGenerationSettings;
+    /** Requested/applied/ignored provider controls from this attempt. */
+    providerSettingResolution?: WorkflowAttemptSettings;
+    /** Allowlisted upstream provider observations; never includes hidden reasoning. */
+    providerObservations?: OllamaRuntimeObservations;
     /**
      * Optional provider/runtime finish reason for debugging or metadata
      * assembly.

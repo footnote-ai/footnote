@@ -348,6 +348,8 @@ export const createChatOrchestrator = ({
                                         activePlannerProfile.capabilities,
                                     providerRouting:
                                         activePlannerProfile.providerRouting,
+                                    providerOptions:
+                                        activePlannerProfile.providerOptions,
                                     maxOutputTokens: resolvedMaxOutputTokens,
                                     ...(activePlannerCapabilityFacts.jsonMode ===
                                         'supported' && { jsonMode: true }),
@@ -452,6 +454,10 @@ export const createChatOrchestrator = ({
                             usage: compatibilityResult.usage,
                             upstreamAttribution:
                                 compatibilityResult.upstreamAttribution,
+                            providerSettingResolution:
+                                compatibilityResult.providerSettingResolution,
+                            providerObservations:
+                                compatibilityResult.providerObservations,
                             rawArguments: compatibilityResult.text.slice(
                                 0,
                                 2_000
@@ -517,6 +523,8 @@ export const createChatOrchestrator = ({
                             capabilities: activePlannerProfile.capabilities,
                             providerRouting:
                                 activePlannerProfile.providerRouting,
+                            providerOptions:
+                                activePlannerProfile.providerOptions,
                             structuredOutput:
                                 chatPlannerDecisionStructuredOutput,
                             ...(safetyIdentifier !== undefined && {
@@ -579,6 +587,9 @@ export const createChatOrchestrator = ({
                             model: result.model,
                             usage: result.usage,
                             upstreamAttribution: result.upstreamAttribution,
+                            providerSettingResolution:
+                                result.providerSettingResolution,
+                            providerObservations: result.providerObservations,
                             rawArguments: result.text.slice(0, 2_000),
                         };
                     } catch (error) {
@@ -648,6 +659,7 @@ export const createChatOrchestrator = ({
                         provider: activePlannerProfile.provider,
                         capabilities: activePlannerProfile.capabilities,
                         providerRouting: activePlannerProfile.providerRouting,
+                        providerOptions: activePlannerProfile.providerOptions,
                         ...(useJsonMode && { jsonMode: true }),
                         ...(safetyIdentifier !== undefined && {
                             safetyIdentifier,
@@ -724,6 +736,9 @@ export const createChatOrchestrator = ({
                     finishReason: plannerResult.finishReason,
                     completion: plannerResult.completion,
                     upstreamAttribution: plannerResult.upstreamAttribution,
+                    providerSettingResolution:
+                        plannerResult.providerSettingResolution,
+                    providerObservations: plannerResult.providerObservations,
                 };
             },
             allowTextJsonCompatibilityFallback:

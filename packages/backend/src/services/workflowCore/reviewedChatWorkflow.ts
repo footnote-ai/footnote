@@ -344,6 +344,7 @@ type ChatStepMetadata = {
     actualModel?: string;
     completion?: GenerationCompletion;
     settings?: WorkflowAttemptSettings;
+    providerObservations?: GenerationResult['providerObservations'];
     capabilities?: WorkflowAttemptCapabilities;
     routingAttempts?: WorkflowAttemptRoutingRecord[];
     usage?: GenerationResult['usage'];
@@ -376,11 +377,15 @@ const trustGraphExecutionsFromContextResults = (
 
 const toWorkflowSettingRecord = (
     value: object | undefined
-): Record<string, string | number> => {
-    const result: Record<string, string | number> = {};
+): Record<string, string | number | boolean> => {
+    const result: Record<string, string | number | boolean> = {};
     if (value === undefined) return result;
     for (const [key, setting] of Object.entries(value)) {
-        if (typeof setting === 'string' || typeof setting === 'number') {
+        if (
+            typeof setting === 'string' ||
+            typeof setting === 'number' ||
+            typeof setting === 'boolean'
+        ) {
             result[key] = setting;
         }
     }
@@ -389,35 +394,41 @@ const toWorkflowSettingRecord = (
 
 const toWorkflowAttemptSettings = (
     resolution: ReturnType<typeof resolveModelSettings> | undefined,
-    observed: object | undefined
+    observed: object | undefined,
+    providerResolution: WorkflowAttemptSettings | undefined = undefined
 ): WorkflowAttemptSettings | undefined => {
     const observedSettings = toWorkflowSettingRecord(observed);
+    const requested = {
+        ...toWorkflowSettingRecord(resolution?.requested),
+        ...providerResolution?.requested,
+    };
+    const applied = {
+        ...toWorkflowSettingRecord(resolution?.applied),
+        ...providerResolution?.applied,
+    };
+    const ignored = [
+        ...(resolution?.ignored.map(({ setting, reasonCode }) => ({
+            setting,
+            reasonCode,
+        })) ?? []),
+        ...(providerResolution?.ignored ?? []),
+    ];
+    const allObserved = {
+        ...observedSettings,
+        ...providerResolution?.observed,
+    };
     if (
         resolution === undefined &&
-        Object.keys(observedSettings).length === 0
+        Object.keys(observedSettings).length === 0 &&
+        providerResolution === undefined
     ) {
         return undefined;
     }
     return {
-        ...(resolution === undefined
-            ? {}
-            : {
-                  requested: toWorkflowSettingRecord(resolution.requested),
-                  applied: toWorkflowSettingRecord(resolution.applied),
-                  ...(resolution.ignored.length === 0
-                      ? {}
-                      : {
-                            ignored: resolution.ignored.map(
-                                ({ setting, reasonCode }) => ({
-                                    setting,
-                                    reasonCode,
-                                })
-                            ),
-                        }),
-              }),
-        ...(Object.keys(observedSettings).length === 0
-            ? {}
-            : { observed: observedSettings }),
+        ...(Object.keys(requested).length > 0 && { requested }),
+        ...(Object.keys(applied).length > 0 && { applied }),
+        ...(ignored.length > 0 && { ignored }),
+        ...(Object.keys(allObserved).length > 0 && { observed: allObserved }),
     };
 };
 
@@ -492,16 +503,28 @@ const withWorkflowRoutingAttempts = (
     return routingAttempts === undefined ? {} : { routingAttempts };
 };
 
+/**
+ * Keeps requested profile identity distinct from upstream-reported routing
+ * facts; Ollama facts also retain their explicit observation source/authority.
+ */
 const toWorkflowAttemptIdentity = (input: {
     requestedProvider?: string;
     requestedModel?: string;
-    result?: GenerationResult;
+    result?: Pick<
+        GenerationResult,
+        'model' | 'upstreamAttribution' | 'providerObservations'
+    >;
 }): Pick<
     ChatStepMetadata,
     'requestedProvider' | 'requestedModel' | 'actualProvider' | 'actualModel'
 > => {
     const actualModel =
-        input.result?.upstreamAttribution?.resolvedModel ?? input.result?.model;
+        input.result?.providerObservations?.resolvedModel ??
+        input.result?.upstreamAttribution?.resolvedModel ??
+        input.result?.model;
+    const actualProvider =
+        input.result?.providerObservations?.source ??
+        input.result?.upstreamAttribution?.inferenceProvider;
     return {
         ...(input.requestedProvider === undefined
             ? {}
@@ -509,11 +532,10 @@ const toWorkflowAttemptIdentity = (input: {
         ...(input.requestedModel === undefined
             ? {}
             : { requestedModel: input.requestedModel }),
-        ...(input.result?.upstreamAttribution?.inferenceProvider === undefined
+        ...(actualProvider === undefined
             ? {}
             : {
-                  actualProvider:
-                      input.result.upstreamAttribution.inferenceProvider,
+                  actualProvider,
               }),
         ...(actualModel === undefined ? {} : { actualModel }),
     };
@@ -714,6 +736,12 @@ const buildWorkflowLineage = (input: {
                     ...(attemptMetadata?.settings === undefined
                         ? {}
                         : { settings: attemptMetadata.settings }),
+                    ...(attemptMetadata?.providerObservations === undefined
+                        ? {}
+                        : {
+                              providerObservations:
+                                  attemptMetadata.providerObservations,
+                          }),
                     ...(attemptMetadata?.capabilities === undefined
                         ? {}
                         : { capabilities: attemptMetadata.capabilities }),
@@ -1629,6 +1657,36 @@ export const runBoundedReviewWorkflow = async (
                     model: plannerResult.execution.model,
                     usage: plannerResult.execution.usage,
                     estimatedCost: plannerResult.execution.cost,
+                    profileId: plannerResult.execution.profileId,
+                    ...toWorkflowAttemptIdentity({
+                        requestedProvider: plannerResult.execution.provider,
+                        requestedModel: plannerResult.execution.model,
+                        result: {
+                            model: plannerResult.execution.model,
+                            upstreamAttribution:
+                                plannerResult.execution.upstreamAttribution,
+                            providerObservations:
+                                plannerResult.execution.providerObservations,
+                        },
+                    }),
+                    ...(plannerResult.execution.providerSettingResolution ===
+                    undefined
+                        ? {}
+                        : {
+                              settings: toWorkflowAttemptSettings(
+                                  undefined,
+                                  undefined,
+                                  plannerResult.execution
+                                      .providerSettingResolution
+                              ),
+                          }),
+                    ...(plannerResult.execution.providerObservations ===
+                    undefined
+                        ? {}
+                        : {
+                              providerObservations:
+                                  plannerResult.execution.providerObservations,
+                          }),
                     signals: {
                         action: plannerResult.plan.action,
                         purpose: plannerResult.execution.purpose,
@@ -2076,13 +2134,21 @@ export const runBoundedReviewWorkflow = async (
                           presentation.config.profile.capabilities
                       ),
                   }),
-            ...(result.draftResult?.providerObservedSettings === undefined
+            ...(result.draftResult?.providerObservedSettings === undefined &&
+            result.draftResult?.providerSettingResolution === undefined
                 ? {}
                 : {
                       settings: toWorkflowAttemptSettings(
                           undefined,
-                          result.draftResult.providerObservedSettings
+                          result.draftResult?.providerObservedSettings,
+                          result.draftResult?.providerSettingResolution
                       ),
+                  }),
+            ...(result.draftResult?.providerObservations === undefined
+                ? {}
+                : {
+                      providerObservations:
+                          result.draftResult.providerObservations,
                   }),
             usage,
             estimatedCost,
@@ -2310,6 +2376,7 @@ export const runBoundedReviewWorkflow = async (
                                   provider: profile.provider,
                                   capabilities: profile.capabilities,
                                   providerRouting: profile.providerRouting,
+                                  providerOptions: profile.providerOptions,
                               })
                           );
                           generationAttempts.push(result);
@@ -2420,7 +2487,8 @@ export const runBoundedReviewWorkflow = async (
               });
         const attemptSettings = toWorkflowAttemptSettings(
             selectedSettings,
-            generationResult.providerObservedSettings
+            generationResult.providerObservedSettings,
+            generationResult.providerSettingResolution
         );
         const metadata = encodeMetadata({
             status: admitted ? 'executed' : 'failed',
@@ -2454,6 +2522,12 @@ export const runBoundedReviewWorkflow = async (
             ...(attemptSettings === undefined
                 ? {}
                 : { settings: attemptSettings }),
+            ...(generationResult.providerObservations === undefined
+                ? {}
+                : {
+                      providerObservations:
+                          generationResult.providerObservations,
+                  }),
             ...(selectedCapabilityFacts === undefined
                 ? {}
                 : { capabilities: selectedCapabilityFacts }),
@@ -2724,6 +2798,7 @@ export const runBoundedReviewWorkflow = async (
                               provider: profile.provider,
                               capabilities: profile.capabilities,
                               providerRouting: profile.providerRouting,
+                              providerOptions: profile.providerOptions,
                           };
                           const result = await runReviewGeneration({
                               request: requestForProfile,
@@ -2849,7 +2924,8 @@ export const runBoundedReviewWorkflow = async (
                     : undefined;
             const attemptSettings = toWorkflowAttemptSettings(
                 selectedSettings,
-                reviewResult.providerObservedSettings
+                reviewResult.providerObservedSettings,
+                reviewResult.providerSettingResolution
             );
             return {
                 status: 'failed',
@@ -2887,6 +2963,12 @@ export const runBoundedReviewWorkflow = async (
                     ...(attemptSettings === undefined
                         ? {}
                         : { settings: attemptSettings }),
+                    ...(reviewResult.providerObservations === undefined
+                        ? {}
+                        : {
+                              providerObservations:
+                                  reviewResult.providerObservations,
+                          }),
                     ...(selectedCapabilityFacts === undefined
                         ? {}
                         : { capabilities: selectedCapabilityFacts }),
@@ -2909,7 +2991,8 @@ export const runBoundedReviewWorkflow = async (
         const decision = typedValidation.value;
         const attemptSettings = toWorkflowAttemptSettings(
             selectedSettings,
-            reviewResult.providerObservedSettings
+            reviewResult.providerObservedSettings,
+            reviewResult.providerSettingResolution
         );
         const hints = extractRoutingHintsFromAssess({
             assessRawText: reviewResult.text,
@@ -2957,6 +3040,12 @@ export const runBoundedReviewWorkflow = async (
                 ...(attemptSettings === undefined
                     ? {}
                     : { settings: attemptSettings }),
+                ...(reviewResult.providerObservations === undefined
+                    ? {}
+                    : {
+                          providerObservations:
+                              reviewResult.providerObservations,
+                      }),
                 ...(selectedCapabilityFacts === undefined
                     ? {}
                     : { capabilities: selectedCapabilityFacts }),
@@ -3091,6 +3180,36 @@ export const runBoundedReviewWorkflow = async (
                     model: plannerResult.execution.model,
                     usage: plannerResult.execution.usage,
                     estimatedCost: plannerResult.execution.cost,
+                    profileId: plannerResult.execution.profileId,
+                    ...toWorkflowAttemptIdentity({
+                        requestedProvider: plannerResult.execution.provider,
+                        requestedModel: plannerResult.execution.model,
+                        result: {
+                            model: plannerResult.execution.model,
+                            upstreamAttribution:
+                                plannerResult.execution.upstreamAttribution,
+                            providerObservations:
+                                plannerResult.execution.providerObservations,
+                        },
+                    }),
+                    ...(plannerResult.execution.providerSettingResolution ===
+                    undefined
+                        ? {}
+                        : {
+                              settings: toWorkflowAttemptSettings(
+                                  undefined,
+                                  undefined,
+                                  plannerResult.execution
+                                      .providerSettingResolution
+                              ),
+                          }),
+                    ...(plannerResult.execution.providerObservations ===
+                    undefined
+                        ? {}
+                        : {
+                              providerObservations:
+                                  plannerResult.execution.providerObservations,
+                          }),
                     signals: {
                         purpose: plannerResult.execution.purpose,
                         contractType: plannerResult.execution.contractType,

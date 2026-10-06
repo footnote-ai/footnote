@@ -9,7 +9,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 
 import { Agent } from '@voltagent/core';
-import { APICallError } from 'ai';
+import { APICallError, generateText } from 'ai';
 import type { GenerationRequest, RuntimeMessage } from '../src/index.js';
 import {
     createDefaultVoltAgentExecutor,
@@ -920,6 +920,238 @@ test('voltagent runtime omits openai-only options for ollama models', async () =
 
     assert.equal(seenOptions?.providerOptions, undefined);
     assert.equal(seenOptions?.search, undefined);
+});
+
+test('voltagent runtime applies an Ollama think setting only when the profile declares support', async () => {
+    let seenOptions: VoltAgentGenerateTextOptions | undefined;
+    const runtime = createVoltAgentRuntime({
+        defaultModel: 'ollama/qwen3',
+        ollama: {
+            baseUrl: 'http://localhost:11434',
+            localInferenceEnabled: true,
+        },
+        createExecutor: () => ({
+            async generateText(_messages, options) {
+                seenOptions = options;
+                return { text: 'Short answer.' };
+            },
+        }),
+    });
+
+    const result = await runtime.generate({
+        model: 'qwen3',
+        provider: 'ollama',
+        messages: [{ role: 'user', content: 'Answer briefly.' }],
+        capabilities: {
+            canUseSearch: false,
+            supportedOllamaThinkingControls: [false],
+        },
+        providerOptions: { ollama: { think: false } },
+    });
+
+    assert.deepEqual(seenOptions?.providerOptions, {
+        providerHints: { ollama: { think: false } },
+    });
+    assert.deepEqual(result.providerSettingResolution, {
+        requested: { 'ollama.think': false },
+        applied: { 'ollama.think': false },
+    });
+});
+
+test('voltagent runtime uses the native path for explicitly supported Ollama thinking levels', async () => {
+    let seenThinkSetting: unknown;
+    let seenOptions: VoltAgentGenerateTextOptions | undefined;
+    const runtime = createVoltAgentRuntime({
+        defaultModel: 'ollama/qwen3',
+        ollama: {
+            baseUrl: 'http://localhost:11434',
+            localInferenceEnabled: true,
+        },
+        createExecutor: ({ ollama }) => {
+            seenThinkSetting = ollama?.think;
+            return {
+                async generateText(_messages, options) {
+                    seenOptions = options;
+                    return { text: 'Reasoned answer.' };
+                },
+            };
+        },
+    });
+
+    const result = await runtime.generate({
+        model: 'qwen3',
+        provider: 'ollama',
+        messages: [{ role: 'user', content: 'Solve this carefully.' }],
+        capabilities: {
+            canUseSearch: false,
+            supportedOllamaThinkingControls: ['low'],
+        },
+        providerOptions: { ollama: { think: 'low' } },
+    });
+
+    assert.equal(seenThinkSetting, 'low');
+    assert.equal(seenOptions?.providerOptions, undefined);
+    assert.deepEqual(result.providerSettingResolution, {
+        requested: { 'ollama.think': 'low' },
+        applied: { 'ollama.think': 'low' },
+    });
+});
+
+test('voltagent runtime records unknown Ollama think support and continues without the option', async () => {
+    let seenThinkSetting: unknown;
+    let seenOptions: VoltAgentGenerateTextOptions | undefined;
+    const runtime = createVoltAgentRuntime({
+        defaultModel: 'ollama/qwen3',
+        createExecutor: ({ ollama }) => {
+            seenThinkSetting = ollama?.think;
+            return {
+                async generateText(_messages, options) {
+                    seenOptions = options;
+                    return { text: 'Fallback answer.' };
+                },
+            };
+        },
+    });
+
+    const result = await runtime.generate({
+        model: 'qwen3',
+        provider: 'ollama',
+        messages: [{ role: 'user', content: 'Answer this.' }],
+        capabilities: { canUseSearch: false },
+        providerOptions: { ollama: { think: false } },
+    });
+
+    assert.equal(seenThinkSetting, undefined);
+    assert.equal(seenOptions?.providerOptions, undefined);
+    assert.equal(result.text, 'Fallback answer.');
+    assert.deepEqual(result.providerSettingResolution, {
+        requested: { 'ollama.think': false },
+        ignored: [
+            { setting: 'ollama.think', reasonCode: 'capability_unknown' },
+        ],
+    });
+});
+
+test('Ollama native observations are allowlisted and reasoning-token usage stays unavailable', () => {
+    const result = normalizeVoltAgentResult(
+        'ollama/qwen3',
+        { messages: [{ role: 'user', content: 'Return a short answer.' }] },
+        {
+            text: 'A short answer.',
+            usage: {
+                promptTokens: 11,
+                completionTokens: 4,
+                reasoningTokens: 0,
+                totalTokens: 15,
+            },
+            response: {
+                modelId: 'ollama/qwen3',
+                body: {
+                    model: 'qwen3:latest',
+                    digest: 'sha256:observed-digest',
+                    total_duration: 900_000_000,
+                    load_duration: 100_000_000,
+                    prompt_eval_duration: 200_000_000,
+                    eval_duration: 500_000_000,
+                    prompt_eval_count: 11,
+                    eval_count: 4,
+                    message: { thinking: 'PRIVATE INTERNAL REASONING' },
+                    unexpected: 'PRIVATE EXTRA RESPONSE BODY',
+                },
+            },
+        }
+    );
+
+    assert.deepEqual(result.providerObservations, {
+        source: 'ollama',
+        authority: 'provider_reported',
+        resolvedModel: 'qwen3:latest',
+        digest: 'sha256:observed-digest',
+        totalDurationNs: 900_000_000,
+        loadDurationNs: 100_000_000,
+        promptEvalDurationNs: 200_000_000,
+        evalDurationNs: 500_000_000,
+        promptEvalCount: 11,
+        evalCount: 4,
+        thinkingPresent: true,
+    });
+    assert.equal(result.usage?.reasoningTokens, undefined);
+    assert.equal(
+        JSON.stringify(result).includes('PRIVATE INTERNAL REASONING'),
+        false
+    );
+    assert.equal(
+        JSON.stringify(result).includes('PRIVATE EXTRA RESPONSE BODY'),
+        false
+    );
+});
+
+test('Ollama observations stay unavailable when the native body omits the fields', () => {
+    const result = normalizeVoltAgentResult(
+        'ollama/qwen3',
+        { messages: [{ role: 'user', content: 'Answer.' }] },
+        { text: 'Answer.', response: { modelId: 'ollama/qwen3', body: {} } }
+    );
+
+    assert.equal(result.providerObservations, undefined);
+    assert.equal(result.usage, undefined);
+});
+
+test('Ollama thinking presence records an empty native field without its content', () => {
+    const result = normalizeVoltAgentResult(
+        'ollama/qwen3',
+        { messages: [{ role: 'user', content: 'Answer.' }] },
+        {
+            text: 'Answer.',
+            response: {
+                modelId: 'ollama/qwen3',
+                body: { message: { thinking: '' } },
+            },
+        }
+    );
+
+    assert.deepEqual(result.providerObservations, {
+        source: 'ollama',
+        authority: 'provider_reported',
+        thinkingPresent: true,
+    });
+});
+
+test('Ollama never surfaces runtime reasoning-token placeholders across think modes', () => {
+    const thinkModes = [undefined, false, true] as const;
+    for (const think of thinkModes) {
+        const result = normalizeVoltAgentResult(
+            'ollama/qwen3',
+            {
+                messages: [{ role: 'user', content: 'Answer.' }],
+                ...(think !== undefined && {
+                    providerOptions: { ollama: { think } },
+                }),
+            },
+            {
+                text: 'Answer.',
+                usage: {
+                    promptTokens: 4,
+                    completionTokens: 2,
+                    reasoningTokens: 0,
+                    totalTokens: 6,
+                },
+                response: {
+                    modelId: 'ollama/qwen3',
+                    body: {
+                        usage: {
+                            output_tokens_details: { reasoning_tokens: 8 },
+                        },
+                    },
+                },
+            }
+        );
+
+        assert.equal(result.usage?.promptTokens, 4);
+        assert.equal(result.usage?.completionTokens, 2);
+        assert.equal(result.usage?.totalTokens, 6);
+        assert.equal(result.usage?.reasoningTokens, undefined);
+    }
 });
 
 test('voltagent runtime does not forward search for providers without a mapped search tool', async () => {
@@ -1984,4 +2216,104 @@ test('default executor projects Ollama system messages into leading instructions
         { role: 'assistant', content: 'Previous answer.' },
         { role: 'user', content: 'Current request.' },
     ]);
+});
+
+test('default executor patches named Ollama think requests and normalized results exclude raw reasoning', async () => {
+    const originalFetch = globalThis.fetch;
+    let capturedRequest: Record<string, unknown> | undefined;
+    globalThis.fetch = async (_input, init) => {
+        capturedRequest = JSON.parse(String(init?.body)) as Record<
+            string,
+            unknown
+        >;
+        return new Response(
+            JSON.stringify({
+                model: 'qwen3:8b',
+                created_at: '2026-10-06T00:00:00Z',
+                message: {
+                    role: 'assistant',
+                    content: 'visible answer',
+                    thinking: 'private reasoning text',
+                },
+                done: true,
+                total_duration: 123,
+                load_duration: 23,
+                prompt_eval_count: 4,
+                prompt_eval_duration: 45,
+                eval_count: 6,
+                eval_duration: 55,
+            }),
+            { headers: { 'content-type': 'application/json' } }
+        );
+    };
+
+    try {
+        const executor = createDefaultVoltAgentExecutor({
+            model: 'ollama/qwen3:8b',
+            ollama: {
+                provider: 'ollama',
+                baseUrl: 'http://ollama.example.test',
+                localInferenceEnabled: true,
+                think: 'high',
+            },
+            agentFactory: ({ model }) => ({
+                async generateText(): Promise<AgentGenerateTextResult> {
+                    return (await generateText({
+                        model: model as Parameters<
+                            typeof generateText
+                        >[0]['model'],
+                        prompt: 'Answer briefly.',
+                    })) as unknown as AgentGenerateTextResult;
+                },
+            }),
+        });
+        const result = await executor.generateText(
+            [{ role: 'user', content: 'Answer briefly.' }],
+            {}
+        );
+
+        assert.equal(capturedRequest?.think, 'high');
+        assert.equal(capturedRequest?.model, 'qwen3:8b');
+        assert.equal(result.text, 'visible answer');
+        assert.equal(result.usage?.promptTokens, 4);
+        assert.equal(result.usage?.completionTokens, 6);
+        assert.equal(result.usage?.totalTokens, 10);
+        assert.equal(
+            (result.response?.body as { message?: { thinking?: string } })
+                .message?.thinking,
+            'private reasoning text'
+        );
+        const normalized = normalizeVoltAgentResult(
+            'ollama/qwen3:8b',
+            {
+                messages: [{ role: 'user', content: 'Answer briefly.' }],
+                provider: 'ollama',
+                capabilities: {
+                    canUseSearch: false,
+                    supportedOllamaThinkingControls: ['high'],
+                },
+                providerOptions: { ollama: { think: 'high' } },
+            },
+            result
+        );
+        assert.equal(normalized.text, 'visible answer');
+        assert.equal(
+            JSON.stringify(normalized).includes('private reasoning'),
+            false
+        );
+        assert.deepEqual(normalized.providerObservations, {
+            source: 'ollama',
+            authority: 'provider_reported',
+            resolvedModel: 'qwen3:8b',
+            totalDurationNs: 123,
+            loadDurationNs: 23,
+            promptEvalCount: 4,
+            promptEvalDurationNs: 45,
+            evalCount: 6,
+            evalDurationNs: 55,
+            thinkingPresent: true,
+        });
+    } finally {
+        globalThis.fetch = originalFetch;
+    }
 });
