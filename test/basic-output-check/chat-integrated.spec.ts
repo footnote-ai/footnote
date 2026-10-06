@@ -14,7 +14,6 @@ import {
     latestEmbedHeight,
     mountSizedEmbed,
     readEmbedHeights,
-    response,
     responseWithCitation,
 } from './chat-test-helpers';
 
@@ -140,7 +139,7 @@ test('keeps request assembly, retries, provenance, and reset coherent on /chat',
 
     const firstTurn = page.locator('.interaction-turn').nth(0);
     const secondTurn = page.locator('.interaction-turn').nth(1);
-    const firstFootnote = await expectTurnSource(
+    await expectTurnSource(
         firstTurn,
         'integrated-response-1',
         'Integrated source 1',
