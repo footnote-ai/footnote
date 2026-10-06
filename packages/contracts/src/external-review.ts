@@ -57,8 +57,8 @@ export type ExternalRunReviewResult = {
 
 /**
  * Validates one host-reported run and classifies only its supplied metadata.
- * Missing signals are treated as absent for the deterministic classifier and
- * listed separately so they are not mistaken for host-reported false facts.
+ * Missing signals remain unknown to absence checks in the deterministic
+ * classifier and are listed separately from host-reported false facts.
  */
 export function reviewExternalRun(input: unknown): ExternalRunReviewResult {
     const record = ExternalRunReviewInputSchema.parse(input);
@@ -67,14 +67,13 @@ export function reviewExternalRun(input: unknown): ExternalRunReviewResult {
         (signal) => signals[signal] === undefined
     );
     const classification = classifyProvenanceWithSignals({
-        citationCount: signals.citationCount ?? 0,
-        retrievalRequested: signals.retrievalRequested ?? false,
-        retrievalUsed: signals.retrievalUsed ?? false,
-        retrievalToolExecuted: signals.retrievalToolExecuted ?? false,
-        workflowEvidence: signals.workflowEvidence ?? false,
-        trustGraphEvidenceAvailable:
-            signals.trustGraphEvidenceAvailable ?? false,
-        trustGraphEvidenceUsed: signals.trustGraphEvidenceUsed ?? false,
+        citationCount: signals.citationCount,
+        retrievalRequested: signals.retrievalRequested,
+        retrievalUsed: signals.retrievalUsed,
+        retrievalToolExecuted: signals.retrievalToolExecuted,
+        workflowEvidence: signals.workflowEvidence,
+        trustGraphEvidenceAvailable: signals.trustGraphEvidenceAvailable,
+        trustGraphEvidenceUsed: signals.trustGraphEvidenceUsed,
         assistantProvenance:
             signals.assistantDeclaredSpeculative === true
                 ? 'Speculative'

@@ -60,6 +60,60 @@ test('reviewExternalRun reports omitted signals instead of treating them as host
     );
 });
 
+test('reviewExternalRun does not infer missing citations from retrieval-only evidence', () => {
+    const review = reviewExternalRun({
+        schemaVersion: 'v0alpha',
+        origin: 'host_reported',
+        signals: { retrievalUsed: true },
+    });
+
+    assert.ok(review.missingSignals.includes('citationCount'));
+    assert.equal(
+        review.assessment.conflicts.includes(
+            'retrieval_used_without_citations'
+        ),
+        false
+    );
+    assert.equal(
+        review.assessment.limitations.includes(
+            'Retrieval ran, but no citations were retained after normalization.'
+        ),
+        false
+    );
+    assert.ok(
+        review.assessment.limitations.some((limitation) =>
+            limitation.includes('citationCount')
+        )
+    );
+});
+
+test('reviewExternalRun does not infer unavailable TrustGraph evidence when availability is unreported', () => {
+    const review = reviewExternalRun({
+        schemaVersion: 'v0alpha',
+        origin: 'host_reported',
+        signals: { trustGraphEvidenceUsed: true },
+    });
+
+    assert.ok(review.missingSignals.includes('trustGraphEvidenceAvailable'));
+    assert.equal(
+        review.assessment.conflicts.includes(
+            'trustgraph_usage_without_availability'
+        ),
+        false
+    );
+    assert.equal(
+        review.assessment.limitations.includes(
+            'TrustGraph usage signal was reported without corresponding available P_EVID refs.'
+        ),
+        false
+    );
+    assert.ok(
+        review.assessment.limitations.some((limitation) =>
+            limitation.includes('trustGraphEvidenceAvailable')
+        )
+    );
+});
+
 test('ExternalRunReviewInputSchema accepts a minimal generic host fixture and rejects private payload fields', () => {
     const genericHostFixture = {
         schemaVersion: 'v0alpha',

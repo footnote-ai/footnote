@@ -10,13 +10,13 @@ import type { Provenance, ProvenanceAssessment } from './types.js';
 
 type ProvenanceClassificationInput = {
     assistantProvenance?: Provenance;
-    citationCount: number;
-    retrievalRequested: boolean;
-    retrievalUsed: boolean;
-    retrievalToolExecuted: boolean;
-    workflowEvidence: boolean;
-    trustGraphEvidenceAvailable: boolean;
-    trustGraphEvidenceUsed: boolean;
+    citationCount?: number;
+    retrievalRequested?: boolean;
+    retrievalUsed?: boolean;
+    retrievalToolExecuted?: boolean;
+    workflowEvidence?: boolean;
+    trustGraphEvidenceAvailable?: boolean;
+    trustGraphEvidenceUsed?: boolean;
 };
 
 type ProvenanceClassificationResult = {
@@ -38,20 +38,21 @@ export const classifyProvenanceWithSignals = (
     // TODO(provenance-structural-first): Keep this deterministic classifier,
     // but retire heuristic fallbacks that can be replaced by explicit runtime
     // execution evidence once those signals are universally available.
-    const citationsPresent = input.citationCount > 0;
+    const citationsPresent =
+        input.citationCount !== undefined && input.citationCount > 0;
     const assistantDeclaredSpeculative =
         input.assistantProvenance === 'Speculative';
     const retrievalSignals = [
         citationsPresent,
-        input.retrievalUsed,
-        input.retrievalToolExecuted,
-        input.workflowEvidence,
+        input.retrievalUsed === true,
+        input.retrievalToolExecuted === true,
+        input.workflowEvidence === true,
     ];
     const retrievalSignalCount = retrievalSignals.filter(Boolean).length;
     const conflicts: string[] = [];
     const limitations: string[] = [];
 
-    if (input.retrievalUsed && !citationsPresent) {
+    if (input.retrievalUsed === true && input.citationCount === 0) {
         conflicts.push('retrieval_used_without_citations');
         limitations.push(
             'Retrieval ran, but no citations were retained after normalization.'
@@ -60,8 +61,8 @@ export const classifyProvenanceWithSignals = (
 
     if (
         citationsPresent &&
-        !input.retrievalUsed &&
-        !input.retrievalToolExecuted
+        input.retrievalUsed === false &&
+        input.retrievalToolExecuted === false
     ) {
         conflicts.push('citations_without_execution_confirmation');
         limitations.push(
@@ -69,7 +70,10 @@ export const classifyProvenanceWithSignals = (
         );
     }
 
-    if (input.trustGraphEvidenceUsed && !input.trustGraphEvidenceAvailable) {
+    if (
+        input.trustGraphEvidenceUsed === true &&
+        input.trustGraphEvidenceAvailable === false
+    ) {
         conflicts.push('trustgraph_usage_without_availability');
         limitations.push(
             'TrustGraph usage signal was reported without corresponding available P_EVID refs.'
@@ -85,7 +89,7 @@ export const classifyProvenanceWithSignals = (
         );
     }
 
-    if (input.retrievalRequested && !input.retrievalUsed) {
+    if (input.retrievalRequested === true && input.retrievalUsed === false) {
         limitations.push(
             'Retrieval was requested but not used by execution, reducing grounding confidence.'
         );
@@ -97,10 +101,10 @@ export const classifyProvenanceWithSignals = (
     } else if (
         citationsPresent ||
         retrievalSignalCount >= 2 ||
-        (input.trustGraphEvidenceUsed &&
+        (input.trustGraphEvidenceUsed === true &&
             (citationsPresent ||
                 retrievalSignalCount > 0 ||
-                input.retrievalToolExecuted))
+                input.retrievalToolExecuted === true))
     ) {
         provenance = 'Retrieved';
     } else if (assistantDeclaredSpeculative) {
@@ -117,12 +121,13 @@ export const classifyProvenanceWithSignals = (
                 'Deterministic multi-signal provenance classification (backend)',
             signals: {
                 citationsPresent,
-                retrievalRequested: input.retrievalRequested,
-                retrievalUsed: input.retrievalUsed,
-                retrievalToolExecuted: input.retrievalToolExecuted,
-                workflowEvidence: input.workflowEvidence,
-                trustGraphEvidenceAvailable: input.trustGraphEvidenceAvailable,
-                trustGraphEvidenceUsed: input.trustGraphEvidenceUsed,
+                retrievalRequested: input.retrievalRequested === true,
+                retrievalUsed: input.retrievalUsed === true,
+                retrievalToolExecuted: input.retrievalToolExecuted === true,
+                workflowEvidence: input.workflowEvidence === true,
+                trustGraphEvidenceAvailable:
+                    input.trustGraphEvidenceAvailable === true,
+                trustGraphEvidenceUsed: input.trustGraphEvidenceUsed === true,
                 assistantDeclaredSpeculative,
             },
             conflicts,
