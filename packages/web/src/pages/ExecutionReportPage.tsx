@@ -47,12 +47,18 @@ const duration = (value: number | undefined): string =>
     value === undefined ? 'Unavailable' : `${value} ms`;
 
 const usageSummary = (usage: Usage): string => {
-    const counts = Object.entries(usage ?? {}).filter(
-        (entry): entry is [string, number] => typeof entry[1] === 'number'
+    const values: Array<[string, number | undefined]> = [
+        ['Input', usage?.promptTokens],
+        ['Cached input', usage?.cachedInputTokens],
+        ['Cache write', usage?.cacheWriteTokens],
+        ['Output', usage?.completionTokens],
+        ['Reasoning', usage?.reasoningTokens],
+        ['Total', usage?.totalTokens],
+    ];
+    const counts = values.flatMap(([label, value]) =>
+        value === undefined ? [] : [`${label} ${value}`]
     );
-    return counts.length
-        ? counts.map(([name, value]) => `${name}: ${value}`).join(' · ')
-        : 'Unavailable';
+    return counts.length ? counts.join(' · ') : 'Unavailable';
 };
 
 const costSummary = (cost: Cost | undefined): string =>

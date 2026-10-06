@@ -185,10 +185,11 @@ test('shows the run, steps, attempts, and recorded results', async ({
         page.getByText('openai / gpt-test', { exact: true })
     ).toBeVisible();
     await expect(
-        page.getByText(
-            'promptTokens: 12 · completionTokens: 4 · totalTokens: 16'
-        )
+        page.getByText('Input 12 · Output 4 · Total 16', { exact: true })
     ).toBeVisible();
+    await expect(
+        page.getByText(/Cached input|Cache write|Reasoning/u)
+    ).toHaveCount(0);
     await expect(
         page.getByText('$0.000000 · complete', { exact: true })
     ).toBeVisible();
@@ -220,6 +221,100 @@ test('shows the run, steps, attempts, and recorded results', async ({
     await expect(
         page.getByText(/PRIVATE_(SUMMARY|ANSWER|SIGNAL)_MUST_NOT_RENDER/u)
     ).toHaveCount(0);
+});
+
+test('shows a completed run with successful attempt details', async ({
+    page,
+}) => {
+    const completedReport = {
+        responseId: 'response-complete-1',
+        workflow: {
+            runId: 'run-complete-1',
+            runStatus: 'completed',
+            workflowId: 'reviewed',
+            workflowName: 'Reviewed response',
+            status: 'completed',
+            startedAt: '2026-10-01T10:00:00.000Z',
+            finishedAt: '2026-10-01T10:00:01.000Z',
+            durationMs: 1000,
+            stepCount: 1,
+            maxSteps: 6,
+            maxDurationMs: 60000,
+            terminationReason: 'goal_satisfied',
+            steps: [
+                {
+                    stepId: 'generate',
+                    attempt: 1,
+                    stepKind: 'generate',
+                    startedAt: '2026-10-01T10:00:00.000Z',
+                    finishedAt: '2026-10-01T10:00:01.000Z',
+                    durationMs: 1000,
+                    resultRefs: [
+                        { resultId: 'result-complete', name: 'answer' },
+                    ],
+                    outcome: { status: 'executed', summary: 'PRIVATE_SUMMARY' },
+                    attempts: [
+                        {
+                            attempt: 1,
+                            status: 'succeeded',
+                            startedAt: '2026-10-01T10:00:00.000Z',
+                            finishedAt: '2026-10-01T10:00:01.000Z',
+                            durationMs: 1000,
+                            actualProvider: 'openai',
+                            actualModel: 'gpt-test',
+                            usage: {
+                                promptTokens: 18,
+                                cachedInputTokens: 5,
+                                cacheWriteTokens: 2,
+                                completionTokens: 7,
+                                reasoningTokens: 3,
+                                totalTokens: 30,
+                            },
+                            cost: {
+                                inputCostUsd: 0.01,
+                                outputCostUsd: 0.02,
+                                totalCostUsd: 0.03,
+                                costCompleteness: 'complete',
+                            },
+                        },
+                    ],
+                },
+            ],
+            results: [
+                {
+                    resultId: 'result-complete',
+                    name: 'answer',
+                    status: 'produced',
+                    producedByStepId: 'generate',
+                    producedByAttempt: 1,
+                },
+            ],
+        },
+    };
+
+    await page.route('**/api/admin/executions/response-complete-1', (route) =>
+        route.fulfill({
+            contentType: 'application/json',
+            body: JSON.stringify(completedReport),
+        })
+    );
+
+    await page.goto('/admin/executions/response-complete-1');
+
+    await expect(page.getByText('completed', { exact: true })).toBeVisible();
+    await expect(page.getByText('generate · executed')).toBeVisible();
+    await expect(
+        page.getByText('openai / gpt-test', { exact: true })
+    ).toBeVisible();
+    await expect(
+        page.getByText(
+            'Input 18 · Cached input 5 · Cache write 2 · Output 7 · Reasoning 3 · Total 30',
+            { exact: true }
+        )
+    ).toBeVisible();
+    await expect(page.getByText('$0.030000 · complete')).toBeVisible();
+    await expect(page.getByText('answer: produced')).toBeVisible();
+    await expect(page.getByText('PRIVATE_SUMMARY')).toHaveCount(0);
 });
 
 test('shows backend access denial without rendering a record', async ({

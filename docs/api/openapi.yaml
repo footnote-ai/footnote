@@ -2809,6 +2809,14 @@ components:
                         - outputCostUsd
                         - totalCostUsd
                     additionalProperties: false
+                inputRefs:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/WorkflowResultReference'
+                resultRefs:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/WorkflowResultReference'
                 attempts:
                     type: array
                     description: 'Per-attempt execution facts, including bounded TrustGraph boundary measurements.'
@@ -3270,6 +3278,17 @@ components:
                 - packages/contracts/src/web/schemas.ts#WorkflowRecordSchema
             type: object
             properties:
+                runId:
+                    type: string
+                    minLength: 1
+                runStatus:
+                    type: string
+                    enum:
+                        - completed
+                        - degraded
+                        - limited
+                        - failed
+                        - rejected
                 startedAt:
                     type: string
                     format: date-time
@@ -3385,6 +3404,10 @@ components:
                     required:
                         - includedItemCount
                     additionalProperties: false
+                results:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/WorkflowResultRecord'
                 terminationReason:
                     type: string
                     enum:
@@ -3409,6 +3432,53 @@ components:
                 - maxDurationMs
                 - terminationReason
                 - steps
+            additionalProperties: false
+        WorkflowResultReference:
+            x-codeRefs:
+                - packages/contracts/src/policy/types.ts#WorkflowResultReference
+                - packages/contracts/src/web/schemas.ts#WorkflowResultReferenceSchema
+            type: object
+            properties:
+                resultId:
+                    type: string
+                    minLength: 1
+                name:
+                    type: string
+                    minLength: 1
+                optional:
+                    type: boolean
+            required:
+                - name
+            additionalProperties: false
+        WorkflowResultRecord:
+            x-codeRefs:
+                - packages/contracts/src/policy/types.ts#WorkflowResultRecord
+                - packages/contracts/src/web/schemas.ts#WorkflowResultRecordSchema
+            type: object
+            properties:
+                resultId:
+                    type: string
+                    minLength: 1
+                name:
+                    type: string
+                    minLength: 1
+                status:
+                    type: string
+                    enum:
+                        - produced
+                        - unavailable
+                producedByStepId:
+                    type: string
+                    minLength: 1
+                producedByAttempt:
+                    type: integer
+                    minimum: 1
+            required:
+                - resultId
+                - name
+                - status
+                - producedByStepId
+                - producedByAttempt
             additionalProperties: false
         ReviewRuntimeSummary:
             type: object
