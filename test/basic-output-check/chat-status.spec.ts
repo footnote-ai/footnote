@@ -64,7 +64,7 @@ const INVALID_METADATA_RESPONSE = {
                                         inputCostUsd: 0,
                                         outputCostUsd: 0,
                                         totalCostUsd: 0,
-                                        costCompleteness: 'unknown',
+                                        costCompleteness: 'not-a-cost-state',
                                     },
                                 },
                             ],
