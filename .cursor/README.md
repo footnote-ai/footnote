@@ -1,6 +1,6 @@
 # Cursor Config
 
-Canonical guidance:
+Repo instructions:
 
 - `AGENTS.md`
 

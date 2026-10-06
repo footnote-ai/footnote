@@ -1,30 +1,30 @@
 {
-  "prompt": "Follow AGENTS.md as canonical. Footnote is pre-1.0: prefer fast, correct, small-scope delivery; do not add migrations/backfills/compat layers unless requested.",
-  "context": {
-    "core": [
-      "packages/backend/src",
-      "packages/discord-bot/src",
-      "packages/web/src"
-    ],
-    "shared": [
-      "packages/contracts/src",
-      "packages/api-client/src",
-      "packages/agent-runtime/src",
-      "packages/prompts/src"
-    ],
-    "docs": [
-      "README.md",
-      "docs/Philosophy.md",
-      "SECURITY.md",
-      "docs/architecture/footnote-annotations.md",
-      "docs/api/openapi.yaml"
-    ],
-    "config": [
-      "package.json",
-      "pnpm-workspace.yaml",
-      "tsconfig.json",
-      "server.js"
-    ]
-  },
-  "priority": ["core", "shared"]
+    "prompt": "Follow AGENTS.md for repo instructions. Footnote is pre-1.0: prefer fast, correct, small-scope delivery; do not add migrations/backfills/compat layers unless requested.",
+    "context": {
+        "core": [
+            "packages/backend/src",
+            "packages/discord-bot/src",
+            "packages/web/src"
+        ],
+        "shared": [
+            "packages/contracts/src",
+            "packages/api-client/src",
+            "packages/agent-runtime/src",
+            "packages/prompts/src"
+        ],
+        "docs": [
+            "README.md",
+            "docs/Philosophy.md",
+            "SECURITY.md",
+            "docs/architecture/footnote-annotations.md",
+            "docs/api/openapi.yaml"
+        ],
+        "config": [
+            "package.json",
+            "pnpm-workspace.yaml",
+            "tsconfig.json",
+            "server.js"
+        ]
+    },
+    "priority": ["core", "shared"]
 }

@@ -13,7 +13,7 @@ job instead of repeating the same information in several places.
 | Milestone      | A finite outcome made up of several pieces of work                        |
 | Relationship   | Parent/sub-issue structure or a hard dependency between issues            |
 
-`AGENTS.md` remains the canonical instruction source. This page explains how to
+`AGENTS.md` contains the repo instructions. This page explains how to
 apply those rules when creating or updating GitHub work.
 
 ## Assignees

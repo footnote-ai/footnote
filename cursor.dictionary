@@ -20,7 +20,6 @@ RealtimeEngagementFilter
 RealtimeEventHandler
 RealtimeWebSocketManager
 ResponseHandler
-Traycer
 UserVoiceStateHandler
 VoiceConnectionManager
 VoiceSessionManager
@@ -32,13 +31,6 @@ CommandHandler
 OpenAIService
 VoltAgent
 agent-runtime
-ReflectRuntime
-ReflectRuntimeRequest
-ReflectRuntimeResult
-runtime seam
-runtime boundary
-runtime adapter
-legacy-openai adapter
 ResponseMetadata
 Provenance
 RiskTier
@@ -55,4 +47,3 @@ FollowUpCache
 SessionHelpers
 ContextResolver
 ProvenanceFooter
-ResponseMetadata
