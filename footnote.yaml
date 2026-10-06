@@ -117,7 +117,11 @@ chat-workflow:
     # factual authority.
     chat-presentation-enabled: true
     chat-presentation-profile-id: 'openrouter-deepseek-v4-flash-0731'
+    max-workflow-steps-override: 12
+    max-tool-calls-override: 5
+    max-deliberation-calls-override: 6
     max-tokens-total-override: 512000
+    max-duration-ms-override: 300000
     chat-presentation-timeout-ms: 90000
     # Optional web-search context is independent from provider-native
     # canUseSearch capability and fails open when unavailable.

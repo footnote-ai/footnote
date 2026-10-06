@@ -1338,8 +1338,16 @@ export const createChatService = ({
                 maxRequestReviewCycles:
                     chatWorkflowConfig.maxRequestReviewCycles ??
                     runtimeConfig.chatWorkflow.maxRequestReviewCycles,
+                maxWorkflowStepsOverride:
+                    runtimeConfig.chatWorkflow.maxWorkflowStepsOverride,
+                maxToolCallsOverride:
+                    runtimeConfig.chatWorkflow.maxToolCallsOverride,
+                maxDeliberationCallsOverride:
+                    runtimeConfig.chatWorkflow.maxDeliberationCallsOverride,
                 maxTokensTotalOverride:
                     runtimeConfig.chatWorkflow.maxTokensTotalOverride,
+                maxDurationMsOverride:
+                    runtimeConfig.chatWorkflow.maxDurationMsOverride,
                 requestMaxReviewCycles: workflowMaxReviewCycles,
                 ExecutionContract:
                     ExecutionContract !== undefined

@@ -148,8 +148,12 @@ export type RuntimeConfig = {
         maxIterations: number;
         maxDurationMs: number;
         maxRequestReviewCycles: number;
-        /** Optional finite deployment override for the cumulative workflow budget. */
+        /** Optional finite operator overrides; undefined preserves the mode limit. */
+        maxWorkflowStepsOverride?: number;
+        maxToolCallsOverride?: number;
+        maxDeliberationCallsOverride?: number;
         maxTokensTotalOverride?: number;
+        maxDurationMsOverride?: number;
         presentation: {
             /** Optional authority-first presentation flow after authoritative generation. */
             enabled: boolean;

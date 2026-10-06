@@ -28,6 +28,10 @@ test('presentation stays disabled but has the tested DeepSeek profile and timeou
     );
     assert.equal(chatWorkflow.presentation.timeoutMs, 90000);
     assert.equal(chatWorkflow.maxTokensTotalOverride, undefined);
+    assert.equal(chatWorkflow.maxWorkflowStepsOverride, undefined);
+    assert.equal(chatWorkflow.maxToolCallsOverride, undefined);
+    assert.equal(chatWorkflow.maxDeliberationCallsOverride, undefined);
+    assert.equal(chatWorkflow.maxDurationMsOverride, undefined);
 });
 
 test('presentation settings accept an explicit deployment override', () => {
@@ -48,33 +52,82 @@ test('presentation settings accept an explicit deployment override', () => {
     assert.equal(chatWorkflow.presentation.timeoutMs, 45000);
 });
 
-test('workflow token override accepts positive safe deployment values', () => {
+test('workflow allowance overrides accept their finite maximums', () => {
     const { chatWorkflow } = buildServiceSections(
-        { CHAT_WORKFLOW_MAX_TOKENS_TOTAL_OVERRIDE: '1048576' },
+        {
+            CHAT_WORKFLOW_MAX_WORKFLOW_STEPS_OVERRIDE: '12',
+            CHAT_WORKFLOW_MAX_TOOL_CALLS_OVERRIDE: '5',
+            CHAT_WORKFLOW_MAX_DELIBERATION_CALLS_OVERRIDE: '6',
+            CHAT_WORKFLOW_MAX_TOKENS_TOTAL_OVERRIDE: '512000',
+            CHAT_WORKFLOW_MAX_DURATION_MS_OVERRIDE: '300000',
+        },
         () => undefined
     );
 
-    assert.equal(chatWorkflow.maxTokensTotalOverride, 1_048_576);
+    assert.equal(chatWorkflow.maxWorkflowStepsOverride, 12);
+    assert.equal(chatWorkflow.maxToolCallsOverride, 5);
+    assert.equal(chatWorkflow.maxDeliberationCallsOverride, 6);
+    assert.equal(chatWorkflow.maxTokensTotalOverride, 512_000);
+    assert.equal(chatWorkflow.maxDurationMsOverride, 300_000);
 });
 
-test('workflow token override rejects unsafe values', () => {
+test('workflow allowance overrides accept zero only for tools and deliberation', () => {
+    const { chatWorkflow } = buildServiceSections(
+        {
+            CHAT_WORKFLOW_MAX_TOOL_CALLS_OVERRIDE: '0',
+            CHAT_WORKFLOW_MAX_DELIBERATION_CALLS_OVERRIDE: '0',
+            CHAT_WORKFLOW_MAX_WORKFLOW_STEPS_OVERRIDE: '0',
+            CHAT_WORKFLOW_MAX_TOKENS_TOTAL_OVERRIDE: '0',
+            CHAT_WORKFLOW_MAX_DURATION_MS_OVERRIDE: '0',
+        },
+        () => undefined
+    );
+
+    assert.equal(chatWorkflow.maxToolCallsOverride, 0);
+    assert.equal(chatWorkflow.maxDeliberationCallsOverride, 0);
+    assert.equal(chatWorkflow.maxWorkflowStepsOverride, undefined);
+    assert.equal(chatWorkflow.maxTokensTotalOverride, undefined);
+    assert.equal(chatWorkflow.maxDurationMsOverride, undefined);
+});
+
+test('workflow allowance overrides reject values beyond their finite caps', () => {
     const warnings: string[] = [];
     const { chatWorkflow } = buildServiceSections(
-        { CHAT_WORKFLOW_MAX_TOKENS_TOTAL_OVERRIDE: '9007199254740992' },
+        {
+            CHAT_WORKFLOW_MAX_WORKFLOW_STEPS_OVERRIDE: '13',
+            CHAT_WORKFLOW_MAX_TOOL_CALLS_OVERRIDE: '6',
+            CHAT_WORKFLOW_MAX_DELIBERATION_CALLS_OVERRIDE: '7',
+            CHAT_WORKFLOW_MAX_TOKENS_TOTAL_OVERRIDE: '512001',
+            CHAT_WORKFLOW_MAX_DURATION_MS_OVERRIDE: '300001',
+        },
         (warning) => warnings.push(warning)
     );
 
+    assert.equal(chatWorkflow.maxWorkflowStepsOverride, undefined);
+    assert.equal(chatWorkflow.maxToolCallsOverride, undefined);
+    assert.equal(chatWorkflow.maxDeliberationCallsOverride, undefined);
     assert.equal(chatWorkflow.maxTokensTotalOverride, undefined);
-    assert.equal(warnings.length, 1);
+    assert.equal(chatWorkflow.maxDurationMsOverride, undefined);
+    assert.equal(warnings.length, 5);
 });
 
-test('workflow token override rejects malformed integer values', () => {
+test('workflow allowance overrides reject malformed values and fail open', () => {
     const warnings: string[] = [];
     const { chatWorkflow } = buildServiceSections(
-        { CHAT_WORKFLOW_MAX_TOKENS_TOTAL_OVERRIDE: '512000tokens' },
+        {
+            CHAT_WORKFLOW_MAX_WORKFLOW_STEPS_OVERRIDE: '12steps',
+            CHAT_WORKFLOW_MAX_TOOL_CALLS_OVERRIDE: '-1',
+            CHAT_WORKFLOW_MAX_DELIBERATION_CALLS_OVERRIDE: '6.5',
+            CHAT_WORKFLOW_MAX_TOKENS_TOTAL_OVERRIDE: '512000tokens',
+            CHAT_WORKFLOW_MAX_DURATION_MS_OVERRIDE: 'Infinity',
+        },
         (warning) => warnings.push(warning)
     );
 
+    assert.equal(chatWorkflow.maxWorkflowStepsOverride, undefined);
+    assert.equal(chatWorkflow.maxToolCallsOverride, undefined);
+    assert.equal(chatWorkflow.maxDeliberationCallsOverride, undefined);
     assert.equal(chatWorkflow.maxTokensTotalOverride, undefined);
-    assert.equal(warnings.length, 1);
+    assert.equal(chatWorkflow.maxDurationMsOverride, undefined);
+    assert.equal(warnings.length, 5);
 });

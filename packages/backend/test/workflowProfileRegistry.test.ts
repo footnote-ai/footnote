@@ -180,6 +180,81 @@ test('resolveWorkflowRuntimeConfig applies a bounded deployment token override w
     assert.equal(config.workflowExecutionLimits.maxDeliberationCalls, 2);
 });
 
+test('resolveWorkflowRuntimeConfig carries bounded deployment allowances into the existing runtime contract', () => {
+    const config = resolveWorkflowRuntimeConfig({
+        modeId: 'balanced',
+        reviewLoopEnabled: true,
+        maxIterations: 5,
+        maxDurationMs: 90_000,
+        maxRequestReviewCycles: 7,
+        maxWorkflowStepsOverride: 12,
+        maxToolCallsOverride: 5,
+        maxDeliberationCallsOverride: 6,
+        maxTokensTotalOverride: 512_000,
+        maxDurationMsOverride: 300_000,
+        ExecutionContract: {
+            response: {
+                responseMode: 'quality_grounded',
+                stoppingRule: 'bounded_sufficient_answer',
+            },
+            limits: {
+                maxWorkflowSteps: 8,
+                maxToolCalls: 3,
+                maxDeliberationCalls: 3,
+                maxTokensTotal: 96_000,
+                maxDurationMs: 180_000,
+            },
+        },
+    });
+    const { workflowExecutionLimits: limits } = config;
+
+    assert.equal(limits.maxWorkflowSteps, 12);
+    assert.equal(limits.maxToolCalls, 5);
+    assert.equal(limits.maxTokensTotal, 512_000);
+    assert.equal(limits.maxDurationMs, 300_000);
+    assert.ok(typeof limits.maxPlanCycles === 'number');
+    assert.ok(typeof limits.maxReviewCycles === 'number');
+    assert.equal(limits.maxPlanCycles + limits.maxReviewCycles, 6);
+    assert.equal(limits.maxDeliberationCalls, 6);
+});
+
+test('zero deliberation override disables plan and review cycles coherently', () => {
+    const config = resolveWorkflowRuntimeConfig({
+        modeId: 'grounded',
+        reviewLoopEnabled: true,
+        maxIterations: 5,
+        maxDurationMs: 90_000,
+        maxRequestReviewCycles: 7,
+        maxDeliberationCallsOverride: 0,
+    });
+
+    assert.equal(config.workflowExecutionLimits.maxPlanCycles, 0);
+    assert.equal(config.workflowExecutionLimits.maxReviewCycles, 0);
+    assert.equal(config.workflowExecutionLimits.maxDeliberationCalls, 0);
+});
+
+test('odd deliberation override remains equal to its coupled plan and review cycles', () => {
+    const config = resolveWorkflowRuntimeConfig({
+        modeId: 'balanced',
+        reviewLoopEnabled: true,
+        maxIterations: 5,
+        maxDurationMs: 90_000,
+        maxRequestReviewCycles: 7,
+        maxDeliberationCallsOverride: 5,
+    });
+
+    assert.ok(typeof config.workflowExecutionLimits.maxPlanCycles === 'number');
+    assert.ok(
+        typeof config.workflowExecutionLimits.maxReviewCycles === 'number'
+    );
+    assert.equal(
+        config.workflowExecutionLimits.maxPlanCycles +
+            config.workflowExecutionLimits.maxReviewCycles,
+        5
+    );
+    assert.equal(config.workflowExecutionLimits.maxDeliberationCalls, 5);
+});
+
 test('resolveWorkflowModeDecision maps requested mode ids and emits inspectable routing behavior', () => {
     const requested = resolveWorkflowModeDecision({
         modeId: 'balanced',
