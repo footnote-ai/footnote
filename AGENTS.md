@@ -1,4 +1,4 @@
-# Footnote Agent Contract
+# Footnote Agent Instructions
 
 AI coding agents should follow this file. Tool-specific files such as `cursor.rules`, `.codexrules`, and `.github/copilot-instructions.md` point here or provide short adapters.
 
@@ -158,8 +158,7 @@ Keep related requests on the same target when testing process-local state.
   conflict with core Footnote semantics, stop and ask before rewriting those
   semantics.
 - Do not invent runtime facts, command output, or test results.
-- Prefer ordinary names and comments. Use terms such as “canonical,” “authoritative,” “boundary,” “bounded,” “projection,” and “seam” only when they describe a real technical distinction.
-- Remove comments that mainly restate architecture already clear from a type or function name.
+- Prefer ordinary names and comments. Use architecture terms only when they add a concrete distinction.
 - If a check was not run, say that clearly.
 
 ## Communication Style

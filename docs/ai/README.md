@@ -74,7 +74,7 @@ Use this quick checklist before merge:
 
 - The change solves the intended problem.
 - The diff is scoped and understandable.
-- The backend still owns the public web and Discord API.
+- The backend still hosts the public web and Discord runtime.
 - Backend remains the authority for LLM cost recording.
 - Logging, provenance, and fail-open behavior are preserved.
 - Provenance comments and license headers are preserved.

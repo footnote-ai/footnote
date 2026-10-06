@@ -7,8 +7,8 @@ content is a secondary explanation and may lag behind `main`.
 ## Documentation maintenance
 
 When a PR materially changes a documented public feature, contract, workflow,
-architecture, setup/deployment behavior, or other documented behavior, update
-the checked-in Markdown in the same PR when that documentation
+package or API boundary, setup/deployment behavior, or other documented behavior,
+update the checked-in Markdown in the same PR when that documentation
 exists. This does not mean every code change requires documentation, and it
 does not mean every documentation change requires a DeepWiki configuration edit.
 
