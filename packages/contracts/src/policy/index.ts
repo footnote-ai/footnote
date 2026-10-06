@@ -214,6 +214,7 @@ export {
     type ProjectContextReasonCode,
 } from './projectContext.js';
 export { formatExecutionTimelineSummary } from './executionFormatting.js';
+export { classifyProvenanceWithSignals } from './provenanceAssessment.js';
 export {
     buildContextPresentationSummary,
     formatGitHubContextSummary,

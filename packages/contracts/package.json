@@ -14,6 +14,10 @@
             "types": "./dist/policy/index.d.ts",
             "default": "./dist/policy/index.js"
         },
+        "./external-review": {
+            "types": "./dist/external-review.d.ts",
+            "default": "./dist/external-review.js"
+        },
         "./web": {
             "types": "./dist/web/index.d.ts",
             "default": "./dist/web/index.js"

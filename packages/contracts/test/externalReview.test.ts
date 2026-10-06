@@ -1,0 +1,118 @@
+/**
+ * @description: Behavior and privacy checks for the bounded external run review surface.
+ * @footnote-scope: test
+ * @footnote-module: ExternalRunReviewTests
+ * @footnote-risk: low - Exercises only synthetic host-reported metadata.
+ * @footnote-ethics: high - Confirms external claims stay attributed and missing evidence stays visible.
+ */
+
+import test from 'node:test';
+import { strict as assert } from 'node:assert';
+import {
+    ExternalRunReviewInputSchema,
+    reviewExternalRun,
+} from '../src/external-review.js';
+
+test('reviewExternalRun keeps host-reported origin separate from its provenance assessment', () => {
+    const review = reviewExternalRun({
+        schemaVersion: 'v0alpha',
+        origin: 'host_reported',
+        signals: {
+            citationCount: 2,
+            retrievalRequested: true,
+            retrievalUsed: true,
+            retrievalToolExecuted: true,
+        },
+    });
+
+    assert.equal(review.origin, 'host_reported');
+    assert.deepEqual(review.reportedSignals, {
+        citationCount: 2,
+        retrievalRequested: true,
+        retrievalUsed: true,
+        retrievalToolExecuted: true,
+    });
+    assert.equal(review.provenance, 'Retrieved');
+    assert.equal(review.assessment.methodId, 'deterministic_multi_signal_v1');
+    assert.equal('origin' in review.assessment, false);
+    assert.deepEqual(review.missingSignals, [
+        'workflowEvidence',
+        'trustGraphEvidenceAvailable',
+        'trustGraphEvidenceUsed',
+        'assistantDeclaredSpeculative',
+    ]);
+});
+
+test('reviewExternalRun reports omitted signals instead of treating them as host-reported false facts', () => {
+    const review = reviewExternalRun({
+        schemaVersion: 'v0alpha',
+        origin: 'host_reported',
+        signals: { retrievalUsed: false },
+    });
+
+    assert.equal(review.provenance, 'Inferred');
+    assert.deepEqual(review.reportedSignals, { retrievalUsed: false });
+    assert.ok(review.missingSignals.includes('citationCount'));
+    assert.ok(
+        review.assessment.limitations.some((limitation) =>
+            limitation.includes('citationCount')
+        )
+    );
+});
+
+test('ExternalRunReviewInputSchema accepts a minimal generic host fixture and rejects private payload fields', () => {
+    const genericHostFixture = {
+        schemaVersion: 'v0alpha',
+        origin: 'host_reported',
+        signals: { retrievalUsed: true },
+    };
+    assert.equal(
+        ExternalRunReviewInputSchema.safeParse(genericHostFixture).success,
+        true
+    );
+    assert.equal(
+        ExternalRunReviewInputSchema.safeParse({
+            ...genericHostFixture,
+            origin: 'footnote_observed',
+        }).success,
+        false
+    );
+
+    for (const field of [
+        'prompt',
+        'response',
+        'sourceBody',
+        'toolPayload',
+        'hiddenReasoning',
+        'secret',
+        'privateContext',
+    ]) {
+        assert.equal(
+            ExternalRunReviewInputSchema.safeParse({
+                ...genericHostFixture,
+                [field]: 'must not be accepted',
+            }).success,
+            false,
+            `top-level ${field} must be rejected`
+        );
+        assert.equal(
+            ExternalRunReviewInputSchema.safeParse({
+                ...genericHostFixture,
+                signals: {
+                    retrievalUsed: true,
+                    [field]: 'must not be accepted',
+                },
+            }).success,
+            false,
+            `signal ${field} must be rejected`
+        );
+    }
+
+    assert.equal(
+        ExternalRunReviewInputSchema.safeParse({
+            ...genericHostFixture,
+            signals: { citationCount: -1 },
+        }).success,
+        false
+    );
+});
