@@ -59,6 +59,44 @@
     margin-top: 0.55rem;
 }
 
+.trace-workflow-list {
+    display: grid;
+    gap: 1rem;
+    padding-left: 1.5rem;
+}
+
+.trace-workflow-step {
+    padding-left: 0.5rem;
+}
+
+.trace-workflow-step h3 {
+    margin: 0;
+    font-size: 1rem;
+}
+
+.trace-workflow-step h3 span {
+    color: var(--public-muted);
+    font-weight: 400;
+}
+
+.trace-workflow-attempts > ol {
+    margin-top: 0.75rem;
+}
+
+.trace-evidence-status {
+    border-left: 3px solid var(--public-focus);
+    padding: 0.75rem;
+    background: color-mix(
+        in srgb,
+        var(--public-focus) 8%,
+        var(--public-paper-raised)
+    );
+}
+
+.trace-evidence-status--caution {
+    border-left-color: var(--public-muted);
+}
+
 .button-link {
     display: inline-flex;
     align-items: center;

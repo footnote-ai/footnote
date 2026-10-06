@@ -12,7 +12,10 @@ import type {
     StepOutcome,
     StepRecord,
     TraceAxisScore,
+    WorkflowAttemptRecord,
     WorkflowRecord,
+    WorkflowResultRecord,
+    WorkflowResultReference,
 } from '@footnote/contracts/policy';
 import type { TraceDisplayMetadata } from '@footnote/contracts/web';
 import {
@@ -29,82 +32,13 @@ const TRACE_AXES = [
     'extent',
 ] as const;
 
-const PUBLIC_STEP_SIGNAL_KEYS = new Set([
-    'action',
-    'appliedModuleCount',
-    'appliedModuleIdsCsv',
-    'applyOutcome',
-    'assessRoutingHintsCsv',
-    'clarificationOptionCount',
-    'clarificationReasonCode',
-    'contractType',
-    'evidenceConcern',
-    'effectiveProfileId',
-    'finalTemperamentAttribution',
-    'finalTemperamentCaution',
-    'finalTemperamentExtent',
-    'finalTemperamentRationale',
-    'finalTemperamentTightness',
-    'lengthConcern',
-    'mattered',
-    'matteredControlCount',
-    'modality',
-    'moduleHintCount',
-    'moduleHintIdsCsv',
-    'originalProfileId',
-    'profileId',
-    'provider',
-    'purpose',
-    'refinementApplied',
-    'refinementRequested',
-    'refinementSourceStepId',
-    'reentryAttempt',
-    'reviewDecision',
-    'reviewParseFailureMessage',
-    'reviewParseFailureReason',
-    'reviewParseFirstIssueCode',
-    'reviewParseFirstIssuePath',
-    'reviewParseIssueCount',
-    'reviewParseOutputLength',
-    'reviewParseStatus',
-    'reviewReason',
-    'routingChainAttemptCount',
-    'routingChainAttemptsJson',
-    'routingHintApplied',
-    'routingHintConflictResolved',
-    'routedModel',
-    'routedProfileId',
-    'routedProvider',
-    'selectedCapabilityProfile',
-    'selectedModel',
-    'selectedProfileId',
-    'selectedProvider',
-    'structuredOutputOutcome',
-    'styleConcern',
-    'terminalAction',
-    'traceAlignment',
-    'traceAlignmentReason',
-    'upstreamModel',
-    'upstreamProvider',
-    'upstreamReportedCostUsd',
-    'upstreamRoutingAttempt',
-    'upstreamRoutingAttemptCount',
-    'requestedCapabilityProfile',
-]);
+const PUBLIC_STEP_SIGNAL_KEYS = new Set(['action', 'contractType']);
 
 const OPTIONAL_METADATA_FIELDS = [
     'totalDurationMs',
     'provenanceAssessment',
-    'execution',
     'workflow',
-    'reviewRuntime',
-    'steerabilityControls',
     'evaluator',
-    'imageDescriptions',
-    'trustGraph',
-    'githubContext',
-    'projectContext',
-    'imageGeneration',
     'presentation',
 ] as const;
 
@@ -162,36 +96,6 @@ const buildValidationBase = (
     trace_final: final,
 });
 
-const omitUnknownWorkflowSignals = (workflow: unknown): unknown => {
-    if (!isRecord(workflow) || !Array.isArray(workflow.steps)) {
-        return workflow;
-    }
-
-    return {
-        ...workflow,
-        steps: workflow.steps.map((step) => {
-            if (!isRecord(step) || !isRecord(step.outcome)) {
-                return step;
-            }
-            const signals = step.outcome.signals;
-            if (!isRecord(signals)) {
-                return step;
-            }
-            return {
-                ...step,
-                outcome: {
-                    ...step.outcome,
-                    signals: Object.fromEntries(
-                        Object.entries(signals).filter(([key]) =>
-                            PUBLIC_STEP_SIGNAL_KEYS.has(key)
-                        )
-                    ),
-                },
-            };
-        }),
-    };
-};
-
 const readValidOptionalField = (
     raw: Record<string, unknown>,
     field: MetadataField,
@@ -200,15 +104,11 @@ const readValidOptionalField = (
     if (raw[field] === undefined) {
         return undefined;
     }
-    const value =
-        field === 'workflow'
-            ? omitUnknownWorkflowSignals(raw[field])
-            : raw[field];
     const parsed = ResponseMetadataSchema.safeParse({
         ...base,
         trace_target: {},
         trace_final: {},
-        [field]: value,
+        [field]: raw[field],
     });
     return parsed.success ? parsed.data[field] : undefined;
 };
@@ -228,9 +128,78 @@ const projectPublicOutcome = (outcome: StepOutcome): StepOutcome => ({
             )
         ),
     }),
-    ...(outcome.recommendations !== undefined && {
-        recommendations: [...outcome.recommendations],
+});
+
+const projectPublicAttempt = (
+    attempt: WorkflowAttemptRecord
+): WorkflowAttemptRecord => ({
+    attempt: attempt.attempt,
+    status: attempt.status,
+    startedAt: attempt.startedAt,
+    finishedAt: attempt.finishedAt,
+    durationMs: attempt.durationMs,
+    ...(attempt.requestedProvider !== undefined && {
+        requestedProvider: attempt.requestedProvider,
     }),
+    ...(attempt.requestedModel !== undefined && {
+        requestedModel: attempt.requestedModel,
+    }),
+    ...(attempt.actualProvider !== undefined && {
+        actualProvider: attempt.actualProvider,
+    }),
+    ...(attempt.actualModel !== undefined && {
+        actualModel: attempt.actualModel,
+    }),
+    ...(attempt.completion !== undefined && {
+        completion: { ...attempt.completion },
+    }),
+    ...(attempt.usage !== undefined && {
+        usage: {
+            ...(attempt.usage.promptTokens !== undefined && {
+                promptTokens: attempt.usage.promptTokens,
+            }),
+            ...(attempt.usage.cachedInputTokens !== undefined && {
+                cachedInputTokens: attempt.usage.cachedInputTokens,
+            }),
+            ...(attempt.usage.cacheWriteTokens !== undefined && {
+                cacheWriteTokens: attempt.usage.cacheWriteTokens,
+            }),
+            ...(attempt.usage.completionTokens !== undefined && {
+                completionTokens: attempt.usage.completionTokens,
+            }),
+            ...(attempt.usage.totalTokens !== undefined && {
+                totalTokens: attempt.usage.totalTokens,
+            }),
+            ...(attempt.usage.reasoningTokens !== undefined && {
+                reasoningTokens: attempt.usage.reasoningTokens,
+            }),
+        },
+    }),
+    ...(attempt.cost !== undefined && {
+        cost: {
+            inputCostUsd: attempt.cost.inputCostUsd,
+            outputCostUsd: attempt.cost.outputCostUsd,
+            totalCostUsd: attempt.cost.totalCostUsd,
+        },
+    }),
+});
+
+const projectPublicResultReference = (
+    reference: WorkflowResultReference
+): WorkflowResultReference => ({
+    name: reference.name,
+    ...(reference.resultId !== undefined && { resultId: reference.resultId }),
+    ...(reference.optional !== undefined && { optional: reference.optional }),
+});
+
+const projectPublicResult = (
+    result: WorkflowResultRecord
+): WorkflowResultRecord => ({
+    resultId: result.resultId,
+    name: result.name,
+    status: result.status,
+    producedByStepId: result.producedByStepId,
+    producedByAttempt: result.producedByAttempt,
 });
 
 const projectPublicStep = (step: StepRecord): StepRecord => ({
@@ -238,7 +207,6 @@ const projectPublicStep = (step: StepRecord): StepRecord => ({
     ...(step.parentStepId !== undefined && { parentStepId: step.parentStepId }),
     attempt: step.attempt,
     stepKind: step.stepKind,
-    ...(step.reasonCode !== undefined && { reasonCode: step.reasonCode }),
     startedAt: step.startedAt,
     finishedAt: step.finishedAt,
     durationMs: step.durationMs,
@@ -271,6 +239,15 @@ const projectPublicStep = (step: StepRecord): StepRecord => ({
             outputCostUsd: step.cost.outputCostUsd,
             totalCostUsd: step.cost.totalCostUsd,
         },
+    }),
+    ...(step.inputRefs !== undefined && {
+        inputRefs: step.inputRefs.map(projectPublicResultReference),
+    }),
+    ...(step.resultRefs !== undefined && {
+        resultRefs: step.resultRefs.map(projectPublicResultReference),
+    }),
+    ...(step.attempts !== undefined && {
+        attempts: step.attempts.map(projectPublicAttempt),
     }),
     outcome: projectPublicOutcome(step.outcome),
 });
@@ -311,6 +288,9 @@ const projectPublicWorkflow = (workflow: WorkflowRecord): WorkflowRecord => ({
                 stoppedBeforeStepKind: workflow.limitStop.stoppedBeforeStepKind,
             }),
         },
+    }),
+    ...(workflow.results !== undefined && {
+        results: workflow.results.map(projectPublicResult),
     }),
     ...(workflow.userMemory !== undefined && {
         userMemory: {
@@ -371,7 +351,11 @@ const projectKnownMetadata = (
         unavailableFields.push('citations');
     } else {
         rawCitations.forEach((citation, index) => {
-            const parsedCitation = CitationSchema.safeParse(citation);
+            const parsedCitation = CitationSchema.safeParse(
+                isRecord(citation)
+                    ? { title: citation.title, url: citation.url }
+                    : citation
+            );
             if (parsedCitation.success) {
                 citations.push(parsedCitation.data);
             } else {

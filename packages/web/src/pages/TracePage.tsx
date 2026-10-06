@@ -22,20 +22,19 @@ import type {
     ResponseCandidate,
 } from '@footnote/contracts/web';
 import type {
-    ImageGenerationMetadata,
     WorkflowRecord,
     WorkflowStepKind,
 } from '@footnote/contracts/policy';
 import PublicPageLayout from '@components/PublicPageLayout';
 import MarkdownResponse from '@components/MarkdownResponse';
 import ResponseCarousel from '@components/ResponseCarousel';
+import TraceWorkflowDetails from '@components/TraceWorkflowDetails';
 import { api, isApiClientError } from '../utils/api';
 import { createScopedLogger } from '../utils/logger';
 import {
     buildRunOutcomeSummary,
     type RunOutcomeSummary,
 } from '../utils/traceOutcome';
-import { summarizeTraceAccounting } from '../utils/traceAccounting';
 import {
     getPresentationTraceSummary,
     sanitizePresentationForDisplay,
@@ -71,9 +70,7 @@ type DisplayTrace = {
     tradeoffCount: number | null;
     staleAfter: string | null;
     citationCount: number;
-    executionCount: number;
     citations: ServerMetadata['citations'];
-    execution: ServerMetadata['execution'];
     evaluator: ServerMetadata['evaluator'] | null;
     workflow: WorkflowRecord | null;
     presentation: ServerMetadata['presentation'] | null;
@@ -112,12 +109,12 @@ const formatPresentationRouting = (
 };
 
 const resolveTraceModelLabel = (traceData: ServerMetadata): string => {
-    // Prefer canonical generation event model first, then legacy mirrors.
-    const generationEventModel = traceData.execution
-        ?.filter((event) => event.kind === 'generation')
-        .at(-1)?.model;
+    const generationStepModel = traceData.workflow?.steps
+        .slice()
+        .reverse()
+        .find((step) => step.stepKind === 'generate')?.model;
     return (
-        generationEventModel ||
+        generationStepModel ||
         traceData.model ||
         traceData.modelVersion ||
         'Unspecified'
@@ -125,7 +122,7 @@ const resolveTraceModelLabel = (traceData: ServerMetadata): string => {
 };
 
 const resolveExecutionSummary = (traceData: ServerMetadata): string | null =>
-    formatExecutionTimelineSummary(traceData.execution, traceData.workflow);
+    formatExecutionTimelineSummary(undefined, traceData.workflow);
 
 const PROVENANCE_EXPLANATIONS: Record<string, string> = {
     Retrieved:
@@ -155,34 +152,22 @@ const getProvenanceExplanation = (provenance: string): string =>
     PROVENANCE_EXPLANATIONS[provenance] ??
     'This is the runtime provenance label recorded for this response.';
 
-const getModeSummary = (
-    traceData: ServerMetadata
-): Pick<SummarySignal, 'value' | 'explanation'> => {
-    if (traceData.workflow?.workflowName) {
-        return {
-            value: traceData.workflow.workflowName,
-            explanation:
-                'A workflow record exists for this response execution path.',
-        };
-    }
-
-    return {
-        value: 'Not recorded',
-        explanation:
-            'This trace does not include workflow execution summary metadata.',
-    };
-};
-
 const getGroundingEvidenceSummary = (
     traceData: ServerMetadata
-): Pick<SummarySignal, 'value' | 'explanation'> => {
-    const groundingEvidenceSummary = summarizeGroundingEvidence(traceData);
+): Pick<SummarySignal, 'value' | 'explanation'> & {
+    status: ReturnType<typeof summarizeGroundingEvidence>['status'];
+} => {
+    const groundingEvidenceSummary = summarizeGroundingEvidence({
+        citations: traceData.citations,
+        provenanceAssessment: traceData.provenanceAssessment,
+    });
     return {
         value:
             groundingEvidenceSummary.status === 'not_recorded'
                 ? 'Not recorded'
                 : groundingEvidenceSummary.label,
         explanation: groundingEvidenceSummary.explanation,
+        status: groundingEvidenceSummary.status,
     };
 };
 
@@ -228,7 +213,7 @@ const getWorkflowSummary = (
     );
 
     return {
-        value: `${workflow.workflowName} (${workflow.status})`,
+        value: workflow.runStatus ?? workflow.status,
         explanation: hasReviewStep
             ? 'Review-related workflow steps are present in this trace.'
             : 'Workflow metadata is present, but no explicit review step is recorded.',
@@ -244,9 +229,8 @@ const buildDisplayTrace = (traceData: ServerMetadata): DisplayTrace => ({
     tradeoffCount: traceData.tradeoffCount ?? null,
     staleAfter: traceData.staleAfter ?? null,
     citationCount: traceData.citations?.length ?? 0,
-    executionCount: traceData.execution?.length ?? 0,
-    citations: traceData.citations ?? [],
-    execution: traceData.execution ?? [],
+    citations:
+        traceData.citations?.map(({ title, url }) => ({ title, url })) ?? [],
     evaluator: traceData.evaluator ?? null,
     workflow: sanitizeWorkflowForDisplay(traceData.workflow),
     presentation: sanitizePresentationForDisplay(traceData.presentation),
@@ -328,171 +312,7 @@ const renderRunOutcomeSummary = (
                 <strong>Run outcome:</strong> {runOutcomeSummary.headline}
             </p>
             <p>{runOutcomeSummary.explanation}</p>
-            {runOutcomeSummary.reasonCode && (
-                <p>
-                    <strong>Recorded reason:</strong>{' '}
-                    <code>{runOutcomeSummary.reasonCode}</code>
-                </p>
-            )}
-            {runOutcomeSummary.secondaryReasonCode && (
-                <p>
-                    <strong>Additional signal:</strong>{' '}
-                    <code>{runOutcomeSummary.secondaryReasonCode}</code>
-                </p>
-            )}
         </>
-    );
-};
-
-const formatPromptForDisplay = (
-    value: string | null | undefined
-): string | null => {
-    const normalized = value?.trim();
-    return normalized && normalized.length > 0 ? normalized : null;
-};
-
-const renderImagePromptBlock = (
-    label: string,
-    value: string | null | undefined
-): JSX.Element => (
-    <div>
-        <dt>{label}</dt>
-        <dd>
-            {formatPromptForDisplay(value) ? (
-                <pre className="trace-prompt-block">
-                    {formatPromptForDisplay(value)}
-                </pre>
-            ) : (
-                'Unavailable'
-            )}
-        </dd>
-    </div>
-);
-
-const renderImageGenerationSection = (
-    imageGeneration: ImageGenerationMetadata
-): JSX.Element => {
-    const outputId = imageGeneration.result.outputResponseId ?? 'Unavailable';
-    const inputId = imageGeneration.linkage.followUpResponseId ?? 'None';
-    const usage = imageGeneration.usage;
-    const costs = imageGeneration.costs;
-    const hasUsage =
-        usage &&
-        Number.isFinite(usage.inputTokens) &&
-        Number.isFinite(usage.outputTokens) &&
-        Number.isFinite(usage.totalTokens) &&
-        Number.isFinite(usage.imageCount);
-    const hasCosts =
-        costs &&
-        Number.isFinite(costs.text) &&
-        Number.isFinite(costs.image) &&
-        Number.isFinite(costs.total) &&
-        Number.isFinite(costs.perImage);
-
-    return (
-        <article
-            className="card"
-            id="trace-image"
-            aria-label="Image generation details"
-        >
-            <h2>Image Generation Details</h2>
-            <p>
-                <strong>Summary:</strong> rendered with{' '}
-                <code>{imageGeneration.request.imageModel}</code> using{' '}
-                <code>{imageGeneration.request.textModel}</code>, style{' '}
-                <code>{imageGeneration.result.finalStyle}</code>, and output{' '}
-                <code>
-                    {imageGeneration.request.outputFormat.toUpperCase()}
-                </code>
-                .
-            </p>
-            <p>
-                <strong>Linkage:</strong> output <code>{outputId}</code> from
-                input <code>{inputId}</code>.
-            </p>
-            <p>
-                <strong>Generation time:</strong>{' '}
-                {imageGeneration.result.generationTimeMs}ms
-            </p>
-            <details className="trace-details" open>
-                <summary>Prompt provenance</summary>
-                <p className="trace-details__copy">
-                    <strong>Policy:</strong>{' '}
-                    {imageGeneration.prompts.policyTruncated
-                        ? 'Prompt input was policy-truncated before generation.'
-                        : 'No policy truncation recorded.'}{' '}
-                    Max input chars: {imageGeneration.prompts.maxInputChars}.
-                </p>
-                {/* TODO(auth-memory-governance): Gate prompt visibility with user opt-in auth/memory/governance controls before broad exposure. */}
-                <dl className="trace-details__list">
-                    {renderImagePromptBlock(
-                        'Original prompt',
-                        imageGeneration.prompts.original
-                    )}
-                    {renderImagePromptBlock(
-                        'Active prompt',
-                        imageGeneration.prompts.active
-                    )}
-                    {renderImagePromptBlock(
-                        'Revised prompt',
-                        imageGeneration.prompts.revised
-                    )}
-                </dl>
-            </details>
-            <details className="trace-details">
-                <summary>Generation settings and usage</summary>
-                <dl className="trace-details__list">
-                    <div>
-                        <dt>Quality</dt>
-                        <dd>{imageGeneration.request.quality}</dd>
-                    </div>
-                    <div>
-                        <dt>Size</dt>
-                        <dd>{imageGeneration.request.size}</dd>
-                    </div>
-                    <div>
-                        <dt>Aspect ratio</dt>
-                        <dd>{imageGeneration.request.aspectRatio}</dd>
-                    </div>
-                    <div>
-                        <dt>Background</dt>
-                        <dd>{imageGeneration.request.background}</dd>
-                    </div>
-                    <div>
-                        <dt>Style request</dt>
-                        <dd>{imageGeneration.request.style}</dd>
-                    </div>
-                    <div>
-                        <dt>Prompt adjustment</dt>
-                        <dd>
-                            {imageGeneration.request.allowPromptAdjustment
-                                ? 'Enabled'
-                                : 'Disabled'}
-                        </dd>
-                    </div>
-                    <div>
-                        <dt>Output compression</dt>
-                        <dd>{imageGeneration.request.outputCompression}%</dd>
-                    </div>
-                    <div>
-                        <dt>Usage</dt>
-                        <dd>
-                            {hasUsage
-                                ? `input ${usage.inputTokens}, output ${usage.outputTokens}, total ${usage.totalTokens}, images ${usage.imageCount}`
-                                : 'Unavailable'}
-                        </dd>
-                    </div>
-                    <div>
-                        <dt>Costs</dt>
-                        <dd>
-                            {hasCosts
-                                ? `text $${costs.text.toFixed(6)}, image $${costs.image.toFixed(6)}, total $${costs.total.toFixed(6)} (per image $${costs.perImage.toFixed(6)})`
-                                : 'Unavailable'}
-                        </dd>
-                    </div>
-                </dl>
-            </details>
-        </article>
     );
 };
 
@@ -648,7 +468,7 @@ const TracePage = (): JSX.Element => {
     }, [responseId]);
 
     const traceRunOutcomeSummary = traceData
-        ? buildRunOutcomeSummary(traceData)
+        ? buildRunOutcomeSummary({ workflow: traceData.workflow })
         : null;
 
     if (loadingState === 'loading') {
@@ -745,6 +565,11 @@ const TracePage = (): JSX.Element => {
                                     : 'N/A'}
                             </p>
                         </article>
+                        <TraceWorkflowDetails
+                            workflow={sanitizeWorkflowForDisplay(
+                                traceData.workflow
+                            )}
+                        />
                     </>
                 )}
             </TracePageShell>
@@ -794,7 +619,6 @@ const TracePage = (): JSX.Element => {
         traceData?.provenance || traceData?.reasoningEffort || 'Unknown';
     const model = resolveTraceModelLabel(traceData);
     const executionSummary = resolveExecutionSummary(traceData);
-    const traceAccounting = summarizeTraceAccounting(traceData.workflow);
     const sanitizedTraceData = buildDisplayTrace(traceData);
     const safetyLabel = rawSafetyTier ?? 'Unspecified';
     const chainHash =
@@ -811,7 +635,6 @@ const TracePage = (): JSX.Element => {
         ? new Date(traceData.timestamp).toLocaleString()
         : 'N/A';
     const provenanceExplanation = getProvenanceExplanation(provenance);
-    const modeSummary = getModeSummary(traceData);
     const groundingEvidenceSummary = getGroundingEvidenceSummary(traceData);
     const safetySummary = getSafetySummary(traceData, safetyLabel);
     const workflowSummary = getWorkflowSummary(traceData);
@@ -822,17 +645,11 @@ const TracePage = (): JSX.Element => {
         responseCandidates?.findIndex(
             (candidate) => candidate.state === 'selected'
         ) ?? -1;
+    const responseAuthorityUnavailable =
+        responseCandidates !== null &&
+        responseCandidates.length > 0 &&
+        selectedCandidateIndex < 0;
     const summarySignals: SummarySignal[] = [
-        {
-            label: 'Mode',
-            value: modeSummary.value,
-            explanation: modeSummary.explanation,
-        },
-        {
-            label: 'Sources',
-            value: groundingEvidenceSummary.value,
-            explanation: groundingEvidenceSummary.explanation,
-        },
         ...(userMemorySummary === undefined
             ? []
             : [
@@ -874,6 +691,14 @@ const TracePage = (): JSX.Element => {
                     you can inspect evidence next.
                 </p>
                 {renderRunOutcomeSummary(runOutcomeSummary)}
+                <p
+                    className={`trace-evidence-status${groundingEvidenceSummary.status === 'sources_available' ? '' : ' trace-evidence-status--caution'}`}
+                    role="status"
+                >
+                    <strong>Evidence status:</strong>{' '}
+                    {groundingEvidenceSummary.value}.{' '}
+                    {groundingEvidenceSummary.explanation}
+                </p>
                 <p>
                     <strong>Provenance label:</strong> {provenance}
                 </p>
@@ -917,6 +742,13 @@ const TracePage = (): JSX.Element => {
                         Response history is unavailable for this trace.
                     </p>
                 )}
+                {responseAuthorityUnavailable && (
+                    <p role="status">
+                        No response version is marked authoritative in this
+                        trace. The stored versions below are historical and are
+                        not presented as the delivered answer.
+                    </p>
+                )}
                 {responseCandidates !== null &&
                     responseCandidates.length === 0 && (
                         <p role="status">
@@ -930,7 +762,7 @@ const TracePage = (): JSX.Element => {
                             initialIndex={
                                 selectedCandidateIndex >= 0
                                     ? selectedCandidateIndex
-                                    : responseCandidates.length - 1
+                                    : 0
                             }
                             ariaLabel="Response versions"
                             getKey={(candidate) => candidate.id}
@@ -1003,9 +835,6 @@ const TracePage = (): JSX.Element => {
                     )}
             </article>
 
-            {traceData.imageGeneration &&
-                renderImageGenerationSection(traceData.imageGeneration)}
-
             <article
                 className="card trace-card"
                 id="trace-sources"
@@ -1047,11 +876,6 @@ const TracePage = (): JSX.Element => {
                                                 {citation.title || 'Untitled'}
                                             </span>
                                         )}
-                                        {citation.snippet && (
-                                            <p className="trace-citation-snippet">
-                                                {citation.snippet}
-                                            </p>
-                                        )}
                                     </li>
                                 );
                             }
@@ -1071,341 +895,329 @@ const TracePage = (): JSX.Element => {
                 </details>
             </article>
 
+            <TraceWorkflowDetails workflow={sanitizedTraceData.workflow} />
+
             <article
                 className="card trace-card"
                 id="trace-runtime"
                 aria-label="Runtime and workflow details"
             >
                 <h2>Runtime and Workflow Details</h2>
-                <p>
-                    <strong>Model:</strong> {model}
-                </p>
-                {executionSummary && (
+                <details className="trace-details">
+                    <summary>Recorded runtime details</summary>
                     <p>
-                        <strong>Execution summary:</strong> {executionSummary}
+                        <strong>Model:</strong>{' '}
+                        {model === 'Unspecified'
+                            ? 'Unavailable (not recorded)'
+                            : model}
                     </p>
-                )}
-                {traceData.totalDurationMs !== undefined && (
+                    <p>
+                        <strong>Execution summary:</strong>{' '}
+                        {executionSummary ?? 'Unavailable (not recorded)'}
+                    </p>
                     <p>
                         <strong>Total duration:</strong>{' '}
-                        {traceData.totalDurationMs}ms
+                        {traceData.totalDurationMs === undefined
+                            ? 'Unavailable (not recorded)'
+                            : `${traceData.totalDurationMs}ms`}
                     </p>
-                )}
-                {traceAccounting && traceAccounting.usageStepCount > 0 ? (
                     <p>
-                        <strong>Recorded token usage:</strong> input{' '}
-                        {traceAccounting.usage.promptTokens}, output{' '}
-                        {traceAccounting.usage.completionTokens}, total{' '}
-                        {traceAccounting.usage.totalTokens}
+                        <strong>Token usage:</strong>{' '}
+                        {traceData.usage
+                            ? `input ${traceData.usage.input_tokens}, output ${traceData.usage.output_tokens}, total ${traceData.usage.total_tokens}`
+                            : 'Unavailable (not recorded)'}
                     </p>
-                ) : (
-                    traceData.usage && (
-                        <p>
-                            <strong>Token usage:</strong> input{' '}
-                            {traceData.usage.input_tokens}, output{' '}
-                            {traceData.usage.output_tokens}, total{' '}
-                            {traceData.usage.total_tokens}
-                        </p>
-                    )
-                )}
-                {traceAccounting && (
                     <p>
-                        <strong>Recorded workflow cost:</strong>{' '}
-                        {traceAccounting.costStepCount > 0
-                            ? `$${traceAccounting.recordedCost.totalCostUsd.toFixed(6)}`
-                            : 'Unavailable'}
+                        <strong>Request-wide cost:</strong> Unavailable (not
+                        recorded; only step-level estimates are available when
+                        present)
                     </p>
-                )}
-                {traceAccounting && traceAccounting.modelStepCount > 0 && (
-                    <p>
-                        <strong>Cost coverage:</strong>{' '}
-                        {traceAccounting.costStepCount} of{' '}
-                        {traceAccounting.modelStepCount} model steps (
-                        {traceAccounting.costCoverage})
-                    </p>
-                )}
-                {presentation && (
-                    <>
-                        <p>
-                            <strong>Presentation:</strong>{' '}
-                            {getPresentationTraceSummary(presentation)}
-                        </p>
-                        <p>
-                            <strong>Requested draft:</strong>{' '}
-                            <code>
-                                {presentation.draftRequestedProvider ??
-                                    'Unavailable'}
-                                {' / '}
-                                {presentation.draftRequestedModel ??
-                                    'Unavailable'}
-                            </code>
-                            {' · '}
-                            <strong>Observed draft:</strong>{' '}
-                            <code>
-                                {presentation.draftObservedProvider ??
-                                    'Not observed'}
-                                {' / '}
-                                {presentation.draftObservedModel ??
-                                    'Not observed'}
-                            </code>{' '}
-                            · {presentation.personaId} persona ·{' '}
-                            {presentation.expressionStrength} expression ·{' '}
-                            {presentation.expressionSource} source
-                        </p>
-                        {presentation.flow === 'legacy_finalizer_audit' ? (
-                            <>
+                    {presentation && (
+                        <>
+                            <p>
+                                <strong>Presentation:</strong>{' '}
+                                {getPresentationTraceSummary(presentation)}
+                            </p>
+                            <p>
+                                <strong>Requested draft:</strong>{' '}
+                                <code>
+                                    {presentation.draftRequestedProvider ??
+                                        'Unavailable'}
+                                    {' / '}
+                                    {presentation.draftRequestedModel ??
+                                        'Unavailable'}
+                                </code>
+                                {' · '}
+                                <strong>Observed draft:</strong>{' '}
+                                <code>
+                                    {presentation.draftObservedProvider ??
+                                        'Not observed'}
+                                    {' / '}
+                                    {presentation.draftObservedModel ??
+                                        'Not observed'}
+                                </code>{' '}
+                                · {presentation.personaId} persona ·{' '}
+                                {presentation.expressionStrength} expression ·{' '}
+                                {presentation.expressionSource} source
+                            </p>
+                            {presentation.flow === 'legacy_finalizer_audit' ? (
+                                <>
+                                    <p>
+                                        <strong>Audit:</strong>{' '}
+                                        {presentation.auditModel ??
+                                            presentation.auditProfileId ??
+                                            'Not attempted'}{' '}
+                                        — {presentation.auditOutcome}
+                                    </p>
+                                    <p>
+                                        <strong>Draft retention:</strong>{' '}
+                                        {Math.round(
+                                            (presentation.styledDraftRetentionRatio ??
+                                                0) * 100
+                                        )}
+                                        % · TRACE caution:{' '}
+                                        {presentation.caution ?? 'Unavailable'}
+                                    </p>
+                                </>
+                            ) : (
                                 <p>
-                                    <strong>Audit:</strong>{' '}
-                                    {presentation.auditModel ??
-                                        presentation.auditProfileId ??
-                                        'Not attempted'}{' '}
-                                    — {presentation.auditOutcome}
-                                </p>
-                                <p>
-                                    <strong>Draft retention:</strong>{' '}
-                                    {Math.round(
-                                        (presentation.styledDraftRetentionRatio ??
-                                            0) * 100
-                                    )}
-                                    % · TRACE caution:{' '}
+                                    <strong>Expression:</strong> The
+                                    presentation candidate influenced expression
+                                    only; authoritative context and review own
+                                    the answer.
+                                    {' · '}TRACE caution:{' '}
                                     {presentation.caution ?? 'Unavailable'}
                                 </p>
-                            </>
-                        ) : (
-                            <p>
-                                <strong>Expression:</strong> The presentation
-                                candidate influenced expression only;
-                                authoritative context and review own the answer.
-                                {' · '}TRACE caution:{' '}
-                                {presentation.caution ?? 'Unavailable'}
-                            </p>
-                        )}
-                        <details className="trace-details">
-                            <summary>Presentation details</summary>
-                            <dl className="trace-details__list">
-                                <div>
-                                    <dt>Reason code</dt>
-                                    <dd>
-                                        <code>{presentation.reasonCode}</code>
-                                    </dd>
-                                </div>
-                                <div>
-                                    <dt>Profile</dt>
-                                    <dd>
-                                        <code>
-                                            {presentation.draftProfileId ??
+                            )}
+                            <details className="trace-details">
+                                <summary>Presentation details</summary>
+                                <dl className="trace-details__list">
+                                    <div>
+                                        <dt>Reason code</dt>
+                                        <dd>
+                                            <code>
+                                                {presentation.reasonCode}
+                                            </code>
+                                        </dd>
+                                    </div>
+                                    <div>
+                                        <dt>Profile</dt>
+                                        <dd>
+                                            <code>
+                                                {presentation.draftProfileId ??
+                                                    'Unavailable'}
+                                            </code>
+                                        </dd>
+                                    </div>
+                                    <div>
+                                        <dt>Requested provider</dt>
+                                        <dd>
+                                            {presentation.draftRequestedProvider ??
                                                 'Unavailable'}
-                                        </code>
-                                    </dd>
-                                </div>
-                                <div>
-                                    <dt>Requested provider</dt>
-                                    <dd>
-                                        {presentation.draftRequestedProvider ??
-                                            'Unavailable'}
-                                    </dd>
-                                </div>
-                                <div>
-                                    <dt>Requested model</dt>
-                                    <dd>
-                                        <code>
-                                            {presentation.draftRequestedModel ??
-                                                'Unavailable'}
-                                        </code>
-                                    </dd>
-                                </div>
-                                <div>
-                                    <dt>Observed draft provider</dt>
-                                    <dd>
-                                        {presentation.draftObservedProvider ??
-                                            'Not observed'}
-                                    </dd>
-                                </div>
-                                <div>
-                                    <dt>Observed draft model</dt>
-                                    <dd>
-                                        <code>
-                                            {presentation.draftObservedModel ??
+                                        </dd>
+                                    </div>
+                                    <div>
+                                        <dt>Requested model</dt>
+                                        <dd>
+                                            <code>
+                                                {presentation.draftRequestedModel ??
+                                                    'Unavailable'}
+                                            </code>
+                                        </dd>
+                                    </div>
+                                    <div>
+                                        <dt>Observed draft provider</dt>
+                                        <dd>
+                                            {presentation.draftObservedProvider ??
                                                 'Not observed'}
-                                        </code>
-                                    </dd>
-                                </div>
-                                <div>
-                                    <dt>Upstream routing</dt>
-                                    <dd>
-                                        {formatPresentationRouting(
-                                            presentation
-                                        )}
-                                    </dd>
-                                </div>
-                                <div>
-                                    <dt>Cost</dt>
-                                    <dd>
-                                        Backend estimate:{' '}
-                                        {formatRecordedUsd(
-                                            presentation.backendEstimatedCostUsd
-                                        )}
-                                        {' · '}Upstream reported:{' '}
-                                        {formatRecordedUsd(
-                                            presentation.upstreamReportedCostUsd
-                                        )}
-                                    </dd>
-                                </div>
-                                <div>
-                                    <dt>Duration</dt>
-                                    <dd>
-                                        {presentation.durationMs === undefined
-                                            ? 'Unavailable'
-                                            : `${presentation.durationMs}ms`}
-                                    </dd>
-                                </div>
-                                <div>
-                                    <dt>Attempts</dt>
-                                    <dd>
-                                        {presentation.flow ===
-                                        'legacy_finalizer_audit'
-                                            ? `Draft ${presentation.draftAttemptCount} · Finalizer ${presentation.finalizerAttemptCount} · Audit ${presentation.auditAttemptCount}`
-                                            : `Candidate ${presentation.draftAttemptCount}`}
-                                    </dd>
-                                </div>
-                                {presentation.flow ===
-                                    'legacy_finalizer_audit' && (
+                                        </dd>
+                                    </div>
                                     <div>
-                                        <dt>Audit profile</dt>
+                                        <dt>Observed draft model</dt>
                                         <dd>
                                             <code>
-                                                {presentation.auditProfileId ??
-                                                    'Unavailable'}
+                                                {presentation.draftObservedModel ??
+                                                    'Not observed'}
                                             </code>
                                         </dd>
                                     </div>
-                                )}
-                                <div>
-                                    <dt>Observed TRACE caution</dt>
-                                    <dd>
-                                        {presentation.caution ?? 'Unavailable'}
-                                    </dd>
-                                </div>
-                                <div>
-                                    <dt>Draft HMAC ID</dt>
-                                    <dd>
-                                        <code>
-                                            {presentation.draftHmacId ??
+                                    <div>
+                                        <dt>Upstream routing</dt>
+                                        <dd>
+                                            {formatPresentationRouting(
+                                                presentation
+                                            )}
+                                        </dd>
+                                    </div>
+                                    <div>
+                                        <dt>Cost</dt>
+                                        <dd>
+                                            Backend estimate:{' '}
+                                            {formatRecordedUsd(
+                                                presentation.backendEstimatedCostUsd
+                                            )}
+                                            {' · '}Upstream reported:{' '}
+                                            {formatRecordedUsd(
+                                                presentation.upstreamReportedCostUsd
+                                            )}
+                                        </dd>
+                                    </div>
+                                    <div>
+                                        <dt>Duration</dt>
+                                        <dd>
+                                            {presentation.durationMs ===
+                                            undefined
+                                                ? 'Unavailable'
+                                                : `${presentation.durationMs}ms`}
+                                        </dd>
+                                    </div>
+                                    <div>
+                                        <dt>Attempts</dt>
+                                        <dd>
+                                            {presentation.flow ===
+                                            'legacy_finalizer_audit'
+                                                ? `Draft ${presentation.draftAttemptCount} · Finalizer ${presentation.finalizerAttemptCount} · Audit ${presentation.auditAttemptCount}`
+                                                : `Candidate ${presentation.draftAttemptCount}`}
+                                        </dd>
+                                    </div>
+                                    {presentation.flow ===
+                                        'legacy_finalizer_audit' && (
+                                        <div>
+                                            <dt>Audit profile</dt>
+                                            <dd>
+                                                <code>
+                                                    {presentation.auditProfileId ??
+                                                        'Unavailable'}
+                                                </code>
+                                            </dd>
+                                        </div>
+                                    )}
+                                    <div>
+                                        <dt>Observed TRACE caution</dt>
+                                        <dd>
+                                            {presentation.caution ??
                                                 'Unavailable'}
-                                        </code>
-                                    </dd>
-                                </div>
-                                {presentation.flow ===
-                                    'legacy_finalizer_audit' && (
+                                        </dd>
+                                    </div>
                                     <div>
-                                        <dt>Final HMAC ID</dt>
+                                        <dt>Draft HMAC ID</dt>
                                         <dd>
                                             <code>
-                                                {presentation.finalHmacId ??
+                                                {presentation.draftHmacId ??
                                                     'Unavailable'}
                                             </code>
                                         </dd>
                                     </div>
-                                )}
-                            </dl>
-                        </details>
-                    </>
-                )}
-                <details className="trace-details">
-                    <summary>Safety and evaluator details</summary>
-                    <dl className="trace-details__list">
-                        <div>
-                            <dt>Safety Tier</dt>
-                            <dd>
-                                <span className="trace-safety-indicator">
-                                    <span
-                                        className={`trace-safety-indicator__dot trace-safety-indicator__dot--${safetyTierClass}`}
-                                    />
-                                    {safetyLabel}
-                                </span>
-                            </dd>
-                        </div>
-                        <div>
-                            <dt>Evaluator Mode</dt>
-                            <dd>
-                                {traceData.evaluator?.mode ?? 'Unavailable'}
-                            </dd>
-                        </div>
-                        <div>
-                            <dt>Evaluator Authority</dt>
-                            <dd>
-                                {traceData.evaluator?.authorityLevel ??
-                                    'Unavailable'}
-                            </dd>
-                        </div>
-                        <div>
-                            <dt>Safety Action</dt>
-                            <dd>
-                                {traceData.evaluator?.safetyDecision.action ??
-                                    'Unavailable'}
-                            </dd>
-                        </div>
-                    </dl>
-                </details>
-                <details className="trace-details">
-                    <summary>Technical fields</summary>
-                    <dl className="trace-details__list">
-                        <div>
-                            <dt>Tradeoff Count</dt>
-                            <dd>{tradeoffCount}</dd>
-                        </div>
-                        <div>
-                            <dt>Chain Hash</dt>
-                            <dd>
-                                <code>{chainHash ?? 'Unavailable'}</code>
-                            </dd>
-                        </div>
-                        <div>
-                            <dt>Stale After</dt>
-                            <dd>{staleAfter}</dd>
-                        </div>
-                        <div>
-                            <dt>Runtime Model Version</dt>
-                            <dd>
-                                {traceData.runtimeContext?.modelVersion ??
-                                    'Unavailable'}
-                            </dd>
-                        </div>
-                        <div>
-                            <dt>Conversation Snapshot</dt>
-                            <dd>
-                                {sanitizedTraceData.runtimeContext
-                                    ?.conversationSnapshot ?? 'Unavailable'}
-                            </dd>
-                        </div>
-                        <div>
-                            <dt>License Context</dt>
-                            <dd>
-                                <span>
-                                    See license strategy for reuse details.
-                                </span>{' '}
-                                <a
-                                    href="https://github.com/footnote-ai/footnote/blob/main/docs/LICENSE_STRATEGY.md"
-                                    target="_blank"
-                                    rel="noopener noreferrer"
-                                >
-                                    License strategy
-                                </a>
-                            </dd>
-                        </div>
-                    </dl>
+                                    {presentation.flow ===
+                                        'legacy_finalizer_audit' && (
+                                        <div>
+                                            <dt>Final HMAC ID</dt>
+                                            <dd>
+                                                <code>
+                                                    {presentation.finalHmacId ??
+                                                        'Unavailable'}
+                                                </code>
+                                            </dd>
+                                        </div>
+                                    )}
+                                </dl>
+                            </details>
+                        </>
+                    )}
+                    <details className="trace-details">
+                        <summary>Safety and evaluator details</summary>
+                        <dl className="trace-details__list">
+                            <div>
+                                <dt>Safety Tier</dt>
+                                <dd>
+                                    <span className="trace-safety-indicator">
+                                        <span
+                                            className={`trace-safety-indicator__dot trace-safety-indicator__dot--${safetyTierClass}`}
+                                        />
+                                        {safetyLabel}
+                                    </span>
+                                </dd>
+                            </div>
+                            <div>
+                                <dt>Evaluator Mode</dt>
+                                <dd>
+                                    {traceData.evaluator?.mode ?? 'Unavailable'}
+                                </dd>
+                            </div>
+                            <div>
+                                <dt>Evaluator Authority</dt>
+                                <dd>
+                                    {traceData.evaluator?.authorityLevel ??
+                                        'Unavailable'}
+                                </dd>
+                            </div>
+                            <div>
+                                <dt>Safety Action</dt>
+                                <dd>
+                                    {traceData.evaluator?.safetyDecision
+                                        .action ?? 'Unavailable'}
+                                </dd>
+                            </div>
+                        </dl>
+                    </details>
+                    <details className="trace-details">
+                        <summary>Technical fields</summary>
+                        <dl className="trace-details__list">
+                            <div>
+                                <dt>Tradeoff Count</dt>
+                                <dd>{tradeoffCount}</dd>
+                            </div>
+                            <div>
+                                <dt>Chain Hash</dt>
+                                <dd>
+                                    <code>{chainHash ?? 'Unavailable'}</code>
+                                </dd>
+                            </div>
+                            <div>
+                                <dt>Stale After</dt>
+                                <dd>{staleAfter}</dd>
+                            </div>
+                            <div>
+                                <dt>Runtime Model Version</dt>
+                                <dd>
+                                    {traceData.runtimeContext?.modelVersion ??
+                                        'Unavailable'}
+                                </dd>
+                            </div>
+                            <div>
+                                <dt>Conversation Snapshot</dt>
+                                <dd>
+                                    {sanitizedTraceData.runtimeContext
+                                        ?.conversationSnapshot ?? 'Unavailable'}
+                                </dd>
+                            </div>
+                            <div>
+                                <dt>License Context</dt>
+                                <dd>
+                                    <span>
+                                        See license strategy for reuse details.
+                                    </span>{' '}
+                                    <a
+                                        href="https://github.com/footnote-ai/footnote/blob/main/docs/LICENSE_STRATEGY.md"
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                    >
+                                        License strategy
+                                    </a>
+                                </dd>
+                            </div>
+                        </dl>
+                    </details>
                 </details>
             </article>
 
             <article
                 className="card trace-card"
                 id="trace-raw"
-                aria-label="Raw trace data"
+                aria-label="Public trace record"
             >
-                <h2>Raw Trace Data</h2>
-                <p>
-                    This is the redacted debug payload used to render the page.
-                </p>
+                <h2>Trace Record</h2>
+                <p>This limited public projection is not an operator report.</p>
                 <details className="trace-details">
                     <summary>Raw JSON</summary>
                     <pre className="trace-raw-json">

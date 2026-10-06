@@ -19,7 +19,11 @@ const baseTrace = {
     modelVersion: 'gpt-5.6-luna',
     staleAfter: new Date().toISOString(),
     citations: [
-        { title: 'valid', url: 'https://example.com/valid' },
+        {
+            title: 'valid',
+            url: 'https://example.com/valid',
+            snippet: 'retrieved body must stay private',
+        },
         { title: 'invalid', url: 'not-a-url' },
     ],
     provenanceAssessment: { methodId: 'not-valid' },
@@ -37,7 +41,9 @@ test('trace display projection keeps valid fields and names unavailable fields',
 
     assert.ok(projected);
     assert.equal(projected.displayIntegrity.status, 'partial');
-    assert.deepEqual(projected.citations, [baseTrace.citations[0]]);
+    assert.deepEqual(projected.citations, [
+        { title: 'valid', url: 'https://example.com/valid' },
+    ]);
     assert.deepEqual(projected.trace_target, { tightness: 3 });
     assert.deepEqual(projected.trace_final, { tightness: 4, attribution: 2 });
     assert.equal(projected.provenanceAssessment, undefined);
@@ -82,6 +88,14 @@ test('public trace display allowlists workflow receipts while omitting operator 
         {
             ...baseTrace,
             provenanceAssessment: undefined,
+            execution: [
+                {
+                    kind: 'tool',
+                    status: 'failed',
+                    toolName: 'private operator tool',
+                    reasonCode: 'tool_timeout',
+                },
+            ],
             trace_target: {},
             trace_final: {},
             workflow: {
@@ -110,7 +124,7 @@ test('public trace display allowlists workflow receipts while omitting operator 
                 userMemory: { includedItemCount: 1 },
                 results: [
                     {
-                        resultId: 'private-result',
+                        resultId: 'result-1',
                         name: 'answer',
                         status: 'produced',
                         producedByStepId: 'step-1',
@@ -126,21 +140,38 @@ test('public trace display allowlists workflow receipts while omitting operator 
                         finishedAt: new Date().toISOString(),
                         durationMs: 0,
                         model: 'model-public-summary',
+                        reasonCode: 'generation_runtime_error',
                         usage: { promptTokens: 12, completionTokens: 4 },
                         cost: {
                             inputCostUsd: 0.01,
                             outputCostUsd: 0.02,
                             totalCostUsd: 0.03,
                         },
-                        inputRefs: [{ name: 'private-input' }],
-                        resultRefs: [{ name: 'private-result' }],
+                        inputRefs: [{ name: 'question', resultId: 'input-1' }],
+                        resultRefs: [{ name: 'answer', resultId: 'result-1' }],
                         attempts: [
                             {
                                 attempt: 1,
-                                status: 'succeeded',
+                                status: 'failed',
                                 startedAt: new Date().toISOString(),
                                 finishedAt: new Date().toISOString(),
                                 durationMs: 0,
+                                requestedProvider: 'requested-provider',
+                                requestedModel: 'requested-model',
+                                actualProvider: 'actual-provider',
+                                actualModel: 'actual-model',
+                                reasonCode: 'provider_timeout',
+                                settings: {
+                                    requested: {
+                                        privatePrompt: 'private prompt setting',
+                                    },
+                                },
+                                usage: { promptTokens: 12 },
+                                cost: {
+                                    inputCostUsd: 0.01,
+                                    outputCostUsd: 0,
+                                    totalCostUsd: 0.01,
+                                },
                                 trustGraphTargets: [
                                     {
                                         targetId: 'private-target',
@@ -163,15 +194,17 @@ test('public trace display allowlists workflow receipts while omitting operator 
                             artifacts: ['private artifact body'],
                             signals: {
                                 action: 'message',
+                                contractType: 'fallback',
                                 routingChainAttemptCount: 1,
                                 routingChainAttemptsJson: '[]',
                                 privateSignal: 'private signal value',
                             },
-                            recommendations: ['Keep the answer concise.'],
+                            recommendations: ['private recommendation body'],
                         },
                     },
                 ],
             },
+            imageGeneration: { prompts: { original: 'private image prompt' } },
         },
         baseTrace.responseId
     );
@@ -180,8 +213,44 @@ test('public trace display allowlists workflow receipts while omitting operator 
     assert.equal(projected.workflow.startedAt, '2026-10-04T00:00:00.000Z');
     assert.equal(projected.workflow.finishedAt, '2026-10-04T00:00:00.025Z');
     assert.equal(projected.workflow.durationMs, 25);
-    assert.equal('results' in projected.workflow, false);
-    assert.equal('attempts' in projected.workflow.steps[0]!, false);
+    assert.deepEqual(projected.workflow.results, [
+        {
+            resultId: 'result-1',
+            name: 'answer',
+            status: 'produced',
+            producedByStepId: 'step-1',
+            producedByAttempt: 1,
+        },
+    ]);
+    assert.deepEqual(projected.workflow.steps[0]?.inputRefs, [
+        { name: 'question', resultId: 'input-1' },
+    ]);
+    assert.deepEqual(projected.workflow.steps[0]?.resultRefs, [
+        { name: 'answer', resultId: 'result-1' },
+    ]);
+    assert.equal(projected.workflow.steps[0]?.attempts?.[0]?.status, 'failed');
+    assert.equal(
+        projected.workflow.steps[0]?.attempts?.[0]?.actualProvider,
+        'actual-provider'
+    );
+    assert.equal(
+        projected.workflow.steps[0]?.attempts?.[0]?.actualModel,
+        'actual-model'
+    );
+    assert.equal(projected.workflow.steps[0]?.reasonCode, undefined);
+    assert.equal(
+        projected.workflow.steps[0]?.attempts?.[0]?.reasonCode,
+        undefined
+    );
+    assert.equal(
+        projected.workflow.steps[0]?.attempts?.[0]?.terminationReason,
+        undefined
+    );
+    assert.equal(projected.execution, undefined);
+    assert.equal(
+        projected.workflow.steps[0]?.attempts?.[0]?.settings,
+        undefined
+    );
     assert.equal(
         JSON.stringify(projected.workflow).includes('private-target'),
         false
@@ -190,9 +259,29 @@ test('public trace display allowlists workflow receipts while omitting operator 
         JSON.stringify(projected.workflow).includes('private-flow'),
         false
     );
-    assert.equal('inputRefs' in projected.workflow.steps[0]!, false);
-    assert.equal('resultRefs' in projected.workflow.steps[0]!, false);
-    assert.equal(projected.workflow.results, undefined);
+    assert.equal(
+        projected.workflow.steps[0]?.attempts?.[0]?.trustGraphTargets,
+        undefined
+    );
+    assert.equal(projected.imageGeneration, undefined);
+    assert.equal(
+        JSON.stringify(projected).includes('private image prompt'),
+        false
+    );
+    assert.equal(JSON.stringify(projected).includes('retrieved body'), false);
+    assert.equal(
+        JSON.stringify(projected).includes('private prompt setting'),
+        false
+    );
+    assert.equal(
+        JSON.stringify(projected).includes('private recommendation body'),
+        false
+    );
+    assert.equal(JSON.stringify(projected).includes('provider_timeout'), false);
+    assert.equal(
+        JSON.stringify(projected).includes('private operator tool'),
+        false
+    );
     assert.equal(projected.workflow.userMemory?.includedItemCount, 1);
     assert.equal(
         projected.workflow.effectiveLimits?.[0]?.key,
@@ -204,8 +293,7 @@ test('public trace display allowlists workflow receipts while omitting operator 
     });
     assert.deepEqual(projected.workflow.steps[0]?.outcome.signals, {
         action: 'message',
-        routingChainAttemptCount: 1,
-        routingChainAttemptsJson: '[]',
+        contractType: 'fallback',
     });
     assert.equal(
         'privateSignal' in (projected.workflow.steps[0]?.outcome.signals ?? {}),
@@ -257,5 +345,56 @@ test('public trace display omits malformed workflow with unknown fields', () => 
     assert.equal(projected.workflow, undefined);
     assert.ok(
         projected.displayIntegrity.unavailableFields.includes('workflow')
+    );
+});
+
+test('public trace display keeps valid planner fallback while withholding operator signals', () => {
+    const projected = projectTraceMetadataForDisplay(
+        {
+            ...baseTrace,
+            workflow: {
+                workflowId: 'workflow-planner',
+                workflowName: 'reviewed_chat',
+                status: 'completed',
+                terminationReason: 'goal_satisfied',
+                stepCount: 1,
+                maxSteps: 4,
+                maxDurationMs: 10_000,
+                steps: [
+                    {
+                        stepId: 'step-plan',
+                        attempt: 1,
+                        stepKind: 'plan',
+                        startedAt: '2026-10-04T00:00:00.000Z',
+                        finishedAt: '2026-10-04T00:00:00.001Z',
+                        durationMs: 1,
+                        outcome: {
+                            status: 'executed',
+                            summary: 'Planner selected the declared route.',
+                            signals: {
+                                action: 'message',
+                                contractType: 'fallback',
+                                purpose: 'chat_orchestrator_action_selection',
+                                applyOutcome: 'not_applied',
+                                selectedProfileId: 'private-profile',
+                                privateSignal: 'operator-only detail',
+                            },
+                        },
+                    },
+                ],
+            },
+        },
+        baseTrace.responseId
+    );
+
+    assert.ok(projected?.workflow);
+    assert.deepEqual(projected.workflow.steps[0]?.outcome.signals, {
+        action: 'message',
+        contractType: 'fallback',
+    });
+    assert.equal(JSON.stringify(projected).includes('private-profile'), false);
+    assert.equal(
+        JSON.stringify(projected).includes('operator-only detail'),
+        false
     );
 });
