@@ -14,7 +14,7 @@ of human review, see the [AI use disclosure](./ai-use-disclosure.md).
 
 ## Where Rules Live
 
-- `AGENTS.md` is the only canonical ruleset for agent behavior.
+- `AGENTS.md` is the main instruction file for agent behavior.
 - Tool-specific files (`cursor.rules`, `.codexrules`, `.github/copilot-instructions.md`) are thin adapters.
 
 If you see conflicting guidance, trust `AGENTS.md`.
@@ -74,7 +74,7 @@ Use this quick checklist before merge:
 
 - The change solves the intended problem.
 - The diff is scoped and understandable.
-- Public boundaries still look correct (`backend` remains the public boundary for web/discord-bot).
+- The backend still owns the public web and Discord API.
 - Backend remains the authority for LLM cost recording.
 - Logging, provenance, and fail-open behavior are preserved.
 - Provenance comments and license headers are preserved.

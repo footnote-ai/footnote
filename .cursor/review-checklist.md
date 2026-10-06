@@ -1,7 +1,7 @@
 # Review Checklist
 
 Use this as a short pre-PR gate.
-Canonical guidance lives in `AGENTS.md`.
+Follow `AGENTS.md` for repo instructions.
 
 ## Core Checks
 

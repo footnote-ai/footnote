@@ -1,11 +1,11 @@
 # Footnote Agent Contract
 
-This is the canonical ruleset for AI coding agents in this repo. Tool-specific files (for example `cursor.rules`, `.codexrules`, `.github/copilot-instructions.md`) are thin adapters.
+AI coding agents should follow this file. Tool-specific files such as `cursor.rules`, `.codexrules`, and `.github/copilot-instructions.md` point here or provide short adapters.
 
 ## Agent Skills
 
-The skills in `.agents/skills/` are authoritative for how agents work in this
-repo: grilling requirements, TDD, code review, triage, specs, and handoffs.
+The skills in `.agents/skills/` define repo workflows for grilling requirements,
+TDD, code review, triage, specs, and handoffs.
 Follow them unless they contradict a Non-Negotiable below.
 
 ### Issue tracker
@@ -20,7 +20,7 @@ Five triage state labels (`needs-triage`, `needs-info`, `ready-for-agent`, `read
 
 Single-context: shared glossary at `docs/ai/CONTEXT.md`, decisions in `docs/ai/adr/`. See `docs/agents/domain.md`.
 For DeepWiki structure or source-entrypoint changes, follow `docs/agents/deepwiki-maintenance.md`.
-For canonical documentation maintenance, follow `docs/agents/deepwiki-maintenance.md`.
+For documentation maintenance, follow `docs/agents/deepwiki-maintenance.md`.
 
 ## Project Stage
 
@@ -34,7 +34,7 @@ Footnote is a transparency- and provenance-focused AI framework.
 
 ## Package Roles
 
-- `packages/backend`: Public runtime and HTTP boundary for web and Discord.
+- `packages/backend`: Public runtime and HTTP API for web and Discord.
 - `packages/discord-bot`: Discord interface adapter.
 - `packages/web`: Browser interface.
 - `packages/contracts`: Serializable shared schemas, types, and pure contract helpers. Do not add application orchestration here.
@@ -52,7 +52,7 @@ Footnote is a transparency- and provenance-focused AI framework.
 - Use structured logging from `packages/discord-bot/src/utils/logger.ts`.
 - Keep fail-open behavior: if uncertain, do not block execution.
 - Preserve provenance comments and license headers.
-- Keep `packages/backend` as the public runtime boundary for web and discord-bot.
+- Keep the public web and Discord runtime in `packages/backend`.
 - Keep Footnote provenance/trace/auth/incident/review semantics outside framework-specific adapters.
 - Keep backend as the authority for LLM cost recording. Discord/web should display cost data already computed by backend or shared pricing helpers.
 - Keep public interfaces serializable.
@@ -126,8 +126,8 @@ the `tdd` and `code-review` skills; these commands always apply:
 
 ### Direct chat endpoint testing
 
-When the backend is reachable, test chat yourself through the canonical
-`POST /api/chat` endpoint. Run the command directly:
+When the backend is reachable, test chat directly through `POST /api/chat`.
+Run the command:
 
 ```powershell
 pnpm agent:chat -- --prompt "<prompt>" --surface discord --trigger-kind direct
@@ -158,6 +158,8 @@ Keep related requests on the same target when testing process-local state.
   conflict with core Footnote semantics, stop and ask before rewriting those
   semantics.
 - Do not invent runtime facts, command output, or test results.
+- Prefer ordinary names and comments. Use terms such as “canonical,” “authoritative,” “boundary,” “bounded,” “projection,” and “seam” only when they describe a real technical distinction.
+- Remove comments that mainly restate architecture already clear from a type or function name.
 - If a check was not run, say that clearly.
 
 ## Communication Style

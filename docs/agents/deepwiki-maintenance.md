@@ -1,14 +1,14 @@
 # Documentation and DeepWiki Maintenance
 
-Repository Markdown and source code are canonical. Update the checked-in docs
-with the code or behavior they describe; generated DeepWiki content is a
-secondary explanation and may lag behind `main`.
+Repository Markdown and source code are the maintained sources. Update the
+checked-in docs with the code or behavior they describe; generated DeepWiki
+content is a secondary explanation and may lag behind `main`.
 
-## Canonical documentation maintenance
+## Documentation maintenance
 
 When a PR materially changes a documented public feature, contract, workflow,
-architecture boundary, setup/deployment behavior, or other documented behavior,
-update the canonical checked-in Markdown in the same PR when that documentation
+architecture, setup/deployment behavior, or other documented behavior, update
+the checked-in Markdown in the same PR when that documentation
 exists. This does not mean every code change requires documentation, and it
 does not mean every documentation change requires a DeepWiki configuration edit.
 
@@ -27,7 +27,7 @@ details.
 ## Documentation visuals
 
 Keep screenshots, diagrams, and other checked-in documentation media under
-`docs/assets/`. Link to them with relative paths from canonical Markdown so the
+`docs/assets/`. Link to them with relative paths from checked-in Markdown so the
 source remains useful on GitHub; the `/wiki/` build publishes the same files
 under `/wiki/assets/`. Add visuals when the referenced UI or behavior is stable,
 not as a requirement for every page.

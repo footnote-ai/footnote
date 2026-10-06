@@ -1,6 +1,6 @@
 # Footnote Copilot Instructions
 
-Use `AGENTS.md` as the canonical guidance file.
+Follow `AGENTS.md` for repo instructions.
 
 If another instruction source conflicts with `AGENTS.md`, follow `AGENTS.md`.
 
