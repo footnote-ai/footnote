@@ -1,7 +1,7 @@
 /**
- * @description: Checks the operator execution report against fixed bounded backend projections.
+ * @description: Checks the execution report using a representative workflow record.
  * @footnote-scope: test
- * @footnote-module: OperatorExecutionReportBrowserCheck
+ * @footnote-module: ExecutionReportBrowserCheck
  * @footnote-risk: low - Mocked API responses isolate presentation from stored execution data.
  * @footnote-ethics: high - Coverage checks both private-field omission and denied access handling.
  */
@@ -164,7 +164,7 @@ const report = {
     },
 };
 
-test('renders the bounded Run, ordered Steps, Attempts, and outcome facts', async ({
+test('shows the run, steps, attempts, and recorded results', async ({
     page,
 }) => {
     await page.route('**/api/admin/executions/response-report-1', (route) =>
@@ -179,9 +179,7 @@ test('renders the bounded Run, ordered Steps, Attempts, and outcome facts', asyn
     await expect(
         page.getByRole('heading', { name: 'Execution report' })
     ).toBeVisible();
-    await expect(
-        page.getByText('Unavailable from this projection')
-    ).toBeVisible();
+    await expect(page.getByText('Record freshness')).toHaveCount(0);
     await expect(page.getByText('2000 ms')).toBeVisible();
     await expect(
         page.getByText('openai / gpt-test', { exact: true })
@@ -205,14 +203,14 @@ test('renders the bounded Run, ordered Steps, Attempts, and outcome facts', asyn
     await page.getByText('TrustGraph targets (1)').click();
     await expect(
         page.locator('details').filter({ hasText: 'TrustGraph targets' })
-    ).toContainText('3 returned / 2 retained');
+    ).toContainText('3 returned, 2 retained');
     await expect(
         page.locator('details').filter({ hasText: 'TrustGraph targets' })
-    ).toContainText('Footnote request boundary 37 ms');
+    ).toContainText('Request time: 37 ms');
     await expect(page.getByText('final-answer: produced')).toBeVisible();
 
     const stepHeadings = await page
-        .locator('.operator-execution__step h3')
+        .locator('.execution-report__step h3')
         .allTextContents();
     expect(stepHeadings).toEqual([
         'plan · executed',
@@ -231,17 +229,17 @@ test('shows backend access denial without rendering a record', async ({
         route.fulfill({
             status: 403,
             contentType: 'application/json',
-            body: JSON.stringify({ error: 'Operator access required' }),
+            body: JSON.stringify({ error: 'Admin access required' }),
         })
     );
 
     await page.goto('/admin/executions/forbidden');
 
-    await expect(
-        page.getByText(
-            'Operator access is required to view this execution record.'
-        )
-    ).toBeVisible();
+    const status = page.getByRole('status');
+    await expect(status).toBeVisible();
+    await expect(status).toContainText(
+        'Admin access is required to view this execution report.'
+    );
     await expect(page.getByText('PRIVATE_ANSWER_MUST_NOT_RENDER')).toHaveCount(
         0
     );

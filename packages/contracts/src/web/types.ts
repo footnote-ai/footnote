@@ -66,12 +66,12 @@ export type GetAuthSessionResponse =
       };
 
 /**
- * Bounded operator-only view of one canonical workflow execution.
+ * Response returned by the admin execution endpoint.
  *
  * @api.operationId: getOperatorExecution
  * @api.path: GET /api/admin/executions/{responseId}
  */
-export type GetOperatorExecutionResponse = {
+export type ExecutionReportResponse = {
     responseId: string;
     workflow: WorkflowRecord;
 };

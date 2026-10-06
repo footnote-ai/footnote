@@ -1621,12 +1621,12 @@ paths:
             x-codeRefs:
                 - packages/backend/src/handlers/operatorExecution.ts#createOperatorExecutionHandler
                 - packages/contracts/src/policy/types.ts#WorkflowRecord
-                - packages/contracts/src/web/types.ts#GetOperatorExecutionResponse
-                - packages/web/src/utils/api.ts#getOperatorExecution
-            summary: Read one bounded execution record as an account operator
+                - packages/contracts/src/web/types.ts#ExecutionReportResponse
+                - packages/web/src/utils/api.ts#getExecutionReport
+            summary: Get a workflow execution report
             description: >-
-                Returns the canonical workflow record for one response. Requires a live Footnote account session
-                authorized by the backend administrator policy. This route does not accept setup or service tokens.
+                Returns the workflow recorded for a response. Requires a signed-in account with admin access. Setup and
+                service tokens cannot use this endpoint.
             tags:
                 - Admin
             security:
@@ -1639,11 +1639,11 @@ paths:
                       type: string
             responses:
                 '200':
-                    description: Bounded canonical execution record.
+                    description: Workflow execution report.
                     content:
                         application/json:
                             schema:
-                                $ref: '#/components/schemas/OperatorExecutionRecord'
+                                $ref: '#/components/schemas/ExecutionReportResponse'
                 '400':
                     $ref: '#/components/responses/BadRequest'
                 '401':
@@ -5730,7 +5730,7 @@ components:
                       - expiresAt
                       - csrfToken
                   additionalProperties: false
-        OperatorExecutionRecord:
+        ExecutionReportResponse:
             type: object
             properties:
                 responseId:
@@ -5744,7 +5744,7 @@ components:
             x-codeRefs:
                 - packages/backend/src/handlers/operatorExecution.ts#createOperatorExecutionHandler
                 - packages/contracts/src/policy/types.ts#WorkflowRecord
-                - packages/contracts/src/web/types.ts#GetOperatorExecutionResponse
+                - packages/contracts/src/web/types.ts#ExecutionReportResponse
         RuntimeConfig:
             type: object
             properties:

@@ -1,9 +1,9 @@
 /**
- * @description: Shows bounded facts from one backend-owned workflow execution to operators.
+ * @description: Displays workflow details for a response.
  * @footnote-scope: web
- * @footnote-module: OperatorExecutionPage
+ * @footnote-module: ExecutionReportPage
  * @footnote-risk: high - Rendering mistakes could expose private execution details.
- * @footnote-ethics: high - The page presents governance-sensitive operational records.
+ * @footnote-ethics: high - The page shows private workflow details to admins.
  */
 
 import { useEffect, useState } from 'react';
@@ -14,7 +14,7 @@ import type {
 } from '@footnote/contracts/policy';
 import PublicPageLayout from '@components/PublicPageLayout';
 import { Link, useParams } from 'react-router-dom';
-import { getOperatorExecution, isApiClientError } from '../utils/api';
+import { getExecutionReport, isApiClientError } from '../utils/api';
 
 type ReadState =
     | { status: 'loading' }
@@ -25,6 +25,23 @@ type ReadState =
 
 type Cost = NonNullable<StepRecord['cost']>;
 type Usage = StepRecord['usage'] | WorkflowAttemptRecord['usage'] | undefined;
+type ReadFailure = Extract<
+    ReadState,
+    { status: 'not-found' | 'denied' | 'unavailable' }
+>['status'];
+
+const readFailureMessages: Record<ReadFailure, string> = {
+    denied: 'Admin access is required to view this execution report.',
+    'not-found': 'Execution record not found.',
+    unavailable: 'Execution record is unavailable.',
+};
+
+const readFailureStatus = (error: unknown): ReadFailure => {
+    if (!isApiClientError(error)) return 'unavailable';
+    if (error.status === 404) return 'not-found';
+    if (error.status === 401 || error.status === 403) return 'denied';
+    return 'unavailable';
+};
 
 const duration = (value: number | undefined): string =>
     value === undefined ? 'Unavailable' : `${value} ms`;
@@ -44,7 +61,7 @@ const costSummary = (cost: Cost | undefined): string =>
         : 'Unavailable';
 
 const Facts = ({ items }: { items: Array<[string, string | number]> }) => (
-    <dl className="operator-execution__facts">
+    <dl className="execution-report__facts">
         {items.map(([label, value]) => (
             <div key={label}>
                 <dt>{label}</dt>
@@ -69,18 +86,15 @@ const Attempt = ({ attempt }: { attempt: WorkflowAttemptRecord }) => (
                     'Requested',
                     `${attempt.requestedProvider ?? 'Unavailable'} / ${attempt.requestedModel ?? 'Unavailable'}`,
                 ],
-                ['Duration (derived)', duration(attempt.durationMs)],
+                ['Duration', duration(attempt.durationMs)],
                 [
                     'Reason',
                     attempt.reasonCode ??
                         attempt.terminationReason ??
                         'Unavailable',
                 ],
-                [
-                    'Usage (provider/runtime reported)',
-                    usageSummary(attempt.usage),
-                ],
-                ['Backend cost estimate', costSummary(attempt.cost)],
+                ['Token usage', usageSummary(attempt.usage)],
+                ['Estimated cost', costSummary(attempt.cost)],
             ]}
         />
         {attempt.routingAttempts?.length ? (
@@ -120,16 +134,16 @@ const Attempt = ({ attempt }: { attempt: WorkflowAttemptRecord }) => (
                         >
                             {target.targetId} · {target.flow}/
                             {target.collection} · {target.outcome} ·{' '}
-                            {target.reasonCode ?? 'No failure reason'} ·
-                            Footnote request boundary{' '}
+                            {target.reasonCode ?? 'No failure reason'} · Request
+                            time:{' '}
                             {duration(target.measurements?.requestDurationMs)} ·
-                            sources{' '}
+                            sources:{' '}
                             {target.measurements?.returnedSourceCount ??
                                 'Unavailable'}{' '}
-                            returned /{' '}
+                            returned,{' '}
                             {target.measurements?.retainedSourceCount ??
                                 'Unavailable'}{' '}
-                            retained · response{' '}
+                            retained · response size:{' '}
                             {target.measurements
                                 ?.responseCodeUnitsBeforeBounds ??
                                 'Unavailable'}{' '}
@@ -137,7 +151,7 @@ const Attempt = ({ attempt }: { attempt: WorkflowAttemptRecord }) => (
                             {target.measurements
                                 ?.responseCodeUnitsAfterBounds ??
                                 'Unavailable'}{' '}
-                            code units · source text{' '}
+                            code units · source text size:{' '}
                             {target.measurements
                                 ?.retainedSourceTextCodeUnitsBeforeTextBounds ??
                                 'Unavailable'}{' '}
@@ -145,7 +159,7 @@ const Attempt = ({ attempt }: { attempt: WorkflowAttemptRecord }) => (
                             {target.measurements
                                 ?.retainedSourceTextCodeUnitsAfterTextBounds ??
                                 'Unavailable'}{' '}
-                            code units before/after text bounds
+                            code units before/after text limit
                             {target.bounds?.sourcesTruncated
                                 ? ' · sources truncated'
                                 : ''}
@@ -155,6 +169,10 @@ const Attempt = ({ attempt }: { attempt: WorkflowAttemptRecord }) => (
                         </li>
                     ))}
                 </ul>
+                <p>
+                    Request time is measured by Footnote, not TrustGraph's
+                    internal processing time.
+                </p>
             </details>
         ) : null}
     </li>
@@ -168,13 +186,13 @@ const Step = ({
     results: NonNullable<WorkflowRecord['results']>;
 }) => (
     <li>
-        <article className="operator-execution__step">
+        <article className="execution-report__step">
             <h3>
                 {step.stepKind} · {step.outcome.status}
             </h3>
             <Facts
                 items={[
-                    ['Duration (derived)', duration(step.durationMs)],
+                    ['Duration', duration(step.durationMs)],
                     ['Reason', step.reasonCode ?? 'Unavailable'],
                     [
                         'Result',
@@ -190,15 +208,12 @@ const Step = ({
                                   .join(', ')
                             : 'Unavailable',
                     ],
-                    [
-                        'Usage (provider/runtime reported)',
-                        usageSummary(step.usage),
-                    ],
-                    ['Backend cost estimate', costSummary(step.cost)],
+                    ['Token usage', usageSummary(step.usage)],
+                    ['Estimated cost', costSummary(step.cost)],
                 ]}
             />
             {step.attempts?.length ? (
-                <ol className="operator-execution__attempts">
+                <ol className="execution-report__attempts">
                     {step.attempts.map((attempt) => (
                         <Attempt key={attempt.attempt} attempt={attempt} />
                     ))}
@@ -210,7 +225,7 @@ const Step = ({
     </li>
 );
 
-const OperatorExecutionPage = (): JSX.Element => {
+const ExecutionReportPage = (): JSX.Element => {
     const { responseId = '' } = useParams();
     const [readState, setReadState] = useState<ReadState>({
         status: 'loading',
@@ -219,7 +234,7 @@ const OperatorExecutionPage = (): JSX.Element => {
     useEffect(() => {
         const controller = new AbortController();
         setReadState({ status: 'loading' });
-        void getOperatorExecution(responseId, controller.signal)
+        void getExecutionReport(responseId, controller.signal)
             .then((record) => {
                 if (!controller.signal.aborted) {
                     setReadState({
@@ -231,16 +246,7 @@ const OperatorExecutionPage = (): JSX.Element => {
             })
             .catch((error: unknown) => {
                 if (controller.signal.aborted) return;
-                if (isApiClientError(error) && error.status === 404) {
-                    setReadState({ status: 'not-found' });
-                } else if (
-                    isApiClientError(error) &&
-                    (error.status === 401 || error.status === 403)
-                ) {
-                    setReadState({ status: 'denied' });
-                } else {
-                    setReadState({ status: 'unavailable' });
-                }
+                setReadState({ status: readFailureStatus(error) });
             });
         return (): void => controller.abort();
     }, [responseId]);
@@ -249,32 +255,28 @@ const OperatorExecutionPage = (): JSX.Element => {
         <PublicPageLayout>
             <main id="main-content" className="public-page__main">
                 <section
-                    className="operator-execution"
-                    aria-labelledby="operator-execution-title"
+                    className="execution-report"
+                    aria-labelledby="execution-report-title"
                 >
                     {readState.status === 'loading' ? (
-                        <p role="status">Loading execution record…</p>
+                        <output>Loading execution record…</output>
                     ) : readState.status !== 'ready' ? (
                         <>
-                            <h1 id="operator-execution-title">
+                            <h1 id="execution-report-title">
                                 Execution report
                             </h1>
-                            <p role="status">
-                                {readState.status === 'denied'
-                                    ? 'Operator access is required to view this execution record.'
-                                    : readState.status === 'not-found'
-                                      ? 'Execution record not found.'
-                                      : 'Execution record is unavailable.'}
-                            </p>
+                            <output>
+                                {readFailureMessages[readState.status]}
+                            </output>
                             <Link to="/admin" className="button-link">
                                 Admin settings
                             </Link>
                         </>
                     ) : (
                         <>
-                            <header className="operator-execution__header">
+                            <header className="execution-report__header">
                                 <div>
-                                    <h1 id="operator-execution-title">
+                                    <h1 id="execution-report-title">
                                         Execution report
                                     </h1>
                                     <p>
@@ -285,8 +287,8 @@ const OperatorExecutionPage = (): JSX.Element => {
                                     Admin settings
                                 </Link>
                             </header>
-                            <section aria-labelledby="operator-run-title">
-                                <h2 id="operator-run-title">Run</h2>
+                            <section aria-labelledby="execution-run-title">
+                                <h2 id="execution-run-title">Run</h2>
                                 <Facts
                                     items={[
                                         [
@@ -304,11 +306,7 @@ const OperatorExecutionPage = (): JSX.Element => {
                                                 readState.workflow.status,
                                         ],
                                         [
-                                            'Record freshness',
-                                            'Unavailable from this projection',
-                                        ],
-                                        [
-                                            'Duration (derived)',
+                                            'Duration',
                                             duration(
                                                 readState.workflow.durationMs
                                             ),
@@ -342,7 +340,7 @@ const OperatorExecutionPage = (): JSX.Element => {
                                     </p>
                                 )}
                                 {readState.workflow.effectiveLimits && (
-                                    <ul className="operator-execution__limits">
+                                    <ul className="execution-report__limits">
                                         {readState.workflow.effectiveLimits.map(
                                             (limit) => (
                                                 <li key={limit.key}>
@@ -356,9 +354,9 @@ const OperatorExecutionPage = (): JSX.Element => {
                                     </ul>
                                 )}
                             </section>
-                            <section aria-labelledby="operator-steps-title">
-                                <h2 id="operator-steps-title">Steps</h2>
-                                <ol className="operator-execution__steps">
+                            <section aria-labelledby="execution-steps-title">
+                                <h2 id="execution-steps-title">Steps</h2>
+                                <ol className="execution-report__steps">
                                     {readState.workflow.steps.map((step) => (
                                         <Step
                                             key={step.stepId}
@@ -378,4 +376,4 @@ const OperatorExecutionPage = (): JSX.Element => {
     );
 };
 
-export default OperatorExecutionPage;
+export default ExecutionReportPage;
