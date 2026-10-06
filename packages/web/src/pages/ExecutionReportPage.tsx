@@ -258,21 +258,24 @@ const ExecutionReportPage = (): JSX.Element => {
                     className="execution-report"
                     aria-labelledby="execution-report-title"
                 >
-                    {readState.status === 'loading' ? (
+                    {readState.status === 'loading' && (
                         <output>Loading execution record…</output>
-                    ) : readState.status !== 'ready' ? (
-                        <>
-                            <h1 id="execution-report-title">
-                                Execution report
-                            </h1>
-                            <output>
-                                {readFailureMessages[readState.status]}
-                            </output>
-                            <Link to="/admin" className="button-link">
-                                Admin settings
-                            </Link>
-                        </>
-                    ) : (
+                    )}
+                    {readState.status !== 'loading' &&
+                        readState.status !== 'ready' && (
+                            <>
+                                <h1 id="execution-report-title">
+                                    Execution report
+                                </h1>
+                                <output>
+                                    {readFailureMessages[readState.status]}
+                                </output>
+                                <Link to="/admin" className="button-link">
+                                    Admin settings
+                                </Link>
+                            </>
+                        )}
+                    {readState.status === 'ready' && (
                         <>
                             <header className="execution-report__header">
                                 <div>
