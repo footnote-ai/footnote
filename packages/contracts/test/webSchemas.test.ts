@@ -1069,6 +1069,42 @@ test('authored workflow cost contract includes the optional Zod completeness fie
     }
 });
 
+test('authored workflow report schemas include the shared result fields', () => {
+    const schemaBlock = (name: string): string => {
+        const block = authoredChatOpenApiSource.match(
+            new RegExp(
+                `^        ${name}:\\r?\\n([\\s\\S]*?)(?=^        [A-Z][A-Za-z0-9]+:|(?![\\s\\S]))`,
+                'm'
+            )
+        );
+        assert.ok(block, `${name} is present in the authored OpenAPI source`);
+        return block[1] ?? '';
+    };
+
+    const workflow = schemaBlock('WorkflowRecord');
+    const step = schemaBlock('WorkflowStepRecord');
+    for (const field of ['runId', 'runStatus', 'results']) {
+        assert.match(workflow, new RegExp(`^\\s{16}${field}:`, 'm'));
+    }
+    for (const field of ['inputRefs', 'resultRefs']) {
+        assert.match(step, new RegExp(`^\\s{16}${field}:`, 'm'));
+    }
+    assert.match(workflow, /runStatus:[\s\S]*?enum:[\s\S]*?- rejected/u);
+    assert.match(workflow, /results:[\s\S]*?WorkflowResultRecord/u);
+    assert.match(
+        step,
+        /(?:inputRefs|resultRefs):[\s\S]*?WorkflowResultReference/u
+    );
+
+    const references = schemaBlock('WorkflowResultReference');
+    const results = schemaBlock('WorkflowResultRecord');
+    assert.match(references, /required:[\s\S]*?- name/u);
+    assert.match(references, /additionalProperties: false/u);
+    assert.match(results, /status:[\s\S]*?enum:[\s\S]*?- unavailable/u);
+    assert.match(results, /required:[\s\S]*?- producedByAttempt/u);
+    assert.match(results, /additionalProperties: false/u);
+});
+
 test('workflow memory provenance permits only a bounded count', () => {
     const now = new Date().toISOString();
     const payload = createValidWorkflowMetadataPayload(now);

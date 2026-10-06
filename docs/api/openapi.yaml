@@ -1621,10 +1621,12 @@ paths:
             x-codeRefs:
                 - packages/backend/src/handlers/operatorExecution.ts#createOperatorExecutionHandler
                 - packages/contracts/src/policy/types.ts#WorkflowRecord
-            summary: Read one bounded execution record as an account operator
+                - packages/contracts/src/web/types.ts#ExecutionReportResponse
+                - packages/web/src/utils/api.ts#getExecutionReport
+            summary: Get a workflow execution report
             description: >-
-                Returns the canonical workflow record for one response. Requires a live Footnote account session
-                authorized by the backend administrator policy. This route does not accept setup or service tokens.
+                Returns the workflow recorded for a response. Requires a signed-in account with admin access. Setup and
+                service tokens cannot use this endpoint.
             tags:
                 - Admin
             security:
@@ -1637,11 +1639,11 @@ paths:
                       type: string
             responses:
                 '200':
-                    description: Bounded canonical execution record.
+                    description: Workflow execution report.
                     content:
                         application/json:
                             schema:
-                                $ref: '#/components/schemas/OperatorExecutionRecord'
+                                $ref: '#/components/schemas/ExecutionReportResponse'
                 '400':
                     $ref: '#/components/responses/BadRequest'
                 '401':
@@ -2807,6 +2809,14 @@ components:
                         - outputCostUsd
                         - totalCostUsd
                     additionalProperties: false
+                inputRefs:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/WorkflowResultReference'
+                resultRefs:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/WorkflowResultReference'
                 attempts:
                     type: array
                     description: 'Per-attempt execution facts, including bounded TrustGraph boundary measurements.'
@@ -3268,6 +3278,17 @@ components:
                 - packages/contracts/src/web/schemas.ts#WorkflowRecordSchema
             type: object
             properties:
+                runId:
+                    type: string
+                    minLength: 1
+                runStatus:
+                    type: string
+                    enum:
+                        - completed
+                        - degraded
+                        - limited
+                        - failed
+                        - rejected
                 startedAt:
                     type: string
                     format: date-time
@@ -3383,6 +3404,10 @@ components:
                     required:
                         - includedItemCount
                     additionalProperties: false
+                results:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/WorkflowResultRecord'
                 terminationReason:
                     type: string
                     enum:
@@ -3407,6 +3432,53 @@ components:
                 - maxDurationMs
                 - terminationReason
                 - steps
+            additionalProperties: false
+        WorkflowResultReference:
+            x-codeRefs:
+                - packages/contracts/src/policy/types.ts#WorkflowResultReference
+                - packages/contracts/src/web/schemas.ts#WorkflowResultReferenceSchema
+            type: object
+            properties:
+                resultId:
+                    type: string
+                    minLength: 1
+                name:
+                    type: string
+                    minLength: 1
+                optional:
+                    type: boolean
+            required:
+                - name
+            additionalProperties: false
+        WorkflowResultRecord:
+            x-codeRefs:
+                - packages/contracts/src/policy/types.ts#WorkflowResultRecord
+                - packages/contracts/src/web/schemas.ts#WorkflowResultRecordSchema
+            type: object
+            properties:
+                resultId:
+                    type: string
+                    minLength: 1
+                name:
+                    type: string
+                    minLength: 1
+                status:
+                    type: string
+                    enum:
+                        - produced
+                        - unavailable
+                producedByStepId:
+                    type: string
+                    minLength: 1
+                producedByAttempt:
+                    type: integer
+                    minimum: 1
+            required:
+                - resultId
+                - name
+                - status
+                - producedByStepId
+                - producedByAttempt
             additionalProperties: false
         ReviewRuntimeSummary:
             type: object
@@ -5728,7 +5800,7 @@ components:
                       - expiresAt
                       - csrfToken
                   additionalProperties: false
-        OperatorExecutionRecord:
+        ExecutionReportResponse:
             type: object
             properties:
                 responseId:
@@ -5742,6 +5814,7 @@ components:
             x-codeRefs:
                 - packages/backend/src/handlers/operatorExecution.ts#createOperatorExecutionHandler
                 - packages/contracts/src/policy/types.ts#WorkflowRecord
+                - packages/contracts/src/web/types.ts#ExecutionReportResponse
         RuntimeConfig:
             type: object
             properties:

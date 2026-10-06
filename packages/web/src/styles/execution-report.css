@@ -1,0 +1,103 @@
+/**
+ * @description: Styles the execution report within the page layout.
+ * @footnote-scope: web
+ * @footnote-module: ExecutionReportStyles
+ * @footnote-risk: low - Styles affect only the execution report surface.
+ * @footnote-ethics: low - Clear labels help admins read execution details.
+ */
+
+.execution-report {
+    display: grid;
+    gap: 2rem;
+    padding-block: clamp(2.5rem, 6vw, 5rem);
+}
+
+.execution-report__header,
+.execution-report__facts {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.75rem 1.5rem;
+}
+
+.execution-report__header {
+    align-items: end;
+    justify-content: space-between;
+    padding-bottom: 1.25rem;
+    border-bottom: 1px solid var(--public-rule);
+}
+
+.execution-report h1,
+.execution-report h2,
+.execution-report h3,
+.execution-report h4,
+.execution-report p {
+    margin: 0;
+}
+
+.execution-report output {
+    display: block;
+}
+
+.execution-report h1,
+.execution-report h2 {
+    font-family: var(--fn-font-display);
+}
+
+.execution-report h1 {
+    font-size: clamp(2rem, 4vw, 3rem);
+}
+
+.execution-report h2 {
+    margin-bottom: 0.8rem;
+    font-size: clamp(1.4rem, 2.5vw, 2rem);
+}
+
+.execution-report h3,
+.execution-report h4 {
+    margin-bottom: 0.75rem;
+}
+
+.execution-report__facts > div {
+    min-width: min(10rem, 100%);
+}
+
+.execution-report dt {
+    color: var(--public-muted);
+    font-size: 0.85rem;
+}
+
+.execution-report dd {
+    margin: 0.15rem 0 0;
+    overflow-wrap: anywhere;
+    font-family: var(--fn-font-mono);
+    font-size: 0.88rem;
+}
+
+.execution-report__steps,
+.execution-report__attempts {
+    display: grid;
+    gap: 0.9rem;
+    padding-left: 1.4rem;
+}
+
+.execution-report__step {
+    display: grid;
+    gap: 0.8rem;
+    padding: 1rem;
+    border: 1px solid var(--public-rule);
+    border-radius: 0.35rem;
+    background: var(--public-paper-raised);
+}
+
+.execution-report details summary {
+    cursor: pointer;
+}
+
+.execution-report details ol,
+.execution-report details ul,
+.execution-report__limits {
+    display: grid;
+    gap: 0.4rem;
+    margin-block: 0.6rem 0;
+    padding-left: 1.25rem;
+}

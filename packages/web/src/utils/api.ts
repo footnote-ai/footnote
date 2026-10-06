@@ -19,6 +19,7 @@ import type {
     GetRuntimeConfigResponse,
     GetTraceResponse,
     GetTraceStaleResponse,
+    ExecutionReportResponse,
     GetResponseVersionsResponse,
     GetResponseVersionsStaleResponse,
     PostChatRequest,
@@ -232,5 +233,21 @@ export const getResponseVersions = (
         GetResponseVersionsResponse | GetResponseVersionsStaleResponse
     >
 > => api.getResponseVersions(responseId, signal);
+
+/** Loads the execution report for a response. */
+/**
+ * @api.operationId: getOperatorExecution
+ * @api.path: GET /api/admin/executions/{responseId}
+ */
+export const getExecutionReport = async (
+    responseId: string,
+    signal?: AbortSignal
+): Promise<ExecutionReportResponse> => {
+    const response = await api.requestJson<ExecutionReportResponse>(
+        `/api/admin/executions/${encodeURIComponent(responseId)}`,
+        { method: 'GET', signal, cache: 'no-store' }
+    );
+    return response.data;
+};
 
 export type { ApiClientError, ApiErrorResponse };
