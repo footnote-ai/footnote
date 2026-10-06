@@ -2317,3 +2317,54 @@ test('default executor patches named Ollama think requests and normalized result
         globalThis.fetch = originalFetch;
     }
 });
+
+test('default executor does not fall back to localhost for an invalid configured Ollama URL', async () => {
+    const originalFetch = globalThis.fetch;
+    const requestedUrls: string[] = [];
+    globalThis.fetch = async (input) => {
+        requestedUrls.push(String(input));
+        return new Response(
+            JSON.stringify({
+                model: 'qwen3:8b',
+                message: { role: 'assistant', content: 'visible answer' },
+                done: true,
+            }),
+            { headers: { 'content-type': 'application/json' } }
+        );
+    };
+
+    try {
+        await assert.rejects(async () => {
+            const executor = createDefaultVoltAgentExecutor({
+                model: 'ollama/qwen3:8b',
+                ollama: {
+                    provider: 'ollama',
+                    baseUrl: 'http://[invalid',
+                    localInferenceEnabled: true,
+                    think: 'high',
+                },
+                agentFactory: ({ model }) => ({
+                    async generateText(): Promise<AgentGenerateTextResult> {
+                        return (await generateText({
+                            model: model as Parameters<
+                                typeof generateText
+                            >[0]['model'],
+                            prompt: 'Answer briefly.',
+                        })) as unknown as AgentGenerateTextResult;
+                    },
+                }),
+            });
+            await executor.generateText(
+                [{ role: 'user', content: 'Answer briefly.' }],
+                {}
+            );
+        });
+
+        assert.equal(
+            requestedUrls.some((url) => url.includes('127.0.0.1')),
+            false
+        );
+    } finally {
+        globalThis.fetch = originalFetch;
+    }
+});

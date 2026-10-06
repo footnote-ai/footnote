@@ -333,18 +333,23 @@ const isLocalOllamaHost = (hostname: string): boolean =>
     hostname === '::1' ||
     hostname === 'host.docker.internal';
 
+const normalizeUrlPath = (pathname: string): string => {
+    const segments = pathname.split('/').filter(Boolean);
+    return segments.length === 0 ? '' : `/${segments.join('/')}`;
+};
+
 const normalizeOllamaCloudBaseUrl = (baseUrl: string): string | undefined => {
     try {
         const parsed = new URL(baseUrl);
-        const normalizedPath = parsed.pathname.replace(/\/+$/, '');
+        const normalizedPath = normalizeUrlPath(parsed.pathname);
         if (normalizedPath === '/api') {
             parsed.pathname = '/v1';
         } else if (!normalizedPath.endsWith('/v1')) {
-            parsed.pathname = `${normalizedPath}/v1`.replace(/\/{2,}/g, '/');
+            parsed.pathname = `${normalizedPath}/v1`;
         } else {
             parsed.pathname = normalizedPath;
         }
-        return parsed.toString().replace(/\/+$/, '');
+        return parsed.toString();
     } catch {
         return undefined;
     }
@@ -353,13 +358,13 @@ const normalizeOllamaCloudBaseUrl = (baseUrl: string): string | undefined => {
 const normalizeOllamaNativeBaseUrl = (baseUrl: string): string | undefined => {
     try {
         const parsed = new URL(baseUrl);
-        const normalizedPath = parsed.pathname.replace(/\/+$/, '');
+        const normalizedPath = normalizeUrlPath(parsed.pathname);
         if (!normalizedPath.endsWith('/api')) {
-            parsed.pathname = `${normalizedPath}/api`.replace(/\/{2,}/g, '/');
+            parsed.pathname = `${normalizedPath}/api`;
         } else {
             parsed.pathname = normalizedPath;
         }
-        return parsed.toString().replace(/\/+$/, '');
+        return parsed.toString();
     } catch {
         return undefined;
     }
@@ -842,14 +847,18 @@ const resolveOllamaThinkControl = (
 
     const supportedValues =
         request.capabilities?.supportedOllamaThinkingControls;
-    const reasonCode =
-        provider !== 'ollama'
-            ? 'provider_not_supported'
-            : supportedValues === undefined
-              ? 'capability_unknown'
-              : supportedValues.includes(requested)
-                ? undefined
-                : 'capability_unsupported';
+    let reasonCode:
+        | 'provider_not_supported'
+        | 'capability_unknown'
+        | 'capability_unsupported'
+        | undefined;
+    if (provider !== 'ollama') {
+        reasonCode = 'provider_not_supported';
+    } else if (supportedValues === undefined) {
+        reasonCode = 'capability_unknown';
+    } else if (!supportedValues.includes(requested)) {
+        reasonCode = 'capability_unsupported';
+    }
     const setting = 'ollama.think';
     return {
         ...(reasonCode === undefined && { applied: requested }),
@@ -909,41 +918,44 @@ export const resolveEffectiveVoltAgentCapabilities = (input: {
         runtime: resolveVoltAgentRuntimeCapabilityFacts(input.provider),
     });
 
+const buildOpenRouterProviderOptions = (
+    request: GenerationRequest
+): VoltAgentProviderOptions | undefined => {
+    const reasoningEffort =
+        request.reasoningEffort !== undefined &&
+        (request.capabilities?.supportedReasoningEfforts === undefined ||
+            request.capabilities.supportedReasoningEfforts.includes(
+                request.reasoningEffort
+            ))
+            ? request.reasoningEffort
+            : undefined;
+    const routing = toOpenRouterProviderPayload(
+        request.providerRouting?.openrouter,
+        request.structuredOutput !== undefined || reasoningEffort !== undefined
+    );
+    const openRouterHints = {
+        ...(routing !== undefined && { provider: routing }),
+        ...(reasoningEffort !== undefined && {
+            reasoning: { effort: reasoningEffort },
+        }),
+        ...(request.structuredOutput !== undefined && {
+            strictJsonSchema: true,
+        }),
+    };
+    if (Object.keys(openRouterHints).length === 0) return undefined;
+    return {
+        providerHints: {
+            openrouter: openRouterHints,
+        },
+    };
+};
+
 const buildVoltAgentProviderOptions = (
     request: GenerationRequest,
     provider: string
 ): VoltAgentProviderOptions | undefined => {
     if (provider === 'openrouter') {
-        const reasoningEffort =
-            request.reasoningEffort !== undefined &&
-            (request.capabilities?.supportedReasoningEfforts === undefined ||
-                request.capabilities.supportedReasoningEfforts.includes(
-                    request.reasoningEffort
-                ))
-                ? request.reasoningEffort
-                : undefined;
-        const routing = toOpenRouterProviderPayload(
-            request.providerRouting?.openrouter,
-            request.structuredOutput !== undefined ||
-                reasoningEffort !== undefined
-        );
-        const openRouterHints = {
-            ...(routing !== undefined && { provider: routing }),
-            ...(reasoningEffort !== undefined && {
-                reasoning: { effort: reasoningEffort },
-            }),
-            ...(request.structuredOutput !== undefined && {
-                strictJsonSchema: true,
-            }),
-        };
-        if (Object.keys(openRouterHints).length === 0) {
-            return undefined;
-        }
-        return {
-            providerHints: {
-                openrouter: openRouterHints,
-            },
-        };
+        return buildOpenRouterProviderOptions(request);
     }
     if (provider === 'ollama') {
         const think = resolveOllamaThinkControl(request, provider).applied;
@@ -1376,12 +1388,16 @@ const normalizeVoltAgentResult = (
     const providerObservations = ollamaProvider
         ? extractOllamaRuntimeObservations(result.response?.body)
         : undefined;
+    const responseReasoningTokens = isNonNegativeSafeInteger(
+        outputTokenDetails?.reasoning_tokens
+    )
+        ? outputTokenDetails.reasoning_tokens
+        : undefined;
+    const providerReasoningTokens =
+        runtimeUsage?.reasoningTokens ?? responseReasoningTokens;
     const reasoningTokens = ollamaProvider
         ? undefined
-        : (runtimeUsage?.reasoningTokens ??
-          (isNonNegativeSafeInteger(outputTokenDetails?.reasoning_tokens)
-              ? outputTokenDetails.reasoning_tokens
-              : undefined));
+        : providerReasoningTokens;
     const promptTokens =
         runtimeUsage?.promptTokens ??
         (isNonNegativeSafeInteger(responseUsage?.input_tokens)
@@ -1539,9 +1555,12 @@ const createDefaultVoltAgentExecutor = ({
                       ),
               })(model.slice('openrouter/'.length))
             : undefined;
-    const normalizedOllamaBaseUrl = ollama?.baseUrl
-        ? normalizeOllamaNativeBaseUrl(ollama.baseUrl)
-        : undefined;
+    const configuredOllamaBaseUrl = ollama?.baseUrl;
+    const normalizedOllamaBaseUrl =
+        configuredOllamaBaseUrl === undefined
+            ? undefined
+            : (normalizeOllamaNativeBaseUrl(configuredOllamaBaseUrl) ??
+              configuredOllamaBaseUrl);
     const ollamaModel =
         getVoltAgentProvider(model) === 'ollama' &&
         typeof ollama?.think === 'string'
