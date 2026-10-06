@@ -232,13 +232,17 @@ test('settles embed height after a successful turn, provenance, and failure', as
         .toBeGreaterThan(pendingHeight);
 
     const firstFootnote = embed.locator('.canonical-response-footnote');
+    const answerHeight = await latestEmbedHeight(page);
     await firstFootnote
         .getByRole('button', { name: 'Sources', exact: true })
         .click();
     await expect(
         firstFootnote.getByRole('region', { name: 'Sources' })
     ).toBeVisible();
-    const provenanceHeight = Math.max(...(await readEmbedHeights(page)));
+    await expect
+        .poll(() => latestEmbedHeight(page))
+        .toBeGreaterThan(answerHeight);
+    const provenanceHeight = await latestEmbedHeight(page);
     const sourceDrawerBottom = await firstFootnote
         .getByRole('region', { name: 'Sources' })
         .evaluate((drawer) => drawer.getBoundingClientRect().bottom);
