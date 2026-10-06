@@ -100,7 +100,10 @@ export const resolveSettingsPath = (value: string | undefined): string =>
     value?.trim() || DEFAULT_SETTINGS_PATH;
 
 const validateKebabCaseKeys = (value: unknown, pointer = 'root'): void => {
-    if (OPTIONAL_WORKFLOW_OVERRIDE_PATHS.has(pointer)) return;
+    const settingsPath = pointer.startsWith('root.')
+        ? pointer.slice('root.'.length)
+        : pointer;
+    if (OPTIONAL_WORKFLOW_OVERRIDE_PATHS.has(settingsPath)) return;
     if (JSON_SETTINGS_POINTERS.has(pointer)) {
         return;
     }

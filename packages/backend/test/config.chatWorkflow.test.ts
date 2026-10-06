@@ -9,6 +9,60 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { buildServiceSections } from '../src/config/sections/services.js';
 
+const workflowLimitOverrides = [
+    {
+        envKey: 'CHAT_WORKFLOW_MAX_WORKFLOW_STEPS_OVERRIDE',
+        settingKey: 'maxWorkflowStepsOverride',
+        maximum: 12,
+        zeroAllowed: false,
+        malformed: '12steps',
+    },
+    {
+        envKey: 'CHAT_WORKFLOW_MAX_TOOL_CALLS_OVERRIDE',
+        settingKey: 'maxToolCallsOverride',
+        maximum: 5,
+        zeroAllowed: true,
+        malformed: '-1',
+    },
+    {
+        envKey: 'CHAT_WORKFLOW_MAX_DELIBERATION_CALLS_OVERRIDE',
+        settingKey: 'maxDeliberationCallsOverride',
+        maximum: 6,
+        zeroAllowed: true,
+        malformed: '6.5',
+    },
+    {
+        envKey: 'CHAT_WORKFLOW_MAX_TOKENS_TOTAL_OVERRIDE',
+        settingKey: 'maxTokensTotalOverride',
+        maximum: 512_000,
+        zeroAllowed: false,
+        malformed: '512000tokens',
+    },
+    {
+        envKey: 'CHAT_WORKFLOW_MAX_DURATION_MS_OVERRIDE',
+        settingKey: 'maxDurationMsOverride',
+        maximum: 300_000,
+        zeroAllowed: false,
+        malformed: 'Infinity',
+    },
+] as const;
+
+type WorkflowLimitOverride = (typeof workflowLimitOverrides)[number];
+
+const runWorkflowLimitOverrides = (
+    valueFor: (override: WorkflowLimitOverride) => string
+) => {
+    const warnings: string[] = [];
+    const env: NodeJS.ProcessEnv = {};
+    for (const override of workflowLimitOverrides) {
+        env[override.envKey] = valueFor(override);
+    }
+    const { chatWorkflow } = buildServiceSections(env, (warning) =>
+        warnings.push(warning)
+    );
+    return { chatWorkflow, warnings };
+};
+
 test('trusted agent token is read from AGENT_API_TOKEN', () => {
     const { agent } = buildServiceSections(
         { AGENT_API_TOKEN: '  agent-secret  ' },
@@ -53,81 +107,50 @@ test('presentation settings accept an explicit deployment override', () => {
 });
 
 test('workflow allowance overrides accept their finite maximums', () => {
-    const { chatWorkflow } = buildServiceSections(
-        {
-            CHAT_WORKFLOW_MAX_WORKFLOW_STEPS_OVERRIDE: '12',
-            CHAT_WORKFLOW_MAX_TOOL_CALLS_OVERRIDE: '5',
-            CHAT_WORKFLOW_MAX_DELIBERATION_CALLS_OVERRIDE: '6',
-            CHAT_WORKFLOW_MAX_TOKENS_TOTAL_OVERRIDE: '512000',
-            CHAT_WORKFLOW_MAX_DURATION_MS_OVERRIDE: '300000',
-        },
-        () => undefined
+    const { chatWorkflow, warnings } = runWorkflowLimitOverrides((override) =>
+        String(override.maximum)
     );
 
-    assert.equal(chatWorkflow.maxWorkflowStepsOverride, 12);
-    assert.equal(chatWorkflow.maxToolCallsOverride, 5);
-    assert.equal(chatWorkflow.maxDeliberationCallsOverride, 6);
-    assert.equal(chatWorkflow.maxTokensTotalOverride, 512_000);
-    assert.equal(chatWorkflow.maxDurationMsOverride, 300_000);
+    for (const override of workflowLimitOverrides) {
+        assert.equal(chatWorkflow[override.settingKey], override.maximum);
+    }
+    assert.equal(warnings.length, 0);
 });
 
 test('workflow allowance overrides accept zero only for tools and deliberation', () => {
-    const { chatWorkflow } = buildServiceSections(
-        {
-            CHAT_WORKFLOW_MAX_TOOL_CALLS_OVERRIDE: '0',
-            CHAT_WORKFLOW_MAX_DELIBERATION_CALLS_OVERRIDE: '0',
-            CHAT_WORKFLOW_MAX_WORKFLOW_STEPS_OVERRIDE: '0',
-            CHAT_WORKFLOW_MAX_TOKENS_TOTAL_OVERRIDE: '0',
-            CHAT_WORKFLOW_MAX_DURATION_MS_OVERRIDE: '0',
-        },
-        () => undefined
-    );
+    const { chatWorkflow, warnings } = runWorkflowLimitOverrides(() => '0');
 
-    assert.equal(chatWorkflow.maxToolCallsOverride, 0);
-    assert.equal(chatWorkflow.maxDeliberationCallsOverride, 0);
-    assert.equal(chatWorkflow.maxWorkflowStepsOverride, undefined);
-    assert.equal(chatWorkflow.maxTokensTotalOverride, undefined);
-    assert.equal(chatWorkflow.maxDurationMsOverride, undefined);
+    for (const override of workflowLimitOverrides) {
+        assert.equal(
+            chatWorkflow[override.settingKey],
+            override.zeroAllowed ? 0 : undefined
+        );
+    }
+    assert.equal(
+        warnings.length,
+        workflowLimitOverrides.filter((override) => !override.zeroAllowed)
+            .length
+    );
 });
 
 test('workflow allowance overrides reject values beyond their finite caps', () => {
-    const warnings: string[] = [];
-    const { chatWorkflow } = buildServiceSections(
-        {
-            CHAT_WORKFLOW_MAX_WORKFLOW_STEPS_OVERRIDE: '13',
-            CHAT_WORKFLOW_MAX_TOOL_CALLS_OVERRIDE: '6',
-            CHAT_WORKFLOW_MAX_DELIBERATION_CALLS_OVERRIDE: '7',
-            CHAT_WORKFLOW_MAX_TOKENS_TOTAL_OVERRIDE: '512001',
-            CHAT_WORKFLOW_MAX_DURATION_MS_OVERRIDE: '300001',
-        },
-        (warning) => warnings.push(warning)
+    const { chatWorkflow, warnings } = runWorkflowLimitOverrides((override) =>
+        String(override.maximum + 1)
     );
 
-    assert.equal(chatWorkflow.maxWorkflowStepsOverride, undefined);
-    assert.equal(chatWorkflow.maxToolCallsOverride, undefined);
-    assert.equal(chatWorkflow.maxDeliberationCallsOverride, undefined);
-    assert.equal(chatWorkflow.maxTokensTotalOverride, undefined);
-    assert.equal(chatWorkflow.maxDurationMsOverride, undefined);
-    assert.equal(warnings.length, 5);
+    for (const override of workflowLimitOverrides) {
+        assert.equal(chatWorkflow[override.settingKey], undefined);
+    }
+    assert.equal(warnings.length, workflowLimitOverrides.length);
 });
 
 test('workflow allowance overrides reject malformed values and fail open', () => {
-    const warnings: string[] = [];
-    const { chatWorkflow } = buildServiceSections(
-        {
-            CHAT_WORKFLOW_MAX_WORKFLOW_STEPS_OVERRIDE: '12steps',
-            CHAT_WORKFLOW_MAX_TOOL_CALLS_OVERRIDE: '-1',
-            CHAT_WORKFLOW_MAX_DELIBERATION_CALLS_OVERRIDE: '6.5',
-            CHAT_WORKFLOW_MAX_TOKENS_TOTAL_OVERRIDE: '512000tokens',
-            CHAT_WORKFLOW_MAX_DURATION_MS_OVERRIDE: 'Infinity',
-        },
-        (warning) => warnings.push(warning)
+    const { chatWorkflow, warnings } = runWorkflowLimitOverrides(
+        (override) => override.malformed
     );
 
-    assert.equal(chatWorkflow.maxWorkflowStepsOverride, undefined);
-    assert.equal(chatWorkflow.maxToolCallsOverride, undefined);
-    assert.equal(chatWorkflow.maxDeliberationCallsOverride, undefined);
-    assert.equal(chatWorkflow.maxTokensTotalOverride, undefined);
-    assert.equal(chatWorkflow.maxDurationMsOverride, undefined);
-    assert.equal(warnings.length, 5);
+    for (const override of workflowLimitOverrides) {
+        assert.equal(chatWorkflow[override.settingKey], undefined);
+    }
+    assert.equal(warnings.length, workflowLimitOverrides.length);
 });

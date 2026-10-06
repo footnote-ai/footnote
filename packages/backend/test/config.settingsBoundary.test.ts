@@ -14,6 +14,7 @@ import path from 'node:path';
 import { renderSettingsTemplateYaml } from '@footnote/config-spec';
 import { buildRuntimeConfig } from '../src/config/buildRuntimeConfig.js';
 import { settingsSpecEntries } from '../src/config/settings-spec.js';
+import { resolveWorkflowRuntimeConfig } from '../src/services/workflowProfileRegistry.js';
 import {
     buildEffectiveConfigEnv,
     parseServerSettingsYaml,
@@ -193,6 +194,48 @@ test('invalid optional workflow override values warn and fail open without block
         ).length,
         5
     );
+});
+
+test('nested malformed workflow override warns and keeps bounded runtime defaults', () => {
+    const warnings: string[] = [];
+    const settingsPath = withSettingsFile(
+        [
+            'version: 1',
+            'chat-workflow:',
+            '  max-workflow-steps-override:',
+            '    Invalid_Nested_Key: 12',
+            '',
+        ].join('\n')
+    );
+
+    const config = buildRuntimeConfig(
+        {
+            NODE_ENV: 'test',
+            FOOTNOTE_SETTINGS_PATH: settingsPath,
+        },
+        (message) => warnings.push(message)
+    );
+
+    assert.equal(config.chatWorkflow.maxWorkflowStepsOverride, undefined);
+    assert.match(
+        warnings.join('\n'),
+        /Invalid optional workflow limit at chat-workflow\.max-workflow-steps-override/
+    );
+
+    const runtime = resolveWorkflowRuntimeConfig({
+        modeId: config.chatWorkflow.modeId,
+        reviewLoopEnabled: config.chatWorkflow.reviewLoopEnabled,
+        maxIterations: config.chatWorkflow.maxIterations,
+        maxDurationMs: config.chatWorkflow.maxDurationMs,
+        maxRequestReviewCycles: config.chatWorkflow.maxRequestReviewCycles,
+    });
+    assert.ok(
+        Object.values(runtime.workflowExecutionLimits).every(
+            (limit) => Number.isSafeInteger(limit) && limit >= 0
+        )
+    );
+    assert.ok(runtime.workflowExecutionLimits.maxWorkflowSteps > 0);
+    assert.ok(runtime.workflowExecutionLimits.maxDurationMs > 0);
 });
 
 test('canonical Fly configuration enables presentation and backend context search independently', () => {
