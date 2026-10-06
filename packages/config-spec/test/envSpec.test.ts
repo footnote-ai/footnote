@@ -48,6 +48,40 @@ test('presentation defaults stay disabled but select the tested profile and time
     );
 });
 
+test('workflow allowance overrides use canonical YAML paths', () => {
+    const overrides = [
+        [
+            'CHAT_WORKFLOW_MAX_WORKFLOW_STEPS_OVERRIDE',
+            ['chat-workflow', 'max-workflow-steps-override'],
+        ],
+        [
+            'CHAT_WORKFLOW_MAX_TOOL_CALLS_OVERRIDE',
+            ['chat-workflow', 'max-tool-calls-override'],
+        ],
+        [
+            'CHAT_WORKFLOW_MAX_DELIBERATION_CALLS_OVERRIDE',
+            ['chat-workflow', 'max-deliberation-calls-override'],
+        ],
+        [
+            'CHAT_WORKFLOW_MAX_TOKENS_TOTAL_OVERRIDE',
+            ['chat-workflow', 'max-tokens-total-override'],
+        ],
+        [
+            'CHAT_WORKFLOW_MAX_DURATION_MS_OVERRIDE',
+            ['chat-workflow', 'max-duration-ms-override'],
+        ],
+    ] as const;
+
+    for (const [envKey, path] of overrides) {
+        assert.equal(envSpecByKey[envKey]?.kind, 'integer');
+        assert.equal(envConfigSourceByKey[envKey], 'settings_yaml');
+        assert.deepEqual(
+            settingsSpecEntries.find((entry) => entry.envKey === envKey)?.path,
+            path
+        );
+    }
+});
+
 test('retired presentation validator settings are absent from the config spec', () => {
     assert.equal(
         Object.prototype.hasOwnProperty.call(

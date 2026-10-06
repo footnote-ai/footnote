@@ -14,6 +14,7 @@ import path from 'node:path';
 import { renderSettingsTemplateYaml } from '@footnote/config-spec';
 import { buildRuntimeConfig } from '../src/config/buildRuntimeConfig.js';
 import { settingsSpecEntries } from '../src/config/settings-spec.js';
+import { resolveWorkflowRuntimeConfig } from '../src/services/workflowProfileRegistry.js';
 import {
     buildEffectiveConfigEnv,
     parseServerSettingsYaml,
@@ -129,12 +130,47 @@ test('planner profile is loaded from canonical settings YAML', () => {
     );
 });
 
-test('workflow token override is loaded from canonical settings YAML', () => {
+test('workflow overrides are loaded from canonical YAML, not process environment', () => {
     const settingsPath = withSettingsFile(
         [
             'version: 1',
             'chat-workflow:',
+            '  max-workflow-steps-override: 12',
+            '  max-tool-calls-override: 5',
+            '  max-deliberation-calls-override: 6',
             '  max-tokens-total-override: 512000',
+            '  max-duration-ms-override: 300000',
+            '',
+        ].join('\n')
+    );
+
+    const config = buildRuntimeConfig(
+        {
+            NODE_ENV: 'test',
+            FOOTNOTE_SETTINGS_PATH: settingsPath,
+            CHAT_WORKFLOW_MAX_WORKFLOW_STEPS_OVERRIDE: '1',
+        },
+        () => undefined
+    );
+
+    assert.equal(config.chatWorkflow.maxWorkflowStepsOverride, 12);
+    assert.equal(config.chatWorkflow.maxToolCallsOverride, 5);
+    assert.equal(config.chatWorkflow.maxDeliberationCallsOverride, 6);
+    assert.equal(config.chatWorkflow.maxTokensTotalOverride, 512_000);
+    assert.equal(config.chatWorkflow.maxDurationMsOverride, 300_000);
+});
+
+test('invalid optional workflow override values warn and fail open without blocking startup', () => {
+    const warnings: string[] = [];
+    const settingsPath = withSettingsFile(
+        [
+            'version: 1',
+            'chat-workflow:',
+            '  max-workflow-steps-override: .inf',
+            '  max-tool-calls-override: "five"',
+            '  max-deliberation-calls-override: 7',
+            '  max-tokens-total-override: 512001',
+            '  max-duration-ms-override: 300001',
             '',
         ].join('\n')
     );
@@ -144,10 +180,62 @@ test('workflow token override is loaded from canonical settings YAML', () => {
             NODE_ENV: 'test',
             FOOTNOTE_SETTINGS_PATH: settingsPath,
         },
-        () => undefined
+        (message) => warnings.push(message)
     );
 
-    assert.equal(config.chatWorkflow.maxTokensTotalOverride, 512_000);
+    assert.equal(config.chatWorkflow.maxWorkflowStepsOverride, undefined);
+    assert.equal(config.chatWorkflow.maxToolCallsOverride, undefined);
+    assert.equal(config.chatWorkflow.maxDeliberationCallsOverride, undefined);
+    assert.equal(config.chatWorkflow.maxTokensTotalOverride, undefined);
+    assert.equal(config.chatWorkflow.maxDurationMsOverride, undefined);
+    assert.equal(
+        warnings.filter((message) =>
+            /workflow limit|CHAT_WORKFLOW/.test(message)
+        ).length,
+        5
+    );
+});
+
+test('nested malformed workflow override warns and keeps bounded runtime defaults', () => {
+    const warnings: string[] = [];
+    const settingsPath = withSettingsFile(
+        [
+            'version: 1',
+            'chat-workflow:',
+            '  max-workflow-steps-override:',
+            '    Invalid_Nested_Key: 12',
+            '',
+        ].join('\n')
+    );
+
+    const config = buildRuntimeConfig(
+        {
+            NODE_ENV: 'test',
+            FOOTNOTE_SETTINGS_PATH: settingsPath,
+        },
+        (message) => warnings.push(message)
+    );
+
+    assert.equal(config.chatWorkflow.maxWorkflowStepsOverride, undefined);
+    assert.match(
+        warnings.join('\n'),
+        /Invalid optional workflow limit at chat-workflow\.max-workflow-steps-override/
+    );
+
+    const runtime = resolveWorkflowRuntimeConfig({
+        modeId: config.chatWorkflow.modeId,
+        reviewLoopEnabled: config.chatWorkflow.reviewLoopEnabled,
+        maxIterations: config.chatWorkflow.maxIterations,
+        maxDurationMs: config.chatWorkflow.maxDurationMs,
+        maxRequestReviewCycles: config.chatWorkflow.maxRequestReviewCycles,
+    });
+    assert.ok(
+        Object.values(runtime.workflowExecutionLimits).every(
+            (limit) => Number.isSafeInteger(limit) && limit >= 0
+        )
+    );
+    assert.ok(runtime.workflowExecutionLimits.maxWorkflowSteps > 0);
+    assert.ok(runtime.workflowExecutionLimits.maxDurationMs > 0);
 });
 
 test('canonical Fly configuration enables presentation and backend context search independently', () => {
@@ -160,7 +248,11 @@ test('canonical Fly configuration enables presentation and backend context searc
     );
 
     assert.equal(config.chatWorkflow.modeId, 'grounded');
+    assert.equal(config.chatWorkflow.maxWorkflowStepsOverride, 12);
+    assert.equal(config.chatWorkflow.maxToolCallsOverride, 5);
+    assert.equal(config.chatWorkflow.maxDeliberationCallsOverride, 6);
     assert.equal(config.chatWorkflow.maxTokensTotalOverride, 512_000);
+    assert.equal(config.chatWorkflow.maxDurationMsOverride, 300_000);
     assert.equal(config.openai.requestTimeoutMs, 180_000);
     assert.equal(
         config.chatWorkflow.contextIntegrations.webSearch.providerTimeoutMs,

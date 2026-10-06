@@ -100,6 +100,10 @@ export const resolveSettingsPath = (value: string | undefined): string =>
     value?.trim() || DEFAULT_SETTINGS_PATH;
 
 const validateKebabCaseKeys = (value: unknown, pointer = 'root'): void => {
+    const settingsPath = pointer.startsWith('root.')
+        ? pointer.slice('root.'.length)
+        : pointer;
+    if (OPTIONAL_WORKFLOW_OVERRIDE_PATHS.has(settingsPath)) return;
     if (JSON_SETTINGS_POINTERS.has(pointer)) {
         return;
     }
@@ -254,6 +258,15 @@ const DEPRECATED_IGNORED_SETTINGS_PATHS = new Set([
     'chat-workflow.chat-presentation-validator-timeout-ms',
 ]);
 
+// Bad optional budgets leave the mode's existing bounded limits active.
+const OPTIONAL_WORKFLOW_OVERRIDE_PATHS = new Set([
+    'chat-workflow.max-workflow-steps-override',
+    'chat-workflow.max-tool-calls-override',
+    'chat-workflow.max-deliberation-calls-override',
+    'chat-workflow.max-tokens-total-override',
+    'chat-workflow.max-duration-ms-override',
+]);
+
 const deprecatedIgnoredSettingWarning = (path: string): string =>
     `${path} is deprecated and ignored; candidate admission does not run a model validator. Remove it from footnote.yaml.`;
 
@@ -332,7 +345,11 @@ const validateSupportedSettingsKeys = (
             continue;
         }
 
-        if (isRecord(value) && next.kind !== 'json') {
+        if (
+            isRecord(value) &&
+            next.kind !== 'json' &&
+            !OPTIONAL_WORKFLOW_OVERRIDE_PATHS.has(path)
+        ) {
             throw new ServerSettingsValidationError({
                 message: `Invalid server settings YAML: ${path} must be a scalar or array value.`,
                 category: 'type_mismatch',
@@ -589,7 +606,9 @@ const normalizeDiscordBots = (value: unknown, settingsPath: string) => {
  *
  * Fail-closed behavior:
  * - Throws on malformed YAML, invalid root/shape, unsupported keys, forbidden secret/bootstrap keys,
- *   type mismatches, or invalid version.
+ *   non-optional type mismatches, or invalid version.
+ * - Invalid values for optional workflow limit overrides are warned about and ignored so the
+ *   existing finite workflow limit stays active.
  * - Secrets/bootstrap credentials in YAML are rejected by source-boundary validation, not projected.
  * - Retired presentation-validator settings are accepted as scalar or array values and returned as
  *   explicit deprecation warnings; they are never projected into `yamlEnv`.
@@ -668,17 +687,27 @@ export const parseServerSettingsYaml = ({
 
     const settingsEnv: SettingsMap = {};
     const yamlEnv: NodeJS.ProcessEnv = {};
+    const warnings: string[] = [];
     for (const specEntry of settingsSpecEntries) {
         const rawValue = getNestedValue(parsed, specEntry.path);
         if (rawValue === undefined) {
             continue;
         }
         const keyPath = specEntry.path.join('.');
-        const normalized = validateSettingValue(
-            specEntry.kind,
-            rawValue,
-            keyPath
-        );
+        let normalized: SettingsScalar;
+        try {
+            normalized = validateSettingValue(
+                specEntry.kind,
+                rawValue,
+                keyPath
+            );
+        } catch (error) {
+            if (!OPTIONAL_WORKFLOW_OVERRIDE_PATHS.has(keyPath)) throw error;
+            warnings.push(
+                `Invalid optional workflow limit at ${keyPath}; ignoring it and keeping the existing limit.`
+            );
+            continue;
+        }
         settingsEnv[keyPath] = normalized;
         yamlEnv[specEntry.envKey] = serializeSettingValue(normalized);
     }
@@ -699,9 +728,10 @@ export const parseServerSettingsYaml = ({
             settingsEnv,
         },
         yamlEnv,
-        warnings: [...ignoredDeprecatedPaths].map(
-            deprecatedIgnoredSettingWarning
-        ),
+        warnings: [
+            ...[...ignoredDeprecatedPaths].map(deprecatedIgnoredSettingWarning),
+            ...warnings,
+        ],
     };
 };
 
@@ -717,7 +747,8 @@ export const parseServerSettingsYaml = ({
  *
  * Behavior:
  * - Missing YAML file (`ENOENT`): fail-open, calls `warn`, returns defaults-only shape
- * - Present but invalid YAML/schema: fail-closed by throwing actionable errors
+ * - Present but invalid YAML/schema: fail-closed by throwing actionable errors, except invalid
+ *   optional workflow limit values, which are ignored after a warning
  *
  * Side effects:
  * - Reads a file from disk

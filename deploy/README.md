@@ -354,7 +354,11 @@ chat-workflow:
     chat-workflow-mode-id: 'grounded'
     chat-presentation-enabled: true
     chat-presentation-profile-id: 'openrouter-deepseek-v4-flash-0731'
+    max-workflow-steps-override: 12
+    max-tool-calls-override: 5
+    max-deliberation-calls-override: 6
     max-tokens-total-override: 512000
+    max-duration-ms-override: 300000
     chat-presentation-timeout-ms: 90000
     chat-context-web-search-enabled: true
     chat-context-web-search-provider-timeout-ms: 30000
@@ -365,9 +369,29 @@ Backend web-search Context Integration remains separately enabled. It retrieves
 advisory context in the backend and is not disabled merely because the selected
 model profile cannot use provider-native search (`canUseSearch: false`).
 
-`max-tokens-total-override` is optional. When set, it replaces only the
-selected workflow's cumulative token limit and must be a positive safe integer.
-It does not change workflow mode, evidence policy, or per-call output ceilings.
+Each YAML setting maps to exactly one existing Execution Contract allowance:
+
+| YAML setting                                    | Config key                                      | Accepted override      |
+| ----------------------------------------------- | ----------------------------------------------- | ---------------------- |
+| `chat-workflow.max-workflow-steps-override`     | `CHAT_WORKFLOW_MAX_WORKFLOW_STEPS_OVERRIDE`     | 1–12                   |
+| `chat-workflow.max-tool-calls-override`         | `CHAT_WORKFLOW_MAX_TOOL_CALLS_OVERRIDE`         | 0–5                    |
+| `chat-workflow.max-deliberation-calls-override` | `CHAT_WORKFLOW_MAX_DELIBERATION_CALLS_OVERRIDE` | 0–6                    |
+| `chat-workflow.max-tokens-total-override`       | `CHAT_WORKFLOW_MAX_TOKENS_TOTAL_OVERRIDE`       | 1–512,000              |
+| `chat-workflow.max-duration-ms-override`        | `CHAT_WORKFLOW_MAX_DURATION_MS_OVERRIDE`        | 1–300,000 milliseconds |
+
+Omit an override to retain the selected mode's existing limit; zero is valid
+only for tool calls and deliberation calls. The deliberation limit stays
+coherent with the derived plan/review cycle bounds.
+
+These are non-secret settings from `/data/config/footnote.yaml`. The canonical
+paths above take precedence over defaults; process environment values named
+`CHAT_WORKFLOW_*_OVERRIDE` are not a separate override source and are ignored
+by the settings boundary. Invalid YAML values that pass basic type validation
+are warned about and ignored at runtime, leaving existing finite limits active.
+Overrides do not change workflow mode, policy flags, generation admission,
+evidence policy, privacy/addressing boundaries, provenance, or per-call output
+ceilings. Limit values remain visible in the existing workflow trace.
+
 The configured DeepSeek profile accepts up to 384,000
 output tokens per call; ordinary and reasoning defaults request 128,000 and
 256,000 respectively. A later canonical deploy uploads the repository

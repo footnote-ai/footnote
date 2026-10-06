@@ -435,6 +435,96 @@ const deriveDefaultMaxIterationsFromWorkflowSteps = (
     return Math.ceil(normalizedSteps / 2);
 };
 
+type WorkflowDeliberationLimitsInput = {
+    defaultPlanCycles: number;
+    defaultReviewCycles: number;
+    modeMaxPlanCycles: number;
+    modeMaxReviewCycles: number;
+    executionContractMaxDeliberationCalls: number | undefined;
+    maxDeliberationCallsOverride?: number;
+    assessmentEnabled: boolean;
+    maxIterations: number;
+    requestMaxReviewCycles?: number;
+};
+
+type WorkflowDeliberationLimits = Pick<
+    WorkflowProfileRuntime['defaultLimits'],
+    'maxPlanCycles' | 'maxReviewCycles' | 'maxDeliberationCalls'
+>;
+
+/**
+ * Resolves plan and review cycle counts under their existing mode/profile caps.
+ * An explicit total remains a compatibility total for both coupled counts.
+ */
+const resolveWorkflowDeliberationLimits = (
+    input: WorkflowDeliberationLimitsInput
+): WorkflowDeliberationLimits => {
+    const hasTotalOverride = input.maxDeliberationCallsOverride !== undefined;
+    const contractBudget = sanitizeNonNegativeInteger(
+        input.maxDeliberationCallsOverride ??
+            input.executionContractMaxDeliberationCalls ??
+            Infinity,
+        Infinity
+    );
+    const planCyclesBaseline = Math.min(
+        sanitizeNonNegativeInteger(
+            input.defaultPlanCycles,
+            input.defaultPlanCycles
+        ),
+        sanitizeNonNegativeInteger(
+            input.modeMaxPlanCycles,
+            input.modeMaxPlanCycles
+        ),
+        contractBudget
+    );
+    const remainingBudget = Math.max(0, contractBudget - planCyclesBaseline);
+
+    let reviewBudget: number;
+    if (hasTotalOverride) {
+        reviewBudget = input.assessmentEnabled
+            ? Math.max(0, contractBudget - 1)
+            : 0;
+    } else if (input.executionContractMaxDeliberationCalls !== undefined) {
+        reviewBudget = Math.max(
+            0,
+            input.executionContractMaxDeliberationCalls - 1
+        );
+    } else if (input.assessmentEnabled) {
+        reviewBudget = input.maxIterations * 2;
+    } else {
+        reviewBudget = 0;
+    }
+
+    let reviewCycleCeiling = input.modeMaxReviewCycles;
+    if (hasTotalOverride) {
+        reviewCycleCeiling = Math.floor(contractBudget / 2);
+    }
+    const reviewCyclesBaseline = Math.min(
+        sanitizeNonNegativeInteger(reviewBudget, input.defaultReviewCycles),
+        sanitizeNonNegativeInteger(reviewCycleCeiling, reviewCycleCeiling),
+        remainingBudget
+    );
+    const requestReviewCycles = sanitizeNonNegativeInteger(
+        input.requestMaxReviewCycles ?? reviewCyclesBaseline,
+        reviewCyclesBaseline
+    );
+    const reviewCycles = Math.min(requestReviewCycles, reviewCyclesBaseline);
+
+    let planCycles = Math.max(planCyclesBaseline, reviewCycles);
+    if (hasTotalOverride) {
+        planCycles = Math.max(
+            planCycles,
+            Math.max(0, contractBudget - reviewCycles)
+        );
+    }
+
+    return {
+        maxPlanCycles: planCycles,
+        maxReviewCycles: reviewCycles,
+        maxDeliberationCalls: planCycles + reviewCycles,
+    };
+};
+
 const toWorkflowProfileContract = (
     runtimeProfile: WorkflowProfileRuntime
 ): WorkflowProfileContract => ({
@@ -531,7 +621,11 @@ export const resolveWorkflowRuntimeConfig = (input: {
     maxIterations: number;
     maxDurationMs: number;
     maxRequestReviewCycles: number;
+    maxWorkflowStepsOverride?: number;
+    maxToolCallsOverride?: number;
+    maxDeliberationCallsOverride?: number;
     maxTokensTotalOverride?: number;
+    maxDurationMsOverride?: number;
     requestMaxReviewCycles?: number;
     ExecutionContract?: Pick<ExecutionContract, 'response' | 'limits'>;
     modeEscalationRequest?: WorkflowModeEscalationRequest;
@@ -583,68 +677,43 @@ export const resolveWorkflowRuntimeConfig = (input: {
     const defaultReviewCycles =
         workflowProfile.defaultLimits.maxReviewCycles ??
         Math.max(0, workflowProfile.defaultLimits.maxDeliberationCalls - 1);
-    const contractBudget = sanitizeNonNegativeInteger(
-        executionContract?.limits.maxDeliberationCalls ?? Infinity,
-        Infinity
+    const deliberationLimits = resolveWorkflowDeliberationLimits({
+        defaultPlanCycles,
+        defaultReviewCycles,
+        modeMaxPlanCycles,
+        modeMaxReviewCycles,
+        executionContractMaxDeliberationCalls:
+            executionContract?.limits.maxDeliberationCalls,
+        maxDeliberationCallsOverride: input.maxDeliberationCallsOverride,
+        assessmentEnabled: workflowProfile.policy.enableAssessment !== false,
+        maxIterations: input.maxIterations,
+        requestMaxReviewCycles: input.requestMaxReviewCycles,
+    });
+    const defaultMaxWorkflowSteps = sanitizePositiveInteger(
+        executionContract?.limits.maxWorkflowSteps ??
+            (workflowProfile.policy.enableAssessment === false
+                ? workflowProfile.defaultLimits.maxWorkflowSteps
+                : input.maxIterations * 2),
+        fallbackWorkflowStepLimit
     );
-    const resolvedMaxPlanCyclesBaseline = Math.min(
-        sanitizeNonNegativeInteger(defaultPlanCycles, defaultPlanCycles),
-        sanitizeNonNegativeInteger(modeMaxPlanCycles, modeMaxPlanCycles),
-        contractBudget
-    );
-    const remainingBudget = Math.max(
-        0,
-        contractBudget - resolvedMaxPlanCyclesBaseline
-    );
-    const resolvedMaxReviewCyclesBaseline = Math.min(
-        sanitizeNonNegativeInteger(
-            executionContract?.limits.maxDeliberationCalls !== undefined
-                ? Math.max(0, executionContract.limits.maxDeliberationCalls - 1)
-                : workflowProfile.policy.enableAssessment === false
-                  ? 0
-                  : input.maxIterations * 2,
-            defaultReviewCycles
-        ),
-        sanitizeNonNegativeInteger(modeMaxReviewCycles, modeMaxReviewCycles),
-        remainingBudget
-    );
-    const requestMaxReviewCycles = sanitizeNonNegativeInteger(
-        input.requestMaxReviewCycles ?? resolvedMaxReviewCyclesBaseline,
-        resolvedMaxReviewCyclesBaseline
-    );
-    // Request-level review override is clamped to the contract-safe resolved
-    // review baseline for this run.
-    const resolvedMaxReviewCycles = Math.min(
-        requestMaxReviewCycles,
-        resolvedMaxReviewCyclesBaseline
-    );
-    // Keep plan/review coupling aligned with current workflow behavior where
-    // deeper review loops imply deeper planner re-entry opportunity.
-    const resolvedMaxPlanCyclesCoupled = Math.max(
-        resolvedMaxPlanCyclesBaseline,
-        resolvedMaxReviewCycles
-    );
-    const resolvedMaxDeliberationCalls =
-        resolvedMaxPlanCyclesCoupled + resolvedMaxReviewCycles;
     const workflowExecutionLimits: WorkflowProfileRuntime['defaultLimits'] = {
-        maxWorkflowSteps: Math.min(
-            sanitizePositiveInteger(
-                executionContract?.limits.maxWorkflowSteps ??
-                    (workflowProfile.policy.enableAssessment === false
-                        ? workflowProfile.defaultLimits.maxWorkflowSteps
-                        : input.maxIterations * 2),
-                fallbackWorkflowStepLimit
+        maxWorkflowSteps:
+            // The bounded operator value intentionally overrides the mode's
+            // normal step ceiling; absence keeps the existing mode limit.
+            input.maxWorkflowStepsOverride ??
+            Math.min(
+                defaultMaxWorkflowSteps,
+                modeDecision.behavior.maxWorkflowSteps
             ),
-            modeDecision.behavior.maxWorkflowSteps
-        ),
         maxToolCalls: sanitizeNonNegativeInteger(
-            executionContract?.limits.maxToolCalls ??
+            input.maxToolCallsOverride ??
+                executionContract?.limits.maxToolCalls ??
                 workflowProfile.defaultLimits.maxToolCalls,
             workflowProfile.defaultLimits.maxToolCalls
         ),
-        maxPlanCycles: resolvedMaxPlanCyclesCoupled,
-        maxReviewCycles: resolvedMaxReviewCycles,
-        maxDeliberationCalls: resolvedMaxDeliberationCalls,
+        maxPlanCycles: deliberationLimits.maxPlanCycles,
+        maxReviewCycles: deliberationLimits.maxReviewCycles,
+        maxDeliberationCalls: deliberationLimits.maxDeliberationCalls,
         maxTokensTotal: sanitizeNonNegativeInteger(
             input.maxTokensTotalOverride ??
                 executionContract?.limits.maxTokensTotal ??
@@ -652,7 +721,9 @@ export const resolveWorkflowRuntimeConfig = (input: {
             workflowProfile.defaultLimits.maxTokensTotal
         ),
         maxDurationMs: sanitizePositiveInteger(
-            executionContract?.limits.maxDurationMs ?? input.maxDurationMs,
+            input.maxDurationMsOverride ??
+                executionContract?.limits.maxDurationMs ??
+                input.maxDurationMs,
             workflowProfile.defaultLimits.maxDurationMs
         ),
     };

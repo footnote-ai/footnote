@@ -43,19 +43,26 @@ const PROJECT_DOCS_MAX_CHUNKS = 5_000;
 const PROJECT_DOCS_MAX_TOP_K_PER_CATEGORY = 50;
 const PROJECT_DOCS_MAX_MATCHES = 20;
 const PROJECT_DOCS_MAX_TIMEOUT_MS = 30_000;
-const parseOptionalWorkflowTokenOverride = (
+const parseOptionalWorkflowLimitOverride = (
     value: string | undefined,
+    key: string,
+    minimum: number,
+    maximum: number,
     warn: WarningSink
 ): number | undefined => {
     if (value === undefined || value.trim().length === 0) return undefined;
 
     const parsed = Number(value.trim());
-    if (Number.isSafeInteger(parsed) && parsed > 0) {
+    if (
+        Number.isSafeInteger(parsed) &&
+        parsed >= minimum &&
+        parsed <= maximum
+    ) {
         return parsed;
     }
 
     warn(
-        `Ignoring invalid CHAT_WORKFLOW_MAX_TOKENS_TOTAL_OVERRIDE: "${value}". Use a positive safe integer.`
+        `Ignoring invalid ${key}. Use a safe integer from ${minimum} through ${maximum}.`
     );
     return undefined;
 };
@@ -131,9 +138,8 @@ const parseWebSearchProviderPriority = (
 
 /**
  * Resolves auth tokens, body-size limits, and chat-workflow settings for
- * trusted backend-only service endpoints. The workflow token override accepts
- * only positive integers through 512,000; invalid deployment input warns and
- * falls back to undefined so the configured workflow default remains active.
+ * trusted backend-only service endpoints. Optional workflow limit overrides
+ * are finite; invalid values warn and leave the existing workflow limit active.
  */
 export const buildServiceSections = (
     env: NodeJS.ProcessEnv,
@@ -232,8 +238,39 @@ export const buildServiceSections = (
             'CHAT_MAX_REQUEST_REVIEW_CYCLES',
             warn
         ),
-        maxTokensTotalOverride: parseOptionalWorkflowTokenOverride(
+        maxWorkflowStepsOverride: parseOptionalWorkflowLimitOverride(
+            env.CHAT_WORKFLOW_MAX_WORKFLOW_STEPS_OVERRIDE,
+            'CHAT_WORKFLOW_MAX_WORKFLOW_STEPS_OVERRIDE',
+            1,
+            12,
+            warn
+        ),
+        maxToolCallsOverride: parseOptionalWorkflowLimitOverride(
+            env.CHAT_WORKFLOW_MAX_TOOL_CALLS_OVERRIDE,
+            'CHAT_WORKFLOW_MAX_TOOL_CALLS_OVERRIDE',
+            0,
+            5,
+            warn
+        ),
+        maxDeliberationCallsOverride: parseOptionalWorkflowLimitOverride(
+            env.CHAT_WORKFLOW_MAX_DELIBERATION_CALLS_OVERRIDE,
+            'CHAT_WORKFLOW_MAX_DELIBERATION_CALLS_OVERRIDE',
+            0,
+            6,
+            warn
+        ),
+        maxTokensTotalOverride: parseOptionalWorkflowLimitOverride(
             env.CHAT_WORKFLOW_MAX_TOKENS_TOTAL_OVERRIDE,
+            'CHAT_WORKFLOW_MAX_TOKENS_TOTAL_OVERRIDE',
+            1,
+            512_000,
+            warn
+        ),
+        maxDurationMsOverride: parseOptionalWorkflowLimitOverride(
+            env.CHAT_WORKFLOW_MAX_DURATION_MS_OVERRIDE,
+            'CHAT_WORKFLOW_MAX_DURATION_MS_OVERRIDE',
+            1,
+            300_000,
             warn
         ),
         presentation: {

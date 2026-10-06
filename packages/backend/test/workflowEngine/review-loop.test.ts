@@ -216,11 +216,11 @@ test('runBoundedReviewWorkflow marks configured-inactive limits when their workf
             maxIterations: 0,
             maxDurationMs: 15000,
             executionLimits: {
-                maxWorkflowSteps: 2,
-                maxToolCalls: 0,
-                maxDeliberationCalls: 0,
-                maxTokensTotal: Number.MAX_SAFE_INTEGER,
-                maxDurationMs: 15000,
+                maxWorkflowSteps: 12,
+                maxToolCalls: 5,
+                maxDeliberationCalls: 6,
+                maxTokensTotal: 512_000,
+                maxDurationMs: 300_000,
             },
         },
         workflowPolicy: {
@@ -252,12 +252,20 @@ test('runBoundedReviewWorkflow marks configured-inactive limits when their workf
     );
     assert.ok(toolLimit);
     assert.equal(toolLimit.state, 'configured_inactive');
-    assert.equal(toolLimit.value, 0);
+    assert.equal(toolLimit.value, 5);
     assert.equal(toolLimit.stoppedRun, false);
     assert.ok(deliberationLimit);
     assert.equal(deliberationLimit.state, 'configured_inactive');
-    assert.equal(deliberationLimit.value, 0);
+    assert.equal(deliberationLimit.value, 6);
     assert.equal(deliberationLimit.stoppedRun, false);
+    assert.equal(result.workflowLineage.maxSteps, 12);
+    assert.equal(result.workflowLineage.maxDurationMs, 300_000);
+    assert.equal(
+        result.workflowLineage.effectiveLimits?.find(
+            (limit) => limit.key === 'maxTokensTotal'
+        )?.value,
+        512_000
+    );
 });
 
 test('runBoundedReviewWorkflow records explicit limit stop attribution for exhausted limits', async () => {

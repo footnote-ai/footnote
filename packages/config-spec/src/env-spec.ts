@@ -49,6 +49,23 @@ const imageDescriptionEnv = {
     usedBy: ['packages/backend/src/config.ts'],
 } as const;
 
+const defineWorkflowLimitOverrideEnv = <const TKey extends string>(
+    key: TKey,
+    description: string
+) =>
+    defineEnv({
+        key,
+        owner: 'backend',
+        stage: 'runtime',
+        section: 'chat-workflow',
+        required: false,
+        secret: false,
+        kind: 'integer',
+        description,
+        defaultValue: noDefault(),
+        usedBy: ['packages/backend/src/config.ts'],
+    });
+
 export const envEntries = [
     defineEnv({
         key: 'OPENAI_API_KEY',
@@ -2112,19 +2129,26 @@ export const envEntries = [
         defaultValue: literal('balanced'),
         usedBy: ['packages/backend/src/config.ts'],
     }),
-    defineEnv({
-        key: 'CHAT_WORKFLOW_MAX_TOKENS_TOTAL_OVERRIDE',
-        owner: 'backend',
-        stage: 'runtime',
-        section: 'chat-workflow',
-        required: false,
-        secret: false,
-        kind: 'integer',
-        description:
-            'Optional positive safe-integer override for the cumulative budget of one chat workflow run.',
-        defaultValue: noDefault(),
-        usedBy: ['packages/backend/src/config.ts'],
-    }),
+    defineWorkflowLimitOverrideEnv(
+        'CHAT_WORKFLOW_MAX_WORKFLOW_STEPS_OVERRIDE',
+        'Optional workflow-step limit override in the canonical settings YAML; use 1 through 12.'
+    ),
+    defineWorkflowLimitOverrideEnv(
+        'CHAT_WORKFLOW_MAX_TOOL_CALLS_OVERRIDE',
+        'Optional tool-call limit override in the canonical settings YAML; use 0 through 5.'
+    ),
+    defineWorkflowLimitOverrideEnv(
+        'CHAT_WORKFLOW_MAX_DELIBERATION_CALLS_OVERRIDE',
+        'Optional deliberation-call limit override in the canonical settings YAML; use 0 through 6.'
+    ),
+    defineWorkflowLimitOverrideEnv(
+        'CHAT_WORKFLOW_MAX_TOKENS_TOTAL_OVERRIDE',
+        'Optional cumulative token limit override in the canonical settings YAML; use 1 through 512000.'
+    ),
+    defineWorkflowLimitOverrideEnv(
+        'CHAT_WORKFLOW_MAX_DURATION_MS_OVERRIDE',
+        'Optional workflow duration limit override in the canonical settings YAML; use 1 through 300000 milliseconds.'
+    ),
     defineEnv({
         key: 'CHAT_REVIEW_LOOP_ENABLED',
         owner: 'backend',
