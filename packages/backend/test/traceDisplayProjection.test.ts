@@ -304,6 +304,83 @@ test('public trace display allowlists workflow receipts while omitting operator 
     ]);
 });
 
+test('public trace exposes the safe fallback fact but omits recorded routing details', () => {
+    const projected = projectTraceMetadataForDisplay(
+        {
+            ...baseTrace,
+            provenanceAssessment: undefined,
+            trace_target: {},
+            trace_final: {},
+            workflow: {
+                workflowId: 'workflow-fallback',
+                workflowName: 'reviewed_chat',
+                status: 'completed',
+                terminationReason: 'goal_satisfied',
+                stepCount: 1,
+                maxSteps: 4,
+                maxDurationMs: 10_000,
+                steps: [
+                    {
+                        stepId: 'step-generate',
+                        attempt: 1,
+                        stepKind: 'generate',
+                        startedAt: '2026-10-04T00:00:00.000Z',
+                        finishedAt: '2026-10-04T00:00:00.025Z',
+                        durationMs: 25,
+                        attempts: [
+                            {
+                                attempt: 1,
+                                status: 'succeeded',
+                                startedAt: '2026-10-04T00:00:00.000Z',
+                                finishedAt: '2026-10-04T00:00:00.025Z',
+                                durationMs: 25,
+                                routingAttempts: [
+                                    {
+                                        index: 0,
+                                        profileId: 'private-profile-id',
+                                        status: 'succeeded',
+                                        reasonCode:
+                                            'search_rerouted_to_fallback_profile',
+                                        chooseOneUsed: false,
+                                        temporaryUnavailableReason:
+                                            'private routing diagnostic',
+                                    },
+                                    {
+                                        index: 1,
+                                        profileId: 'private-primary-profile-id',
+                                        status: 'failed',
+                                        reasonCode: 'provider_timeout',
+                                        chooseOneUsed: false,
+                                    },
+                                ],
+                            },
+                        ],
+                        outcome: {
+                            status: 'executed',
+                            summary: 'Generated the delivered answer.',
+                        },
+                    },
+                ],
+            },
+        },
+        baseTrace.responseId
+    );
+
+    assert.ok(projected?.workflow);
+    assert.equal(
+        projected.workflow.steps[0]?.attempts?.[0]?.reasonCode,
+        'search_rerouted_to_fallback_profile'
+    );
+    assert.equal(
+        projected.workflow.steps[0]?.attempts?.[0]?.routingAttempts,
+        undefined
+    );
+    const publicWorkflow = JSON.stringify(projected.workflow);
+    assert.equal(publicWorkflow.includes('private-profile-id'), false);
+    assert.equal(publicWorkflow.includes('private routing diagnostic'), false);
+    assert.equal(publicWorkflow.includes('provider_timeout'), false);
+});
+
 test('public trace display omits malformed workflow with unknown fields', () => {
     const projected = projectTraceMetadataForDisplay(
         {

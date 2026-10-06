@@ -33,6 +33,7 @@ const TRACE_AXES = [
 ] as const;
 
 const PUBLIC_STEP_SIGNAL_KEYS = new Set(['action', 'contractType']);
+const PUBLIC_FALLBACK_ROUTE_REASON_CODE = 'search_rerouted_to_fallback_profile';
 
 const OPTIONAL_METADATA_FIELDS = [
     'totalDurationMs',
@@ -152,6 +153,13 @@ const projectPublicAttempt = (
     }),
     ...(attempt.completion !== undefined && {
         completion: { ...attempt.completion },
+    }),
+    // Preserve only this stable public fact; routing profiles and diagnostics stay private.
+    ...(attempt.routingAttempts?.some(
+        (routingAttempt) =>
+            routingAttempt.reasonCode === PUBLIC_FALLBACK_ROUTE_REASON_CODE
+    ) && {
+        reasonCode: PUBLIC_FALLBACK_ROUTE_REASON_CODE,
     }),
     ...(attempt.usage !== undefined && {
         usage: {

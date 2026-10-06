@@ -127,6 +127,36 @@ test('workflow page orders Steps and keeps Attempt history subordinate', () => {
     assert.match(html, /answer: produced by Step step-generate, Attempt 2/u);
 });
 
+test('fallback plan keeps its Step status and explains a recorded fallback Attempt', () => {
+    const workflow = createWorkflow();
+    const html = renderWorkflow({
+        ...workflow,
+        steps: workflow.steps.map((step) =>
+            step.stepKind === 'plan'
+                ? {
+                      ...step,
+                      outcome: { ...step.outcome, status: 'failed' },
+                      attempts: [
+                          {
+                              attempt: 1,
+                              status: 'succeeded',
+                              startedAt: '2026-10-01T00:00:00.000Z',
+                              finishedAt: '2026-10-01T00:00:00.010Z',
+                              durationMs: 10,
+                              reasonCode: 'search_rerouted_to_fallback_profile',
+                          },
+                      ],
+                  }
+                : step
+        ),
+    });
+
+    assert.match(html, /Planning <span>— Failed · fallback plan<\/span>/u);
+    assert.match(html, /Attempt 1: Succeeded/u);
+    assert.match(html, /A fallback search profile was used\./u);
+    assert.doesNotMatch(html, /search_rerouted_to_fallback_profile/u);
+});
+
 test('workflow page distinguishes explicit degraded, limited, failed, and rejected outcomes', () => {
     const workflow = createWorkflow();
 

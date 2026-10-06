@@ -45,6 +45,8 @@ const RUN_STATUS_LABELS = {
     rejected: 'Rejected',
 } as const;
 
+const PUBLIC_FALLBACK_ROUTE_REASON_CODE = 'search_rerouted_to_fallback_profile';
+
 const displayTokens = (usage: {
     promptTokens?: number;
     completionTokens?: number;
@@ -135,9 +137,15 @@ const TraceWorkflowDetails = ({
                                     <h3>
                                         {STEP_LABELS[step.stepKind]}{' '}
                                         <span>
+                                            —{' '}
+                                            {
+                                                STEP_STATUS_LABELS[
+                                                    step.outcome.status
+                                                ]
+                                            }
                                             {isFallbackPlan
-                                                ? '— fallback plan'
-                                                : `— ${STEP_STATUS_LABELS[step.outcome.status]}`}
+                                                ? ' · fallback plan'
+                                                : ''}
                                         </span>
                                     </h3>
                                     <p>{step.outcome.summary}</p>
@@ -230,6 +238,15 @@ const TraceWorkflowDetails = ({
                                                                     ]
                                                                 }
                                                             </strong>
+                                                            {attempt.reasonCode ===
+                                                                PUBLIC_FALLBACK_ROUTE_REASON_CODE && (
+                                                                <p>
+                                                                    A fallback
+                                                                    search
+                                                                    profile was
+                                                                    used.
+                                                                </p>
+                                                            )}
                                                             <dl className="trace-details__list">
                                                                 <div>
                                                                     <dt>
