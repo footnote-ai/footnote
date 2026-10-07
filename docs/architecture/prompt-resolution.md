@@ -85,9 +85,7 @@ records. Older
 loading only to warn that they are deprecated and ignored; they do nothing and
 are not part of the current operator contract.
 
-TRACE caution remains observed presentation metadata and may protect answer
-posture while the candidate is written. It never skips or weakens persona
-expression. The resolved expression strength controls prose only; facts,
-uncertainty, attribution, scope, permissions, refusals, provenance, TRACE
-values, and safety decisions remain authoritative. Footnote is the default
-persona; Discord can select Danny, Myuri, or Winter.
+TRACE caution remains observed metadata. It can protect answer posture while
+the candidate is written, but it cannot skip or weaken persona expression.
+Expression strength changes wording only. Footnote is the default persona;
+Discord may select Danny, Myuri, or Winter.
