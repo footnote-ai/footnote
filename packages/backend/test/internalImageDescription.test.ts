@@ -295,6 +295,64 @@ test('Ollama scanner retries without tools and parses plain JSON when tools are 
     assert.equal(result.totalTokens, 8);
 });
 
+test('Ollama scanner still retries without tools when cancelling the rejected response fails', async () => {
+    let apiCalls = 0;
+    const adapter = createImageDescriptionAdapter({
+        provider: 'ollama',
+        baseUrl: 'http://localhost:11434/v1',
+        model: 'vision-json',
+        lookupImpl: publicLookup,
+        fetchImpl: async (url) => {
+            if (String(url) === 'https://example.com/image.png') {
+                return new Response(Buffer.from('image'), {
+                    headers: { 'content-type': 'image/png' },
+                });
+            }
+
+            apiCalls += 1;
+            if (apiCalls === 1) {
+                return {
+                    ok: false,
+                    status: 400,
+                    statusText: 'Bad Request',
+                    body: {
+                        async cancel() {
+                            throw new Error('response cleanup failed');
+                        },
+                    },
+                } as unknown as Response;
+            }
+
+            return new Response(
+                JSON.stringify({
+                    choices: [
+                        {
+                            message: {
+                                content: JSON.stringify({
+                                    summary: 'A document.',
+                                    detected_type: 'document',
+                                    extracted_text: [],
+                                    structured: { key_elements: [] },
+                                    certainty: 'high',
+                                }),
+                            },
+                        },
+                    ],
+                }),
+                { status: 200 }
+            );
+        },
+    });
+
+    const result = await adapter.describeImage({
+        imageUrl: 'https://example.com/image.png',
+        prompt: 'Describe it.',
+    });
+
+    assert.equal(apiCalls, 2);
+    assert.match(result.description, /A document/);
+});
+
 test('Ollama scanner includes usage from both successful tool and JSON requests', async () => {
     const requestBodies: Array<Record<string, unknown>> = [];
     const responses: Array<Record<string, unknown>> = [
