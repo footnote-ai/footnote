@@ -8,8 +8,8 @@ work is done.
 
 - [Account identity and access](./account-identity-and-access.md) — lifecycle
   delivered; account UI polish remains in #769
-- [Repository context and TrustGraph](./repository-context-status.md) — guided
-  setup remains in #454; source-code retrieval is tracked separately in #539
+- [Repository context and TrustGraph](./repository-context-status.md) — one-time
+  setup is complete; source-code retrieval is tracked separately in #539
 - [Web search grounding recovery](./web-search-grounding-recovery-status.md) —
   implementation has not started (#451)
 
