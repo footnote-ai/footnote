@@ -28,24 +28,11 @@ The main fields are:
 
 ## Routing, posture, and influence
 
-These concepts are related, but they are not the same thing.
-
-Mode is routing metadata.
-
-It explains how the backend chose to run the request: which path it took,
-where that choice came from, and whether workflow-owned escalation happened.
-
-TRACE is answer-posture metadata.
-
-It explains how the answer was shaped, not how the request was routed. If
-`metadata.workflow` indicating a grounded-oriented run does not automatically mean the answer
-had supporting evidence. Check citations, provenance assessment, and execution
-records for that.
-
-Planner metadata and control-influence records are influence records.
-
-They explain what the system considered and what materially affected the run.
-They do not replace workflow routing, and they do not replace provenance.
+Mode records the selected route, its source, and workflow-owned escalation.
+TRACE records answer posture; planner/control records describe influence.
+None replaces provenance. A grounded-oriented workflow does not prove the
+answer has supporting evidence; check citations, provenance assessment, and
+execution records.
 
 ## TRACE
 
