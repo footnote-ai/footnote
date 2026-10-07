@@ -67,6 +67,20 @@ use **administrator** or **admin** for the person managing a Footnote instance.
 - Save succeeds with `restartRequired: true` and `applied: false`.
 - Settings are persisted, but running process does not auto-reload or auto-restart.
 
+## Repository Context Setup
+
+First-run setup also lets the operator review and load the deployment-approved
+repository context into a configured TrustGraph destination. The browser can
+inspect the configured destination, test it, preview the selected file paths
+and sizes, and start the load. TrustGraph URLs, tokens, and file contents stay
+on the backend; operators do not enter credentials in the browser. If TrustGraph
+is not configured, setup still shows the prepared file preview and explains that
+an operator must configure the service before loading.
+
+The preview is the already-prepared `.footnote/context-bundle`, not an arbitrary
+checkout or Git browser. Changing its selected files remains a repository
+configuration and deployment step.
+
 ## Administrator Commands
 
 - `pnpm settings`: opens the settings editor for the current config. If config

@@ -18,6 +18,7 @@ import PublicPageLayout from '@components/PublicPageLayout';
 import { Link } from 'react-router-dom';
 import { parseSetupCodeFromHash } from '../utils/setupFlow';
 import { getAuthSession } from '../utils/api';
+import RepositoryContextSetup from './RepositoryContextSetup';
 
 const MISSING_SETTINGS_SENTINEL = '"footnote-settings-missing"';
 const SETUP_CSRF_HEADER_NAME = 'x-setup-csrf';
@@ -635,6 +636,11 @@ const SetupPage = ({ mode = 'setup' }: SetupPageProps): JSX.Element => {
                             )}
                         </section>
                     )}
+                {exchangeState.status === 'ready' && !isAdministratorMode && (
+                    <RepositoryContextSetup
+                        csrfToken={exchangeState.csrfToken}
+                    />
+                )}
             </main>
         </PublicPageLayout>
     );

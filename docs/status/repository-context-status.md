@@ -177,16 +177,21 @@ deployment path is validated separately from this status document.
 
 ### 4. Add guided setup
 
-Add a Context integrations section to first setup. It should let the user:
+The first-run `/setup` page now includes a repository-context flow. It lets the
+user:
 
-1. choose whether to use TrustGraph
-2. enter and test connection settings
-3. choose whether to load repository context
-4. review the selected files and total size
-5. load the files and see progress
+1. choose and test a deployment-configured TrustGraph destination
+2. review the already-approved file list and total size
+3. load the files and see added, changed, unchanged, skipped, and failed results
 
-Done when a new user can complete the flow without editing YAML or running a
-manual loading command.
+Credentials remain backend-only. If the deployment has no TrustGraph
+connection, setup still shows the file preview and explains what must be
+configured before a load can run.
+
+Done when a new user can review and load repository context from normal setup
+without editing YAML or running a manual loading command. A repository's
+allowlist and prepared bundle are still maintained as repository/deployment
+configuration; setup does not browse arbitrary checkouts.
 
 ## Later Work
 
