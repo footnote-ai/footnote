@@ -126,10 +126,8 @@ Footnote applies this work to the full interaction: what entered, what acted, wh
 
 ## What we ask while building
 
-These ideas have to affect the code. For any feature with real power, we ask the same handful of questions: What is it allowed to do? Will the user understand that? What record will remain? Can the user stop, reverse, or correct it? Does it make Footnote harder to leave?
-
-These questions help catch small technical changes that quietly give the system more authority.
+These ideas have to affect the code. For any feature with real power, ask: What can it do? Will the user understand that? What record will remain? Can they stop, reverse, or correct it? Does it make Footnote harder to leave? These questions catch technical changes that quietly give the system more authority.
 
 ## What success looks like
 
-Footnote is working when someone can use AI without treating it like an oracle. Important answers show where they came from. The user controls what the assistant may do and can correct it when it is wrong. They can change models or providers without giving up their records. Serious failures leave enough evidence to investigate.
+Success means people can check important answers, control and correct the assistant, keep their records when they change providers, and investigate serious failures.
