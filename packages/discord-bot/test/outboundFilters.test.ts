@@ -114,6 +114,11 @@ test('normalizeOutboundLinks handles trailing punctuation and parentheses', () =
                 'Commas/colons: <https://example.com>, next: <https://example.org>:',
             count: 2,
         },
+        {
+            input: 'CJK punctuation: https://example.com。',
+            expected: 'CJK punctuation: <https://example.com>。',
+            count: 1,
+        },
     ];
 
     for (const testCase of cases) {
@@ -129,6 +134,14 @@ test('normalizeOutboundLinks wraps URLs with query strings and parentheses', () 
     const result = normalizeOutboundLinks(input);
 
     assert.equal(result.content, 'Lookup <https://example.com?foo=bar(baz)>.');
+    assert.deepEqual(result.changes, ['wrapped_urls:1']);
+});
+
+test('normalizeOutboundLinks preserves the full URL when it contains authentication info', () => {
+    const input = 'Docs https://user:pass@example.com/path';
+    const result = normalizeOutboundLinks(input);
+
+    assert.equal(result.content, 'Docs <https://user:pass@example.com/path>');
     assert.deepEqual(result.changes, ['wrapped_urls:1']);
 });
 
