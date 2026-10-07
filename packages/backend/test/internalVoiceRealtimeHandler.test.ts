@@ -15,6 +15,7 @@ import type {
     InternalVoiceRealtimeServerEvent,
     InternalVoiceSessionContext,
 } from '@footnote/contracts/voice';
+import type { BotProfileConfig } from '../src/config/profile.js';
 import type {
     RealtimeVoiceRuntime,
     RealtimeVoiceSession,
@@ -23,6 +24,19 @@ import type { BackendLLMCostRecord } from '../src/services/llmCostRecorder.js';
 
 import { createInternalVoiceRealtimeHandler } from '../src/handlers/internalVoiceRealtime.js';
 import { SimpleRateLimiter } from '../src/services/rateLimiter.js';
+
+const testProfile: BotProfileConfig = {
+    id: 'winter',
+    displayName: 'Winter',
+    mentionAliases: [],
+    promptOverlay: {
+        source: 'none' as const,
+        text: null,
+        path: null,
+        length: 0,
+    },
+    speechPresentation: { realtimeDelivery: 'dry and direct' },
+};
 
 class FakeUpgradeSocket extends Duplex {
     public written = '';
@@ -113,89 +127,99 @@ type RealtimeHandlerHarness = {
     }>;
 };
 
-const createRealtimeHandlerHarness =
-    async (): Promise<RealtimeHandlerHarness> => {
-        const requests: RealtimeHandlerHarness['requests'] = [];
-        const recordedUsage: BackendLLMCostRecord[] = [];
-        let currentSession: StubRealtimeSession | null = null;
-        let lastContext: InternalVoiceSessionContext = {
-            participants: [],
-        };
-        const runtime: RealtimeVoiceRuntime = {
-            kind: 'stub-realtime-runtime',
-            async createSession(request) {
-                currentSession = new StubRealtimeSession();
-                requests.push({
-                    instructions: request.instructions,
-                    context: lastContext,
-                    options: request.options,
-                });
-                return currentSession;
-            },
-        };
-
-        const { handleUpgrade } = createInternalVoiceRealtimeHandler({
-            realtimeVoiceRuntime: runtime,
-            traceApiToken: 'trace-token',
-            serviceToken: 'service-token',
-            serviceRateLimiter: new SimpleRateLimiter({
-                limit: 10,
-                window: 60000,
-            }),
-            buildInstructions: (context) => {
-                lastContext = context;
-                return `participants=${context.participants.length}`;
-            },
-            recordUsage: (record) => {
-                recordedUsage.push(record);
-            },
-        });
-
-        const server = http.createServer((_req, res) => {
-            res.statusCode = 404;
-            res.end();
-        });
-
-        server.on('upgrade', (req, socket, head) => {
-            handleUpgrade(req, socket, head);
-        });
-
-        await new Promise<void>((resolve) => {
-            server.listen(0, '127.0.0.1', resolve);
-        });
-        const address = server.address();
-        assert.ok(address && typeof address === 'object');
-
-        return {
-            close: () =>
-                new Promise((resolve, reject) => {
-                    server.close((error) => {
-                        if (error) {
-                            reject(error);
-                            return;
-                        }
-                        resolve();
-                    });
-                }),
-            connect: (headers = {}) =>
-                new Promise((resolve, reject) => {
-                    const ws = new WebSocket(
-                        `ws://127.0.0.1:${address.port}/api/internal/voice/realtime`,
-                        {
-                            headers: {
-                                'X-Trace-Token': 'trace-token',
-                                ...headers,
-                            },
-                        }
-                    );
-                    ws.once('open', () => resolve(ws));
-                    ws.once('error', reject);
-                }),
-            lastSession: () => currentSession,
-            recordedUsage,
-            requests,
-        };
+const createRealtimeHandlerHarness = async (
+    overrides: {
+        profile?: typeof testProfile;
+        supportsModel?: (model: string) => boolean;
+        supportsVoice?: (voice: string) => boolean;
+    } = {}
+): Promise<RealtimeHandlerHarness> => {
+    const requests: RealtimeHandlerHarness['requests'] = [];
+    const recordedUsage: BackendLLMCostRecord[] = [];
+    let currentSession: StubRealtimeSession | null = null;
+    let lastContext: InternalVoiceSessionContext = {
+        participants: [],
     };
+    const runtime: RealtimeVoiceRuntime = {
+        kind: 'stub-realtime-runtime',
+        provider: 'openai',
+        supportsModel: overrides.supportsModel ?? (() => true),
+        supportsVoice: overrides.supportsVoice ?? (() => true),
+        async createSession(request) {
+            currentSession = new StubRealtimeSession();
+            requests.push({
+                instructions: request.instructions,
+                context: lastContext,
+                options: request.options,
+            });
+            return currentSession;
+        },
+    };
+
+    const { handleUpgrade } = createInternalVoiceRealtimeHandler({
+        realtimeVoiceRuntime: runtime,
+        profile: overrides.profile ?? testProfile,
+        fallbackOptions: { model: 'gpt-realtime-mini', voice: 'echo' },
+        traceApiToken: 'trace-token',
+        serviceToken: 'service-token',
+        serviceRateLimiter: new SimpleRateLimiter({
+            limit: 10,
+            window: 60000,
+        }),
+        buildInstructions: (context) => {
+            lastContext = context;
+            return `participants=${context.participants.length}`;
+        },
+        recordUsage: (record) => {
+            recordedUsage.push(record);
+        },
+    });
+
+    const server = http.createServer((_req, res) => {
+        res.statusCode = 404;
+        res.end();
+    });
+
+    server.on('upgrade', (req, socket, head) => {
+        handleUpgrade(req, socket, head);
+    });
+
+    await new Promise<void>((resolve) => {
+        server.listen(0, '127.0.0.1', resolve);
+    });
+    const address = server.address();
+    assert.ok(address && typeof address === 'object');
+
+    return {
+        close: () =>
+            new Promise((resolve, reject) => {
+                server.close((error) => {
+                    if (error) {
+                        reject(error);
+                        return;
+                    }
+                    resolve();
+                });
+            }),
+        connect: (headers = {}) =>
+            new Promise((resolve, reject) => {
+                const ws = new WebSocket(
+                    `ws://127.0.0.1:${address.port}/api/internal/voice/realtime`,
+                    {
+                        headers: {
+                            'X-Trace-Token': 'trace-token',
+                            ...headers,
+                        },
+                    }
+                );
+                ws.once('open', () => resolve(ws));
+                ws.once('error', reject);
+            }),
+        lastSession: () => currentSession,
+        recordedUsage,
+        requests,
+    };
+};
 
 const waitForJsonMessage = async (
     ws: WebSocket
@@ -238,6 +262,8 @@ const closeWebSocket = async (ws: WebSocket): Promise<void> =>
 test('internal realtime handler rejects websocket upgrades without trusted auth', () => {
     const { handleUpgrade } = createInternalVoiceRealtimeHandler({
         realtimeVoiceRuntime: null,
+        profile: testProfile,
+        fallbackOptions: { model: 'gpt-realtime-mini', voice: 'echo' },
         traceApiToken: 'trace-token',
         serviceToken: 'service-token',
         serviceRateLimiter: new SimpleRateLimiter({ limit: 10, window: 60000 }),
@@ -259,6 +285,8 @@ test('internal realtime handler rejects websocket upgrades without trusted auth'
 test('internal realtime handler returns provider_unavailable when runtime is missing', () => {
     const { handleUpgrade } = createInternalVoiceRealtimeHandler({
         realtimeVoiceRuntime: null,
+        profile: testProfile,
+        fallbackOptions: { model: 'gpt-realtime-mini', voice: 'echo' },
         traceApiToken: 'trace-token',
         serviceToken: null,
         serviceRateLimiter: new SimpleRateLimiter({ limit: 10, window: 60000 }),
@@ -349,7 +377,12 @@ test('internal realtime handler starts a session and forwards session.ready to t
         );
 
         assert.equal(harness.requests.length, 1);
-        assert.equal(harness.requests[0].instructions, 'participants=1');
+        assert.equal(harness.requests[0].options?.model, 'gpt-realtime');
+        assert.equal(harness.requests[0].options?.voice, 'alloy');
+        assert.equal(
+            harness.requests[0].instructions,
+            'participants=1\n\nSpeech delivery guidance: dry and direct'
+        );
         assert.deepEqual(harness.requests[0].context.participants, [
             {
                 id: 'user-1',
@@ -359,7 +392,24 @@ test('internal realtime handler starts a session and forwards session.ready to t
 
         session.emitServerEvent({ type: 'session.ready' });
         const readyMessage = await waitForJsonMessage(ws);
-        assert.deepEqual(readyMessage, { type: 'session.ready' });
+        assert.deepEqual(readyMessage, {
+            type: 'session.ready',
+            speechSelection: {
+                profileId: 'winter',
+                modality: 'realtime',
+                provider: 'openai',
+                model: 'gpt-realtime',
+                voice: 'alloy',
+                delivery: 'dry and direct',
+                requestedVoice: 'alloy',
+                selectionSource: {
+                    model: 'request_or_session',
+                    voice: 'request_or_session',
+                    delivery: 'operator_profile',
+                },
+                fallbackReason: null,
+            },
+        });
 
         session.emitServerEvent({
             type: 'response.done',
@@ -377,6 +427,67 @@ test('internal realtime handler starts a session and forwards session.ready to t
         assert.equal(harness.recordedUsage[0].promptTokens, 50);
         assert.equal(harness.recordedUsage[0].completionTokens, 25);
 
+        await closeWebSocket(ws);
+    } finally {
+        await harness.close();
+    }
+});
+
+test('Realtime falls back only the unsupported profile model and keeps an explicit voice', async () => {
+    const harness = await createRealtimeHandlerHarness({
+        profile: {
+            ...testProfile,
+            speechPresentation: {
+                ...testProfile.speechPresentation,
+                realtimeModel: 'unsupported-model',
+            },
+        },
+        supportsModel: (model) => model === 'gpt-realtime-mini',
+    });
+
+    try {
+        const ws = await harness.connect();
+        ws.send(
+            JSON.stringify({
+                type: 'session.start',
+                context: { participants: [] },
+                options: { voice: 'alloy' },
+            })
+        );
+
+        const session = await new Promise<StubRealtimeSession>(
+            (resolve, reject) => {
+                const startedAt = Date.now();
+                const poll = () => {
+                    const current = harness.lastSession();
+                    if (current) {
+                        resolve(current);
+                        return;
+                    }
+                    if (Date.now() - startedAt > 1000) {
+                        reject(new Error('Realtime session was not created.'));
+                        return;
+                    }
+                    setTimeout(poll, 10);
+                };
+                poll();
+            }
+        );
+
+        assert.equal(harness.requests[0].options?.model, 'gpt-realtime-mini');
+        assert.equal(harness.requests[0].options?.voice, 'alloy');
+        session.emitServerEvent({ type: 'session.ready' });
+        const readyMessage = await waitForJsonMessage(ws);
+        const metadata = readyMessage.speechSelection as Record<
+            string,
+            unknown
+        >;
+        assert.equal(metadata.model, 'gpt-realtime-mini');
+        assert.equal(metadata.voice, 'alloy');
+        assert.equal(
+            metadata.fallbackReason,
+            'Configured profile model is unsupported; using deployment fallback for that setting.'
+        );
         await closeWebSocket(ws);
     } finally {
         await harness.close();

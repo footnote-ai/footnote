@@ -7,6 +7,10 @@
  */
 import OpenAI from 'openai';
 import { estimateOpenAITtsCost } from '@footnote/contracts/pricing';
+import {
+    supportedOpenAITtsModels,
+    supportedOpenAITtsVoices,
+} from '@footnote/contracts/providers';
 import type {
     InternalTtsOptions,
     InternalVoiceOutputFormat,
@@ -196,6 +200,16 @@ export const createOpenAiTtsRuntime = ({
 
     return {
         kind,
+        provider: 'openai',
+        supportsModel: (model) =>
+            supportedOpenAITtsModels.includes(
+                model as (typeof supportedOpenAITtsModels)[number]
+            ),
+        supportsVoice: (voice) =>
+            supportedOpenAITtsVoices.includes(
+                voice as (typeof supportedOpenAITtsVoices)[number]
+            ),
+        supportsDelivery: (model) => model !== 'tts-1' && model !== 'tts-1-hd',
         async synthesize(
             request: TextToSpeechRequest
         ): Promise<TextToSpeechResult> {
@@ -219,7 +233,10 @@ export const createOpenAiTtsRuntime = ({
                         model: request.options.model,
                         voice: request.options.voice,
                         input: request.text,
-                        instructions: instructionsText,
+                        ...(request.options.model === 'tts-1' ||
+                        request.options.model === 'tts-1-hd'
+                            ? {}
+                            : { instructions: instructionsText }),
                         response_format: request.outputFormat,
                     },
                     { signal: abortContext.signal }
@@ -230,12 +247,25 @@ export const createOpenAiTtsRuntime = ({
                 const audioBase64 = Buffer.from(
                     await response.arrayBuffer()
                 ).toString('base64');
-                const promptTokens = estimateTokenCount(
+                const inputCharacters = Array.from(request.text).length;
+                const isCharacterBilled =
+                    request.options.model === 'tts-1' ||
+                    request.options.model === 'tts-1-hd';
+                const hasNonAsciiText = Array.from(request.text).some(
+                    (character) => {
+                        const codePoint = character.codePointAt(0);
+                        return codePoint !== undefined && codePoint > 0x7f;
+                    }
+                );
+                const isTokenBilled =
+                    request.options.model === 'gpt-4o-mini-tts';
+                const estimatedInputTokens = estimateTokenCount(
                     `${request.text}\n${instructionsText}`
                 );
                 const cost = estimateOpenAITtsCost(
                     request.options.model,
-                    promptTokens
+                    isCharacterBilled ? inputCharacters : estimatedInputTokens,
+                    !isCharacterBilled || hasNonAsciiText
                 );
 
                 return {
@@ -245,14 +275,23 @@ export const createOpenAiTtsRuntime = ({
                     model: request.options.model,
                     voice: request.options.voice,
                     usage: {
-                        inputTokens: cost.inputTokens,
-                        outputTokens: 0,
-                        totalTokens: cost.inputTokens,
+                        billingUnit: isCharacterBilled
+                            ? 'characters'
+                            : isTokenBilled
+                              ? 'estimated_tokens'
+                              : 'unknown',
+                        inputQuantity: cost.inputQuantity,
+                        inputCharacters,
+                        ...(isTokenBilled && {
+                            inputTokens: estimatedInputTokens,
+                        }),
                     },
                     costs: {
                         input: cost.inputCost,
                         output: cost.outputCost,
                         total: cost.totalCost,
+                        completeness: cost.completeness,
+                        incompleteReasons: cost.incompleteReasons,
                     },
                     generationTimeMs: Date.now() - startedAt,
                 };

@@ -54,6 +54,24 @@ test('parses expression-strength defaults and fails open on malformed values', (
     );
 });
 
+test('reads bounded per-profile speech presentation overrides', () => {
+    const parsed = readBotProfileConfig({
+        env: {
+            BOT_PROFILE_TTS_VOICE: '  custom-tts-voice  ',
+            BOT_PROFILE_TTS_DELIVERY: ' calm, clear ',
+            BOT_PROFILE_REALTIME_MODEL: ' custom-realtime-model ',
+            BOT_PROFILE_REALTIME_DELIVERY: 'x'.repeat(501),
+        },
+        warn: () => undefined,
+    });
+
+    assert.deepEqual(parsed.speechPresentation, {
+        ttsVoice: 'custom-tts-voice',
+        ttsDelivery: 'calm, clear',
+        realtimeModel: 'custom-realtime-model',
+    });
+});
+
 test('parseBotProfileConfig prefers inline overlay over file overlay', () => {
     const parsed = parseBotProfileConfig({
         profileId: 'ari-vendor',

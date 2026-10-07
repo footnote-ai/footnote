@@ -7,36 +7,29 @@
  */
 
 import type {
-    InternalTtsModelId,
-    InternalTtsVoiceId,
-    SupportedOpenAIRealtimeModel,
     SupportedOpenAIRealtimeTurnDetection,
     SupportedOpenAIRealtimeVadEagerness,
 } from '../providers.js';
+import type { OpenAITtsCostIncompleteReason } from '../pricing.js';
 
 /**
  * @api.operationId: postInternalVoiceTts
  * @api.path: POST /api/internal/voice/tts
  */
 export type InternalVoiceOutputFormat =
-    | 'mp3'
-    | 'opus'
-    | 'aac'
-    | 'flac'
-    | 'wav'
-    | 'pcm';
+    'mp3' | 'opus' | 'aac' | 'flac' | 'wav' | 'pcm';
 
 /**
  * @api.operationId: postInternalVoiceTts
  * @api.path: POST /api/internal/voice/tts
  */
-export type InternalTtsModel = InternalTtsModelId;
+export type InternalTtsModel = string;
 
 /**
  * @api.operationId: postInternalVoiceTts
  * @api.path: POST /api/internal/voice/tts
  */
-export type InternalTtsVoice = InternalTtsVoiceId;
+export type InternalTtsVoice = string;
 
 /**
  * @api.operationId: postInternalVoiceTts
@@ -52,15 +45,21 @@ export type InternalVoiceChannelContext = {
  * @api.path: POST /api/internal/voice/tts
  */
 export type InternalTtsOptions = {
-    model: InternalTtsModel;
-    voice: InternalTtsVoice;
+    model?: string;
+    voice?: string;
     speed?: 'slow' | 'normal' | 'fast';
     pitch?: 'low' | 'normal' | 'high';
     emphasis?: 'none' | 'moderate' | 'strong';
     style?: string;
     styleDegree?: 'low' | 'normal' | 'high';
     styleNote?: string;
+    delivery?: string;
 };
+
+export type ResolvedInternalTtsOptions = Omit<
+    InternalTtsOptions,
+    'model' | 'voice'
+> & { model: string; voice: string };
 
 /**
  * @api.operationId: postInternalVoiceTts
@@ -69,7 +68,7 @@ export type InternalTtsOptions = {
 export type PostInternalVoiceTtsRequest = {
     task: 'synthesize';
     text: string;
-    options: InternalTtsOptions;
+    options?: InternalTtsOptions;
     outputFormat: InternalVoiceOutputFormat;
     channelContext?: InternalVoiceChannelContext;
 };
@@ -79,9 +78,11 @@ export type PostInternalVoiceTtsRequest = {
  * @api.path: POST /api/internal/voice/tts
  */
 export type InternalTtsUsage = {
-    inputTokens: number;
-    outputTokens: number;
-    totalTokens: number;
+    billingUnit: 'characters' | 'estimated_tokens' | 'unknown';
+    inputQuantity: number;
+    inputCharacters: number;
+    /** Estimated tokenizer count for models whose billing unit is tokens. */
+    inputTokens?: number;
 };
 
 /**
@@ -92,6 +93,8 @@ export type InternalTtsCosts = {
     input: number;
     output: number;
     total: number;
+    completeness: 'complete' | 'partial' | 'unknown';
+    incompleteReasons: OpenAITtsCostIncompleteReason[];
 };
 
 /**
@@ -106,6 +109,7 @@ export type PostInternalVoiceTtsResponse = {
         mimeType: string;
         model: InternalTtsModel;
         voice: InternalTtsVoice;
+        speechSelection: SpeechSelectionMetadata;
         usage: InternalTtsUsage;
         costs: InternalTtsCosts;
         generationTimeMs: number;
@@ -166,12 +170,39 @@ export type InternalVoiceRealtimeTurnDetectionConfig = {
  * @api.path: GET /api/internal/voice/realtime
  */
 export type InternalVoiceRealtimeOptions = {
-    model?: SupportedOpenAIRealtimeModel;
-    voice?: InternalTtsVoice;
+    model?: string;
+    voice?: string;
+    delivery?: string;
     temperature?: number;
     maxResponseOutputTokens?: number;
     turnDetection?: SupportedOpenAIRealtimeTurnDetection;
     turnDetectionConfig?: InternalVoiceRealtimeTurnDetectionConfig;
+};
+
+export type SpeechSelectionSource =
+    | 'request_or_session'
+    | 'operator_profile'
+    | 'persona_default'
+    | 'deployment_fallback';
+
+/**
+ * @api.operationId: postInternalVoiceTts
+ * @api.path: POST /api/internal/voice/tts
+ */
+export type SpeechSelectionMetadata = {
+    profileId: string;
+    modality: 'tts' | 'realtime';
+    provider: string;
+    model: string;
+    voice: string;
+    delivery: string | null;
+    requestedVoice: string | null;
+    selectionSource: {
+        model: SpeechSelectionSource;
+        voice: SpeechSelectionSource;
+        delivery: SpeechSelectionSource;
+    };
+    fallbackReason: string | null;
 };
 
 /**
@@ -217,7 +248,7 @@ export type InternalVoiceRealtimeClientEvent =
  * @api.path: GET /api/internal/voice/realtime
  */
 export type InternalVoiceRealtimeServerEvent =
-    | { type: 'session.ready' }
+    | { type: 'session.ready'; speechSelection?: SpeechSelectionMetadata }
     | {
           type: 'session.closed';
           reason?: string;

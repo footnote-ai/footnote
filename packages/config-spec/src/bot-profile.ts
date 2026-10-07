@@ -26,6 +26,15 @@ export interface BotProfilePromptOverlay {
     length: number;
 }
 
+export interface BotProfileSpeechPresentation {
+    ttsModel?: string;
+    ttsVoice?: string;
+    ttsDelivery?: string;
+    realtimeModel?: string;
+    realtimeVoice?: string;
+    realtimeDelivery?: string;
+}
+
 /**
  * Parsed bot profile settings used by prompt builders and mention routing.
  */
@@ -36,6 +45,7 @@ export interface BotProfileConfig {
     promptOverlay: BotProfilePromptOverlay;
     /** Optional operator default; persona catalog defaults apply when absent. */
     personaExpressionStrength?: PersonaExpressionStrength;
+    speechPresentation?: BotProfileSpeechPresentation;
 }
 
 /**
@@ -50,6 +60,7 @@ export interface ParseBotProfileConfigInput {
     overlayFileText?: string | null;
     maxOverlayLength?: number;
     personaExpressionStrength?: string | null;
+    speechPresentation?: Partial<BotProfileSpeechPresentation>;
 }
 
 /**
@@ -106,6 +117,26 @@ const normalizeOptionalString = (
 
     const normalized = value.trim();
     return normalized.length > 0 ? normalized : null;
+};
+
+const normalizeSpeechPresentation = (
+    value: Partial<BotProfileSpeechPresentation> | undefined
+): BotProfileSpeechPresentation => {
+    const result: BotProfileSpeechPresentation = {};
+    for (const key of [
+        'ttsModel',
+        'ttsVoice',
+        'ttsDelivery',
+        'realtimeModel',
+        'realtimeVoice',
+        'realtimeDelivery',
+    ] as const) {
+        const normalized = normalizeOptionalString(value?.[key]);
+        if (!normalized) continue;
+        const maxLength = key.endsWith('Delivery') ? 500 : 128;
+        if (normalized.length <= maxLength) result[key] = normalized;
+    }
+    return result;
 };
 
 /** Parses operator input without allowing malformed values to block startup. */
@@ -245,6 +276,9 @@ export const parseBotProfileConfig = (
         ...(personaExpressionStrength !== undefined && {
             personaExpressionStrength,
         }),
+        speechPresentation: normalizeSpeechPresentation(
+            input.speechPresentation
+        ),
     };
 };
 
@@ -299,6 +333,14 @@ export const readBotProfileConfig = (
         overlayPath: resolvedOverlayPath,
         overlayFileText,
         personaExpressionStrength: env.BOT_PROFILE_PERSONA_EXPRESSION_STRENGTH,
+        speechPresentation: normalizeSpeechPresentation({
+            ttsModel: env.BOT_PROFILE_TTS_MODEL,
+            ttsVoice: env.BOT_PROFILE_TTS_VOICE,
+            ttsDelivery: env.BOT_PROFILE_TTS_DELIVERY,
+            realtimeModel: env.BOT_PROFILE_REALTIME_MODEL,
+            realtimeVoice: env.BOT_PROFILE_REALTIME_VOICE,
+            realtimeDelivery: env.BOT_PROFILE_REALTIME_DELIVERY,
+        }),
         maxOverlayLength,
     });
 
