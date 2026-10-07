@@ -197,6 +197,141 @@ test('public GET trace returns the inclusion count without private memory text',
     }
 });
 
+test('anonymous trace GET omits private GitHub source metadata and citation snippets', async () => {
+    const server = await createTestServer();
+    const responseId = 'private-github-source-trace';
+    const privateResolvedRevision = '0123456789abcdef0123456789abcdef01234567';
+    const metadata: ResponseMetadata = {
+        responseId,
+        provenance: 'Retrieved',
+        safetyTier: 'Low',
+        tradeoffCount: 0,
+        chainHash: 'private-source-hash',
+        licenseContext: 'Private source',
+        modelVersion: 'gpt-5-mini',
+        staleAfter: new Date(Date.now() + 60_000).toISOString(),
+        citations: [
+            {
+                title: 'src/private-service.ts',
+                url: `https://github.com/acme/private-repo/blob/${privateResolvedRevision}/src/private-service.ts`,
+                snippet: 'PRIVATE_SOURCE_EXCERPT_DO_NOT_PUBLISH',
+            },
+            {
+                title: 'Public API documentation',
+                url: 'https://example.com/public-api',
+            },
+        ],
+        githubSource: {
+            repository: 'acme/private-repo',
+            path: 'src/private-service.ts',
+            requestedRevision: 'private-feature-branch',
+            resolvedRevision: privateResolvedRevision,
+            scope: 'selected_file',
+            status: 'retrieved',
+            freshness: 'current',
+            matchCount: 1,
+            returnedMatchCount: 1,
+            fetchedAt: '2026-10-06T00:00:00.000Z',
+        },
+        trace_target: {},
+        trace_final: {},
+    };
+
+    try {
+        await server.store.upsert(metadata);
+        const response = await fetch(
+            `${server.url}/api/traces/${encodeURIComponent(responseId)}`
+        );
+        assert.equal(response.status, 200);
+        const payload = (await response.json()) as Record<string, unknown>;
+        const serialized = JSON.stringify(payload);
+        assert.equal('githubSource' in payload, false);
+        assert.equal(
+            JSON.stringify(payload.citations),
+            JSON.stringify([
+                {
+                    title: 'Public API documentation',
+                    url: metadata.citations[1]?.url,
+                },
+            ])
+        );
+        assert.doesNotMatch(
+            serialized,
+            /PRIVATE_SOURCE_EXCERPT_DO_NOT_PUBLISH/u
+        );
+        assert.doesNotMatch(serialized, /private-feature-branch/u);
+        assert.doesNotMatch(
+            serialized,
+            new RegExp(privateResolvedRevision, 'u')
+        );
+        assert.doesNotMatch(serialized, /acme\/private-repo/u);
+        assert.doesNotMatch(serialized, /src\/private-service\.ts/u);
+        const nonCitationFields = { ...payload };
+        delete nonCitationFields.citations;
+        const nonCitationSerialized = JSON.stringify(nonCitationFields);
+        assert.doesNotMatch(nonCitationSerialized, /private-feature-branch/u);
+        assert.doesNotMatch(
+            nonCitationSerialized,
+            new RegExp(privateResolvedRevision, 'u')
+        );
+        assert.doesNotMatch(nonCitationSerialized, /acme\/private-repo/u);
+        assert.doesNotMatch(nonCitationSerialized, /src\/private-service\.ts/u);
+
+        const staleResponseId = 'stale-private-github-source-trace';
+        await server.store.upsert({
+            ...metadata,
+            responseId: staleResponseId,
+            staleAfter: new Date(Date.now() - 60_000).toISOString(),
+        });
+        const staleResponse = await fetch(
+            `${server.url}/api/traces/${encodeURIComponent(staleResponseId)}`
+        );
+        assert.equal(staleResponse.status, 410);
+        const stalePayload = (await staleResponse.json()) as {
+            metadata: Record<string, unknown>;
+        };
+        const staleSerialized = JSON.stringify(stalePayload.metadata);
+        assert.equal('githubSource' in stalePayload.metadata, false);
+        assert.equal(
+            JSON.stringify(stalePayload.metadata.citations),
+            JSON.stringify([
+                {
+                    title: 'Public API documentation',
+                    url: metadata.citations[1]?.url,
+                },
+            ])
+        );
+        assert.doesNotMatch(
+            staleSerialized,
+            /PRIVATE_SOURCE_EXCERPT_DO_NOT_PUBLISH/u
+        );
+        assert.doesNotMatch(staleSerialized, /private-feature-branch/u);
+        assert.doesNotMatch(
+            staleSerialized,
+            new RegExp(privateResolvedRevision, 'u')
+        );
+        assert.doesNotMatch(staleSerialized, /acme\/private-repo/u);
+        assert.doesNotMatch(staleSerialized, /src\/private-service\.ts/u);
+        const staleNonCitationFields = { ...stalePayload.metadata };
+        delete staleNonCitationFields.citations;
+        const staleNonCitationSerialized = JSON.stringify(
+            staleNonCitationFields
+        );
+        assert.doesNotMatch(
+            staleNonCitationSerialized,
+            /private-feature-branch/u
+        );
+        assert.doesNotMatch(
+            staleNonCitationSerialized,
+            new RegExp(privateResolvedRevision, 'u')
+        );
+        assert.doesNotMatch(staleNonCitationSerialized, /acme\/private-repo/u);
+    } finally {
+        await server.close();
+        await server.cleanup();
+    }
+});
+
 test('trace rate limits ignore forged proxy headers from direct Fly traffic', async () => {
     const server = await createTestServer(undefined, {
         trustProxy: true,

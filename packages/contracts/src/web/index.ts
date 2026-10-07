@@ -309,6 +309,7 @@ export {
     PostTracesResponseSchema,
     ResponseMetadataSchema,
     ProjectContextMetadataSchema,
+    RepositorySourceMetadataSchema,
     PresentationMetadataSchema,
     GetResponseVersionsApiResponseSchema,
     createSchemaResponseValidator,

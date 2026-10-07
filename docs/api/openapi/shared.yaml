@@ -1027,6 +1027,8 @@ components:
                     additionalProperties: false
                 githubContext:
                     $ref: '#/components/schemas/GitHubContextMetadata'
+                githubSource:
+                    $ref: '#/components/schemas/RepositorySourceMetadata'
                 projectContext:
                     $ref: '#/components/schemas/ProjectContextMetadata'
                 providerRetention:

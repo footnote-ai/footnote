@@ -60,6 +60,12 @@ const PLANNER_ALLOWED_FIELD_TREE: AllowedFieldTree = {
             sections: true,
             reference: true,
         },
+        githubSource: {
+            repository: true,
+            revision: true,
+            path: true,
+            searchTerm: true,
+        },
         search: {
             query: true,
             contextSize: true,
@@ -384,6 +390,33 @@ export const chatPlannerDecisionParametersSchema: Record<string, unknown> = {
                         },
                     },
                     required: ['repository'],
+                },
+                githubSource: {
+                    type: 'object',
+                    additionalProperties: false,
+                    properties: {
+                        repository: {
+                            type: 'string',
+                            minLength: 3,
+                            maxLength: 202,
+                        },
+                        revision: {
+                            type: 'string',
+                            minLength: 1,
+                            maxLength: 128,
+                        },
+                        path: {
+                            type: 'string',
+                            minLength: 1,
+                            maxLength: 512,
+                        },
+                        searchTerm: {
+                            type: 'string',
+                            minLength: 1,
+                            maxLength: 128,
+                        },
+                    },
+                    required: ['repository', 'revision', 'path'],
                 },
                 search: {
                     type: 'object',

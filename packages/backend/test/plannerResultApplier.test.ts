@@ -146,6 +146,17 @@ test('PlannerResultApplier keeps native search capability separate from optional
             (request) => request.integrationName === 'web_search'
         )
     );
+    const sourceRequest = output.contextStepRequests?.find(
+        (request) => request.integrationName === 'github_source'
+    );
+    assert.deepEqual(
+        {
+            requested: sourceRequest?.requested,
+            eligible: sourceRequest?.eligible,
+            input: sourceRequest?.input,
+        },
+        { requested: false, eligible: false, input: {} }
+    );
 });
 
 test('PlannerResultApplier applies surface coercion for web requests', () => {
@@ -254,6 +265,49 @@ test('PlannerResultApplier carries a validated GitHub object reference into cont
         sections: ['pulls'],
         reference: { kind: 'pull_request', number: 528 },
     });
+});
+
+test('PlannerResultApplier passes the selected repository source unchanged to the source integration', () => {
+    const applier = createApplier();
+    const latestUserInput =
+        'Inspect acme/repo at main in src/service.ts for target()';
+    const selection = {
+        repository: 'acme/repo',
+        revision: 'main',
+        path: 'src/service.ts',
+        searchTerm: 'target()',
+    };
+    const output = applier({
+        normalizedRequest: createChatRequest({
+            latestUserInput,
+            conversation: [{ role: 'user', content: latestUserInput }],
+        }),
+        plannerStepResult: createPlannerStepResult({
+            plan: {
+                ...createPlannerStepResult().plan,
+                generation: {
+                    ...createPlannerStepResult().plan.generation,
+                    githubSource: selection,
+                },
+            },
+        }),
+        clarificationContinuation: { kind: 'none' },
+        resolvedExecutionPolicy: resolveExecutionContract({
+            presetId: 'quality-grounded',
+        }).policyContract,
+    });
+
+    const sourceRequest = output.contextStepRequests?.find(
+        (request) => request.integrationName === 'github_source'
+    );
+    assert.deepEqual(
+        {
+            requested: sourceRequest?.requested,
+            eligible: sourceRequest?.eligible,
+            input: sourceRequest?.input,
+        },
+        { requested: true, eligible: true, input: selection }
+    );
 });
 
 test('PlannerResultApplier resolves profile and keeps planner suggestions non-authoritative', () => {

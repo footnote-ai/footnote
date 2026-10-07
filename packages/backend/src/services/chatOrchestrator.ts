@@ -62,6 +62,7 @@ import { createReverseImageSearchContextStepExecutor } from './contextIntegratio
 import { createSerpApiReverseImageSearchProvider } from './contextIntegrations/reverseImageSearch/index.js';
 import { createWebSearchContextStepExecutor } from './contextIntegrations/webSearch/index.js';
 import { createGitHubContextStepExecutor } from './contextIntegrations/github/index.js';
+import { createGitHubSourceContextStepExecutor } from './contextIntegrations/github/source.js';
 import {
     buildProjectContextWiring,
     createProjectContextStepExecutor,
@@ -260,6 +261,10 @@ export const createChatOrchestrator = ({
         ...runtimeConfig.chatWorkflow.contextIntegrations.github,
         onWarn: (message, meta) => chatOrchestratorLogger.warn(message, meta),
     });
+    const githubSourceContextStepExecutor =
+        createGitHubSourceContextStepExecutor({
+            ...runtimeConfig.chatWorkflow.contextIntegrations.github,
+        });
     // Project-context integration is assembled once at orchestrator scope so its
     // embedded index and last-known-good fallback survive across requests.
     const projectContextWiring = buildProjectContextWiring({
@@ -1193,6 +1198,7 @@ export const createChatOrchestrator = ({
                 },
             }),
             github_context: githubContextStepExecutor,
+            github_source: githubSourceContextStepExecutor,
             file_scan: fileScanningContextStepExecutor,
             ...(projectContextStepExecutor !== undefined && {
                 project_context: projectContextStepExecutor,

@@ -16,6 +16,7 @@ import type {
     Citation,
     GitHubContextMetadata,
     ProjectContextMetadata,
+    RepositorySourceMetadata,
     ContextStepRequest,
     ContextStepResult,
     ExecutionReasonCode,
@@ -38,7 +39,10 @@ import type {
     PostChatResponse,
     ResponseCandidate,
 } from '@footnote/contracts/web';
-import { ProjectContextMetadataSchema } from '@footnote/contracts/web';
+import {
+    ProjectContextMetadataSchema,
+    RepositorySourceMetadataSchema,
+} from '@footnote/contracts/web';
 import { ok, type Result } from 'neverthrow';
 import type {
     GenerationMetadataUsage,
@@ -884,6 +888,23 @@ const pickGitHubContextMetadata = (
     if (!metadata || typeof metadata !== 'object' || Array.isArray(metadata))
         return undefined;
     return metadata as GitHubContextMetadata;
+};
+
+/** Validates provenance for the single source file selected in this response. */
+const pickGitHubSourceMetadata = (
+    contextStepResults: ContextStepResult[] | undefined
+): RepositorySourceMetadata | undefined => {
+    const result = contextStepResults?.find(
+        (step) => step.integrationContext?.kind === 'github_source'
+    );
+    const payload = result?.integrationContext?.payload;
+    if (!payload || typeof payload !== 'object' || Array.isArray(payload))
+        return undefined;
+    const metadata = (payload as { metadata?: unknown }).metadata;
+    if (!metadata || typeof metadata !== 'object' || Array.isArray(metadata))
+        return undefined;
+    const parsed = RepositorySourceMetadataSchema.safeParse(metadata);
+    return parsed.success ? parsed.data : undefined;
 };
 
 /** Validates one backend project-context metadata payload before response assembly. */
@@ -2464,6 +2485,9 @@ export const createChatService = ({
         const githubContext = pickGitHubContextMetadata(
             workflowContextStepResults
         );
+        const githubSource = pickGitHubSourceMetadata(
+            workflowContextStepResults
+        );
         const projectContext = pickProjectContextMetadata(
             effectiveContextStepResults
         );
@@ -2509,6 +2533,7 @@ export const createChatService = ({
             trustGraphEvidenceAvailable,
             trustGraphEvidenceUsed,
             ...(githubContext !== undefined && { githubContext }),
+            ...(githubSource !== undefined && { githubSource }),
             ...(projectContext !== undefined && { projectContext }),
         };
         const finalToolExecutionTelemetry:

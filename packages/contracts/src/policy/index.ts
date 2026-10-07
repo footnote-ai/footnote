@@ -145,6 +145,7 @@ export type {
     ImageGenerationMetadata,
     GitHubContextMetadata,
     GitHubContextSection,
+    RepositorySourceMetadata,
     ProviderRetentionMetadata,
     ResponseMetadata,
 } from './types.js';
@@ -205,6 +206,7 @@ export type {
     ContextIntegrationName,
     GitHubContextReference,
     GitHubObjectReference,
+    RepositorySourceSelection,
 } from './contextIntegrations.js';
 export {
     PROJECT_CONTEXT_CATEGORIES,

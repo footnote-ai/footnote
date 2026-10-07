@@ -391,6 +391,7 @@ export type ToolInvocationName =
     | 'weather_forecast'
     | 'reverse_image_search'
     | 'github_context'
+    | 'github_source'
     | 'project_context'
     | (string & {});
 
@@ -1754,6 +1755,35 @@ export type GitHubContextMetadata = {
     >;
 };
 
+/** Provenance for a single explicitly selected repository source file. */
+export type RepositorySourceMetadata = {
+    repository: string;
+    path: string;
+    requestedRevision: string;
+    resolvedRevision?: string;
+    scope: 'selected_file';
+    status:
+        'retrieved' | 'empty' | 'partial' | 'stale' | 'unavailable' | 'failed';
+    freshness: 'current' | 'stale' | 'unknown';
+    matchCount?: number;
+    returnedMatchCount?: number;
+    fetchedAt?: string;
+    reasonCode?:
+        | 'disabled'
+        | 'invalid_selection'
+        | 'not_found_or_private'
+        | 'private_access_denied'
+        | 'revision_not_found'
+        | 'path_not_found'
+        | 'not_a_file'
+        | 'file_too_large'
+        | 'malformed_response'
+        | 'unauthorized'
+        | 'rate_limited'
+        | 'timeout'
+        | 'network_error';
+};
+
 /**
  * Configured/request-side provider posture. This is not provider-verified
  * retention or a claim about Footnote-owned storage.
@@ -1805,6 +1835,7 @@ export type ResponseMetadata = {
     trace_final_reason_code?: TraceFinalizationReasonCode;
     trustGraph?: TrustGraphMetadata;
     githubContext?: GitHubContextMetadata;
+    githubSource?: RepositorySourceMetadata;
     projectContext?: ProjectContextMetadata;
     /** Configured/request-side posture only; never provider verification. */
     providerRetention?: ProviderRetentionMetadata[];

@@ -683,6 +683,38 @@ test('ResponseMetadataSchema accepts typed GitHub context metadata', () => {
     assert.equal(parsed.success, true);
 });
 
+test('ResponseMetadataSchema validates revision-aware repository source metadata', () => {
+    const parsed = ResponseMetadataSchema.safeParse({
+        ...baseMetadata,
+        githubSource: {
+            repository: 'acme/repo',
+            path: 'src/service.ts',
+            requestedRevision: 'main',
+            resolvedRevision: '0123456789abcdef0123456789abcdef01234567',
+            scope: 'selected_file',
+            status: 'retrieved',
+            freshness: 'current',
+            matchCount: 1,
+            returnedMatchCount: 1,
+            fetchedAt: new Date().toISOString(),
+        },
+    });
+    assert.equal(parsed.success, true);
+
+    const invalid = ResponseMetadataSchema.safeParse({
+        ...baseMetadata,
+        githubSource: {
+            repository: 'acme/repo',
+            path: '../private.ts',
+            requestedRevision: 'main',
+            scope: 'repository',
+            status: 'retrieved',
+            freshness: 'current',
+        },
+    });
+    assert.equal(invalid.success, false);
+});
+
 test('ResponseMetadataSchema accepts typed project context metadata', () => {
     const parsed = ResponseMetadataSchema.safeParse({
         ...baseMetadata,

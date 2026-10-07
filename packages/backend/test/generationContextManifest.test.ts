@@ -220,19 +220,30 @@ test('buildGenerationContextManifest distinguishes retrieved, empty, failed, ski
 
     const notRequested = buildGenerationContextManifest({
         contextEnvelope,
-        contextStepRequests: [],
+        contextStepRequests: [
+            {
+                integrationName: 'github_source',
+                requested: false,
+                eligible: false,
+                input: {},
+            },
+        ],
         contextStepResults: [
             {
                 outcome: 'skipped',
                 executionContext: {
-                    toolName: 'github_context',
+                    toolName: 'github_source',
                     status: 'skipped',
                     reasonCode: 'tool_not_requested',
                 },
             },
         ],
     });
-    assert.equal(notRequested.entries[2]?.status, 'not_requested');
+    const notQueriedSource = notRequested.entries.find(
+        (entry) => entry.source === 'github_source'
+    );
+    assert.equal(notQueriedSource?.status, 'not_requested');
+    assert.equal(notQueriedSource?.requested, false);
 });
 
 test('buildGenerationContextManifest reports requested web search without claiming results', () => {

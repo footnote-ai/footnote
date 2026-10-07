@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
     title: Footnote Backend API
-    version: 1.9.0
+    version: 1.10.0
     license:
         name: MIT + Hippocratic License v3 (HL3-CORE)
         url: docs/LICENSE_STRATEGY.md
@@ -3656,6 +3656,82 @@ components:
                 - failedSections
                 - reasonCodes
             additionalProperties: false
+        RepositorySourceMetadata:
+            type: object
+            description: >-
+                Provenance for one explicitly selected repository source file. No entry is emitted when source retrieval
+                was not requested; the generation context manifest reports that state separately.
+            x-codeRefs:
+                - packages/contracts/src/policy/types.ts#RepositorySourceMetadata
+                - packages/contracts/src/web/schemas.ts#RepositorySourceMetadataSchema
+            properties:
+                repository:
+                    type: string
+                    pattern: '^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$'
+                path:
+                    type: string
+                    minLength: 1
+                    maxLength: 512
+                    description: Normalized repository-relative POSIX path.
+                requestedRevision:
+                    type: string
+                    minLength: 1
+                    maxLength: 128
+                resolvedRevision:
+                    type: string
+                    pattern: '^[A-Fa-f0-9]{40}$'
+                scope:
+                    type: string
+                    enum:
+                        - selected_file
+                status:
+                    type: string
+                    enum:
+                        - retrieved
+                        - empty
+                        - partial
+                        - stale
+                        - unavailable
+                        - failed
+                freshness:
+                    type: string
+                    enum:
+                        - current
+                        - stale
+                        - unknown
+                matchCount:
+                    type: integer
+                    minimum: 0
+                returnedMatchCount:
+                    type: integer
+                    minimum: 0
+                fetchedAt:
+                    type: string
+                    format: date-time
+                reasonCode:
+                    type: string
+                    enum:
+                        - disabled
+                        - invalid_selection
+                        - not_found_or_private
+                        - private_access_denied
+                        - revision_not_found
+                        - path_not_found
+                        - not_a_file
+                        - file_too_large
+                        - malformed_response
+                        - unauthorized
+                        - rate_limited
+                        - timeout
+                        - network_error
+            required:
+                - repository
+                - path
+                - requestedRevision
+                - scope
+                - status
+                - freshness
+            additionalProperties: false
         ProjectContextMetadata:
             type: object
             description: Metadata for approved Footnote project documents used during generation.
@@ -7185,6 +7261,8 @@ components:
                     additionalProperties: false
                 githubContext:
                     $ref: '#/components/schemas/GitHubContextMetadata'
+                githubSource:
+                    $ref: '#/components/schemas/RepositorySourceMetadata'
                 projectContext:
                     $ref: '#/components/schemas/ProjectContextMetadata'
                 providerRetention:

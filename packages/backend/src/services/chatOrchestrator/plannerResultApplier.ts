@@ -289,6 +289,19 @@ export const createPlannerResultApplier = (
                   },
               }
             : undefined;
+        const githubSourceStepRequest = generationForExecution.githubSource
+            ? {
+                  integrationName: 'github_source' as const,
+                  requested: true,
+                  eligible: true,
+                  input: { ...generationForExecution.githubSource },
+              }
+            : {
+                  integrationName: 'github_source' as const,
+                  requested: false,
+                  eligible: false,
+                  input: {},
+              };
         // A Footnote project-context suggestion does not need a user-supplied
         // slug. The backend still checks the route and setting before creating
         // a step that can run.
@@ -323,6 +336,7 @@ export const createPlannerResultApplier = (
             ...(reverseImageSearchContextStepRequest !== undefined
                 ? [reverseImageSearchContextStepRequest]
                 : []),
+            githubSourceStepRequest,
         ];
         const plannerApplyOutcome =
             plannerInput.plannerStepResult.execution.status !== 'executed'

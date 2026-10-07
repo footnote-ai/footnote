@@ -23,6 +23,7 @@ import {
     type ImageGenerationMetadata,
     type GitHubContextMetadata,
     type ProjectContextMetadata,
+    type RepositorySourceMetadata,
     type ProvenanceAssessment,
     type ResponseMetadata,
     type SteerabilityControls,
@@ -2055,6 +2056,66 @@ const GitHubContextMetadataSchema: z.ZodType<GitHubContextMetadata> = z
     })
     .strict();
 
+export const RepositorySourceMetadataSchema: z.ZodType<RepositorySourceMetadata> =
+    z
+        .object({
+            repository: z.string().regex(/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/),
+            path: z
+                .string()
+                .min(1)
+                .max(512)
+                .refine(
+                    (path) =>
+                        !path.startsWith('/') &&
+                        !path.includes('\\') &&
+                        path
+                            .split('/')
+                            .every(
+                                (segment) =>
+                                    segment.length > 0 &&
+                                    segment !== '.' &&
+                                    segment !== '..'
+                            ),
+                    'must be a normalized repository-relative POSIX path'
+                ),
+            requestedRevision: z.string().min(1).max(128),
+            resolvedRevision: z
+                .string()
+                .regex(/^[A-Fa-f0-9]{40}$/)
+                .optional(),
+            scope: z.literal('selected_file'),
+            status: z.enum([
+                'retrieved',
+                'empty',
+                'partial',
+                'stale',
+                'unavailable',
+                'failed',
+            ]),
+            freshness: z.enum(['current', 'stale', 'unknown']),
+            matchCount: z.number().int().nonnegative().optional(),
+            returnedMatchCount: z.number().int().nonnegative().optional(),
+            fetchedAt: z.string().datetime().optional(),
+            reasonCode: z
+                .enum([
+                    'disabled',
+                    'invalid_selection',
+                    'not_found_or_private',
+                    'private_access_denied',
+                    'revision_not_found',
+                    'path_not_found',
+                    'not_a_file',
+                    'file_too_large',
+                    'malformed_response',
+                    'unauthorized',
+                    'rate_limited',
+                    'timeout',
+                    'network_error',
+                ])
+                .optional(),
+        })
+        .strict();
+
 const ProjectContextCategorySchema = z.enum([
     'documented_intent',
     'documented_behavior',
@@ -2125,6 +2186,7 @@ const responseMetadataShape = {
     trace_final_reason_code: TraceFinalizationReasonCodeSchema.optional(),
     trustGraph: TrustGraphMetadataSchema.optional(),
     githubContext: GitHubContextMetadataSchema.optional(),
+    githubSource: RepositorySourceMetadataSchema.optional(),
     projectContext: ProjectContextMetadataSchema.optional(),
     providerRetention: z
         .array(

@@ -54,3 +54,31 @@ requested sections, exact-reference status when requested, fetch time,
 per-section limit, returned counts, failed sections, and reason codes. The
 workflow trace keeps the lookup outcome. Web and Discord show the source status
 without exposing credentials or private access settings.
+
+## Explicit source-file retrieval
+
+`github_source` is a separate, opt-in context integration for source-code
+questions. It accepts one repository, one repository-relative POSIX path, and
+one user-selected revision or ref. The backend resolves that ref to a full
+commit SHA, then asks GitHub Contents for only that path at the resolved SHA.
+It does not use GitHub code search (which searches the default branch), crawl
+the repository tree, or inherit the project-document allowlist. A literal
+search term, when supplied, is evaluated only within the selected file.
+
+The planner may propose these selectors only when the latest user message
+contains the repository, path, revision/ref, and a source-inspection request.
+The backend validates them against that message and rejects traversal paths and
+prompt/persona implementation paths. The integration reuses the existing
+backend-held token and exact private-repository allowlist. Public requests use
+no token; private access is attempted only for an exact allowlisted repository.
+
+The selected file is bounded to 64 KiB, and the excerpt to 12 KiB, 20 returned
+lines/matches, and 600 characters per line. Returned code is labeled untrusted
+and remains advisory user-role evidence. Response metadata includes requested
+ref, resolved commit SHA, path, scope, freshness, status, and citation. The
+`githubSource` metadata object is absent when retrieval was not requested; the
+generation context manifest separately reports `not_requested`. An available
+file with no matching literal search is `empty`; truncation is `partial`; a
+cached read after a failed refresh is `stale`; inaccessible sources are
+`unavailable`; malformed or failed reads are `failed`. Retrieval failures do
+not block ordinary answering.
