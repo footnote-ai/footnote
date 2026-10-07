@@ -9,6 +9,7 @@
 import type { ModelProfile } from '@footnote/contracts';
 import {
     isGenerationRuntimeError,
+    type GenerationResult,
     type ProviderTemporaryUnavailableReason,
 } from '@footnote/agent-runtime';
 import type {
@@ -49,6 +50,10 @@ export type RoutingChainAttemptLog = {
     finishReason?: string;
     completion?: GenerationCompletion;
     usage?: GenerationExecutionUsage;
+    /** Requested/applied/ignored provider controls from this attempt. */
+    providerSettingResolution?: GenerationResult['providerSettingResolution'];
+    /** Allowlisted native provider facts; never contains hidden reasoning. */
+    providerObservations?: GenerationResult['providerObservations'];
     cost?: BackendTextCostEstimate;
     startedAtMs?: number;
     finishedAtMs?: number;

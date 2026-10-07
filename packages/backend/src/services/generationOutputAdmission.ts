@@ -1,6 +1,6 @@
 /**
  * @description: Admits normalized generation results using deterministic output facts only.
- * Rejected results retain safe completion and usage facts through routing receipts, never raw output.
+ * Rejected results retain allowlisted settings, provider facts, completion, and usage through routing receipts, never raw output.
  * @footnote-scope: core
  * @footnote-module: GenerationOutputAdmission
  * @footnote-risk: high - A false admission can surface unusable provider output as a user answer.
@@ -16,6 +16,7 @@ import type {
     ExecutionReasonCode,
     GenerationCompletion,
     OllamaRuntimeObservations,
+    WorkflowAttemptSettings,
     WorkflowRoutingChainAttemptSignal,
 } from '@footnote/contracts/policy';
 import type { BackendTextCostEstimate } from './llmCostRecorder.js';
@@ -114,6 +115,64 @@ const normalizeOllamaRuntimeObservations = (
     };
 };
 
+const normalizeOllamaThinkSettingValue = (
+    value: unknown
+): boolean | string | undefined =>
+    typeof value === 'boolean' ? value : normalizeEvidenceString(value);
+
+/** Keeps per-route setting resolution within Ollama's one-control allowlist. */
+const normalizeOllamaThinkSettingResolution = (
+    value: unknown
+): WorkflowAttemptSettings | undefined => {
+    if (!isRecord(value)) return undefined;
+
+    const requested = isRecord(value.requested)
+        ? normalizeOllamaThinkSettingValue(value.requested['ollama.think'])
+        : undefined;
+    const applied = isRecord(value.applied)
+        ? normalizeOllamaThinkSettingValue(value.applied['ollama.think'])
+        : undefined;
+    const ignored = Array.isArray(value.ignored)
+        ? value.ignored.flatMap((entry) => {
+              if (
+                  !isRecord(entry) ||
+                  entry.setting !== 'ollama.think' ||
+                  typeof entry.reasonCode !== 'string' ||
+                  ![
+                      'provider_not_supported',
+                      'capability_unknown',
+                      'capability_unsupported',
+                  ].includes(entry.reasonCode)
+              ) {
+                  return [];
+              }
+              return [
+                  {
+                      setting: 'ollama.think',
+                      reasonCode: entry.reasonCode,
+                  },
+              ];
+          })
+        : [];
+
+    if (
+        requested === undefined &&
+        applied === undefined &&
+        ignored.length === 0
+    ) {
+        return undefined;
+    }
+    return {
+        ...(requested === undefined
+            ? {}
+            : { requested: { 'ollama.think': requested } }),
+        ...(applied === undefined
+            ? {}
+            : { applied: { 'ollama.think': applied } }),
+        ...(ignored.length === 0 ? {} : { ignored }),
+    };
+};
+
 /**
  * Normalizes provider-controlled generation evidence before it reaches cost,
  * workflow, or response-metadata serialization. Invalid individual facts are
@@ -137,11 +196,15 @@ export const normalizeGenerationResultEvidence = (
     const providerObservations = normalizeOllamaRuntimeObservations(
         result.providerObservations
     );
+    const providerSettingResolution = normalizeOllamaThinkSettingResolution(
+        result.providerSettingResolution
+    );
     return {
         ...result,
         finishReason,
         completion,
         usage,
+        providerSettingResolution,
         providerObservations,
     };
 };
@@ -188,7 +251,7 @@ export const admitGenerationResult = (
 /**
  * Adds only bounded runtime facts to generation routing receipts. Rejected
  * response bodies stay out of provenance storage under the existing privacy
- * boundary, while route identity, completion, and usage remain auditable.
+ * boundary, while settings, provider observations, and usage remain auditable.
  */
 export const attachGenerationAttemptEvidence = (
     attempts: readonly RoutingChainAttemptLog[],
@@ -233,6 +296,18 @@ export const attachGenerationAttemptEvidence = (
             ...(normalizedResult.usage === undefined
                 ? {}
                 : { usage: normalizedResult.usage }),
+            ...(normalizedResult.providerSettingResolution === undefined
+                ? {}
+                : {
+                      providerSettingResolution:
+                          normalizedResult.providerSettingResolution,
+                  }),
+            ...(normalizedResult.providerObservations === undefined
+                ? {}
+                : {
+                      providerObservations:
+                          normalizedResult.providerObservations,
+                  }),
             ...(cost === undefined ? {} : { cost }),
         };
     });

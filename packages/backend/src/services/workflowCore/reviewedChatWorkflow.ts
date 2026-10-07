@@ -462,6 +462,12 @@ const toWorkflowRoutingAttempts = (
             ? {}
             : { completion: attempt.completion }),
         ...(attempt.usage === undefined ? {} : { usage: attempt.usage }),
+        ...(attempt.providerSettingResolution === undefined
+            ? {}
+            : { settings: attempt.providerSettingResolution }),
+        ...(attempt.providerObservations === undefined
+            ? {}
+            : { providerObservations: attempt.providerObservations }),
         ...(attempt.cost === undefined
             ? {}
             : { cost: toWorkflowCost(attempt.cost) }),

@@ -989,6 +989,10 @@ export type WorkflowAttemptRoutingRecord = {
     reasonCode?: string;
     finishReason?: string;
     completion?: GenerationCompletion;
+    /** Requested/applied/ignored provider controls for this routing attempt. */
+    settings?: WorkflowAttemptSettings;
+    /** Allowlisted provider/runtime facts with their source and authority. */
+    providerObservations?: OllamaRuntimeObservations;
     /** Provider/runtime-reported counts for this routing attempt; omitted counts are unavailable. */
     usage?: GenerationExecutionUsage;
     /** Backend-computed cost estimate from the available attempt usage and pricing data. */

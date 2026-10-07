@@ -1093,49 +1093,6 @@ const WorkflowCostSchema = z
     })
     .strict();
 
-const WorkflowAttemptRoutingRecordSchema = z
-    .object({
-        index: z.number().int().nonnegative(),
-        profileId: z.string().min(1),
-        requestedProvider: z.string().min(1).optional(),
-        requestedModel: z.string().min(1).optional(),
-        actualProvider: z.string().min(1).optional(),
-        actualModel: z.string().min(1).optional(),
-        status: z.string().min(1),
-        reasonCode: z.string().min(1).optional(),
-        finishReason: z.string().min(1).optional(),
-        completion: GenerationCompletionSchema.optional(),
-        usage: GenerationUsageSchema.optional().describe(
-            'Provider/runtime-reported token counts for this routing attempt. Omitted counts are unavailable.'
-        ),
-        cost: WorkflowCostSchema.describe(
-            'Backend-computed cost estimate from available attempt usage and pricing data; not a provider-reported bill.'
-        ).optional(),
-        startedAt: z
-            .string()
-            .datetime()
-            .optional()
-            .describe('Footnote-observed routing-attempt wall-clock start.'),
-        finishedAt: z
-            .string()
-            .datetime()
-            .optional()
-            .describe('Footnote-observed routing-attempt wall-clock finish.'),
-        durationMs: z
-            .number()
-            .int()
-            .nonnegative()
-            .optional()
-            .describe(
-                'Derived from available Footnote-observed routing-attempt timestamps; not provider or internal compute time.'
-            ),
-        chooseOneUsed: z.boolean(),
-        chooseOneSelectedIndex: z.number().int().nonnegative().optional(),
-        temporaryUnavailableReason: z.string().min(1).optional(),
-        selectionSource: z.enum(['explicit', 'configured']).optional(),
-    })
-    .strict();
-
 const WorkflowAttemptSettingsSchema = z
     .object({
         requested: z
@@ -1173,6 +1130,51 @@ const OllamaRuntimeObservationsSchema = z
         promptEvalCount: z.number().int().nonnegative().optional(),
         evalCount: z.number().int().nonnegative().optional(),
         thinkingPresent: z.boolean().optional(),
+    })
+    .strict();
+
+const WorkflowAttemptRoutingRecordSchema = z
+    .object({
+        index: z.number().int().nonnegative(),
+        profileId: z.string().min(1),
+        requestedProvider: z.string().min(1).optional(),
+        requestedModel: z.string().min(1).optional(),
+        actualProvider: z.string().min(1).optional(),
+        actualModel: z.string().min(1).optional(),
+        status: z.string().min(1),
+        reasonCode: z.string().min(1).optional(),
+        finishReason: z.string().min(1).optional(),
+        completion: GenerationCompletionSchema.optional(),
+        settings: WorkflowAttemptSettingsSchema.optional(),
+        providerObservations: OllamaRuntimeObservationsSchema.optional(),
+        usage: GenerationUsageSchema.optional().describe(
+            'Provider/runtime-reported token counts for this routing attempt. Omitted counts are unavailable.'
+        ),
+        cost: WorkflowCostSchema.describe(
+            'Backend-computed cost estimate from available attempt usage and pricing data; not a provider-reported bill.'
+        ).optional(),
+        startedAt: z
+            .string()
+            .datetime()
+            .optional()
+            .describe('Footnote-observed routing-attempt wall-clock start.'),
+        finishedAt: z
+            .string()
+            .datetime()
+            .optional()
+            .describe('Footnote-observed routing-attempt wall-clock finish.'),
+        durationMs: z
+            .number()
+            .int()
+            .nonnegative()
+            .optional()
+            .describe(
+                'Derived from available Footnote-observed routing-attempt timestamps; not provider or internal compute time.'
+            ),
+        chooseOneUsed: z.boolean(),
+        chooseOneSelectedIndex: z.number().int().nonnegative().optional(),
+        temporaryUnavailableReason: z.string().min(1).optional(),
+        selectionSource: z.enum(['explicit', 'configured']).optional(),
     })
     .strict();
 

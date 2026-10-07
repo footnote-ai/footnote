@@ -1032,6 +1032,44 @@ test('voltagent runtime records unknown Ollama think support and continues witho
     });
 });
 
+test('voltagent runtime records unsupported Ollama think values and continues without the option', async () => {
+    let seenThinkSetting: unknown;
+    let seenOptions: VoltAgentGenerateTextOptions | undefined;
+    const runtime = createVoltAgentRuntime({
+        defaultModel: 'ollama/qwen3',
+        createExecutor: ({ ollama }) => {
+            seenThinkSetting = ollama?.think;
+            return {
+                async generateText(_messages, options) {
+                    seenOptions = options;
+                    return { text: 'Fallback answer.' };
+                },
+            };
+        },
+    });
+
+    const result = await runtime.generate({
+        model: 'qwen3',
+        provider: 'ollama',
+        messages: [{ role: 'user', content: 'Answer this.' }],
+        capabilities: {
+            canUseSearch: false,
+            supportedOllamaThinkingControls: ['low'],
+        },
+        providerOptions: { ollama: { think: 'high' } },
+    });
+
+    assert.equal(seenThinkSetting, undefined);
+    assert.equal(seenOptions?.providerOptions, undefined);
+    assert.equal(result.text, 'Fallback answer.');
+    assert.deepEqual(result.providerSettingResolution, {
+        requested: { 'ollama.think': 'high' },
+        ignored: [
+            { setting: 'ollama.think', reasonCode: 'capability_unsupported' },
+        ],
+    });
+});
+
 test('Ollama native observations are allowlisted and reasoning-token usage stays unavailable', () => {
     const result = normalizeVoltAgentResult(
         'ollama/qwen3',

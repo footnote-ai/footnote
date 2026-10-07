@@ -1022,6 +1022,28 @@ test('workflow Attempt schema accepts native Ollama observations without raw thi
                 totalDurationNs: 1200,
                 thinkingPresent: true,
             },
+            routingAttempts: [
+                {
+                    index: 0,
+                    profileId: 'ollama-first',
+                    requestedProvider: 'ollama',
+                    requestedModel: 'qwen3:8b',
+                    status: 'failed_transient_advanced',
+                    reasonCode: 'generation_incomplete_before_output',
+                    settings: {
+                        requested: { 'ollama.think': 'high' },
+                        applied: { 'ollama.think': 'high' },
+                    },
+                    providerObservations: {
+                        source: 'ollama',
+                        authority: 'provider_reported',
+                        resolvedModel: 'qwen3:8b',
+                        digest: 'sha256:first-digest',
+                        totalDurationNs: 7500,
+                    },
+                    chooseOneUsed: false,
+                },
+            ],
         },
     ];
     assert.equal(ResponseMetadataSchema.safeParse(payload).success, true);
@@ -1053,6 +1075,35 @@ test('workflow Attempt schema accepts native Ollama observations without raw thi
         },
     };
     assert.equal(ResponseMetadataSchema.safeParse(invalid).success, false);
+
+    const invalidRouting = createValidWorkflowMetadataPayload(now);
+    const rawReasoningObservation = {
+        source: 'ollama' as const,
+        authority: 'provider_reported' as const,
+        thinking: 'PRIVATE_REASONING_SENTINEL',
+    };
+    invalidRouting.workflow.steps[0].attempts = [
+        {
+            attempt: 1,
+            status: 'succeeded',
+            startedAt: now,
+            finishedAt: now,
+            durationMs: 25,
+            routingAttempts: [
+                {
+                    index: 0,
+                    profileId: 'ollama-first',
+                    status: 'failed_transient_advanced',
+                    chooseOneUsed: false,
+                    providerObservations: rawReasoningObservation,
+                },
+            ],
+        },
+    ];
+    assert.equal(
+        ResponseMetadataSchema.safeParse(invalidRouting).success,
+        false
+    );
 });
 
 test('workflow cost schema preserves completeness and accepts historical cost records without it', () => {
