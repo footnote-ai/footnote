@@ -85,6 +85,7 @@ import {
     normalizeGitHubSections,
     parseGitHubRepositorySlug,
 } from './contextIntegrations/github/index.js';
+import { normalizeGitHubSourceSelection } from './contextIntegrations/github/source.js';
 import { logger } from '../utils/logger.js';
 import type { TrustGraphTargetConfig } from './executionContractTrustGraph/trustGraphEvidenceTypes.js';
 
@@ -412,6 +413,7 @@ export type PlannerCandidate = Partial<ChatPlan> & {
         weather?: unknown;
         temperament?: unknown;
         githubContext?: unknown;
+        githubSource?: unknown;
     };
 };
 
@@ -1216,6 +1218,15 @@ const normalizeGeneration = (
         baseGeneration.githubContext = normalizedGitHubContext;
     } else if (candidate?.githubContext !== undefined) {
         correctionCodes.push('github_context_invalid');
+    }
+    const normalizedGitHubSource = normalizeGitHubSourceSelection(
+        candidate?.githubSource,
+        request.latestUserInput
+    );
+    if (normalizedGitHubSource) {
+        baseGeneration.githubSource = normalizedGitHubSource;
+    } else if (candidate?.githubSource !== undefined) {
+        correctionCodes.push('github_source_invalid');
     }
     const normalizedToolIntent = normalizeToolIntent(candidate?.toolIntent);
     if (normalizedToolIntent) {

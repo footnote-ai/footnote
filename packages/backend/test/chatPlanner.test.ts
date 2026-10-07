@@ -2364,6 +2364,93 @@ test('chatPlanner accepts exact GitHub references only when user-authored text n
     });
 });
 
+test('chatPlanner accepts source retrieval only for the latest user-selected repository, path, and revision', async () => {
+    const planner = createStructuredPlanner(
+        {
+            action: 'message',
+            modality: 'text',
+            requestedCapabilityProfile: 'balanced-general',
+            safetyTier: 'Low',
+            reasoning: 'Inspect the explicitly selected source file.',
+            generation: {
+                reasoningEffort: 'low',
+                verbosity: 'low',
+                temperament: {
+                    tightness: 3,
+                    rationale: 3,
+                    attribution: 3,
+                    caution: 3,
+                    extent: 3,
+                },
+                githubSource: {
+                    repository: 'acme/repo',
+                    revision: 'main',
+                    path: 'src/service.ts',
+                    searchTerm: 'target()',
+                },
+            },
+        },
+        [{ id: 'balanced-general', description: 'general' }]
+    );
+
+    const userInput =
+        'Search for target() in acme/repo at main in src/service.ts';
+    const accepted = await planFromWorkflow(
+        planner,
+        createChatRequest({
+            latestUserInput: userInput,
+            conversation: [{ role: 'user', content: userInput }],
+        })
+    );
+    assert.deepEqual(accepted.plan.generation.githubSource, {
+        repository: 'acme/repo',
+        revision: 'main',
+        path: 'src/service.ts',
+        searchTerm: 'target()',
+    });
+
+    const pathOnlyFromEarlierTurn = await planFromWorkflow(
+        planner,
+        createChatRequest({
+            latestUserInput: 'Tell me what the project does.',
+            conversation: [
+                { role: 'user', content: userInput },
+                { role: 'user', content: 'Tell me what the project does.' },
+            ],
+        })
+    );
+    assert.equal(
+        pathOnlyFromEarlierTurn.plan.generation.githubSource,
+        undefined
+    );
+
+    const unselected = await planFromWorkflow(
+        createPlanner(
+            JSON.stringify({
+                action: 'message',
+                modality: 'text',
+                requestedCapabilityProfile: 'balanced-general',
+                safetyTier: 'Low',
+                reasoning: 'Answer normally.',
+                generation: {
+                    reasoningEffort: 'low',
+                    verbosity: 'low',
+                    temperament: {
+                        tightness: 3,
+                        rationale: 3,
+                        attribution: 3,
+                        caution: 3,
+                        extent: 3,
+                    },
+                },
+            }),
+            [{ id: 'balanced-general', description: 'general' }]
+        ),
+        createChatRequest({ latestUserInput: 'Hi.' })
+    );
+    assert.equal(unselected.plan.generation.githubSource, undefined);
+});
+
 test('chatPlanner preserves bounded opaque TrustGraph target suggestions', async () => {
     const planner = createPlanner(
         JSON.stringify({

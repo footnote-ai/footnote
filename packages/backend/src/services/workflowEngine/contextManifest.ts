@@ -16,7 +16,13 @@ import type {
 import type { ConversationContextEnvelope } from '../conversationContextService.js';
 
 type IntegrationMetadataStatus =
-    'current' | 'partial' | 'stale' | 'unavailable';
+    | 'current'
+    | 'retrieved'
+    | 'empty'
+    | 'partial'
+    | 'stale'
+    | 'unavailable'
+    | 'failed';
 
 type ContextStepManifestFailure = {
     integrationName: string;
@@ -26,6 +32,7 @@ type ContextStepManifestFailure = {
 
 const INTEGRATION_SCOPES: Record<string, string> = {
     github_context: 'bounded GitHub repository metadata',
+    github_source: 'one explicitly selected repository source file',
     project_context: 'approved project documents',
     web_search: 'provider web search results',
     trustgraph: 'scoped advisory external evidence',
@@ -48,9 +55,12 @@ const readMetadataStatus = (
     }
     const status = (metadata as { status?: unknown }).status;
     return status === 'current' ||
+        status === 'retrieved' ||
+        status === 'empty' ||
         status === 'partial' ||
         status === 'stale' ||
-        status === 'unavailable'
+        status === 'unavailable' ||
+        status === 'failed'
         ? status
         : undefined;
 };
@@ -76,6 +86,8 @@ const resolveStepStatus = (
 ): GenerationContextManifestStatus => {
     const metadataStatus = readMetadataStatus(result);
     if (metadataStatus === 'unavailable') return 'unavailable';
+    if (metadataStatus === 'empty') return 'empty';
+    if (metadataStatus === 'failed') return 'failed';
     if (metadataStatus === 'partial') return 'partial';
     if (metadataStatus === 'stale') return 'stale';
 

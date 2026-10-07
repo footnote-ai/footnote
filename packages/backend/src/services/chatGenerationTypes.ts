@@ -15,7 +15,10 @@ import type {
     ResponseTemperament,
 } from '@footnote/contracts';
 import type { ExecutionResponseMode } from './executionContract.js';
-import type { ToolInvocationIntent } from '@footnote/contracts/policy';
+import type {
+    RepositorySourceSelection,
+    ToolInvocationIntent,
+} from '@footnote/contracts/policy';
 export type { ChatRepoSearchHint } from '@footnote/contracts';
 
 /**
@@ -97,6 +100,8 @@ export type ChatGenerationPlan = {
     search?: ChatGenerationSearch;
     /** Planner suggestion only; backend validates the slug against user conversation. */
     githubContext?: ChatGenerationGitHubContext;
+    /** Planner suggestion only; backend validates every selector in the latest user message. */
+    githubSource?: RepositorySourceSelection;
     /** Backend routing suggestion for Footnote itself; the user need not provide a slug. */
     projectContext?: ChatGenerationProjectContext;
     toolIntent?: ChatGenerationToolIntent;

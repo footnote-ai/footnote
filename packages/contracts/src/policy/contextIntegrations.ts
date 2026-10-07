@@ -14,6 +14,7 @@ export const CONTEXT_INTEGRATION_NAMES = [
     'trustgraph',
     'reverse_image_search',
     'github_context',
+    'github_source',
     'project_context',
 ] as const;
 
@@ -31,4 +32,13 @@ export type GitHubObjectReference =
 export type GitHubContextReference = {
     repository: string;
     reference: GitHubObjectReference;
+};
+
+/** Provider-neutral selection of one repository file at a requested revision. */
+export type RepositorySourceSelection = {
+    repository: string;
+    path: string;
+    revision: string;
+    /** Optional literal search within the selected file, never repository-wide. */
+    searchTerm?: string;
 };

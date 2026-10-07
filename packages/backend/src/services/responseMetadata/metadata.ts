@@ -230,6 +230,9 @@ const buildResponseMetadata = (
         ...(runtimeContext.githubContext !== undefined && {
             githubContext: runtimeContext.githubContext,
         }),
+        ...(runtimeContext.githubSource !== undefined && {
+            githubSource: runtimeContext.githubSource,
+        }),
         ...(runtimeContext.projectContext !== undefined && {
             projectContext: runtimeContext.projectContext,
         }),

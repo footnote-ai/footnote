@@ -25,6 +25,7 @@ import type {
     PlannerExecutionContractType,
     PlannerExecutionPurpose,
     ProjectContextMetadata,
+    RepositorySourceMetadata,
     Provenance,
     ResponseMetadata,
     SteerabilityControlId,
@@ -82,6 +83,7 @@ export type ResponseMetadataRuntimeContext = {
     trustGraphEvidenceAvailable?: boolean;
     trustGraphEvidenceUsed?: boolean;
     githubContext?: GitHubContextMetadata;
+    githubSource?: RepositorySourceMetadata;
     projectContext?: ProjectContextMetadata;
     executionContext?: {
         planner?: {
