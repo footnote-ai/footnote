@@ -9,8 +9,8 @@ paths:
                 - packages/web/src/utils/api.ts#getExecutionReport
             summary: Get a workflow execution report
             description: >-
-                Returns the workflow recorded for a response. Requires a signed-in account with admin access. Setup
-                and service tokens cannot use this endpoint.
+                Returns the workflow and bounded model debug material recorded for a response. Requires a signed-in
+                account with admin access. Setup and service tokens cannot use this endpoint.
             tags:
                 - Admin
             security:
@@ -483,14 +483,70 @@ components:
                     type: string
                 workflow:
                     $ref: '#/components/schemas/WorkflowRecord'
+                modelDebugCaptures:
+                    type: array
+                    maxItems: 33
+                    description: Bounded model input/output material for this Run, or an empty list when unavailable.
+                    items:
+                        $ref: '#/components/schemas/ExecutionReportDebugCapture'
             required:
                 - responseId
                 - workflow
+                - modelDebugCaptures
             additionalProperties: false
             x-codeRefs:
                 - packages/backend/src/handlers/operatorExecution.ts#createOperatorExecutionHandler
                 - packages/contracts/src/policy/types.ts#WorkflowRecord
                 - packages/contracts/src/web/types.ts#ExecutionReportResponse
+        ExecutionReportDebugCapture:
+            type: object
+            description: Bounded debug material for one model invocation; it is not the delivered answer.
+            properties:
+                runId:
+                    type: string
+                stepId:
+                    type: string
+                attempt:
+                    type: integer
+                    minimum: 1
+                invocation:
+                    type: integer
+                    minimum: 0
+                inputText:
+                    type: string
+                    description: At most 16,384 UTF-16 code units of model-visible input; inputTruncated indicates an incomplete body.
+                inputTruncated:
+                    type: boolean
+                inputRedacted:
+                    type: boolean
+                outputText:
+                    type: string
+                    description: At most 16,384 UTF-16 code units of model output or reused candidate text; outputTruncated indicates an incomplete body.
+                outputCandidateId:
+                    type: string
+                outputTruncated:
+                    type: boolean
+                outputRedacted:
+                    type: boolean
+                outputUnavailable:
+                    type: boolean
+                captureLimitReached:
+                    type: boolean
+                omittedInvocationCount:
+                    type: integer
+                    minimum: 1
+            required:
+                - runId
+                - stepId
+                - attempt
+                - invocation
+                - inputText
+                - inputTruncated
+                - inputRedacted
+            additionalProperties: false
+            x-codeRefs:
+                - packages/backend/src/storage/traces/sqliteTraceStore.ts#ModelDebugCaptureRecord
+                - packages/contracts/src/web/types.ts#ExecutionReportDebugCapture
         RuntimeConfig:
             type: object
             properties:

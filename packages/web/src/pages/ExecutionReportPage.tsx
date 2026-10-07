@@ -12,13 +12,19 @@ import type {
     WorkflowAttemptRecord,
     WorkflowRecord,
 } from '@footnote/contracts/policy';
+import type { ExecutionReportDebugCapture } from '@footnote/contracts/web';
 import PublicPageLayout from '@components/PublicPageLayout';
 import { Link, useParams } from 'react-router-dom';
 import { getExecutionReport, isApiClientError } from '../utils/api';
 
 type ReadState =
     | { status: 'loading' }
-    | { status: 'ready'; responseId: string; workflow: WorkflowRecord }
+    | {
+          status: 'ready';
+          responseId: string;
+          workflow: WorkflowRecord;
+          modelDebugCaptures: ExecutionReportDebugCapture[];
+      }
     | { status: 'not-found' }
     | { status: 'denied' }
     | { status: 'unavailable' };
@@ -77,119 +83,214 @@ const Facts = ({ items }: { items: Array<[string, string | number]> }) => (
     </dl>
 );
 
-const Attempt = ({ attempt }: { attempt: WorkflowAttemptRecord }) => (
-    <li>
-        <h4>
-            Attempt {attempt.attempt} · {attempt.status}
-        </h4>
-        <Facts
-            items={[
-                [
-                    'Provider / model',
-                    `${attempt.actualProvider ?? 'Unavailable'} / ${attempt.actualModel ?? 'Unavailable'}`,
-                ],
-                [
-                    'Requested',
-                    `${attempt.requestedProvider ?? 'Unavailable'} / ${attempt.requestedModel ?? 'Unavailable'}`,
-                ],
-                ['Duration', duration(attempt.durationMs)],
-                [
-                    'Reason',
-                    attempt.reasonCode ??
-                        attempt.terminationReason ??
-                        'Unavailable',
-                ],
-                ['Token usage', usageSummary(attempt.usage)],
-                ['Estimated cost', costSummary(attempt.cost)],
-            ]}
-        />
-        {attempt.routingAttempts?.length ? (
-            <details>
-                <summary>
-                    Routing attempts ({attempt.routingAttempts.length})
-                </summary>
-                <ol>
-                    {attempt.routingAttempts.map((routing) => (
-                        <li key={routing.index}>
-                            {routing.profileId} · {routing.status} ·{' '}
-                            {routing.actualProvider ??
-                                routing.requestedProvider ??
-                                'Provider unavailable'}{' '}
-                            /{' '}
-                            {routing.actualModel ??
-                                routing.requestedModel ??
-                                'Model unavailable'}{' '}
-                            · {duration(routing.durationMs)}
-                            {routing.reasonCode
-                                ? ` · ${routing.reasonCode}`
-                                : ''}
-                        </li>
-                    ))}
-                </ol>
-            </details>
-        ) : null}
-        {attempt.trustGraphTargets?.length ? (
-            <details>
-                <summary>
-                    TrustGraph targets ({attempt.trustGraphTargets.length})
-                </summary>
-                <ul>
-                    {attempt.trustGraphTargets.map((target) => (
-                        <li
-                            key={`${target.targetId}-${target.flow}-${target.collection}`}
-                        >
-                            {target.targetId} · {target.flow}/
-                            {target.collection} · {target.outcome} ·{' '}
-                            {target.reasonCode ?? 'No failure reason'} · Request
-                            time:{' '}
-                            {duration(target.measurements?.requestDurationMs)} ·
-                            sources:{' '}
-                            {target.measurements?.returnedSourceCount ??
-                                'Unavailable'}{' '}
-                            returned,{' '}
-                            {target.measurements?.retainedSourceCount ??
-                                'Unavailable'}{' '}
-                            retained · response size:{' '}
-                            {target.measurements
-                                ?.responseCodeUnitsBeforeBounds ??
-                                'Unavailable'}{' '}
-                            /{' '}
-                            {target.measurements
-                                ?.responseCodeUnitsAfterBounds ??
-                                'Unavailable'}{' '}
-                            code units · source text size:{' '}
-                            {target.measurements
-                                ?.retainedSourceTextCodeUnitsBeforeTextBounds ??
-                                'Unavailable'}{' '}
-                            /{' '}
-                            {target.measurements
-                                ?.retainedSourceTextCodeUnitsAfterTextBounds ??
-                                'Unavailable'}{' '}
-                            code units before/after text limit
-                            {target.bounds?.sourcesTruncated
-                                ? ' · sources truncated'
-                                : ''}
-                            {target.bounds?.responseTruncated
-                                ? ' · response truncated'
-                                : ''}
-                        </li>
-                    ))}
-                </ul>
+const DebugCapture = ({
+    capture,
+}: {
+    capture: ExecutionReportDebugCapture;
+}) => (
+    <section className="execution-report__debug-capture">
+        <h5>Invocation {capture.invocation + 1}</h5>
+        {capture.captureLimitReached ? (
+            <p>
+                Debug capture unavailable: run limit reached;{' '}
+                {capture.omittedInvocationCount ?? 'Additional'} model calls
+                omitted.
+            </p>
+        ) : (
+            <>
+                <h6>Model input</h6>
                 <p>
-                    Request time is measured by Footnote, not TrustGraph's
-                    internal processing time.
+                    {capture.inputTruncated
+                        ? 'Partial — input was truncated.'
+                        : 'Available.'}
+                    {capture.inputRedacted &&
+                        ' Secret-like values were redacted.'}
                 </p>
-            </details>
-        ) : null}
-    </li>
+                <pre>{capture.inputText}</pre>
+                <h6>Model output</h6>
+                {capture.outputText === undefined ? (
+                    <p>
+                        {capture.outputUnavailable
+                            ? 'Unavailable — returned text was not retained.'
+                            : 'Unavailable — no output was recorded.'}
+                    </p>
+                ) : (
+                    <>
+                        <p>
+                            {capture.outputTruncated
+                                ? 'Partial — output was truncated.'
+                                : 'Available.'}
+                            {capture.outputRedacted &&
+                                ' Secret-like values were redacted.'}
+                        </p>
+                        <pre>{capture.outputText}</pre>
+                    </>
+                )}
+            </>
+        )}
+    </section>
 );
+
+const Attempt = ({
+    attempt,
+    stepId,
+    captures,
+}: {
+    attempt: WorkflowAttemptRecord;
+    stepId: string;
+    captures: ExecutionReportDebugCapture[];
+}) => {
+    const attemptCaptures = captures.filter(
+        (capture) =>
+            capture.stepId === stepId && capture.attempt === attempt.attempt
+    );
+    const hasModelIdentity = Boolean(
+        attempt.actualProvider ??
+        attempt.actualModel ??
+        attempt.requestedProvider ??
+        attempt.requestedModel
+    );
+
+    return (
+        <li>
+            <h4>
+                Attempt {attempt.attempt} · {attempt.status}
+            </h4>
+            <Facts
+                items={[
+                    [
+                        'Provider / model',
+                        `${attempt.actualProvider ?? 'Unavailable'} / ${attempt.actualModel ?? 'Unavailable'}`,
+                    ],
+                    [
+                        'Requested',
+                        `${attempt.requestedProvider ?? 'Unavailable'} / ${attempt.requestedModel ?? 'Unavailable'}`,
+                    ],
+                    ['Duration', duration(attempt.durationMs)],
+                    [
+                        'Reason',
+                        attempt.reasonCode ??
+                            attempt.terminationReason ??
+                            'Unavailable',
+                    ],
+                    ['Token usage', usageSummary(attempt.usage)],
+                    ['Estimated cost', costSummary(attempt.cost)],
+                ]}
+            />
+            {attempt.routingAttempts?.length ? (
+                <details>
+                    <summary>
+                        Routing attempts ({attempt.routingAttempts.length})
+                    </summary>
+                    <ol>
+                        {attempt.routingAttempts.map((routing) => (
+                            <li key={routing.index}>
+                                {routing.profileId} · {routing.status} ·{' '}
+                                {routing.actualProvider ??
+                                    routing.requestedProvider ??
+                                    'Provider unavailable'}{' '}
+                                /{' '}
+                                {routing.actualModel ??
+                                    routing.requestedModel ??
+                                    'Model unavailable'}{' '}
+                                · {duration(routing.durationMs)}
+                                {routing.reasonCode
+                                    ? ` · ${routing.reasonCode}`
+                                    : ''}
+                            </li>
+                        ))}
+                    </ol>
+                </details>
+            ) : null}
+            {attempt.trustGraphTargets?.length ? (
+                <details>
+                    <summary>
+                        TrustGraph targets ({attempt.trustGraphTargets.length})
+                    </summary>
+                    <ul>
+                        {attempt.trustGraphTargets.map((target) => (
+                            <li
+                                key={`${target.targetId}-${target.flow}-${target.collection}`}
+                            >
+                                {target.targetId} · {target.flow}/
+                                {target.collection} · {target.outcome} ·{' '}
+                                {target.reasonCode ?? 'No failure reason'} ·
+                                Request time:{' '}
+                                {duration(
+                                    target.measurements?.requestDurationMs
+                                )}{' '}
+                                · sources:{' '}
+                                {target.measurements?.returnedSourceCount ??
+                                    'Unavailable'}{' '}
+                                returned,{' '}
+                                {target.measurements?.retainedSourceCount ??
+                                    'Unavailable'}{' '}
+                                retained · response size:{' '}
+                                {target.measurements
+                                    ?.responseCodeUnitsBeforeBounds ??
+                                    'Unavailable'}{' '}
+                                /{' '}
+                                {target.measurements
+                                    ?.responseCodeUnitsAfterBounds ??
+                                    'Unavailable'}{' '}
+                                code units · source text size:{' '}
+                                {target.measurements
+                                    ?.retainedSourceTextCodeUnitsBeforeTextBounds ??
+                                    'Unavailable'}{' '}
+                                /{' '}
+                                {target.measurements
+                                    ?.retainedSourceTextCodeUnitsAfterTextBounds ??
+                                    'Unavailable'}{' '}
+                                code units before/after text limit
+                                {target.bounds?.sourcesTruncated
+                                    ? ' · sources truncated'
+                                    : ''}
+                                {target.bounds?.responseTruncated
+                                    ? ' · response truncated'
+                                    : ''}
+                            </li>
+                        ))}
+                    </ul>
+                    <p>
+                        Request time is measured by Footnote, not TrustGraph's
+                        internal processing time.
+                    </p>
+                </details>
+            ) : null}
+            {hasModelIdentity || attemptCaptures.length > 0 ? (
+                <details className="execution-report__debug">
+                    <summary>Model input/output (debug material)</summary>
+                    <p>
+                        Debug material for Attempt {attempt.attempt}; it is not
+                        the delivered answer.
+                    </p>
+                    {attemptCaptures.length > 0 ? (
+                        attemptCaptures.map((capture) => (
+                            <DebugCapture
+                                key={capture.invocation}
+                                capture={capture}
+                            />
+                        ))
+                    ) : (
+                        <p>
+                            Unavailable — no model input or output was retained
+                            for this Attempt.
+                        </p>
+                    )}
+                </details>
+            ) : null}
+        </li>
+    );
+};
 
 const Step = ({
     step,
     results,
+    captures,
 }: {
     step: StepRecord;
     results: NonNullable<WorkflowRecord['results']>;
+    captures: ExecutionReportDebugCapture[];
 }) => (
     <li>
         <article className="execution-report__step">
@@ -209,7 +310,7 @@ const Step = ({
                                           (item) =>
                                               item.resultId === result.resultId
                                       );
-                                      return `${result.name}: ${record?.status ?? 'Unavailable'}`;
+                                      return `${result.name} (${result.resultId}): ${record?.status ?? 'Unavailable'}`;
                                   })
                                   .join(', ')
                             : 'Unavailable',
@@ -221,7 +322,12 @@ const Step = ({
             {step.attempts?.length ? (
                 <ol className="execution-report__attempts">
                     {step.attempts.map((attempt) => (
-                        <Attempt key={attempt.attempt} attempt={attempt} />
+                        <Attempt
+                            key={attempt.attempt}
+                            attempt={attempt}
+                            stepId={step.stepId}
+                            captures={captures}
+                        />
                     ))}
                 </ol>
             ) : (
@@ -247,6 +353,7 @@ const ExecutionReportPage = (): JSX.Element => {
                         status: 'ready',
                         responseId: record.responseId,
                         workflow: record.workflow,
+                        modelDebugCaptures: record.modelDebugCaptures ?? [],
                     });
                 }
             })
@@ -372,6 +479,9 @@ const ExecutionReportPage = (): JSX.Element => {
                                             step={step}
                                             results={
                                                 readState.workflow.results ?? []
+                                            }
+                                            captures={
+                                                readState.modelDebugCaptures
                                             }
                                         />
                                     ))}

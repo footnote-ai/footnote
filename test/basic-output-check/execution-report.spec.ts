@@ -9,6 +9,30 @@ import { expect, test } from '@playwright/test';
 
 const report = {
     responseId: 'response-report-1',
+    modelDebugCaptures: [
+        {
+            runId: 'run-1',
+            stepId: 'write',
+            attempt: 1,
+            invocation: 0,
+            inputText: 'partial failed-attempt input',
+            inputTruncated: true,
+            inputRedacted: false,
+            outputUnavailable: true,
+        },
+        {
+            runId: 'run-1',
+            stepId: 'write',
+            attempt: 2,
+            invocation: 0,
+            inputText: 'redacted model input',
+            inputTruncated: false,
+            inputRedacted: true,
+            outputText: 'candidate output body',
+            outputCandidateId: 'candidate-1',
+            outputRedacted: true,
+        },
+    ],
     workflow: {
         runId: 'run-1',
         runStatus: 'degraded',
@@ -208,7 +232,40 @@ test('shows the run, steps, attempts, and recorded results', async ({
     await expect(
         page.locator('details').filter({ hasText: 'TrustGraph targets' })
     ).toContainText('Request time: 37 ms');
-    await expect(page.getByText('final-answer: produced')).toBeVisible();
+    await expect(
+        page.getByText('final-answer (result-1): produced')
+    ).toBeVisible();
+
+    const failedAttemptDebug = page
+        .locator('.execution-report__attempts > li')
+        .filter({ hasText: 'Attempt 1 · failed' })
+        .locator('.execution-report__debug');
+    await failedAttemptDebug.locator('summary').click();
+    await expect(
+        failedAttemptDebug.getByText('Partial — input was truncated.')
+    ).toBeVisible();
+    await expect(
+        failedAttemptDebug.getByText(
+            'Unavailable — returned text was not retained.'
+        )
+    ).toBeVisible();
+    const successfulAttemptDebug = page
+        .locator('.execution-report__attempts > li')
+        .filter({ hasText: 'Attempt 2 · succeeded' })
+        .locator('.execution-report__debug');
+    await successfulAttemptDebug.locator('summary').click();
+    await expect(
+        successfulAttemptDebug.getByText('candidate output body')
+    ).toBeVisible();
+    await expect(
+        successfulAttemptDebug
+            .getByText('Available. Secret-like values were redacted.')
+            .first()
+    ).toBeVisible();
+    await successfulAttemptDebug.locator('summary').click();
+    await expect(
+        successfulAttemptDebug.getByText('candidate output body')
+    ).not.toBeVisible();
 
     const stepHeadings = await page
         .locator('.execution-report__step h3')
@@ -313,8 +370,17 @@ test('shows a completed run with successful attempt details', async ({
         )
     ).toBeVisible();
     await expect(page.getByText('$0.030000 · complete')).toBeVisible();
-    await expect(page.getByText('answer: produced')).toBeVisible();
+    await expect(
+        page.getByText('answer (result-complete): produced')
+    ).toBeVisible();
     await expect(page.getByText('PRIVATE_SUMMARY')).toHaveCount(0);
+    const debug = page.locator('.execution-report__debug');
+    await debug.locator('summary').click();
+    await expect(
+        debug.getByText(
+            'Unavailable — no model input or output was retained for this Attempt.'
+        )
+    ).toBeVisible();
 });
 
 test('shows backend access denial without rendering a record', async ({
