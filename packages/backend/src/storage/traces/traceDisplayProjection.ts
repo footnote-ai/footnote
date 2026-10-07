@@ -48,6 +48,32 @@ type MetadataField = (typeof OPTIONAL_METADATA_FIELDS)[number];
 const isRecord = (value: unknown): value is Record<string, unknown> =>
     !!value && typeof value === 'object' && !Array.isArray(value);
 
+/**
+ * A GitHub source citation has no public/private visibility fact in its contract.
+ * Withhold the exact citation produced for that source rather than exposing a
+ * private repository path or revision through the otherwise-public title/URL.
+ */
+const isGitHubSourceCitation = (
+    citation: { title: string; url: string },
+    value: unknown
+): boolean => {
+    if (!isRecord(value)) return false;
+    const { repository, path, resolvedRevision } = value;
+    if (
+        typeof repository !== 'string' ||
+        typeof path !== 'string' ||
+        typeof resolvedRevision !== 'string' ||
+        !/^[A-Fa-f0-9]{40}$/u.test(resolvedRevision)
+    ) {
+        return false;
+    }
+    const citationUrl = `https://github.com/${repository}/blob/${resolvedRevision}/${path
+        .split('/')
+        .map(encodeURIComponent)
+        .join('/')}`;
+    return citation.title === path && citation.url === citationUrl;
+};
+
 const isTraceAxisScore = (value: unknown): value is TraceAxisScore =>
     typeof value === 'number' &&
     Number.isInteger(value) &&
@@ -365,6 +391,15 @@ const projectKnownMetadata = (
                     : citation
             );
             if (parsedCitation.success) {
+                if (
+                    isGitHubSourceCitation(
+                        parsedCitation.data,
+                        raw.githubSource
+                    )
+                ) {
+                    unavailableFields.push(`citations[${index}]`);
+                    return;
+                }
                 citations.push(parsedCitation.data);
             } else {
                 unavailableFields.push(`citations[${index}]`);

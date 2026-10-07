@@ -179,6 +179,77 @@ test('source selection requires user-authored repo, ref, and path and rejects un
         ),
         undefined
     );
+    for (const negativeRequest of [
+        "I'm not asking you to inspect acme/repo at main in src/service.ts.",
+        "Please don't read acme/repo at main in src/service.ts.",
+        'No need to search acme/repo at main in src/service.ts.',
+    ]) {
+        assert.equal(
+            normalizeGitHubSourceSelection(selection, negativeRequest),
+            undefined,
+            negativeRequest
+        );
+    }
+    for (const positiveRequest of [
+        'Please check acme/repo at main in src/service.ts for target().',
+        'Open acme/repo at main in src/service.ts and find target().',
+    ]) {
+        assert.deepEqual(
+            normalizeGitHubSourceSelection(selection, positiveRequest),
+            selection,
+            positiveRequest
+        );
+    }
+});
+
+test('returned match count reflects matches retained by the UTF-8 excerpt cap', async () => {
+    const largeCode = Array.from(
+        { length: 20 },
+        (_, index) => `target ${index} ${'é'.repeat(550)}`
+    ).join('\n');
+    const largeFileResponse = {
+        ...fileResponse,
+        size: Buffer.byteLength(largeCode),
+        content: Buffer.from(largeCode).toString('base64'),
+    };
+    const executor = createGitHubSourceContextStepExecutor({
+        enabled: true,
+        token: null,
+        timeoutMs: 5000,
+        privateRepositoryAllowlist: [],
+        cacheTtlMs: 60_000,
+        staleResultLimitMs: 900_000,
+        fetchImpl: async (url) =>
+            url.endsWith('/acme/repo')
+                ? response(200, { private: false })
+                : url.endsWith('/commits/main')
+                  ? response(200, { sha: commit })
+                  : response(200, largeFileResponse),
+    });
+    const result = await executor(
+        request({ ...selection, searchTerm: 'target' })
+    );
+    const payload = result.integrationContext?.payload as GitHubSourcePayload;
+    const content = payload.content ?? '';
+    assert.equal(result.outcome, 'executed');
+    assert.equal(payload.metadata.matchCount, 20);
+    assert.ok((payload.metadata.returnedMatchCount ?? 20) < 20);
+    assert.ok(Buffer.byteLength(content, 'utf8') <= 12 * 1024);
+    assert.match(
+        content,
+        new RegExp(
+            `returned lines: ${payload.metadata.returnedMatchCount}\\.`,
+            'u'
+        )
+    );
+    assert.equal(
+        (content.match(/^L\d+:/gmu) ?? []).length,
+        payload.metadata.returnedMatchCount
+    );
+    assert.match(
+        content,
+        /excerpt is partial because the result limit was reached/u
+    );
 });
 
 test('an empty literal search is distinct from an unavailable source', async () => {
