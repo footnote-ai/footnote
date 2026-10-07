@@ -232,6 +232,9 @@ importers:
 
   .:
     dependencies:
+      '@footnote/repository-context':
+        specifier: workspace:*
+        version: link:packages/repository-context
       dotenv:
         specifier: 'catalog:'
         version: 17.4.2
@@ -599,6 +602,8 @@ importers:
       typescript:
         specifier: 'catalog:'
         version: 5.9.3
+
+  packages/repository-context: {}
 
   packages/web:
     dependencies:

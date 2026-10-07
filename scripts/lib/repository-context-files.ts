@@ -1,157 +1,50 @@
 /**
- * @description: Parses and resolves the repository-owned context file allowlist without loading file contents.
- * It limits the preview to safe, tracked, regular files inside the repository.
+ * @description: Adapts a local Git checkout to the repository-context core.
+ * It limits selection to tracked regular files and never returns source contents in previews.
  * @footnote-scope: utility
- * @footnote-module: RepositoryContextFiles
- * @footnote-risk: medium - Unsafe path matching could expose unintended repository files to later context loaders.
- * @footnote-ethics: high - Repository context selection controls which project information may influence AI output.
+ * @footnote-module: RepositoryContextGitSource
+ * @footnote-risk: medium - Unsafe path matching could expose files outside the checked-out repository.
+ * @footnote-ethics: high - Local source selection controls which repository data may be loaded.
  */
 
 import { execFile } from 'node:child_process';
+import type { Stats } from 'node:fs';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { promisify } from 'node:util';
+import {
+    createRepositoryContextPreview,
+    DEFAULT_REPOSITORY_CONTEXT_LIMITS,
+    normalizeRepositoryRelativePath,
+    parseRepositoryContextPatterns,
+    type RepositoryContextFile,
+    type RepositoryContextFileReadResult,
+    type RepositoryContextFileSource,
+    type RepositoryContextLimits,
+    type RepositoryContextResult,
+} from '@footnote/repository-context';
 
-export type RepositoryContextFile = {
-    path: string;
-    sizeBytes: number;
+export {
+    createRepositoryContextPreview,
+    DEFAULT_REPOSITORY_CONTEXT_LIMITS,
+    normalizeRepositoryRelativePath,
+    parseRepositoryContextPatterns,
 };
-
-export type RepositoryContextResult = {
-    files: RepositoryContextFile[];
-    skipped: Array<{
-        path: string;
-        reason: string;
-    }>;
-    totalBytes: number;
-};
-
-export type RepositoryContextPatterns = {
-    include: string[];
-    exclude: string[];
-};
-
-export type RepositoryContextLimits = {
-    maxFiles: number;
-    maxFileBytes: number;
-    maxTotalBytes: number;
+export type {
+    RepositoryContextFile,
+    RepositoryContextFileReadResult,
+    RepositoryContextFileSource,
+    RepositoryContextLimits,
+    RepositoryContextResult,
 };
 
 export type ResolveRepositoryContextOptions = {
     repositoryRoot?: string;
     limits?: Partial<RepositoryContextLimits>;
 };
-
-export const DEFAULT_REPOSITORY_CONTEXT_LIMITS: RepositoryContextLimits = {
-    maxFiles: 250,
-    maxFileBytes: 1024 * 1024,
-    maxTotalBytes: 10 * 1024 * 1024,
-};
-
 const CONTEXT_FILES_PATH = '.footnote/context-files';
 const execFileAsync = promisify(execFile);
-
-const toForwardSlashes = (filePath: string): string =>
-    filePath.replaceAll('\\', '/');
-
-/**
- * Normalizes a concrete repository-relative path for identity and metadata.
- * Glob patterns must use `toForwardSlashes` because they are not concrete paths.
- */
-export const normalizeRepositoryRelativePath = (
-    filePath: string
-): string | undefined => {
-    const forwardPath = toForwardSlashes(filePath);
-    if (
-        forwardPath.length === 0 ||
-        path.posix.isAbsolute(forwardPath) ||
-        path.win32.isAbsolute(filePath) ||
-        /^[a-zA-Z]:\//u.test(forwardPath)
-    ) {
-        return undefined;
-    }
-
-    const normalizedPath = path.posix.normalize(forwardPath);
-    if (
-        normalizedPath === '.' ||
-        normalizedPath === '..' ||
-        normalizedPath.startsWith('../') ||
-        path.posix.isAbsolute(normalizedPath) ||
-        normalizedPath.split('/').some((segment) => segment.length === 0)
-    ) {
-        return undefined;
-    }
-
-    return normalizedPath;
-};
-
-const comparePaths = (left: string, right: string): number => {
-    if (left < right) {
-        return -1;
-    }
-    if (left > right) {
-        return 1;
-    }
-    return 0;
-};
-
-const formatLimitBytes = (bytes: number): string => {
-    if (bytes > 0 && bytes % (1024 * 1024) === 0) {
-        return `${bytes / (1024 * 1024)} MiB`;
-    }
-    return `${bytes} bytes`;
-};
-
-const assertSafePattern = (pattern: string, lineNumber: number): void => {
-    const normalized = toForwardSlashes(pattern);
-    const isAbsolute =
-        path.posix.isAbsolute(normalized) ||
-        path.win32.isAbsolute(pattern) ||
-        /^[a-zA-Z]:\//u.test(normalized);
-    const escapesRepository = normalized.split('/').includes('..');
-
-    if (isAbsolute || escapesRepository) {
-        throw new Error(
-            `Invalid repository context pattern on line ${lineNumber}: "${pattern}". Patterns must stay inside the repository.`
-        );
-    }
-};
-
-/**
- * Parses repository context patterns without consulting Git or the filesystem.
- */
-export const parseRepositoryContextPatterns = (
-    contents: string
-): RepositoryContextPatterns => {
-    const include: string[] = [];
-    const exclude: string[] = [];
-
-    for (const [index, rawLine] of contents.split(/\r?\n/u).entries()) {
-        const line = rawLine.trim();
-        if (line.length === 0 || line.startsWith('#')) {
-            continue;
-        }
-
-        const isExclude = line.startsWith('!');
-        const pattern = isExclude ? line.slice(1).trim() : line;
-        if (pattern.length === 0) {
-            throw new Error(
-                `Invalid repository context pattern on line ${index + 1}: a pattern is required.`
-            );
-        }
-        assertSafePattern(pattern, index + 1);
-
-        (isExclude ? exclude : include).push(toForwardSlashes(pattern));
-    }
-
-    if (include.length === 0) {
-        throw new Error(
-            'Repository context allowlist must contain at least one include pattern.'
-        );
-    }
-
-    return { include, exclude };
-};
+const UTF8_DECODER = new TextDecoder('utf-8', { fatal: true });
 
 const isPathInsideRepository = (
     repositoryRoot: string,
@@ -172,12 +65,8 @@ const listTrackedFiles = async (
     const { stdout } = await execFileAsync(
         'git',
         ['-C', repositoryRoot, 'ls-files', '-z', '--'],
-        {
-            encoding: 'utf8',
-            maxBuffer: 20 * 1024 * 1024,
-        }
+        { encoding: 'utf8', maxBuffer: 20 * 1024 * 1024 }
     );
-
     return new Set(
         stdout
             .split('\0')
@@ -192,8 +81,6 @@ const matchFiles = async (
     include: string[],
     exclude: string[]
 ): Promise<string[]> => {
-    // Keep the ESM-only dependency behind a native dynamic import because the
-    // repository's tsx scripts currently run from a CommonJS package root.
     const { globby } = await import('globby');
     return globby(include, {
         cwd: repositoryRoot,
@@ -204,10 +91,7 @@ const matchFiles = async (
     });
 };
 
-/**
- * Resolves the canonical allowlist to a serializable preview of safe, tracked files.
- * This function intentionally returns metadata only and never reads file contents.
- */
+/** Resolves the local tracked allowlist into the shared metadata-only preview. */
 export const resolveRepositoryContextFiles = async (
     options: ResolveRepositoryContextOptions = {}
 ): Promise<RepositoryContextResult> => {
@@ -238,21 +122,16 @@ export const resolveRepositoryContextFiles = async (
             .filter((filePath): filePath is string => filePath !== undefined)
             .filter((filePath) => trackedFiles.has(filePath))
     );
-
     if (selectedTracked.size === 0) {
         throw new Error(
             'Repository context allowlist matched no safe, tracked files. Add or broaden an include pattern.'
         );
     }
 
-    const skipped: RepositoryContextResult['skipped'] = [...includedTracked]
+    const skipped = [...includedTracked]
         .filter((filePath) => !selectedTracked.has(filePath))
-        .map((filePath) => ({
-            path: filePath,
-            reason: 'excluded by pattern',
-        }));
+        .map((filePath) => ({ path: filePath, reason: 'excluded by pattern' }));
     const files: RepositoryContextFile[] = [];
-
     for (const filePath of selectedTracked) {
         const absolutePath = path.resolve(repositoryRoot, filePath);
         if (!isPathInsideRepository(repositoryRoot, absolutePath)) {
@@ -260,7 +139,6 @@ export const resolveRepositoryContextFiles = async (
                 `Resolved repository context path escapes the repository: ${filePath}. Narrow the allowlist.`
             );
         }
-
         const fileStats = await fs.lstat(absolutePath);
         if (fileStats.isSymbolicLink()) {
             skipped.push({ path: filePath, reason: 'symbolic link' });
@@ -270,35 +148,110 @@ export const resolveRepositoryContextFiles = async (
             skipped.push({ path: filePath, reason: 'not a regular file' });
             continue;
         }
-        if (fileStats.size > limits.maxFileBytes) {
-            skipped.push({
-                path: filePath,
-                reason: `larger than ${formatLimitBytes(limits.maxFileBytes)}`,
-            });
-            continue;
-        }
-
         files.push({ path: filePath, sizeBytes: fileStats.size });
     }
+    return createRepositoryContextPreview({ files, skipped, limits });
+};
 
-    files.sort((left, right) => comparePaths(left.path, right.path));
-    skipped.sort((left, right) => comparePaths(left.path, right.path));
+const hasStableStats = (before: Stats, after: Stats): boolean =>
+    before.dev === after.dev &&
+    before.ino === after.ino &&
+    before.size === after.size &&
+    before.mtimeMs === after.mtimeMs;
 
-    if (files.length > limits.maxFiles) {
-        throw new Error(
-            `Repository context selects ${files.length} files, above the ${limits.maxFiles}-file limit. Narrow .footnote/context-files and try again.`
-        );
-    }
-
-    const totalBytes = files.reduce(
-        (sum, repositoryFile) => sum + repositoryFile.sizeBytes,
-        0
-    );
-    if (totalBytes > limits.maxTotalBytes) {
-        throw new Error(
-            `Repository context selects ${totalBytes} bytes, above the ${formatLimitBytes(limits.maxTotalBytes)} combined limit. Narrow .footnote/context-files and try again.`
-        );
-    }
-
-    return { files, skipped, totalBytes };
+/** Creates the CLI-owned Git/file source consumed by the shared TrustGraph loader. */
+export const createGitRepositoryContextFileSource = (
+    repositoryRoot: string
+): RepositoryContextFileSource => {
+    const absoluteRoot = path.resolve(repositoryRoot);
+    return {
+        preview: (limits) =>
+            resolveRepositoryContextFiles({
+                repositoryRoot: absoluteRoot,
+                limits,
+            }),
+        readFile: async (filePath, maxFileBytes) => {
+            const normalizedPath = normalizeRepositoryRelativePath(filePath);
+            if (normalizedPath === undefined) {
+                return { status: 'failed', reason: 'unsafe repository path' };
+            }
+            const fullPath = path.resolve(absoluteRoot, normalizedPath);
+            if (!isPathInsideRepository(absoluteRoot, fullPath)) {
+                return {
+                    status: 'failed',
+                    reason: 'resolved path escapes the repository',
+                };
+            }
+            let fileHandle: Awaited<ReturnType<typeof fs.open>> | undefined;
+            try {
+                const pathStats = await fs.lstat(fullPath);
+                if (pathStats.isSymbolicLink()) {
+                    return { status: 'skipped', reason: 'symbolic link' };
+                }
+                if (!pathStats.isFile()) {
+                    return { status: 'skipped', reason: 'not a regular file' };
+                }
+                const realRoot = await fs.realpath(absoluteRoot);
+                const realPath = await fs.realpath(fullPath);
+                if (!isPathInsideRepository(realRoot, realPath)) {
+                    return {
+                        status: 'failed',
+                        reason: 'real path escapes the repository',
+                    };
+                }
+                fileHandle = await fs.open(realPath, 'r');
+                const before = await fileHandle.stat();
+                if (!before.isFile()) {
+                    return { status: 'skipped', reason: 'not a regular file' };
+                }
+                if (before.size > maxFileBytes) {
+                    return {
+                        status: 'skipped',
+                        sizeBytes: before.size,
+                        reason: `larger than ${maxFileBytes} bytes`,
+                    };
+                }
+                const bytes = await fileHandle.readFile();
+                const after = await fileHandle.stat();
+                if (!hasStableStats(before, after)) {
+                    return {
+                        status: 'failed',
+                        reason: 'file changed while it was being read',
+                    };
+                }
+                if (bytes.byteLength > maxFileBytes) {
+                    return {
+                        status: 'skipped',
+                        sizeBytes: bytes.byteLength,
+                        reason: `larger than ${maxFileBytes} bytes`,
+                    };
+                }
+                try {
+                    if (UTF8_DECODER.decode(bytes).includes('\0')) {
+                        return {
+                            status: 'skipped',
+                            sizeBytes: bytes.byteLength,
+                            reason: 'contains a NUL byte',
+                        };
+                    }
+                } catch {
+                    return {
+                        status: 'skipped',
+                        sizeBytes: bytes.byteLength,
+                        reason: 'not valid UTF-8 text',
+                    };
+                }
+                return { status: 'readable', bytes };
+            } catch (error) {
+                const reason =
+                    error instanceof Error ? error.message : String(error);
+                return {
+                    status: 'failed',
+                    reason: `could not read file: ${reason}`,
+                };
+            } finally {
+                await fileHandle?.close().catch(() => undefined);
+            }
+        },
+    };
 };

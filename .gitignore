@@ -98,3 +98,6 @@ opencode.json
 /playwright-report/
 /test-results/
 /blob-report/
+
+# Repository context build artifacts
+/packages/repository-context/dist/
