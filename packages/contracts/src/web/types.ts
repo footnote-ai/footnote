@@ -588,7 +588,7 @@ export type PostChatResponse =
     | ChatIgnoreActionResponse
     | ChatImageActionResponse;
 
-/** One approved source link; snippets and retrieved bodies are never included. */
+/** Approved source link shape; v1 leaves sources empty until publicness is explicit. */
 export type PublicResponseSource = {
     title: string;
     url: string;

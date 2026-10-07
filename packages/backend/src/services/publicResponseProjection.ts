@@ -10,29 +10,6 @@ import type { PublicResponseProjection } from '@footnote/contracts/web';
 
 const PUBLIC_LIMITATION_MAX_LENGTH = 500;
 const PUBLIC_LIMITATIONS_MAX_COUNT = 8;
-const PUBLIC_SOURCES_MAX_COUNT = 50;
-
-const projectPublicSource = (
-    citation: ResponseMetadata['citations'][number]
-): { title: string; url: string } | null => {
-    try {
-        const url = new URL(citation.url);
-        if (url.protocol !== 'http:' && url.protocol !== 'https:') {
-            return null;
-        }
-        // Query strings and fragments often carry tracking or bearer values.
-        url.username = '';
-        url.password = '';
-        url.search = '';
-        url.hash = '';
-        return {
-            title: citation.title.trim().slice(0, 200) || 'Source',
-            url: url.toString(),
-        };
-    } catch {
-        return null;
-    }
-};
 
 /**
  * Projects an explicitly published delivered answer without serializing raw metadata.
@@ -53,17 +30,16 @@ export const projectPublicResponse = ({
 }): PublicResponseProjection => ({
     answer,
     provenance: metadata.provenance,
-    sources: metadata.citations
-        .slice(0, PUBLIC_SOURCES_MAX_COUNT)
-        .flatMap((citation) => {
-            const source = projectPublicSource(citation);
-            return source ? [source] : [];
-        }),
+    // Citations do not carry a public/private marker; HTTP(S) alone cannot
+    // distinguish public references from private GitHub or signed attachment URLs.
+    sources: [],
     limitations: [
         ...(metadata.provenanceAssessment?.limitations ?? []),
         ...(metadata.citations.length === 0
             ? ['No sources were recorded for this response.']
-            : []),
+            : [
+                  'Source links were omitted because saved citations are not classified as public.',
+              ]),
         ...(metadata.displayIntegrity?.status === 'partial'
             ? ['Some provenance details are unavailable.']
             : []),

@@ -63,7 +63,8 @@ paths:
                 Explicitly creates an anonymous public page from one backend-delivered answer.
                 The short-lived, single-use publication capability is bound to the server-stored response version and exact
                 delivered answer. It is sent in the request body and is never placed in the permalink. The backend builds
-                a strict allowlisted snapshot. Publications expire after 30 days. No account is required to view a page.
+                a strict allowlisted snapshot. The capability and published page each expire after 7 days. No account is
+                required to view a page.
             tags:
                 - Public responses
             requestBody:
@@ -109,7 +110,8 @@ paths:
             description: |
                 Returns only the immutable public projection, never the raw trace or internal response identifier.
                 Expired, revoked, stale, malformed, or deleted-source pages are unavailable. Responses use no-store,
-                no-referrer, and noindex/noarchive protections.
+                no-referrer, and noindex/noarchive protections. V1 omits all citation links because saved citations
+                do not distinguish public sources from private repositories or signed attachments.
             tags:
                 - Public responses
             responses:
@@ -134,7 +136,10 @@ paths:
                 - packages/contracts/src/web/types.ts#RevokePublicResponseResponse
                 - packages/contracts/src/web/schemas.ts#RevokePublicResponseRequestSchema
             summary: Revoke a public answer page
-            description: The original publication capability is required in the request body; answer content is erased on revocation.
+            description: |
+                The original publication capability is required in the request body; answer content is erased on revocation.
+                The first-party web chat keeps that capability only in the current chat's memory. Refreshing or closing the
+                chat removes its Unpublish control; the public page expires automatically after 7 days.
             tags:
                 - Public responses
             requestBody:

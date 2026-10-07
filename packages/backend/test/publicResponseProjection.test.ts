@@ -11,15 +11,24 @@ import type { ResponseMetadata } from '@footnote/contracts/policy';
 import { createMetadata } from './fixtures/responseMetadataFixture.js';
 import { projectPublicResponse } from '../src/services/publicResponseProjection.js';
 
-test('public response includes answer, safe sources, provenance, and limitations only', () => {
+test('public response omits unclassified source links and keeps private trace fields out', () => {
     const metadata: ResponseMetadata = {
         ...createMetadata(),
         provenance: 'Retrieved',
         citations: [
             {
-                title: 'Official source',
-                url: 'https://private-user:private-pass@example.com/source?token=private-token#private-fragment',
+                title: 'Private repository: owner/private-repo',
+                url: 'https://github.com/owner/private-repo/blob/main/file.md?token=private-token#private-fragment',
                 snippet: 'private retrieved body must not escape',
+            },
+            {
+                title: 'Signed attachment: private.pdf',
+                url: 'https://storage.example.com/private.pdf?X-Amz-Credential=signed-secret',
+                snippet: 'private attachment body must not escape',
+            },
+            {
+                title: 'Unclassified public-looking source',
+                url: 'https://example.com/public-source',
             },
             { title: 'Unsafe URL', url: 'javascript:alert(1)' },
         ],
@@ -66,21 +75,24 @@ test('public response includes answer, safe sources, provenance, and limitations
         answer: 'Delivered answer',
         metadata,
         publishedAt: '2026-10-07T12:00:00.000Z',
-        expiresAt: '2026-11-06T12:00:00.000Z',
+        expiresAt: '2026-10-14T12:00:00.000Z',
     });
 
     assert.deepEqual(projection, {
         answer: 'Delivered answer',
         provenance: 'Retrieved',
-        sources: [
-            { title: 'Official source', url: 'https://example.com/source' },
+        sources: [],
+        limitations: [
+            'Evidence may be incomplete.',
+            'Source links were omitted because saved citations are not classified as public.',
         ],
-        limitations: ['Evidence may be incomplete.'],
         publishedAt: '2026-10-07T12:00:00.000Z',
-        expiresAt: '2026-11-06T12:00:00.000Z',
+        expiresAt: '2026-10-14T12:00:00.000Z',
     });
     const serializedProjection = JSON.stringify(projection);
+    assert.equal(serializedProjection.includes('github.com'), false);
+    assert.equal(serializedProjection.includes('storage.example.com'), false);
     assert.equal(serializedProjection.includes('private'), false);
     assert.equal(serializedProjection.includes('private-token'), false);
-    assert.equal(serializedProjection.includes('private-pass'), false);
+    assert.equal(serializedProjection.includes('signed-secret'), false);
 });

@@ -111,6 +111,14 @@ test('a user can explicitly publish, view, and revoke an allowlisted response', 
         expiresAt: string;
     };
     assert.match(published.publicId, /^[A-Za-z0-9_-]{43}$/u);
+    const expectedPublicTtlMs = 7 * 24 * 60 * 60 * 1000;
+    assert.ok(
+        Math.abs(
+            Date.parse(published.expiresAt) -
+                Date.parse(published.publishedAt) -
+                expectedPublicTtlMs
+        ) < 1000
+    );
     assert.equal(JSON.stringify(published).includes(PUBLICATION_TOKEN), false);
 
     const pageResponse = await fetch(
@@ -121,13 +129,15 @@ test('a user can explicitly publish, view, and revoke an allowlisted response', 
     const page = (await pageResponse.json()) as Record<string, unknown>;
     assert.equal(page.answer, answer);
     assert.equal(page.provenance, metadata.provenance);
-    assert.deepEqual(page.sources, [
-        { title: 'Safe source', url: 'https://example.com/reference' },
+    assert.deepEqual(page.sources, []);
+    assert.deepEqual(page.limitations, [
+        'Source links were omitted because saved citations are not classified as public.',
     ]);
     assert.equal('responseId' in page, false);
     assert.equal(JSON.stringify(page).includes(PUBLICATION_TOKEN), false);
     assert.equal(JSON.stringify(page).includes('private source body'), false);
     assert.equal(JSON.stringify(page).includes('secret='), false);
+    assert.equal(JSON.stringify(page).includes('example.com'), false);
 
     const revokeResponse = await fetch(
         `${baseUrl}/api/public-responses/${published.publicId}`,

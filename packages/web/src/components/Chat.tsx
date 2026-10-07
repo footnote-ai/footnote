@@ -816,6 +816,14 @@ const Chat = (): JSX.Element => {
                                                 >
                                                     Unpublish
                                                 </button>
+                                                <small className="chat-publication-note">
+                                                    This link expires after 7
+                                                    days. To unpublish it
+                                                    sooner, keep this chat open;
+                                                    refreshing or closing it
+                                                    removes your unpublish
+                                                    control.
+                                                </small>
                                             </>
                                         )}
                                     {turn.publicationState === 'revoking' && (

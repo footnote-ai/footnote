@@ -373,6 +373,11 @@
     cursor: pointer;
 }
 
+.chat-publication-note {
+    flex-basis: 100%;
+    line-height: 1.4;
+}
+
 .shared-response-page__published,
 .shared-response-page__expiry {
     color: var(--public-muted);

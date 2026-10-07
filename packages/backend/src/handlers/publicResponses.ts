@@ -26,7 +26,7 @@ type HandlerDependencies = {
     maxBodyBytes: number;
 };
 
-const PUBLIC_RESPONSE_TTL_MS = 30 * 24 * 60 * 60 * 1000;
+const PUBLIC_RESPONSE_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 const PUBLIC_RESPONSE_PATH =
     /^\/api\/public-responses\/([A-Za-z0-9_-]{43})\/?$/u;
 const UNAVAILABLE_MESSAGE = 'This published response is no longer available.';
