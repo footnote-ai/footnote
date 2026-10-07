@@ -8,16 +8,18 @@
 import { ActionRowBuilder, ButtonBuilder, ButtonStyle } from 'discord.js';
 
 export type ProvenanceAction =
-    'details' | 'sources' | 'controls' | 'trace' | 'report_issue';
+    'details' | 'sources' | 'controls' | 'trace' | 'listen' | 'report_issue';
 
 const PROVENANCE_ACTIONS = new Set<ProvenanceAction>([
     'details',
     'sources',
     'controls',
     'trace',
+    'listen',
     'report_issue',
 ]);
 const UNKNOWN_RESPONSE_ID_FALLBACK = 'unknown_response_id';
+export const MAX_DISCORD_LISTEN_TEXT_LENGTH = 1600;
 
 /**
  * Normalize a response identifier by trimming surrounding whitespace and substituting a fallback when empty.
@@ -64,30 +66,33 @@ export function parseProvenanceActionCustomId(
  * Builds the compact provenance control row used under the trace card.
  */
 export function buildProvenanceActionRow(
-    responseId: string
+    responseId: string,
+    options: { listen: boolean; listenDisabled?: boolean } = { listen: false }
 ): ActionRowBuilder<ButtonBuilder> {
-    return new ActionRowBuilder<ButtonBuilder>().addComponents(
+    const buttons = [
         new ButtonBuilder()
-            .setCustomId(buildProvenanceActionCustomId('sources', responseId))
+            .setCustomId(buildProvenanceActionCustomId('details', responseId))
             .setStyle(ButtonStyle.Secondary)
-            .setEmoji('\u{1F4D6}')
-            .setLabel('Sources'),
-        new ButtonBuilder()
-            .setCustomId(buildProvenanceActionCustomId('controls', responseId))
-            .setStyle(ButtonStyle.Secondary)
-            .setEmoji('\u{1F39B}\u{FE0F}')
-            .setLabel('Controls'),
-        new ButtonBuilder()
-            .setCustomId(buildProvenanceActionCustomId('trace', responseId))
-            .setStyle(ButtonStyle.Secondary)
-            .setEmoji('\u{1F4C4}')
-            .setLabel('Trace'),
+            .setLabel('Inspect'),
+    ];
+    if (options.listen) {
+        buttons.push(
+            new ButtonBuilder()
+                .setCustomId(
+                    buildProvenanceActionCustomId('listen', responseId)
+                )
+                .setStyle(ButtonStyle.Secondary)
+                .setLabel('Listen')
+                .setDisabled(options.listenDisabled ?? false)
+        );
+    }
+    buttons.push(
         new ButtonBuilder()
             .setCustomId(
                 buildProvenanceActionCustomId('report_issue', responseId)
             )
             .setStyle(ButtonStyle.Secondary)
-            .setEmoji('\u{1F6A9}')
             .setLabel('Report')
     );
+    return new ActionRowBuilder<ButtonBuilder>().addComponents(...buttons);
 }

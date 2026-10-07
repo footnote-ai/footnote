@@ -5,7 +5,9 @@
  * @footnote-risk: high - Bad metadata parsing can hide trace details or crash details rendering.
  * @footnote-ethics: high - Provenance details and reporting actions directly affect transparency and accountability.
  */
-import type { ButtonInteraction } from 'discord.js';
+import { AttachmentBuilder, type ButtonInteraction } from 'discord.js';
+import { DEFAULT_INTERNAL_TTS_OUTPUT_FORMAT } from '@footnote/contracts/voice';
+import type { PostInternalVoiceTtsResponse } from '@footnote/contracts/voice';
 import {
     formatExecutionTimelineSummary,
     type ExecutionEvent,
@@ -18,7 +20,12 @@ import { ResponseMetadataSchema } from '@footnote/contracts/web/schemas';
 import { botApi } from '../../api/botApi.js';
 import { logger } from '../../utils/logger.js';
 import { runtimeConfig } from '../../config/runtime.js';
-import { parseProvenanceActionCustomId } from '../../utils/response/provenanceCgi.js';
+import {
+    buildProvenanceActionRow,
+    MAX_DISCORD_LISTEN_TEXT_LENGTH,
+    parseProvenanceActionCustomId,
+} from '../../utils/response/provenanceCgi.js';
+import { resolveResponseAnchorMessage } from '../../utils/response/provenanceInteractions.js';
 import { handleIncidentReportButton } from '../../utils/response/incidentReporting.js';
 import { EPHEMERAL_FLAG } from './shared.js';
 
@@ -29,6 +36,14 @@ const DETAILS_FALLBACK_REASON = 'metadata_unavailable';
 const DETAILS_INLINE_FIELD_LIMIT = 120;
 const DETAILS_CITATION_LIMIT = 4;
 const DETAILS_EXECUTION_EVENT_LIMIT = 5;
+const LISTEN_RETRY_COOLDOWN_MS = 30_000;
+const MAX_COMPLETED_LISTEN_RESPONSES = 500;
+const pendingListenSynthesis = new Map<
+    string,
+    Promise<PostInternalVoiceTtsResponse>
+>();
+const completedListenResponses = new Set<string>();
+const listenRetryAfter = new Map<string, number>();
 const DETAILS_MIN_EXECUTION_SECTION_LENGTH = 320;
 const EXECUTION_TABLE_COLUMN_WIDTHS = {
     kind: 10,
@@ -664,6 +679,119 @@ async function loadDetailsPayload(
     return buildDetailsPayload(responseId, metadata);
 }
 
+/** Synthesizes the delivered Discord message content through the backend-owned speech runtime. */
+async function handleListenButton(
+    interaction: ButtonInteraction,
+    responseId: string
+): Promise<void> {
+    await interaction.deferReply({ flags: [EPHEMERAL_FLAG] });
+    if (completedListenResponses.has(responseId)) {
+        await interaction.editReply({
+            content: 'This response has already been synthesized once.',
+        });
+        return;
+    }
+    const retryAfter = listenRetryAfter.get(responseId) ?? 0;
+    for (const [failedResponseId, retryAt] of listenRetryAfter) {
+        if (retryAt <= Date.now()) {
+            listenRetryAfter.delete(failedResponseId);
+        }
+    }
+    if (retryAfter > Date.now()) {
+        await interaction.editReply({
+            content:
+                'Speech is temporarily unavailable. Please try again shortly.',
+        });
+        return;
+    }
+
+    const responseMessage = await resolveResponseAnchorMessage(
+        interaction.message
+    );
+    const text = responseMessage?.content ?? '';
+    if (
+        text.trim().length === 0 ||
+        text.length > MAX_DISCORD_LISTEN_TEXT_LENGTH
+    ) {
+        await interaction.editReply({
+            content:
+                'This reply is no longer available for Listen. The original text remains available.',
+        });
+        return;
+    }
+
+    let synthesis = pendingListenSynthesis.get(responseId);
+    if (!synthesis) {
+        synthesis = botApi.runVoiceTtsViaApi({
+            task: 'synthesize',
+            text,
+            options: {},
+            outputFormat: DEFAULT_INTERNAL_TTS_OUTPUT_FORMAT,
+            channelContext: {
+                channelId: interaction.channelId ?? undefined,
+                guildId: interaction.guildId ?? undefined,
+            },
+        });
+        pendingListenSynthesis.set(responseId, synthesis);
+    }
+
+    try {
+        const response = await synthesis;
+        completedListenResponses.add(responseId);
+        if (completedListenResponses.size > MAX_COMPLETED_LISTEN_RESPONSES) {
+            const oldestResponseId = completedListenResponses
+                .values()
+                .next().value;
+            if (oldestResponseId) {
+                completedListenResponses.delete(oldestResponseId);
+            }
+        }
+        await interaction.editReply({
+            files: [
+                new AttachmentBuilder(
+                    Buffer.from(response.result.audioBase64, 'base64'),
+                    { name: `listen.${response.result.outputFormat}` }
+                ),
+            ],
+        });
+        try {
+            await interaction.message.edit({
+                components: [
+                    buildProvenanceActionRow(responseId, {
+                        listen: true,
+                        listenDisabled: true,
+                    }),
+                ],
+            });
+        } catch (error) {
+            logger.warn('Could not disable the completed Listen action.', {
+                responseId,
+                errorName: error instanceof Error ? error.name : 'unknown',
+            });
+        }
+    } catch (error) {
+        listenRetryAfter.set(responseId, Date.now() + LISTEN_RETRY_COOLDOWN_MS);
+        if (listenRetryAfter.size > MAX_COMPLETED_LISTEN_RESPONSES) {
+            const oldestResponseId = listenRetryAfter.keys().next().value;
+            if (oldestResponseId) {
+                listenRetryAfter.delete(oldestResponseId);
+            }
+        }
+        logger.warn('Backend speech synthesis failed for Discord Listen.', {
+            responseId,
+            errorName: error instanceof Error ? error.name : 'unknown',
+        });
+        await interaction.editReply({
+            content:
+                'Could not create audio for this reply. Your text response is unchanged; please try again shortly.',
+        });
+    } finally {
+        if (pendingListenSynthesis.get(responseId) === synthesis) {
+            pendingListenSynthesis.delete(responseId);
+        }
+    }
+}
+
 /**
  * @description: Routes provenance button interactions for source, control, trace, and incident report actions.
  * @footnote-scope: core
@@ -683,6 +811,11 @@ export async function handleProvenanceButtonInteraction(
 
     if (provenanceAction.action === 'report_issue') {
         await handleIncidentReportButton(interaction);
+        return true;
+    }
+
+    if (provenanceAction.action === 'listen') {
+        await handleListenButton(interaction, provenanceAction.responseId);
         return true;
     }
 

@@ -21,7 +21,10 @@ import type { DiscordChatApiResponse } from '../api/index.js';
 import { runtimeConfig } from '../config.js';
 import { toChatAssistantIdentity } from '../config/profile.js';
 import { logger } from '../utils/logger.js';
-import { buildProvenanceActionRow } from '../utils/response/provenanceCgi.js';
+import {
+    buildProvenanceActionRow,
+    MAX_DISCORD_LISTEN_TEXT_LENGTH,
+} from '../utils/response/provenanceCgi.js';
 import type { ChatProfileOption } from '@footnote/contracts/web';
 import type { Command, SlashCommand } from './BaseCommand.js';
 
@@ -358,7 +361,11 @@ const chatCommand: ChatCommandWithProfiles = {
                 }
 
                 const components = [
-                    buildProvenanceActionRow(metadata.responseId),
+                    buildProvenanceActionRow(metadata.responseId, {
+                        listen:
+                            response.modality === 'text' &&
+                            replyBody.length <= MAX_DISCORD_LISTEN_TEXT_LENGTH,
+                    }),
                 ];
                 const files: AttachmentBuilder[] = [];
                 try {
