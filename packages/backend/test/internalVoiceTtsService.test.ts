@@ -94,6 +94,36 @@ test('TTS applies the shared profile/request precedence and returns effective me
     });
 });
 
+test('TTS synthesizes the submitted text and records backend usage and cost', async () => {
+    let captured: TextToSpeechRequest | undefined;
+    let recordedUsage: Record<string, unknown> | undefined;
+    const service = createInternalVoiceTtsService({
+        ttsRuntime: createRuntime(
+            () => true,
+            (request) => (captured = request)
+        ),
+        profile,
+        recordUsage: (record) => {
+            recordedUsage = record as unknown as Record<string, unknown>;
+        },
+    });
+
+    const exactText = 'Delivered answer, with punctuation.';
+    const response = await service.runTtsTask({
+        task: 'synthesize',
+        text: exactText,
+        outputFormat: 'mp3',
+    });
+
+    assert.equal(captured?.text, exactText);
+    assert.equal(response.result.speechSelection?.voice, 'alloy');
+    assert.equal(response.result.usage.inputCharacters, exactText.length);
+    assert.equal(response.result.costs.completeness, 'complete');
+    assert.equal(recordedUsage?.feature, 'tts');
+    assert.equal(recordedUsage?.totalCostUsd, 0);
+    assert.equal(recordedUsage?.costCompleteness, 'complete');
+});
+
 test('unsupported profile model falls back without dropping an explicit voice', async () => {
     let captured: TextToSpeechRequest | undefined;
     const profileWithInvalidModel = {

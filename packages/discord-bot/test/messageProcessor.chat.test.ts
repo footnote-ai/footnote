@@ -129,7 +129,10 @@ const createChatBuildMessage = () =>
     }) as never;
 
 type ProcessorPrivateAccess = {
-    prepareProvenanceCgiPayload: (metadata: ResponseMetadata) => Promise<{
+    prepareProvenanceCgiPayload: (
+        metadata: ResponseMetadata,
+        listenEligible?: boolean
+    ) => Promise<{
         files: Array<{ filename: string; data: Buffer }>;
         components: unknown[];
     }>;
@@ -426,16 +429,19 @@ test('prepareProvenanceCgiPayload and sendPreparedProvenanceCgi send image plus 
 
     try {
         const preparedPayload =
-            await processorAccess.prepareProvenanceCgiPayload({
-                ...createMetadata(),
-                trace_final: {
-                    tightness: 5,
-                    rationale: 3,
+            await processorAccess.prepareProvenanceCgiPayload(
+                {
+                    ...createMetadata(),
+                    trace_final: {
+                        tightness: 5,
+                        rationale: 3,
+                    },
+                    trace_final_reason_code: 'runtime_posture_adjustment',
+                    evidenceScore: 4,
+                    freshnessScore: 5,
                 },
-                trace_final_reason_code: 'runtime_posture_adjustment',
-                evidenceScore: 4,
-                freshnessScore: 5,
-            });
+                true
+            );
         await processorAccess.sendPreparedProvenanceCgi(
             {
                 id: 'anchor-1',
@@ -470,9 +476,8 @@ test('prepareProvenanceCgiPayload and sendPreparedProvenanceCgi send image plus 
         .components.map((component) => component.custom_id)
         .filter((value): value is string => typeof value === 'string');
     assert.deepEqual(customIds, [
-        'sources:resp_123',
-        'controls:resp_123',
-        'trace:resp_123',
+        'details:resp_123',
+        'listen:resp_123',
         'report_issue:resp_123',
     ]);
 });
@@ -534,12 +539,7 @@ test('prepareProvenanceCgiPayload falls back to buttons-only when trace-card gen
         .toJSON()
         .components.map((component) => component.custom_id)
         .filter((value): value is string => typeof value === 'string');
-    assert.deepEqual(customIds, [
-        'sources:resp_123',
-        'controls:resp_123',
-        'trace:resp_123',
-        'report_issue:resp_123',
-    ]);
+    assert.deepEqual(customIds, ['details:resp_123', 'report_issue:resp_123']);
 });
 
 test('sendPreparedProvenanceCgi delegates attachment delivery to ResponseHandler', async () => {

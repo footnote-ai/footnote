@@ -15,8 +15,8 @@ import {
     parseProvenanceActionCustomId,
 } from '../src/utils/response/provenanceCgi.js';
 
-test('buildProvenanceActionRow renders four response-bound provenance buttons', () => {
-    const row = buildProvenanceActionRow('resp_123');
+test('buildProvenanceActionRow orders Inspect, optional Listen, and Report', () => {
+    const row = buildProvenanceActionRow('resp_123', { listen: true });
     const rowJson = row.toJSON() as {
         components: Array<{
             custom_id?: string;
@@ -28,23 +28,25 @@ test('buildProvenanceActionRow renders four response-bound provenance buttons', 
         .map((component) => component.custom_id)
         .filter((value): value is string => typeof value === 'string');
 
-    assert.equal(customIds.length, 4);
+    assert.equal(customIds.length, 3);
     assert.deepEqual(customIds, [
-        'sources:resp_123',
-        'controls:resp_123',
-        'trace:resp_123',
+        'details:resp_123',
+        'listen:resp_123',
         'report_issue:resp_123',
     ]);
     assert.deepEqual(
         rowJson.components.map((component) => component.label),
-        ['Sources', 'Controls', 'Trace', 'Report']
+        ['Inspect', 'Listen', 'Report']
     );
     assert.deepEqual(
         rowJson.components.map((component) => component.emoji?.name),
-        ['📖', '🎛️', '📄', '🚩']
+        [undefined, undefined, undefined]
     );
-    assert.equal(customIds.includes('details'), false);
-    assert.equal(customIds.includes('report_issue'), false);
+    assert.equal(
+        buildProvenanceActionRow('resp_123', { listen: false }).toJSON()
+            .components.length,
+        2
+    );
 });
 
 test('customId helpers round-trip valid provenance IDs', () => {

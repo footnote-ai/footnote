@@ -46,7 +46,10 @@ import {
     recoverContextDetailsFromTrace,
     type RecoveredImageContext,
 } from '../commands/image/contextResolver.js';
-import { buildProvenanceActionRow } from './response/provenanceCgi.js';
+import {
+    buildProvenanceActionRow,
+    MAX_DISCORD_LISTEN_TEXT_LENGTH,
+} from './response/provenanceCgi.js';
 import { botApi, isDiscordApiClientError } from '../api/botApi.js';
 import type { DiscordChatApiResponse } from '../api/index.js';
 import type {
@@ -1059,7 +1062,12 @@ export class MessageProcessor {
                       files: [],
                       components: [],
                   })
-                : this.prepareProvenanceCgiPayload(chatResponse.metadata);
+                : this.prepareProvenanceCgiPayload(
+                      chatResponse.metadata,
+                      chatResponse.modality === 'text' &&
+                          finalResponseText.length <=
+                              MAX_DISCORD_LISTEN_TEXT_LENGTH
+                  );
 
         let ttsResult:
             | Awaited<ReturnType<typeof botApi.runVoiceTtsViaApi>>['result']
@@ -1190,9 +1198,12 @@ export class MessageProcessor {
      * the user keeps provenance controls instead of losing the footer entirely.
      */
     private async prepareProvenanceCgiPayload(
-        metadata: ResponseMetadata
+        metadata: ResponseMetadata,
+        listenEligible = false
     ): Promise<PreparedProvenancePayload> {
-        const actionRow = buildProvenanceActionRow(metadata.responseId);
+        const actionRow = buildProvenanceActionRow(metadata.responseId, {
+            listen: listenEligible,
+        });
         const files: Array<{ filename: string; data: Buffer }> = [];
 
         try {
