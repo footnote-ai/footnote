@@ -200,6 +200,7 @@ test('public GET trace returns the inclusion count without private memory text',
 test('anonymous trace GET omits private GitHub source metadata and citation snippets', async () => {
     const server = await createTestServer();
     const responseId = 'private-github-source-trace';
+    const privateResolvedRevision = '0123456789abcdef0123456789abcdef01234567';
     const metadata: ResponseMetadata = {
         responseId,
         provenance: 'Retrieved',
@@ -212,7 +213,7 @@ test('anonymous trace GET omits private GitHub source metadata and citation snip
         citations: [
             {
                 title: 'src/private-service.ts',
-                url: 'https://github.com/acme/private-repo/blob/0123456789abcdef0123456789abcdef01234567/src/private-service.ts',
+                url: `https://github.com/acme/private-repo/blob/${privateResolvedRevision}/src/private-service.ts`,
                 snippet: 'PRIVATE_SOURCE_EXCERPT_DO_NOT_PUBLISH',
             },
             {
@@ -224,7 +225,7 @@ test('anonymous trace GET omits private GitHub source metadata and citation snip
             repository: 'acme/private-repo',
             path: 'src/private-service.ts',
             requestedRevision: 'private-feature-branch',
-            resolvedRevision: '0123456789abcdef0123456789abcdef01234567',
+            resolvedRevision: privateResolvedRevision,
             scope: 'selected_file',
             status: 'retrieved',
             freshness: 'current',
@@ -259,12 +260,20 @@ test('anonymous trace GET omits private GitHub source metadata and citation snip
             /PRIVATE_SOURCE_EXCERPT_DO_NOT_PUBLISH/u
         );
         assert.doesNotMatch(serialized, /private-feature-branch/u);
+        assert.doesNotMatch(
+            serialized,
+            new RegExp(privateResolvedRevision, 'u')
+        );
         assert.doesNotMatch(serialized, /acme\/private-repo/u);
         assert.doesNotMatch(serialized, /src\/private-service\.ts/u);
         const nonCitationFields = { ...payload };
         delete nonCitationFields.citations;
         const nonCitationSerialized = JSON.stringify(nonCitationFields);
         assert.doesNotMatch(nonCitationSerialized, /private-feature-branch/u);
+        assert.doesNotMatch(
+            nonCitationSerialized,
+            new RegExp(privateResolvedRevision, 'u')
+        );
         assert.doesNotMatch(nonCitationSerialized, /acme\/private-repo/u);
         assert.doesNotMatch(nonCitationSerialized, /src\/private-service\.ts/u);
 
@@ -297,6 +306,10 @@ test('anonymous trace GET omits private GitHub source metadata and citation snip
             /PRIVATE_SOURCE_EXCERPT_DO_NOT_PUBLISH/u
         );
         assert.doesNotMatch(staleSerialized, /private-feature-branch/u);
+        assert.doesNotMatch(
+            staleSerialized,
+            new RegExp(privateResolvedRevision, 'u')
+        );
         assert.doesNotMatch(staleSerialized, /acme\/private-repo/u);
         assert.doesNotMatch(staleSerialized, /src\/private-service\.ts/u);
         const staleNonCitationFields = { ...stalePayload.metadata };
@@ -307,6 +320,10 @@ test('anonymous trace GET omits private GitHub source metadata and citation snip
         assert.doesNotMatch(
             staleNonCitationSerialized,
             /private-feature-branch/u
+        );
+        assert.doesNotMatch(
+            staleNonCitationSerialized,
+            new RegExp(privateResolvedRevision, 'u')
         );
         assert.doesNotMatch(staleNonCitationSerialized, /acme\/private-repo/u);
     } finally {
