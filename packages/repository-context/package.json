@@ -1,0 +1,31 @@
+{
+    "name": "@footnote/repository-context",
+    "version": "0.0.1",
+    "private": true,
+    "type": "module",
+    "main": "dist/index.js",
+    "types": "dist/index.d.ts",
+    "exports": {
+        ".": {
+            "types": "./dist/index.d.ts",
+            "default": "./dist/index.js"
+        },
+        "./files": {
+            "types": "./dist/files.d.ts",
+            "default": "./dist/files.js"
+        },
+        "./loader": {
+            "types": "./dist/loader.d.ts",
+            "default": "./dist/loader.js"
+        },
+        "./trustgraph": {
+            "types": "./dist/trustgraph-librarian-client.d.ts",
+            "default": "./dist/trustgraph-librarian-client.js"
+        }
+    },
+    "scripts": {
+        "clean": "node -e \"const fs=require('node:fs'); fs.rmSync('dist',{recursive:true,force:true}); fs.rmSync('tsconfig.tsbuildinfo',{force:true});\"",
+        "build:dev": "tsc -b tsconfig.json",
+        "build": "pnpm clean && tsc -b tsconfig.json"
+    }
+}
