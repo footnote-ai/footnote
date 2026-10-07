@@ -1,5 +1,6 @@
 .setup-panel,
-.setup-editor {
+.setup-editor,
+.setup-context {
     width: 100%;
     margin: 0 auto 1.5rem;
 }
@@ -12,6 +13,85 @@
     max-width: min(100%, clamp(44rem, 82vw, 66rem));
     display: grid;
     gap: 1rem;
+}
+
+.setup-context {
+    max-width: min(100%, clamp(44rem, 82vw, 66rem));
+    display: grid;
+    gap: 1rem;
+    border-top: 1px solid var(--public-rule);
+    padding-top: 1.5rem;
+}
+
+.setup-context__step {
+    display: grid;
+    gap: 0.65rem;
+    border: 1px solid var(--public-rule);
+    border-radius: 0.35rem;
+    background: var(--public-paper-raised);
+    padding: 1rem;
+}
+
+.setup-context__step h3,
+.setup-context__result h4 {
+    margin: 0;
+    font-size: 1rem;
+}
+
+.setup-context__step label {
+    font-weight: 600;
+}
+
+.setup-context__step select {
+    width: 100%;
+    max-width: 32rem;
+    border: 1px solid var(--public-rule);
+    border-radius: 0.3rem;
+    padding: 0.65rem 0.75rem;
+    color: var(--public-ink);
+    background: var(--public-paper);
+}
+
+.setup-context__files,
+.setup-context__skipped {
+    display: grid;
+    gap: 0.35rem;
+    margin: 0;
+    padding-left: 1.2rem;
+}
+
+.setup-context__files li {
+    display: flex;
+    justify-content: space-between;
+    gap: 1rem;
+    overflow-wrap: anywhere;
+}
+
+.setup-context__files li > code {
+    min-width: 0;
+    overflow-wrap: anywhere;
+}
+
+.setup-context__result {
+    display: grid;
+    gap: 0.65rem;
+}
+
+.setup-context__result dl {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.4rem 1.1rem;
+    margin: 0;
+}
+
+.setup-context__result dl div {
+    display: flex;
+    gap: 0.3rem;
+}
+
+.setup-context__result dd {
+    margin: 0;
+    font-weight: 600;
 }
 
 .setup-editor-disclosure {
@@ -106,7 +186,8 @@
 }
 
 @media (max-width: 768px) {
-    .setup-editor {
+    .setup-editor,
+    .setup-context {
         max-width: 100%;
     }
 
