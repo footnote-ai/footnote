@@ -101,6 +101,23 @@ const buildProviderRetentionRecord = (
     };
 };
 
+const buildContextSourceMetadata = (
+    runtimeContext: ResponseMetadataRuntimeContext
+): Pick<
+    ResponseMetadata,
+    'githubContext' | 'githubSource' | 'projectContext'
+> => ({
+    ...(runtimeContext.githubContext !== undefined && {
+        githubContext: runtimeContext.githubContext,
+    }),
+    ...(runtimeContext.githubSource !== undefined && {
+        githubSource: runtimeContext.githubSource,
+    }),
+    ...(runtimeContext.projectContext !== undefined && {
+        projectContext: runtimeContext.projectContext,
+    }),
+});
+
 // Owns: response metadata assembly and normalization of execution metadata fields.
 // Does not own: making provider calls or deciding chat policy.
 
@@ -227,15 +244,7 @@ const buildResponseMetadata = (
         ...(runtimeContext.presentation !== undefined && {
             presentation: runtimeContext.presentation,
         }),
-        ...(runtimeContext.githubContext !== undefined && {
-            githubContext: runtimeContext.githubContext,
-        }),
-        ...(runtimeContext.githubSource !== undefined && {
-            githubSource: runtimeContext.githubSource,
-        }),
-        ...(runtimeContext.projectContext !== undefined && {
-            projectContext: runtimeContext.projectContext,
-        }),
+        ...buildContextSourceMetadata(runtimeContext),
         ...(runtimeContext.workflow !== undefined && {
             providerRetention: buildProviderRetentionMetadata(
                 runtimeContext.workflow

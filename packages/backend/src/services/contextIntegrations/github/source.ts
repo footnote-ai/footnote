@@ -70,6 +70,20 @@ type SourceFailure = {
     reasonCode: NonNullable<RepositorySourceMetadata['reasonCode']>;
 };
 
+type GitHubJsonResult = {
+    json?: unknown;
+    status?: number;
+    failure?: SourceFailure;
+};
+
+type GitHubJsonRequest = (
+    path: string,
+    headers: Record<string, string>
+) => Promise<GitHubJsonResult>;
+
+type SourceValue<T> = { value: T };
+type SourceOperation<T> = SourceValue<T> | SourceFailure;
+
 const isRecord = (value: unknown): value is Record<string, unknown> =>
     value !== null && typeof value === 'object' && !Array.isArray(value);
 
@@ -245,6 +259,191 @@ const canServeStaleSource = (failure: SourceFailure): boolean =>
     failure.reasonCode === 'network_error' ||
     failure.reasonCode === 'timeout' ||
     failure.reasonCode === 'rate_limited';
+
+const requestGitHubJson = async (
+    fetchImpl: GitHubSourceFetch,
+    url: string,
+    headers: Record<string, string>,
+    signal: AbortSignal
+): Promise<GitHubJsonResult> => {
+    try {
+        const response = await fetchImpl(url, {
+            method: 'GET',
+            headers,
+            signal,
+        });
+        if (response.status < 200 || response.status >= 300) {
+            return { status: response.status };
+        }
+        try {
+            return { json: await response.json() };
+        } catch {
+            return {
+                failure: { status: 'failed', reasonCode: 'malformed_response' },
+            };
+        }
+    } catch {
+        return {
+            failure: {
+                status: 'failed',
+                reasonCode: signal.aborted ? 'timeout' : 'network_error',
+            },
+        };
+    }
+};
+
+const resolveRepositoryHeaders = async (
+    requestJson: GitHubJsonRequest,
+    allowedPrivateRepository: boolean,
+    authenticatedHeaders: Record<string, string> | undefined,
+    publicHeaders: Record<string, string>
+): Promise<SourceOperation<Record<string, string>>> => {
+    const publicRepository = await requestJson('', publicHeaders);
+    let repositoryBody = publicRepository.json;
+    if (
+        publicRepository.status === 404 &&
+        allowedPrivateRepository &&
+        authenticatedHeaders !== undefined
+    ) {
+        const privateRepository = await requestJson('', authenticatedHeaders);
+        if (privateRepository.failure !== undefined)
+            return privateRepository.failure;
+        if (privateRepository.json === undefined) {
+            return {
+                status: 'unavailable',
+                reasonCode:
+                    privateRepository.status === 404
+                        ? 'not_found_or_private'
+                        : failureForStatus(privateRepository.status ?? 0),
+            };
+        }
+        repositoryBody = privateRepository.json;
+    } else if (publicRepository.failure !== undefined) {
+        return publicRepository.failure;
+    } else if (repositoryBody === undefined) {
+        return {
+            status: 'unavailable',
+            reasonCode:
+                publicRepository.status === 404
+                    ? 'not_found_or_private'
+                    : failureForStatus(publicRepository.status ?? 0),
+        };
+    }
+
+    if (
+        !isRecord(repositoryBody) ||
+        typeof repositoryBody.private !== 'boolean'
+    ) {
+        return { status: 'failed', reasonCode: 'malformed_response' };
+    }
+    if (
+        repositoryBody.private &&
+        (!allowedPrivateRepository || authenticatedHeaders === undefined)
+    ) {
+        return { status: 'unavailable', reasonCode: 'private_access_denied' };
+    }
+    const headers = repositoryBody.private
+        ? authenticatedHeaders
+        : publicHeaders;
+    return headers === undefined
+        ? { status: 'unavailable', reasonCode: 'private_access_denied' }
+        : { value: headers };
+};
+
+const resolveSourceRevision = async (
+    requestJson: GitHubJsonRequest,
+    selection: RepositorySourceSelection,
+    headers: Record<string, string>
+): Promise<SourceOperation<string>> => {
+    const commitResult = await requestJson(
+        `/commits/${encodeURIComponent(selection.revision)}`,
+        headers
+    );
+    if (commitResult.failure !== undefined) return commitResult.failure;
+    if (commitResult.json === undefined) {
+        return {
+            status: commitResult.status === 404 ? 'unavailable' : 'failed',
+            reasonCode:
+                commitResult.status === 404
+                    ? 'revision_not_found'
+                    : failureForStatus(commitResult.status ?? 0),
+        };
+    }
+    const revision = isRecord(commitResult.json)
+        ? commitResult.json.sha
+        : undefined;
+    return typeof revision === 'string' && /^[A-Fa-f0-9]{40}$/u.test(revision)
+        ? { value: revision }
+        : { status: 'failed', reasonCode: 'malformed_response' };
+};
+
+const decodeSourceFile = (
+    value: unknown,
+    expectedPath: string
+): SourceOperation<string> => {
+    if (!isRecord(value)) {
+        return { status: 'failed', reasonCode: 'malformed_response' };
+    }
+    if (value.type !== 'file' || value.path !== expectedPath) {
+        return { status: 'unavailable', reasonCode: 'not_a_file' };
+    }
+    if (
+        typeof value.size !== 'number' ||
+        !Number.isSafeInteger(value.size) ||
+        value.size < 0
+    ) {
+        return { status: 'failed', reasonCode: 'malformed_response' };
+    }
+    if (value.size > MAX_SOURCE_FILE_BYTES) {
+        return { status: 'unavailable', reasonCode: 'file_too_large' };
+    }
+    if (value.encoding !== 'base64' || typeof value.content !== 'string') {
+        return { status: 'failed', reasonCode: 'malformed_response' };
+    }
+    const encodedContent = value.content.replace(/\s/gu, '');
+    if (
+        !/^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/u.test(
+            encodedContent
+        )
+    ) {
+        return { status: 'failed', reasonCode: 'malformed_response' };
+    }
+    let decoded: string;
+    try {
+        decoded = new TextDecoder('utf-8', { fatal: true }).decode(
+            Buffer.from(encodedContent, 'base64')
+        );
+    } catch {
+        return { status: 'unavailable', reasonCode: 'not_a_file' };
+    }
+    if (Buffer.byteLength(decoded, 'utf8') !== value.size) {
+        return { status: 'failed', reasonCode: 'malformed_response' };
+    }
+    return {
+        value: decoded.replace(/\r\n?/gu, '\n').replace(/(?!\n)\p{Cc}/gu, ' '),
+    };
+};
+
+const readPinnedSourceFile = async (
+    requestJson: GitHubJsonRequest,
+    selection: RepositorySourceSelection,
+    revision: string,
+    headers: Record<string, string>
+): Promise<SourceOperation<string>> => {
+    const path = `/contents/${encodePath(selection.path)}?ref=${encodeURIComponent(revision)}`;
+    const contentResult = await requestJson(path, headers);
+    if (contentResult.failure !== undefined) return contentResult.failure;
+    if (contentResult.json === undefined) {
+        return {
+            status: contentResult.status === 404 ? 'unavailable' : 'failed',
+            reasonCode:
+                contentResult.status === 404
+                    ? 'path_not_found'
+                    : failureForStatus(contentResult.status ?? 0),
+        };
+    }
+    return decodeSourceFile(contentResult.json, selection.path);
+};
 
 const toolReasonForSourceFailure = (
     reasonCode: NonNullable<RepositorySourceMetadata['reasonCode']>
@@ -490,204 +689,39 @@ export const createGitHubSourceContextStepExecutor = (input: {
                       Authorization: `Bearer ${input.token}`,
                   }
                 : undefined;
-        const requestJson = async (
-            path: string,
-            headers: Record<string, string>
-        ): Promise<{
-            json?: unknown;
-            status?: number;
-            failure?: SourceFailure;
-        }> => {
-            try {
-                const response = await fetchImpl(
-                    `https://api.github.com/repos/${selection.repository}${path}`,
-                    { method: 'GET', headers, signal: controller.signal }
-                );
-                if (response.status < 200 || response.status >= 300) {
-                    return { status: response.status };
-                }
-                try {
-                    return { json: await response.json() };
-                } catch {
-                    return {
-                        failure: {
-                            status: 'failed',
-                            reasonCode: 'malformed_response',
-                        },
-                    };
-                }
-            } catch {
-                return {
-                    failure: {
-                        status: 'failed',
-                        reasonCode: controller.signal.aborted
-                            ? 'timeout'
-                            : 'network_error',
-                    },
-                };
-            }
-        };
+        const requestJson: GitHubJsonRequest = (path, headers) =>
+            requestGitHubJson(
+                fetchImpl,
+                `https://api.github.com/repos/${selection.repository}${path}`,
+                headers,
+                controller.signal
+            );
 
         try {
-            const publicRepository = await requestJson('', publicHeaders);
-            let repositoryBody = publicRepository.json;
-            if (
-                publicRepository.status === 404 &&
-                allowedPrivateRepository &&
-                authenticatedHeaders !== undefined
-            ) {
-                const privateRepository = await requestJson(
-                    '',
-                    authenticatedHeaders
-                );
-                if (privateRepository.failure !== undefined) {
-                    return privateRepository.failure;
-                }
-                if (privateRepository.json === undefined) {
-                    return {
-                        status: 'unavailable',
-                        reasonCode:
-                            privateRepository.status === 404
-                                ? 'not_found_or_private'
-                                : failureForStatus(
-                                      privateRepository.status ?? 0
-                                  ),
-                    };
-                }
-                repositoryBody = privateRepository.json;
-            } else if (publicRepository.failure !== undefined) {
-                return publicRepository.failure;
-            } else if (repositoryBody === undefined) {
-                return {
-                    status: 'unavailable',
-                    reasonCode:
-                        publicRepository.status === 404
-                            ? 'not_found_or_private'
-                            : failureForStatus(publicRepository.status ?? 0),
-                };
-            }
-
-            if (
-                !isRecord(repositoryBody) ||
-                typeof repositoryBody.private !== 'boolean'
-            ) {
-                return { status: 'failed', reasonCode: 'malformed_response' };
-            }
-            if (repositoryBody.private) {
-                if (
-                    !allowedPrivateRepository ||
-                    authenticatedHeaders === undefined
-                ) {
-                    return {
-                        status: 'unavailable',
-                        reasonCode: 'private_access_denied',
-                    };
-                }
-            }
-            const sourceHeaders = repositoryBody.private
-                ? authenticatedHeaders
-                : publicHeaders;
-            if (sourceHeaders === undefined) {
-                return {
-                    status: 'unavailable',
-                    reasonCode: 'private_access_denied',
-                };
-            }
-
-            const commitResult = await requestJson(
-                `/commits/${encodeURIComponent(selection.revision)}`,
-                sourceHeaders
+            const repositoryResult = await resolveRepositoryHeaders(
+                requestJson,
+                allowedPrivateRepository,
+                authenticatedHeaders,
+                publicHeaders
             );
-            if (commitResult.failure !== undefined) return commitResult.failure;
-            if (commitResult.json === undefined) {
-                return {
-                    status:
-                        commitResult.status === 404 ? 'unavailable' : 'failed',
-                    reasonCode:
-                        commitResult.status === 404
-                            ? 'revision_not_found'
-                            : failureForStatus(commitResult.status ?? 0),
-                };
-            }
-            const resolvedRevision = isRecord(commitResult.json)
-                ? commitResult.json.sha
-                : undefined;
-            if (
-                typeof resolvedRevision !== 'string' ||
-                !/^[A-Fa-f0-9]{40}$/u.test(resolvedRevision)
-            ) {
-                return { status: 'failed', reasonCode: 'malformed_response' };
-            }
-
-            const contentPath = `/contents/${encodePath(selection.path)}?ref=${encodeURIComponent(resolvedRevision)}`;
-            const contentResult = await requestJson(contentPath, sourceHeaders);
-            if (contentResult.failure !== undefined)
-                return contentResult.failure;
-            if (contentResult.json === undefined) {
-                return {
-                    status:
-                        contentResult.status === 404 ? 'unavailable' : 'failed',
-                    reasonCode:
-                        contentResult.status === 404
-                            ? 'path_not_found'
-                            : failureForStatus(contentResult.status ?? 0),
-                };
-            }
-            if (!isRecord(contentResult.json)) {
-                return { status: 'failed', reasonCode: 'malformed_response' };
-            }
-            const file = contentResult.json;
-            if (file.type !== 'file' || file.path !== selection.path) {
-                return {
-                    status: 'unavailable',
-                    reasonCode: 'not_a_file',
-                };
-            }
-            if (
-                typeof file.size !== 'number' ||
-                !Number.isSafeInteger(file.size) ||
-                file.size < 0
-            ) {
-                return { status: 'failed', reasonCode: 'malformed_response' };
-            }
-            if (file.size > MAX_SOURCE_FILE_BYTES) {
-                return {
-                    status: 'unavailable',
-                    reasonCode: 'file_too_large',
-                };
-            }
-            if (
-                file.encoding !== 'base64' ||
-                typeof file.content !== 'string'
-            ) {
-                return { status: 'failed', reasonCode: 'malformed_response' };
-            }
-            const encodedContent = file.content.replace(/\s/gu, '');
-            if (
-                !/^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/u.test(
-                    encodedContent
-                )
-            ) {
-                return { status: 'failed', reasonCode: 'malformed_response' };
-            }
-            let decoded: string;
-            try {
-                decoded = new TextDecoder('utf-8', { fatal: true }).decode(
-                    Buffer.from(encodedContent, 'base64')
-                );
-            } catch {
-                return { status: 'unavailable', reasonCode: 'not_a_file' };
-            }
-            if (Buffer.byteLength(decoded, 'utf8') !== file.size) {
-                return { status: 'failed', reasonCode: 'malformed_response' };
-            }
-            const safeSource = decoded
-                .replace(/\r\n?/gu, '\n')
-                .replace(/(?!\n)\p{Cc}/gu, ' ');
+            if (!('value' in repositoryResult)) return repositoryResult;
+            const revisionResult = await resolveSourceRevision(
+                requestJson,
+                selection,
+                repositoryResult.value
+            );
+            if (!('value' in revisionResult)) return revisionResult;
+            const sourceResult = await readPinnedSourceFile(
+                requestJson,
+                selection,
+                revisionResult.value,
+                repositoryResult.value
+            );
+            if (!('value' in sourceResult)) return sourceResult;
             const formatted = buildSourceContent(
                 selection,
-                resolvedRevision,
-                safeSource
+                revisionResult.value,
+                sourceResult.value
             );
             const fetchedAt = new Date(now()).toISOString();
             const payload: GitHubSourcePayload = {
@@ -698,7 +732,7 @@ export const createGitHubSourceContextStepExecutor = (input: {
                         undefined,
                         fetchedAt
                     ),
-                    resolvedRevision,
+                    resolvedRevision: revisionResult.value,
                     freshness: 'current',
                     ...(formatted.matchCount !== undefined && {
                         matchCount: formatted.matchCount,
@@ -713,7 +747,7 @@ export const createGitHubSourceContextStepExecutor = (input: {
                 payload,
                 citation: {
                     title: selection.path,
-                    url: sourceUrl(selection, resolvedRevision),
+                    url: sourceUrl(selection, revisionResult.value),
                     snippet: formatted.snippet,
                 },
             };

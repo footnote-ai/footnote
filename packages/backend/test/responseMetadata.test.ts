@@ -1323,7 +1323,7 @@ test('buildResponseMetadata does not mark revised when assess requested refineme
     });
 });
 
-test('buildResponseMetadata preserves githubContext and projectContext when present', () => {
+test('buildResponseMetadata preserves context source metadata when present', () => {
     const metadata = buildResponseMetadata(
         baseGenerationMetadata(),
         baseRuntimeContext({
@@ -1334,6 +1334,15 @@ test('buildResponseMetadata preserves githubContext and projectContext when pres
                 returnedCounts: { repository: 1 },
                 failedSections: [],
                 reasonCodes: [],
+            },
+            githubSource: {
+                repository: 'footnote-ai/footnote',
+                path: 'src/service.ts',
+                requestedRevision: 'main',
+                resolvedRevision: '0123456789abcdef0123456789abcdef01234567',
+                scope: 'selected_file',
+                status: 'retrieved',
+                freshness: 'current',
             },
             projectContext: {
                 repository: 'footnote-ai/footnote',
@@ -1352,6 +1361,9 @@ test('buildResponseMetadata preserves githubContext and projectContext when pres
     );
 
     assert.equal(metadata.githubContext?.repository, 'footnote-ai/footnote');
+    assert.equal(metadata.githubSource?.repository, 'footnote-ai/footnote');
+    assert.equal(metadata.githubSource?.path, 'src/service.ts');
+    assert.equal(metadata.githubSource?.requestedRevision, 'main');
     assert.equal(metadata.projectContext?.provider, 'openai');
     assert.equal(metadata.projectContext?.model, 'text-embedding-3-small');
     assert.deepEqual(metadata.projectContext?.requestedCategories, [
