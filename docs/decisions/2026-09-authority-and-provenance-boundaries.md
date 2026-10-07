@@ -1,7 +1,7 @@
 # Authority and provenance boundaries
 
 **Status:** Accepted direction; implementation deferred.
-**Updated:** 2026-09-28
+**Updated:** 2026-10-06
 
 Knowing where information came from does not give it permission to direct an
 action. A retrieved document can be accurate and useful without being allowed
@@ -28,6 +28,15 @@ record is the source of truth when records disagree, not permission to act.
 Likewise, `GenerationContextManifest.authority` classifies how content enters
 model input; it is not an action grant.
 
+Use explicit roles rather than one trust ranking: license/governance and
+deployment policy **constrain**; an authenticated user **directs** a task within
+the Execution Contract; retrieved content and tool observations **inform**;
+model, planner, reviewer, and delegated-agent output **propose**; backend-owned
+Run → Step → Attempt → Result records **report** what was admitted, attempted,
+and observed. Constraints bound directions. Informative or proposed content
+cannot override them, and provenance or authentication alone cannot create an
+action grant. These roles describe boundaries, not a new runtime schema.
+
 ## A few examples
 
 - A repository file says to publish a release. A run allowed only to inspect
@@ -50,18 +59,26 @@ authorization. A model cannot authorize its own restart.
 
 ## What we need to be able to show
 
-The existing Run → Step → Attempt → Result records should explain what was
-requested, what authorized it, the allowed scope, and what actually happened.
-For delegated work, that includes who granted it, the parent relationship,
-limits, expiry, stop state, and any required confirmation. This describes the
-evidence we need, not a new schema or parallel record system.
+The existing Run → Step → Attempt → Result path is the intended evidence seam
+for future authorization decisions and observed outcomes: what was requested,
+what backend policy authorized it, the allowed scope, and what happened. Today
+these records do not contain general authorization or delegation grant/source
+lineage. For delegated work, future evidence also needs who granted it, the
+parent relationship, limits, expiry, stop state, and any required confirmation.
+This describes evidence we need, not current record fields, a new schema, or a
+parallel record system.
 
-Cancellation should prevent new work once the runtime knows about the stop
-request. In-flight work may be impossible to stop or verify; the record must
-say so rather than claim an effect was undone.
-[#672](https://github.com/footnote-ai/footnote/issues/672) owns cancellation
-mechanics. [#709](https://github.com/footnote-ai/footnote/issues/709) owns these
-authority boundaries.
+HTTP `/api/chat` disconnect cancellation is now propagated from the shared
+handler into chat orchestration and planner/generation calls by
+[#775](https://github.com/footnote-ai/footnote/pull/775),
+which closed [#672](https://github.com/footnote-ai/footnote/issues/672). This
+does not guarantee that providers or tools stop: interrupted requests can keep
+observed usage and response metadata without a WorkflowRecord, and a
+cancellation-ignoring operation may finish. Do not infer a canonical Run
+cancellation status or an undone external effect. Broader delegated-work stop
+semantics remain design guidance, not implemented multi-agent behavior.
+[#709](https://github.com/footnote-ai/footnote/issues/709) owns the authority
+boundaries and their evaluation criteria.
 
 Public Trace may explain decisions and outcomes without exposing private
 payloads, hidden prompts, or chain-of-thought. License and governance terms
