@@ -1514,3 +1514,9 @@ components:
                 application/json:
                     schema:
                         $ref: '#/components/schemas/TraceStaleResponse'
+        PublicResponseGone:
+            description: Public response is expired or unavailable.
+            content:
+                application/json:
+                    schema:
+                        $ref: '#/components/schemas/ErrorResponse'

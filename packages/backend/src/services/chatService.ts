@@ -2595,6 +2595,7 @@ export const createChatService = ({
 
         const publicationToken =
             terminalActionResponse === undefined &&
+            answerProvenanceEligible &&
             effectiveOutputBoundary.surface === 'web'
                 ? randomBytes(32).toString('base64url')
                 : undefined;

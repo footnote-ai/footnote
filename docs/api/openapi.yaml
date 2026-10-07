@@ -532,7 +532,7 @@ paths:
                 '404':
                     $ref: '#/components/responses/NotFound'
                 '410':
-                    $ref: '#/components/responses/Gone'
+                    $ref: '#/components/responses/PublicResponseGone'
                 '413':
                     $ref: '#/components/responses/PayloadTooLarge'
                 '503':
@@ -580,7 +580,7 @@ paths:
                 '404':
                     $ref: '#/components/responses/NotFound'
                 '410':
-                    $ref: '#/components/responses/Gone'
+                    $ref: '#/components/responses/PublicResponseGone'
                 '503':
                     $ref: '#/components/responses/ServiceUnavailable'
         delete:
@@ -620,7 +620,7 @@ paths:
                 '404':
                     $ref: '#/components/responses/NotFound'
                 '410':
-                    $ref: '#/components/responses/Gone'
+                    $ref: '#/components/responses/PublicResponseGone'
                 '503':
                     $ref: '#/components/responses/ServiceUnavailable'
     /api/trace-cards:
@@ -7988,3 +7988,9 @@ components:
                 application/json:
                     schema:
                         $ref: '#/components/schemas/TraceStaleResponse'
+        PublicResponseGone:
+            description: Public response is expired or unavailable.
+            content:
+                application/json:
+                    schema:
+                        $ref: '#/components/schemas/ErrorResponse'

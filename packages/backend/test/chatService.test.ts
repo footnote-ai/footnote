@@ -2795,6 +2795,7 @@ test('runChatMessages handles surfaced no-generation reasons without runtime fal
     for (const terminationReason of surfacedReasons) {
         let generationCalls = 0;
         let traceMetadata: ResponseMetadata | undefined;
+        let publicationRequested = false;
         const usageRecords: BackendLLMCostRecord[] = [];
         const generationRuntime: GenerationRuntime = {
             kind: 'test-runtime',
@@ -2816,8 +2817,9 @@ test('runChatMessages handles surfaced no-generation reasons without runtime fal
 
         const chatService = createChatService({
             generationRuntime,
-            storeTrace: async (metadata) => {
+            storeTrace: async (metadata, _candidates, publicationSource) => {
                 traceMetadata = metadata;
+                publicationRequested = publicationSource !== undefined;
             },
             buildResponseMetadata,
             defaultModel: 'gpt-5-mini',
@@ -2857,6 +2859,7 @@ test('runChatMessages handles surfaced no-generation reasons without runtime fal
             'I could not generate a response for this request.'
         );
         assert.equal(response.answerProvenanceEligible, false);
+        assert.equal(publicationRequested, false);
         assert.equal(
             response.metadata.workflow?.terminationReason,
             terminationReason
