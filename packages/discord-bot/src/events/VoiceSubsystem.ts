@@ -348,11 +348,8 @@ export class VoiceSubsystem extends Event {
                     });
             });
 
-            realtimeSession.on('text', (text: string) =>
-                logger.debug(`[BOT TEXT] ${text}`)
-            );
-            realtimeSession.on('greeting', (text: string) =>
-                logger.info(`[BOT GREETING] ${text}`)
+            realtimeSession.on('greeting', () =>
+                logger.info('[BOT GREETING] Realtime greeting received.')
             );
             realtimeSession.on(
                 'response.done',
