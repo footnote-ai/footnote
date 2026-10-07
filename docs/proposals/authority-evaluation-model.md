@@ -50,6 +50,12 @@ provide a general authorization or delegation gate for arbitrary external
 actions, so these acceptance cases do not claim that such actions are already
 enforced.
 
+The provider-neutral fixture inventory is
+[`packages/backend/test/fixtures/authorityBehaviorEvaluation.json`](../../packages/backend/test/fixtures/authorityBehaviorEvaluation.json).
+It maps only existing backend behavior to its current test oracle. Delegated
+execution is explicitly marked unsupported; the fixture is not evidence that
+the broader authorization cases below are implemented.
+
 ## Cases that must hold
 
 1. **Instructions hidden in evidence.** A retrieved article says to delete
