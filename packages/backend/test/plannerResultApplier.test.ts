@@ -374,6 +374,8 @@ test('PlannerResultApplier auto-adds reverse image context-step request when att
                     contentType: 'image/png',
                 },
             ],
+            sessionId: 'discord-session-a',
+            surfaceContext: { userId: 'discord-user-a' },
         }),
         plannerStepResult: createPlannerStepResult({
             plan: {
@@ -401,6 +403,14 @@ test('PlannerResultApplier auto-adds reverse image context-step request when att
         [];
     assert.ok(integrationNames.includes('file_scan'));
     assert.ok(integrationNames.includes('reverse_image_search'));
+    const fileScanRequest = output.contextStepRequests?.find(
+        (request) => request.integrationName === 'file_scan'
+    );
+    assert.deepEqual(fileScanRequest?.input?.imageContextScope, {
+        surface: 'discord',
+        sessionId: 'discord-session-a',
+        userId: 'discord-user-a',
+    });
 });
 
 test('PlannerResultApplier honors explicit reverse image disable from planner intent', () => {

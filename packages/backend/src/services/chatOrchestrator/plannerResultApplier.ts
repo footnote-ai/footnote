@@ -277,9 +277,10 @@ export const createPlannerResultApplier = (
                 integrationName: REVERSE_IMAGE_SEARCH_INTEGRATION_NAME,
                 attachments: plannerInput.normalizedRequest.attachments,
                 latestUserInput: plannerInput.normalizedRequest.latestUserInput,
-                imageContextScope: hasImageFollowUpReference
-                    ? imageContextScope
-                    : undefined,
+                imageContextScope:
+                    hasImageAttachments || hasImageFollowUpReference
+                        ? imageContextScope
+                        : undefined,
             });
         const reverseImageSearchContextStepRequest =
             reverseImageSearchConfig.enabled &&
@@ -298,9 +299,10 @@ export const createPlannerResultApplier = (
                       attachments: plannerInput.normalizedRequest.attachments,
                       latestUserInput:
                           plannerInput.normalizedRequest.latestUserInput,
-                      imageContextScope: hasImageFollowUpReference
-                          ? imageContextScope
-                          : undefined,
+                      imageContextScope:
+                          hasImageAttachments || hasImageFollowUpReference
+                              ? imageContextScope
+                              : undefined,
                   })
                 : undefined;
         // The planner suggests GitHub scope and sections. The backend creates
