@@ -203,3 +203,10 @@ Realtime is a separate streaming session, not another route through `POST /api/c
 | Availability and fail-open behavior | Ordinary chat does not depend on voice. The Discord voice subsystem loads on demand; session/provider failures stop that voice session rather than invoking text chat (`VoiceStateHandler.ts`, `VoiceSubsystem.ts`). Text chat remains independently available, but the voice path itself has no chat fallback.                                                                                                                                          | Voice is an optional surface, so its failure does not block ordinary text chat; a failed voice session is not transparently retried as text.                                                                                            |
 
 This audit leaves #558 open. Confirmed follow-up areas are #534 speech resolution, #559 cross-surface continuity, thinner Realtime execution evidence/usage completeness, and avoiding full response text in debug logs. Realtime remains a separate streaming surface; no chat-endpoint or workflow migration is proposed here.
+
+### Existing test coverage
+
+- Backend session authorization, startup, and usage forwarding: `packages/backend/test/internalVoiceRealtimeHandler.test.ts`.
+- Provider event and session behavior: `packages/agent-runtime/test/openAiRealtimeVoiceRuntime.test.ts`.
+- Discord event and audio-stream handling: `packages/discord-bot/test/realtimeService.test.ts` and `packages/discord-bot/test/realtimeStreaming.test.ts`.
+- `packages/discord-bot/test/loggingPrivacy.test.ts` covers identifier redaction, not the full generated-text logging noted above. Current tests do not establish chat-equivalent speech resolution, context retrieval, execution lineage, or cache/reasoning usage; these remain follow-up gaps.
