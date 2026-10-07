@@ -10,6 +10,7 @@ import { Client } from 'discord.js';
 import path from 'path';
 import { readdir } from 'fs/promises';
 import { logger } from './logger.js';
+import { runAsyncCallback } from './runAsyncCallback.js';
 import { Event } from '../events/Event.js';
 import { runtimeConfig } from '../config.js';
 
@@ -197,21 +198,12 @@ export class EventManager {
                 continue;
             }
 
-            // Discord's event emitter ignores callback return values, so catch
-            // event failures here instead of returning an unobserved promise.
             const executeEvent = (...args: unknown[]): void => {
-                try {
-                    void Promise.resolve(event.execute(...args)).catch(
-                        (error: unknown) => {
-                            logger.error(
-                                `Error in event ${event.name}:`,
-                                error
-                            );
-                        }
-                    );
-                } catch (error) {
-                    logger.error(`Error in event ${event.name}:`, error);
-                }
+                runAsyncCallback(
+                    () => event.execute(...args),
+                    (error) =>
+                        logger.error(`Error in event ${event.name}:`, error)
+                );
             };
 
             // Register the event

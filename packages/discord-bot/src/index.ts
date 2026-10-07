@@ -17,6 +17,7 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import { CommandHandler } from './utils/commandHandler.js';
 import { EventManager } from './utils/eventManager.js';
+import { runAsyncCallback } from './utils/runAsyncCallback.js';
 import { logger, logRuntimeLifecycleEvent } from './utils/logger.js';
 import { runtimeConfig } from './config.js';
 import type { Command } from './commands/BaseCommand.js';
@@ -166,61 +167,74 @@ client.handlers = new Collection();
 // Process Handlers
 // ====================
 // Client ready handler
-client.once(Events.ClientReady, async () => {
-    await recoverInterruptedImageTasks(client);
-    logRuntimeLifecycleEvent('ready', 'discord_client');
+client.once(Events.ClientReady, () => {
+    runAsyncCallback(
+        async () => {
+            await recoverInterruptedImageTasks(client);
+            logRuntimeLifecycleEvent('ready', 'discord_client');
+        },
+        (error: unknown) =>
+            logger.error('Discord client ready handling failed.', { error })
+    );
 });
 
 // Slash commands handler
-client.on(Events.InteractionCreate, async (interaction) => {
-    if (interaction.isChatInputCommand()) {
-        const command = (
-            interaction.client as ClientWithCommands
-        ).commands?.get(interaction.commandName);
+client.on(Events.InteractionCreate, (interaction) => {
+    runAsyncCallback(
+        async () => {
+            if (interaction.isChatInputCommand()) {
+                const command = (
+                    interaction.client as ClientWithCommands
+                ).commands?.get(interaction.commandName);
 
-        if (!command) {
-            logger.error(
-                `No command matching ${interaction.commandName} was found.`
-            );
-            return;
-        }
+                if (!command) {
+                    logger.error(
+                        `No command matching ${interaction.commandName} was found.`
+                    );
+                    return;
+                }
 
-        logger.debug(`Executing command: ${interaction.commandName}`);
+                logger.debug(`Executing command: ${interaction.commandName}`);
 
-        try {
-            await command.execute(interaction);
-        } catch (error) {
-            logger.error(
-                `Error executing command ${interaction.commandName}: ${error}`
-            );
-        }
+                try {
+                    await command.execute(interaction);
+                } catch (error) {
+                    logger.error(
+                        `Error executing command ${interaction.commandName}: ${error}`
+                    );
+                }
 
-        return;
-    }
+                return;
+            }
 
-    if (interaction.isStringSelectMenu()) {
-        const handled = await handleStringSelectMenuInteraction(interaction);
-        if (handled) {
-            return;
-        }
-    }
+            if (interaction.isStringSelectMenu()) {
+                const handled =
+                    await handleStringSelectMenuInteraction(interaction);
+                if (handled) {
+                    return;
+                }
+            }
 
-    if (interaction.isModalSubmit()) {
-        const handled = await handleModalSubmitInteraction(interaction);
-        if (handled) {
-            return;
-        }
-    }
+            if (interaction.isModalSubmit()) {
+                const handled = await handleModalSubmitInteraction(interaction);
+                if (handled) {
+                    return;
+                }
+            }
 
-    // ====================
-    // Button Interactions
-    // ====================
-    if (interaction.isButton()) {
-        const handled = await handleButtonInteraction(interaction);
-        if (handled) {
-            return;
-        }
-    }
+            // ====================
+            // Button Interactions
+            // ====================
+            if (interaction.isButton()) {
+                const handled = await handleButtonInteraction(interaction);
+                if (handled) {
+                    return;
+                }
+            }
+        },
+        (error: unknown) =>
+            logger.error('Discord interaction handling failed.', { error })
+    );
 });
 
 // ====================
