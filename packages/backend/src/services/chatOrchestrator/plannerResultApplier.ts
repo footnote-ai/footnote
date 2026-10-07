@@ -19,6 +19,7 @@ import { PROJECT_CONTEXT_NAME } from '../contextIntegrations/projectContext/inde
 import { FILE_SCAN_INTEGRATION_NAME } from '../contextIntegrations/fileScanning/index.js';
 import { REVERSE_IMAGE_SEARCH_INTEGRATION_NAME } from '../contextIntegrations/reverseImageSearch/index.js';
 import { isImageAttachment } from '../attachments/attachmentContext.js';
+import { isImageContextReference } from '../contextIntegrations/fileScanning/conversationImageContextStore.js';
 import { runtimeConfig } from '../../config.js';
 import { resolveExecutionProfile } from './profileResolution.js';
 import type {
@@ -99,6 +100,11 @@ const buildAttachmentContextStep = (input: {
     integrationName: string;
     attachments: PostChatRequest['attachments'];
     latestUserInput: string;
+    imageContextScope?: {
+        surface: PostChatRequest['surface'];
+        sessionId: string;
+        userId?: string;
+    };
 }):
     | {
           integrationName: string;
@@ -107,10 +113,14 @@ const buildAttachmentContextStep = (input: {
           input: {
               attachments: Record<string, unknown>[];
               latestUserInput: string;
+              imageContextScope?: NonNullable<typeof input.imageContextScope>;
           };
       }
     | undefined => {
-    if (input.attachments === undefined || input.attachments.length === 0) {
+    if (
+        (input.attachments === undefined || input.attachments.length === 0) &&
+        input.imageContextScope === undefined
+    ) {
         return undefined;
     }
     return {
@@ -118,8 +128,11 @@ const buildAttachmentContextStep = (input: {
         requested: true,
         eligible: true,
         input: {
-            attachments: input.attachments as Record<string, unknown>[],
+            attachments: (input.attachments ?? []) as Record<string, unknown>[],
             latestUserInput: input.latestUserInput,
+            ...(input.imageContextScope !== undefined && {
+                imageContextScope: input.imageContextScope,
+            }),
         },
     };
 };
@@ -240,6 +253,23 @@ export const createPlannerResultApplier = (
             plannerInput.normalizedRequest.attachments?.some((attachment) =>
                 isImageAttachment(attachment)
             ) ?? false;
+        const imageContextScope =
+            plannerInput.normalizedRequest.sessionId !== undefined
+                ? {
+                      surface: plannerInput.normalizedRequest.surface,
+                      sessionId: plannerInput.normalizedRequest.sessionId,
+                      ...(plannerInput.normalizedRequest.surfaceContext
+                          ?.userId && {
+                          userId: plannerInput.normalizedRequest.surfaceContext
+                              .userId,
+                      }),
+                  }
+                : undefined;
+        const hasImageFollowUpReference =
+            imageContextScope !== undefined &&
+            isImageContextReference(
+                plannerInput.normalizedRequest.latestUserInput
+            );
         const reverseImageSearchConfig =
             runtimeConfig.chatWorkflow.contextIntegrations.reverseImageSearch;
         const reverseImageSearchAttachmentContextStep =
@@ -247,10 +277,13 @@ export const createPlannerResultApplier = (
                 integrationName: REVERSE_IMAGE_SEARCH_INTEGRATION_NAME,
                 attachments: plannerInput.normalizedRequest.attachments,
                 latestUserInput: plannerInput.normalizedRequest.latestUserInput,
+                imageContextScope: hasImageFollowUpReference
+                    ? imageContextScope
+                    : undefined,
             });
         const reverseImageSearchContextStepRequest =
             reverseImageSearchConfig.enabled &&
-            hasImageAttachments &&
+            (hasImageAttachments || hasImageFollowUpReference) &&
             !reverseImageSearchExplicitlyDisabledByPlanner &&
             (reverseImageSearchRequestedByPlanner ||
                 reverseImageSearchConfig.autoRunWithImageAttachments)
@@ -258,14 +291,18 @@ export const createPlannerResultApplier = (
                 : undefined;
         // File scan is backend-owned attachment grounding and should run for
         // any attachment payload (image or non-image) when attachments exist.
-        const fileScanContextStepRequest = hasAttachments
-            ? buildAttachmentContextStep({
-                  integrationName: FILE_SCAN_INTEGRATION_NAME,
-                  attachments: plannerInput.normalizedRequest.attachments,
-                  latestUserInput:
-                      plannerInput.normalizedRequest.latestUserInput,
-              })
-            : undefined;
+        const fileScanContextStepRequest =
+            hasAttachments || hasImageFollowUpReference
+                ? buildAttachmentContextStep({
+                      integrationName: FILE_SCAN_INTEGRATION_NAME,
+                      attachments: plannerInput.normalizedRequest.attachments,
+                      latestUserInput:
+                          plannerInput.normalizedRequest.latestUserInput,
+                      imageContextScope: hasImageFollowUpReference
+                          ? imageContextScope
+                          : undefined,
+                  })
+                : undefined;
         // The planner suggests GitHub scope and sections. The backend creates
         // the request that can run.
         const githubContextStepRequest = generationForExecution.githubContext

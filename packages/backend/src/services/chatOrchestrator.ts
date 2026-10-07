@@ -58,6 +58,7 @@ import type { InternalImageDescriptionTaskService } from './internalText.js';
 import { resolveWeatherClarificationContinuation } from './tools/weatherClarificationContinuation.js';
 import { createWeatherForecastContextStepExecutor } from './contextIntegrations/weather/index.js';
 import { createFileScanningContextStepExecutor } from './contextIntegrations/fileScanning/index.js';
+import { ConversationImageContextStore } from './contextIntegrations/fileScanning/conversationImageContextStore.js';
 import { createReverseImageSearchContextStepExecutor } from './contextIntegrations/reverseImageSearch/index.js';
 import { createSerpApiReverseImageSearchProvider } from './contextIntegrations/reverseImageSearch/index.js';
 import { createWebSearchContextStepExecutor } from './contextIntegrations/webSearch/index.js';
@@ -201,6 +202,7 @@ export const createChatOrchestrator = ({
         typeof logger.child === 'function'
             ? logger.child({ module: 'chatOrchestrator' })
             : logger;
+    const conversationImageContextStore = new ConversationImageContextStore();
     const catalogProfiles = runtimeConfig.modelProfiles.catalog;
     const enabledProfiles = catalogProfiles.filter(
         (profile) => profile.enabled
@@ -1144,6 +1146,7 @@ export const createChatOrchestrator = ({
             createFileScanningContextStepExecutor({
                 imageDescriptionTaskService:
                     internalImageDescriptionTaskService,
+                imageContextStore: conversationImageContextStore,
                 logger: chatOrchestratorLogger,
             });
         const reverseImageSearchProviderMode =
@@ -1205,6 +1208,7 @@ export const createChatOrchestrator = ({
             }),
             reverse_image_search: createReverseImageSearchContextStepExecutor({
                 provider: reverseImageSearchProvider,
+                imageContextStore: conversationImageContextStore,
                 logger: chatOrchestratorLogger,
                 maxMatchesPerImage:
                     runtimeConfig.chatWorkflow.contextIntegrations
