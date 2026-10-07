@@ -73,8 +73,11 @@ const listChangedFiles = () => {
     return [...unstaged, ...staged, ...untracked];
 };
 
-const compareCodeUnits = (left, right) =>
-    left < right ? -1 : left > right ? 1 : 0;
+const compareCodeUnits = (left, right) => {
+    if (left < right) return -1;
+    if (left > right) return 1;
+    return 0;
+};
 
 const uniqueSorted = (values) => [...new Set(values)].sort(compareCodeUnits);
 

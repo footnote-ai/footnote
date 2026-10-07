@@ -16,12 +16,17 @@ const currentDirectory = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(currentDirectory, '..');
 const envExamplePath = path.join(repoRoot, '.env.example');
 
-const compareCodeUnits = (left: string, right: string): number =>
-    left < right ? -1 : left > right ? 1 : 0;
+const compareCodeUnits = (left: string, right: string): number => {
+    if (left < right) return -1;
+    if (left > right) return 1;
+    return 0;
+};
 
 /** Sorts diagnostic keys in stable UTF-16 code-unit order. */
-export const sortKeysInCodeUnitOrder = (keys: string[]): string[] =>
+export const sortKeysInCodeUnitOrder = (keys: string[]): string[] => {
     keys.sort(compareCodeUnits);
+    return keys;
+};
 
 const parseExampleKeys = (content: string): string[] => {
     const keys: string[] = [];
