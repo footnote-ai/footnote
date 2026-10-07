@@ -1,0 +1,390 @@
+{
+    "version": 1,
+    "sources": [
+        {
+            "id": "local-ollama-cohort",
+            "kind": "documentation",
+            "path": "docs/status/local-ollama-model-cohort.md",
+            "commit": "106fd89e3aa1654986cceeef70a9116cb889a363"
+        },
+        {
+            "id": "model-behavior-baseline",
+            "kind": "documentation",
+            "path": "docs/status/model-behavior-baseline.md",
+            "commit": "88212d5991bd0eb0e6521706fc44b8a970ec58e3"
+        },
+        {
+            "id": "planner-comparison-status",
+            "kind": "documentation",
+            "path": "docs/status/planner-strict-provenance-comparison.md",
+            "commit": "1e52151d5a465f737a668a8964e13c1fe3c2b014"
+        },
+        {
+            "id": "status-index",
+            "kind": "documentation",
+            "path": "docs/status/index.md",
+            "commit": "1e52151d5a465f737a668a8964e13c1fe3c2b014"
+        },
+        {
+            "id": "ollama-provider-controls",
+            "kind": "documentation",
+            "path": "docs/architecture/ollama-provider-controls.md",
+            "commit": "1e52151d5a465f737a668a8964e13c1fe3c2b014"
+        }
+    ],
+    "models": [
+        {
+            "id": "qwen3.8",
+            "recordedAt": "2026-09-12",
+            "family": {
+                "value": "Qwen3.8",
+                "nature": "derived",
+                "source": "local-ollama-cohort"
+            },
+            "revision": {
+                "value": null,
+                "nature": "unavailable",
+                "source": "local-ollama-cohort"
+            }
+        },
+        {
+            "id": "qwen3.6-35b-a3b-reap-48-v2",
+            "recordedAt": "2026-09-12",
+            "family": {
+                "value": "Qwen3.6",
+                "nature": "derived",
+                "source": "local-ollama-cohort"
+            },
+            "revision": {
+                "value": null,
+                "nature": "unavailable",
+                "source": "local-ollama-cohort"
+            }
+        },
+        {
+            "id": "qwen3.5-abliterated-9b",
+            "recordedAt": "2026-09-12",
+            "family": {
+                "value": "Qwen3.5",
+                "nature": "derived",
+                "source": "local-ollama-cohort"
+            },
+            "revision": {
+                "value": null,
+                "nature": "unavailable",
+                "source": "local-ollama-cohort"
+            }
+        },
+        {
+            "id": "ling-3.0-tiny",
+            "recordedAt": "2026-09-12",
+            "family": {
+                "value": "Ling 3.0",
+                "nature": "derived",
+                "source": "local-ollama-cohort"
+            },
+            "revision": {
+                "value": null,
+                "nature": "unavailable",
+                "source": "local-ollama-cohort"
+            }
+        }
+    ],
+    "deployments": [
+        {
+            "id": "ollama-local-footnote",
+            "recordedAt": "2026-09-12",
+            "modelId": "qwen3.8",
+            "role": {
+                "value": "upper-local dense quality test",
+                "nature": "maintainer judgment",
+                "source": "local-ollama-cohort"
+            },
+            "artifact": {
+                "value": "qwen3.8:27b-q4_K_M",
+                "nature": "derived",
+                "source": "local-ollama-cohort"
+            },
+            "quantization": {
+                "value": "Q4_K_M",
+                "nature": "derived",
+                "source": "local-ollama-cohort"
+            },
+            "provider": {
+                "value": "Ollama",
+                "nature": "derived",
+                "source": "local-ollama-cohort"
+            },
+            "capabilities": {
+                "supportedOllamaThinkingControls": {
+                    "value": null,
+                    "nature": "unavailable",
+                    "source": "ollama-provider-controls"
+                }
+            },
+            "runtime": {
+                "name": {
+                    "value": "Ollama",
+                    "nature": "derived",
+                    "source": "local-ollama-cohort"
+                },
+                "version": {
+                    "value": null,
+                    "nature": "unavailable",
+                    "source": "local-ollama-cohort"
+                }
+            },
+            "deployment": {
+                "environment": {
+                    "value": "local development",
+                    "nature": "derived",
+                    "source": "local-ollama-cohort"
+                },
+                "hardware": {
+                    "value": "AMD Radeon RX 7800 XT 16 GB VRAM; 32 GB system RAM",
+                    "nature": "derived",
+                    "source": "local-ollama-cohort"
+                }
+            },
+            "artifactSize": {
+                "value": "about 17 GB locally",
+                "nature": "maintainer judgment",
+                "source": "local-ollama-cohort"
+            },
+            "artifactDigest": {
+                "value": null,
+                "nature": "unavailable",
+                "source": "local-ollama-cohort"
+            }
+        },
+        {
+            "id": "ollama-local-danny",
+            "recordedAt": "2026-09-12",
+            "modelId": "qwen3.6-35b-a3b-reap-48-v2",
+            "role": {
+                "value": "sparse/MoE efficiency and reasoning comparison",
+                "nature": "maintainer judgment",
+                "source": "local-ollama-cohort"
+            },
+            "artifact": {
+                "value": "hf.co/crucible-labs/Qwen3.6-35B-A3B-REAP-48-v2-GGUF:latest",
+                "nature": "derived",
+                "source": "local-ollama-cohort"
+            },
+            "quantization": {
+                "value": "Q4_K_M",
+                "nature": "derived",
+                "source": "local-ollama-cohort"
+            },
+            "provider": {
+                "value": "Ollama",
+                "nature": "derived",
+                "source": "local-ollama-cohort"
+            },
+            "capabilities": {
+                "supportedOllamaThinkingControls": {
+                    "value": null,
+                    "nature": "unavailable",
+                    "source": "ollama-provider-controls"
+                }
+            },
+            "runtime": {
+                "name": {
+                    "value": "Ollama",
+                    "nature": "derived",
+                    "source": "local-ollama-cohort"
+                },
+                "version": {
+                    "value": null,
+                    "nature": "unavailable",
+                    "source": "local-ollama-cohort"
+                }
+            },
+            "deployment": {
+                "environment": {
+                    "value": "local development",
+                    "nature": "derived",
+                    "source": "local-ollama-cohort"
+                },
+                "hardware": {
+                    "value": "AMD Radeon RX 7800 XT 16 GB VRAM; 32 GB system RAM",
+                    "nature": "derived",
+                    "source": "local-ollama-cohort"
+                }
+            },
+            "artifactSize": {
+                "value": "about 9.4 GB locally",
+                "nature": "maintainer judgment",
+                "source": "local-ollama-cohort"
+            },
+            "artifactDigest": {
+                "value": "d0f50978e07996f96480c90a4b789b7988d91a9c015aa84f5cfb5ff7d5d2ece4",
+                "nature": "provider-reported",
+                "source": "local-ollama-cohort"
+            }
+        },
+        {
+            "id": "ollama-local-myuri",
+            "recordedAt": "2026-09-12",
+            "modelId": "qwen3.5-abliterated-9b",
+            "role": {
+                "value": "behavioral variant and stress case; not stock-Qwen3.5 representative",
+                "nature": "maintainer judgment",
+                "source": "local-ollama-cohort"
+            },
+            "artifact": {
+                "value": "huihui_ai/qwen3.5-abliterated:9b",
+                "nature": "derived",
+                "source": "local-ollama-cohort"
+            },
+            "quantization": {
+                "value": "Q4_K_M",
+                "nature": "derived",
+                "source": "local-ollama-cohort"
+            },
+            "provider": {
+                "value": "Ollama",
+                "nature": "derived",
+                "source": "local-ollama-cohort"
+            },
+            "capabilities": {
+                "supportedOllamaThinkingControls": {
+                    "value": null,
+                    "nature": "unavailable",
+                    "source": "ollama-provider-controls"
+                }
+            },
+            "runtime": {
+                "name": {
+                    "value": "Ollama",
+                    "nature": "derived",
+                    "source": "local-ollama-cohort"
+                },
+                "version": {
+                    "value": null,
+                    "nature": "unavailable",
+                    "source": "local-ollama-cohort"
+                }
+            },
+            "deployment": {
+                "environment": {
+                    "value": "local development",
+                    "nature": "derived",
+                    "source": "local-ollama-cohort"
+                },
+                "hardware": {
+                    "value": "AMD Radeon RX 7800 XT 16 GB VRAM; 32 GB system RAM",
+                    "nature": "derived",
+                    "source": "local-ollama-cohort"
+                }
+            },
+            "artifactSize": {
+                "value": "about 6.6 GB locally",
+                "nature": "maintainer judgment",
+                "source": "local-ollama-cohort"
+            },
+            "artifactDigest": {
+                "value": null,
+                "nature": "unavailable",
+                "source": "local-ollama-cohort"
+            }
+        },
+        {
+            "id": "ollama-local-winter",
+            "recordedAt": "2026-09-12",
+            "modelId": "ling-3.0-tiny",
+            "role": {
+                "value": "edge-efficient architecture test; 1.3B active MoE parameters",
+                "nature": "maintainer judgment",
+                "source": "local-ollama-cohort"
+            },
+            "artifact": {
+                "value": "hf.co/inclusionAI/Ling-3.0-tiny-GGUF:Q5_K_M",
+                "nature": "derived",
+                "source": "local-ollama-cohort"
+            },
+            "quantization": {
+                "value": "Q5_K_M",
+                "nature": "derived",
+                "source": "local-ollama-cohort"
+            },
+            "provider": {
+                "value": "Ollama",
+                "nature": "derived",
+                "source": "local-ollama-cohort"
+            },
+            "capabilities": {
+                "supportedOllamaThinkingControls": {
+                    "value": null,
+                    "nature": "unavailable",
+                    "source": "ollama-provider-controls"
+                }
+            },
+            "runtime": {
+                "name": {
+                    "value": "Ollama",
+                    "nature": "derived",
+                    "source": "local-ollama-cohort"
+                },
+                "version": {
+                    "value": null,
+                    "nature": "unavailable",
+                    "source": "local-ollama-cohort"
+                }
+            },
+            "deployment": {
+                "environment": {
+                    "value": "local development",
+                    "nature": "derived",
+                    "source": "local-ollama-cohort"
+                },
+                "hardware": {
+                    "value": "AMD Radeon RX 7800 XT 16 GB VRAM; 32 GB system RAM",
+                    "nature": "derived",
+                    "source": "local-ollama-cohort"
+                }
+            },
+            "artifactSize": {
+                "value": "about 5.6 GB locally",
+                "nature": "maintainer judgment",
+                "source": "local-ollama-cohort"
+            },
+            "artifactDigest": {
+                "value": null,
+                "nature": "unavailable",
+                "source": "local-ollama-cohort"
+            }
+        }
+    ],
+    "evaluations": [
+        {
+            "id": "live-model-behavior",
+            "scope": "live provider/model evaluation",
+            "assessedAt": "2026-10-07",
+            "modelId": null,
+            "deploymentId": null,
+            "status": {
+                "value": "not run or scheduled",
+                "nature": "derived",
+                "source": "planner-comparison-status"
+            },
+            "observedAt": null,
+            "evidence": [
+                "planner-comparison-status",
+                "model-behavior-baseline",
+                "status-index"
+            ]
+        }
+    ],
+    "assessments": [
+        {
+            "id": "local-cohort-experiment-only-2026-09-12",
+            "date": "2026-09-12",
+            "target": "local-ollama-cohort",
+            "recommendation": "Keep this cohort as experiment setup only; it is not production model policy and does not establish a universally best model or transferable quantization result.",
+            "nature": "maintainer judgment",
+            "evidence": ["local-ollama-cohort"],
+            "supersedes": null
+        }
+    ]
+}

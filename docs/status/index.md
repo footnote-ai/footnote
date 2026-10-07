@@ -19,6 +19,8 @@ work is done.
   no evaluation run is scheduled
 - [Planner strict-output comparison](./planner-strict-provenance-comparison.md)
   — no live-provider evidence recorded
+- [Model capability registry](./model-capability-registry.json) — evidence-backed
+  model and deployment facts, evaluation status, and dated assessments
 
 The [local Ollama cohort](./local-ollama-model-cohort.md) is experiment setup,
 not an active work tracker.
