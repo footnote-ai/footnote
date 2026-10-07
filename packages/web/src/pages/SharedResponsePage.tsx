@@ -101,26 +101,6 @@ const SharedResponsePage = (): JSX.Element => {
                                     </strong>
                                     .
                                 </p>
-                                {pageState.response.sources.length > 0 && (
-                                    <>
-                                        <h3>Sources</h3>
-                                        <ul>
-                                            {pageState.response.sources.map(
-                                                (source) => (
-                                                    <li key={source.url}>
-                                                        <a
-                                                            href={source.url}
-                                                            target="_blank"
-                                                            rel="nofollow noreferrer"
-                                                        >
-                                                            {source.title}
-                                                        </a>
-                                                    </li>
-                                                )
-                                            )}
-                                        </ul>
-                                    </>
-                                )}
                                 {pageState.response.limitations.length > 0 && (
                                     <>
                                         <h3>Limitations</h3>

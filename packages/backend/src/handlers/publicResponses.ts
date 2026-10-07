@@ -183,7 +183,6 @@ export const createPublicResponsesHandler = ({
         logRequest(req, res, 'public response revoked');
     };
 
-    /** @api.operationId: createPublicResponse @api.path: POST /api/public-responses */
     const handlePublicResponsesRequest = async (
         req: IncomingMessage,
         res: ServerResponse,

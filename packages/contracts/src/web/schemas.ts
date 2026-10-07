@@ -2826,16 +2826,6 @@ export const GetTraceApiResponseSchema: z.ZodType<
 > = z.union([GetTraceResponseSchema, GetTraceStaleResponseSchema]);
 
 const PublicResponseIdSchema = z.string().regex(/^[A-Za-z0-9_-]{43}$/u);
-const PublicResponseSourceSchema = z
-    .object({
-        title: z.string().min(1).max(200),
-        url: z
-            .string()
-            .url()
-            .max(2048)
-            .refine((value) => /^https?:/iu.test(value)),
-    })
-    .strict();
 
 /** @api.operationId: createPublicResponse @api.path: POST /api/public-responses */
 export const CreatePublicResponseRequestSchema: z.ZodType<CreatePublicResponseRequest> =
@@ -2863,7 +2853,6 @@ export const GetPublicResponseResponseSchema: z.ZodType<GetPublicResponseRespons
         .object({
             answer: z.string().min(1).max(64_000),
             provenance: ProvenanceSchema,
-            sources: z.array(PublicResponseSourceSchema).max(50),
             limitations: z.array(z.string().min(1).max(500)).max(8),
             publishedAt: z.string().datetime(),
             expiresAt: z.string().datetime(),

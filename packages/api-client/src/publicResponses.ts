@@ -44,6 +44,10 @@ const PublicResponseReadResultSchema = GetPublicResponseResponseSchema.or(
     ApiErrorResponseSchema
 );
 
+/**
+ * Creates the typed public-response transport. Publication capabilities are
+ * sent only in explicit request bodies.
+ */
 export const createPublicResponsesApi = (
     requestJson: ApiRequester
 ): PublicResponsesApi => {

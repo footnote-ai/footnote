@@ -5003,23 +5003,10 @@ components:
                 - publishedAt
                 - expiresAt
             additionalProperties: false
-        PublicResponseSource:
-            type: object
-            properties:
-                title:
-                    type: string
-                    minLength: 1
-                    maxLength: 200
-                url:
-                    type: string
-                    format: uri
-                    maxLength: 2048
-                    pattern: '^https?://'
-            required:
-                - title
-                - url
-            additionalProperties: false
         PublicResponseProjection:
+            description: >-
+                The public allowlist exposes only the answer, provenance, limitations, and lifecycle dates; v1 omits
+                unclassified citation links.
             type: object
             properties:
                 answer:
@@ -5032,11 +5019,6 @@ components:
                         - Retrieved
                         - Inferred
                         - Speculative
-                sources:
-                    type: array
-                    maxItems: 50
-                    items:
-                        $ref: '#/components/schemas/PublicResponseSource'
                 limitations:
                     type: array
                     maxItems: 8
@@ -5053,7 +5035,6 @@ components:
             required:
                 - answer
                 - provenance
-                - sources
                 - limitations
                 - publishedAt
                 - expiresAt

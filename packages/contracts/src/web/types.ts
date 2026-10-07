@@ -588,17 +588,10 @@ export type PostChatResponse =
     | ChatIgnoreActionResponse
     | ChatImageActionResponse;
 
-/** Approved source link shape; v1 leaves sources empty until publicness is explicit. */
-export type PublicResponseSource = {
-    title: string;
-    url: string;
-};
-
 /** Backend-owned allowlist for an explicitly published answer. */
 export type PublicResponseProjection = {
     answer: string;
     provenance: Provenance;
-    sources: PublicResponseSource[];
     limitations: string[];
     publishedAt: string;
     expiresAt: string;

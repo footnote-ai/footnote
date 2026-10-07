@@ -33,7 +33,6 @@ test('publication requires the backend-issued answer-bound capability and suppor
     const projection: PublicResponseProjection = {
         answer,
         provenance: 'Inferred',
-        sources: [],
         limitations: [],
         publishedAt,
         expiresAt,
@@ -211,7 +210,6 @@ test('expired public response data is not retrievable', async () => {
     const projection: PublicResponseProjection = {
         answer,
         provenance: 'Inferred',
-        sources: [],
         limitations: [],
         publishedAt,
         expiresAt,
@@ -265,7 +263,6 @@ test('updating the source trace invalidates its published snapshot', async () =>
     const projection: PublicResponseProjection = {
         answer,
         provenance: 'Inferred',
-        sources: [],
         limitations: [],
         publishedAt,
         expiresAt,
@@ -323,7 +320,6 @@ test('publication rejects a stale trace version even when the answer capability 
     const projection: PublicResponseProjection = {
         answer,
         provenance: 'Inferred',
-        sources: [],
         limitations: [],
         publishedAt,
         expiresAt,

@@ -129,7 +129,7 @@ test('a user can explicitly publish, view, and revoke an allowlisted response', 
     const page = (await pageResponse.json()) as Record<string, unknown>;
     assert.equal(page.answer, answer);
     assert.equal(page.provenance, metadata.provenance);
-    assert.deepEqual(page.sources, []);
+    assert.equal('sources' in page, false);
     assert.deepEqual(page.limitations, [
         'Source links were omitted because saved citations are not classified as public.',
     ]);
@@ -137,7 +137,6 @@ test('a user can explicitly publish, view, and revoke an allowlisted response', 
     assert.equal(JSON.stringify(page).includes(PUBLICATION_TOKEN), false);
     assert.equal(JSON.stringify(page).includes('private source body'), false);
     assert.equal(JSON.stringify(page).includes('secret='), false);
-    assert.equal(JSON.stringify(page).includes('example.com'), false);
 
     const revokeResponse = await fetch(
         `${baseUrl}/api/public-responses/${published.publicId}`,

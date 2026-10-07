@@ -30,11 +30,7 @@ export const projectPublicResponse = ({
 }): PublicResponseProjection => ({
     answer,
     provenance: metadata.provenance,
-    // Citations do not carry a public/private marker; HTTP(S) alone cannot
-    // distinguish public references from private GitHub or signed attachment URLs.
-    sources: [],
     limitations: [
-        ...(metadata.provenanceAssessment?.limitations ?? []),
         ...(metadata.citations.length === 0
             ? ['No sources were recorded for this response.']
             : [
@@ -43,6 +39,7 @@ export const projectPublicResponse = ({
         ...(metadata.displayIntegrity?.status === 'partial'
             ? ['Some provenance details are unavailable.']
             : []),
+        ...(metadata.provenanceAssessment?.limitations ?? []),
     ]
         .filter(
             (limitation): limitation is string =>

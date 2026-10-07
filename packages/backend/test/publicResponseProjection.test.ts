@@ -81,18 +81,60 @@ test('public response omits unclassified source links and keeps private trace fi
     assert.deepEqual(projection, {
         answer: 'Delivered answer',
         provenance: 'Retrieved',
-        sources: [],
         limitations: [
-            'Evidence may be incomplete.',
             'Source links were omitted because saved citations are not classified as public.',
+            'Evidence may be incomplete.',
         ],
         publishedAt: '2026-10-07T12:00:00.000Z',
         expiresAt: '2026-10-14T12:00:00.000Z',
     });
     const serializedProjection = JSON.stringify(projection);
-    assert.equal(serializedProjection.includes('github.com'), false);
-    assert.equal(serializedProjection.includes('storage.example.com'), false);
     assert.equal(serializedProjection.includes('private'), false);
     assert.equal(serializedProjection.includes('private-token'), false);
     assert.equal(serializedProjection.includes('signed-secret'), false);
+});
+
+test('public response reserves space to disclose omitted citations', () => {
+    const metadata: ResponseMetadata = {
+        ...createMetadata(),
+        citations: [
+            {
+                title: 'Unclassified source',
+                url: 'https://example.test/source',
+            },
+        ],
+        provenanceAssessment: {
+            methodId: 'deterministic_multi_signal_v1',
+            methodLabel: 'Deterministic signals',
+            signals: {
+                citationsPresent: true,
+                retrievalRequested: true,
+                retrievalUsed: true,
+                retrievalToolExecuted: true,
+                workflowEvidence: true,
+                trustGraphEvidenceAvailable: false,
+                trustGraphEvidenceUsed: false,
+                assistantDeclaredSpeculative: false,
+            },
+            conflicts: [],
+            limitations: Array.from(
+                { length: 8 },
+                (_, index) => `Existing limitation ${index + 1}.`
+            ),
+        },
+    };
+
+    const projection = projectPublicResponse({
+        answer: 'Delivered answer',
+        metadata,
+        publishedAt: '2026-10-07T12:00:00.000Z',
+        expiresAt: '2026-10-14T12:00:00.000Z',
+    });
+
+    assert.equal(
+        projection.limitations.includes(
+            'Source links were omitted because saved citations are not classified as public.'
+        ),
+        true
+    );
 });

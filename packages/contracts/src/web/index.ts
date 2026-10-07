@@ -136,7 +136,6 @@ export type {
  * @api.path: DELETE /api/public-responses/{publicId}
  */
 export type {
-    PublicResponseSource,
     PublicResponseProjection,
     CreatePublicResponseRequest,
     CreatePublicResponseResponse,

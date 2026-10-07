@@ -786,14 +786,24 @@ const Chat = (): JSX.Element => {
                             {turn.publicationToken && (
                                 <div className="chat-publication-controls">
                                     {!turn.publicationState && (
-                                        <button
-                                            type="button"
-                                            onClick={() =>
-                                                void publishTurn(turn)
-                                            }
-                                        >
-                                            Publish this answer
-                                        </button>
+                                        <>
+                                            <small className="chat-publication-note">
+                                                Publishing makes this answer
+                                                public for 7 days. You can
+                                                unpublish it sooner only while
+                                                this chat stays open; refreshing
+                                                or closing it removes your
+                                                unpublish control.
+                                            </small>
+                                            <button
+                                                type="button"
+                                                onClick={() =>
+                                                    void publishTurn(turn)
+                                                }
+                                            >
+                                                Publish this answer
+                                            </button>
+                                        </>
                                     )}
                                     {turn.publicationState === 'publishing' && (
                                         <span role="status">Publishing…</span>

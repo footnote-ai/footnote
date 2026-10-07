@@ -2,8 +2,8 @@
  * @description: Persists provenance traces in SQLite with retry handling and validation.
  * @footnote-scope: utility
  * @footnote-module: SqliteTraceStore
- * @footnote-risk: medium - Storage errors can drop trace records or corrupt metadata.
- * @footnote-ethics: medium - Trace accuracy underpins transparency and auditability.
+ * @footnote-risk: high - SQLite now also holds anonymous page snapshots and hashed publish capabilities.
+ * @footnote-ethics: high - Storage governs public response exposure and limited session-scoped revocation.
  */
 import { createHash, timingSafeEqual } from 'node:crypto';
 import {
