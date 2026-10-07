@@ -245,6 +245,28 @@ test('expired public response data is not retrievable', async () => {
             (await store.getPublicResponse('expired-public-id')).status,
             'expired'
         );
+        assert.equal(
+            (
+                await store.getPublicResponse(
+                    'expired-public-id',
+                    new Date(
+                        Date.parse(expiresAt) + 6 * 86_400_000
+                    ).toISOString()
+                )
+            ).status,
+            'expired'
+        );
+        assert.equal(
+            (
+                await store.getPublicResponse(
+                    'expired-public-id',
+                    new Date(
+                        Date.parse(expiresAt) + 8 * 86_400_000
+                    ).toISOString()
+                )
+            ).status,
+            'not_found'
+        );
     } finally {
         store.close();
         await fs.rm(tempRoot, { recursive: true, force: true });

@@ -6,6 +6,7 @@
  * @footnote-ethics: medium - It guards the anonymous page against exposing trace fields.
  */
 import { expect, test } from '@playwright/test';
+import { configureRuntime, response } from './chat-test-helpers';
 
 test('renders the public response projection without trace metadata', async ({
     page,
@@ -39,5 +40,56 @@ test('renders the public response projection without trace metadata', async ({
     ).toBeVisible();
     await expect(
         page.locator('.shared-response-page').getByRole('link')
+    ).toHaveCount(0);
+});
+
+test('reports an unavailable publication after unpublish is attempted', async ({
+    page,
+}) => {
+    const publicId = 'B'.repeat(43);
+    await configureRuntime(page);
+    await page.route('**/api/chat', async (route) => {
+        await route.fulfill({
+            contentType: 'application/json',
+            body: JSON.stringify({
+                ...response('A published answer.'),
+                publicationToken: 'A'.repeat(43),
+            }),
+        });
+    });
+    await page.route('**/api/public-responses', async (route) => {
+        await route.fulfill({
+            status: 201,
+            contentType: 'application/json',
+            body: JSON.stringify({
+                publicId,
+                publishedAt: '2026-10-07T12:00:00.000Z',
+                expiresAt: '2026-10-14T12:00:00.000Z',
+            }),
+        });
+    });
+    await page.route(`**/api/public-responses/${publicId}`, async (route) => {
+        await route.fulfill({
+            status: 410,
+            contentType: 'application/json',
+            body: JSON.stringify({
+                error: 'This published response is no longer available.',
+            }),
+        });
+    });
+
+    await page.goto('/chat');
+    await page.getByLabel('Ask a question').fill('Publish this answer?');
+    await page.getByRole('button', { name: 'Submit question' }).click();
+    await page.getByRole('button', { name: 'Publish this answer' }).click();
+    await page.getByRole('button', { name: 'Unpublish' }).click();
+
+    await expect(
+        page
+            .getByRole('status')
+            .filter({ hasText: 'This public link is no longer available.' })
+    ).toBeVisible();
+    await expect(
+        page.getByRole('link', { name: 'View public page' })
     ).toHaveCount(0);
 });

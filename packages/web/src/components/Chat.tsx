@@ -55,7 +55,8 @@ type CompletedChatTurn = {
     answerProvenanceEligible: boolean | undefined;
     publicationToken?: string;
     publicId?: string;
-    publicationState?: 'publishing' | 'published' | 'revoking' | 'revoked';
+    publicationState?:
+        'publishing' | 'published' | 'revoking' | 'revoked' | 'unavailable';
     publicationMessage?: string;
 };
 type CurrentChatRequest = {
@@ -121,7 +122,10 @@ const Chat = (): JSX.Element => {
         turnId: number,
         updates: Pick<
             CompletedChatTurn,
-            'publicId' | 'publicationState' | 'publicationMessage'
+            | 'publicId'
+            | 'publicationState'
+            | 'publicationMessage'
+            | 'publicationToken'
         >
     ): void => {
         setCompletedTurns((previous) =>
@@ -171,9 +175,19 @@ const Chat = (): JSX.Element => {
                 updatePublicationTurn(turn.id, {
                     publicationState: 'revoked',
                     publicId: undefined,
+                    publicationToken: undefined,
                 });
                 return;
             }
+            if (result.status === 410) {
+                updatePublicationTurn(turn.id, {
+                    publicationState: 'unavailable',
+                    publicId: undefined,
+                    publicationToken: undefined,
+                });
+                return;
+            }
+            // A 404 also covers an invalid capability, so it cannot prove unpublication.
         } catch {
             // Keep the current link visible when revocation could not be confirmed.
         }
@@ -783,7 +797,9 @@ const Chat = (): JSX.Element => {
                                     turn.answerProvenanceEligible
                                 }
                             />
-                            {turn.publicationToken && (
+                            {(turn.publicationToken !== undefined ||
+                                turn.publicationState === 'revoked' ||
+                                turn.publicationState === 'unavailable') && (
                                 <div className="chat-publication-controls">
                                     {!turn.publicationState && (
                                         <>
@@ -842,6 +858,13 @@ const Chat = (): JSX.Element => {
                                     {turn.publicationState === 'revoked' && (
                                         <span role="status">
                                             This answer is unpublished.
+                                        </span>
+                                    )}
+                                    {turn.publicationState ===
+                                        'unavailable' && (
+                                        <span role="status">
+                                            This public link is no longer
+                                            available.
                                         </span>
                                     )}
                                     {turn.publicationMessage && (

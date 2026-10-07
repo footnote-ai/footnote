@@ -31,6 +31,8 @@ import { projectTraceMetadataForDisplay } from './traceDisplayProjection.js';
 
 const BUSY_MAX_ATTEMPTS = 5;
 const BUSY_RETRY_DELAY_MS = 50;
+const PUBLIC_RESPONSE_TOMBSTONE_RETENTION_MS = 7 * 24 * 60 * 60 * 1000;
+const PUBLIC_RESPONSE_CLEANUP_INTERVAL_MS = 60 * 1000;
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 const traceLogger =
@@ -211,7 +213,9 @@ export class SqliteTraceStore {
     private readonly updatePublicResponseStateStatement: Database.Statement;
     private readonly revokePublicResponseStatement: Database.Statement;
     private readonly cleanupExpiredPublicResponsesStatement: Database.Statement;
+    private readonly deleteRetainedPublicResponseTombstonesStatement: Database.Statement;
     private readonly invalidatePublicResponsesByTraceStatement: Database.Statement;
+    private readonly publicResponseCleanupTimer: NodeJS.Timeout;
 
     constructor(config: SqliteTraceStoreConfig) {
         const resolvedPath = path.resolve(config.dbPath);
@@ -361,14 +365,26 @@ export class SqliteTraceStore {
             SET state = 'expired', projection_json = NULL
             WHERE state = 'published' AND expires_at <= ?
         `);
+        this.deleteRetainedPublicResponseTombstonesStatement = this.db.prepare(`
+            DELETE FROM public_response_publications
+            WHERE state IN ('expired', 'revoked', 'unavailable') AND expires_at <= ?
+        `);
         this.invalidatePublicResponsesByTraceStatement = this.db.prepare(`
             UPDATE public_response_publications
             SET state = 'unavailable', projection_json = NULL
             WHERE response_id = ? AND state = 'published'
         `);
-        this.cleanupExpiredPublicResponsesStatement.run(
-            new Date().toISOString()
-        );
+        this.cleanupPublicResponses(new Date().toISOString());
+        this.publicResponseCleanupTimer = setInterval(() => {
+            try {
+                this.cleanupPublicResponses(new Date().toISOString());
+            } catch {
+                traceLogger.warn(
+                    'Public response cleanup failed; it will retry on the next interval.'
+                );
+            }
+        }, PUBLIC_RESPONSE_CLEANUP_INTERVAL_MS);
+        this.publicResponseCleanupTimer.unref();
         this.db
             .prepare(
                 `DELETE FROM response_publication_sources WHERE expires_at <= ?`
@@ -377,11 +393,22 @@ export class SqliteTraceStore {
         traceLogger.info(`Initialized SQLite trace store at ${resolvedPath}`);
     }
 
+    /** Keeps unavailable-link tombstones for one week after their public expiry. */
+    private cleanupPublicResponses(now: string): void {
+        this.cleanupExpiredPublicResponsesStatement.run(now);
+        const tombstoneCutoff = new Date(
+            Date.parse(now) - PUBLIC_RESPONSE_TOMBSTONE_RETENTION_MS
+        ).toISOString();
+        this.deleteRetainedPublicResponseTombstonesStatement.run(
+            tombstoneCutoff
+        );
+    }
+
     /** Stores hashes only; the exact answer is kept only after explicit publication. */
     async createPublicResponseSource(source: PublicationSource): Promise<void> {
         await this.withRetry(() => {
             const now = new Date().toISOString();
-            this.cleanupExpiredPublicResponsesStatement.run(now);
+            this.cleanupPublicResponses(now);
             this.db
                 .prepare(
                     `DELETE FROM response_publication_sources WHERE expires_at <= ?`
@@ -416,7 +443,7 @@ export class SqliteTraceStore {
         return this.withRetry(() => {
             const publish = this.db.transaction(() => {
                 const now = new Date().toISOString();
-                this.cleanupExpiredPublicResponsesStatement.run(now);
+                this.cleanupPublicResponses(now);
                 const source = this.retrievePublicationSourceStatement.get(
                     input.responseId
                 ) as
@@ -485,7 +512,7 @@ export class SqliteTraceStore {
         now = new Date().toISOString()
     ): Promise<PublicResponseResult> {
         return this.withRetry(() => {
-            this.cleanupExpiredPublicResponsesStatement.run(now);
+            this.cleanupPublicResponses(now);
             const row = this.retrievePublicResponseStatement.get(publicId) as
                 | {
                       response_id: string;
@@ -549,7 +576,7 @@ export class SqliteTraceStore {
     ): Promise<'revoked' | 'invalid' | 'expired' | 'unavailable'> {
         return this.withRetry(() => {
             const revoke = this.db.transaction(() => {
-                this.cleanupExpiredPublicResponsesStatement.run(now);
+                this.cleanupPublicResponses(now);
                 const row = this.retrievePublicResponseStatement.get(
                     publicId
                 ) as
@@ -1039,6 +1066,7 @@ export class SqliteTraceStore {
 
     close(): void {
         // Close the SQLite handle so Windows can clean up temp DB files.
+        clearInterval(this.publicResponseCleanupTimer);
         this.db.close();
     }
 }

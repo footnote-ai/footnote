@@ -554,11 +554,20 @@ paths:
                 - packages/contracts/src/web/types.ts#PublicResponseProjection
                 - packages/contracts/src/web/schemas.ts#GetPublicResponseResponseSchema
             summary: Read a public answer page
-            description: |
+            description: >
                 Returns only the immutable public projection, never the raw trace or internal response identifier.
+
                 Expired, revoked, stale, malformed, or deleted-source pages are unavailable. Responses use no-store,
+
                 no-referrer, and noindex/noarchive protections. V1 omits all citation links because saved citations
-                do not distinguish public sources from private repositories or signed attachments.
+
+                do not distinguish public sources from private repositories or signed attachments. Minimal
+                unavailable-link
+
+                tombstones remain until seven days after scheduled expiry, then are removed; older links return 404.
+
+                Expired page content is cleaned on startup, public-response access, and once per minute while the store
+                runs.
             tags:
                 - Public responses
             responses:
