@@ -65,6 +65,7 @@ const SOURCE_REQUEST_PREFIXES = [
     'i am asking you to ',
     "i'd like you to ",
     'i would like you to ',
+    'i want to ',
     'i want you to ',
     'i need you to ',
     'help me ',
