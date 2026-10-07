@@ -23,6 +23,13 @@ import type {
     ContextStepExecutorInput,
     ContextStepResult,
 } from '../../workflowCore/reviewedChatWorkflow.js';
+import {
+    ConversationImageContextStore,
+    imageContextIntegrationStatus,
+    isImageContextReference,
+    isImageContextRefresh,
+    type ImageContextScope,
+} from '../fileScanning/conversationImageContextStore.js';
 
 type ReverseImageSearchExecutorLogger = {
     warn: (message: string, meta?: Record<string, unknown>) => void;
@@ -51,6 +58,7 @@ export type ReverseImageSearchProvider = {
 
 type CreateReverseImageSearchContextStepExecutorOptions = {
     provider?: ReverseImageSearchProvider | null;
+    imageContextStore?: ConversationImageContextStore;
     logger: ReverseImageSearchExecutorLogger;
     maxMatchesPerImage?: number;
 };
@@ -60,6 +68,7 @@ const DEFAULT_MATCH_LIMIT = 2;
 
 export const createReverseImageSearchContextStepExecutor = ({
     provider,
+    imageContextStore,
     logger,
     maxMatchesPerImage = DEFAULT_MATCH_LIMIT,
 }: CreateReverseImageSearchContextStepExecutorOptions): ContextStepExecutor => {
@@ -77,26 +86,75 @@ export const createReverseImageSearchContextStepExecutor = ({
             input.request.input?.attachments
         );
         const imageAttachments = attachmentList.filter(isImageAttachment);
+        const userContext =
+            typeof input.request.input?.latestUserInput === 'string'
+                ? input.request.input.latestUserInput.trim()
+                : '';
+        const scopeValue = input.request.input?.imageContextScope;
+        const imageContextScope =
+            typeof scopeValue === 'object' && scopeValue !== null
+                ? (scopeValue as ImageContextScope)
+                : undefined;
+        const refersToImage = isImageContextReference(userContext);
+        const refresh = isImageContextRefresh(userContext);
+        const imageAttachment =
+            imageAttachments.length === 1 ? imageAttachments[0] : undefined;
+        const lookup = imageContextStore
+            ? imageContextStore.lookup({
+                  scope: imageContextScope,
+                  toolName: 'reverse_image_search',
+                  ...(imageAttachment && { imageUrl: imageAttachment.url }),
+                  refersToImage,
+                  refresh,
+              })
+            : undefined;
+        if (lookup?.status === 'reused') {
+            return {
+                ...lookup.result,
+                integrationContext: imageContextIntegrationStatus(
+                    'reverse_image_search',
+                    'reused'
+                ),
+            };
+        }
+        if (lookup?.status === 'expired') {
+            return buildSkippedContextStepResult({
+                toolName: REVERSE_IMAGE_SEARCH_NAME,
+                reasonCode: 'tool_not_used',
+                integrationContext: imageContextIntegrationStatus(
+                    'reverse_image_search',
+                    'expired'
+                ),
+            });
+        }
 
         if (imageAttachments.length === 0) {
             return buildSkippedContextStepResult({
                 toolName: REVERSE_IMAGE_SEARCH_NAME,
                 reasonCode: 'tool_not_used',
+                ...(lookup !== undefined && {
+                    integrationContext: imageContextIntegrationStatus(
+                        'reverse_image_search',
+                        lookup.status
+                    ),
+                }),
             });
         }
         if (!provider) {
             return buildSkippedContextStepResult({
                 toolName: REVERSE_IMAGE_SEARCH_NAME,
                 reasonCode: 'tool_unavailable',
+                integrationContext: imageContextIntegrationStatus(
+                    'reverse_image_search',
+                    'provider_unavailable'
+                ),
             });
         }
 
-        const userContext =
-            typeof input.request.input?.latestUserInput === 'string'
-                ? input.request.input.latestUserInput.trim()
-                : '';
         const evidenceContent: string[] = [];
         const sources: Citation[] = [];
+        let successfulLookups = 0;
+        let failedLookups = 0;
 
         for (const [index, attachment] of imageAttachments.entries()) {
             const label = `Image ${index + 1}`;
@@ -113,6 +171,7 @@ export const createReverseImageSearchContextStepExecutor = ({
                     }),
             });
             if (taskResult.status === 'executed') {
+                successfulLookups += 1;
                 const result = taskResult.value;
                 const topMatches = result.matches.slice(
                     0,
@@ -157,6 +216,7 @@ export const createReverseImageSearchContextStepExecutor = ({
                     });
                 }
             } else {
+                failedLookups += 1;
                 evidenceContent.push(
                     `[${label}] reverse image search failed; continuing without reverse-image grounding.`
                 );
@@ -171,13 +231,37 @@ export const createReverseImageSearchContextStepExecutor = ({
             }
         }
 
-        return buildExecutedContextStepResult({
+        const providerDisposition =
+            failedLookups === 0
+                ? refresh
+                    ? 'refreshed'
+                    : 'scanned'
+                : successfulLookups === 0
+                  ? 'provider_failed'
+                  : 'provider_partial';
+        const result = buildExecutedContextStepResult({
             toolName: REVERSE_IMAGE_SEARCH_NAME,
             evidence: {
                 content: evidenceContent,
             },
             sources,
+            integrationContext: imageContextIntegrationStatus(
+                'reverse_image_search',
+                (imageContextScope === undefined ||
+                    imageAttachment === undefined) &&
+                    failedLookups === 0
+                    ? 'not_retained'
+                    : providerDisposition
+            ),
         });
+        if (imageAttachment && failedLookups === 0) {
+            imageContextStore?.record({
+                scope: imageContextScope,
+                imageUrl: imageAttachment.url,
+                result,
+            });
+        }
+        return result;
     };
 
     return execute;

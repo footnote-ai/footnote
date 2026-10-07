@@ -159,6 +159,38 @@ test('PlannerResultApplier keeps native search capability separate from optional
     );
 });
 
+test('PlannerResultApplier requests backend image context for a clear session follow-up', () => {
+    const output = createApplier({ nativeSearchRequired: false })({
+        normalizedRequest: createChatRequest({
+            surface: 'web',
+            sessionId: 'web-session-a',
+            surfaceContext: { userId: 'web-user-a' },
+            latestUserInput: 'What else is in this picture?',
+            conversation: [
+                { role: 'user', content: 'Describe this image' },
+                { role: 'assistant', content: 'A red bicycle.' },
+                { role: 'user', content: 'What else is in this picture?' },
+            ],
+        }),
+        plannerStepResult: createPlannerStepResult(),
+        clarificationContinuation: { kind: 'none' },
+        resolvedExecutionPolicy: resolveExecutionContract({
+            presetId: 'quality-grounded',
+        }).policyContract,
+    });
+
+    const fileScanRequest = output.contextStepRequests?.find(
+        (request) => request.integrationName === 'file_scan'
+    );
+    assert.ok(fileScanRequest);
+    assert.deepEqual(fileScanRequest.input?.attachments, []);
+    assert.deepEqual(fileScanRequest.input?.imageContextScope, {
+        surface: 'web',
+        sessionId: 'web-session-a',
+        userId: 'web-user-a',
+    });
+});
+
 test('PlannerResultApplier applies surface coercion for web requests', () => {
     const applier = createApplier();
     const output = applier({
@@ -342,6 +374,8 @@ test('PlannerResultApplier auto-adds reverse image context-step request when att
                     contentType: 'image/png',
                 },
             ],
+            sessionId: 'discord-session-a',
+            surfaceContext: { userId: 'discord-user-a' },
         }),
         plannerStepResult: createPlannerStepResult({
             plan: {
@@ -369,6 +403,14 @@ test('PlannerResultApplier auto-adds reverse image context-step request when att
         [];
     assert.ok(integrationNames.includes('file_scan'));
     assert.ok(integrationNames.includes('reverse_image_search'));
+    const fileScanRequest = output.contextStepRequests?.find(
+        (request) => request.integrationName === 'file_scan'
+    );
+    assert.deepEqual(fileScanRequest?.input?.imageContextScope, {
+        surface: 'discord',
+        sessionId: 'discord-session-a',
+        userId: 'discord-user-a',
+    });
 });
 
 test('PlannerResultApplier honors explicit reverse image disable from planner intent', () => {
