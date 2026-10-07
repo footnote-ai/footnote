@@ -1,15 +1,8 @@
 # Footnote and Common Agentic Patterns
 
-This page is a translation guide.
-
-It helps contributors map common agent vocabulary onto Footnote's architecture
-without erasing Footnote's own semantics.
-
-Use it like this:
-
-- Start with the Footnote term.
-- Use the common pattern only as orientation.
-- Footnote's constraints are the real rule.
+Use this page to map common agent vocabulary onto Footnote's architecture.
+The Footnote terms and constraints are authoritative; common patterns are only
+orientation.
 
 ## Quick Crosswalk
 
@@ -22,12 +15,7 @@ Use it like this:
 
 ## Routing
 
-**What common pattern it resembles**
-
-Routing in other systems usually means deciding which execution path to take.
-That may mean a balanced path, a grounded path, or a tool-assisted path.
-
-**What Footnote calls it**
+**Footnote's term**
 
 Footnote uses a workflow mode for the high-level run choice and a
 shared reviewed workflow shape for concrete execution.
@@ -52,11 +40,7 @@ Current examples:
 
 ## Planning
 
-**What common pattern it resembles**
-
-Planning resembles the common planner step that decides the next action shape.
-
-**What Footnote calls it**
+**Footnote's term**
 
 Footnote treats planning as a bounded planner step. It is part of orchestration,
 not the owner of orchestration.
@@ -77,16 +61,10 @@ not the owner of orchestration.
 
 ## Reflection / Review
 
-**What common pattern it resembles**
+**Footnote's term**
 
-This resembles reflection, critique, or reviewer passes used in other agent
-systems.
-
-**What Footnote calls it**
-
-Today Footnote has an engine-bounded review / refinement path in the shared reviewed workflow.
-Future TRACE refinement may add another bounded refinement seam, but still under
-Footnote control.
+Footnote has an engine-bounded review and refinement path in the shared reviewed
+workflow. Any future TRACE refinement would remain bounded by Footnote.
 
 **What constraints Footnote adds**
 
@@ -107,12 +85,7 @@ Footnote control.
 
 ## Tool Use
 
-**What common pattern it resembles**
-
-This resembles standard tool calling: request a capability, then execute it if
-allowed.
-
-**What Footnote calls it**
+**Footnote's term**
 
 Footnote treats this as Execution Contract-limited tool execution with explicit
 intent, eligibility, outcome state, and reason codes.
@@ -134,12 +107,7 @@ intent, eligibility, outcome state, and reason codes.
 
 ## Memory
 
-**What common pattern it resembles**
-
-This resembles agent memory, but this part is mostly planned rather than
-current.
-
-**What Footnote calls it**
+**Footnote's term**
 
 Memory is planned work in Footnote. Near-term direction is bounded memory, not
 open-ended agent identity or autonomous long-horizon recall.
@@ -160,12 +128,7 @@ open-ended agent identity or autonomous long-horizon recall.
 
 ## MCP as a Protocol Boundary
 
-**What common pattern it resembles**
-
-MCP resembles a protocol layer for exposing tools or resources in a more
-uniform way.
-
-**What Footnote calls it**
+**Footnote's boundary**
 
 For this pass, MCP is best understood as a possible protocol boundary for
 capability access.
@@ -185,17 +148,3 @@ capability access.
 - not a default replacement for the current tool architecture
 - not policy authority
 - not a replacement for Footnote's authority boundaries
-
-## Bottom Line
-
-Footnote uses some patterns people will recognize from agent systems.
-
-But those patterns only help if they are translated into Footnote's own terms
-and constraints.
-
-The semantic center stays the same:
-
-- Execution Contract governs authority
-- workflow modes and workflow shape govern run shape
-- TRACE, provenance, and steerability stay Footnote-native
-- backend remains the control-plane boundary
