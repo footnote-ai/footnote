@@ -27,11 +27,11 @@ export type BoundedDebugText = {
 };
 
 const SECRET_ASSIGNMENT =
-    /(["']?(?:authorization|api[-_]?key|client[-_]?secret|access[-_]?token|refresh[-_]?token|token|password|csrf(?:[-_]?token)?|private[-_]?key|secret)["']?\s*[:=]\s*)(["']?)(?:bearer\s+|basic\s+)?([^"'\s,}\]]+)(["']?)/giu;
+    /(["']?[a-z0-9_-]*(?:authorization|api[-_]?key|access[-_]?key|private[-_]?key|secret|token|password|credential|csrf)[a-z0-9_-]*["']?\s*[:=]\s*)(["']?)(?:bearer\s+|basic\s+)?([^"'\s,}\]]+)(["']?)/giu;
 const COOKIE_HEADER =
     /(["']?(?:cookie|set-cookie)["']?\s*[:=]\s*)(?:"((?:\\.|[^"\\])*)"|'((?:\\.|[^'\\])*)'|([^\r\n]*))/giu;
 const ESCAPED_SECRET_ASSIGNMENT =
-    /(\\*["'](?:authorization|api[-_]?key|client[-_]?secret|access[-_]?token|refresh[-_]?token|token|password|cookie|set-cookie|csrf(?:[-_]?token)?|private[-_]?key|secret)\\*["']\s*[:=]\s*\\*["'])[\s\S]*/giu;
+    /(\\+["'][a-z0-9_-]*(?:authorization|api[-_]?key|access[-_]?key|private[-_]?key|secret|token|password|credential|cookie|set-cookie|csrf)[a-z0-9_-]*\\+["']\s*[:=]\s*\\+["'])[\s\S]*/giu;
 const URL_CREDENTIALS = /([a-z][a-z0-9+.-]*:\/\/)[^/@\s]+@/giu;
 const PRIVATE_KEY_BLOCK =
     /-----BEGIN [A-Z ]*PRIVATE KEY-----[\s\S]*?-----END [A-Z ]*PRIVATE KEY-----/gu;

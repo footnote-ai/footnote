@@ -21,7 +21,9 @@ test('model debug text redacts credential-shaped fields before storing', () => {
         'Authorization: Bearer abc123\napi_key="secret-value"\ntoken=session-token\n' +
             'https://operator:uri-password@example.com/private\n' +
             'postgres://operator:db-password@db.example/db\n' +
-            'mongodb+srv://user:mongo-password@cluster.example/db\nnormal text'
+            'mongodb+srv://user:mongo-password@cluster.example/db\n' +
+            'AWS_SECRET_ACCESS_KEY=aws-secret-value\n' +
+            '{"AWS_SECRET_ACCESS_KEY":"json-aws-secret-value"}\nnormal text'
     );
 
     assert.equal(result.redacted, true);
@@ -32,6 +34,8 @@ test('model debug text redacts credential-shaped fields before storing', () => {
     assert.equal(result.text.includes('uri-password'), false);
     assert.equal(result.text.includes('db-password'), false);
     assert.equal(result.text.includes('mongo-password'), false);
+    assert.equal(result.text.includes('aws-secret-value'), false);
+    assert.equal(result.text.includes('json-aws-secret-value'), false);
     assert.match(result.text, /normal text/u);
 });
 
@@ -67,6 +71,19 @@ test('model debug text fails closed on escaped quotes in serialized cookie value
     const result = boundAndRedactDebugText(JSON.stringify([nestedMessage]));
 
     assert.doesNotMatch(result.text, /secret|auth=/);
+    assert.equal(result.redacted, true);
+});
+
+test('model debug text redacts nested cloud secret environment fields', () => {
+    const nestedMessage = JSON.stringify({
+        role: 'user',
+        content: JSON.stringify({
+            AWS_SECRET_ACCESS_KEY: 'nested-aws-secret-value',
+        }),
+    });
+    const result = boundAndRedactDebugText(JSON.stringify([nestedMessage]));
+
+    assert.doesNotMatch(result.text, /nested-aws-secret-value/);
     assert.equal(result.redacted, true);
 });
 
