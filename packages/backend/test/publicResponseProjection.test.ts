@@ -32,6 +32,15 @@ test('public response omits unclassified source links and keeps private trace fi
             },
             { title: 'Unsafe URL', url: 'javascript:alert(1)' },
         ],
+        githubSource: {
+            repository: 'owner/private-repo',
+            path: '.footnote/private-prompt.ts',
+            requestedRevision: 'private-requested-ref',
+            resolvedRevision: 'private-resolved-sha',
+            scope: 'selected_file',
+            status: 'retrieved',
+            freshness: 'current',
+        },
         provenanceAssessment: {
             methodId: 'deterministic_multi_signal_v1',
             methodLabel: 'Deterministic signals',
@@ -89,9 +98,12 @@ test('public response omits unclassified source links and keeps private trace fi
         expiresAt: '2026-10-14T12:00:00.000Z',
     });
     const serializedProjection = JSON.stringify(projection);
+    assert.equal('githubSource' in projection, false);
     assert.equal(serializedProjection.includes('private'), false);
     assert.equal(serializedProjection.includes('private-token'), false);
     assert.equal(serializedProjection.includes('signed-secret'), false);
+    assert.equal(serializedProjection.includes('private-requested-ref'), false);
+    assert.equal(serializedProjection.includes('private-resolved-sha'), false);
 });
 
 test('public response reserves space to disclose omitted citations', () => {
