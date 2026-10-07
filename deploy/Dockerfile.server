@@ -25,6 +25,7 @@ COPY packages/config-spec/package.json packages/config-spec/tsconfig.json packag
 COPY packages/contracts/package.json packages/contracts/tsconfig.json packages/contracts/
 COPY packages/discord-bot/package.json packages/discord-bot/tsconfig.json packages/discord-bot/
 COPY packages/prompts/package.json packages/prompts/tsconfig.json packages/prompts/
+COPY packages/repository-context/package.json packages/repository-context/tsconfig.json packages/repository-context/
 COPY packages/web/package.json packages/web/tsconfig.json packages/web/
 
 COPY pnpm-lock.yaml* ./
@@ -42,6 +43,7 @@ COPY packages/contracts/src/ packages/contracts/src/
 COPY packages/contracts/test/fixtures/ packages/contracts/test/fixtures/
 COPY packages/discord-bot/ packages/discord-bot/
 COPY packages/prompts/src/ packages/prompts/src/
+COPY packages/repository-context/src/ packages/repository-context/src/
 COPY packages/web/ packages/web/
 COPY docs/ docs/
 COPY README.md SECURITY.md MIT_LICENSE.md HIPPOCRATIC_LICENSE.md ./
