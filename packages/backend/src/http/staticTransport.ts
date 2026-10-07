@@ -104,6 +104,13 @@ const handleStaticTransportRequest = async ({
     frameAncestors,
     logRequest,
 }: StaticTransportDeps): Promise<void> => {
+    const isSharedResponsePage = parsedUrl.pathname.startsWith('/share/');
+    if (isSharedResponsePage) {
+        res.setHeader('Cache-Control', 'no-store');
+        res.setHeader('Referrer-Policy', 'no-referrer');
+        res.setHeader('X-Robots-Tag', 'noindex, noarchive');
+    }
+
     // resolveAsset also owns SPA fallback behavior; keep that fallback path centralized.
     const asset = await resolveAsset(req.url ?? parsedUrl.pathname);
     if (!asset) {
@@ -118,7 +125,9 @@ const handleStaticTransportRequest = async ({
 
     res.statusCode = 200;
     res.setHeader('Content-Type', contentType);
-    res.setHeader('Cache-Control', 'public, max-age=600');
+    if (!isSharedResponsePage) {
+        res.setHeader('Cache-Control', 'public, max-age=600');
+    }
 
     maybeApplyHtmlCsp({
         req,

@@ -197,6 +197,29 @@ test('chat stays suggestion-free and falls back to an out-of-flow managed challe
     assert.match(interactionStyles, /\.interaction-captcha--managed/);
 });
 
+test('share publication explains public visibility and session-only revocation before consent', async () => {
+    const chatSource = await readFile(
+        `${webSourceDirectory}components/Chat.tsx`,
+        'utf8'
+    );
+    const beforePublish = chatSource.slice(
+        0,
+        chatSource.indexOf('Publish this answer')
+    );
+
+    assert.match(
+        beforePublish,
+        /Publishing makes this answer\s+public for 7 days\. You can\s+unpublish it sooner only while\s+this chat stays open; refreshing\s+or closing it removes your\s+unpublish control\./
+    );
+    const publishedControls = chatSource.slice(
+        chatSource.indexOf("turn.publicationState === 'published'")
+    );
+    assert.match(
+        publishedControls,
+        /This link expires after 7[\s\S]*refreshing or closing it[\s\S]*removes your unpublish[\s\S]*control\./
+    );
+});
+
 test('route fallback is a flat, spinner-only loading state', async () => {
     const [appSource, publicStyles, preloadSource] = await Promise.all([
         readFile(`${webSourceDirectory}App.tsx`, 'utf8'),

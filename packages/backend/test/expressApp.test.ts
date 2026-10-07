@@ -89,6 +89,7 @@ test('express shell returns handled API dispatch without entering static fallbac
         handleTraceCardFromTraceRequest: createUnhandledRouteHandler,
         handleTraceCardAssetRequest: async (req, res) =>
             createUnhandledRouteHandler(req, res),
+        handlePublicResponsesRequest: createUnhandledRouteHandler,
         handleRuntimeConfigRequest: createUnhandledRouteHandler,
         handleChatProfilesRequest: createUnhandledRouteHandler,
         handleAdminSettingsSchemaRequest: createUnhandledRouteHandler,
@@ -149,6 +150,7 @@ test('express shell falls through API dispatch and serves static transport', asy
         handleTraceCardFromTraceRequest: createUnhandledRouteHandler,
         handleTraceCardAssetRequest: async (req, res) =>
             createUnhandledRouteHandler(req, res),
+        handlePublicResponsesRequest: createUnhandledRouteHandler,
         handleRuntimeConfigRequest: createUnhandledRouteHandler,
         handleChatProfilesRequest: createUnhandledRouteHandler,
         handleAdminSettingsSchemaRequest: createUnhandledRouteHandler,

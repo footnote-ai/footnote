@@ -27,6 +27,9 @@ const NotFound = (): JSX.Element => (
 
 const loadTracePage = (): Promise<typeof import('@pages/TracePage')> =>
     import('@pages/TracePage');
+const loadSharedResponsePage = (): Promise<
+    typeof import('@pages/SharedResponsePage')
+> => import('@pages/SharedResponsePage');
 const loadEmbedPage = (): Promise<typeof import('@pages/EmbedPage')> =>
     import('@pages/EmbedPage');
 const loadSetupPage = (): Promise<typeof import('@pages/SetupPage')> =>
@@ -42,6 +45,7 @@ const loadExecutionReportPage = (): Promise<
 > => import('@pages/ExecutionReportPage');
 
 const TracePage = lazy(loadTracePage);
+const SharedResponsePage = lazy(loadSharedResponsePage);
 const EmbedPage = lazy(loadEmbedPage);
 const SetupPage = lazy(loadSetupPage);
 const ChatPage = lazy(loadChatPage);
@@ -164,6 +168,14 @@ const App = (): JSX.Element => {
                     element={
                         <Suspense fallback={routeFallback}>
                             <TracePage />
+                        </Suspense>
+                    }
+                />
+                <Route
+                    path="/share/:publicId"
+                    element={
+                        <Suspense fallback={routeFallback}>
+                            <SharedResponsePage />
                         </Suspense>
                     }
                 />

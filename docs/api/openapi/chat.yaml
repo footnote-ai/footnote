@@ -8,6 +8,8 @@ paths:
                 - packages/contracts/src/web/types.ts#PostChatRequest
                 - packages/contracts/src/web/types.ts#ChatAssistantIdentity
                 - packages/contracts/src/web/types.ts#PostChatResponse
+                - packages/contracts/src/web/types.ts#ChatMessageActionResponse
+                - packages/contracts/src/web/schemas.ts#PostChatResponseSchema
                 - packages/contracts/src/web/schemas.ts#ChatAssistantIdentitySchema
                 - packages/contracts/src/web/schemas.ts#ResponseMetadataSchema
                 - packages/contracts/src/web/schemas.ts#PresentationMetadataSchema
@@ -613,6 +615,11 @@ components:
                 answerProvenanceEligible:
                     type: boolean
                     description: Whether the user-visible response is eligible for normal answer-provenance presentation.
+                publicationToken:
+                    type: string
+                    pattern: '^[A-Za-z0-9_-]{43}$'
+                    readOnly: true
+                    description: Short-lived backend-issued capability for an explicit publication request. Keep out of URLs and logs.
                 metadata:
                     $ref: '#/components/schemas/ResponseMetadata'
             required:

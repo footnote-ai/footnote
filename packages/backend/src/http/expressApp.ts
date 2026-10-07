@@ -19,7 +19,9 @@ import { registerAccountDiscordConnectionRoutes } from './accountDiscordConnecti
 import { registerChatRoutes } from './chatRoutes.js';
 import { registerInternalRoutes } from './internalRoutes.js';
 import { registerTraceRoutes } from './traceRoutes.js';
+import { registerPublicResponseRoutes } from './publicResponseRoutes.js';
 import { getRequestUrl } from './requestUrl.js';
+import type { ParsedUrlHandler } from './dispatchRouter.js';
 
 type DispatchOutcome = 'handled' | 'fallthrough';
 
@@ -169,6 +171,7 @@ type CreateExpressAppDeps = {
         res: http.ServerResponse,
         parsedUrl: URL
     ) => Promise<void>;
+    handlePublicResponsesRequest: ParsedUrlHandler;
     handleRuntimeConfigRequest: (
         req: http.IncomingMessage,
         res: http.ServerResponse
@@ -293,6 +296,7 @@ const createExpressApp = ({
     handleTraceCardCreateRequest,
     handleTraceCardFromTraceRequest,
     handleTraceCardAssetRequest,
+    handlePublicResponsesRequest,
     handleRuntimeConfigRequest,
     handleChatProfilesRequest,
     handleAdminSettingsSchemaRequest,
@@ -454,6 +458,12 @@ const createExpressApp = ({
         handleTraceCardCreateRequest,
         handleTraceCardFromTraceRequest,
         handleTraceCardAssetRequest,
+        logRequest,
+    });
+    registerPublicResponseRoutes({
+        app,
+        normalizePathname,
+        handlePublicResponsesRequest,
         logRequest,
     });
 

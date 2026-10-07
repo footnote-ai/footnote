@@ -6,6 +6,7 @@
  * @footnote-risk: high - Mistakes here change the canonical chat behavior used by multiple callers.
  * @footnote-ethics: high - This workflow owns the AI response and provenance metadata users rely on.
  */
+import { randomBytes } from 'node:crypto';
 import type {
     GenerationResult,
     GenerationRuntime,
@@ -98,6 +99,7 @@ import type {
 } from './executionContractTrustGraph/trustGraphEvidenceTypes.js';
 import type { ScopeValidationPolicy } from './executionContractTrustGraph/scopeValidator.js';
 import { logger } from '../utils/logger.js';
+import type { PublicResponseSourceCredential } from './traceStore.js';
 import {
     normalizeChatOutput,
     type ChatOutputBoundaryOptions,
@@ -105,6 +107,7 @@ import {
 
 const BALANCED_PERSONA_EXPRESSION_GUIDANCE =
     buildPersonaExpressionGuidance('balanced');
+const PUBLICATION_TOKEN_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 
 const buildBalancedPresentationPersona = (id: string): PresentationPersona => ({
     id,
@@ -954,7 +957,8 @@ export type CreateChatServiceOptions = {
     generationRuntime: GenerationRuntime;
     storeTrace: (
         metadata: ResponseMetadata,
-        candidates?: readonly ResponseCandidate[]
+        candidates?: readonly ResponseCandidate[],
+        publicationSource?: PublicResponseSourceCredential
     ) => Promise<void>;
     buildResponseMetadata: (
         generationMetadata: ResponseMetadataGenerationInput,
@@ -1052,6 +1056,7 @@ export type RunChatMessagesResult =
           message: string;
           metadata: ResponseMetadata;
           answerProvenanceEligible: boolean;
+          publicationToken?: string;
           generationDurationMs: number;
           finalToolExecutionTelemetry?: FinalToolExecutionTelemetry;
           plannerSummary?: AppliedPlanState;
@@ -2588,14 +2593,52 @@ export const createChatService = ({
                   }
                 : normalizedResponseMetadata;
 
-        // Trace writes stay fire-and-forget so a storage hiccup does not block the user response.
-        storeTrace(metadataWithTrustGraph, normalizedResponseCandidates).catch(
-            (error) => {
+        const publicationToken =
+            terminalActionResponse === undefined &&
+            answerProvenanceEligible &&
+            effectiveOutputBoundary.surface === 'web'
+                ? randomBytes(32).toString('base64url')
+                : undefined;
+        const publicationSource: PublicResponseSourceCredential | undefined =
+            publicationToken === undefined
+                ? undefined
+                : {
+                      // The web UI trims the displayed answer before adding it
+                      // to the transcript; bind publication to that exact text.
+                      answer: normalizedDeliveredMessage.content.trim(),
+                      publicationToken,
+                      expiresAt: new Date(
+                          Date.now() + PUBLICATION_TOKEN_TTL_MS
+                      ).toISOString(),
+                  };
+
+        // Persist the answer-bound publication capability before returning it
+        // to the browser. Storage failure hides the share control but does not
+        // block delivery of the answer.
+        let availablePublicationToken: string | undefined;
+        if (publicationSource !== undefined) {
+            try {
+                await storeTrace(
+                    metadataWithTrustGraph,
+                    normalizedResponseCandidates,
+                    publicationSource
+                );
+                availablePublicationToken = publicationToken;
+            } catch (error) {
+                logger.error(
+                    `Failed to prepare response publication: ${error instanceof Error ? error.message : String(error)}`
+                );
+            }
+        } else {
+            void storeTrace(
+                metadataWithTrustGraph,
+                normalizedResponseCandidates
+            ).catch((error) => {
                 logger.error(
                     `Background trace storage error: ${error instanceof Error ? error.message : String(error)}`
                 );
-            }
-        );
+            });
+        }
 
         if (terminalActionResponse !== undefined) {
             return {
@@ -2610,6 +2653,9 @@ export const createChatService = ({
             message: normalizedDeliveredMessage.content,
             metadata: metadataWithTrustGraph,
             answerProvenanceEligible,
+            ...(availablePublicationToken !== undefined && {
+                publicationToken: availablePublicationToken,
+            }),
             generationDurationMs,
             ...(workflowPlannerSummary !== undefined && {
                 plannerSummary: workflowPlannerSummary,
@@ -2722,6 +2768,9 @@ export const createChatService = ({
             modality: 'text',
             metadata: response.metadata,
             answerProvenanceEligible: response.answerProvenanceEligible,
+            ...(response.publicationToken !== undefined && {
+                publicationToken: response.publicationToken,
+            }),
         };
     };
 

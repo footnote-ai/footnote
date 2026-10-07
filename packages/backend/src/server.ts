@@ -31,6 +31,7 @@ import {
     createTraceStore,
     storeTrace,
 } from './services/traceStore.js';
+import type { PublicResponseSourceCredential } from './services/traceStore.js';
 import { createLangfuseMetadataMirrorExporter } from './services/langfuseMetadataMirrorExporter.js';
 import { getDefaultIncidentStore } from './storage/incidents/incidentStore.js';
 import { createAssetResolver } from './http/assets.js';
@@ -46,6 +47,7 @@ import { logger, logRuntimeLifecycleEvent } from './utils/logger.js';
 import { createVoltAgentLogger } from './utils/voltagentLogger.js';
 import { createChatHandler } from './handlers/chat.js';
 import { createTraceHandlers } from './handlers/trace.js';
+import { createPublicResponsesHandler } from './handlers/publicResponses.js';
 import { createIncidentHandlers } from './handlers/incidents.js';
 import { createRuntimeConfigHandler } from './handlers/config.js';
 import { createAdminSettingsHandlers } from './handlers/adminSettings.js';
@@ -528,13 +530,14 @@ try {
 // --- Trace storage wrapper ---
 const storeTraceWithStore = (
     metadata: ResponseMetadata,
-    candidates?: readonly ResponseCandidate[]
+    candidates?: readonly ResponseCandidate[],
+    publicationSource?: PublicResponseSourceCredential
 ) => {
     // Prevent trace writes when the store failed to initialize.
     if (!traceStore) {
         return Promise.reject(new Error('Trace store is not initialized'));
     }
-    return storeTrace(traceStore, metadata, candidates);
+    return storeTrace(traceStore, metadata, candidates, publicationSource);
 };
 
 // --- Handler wiring ---
@@ -552,6 +555,11 @@ const {
     traceToken: runtimeConfig.trace.apiToken,
     maxTraceBodyBytes: runtimeConfig.trace.maxBodyBytes,
     trustProxy: runtimeConfig.server.trustProxy,
+});
+const { handlePublicResponsesRequest } = createPublicResponsesHandler({
+    traceStore,
+    logRequest,
+    maxBodyBytes: runtimeConfig.reflect.maxBodyBytes,
 });
 const incidentAlertRouter = createIncidentAlertRouter({
     config: runtimeConfig.alerts,
@@ -908,6 +916,7 @@ const app = createExpressApp({
     handleTraceCardCreateRequest,
     handleTraceCardFromTraceRequest,
     handleTraceCardAssetRequest,
+    handlePublicResponsesRequest,
     handleRuntimeConfigRequest,
     handleChatProfilesRequest,
     handleAdminSettingsSchemaRequest,

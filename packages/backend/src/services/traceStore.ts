@@ -16,6 +16,12 @@ import { logger } from '../utils/logger.js';
 
 let traceMetadataMirror: LangfuseMetadataMirror | null = null;
 
+export type PublicResponseSourceCredential = {
+    answer: string;
+    publicationToken: string;
+    expiresAt: string;
+};
+
 /**
  * Sets the global mutable metadata mirror callback used by `storeTrace`.
  *
@@ -56,7 +62,8 @@ const createTraceStore = (): TraceStore => createTraceStoreFromConfig();
 const storeTrace = async (
     traceStore: TraceStore,
     metadata: ResponseMetadata,
-    candidates?: readonly ResponseCandidate[]
+    candidates?: readonly ResponseCandidate[],
+    publicationSource?: PublicResponseSourceCredential
 ): Promise<void> => {
     try {
         // --- Response identifier guard ---
@@ -68,9 +75,23 @@ const storeTrace = async (
 
         // --- Write-through ---
         await traceStore.upsert(metadata, candidates);
+        if (publicationSource !== undefined) {
+            await traceStore.createPublicResponseSource({
+                responseId,
+                metadata,
+                ...publicationSource,
+            });
+        }
         logger.debug(`Trace stored successfully: ${responseId}`);
 
-        await mirrorTraceMetadata(metadata);
+        if (publicationSource !== undefined) {
+            // The browser must not receive a publish capability until the
+            // local answer-bound source is durable; optional mirror I/O stays
+            // detached from the user-facing response path.
+            void mirrorTraceMetadata(metadata);
+        } else {
+            await mirrorTraceMetadata(metadata);
+        }
 
         // --- Optional trace-card persistence ---
         // Trace-card generation stays out of this write path so trace storage
@@ -86,6 +107,9 @@ const storeTrace = async (
         logger.error(
             `Failed to store trace for response "${metadata.responseId}": ${error instanceof Error ? error.message : String(error)}`
         );
+        if (publicationSource !== undefined) {
+            throw error;
+        }
     }
 };
 

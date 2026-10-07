@@ -2,19 +2,22 @@
  * @description: Persists provenance traces in SQLite with retry handling and validation.
  * @footnote-scope: utility
  * @footnote-module: SqliteTraceStore
- * @footnote-risk: medium - Storage errors can drop trace records or corrupt metadata.
- * @footnote-ethics: medium - Trace accuracy underpins transparency and auditability.
+ * @footnote-risk: high - SQLite now also holds anonymous page snapshots and hashed publish capabilities.
+ * @footnote-ethics: high - Storage governs public response exposure and limited session-scoped revocation.
  */
+import { createHash, timingSafeEqual } from 'node:crypto';
 import {
     TRACE_ASSESS_FINAL_TEMPERAMENT_SIGNAL_KEYS,
     type Citation,
     type ResponseMetadata,
 } from '@footnote/contracts/policy';
 import type {
+    PublicResponseProjection,
     ResponseCandidate,
     TraceDisplayMetadata,
 } from '@footnote/contracts/web';
 import {
+    GetPublicResponseResponseSchema,
     normalizePresentationMetadataForCompatibility,
     ResponseCandidateSchema,
     ResponseMetadataSchema,
@@ -28,6 +31,8 @@ import { projectTraceMetadataForDisplay } from './traceDisplayProjection.js';
 
 const BUSY_MAX_ATTEMPTS = 5;
 const BUSY_RETRY_DELAY_MS = 50;
+const PUBLIC_RESPONSE_TOMBSTONE_RETENTION_MS = 7 * 24 * 60 * 60 * 1000;
+const PUBLIC_RESPONSE_CLEANUP_INTERVAL_MS = 60 * 1000;
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 const traceLogger =
@@ -158,10 +163,41 @@ export interface SqliteTraceStoreConfig {
     dbPath: string;
 }
 
+type PublicResponseState = 'published' | 'expired' | 'revoked' | 'unavailable';
+type PublicResponseResult =
+    | {
+          status: 'published';
+          responseId: string;
+          projection: PublicResponseProjection;
+      }
+    | { status: Exclude<PublicResponseState, 'published'> | 'not_found' };
+
+type PublicationSource = {
+    responseId: string;
+    answer: string;
+    publicationToken: string;
+    expiresAt: string;
+    metadata: ResponseMetadata;
+};
+
+const sha256 = (value: string): string =>
+    createHash('sha256').update(value, 'utf8').digest('hex');
+
+const hashesMatch = (expected: string, actual: string): boolean => {
+    const expectedBytes = Buffer.from(expected, 'hex');
+    const actualBytes = Buffer.from(actual, 'hex');
+    return (
+        expectedBytes.length === 32 &&
+        actualBytes.length === 32 &&
+        timingSafeEqual(expectedBytes, actualBytes)
+    );
+};
+
 export class SqliteTraceStore {
     private readonly db: Database.Database;
     private readonly upsertStatement: Database.Statement;
     private readonly retrieveStatement: Database.Statement;
+    private readonly retrieveTraceForPublicationStatement: Database.Statement;
     private readonly traceExistsStatement: Database.Statement;
     private readonly deleteStatement: Database.Statement;
     private readonly upsertTraceCardStatement: Database.Statement;
@@ -169,6 +205,17 @@ export class SqliteTraceStore {
     private readonly deleteResponseCandidatesStatement: Database.Statement;
     private readonly insertResponseCandidateStatement: Database.Statement;
     private readonly retrieveResponseCandidatesStatement: Database.Statement;
+    private readonly createPublicationSourceStatement: Database.Statement;
+    private readonly retrievePublicationSourceStatement: Database.Statement;
+    private readonly deletePublicationSourceStatement: Database.Statement;
+    private readonly insertPublicResponseStatement: Database.Statement;
+    private readonly retrievePublicResponseStatement: Database.Statement;
+    private readonly updatePublicResponseStateStatement: Database.Statement;
+    private readonly revokePublicResponseStatement: Database.Statement;
+    private readonly cleanupExpiredPublicResponsesStatement: Database.Statement;
+    private readonly deleteRetainedPublicResponseTombstonesStatement: Database.Statement;
+    private readonly invalidatePublicResponsesByTraceStatement: Database.Statement;
+    private readonly publicResponseCleanupTimer: NodeJS.Timeout;
 
     constructor(config: SqliteTraceStoreConfig) {
         const resolvedPath = path.resolve(config.dbPath);
@@ -205,6 +252,24 @@ export class SqliteTraceStore {
       );
       CREATE INDEX IF NOT EXISTS idx_provenance_response_candidates_response_sequence
         ON provenance_response_candidates (response_id, sequence_number);
+      CREATE TABLE IF NOT EXISTS response_publication_sources (
+        response_id TEXT PRIMARY KEY REFERENCES provenance_traces(response_id) ON DELETE CASCADE,
+        answer_sha256 TEXT NOT NULL,
+        publication_token_sha256 TEXT NOT NULL,
+        metadata_sha256 TEXT NOT NULL,
+        expires_at TEXT NOT NULL
+      );
+      CREATE TABLE IF NOT EXISTS public_response_publications (
+        public_id TEXT PRIMARY KEY,
+        response_id TEXT NOT NULL REFERENCES provenance_traces(response_id) ON DELETE CASCADE,
+        projection_json TEXT,
+        publication_token_sha256 TEXT NOT NULL,
+        published_at TEXT NOT NULL,
+        expires_at TEXT NOT NULL,
+        state TEXT NOT NULL CHECK (state IN ('published', 'expired', 'revoked', 'unavailable'))
+      );
+      CREATE INDEX IF NOT EXISTS idx_public_response_publications_expiry
+        ON public_response_publications (expires_at);
     `);
         this.ensureTraceCardForeignKey();
 
@@ -218,6 +283,9 @@ export class SqliteTraceStore {
     `);
         this.retrieveStatement = this.db.prepare(
             `SELECT metadata_json FROM provenance_traces WHERE response_id = ? LIMIT 1`
+        );
+        this.retrieveTraceForPublicationStatement = this.db.prepare(
+            `SELECT metadata_json, stale_after FROM provenance_traces WHERE response_id = ? LIMIT 1`
         );
         this.traceExistsStatement = this.db.prepare(
             `SELECT 1 AS present FROM provenance_traces WHERE response_id = ? LIMIT 1`
@@ -253,7 +321,301 @@ export class SqliteTraceStore {
             WHERE response_id = ?
             ORDER BY sequence_number ASC
         `);
+        this.createPublicationSourceStatement = this.db.prepare(`
+            INSERT INTO response_publication_sources (
+                response_id, answer_sha256, publication_token_sha256, metadata_sha256, expires_at
+            ) VALUES (@response_id, @answer_sha256, @publication_token_sha256, @metadata_sha256, @expires_at)
+            ON CONFLICT(response_id) DO UPDATE SET
+                answer_sha256 = excluded.answer_sha256,
+                publication_token_sha256 = excluded.publication_token_sha256,
+                metadata_sha256 = excluded.metadata_sha256,
+                expires_at = excluded.expires_at
+        `);
+        this.retrievePublicationSourceStatement = this.db.prepare(`
+            SELECT answer_sha256, publication_token_sha256, metadata_sha256, expires_at
+            FROM response_publication_sources WHERE response_id = ? LIMIT 1
+        `);
+        this.deletePublicationSourceStatement = this.db.prepare(
+            `DELETE FROM response_publication_sources WHERE response_id = ?`
+        );
+        this.insertPublicResponseStatement = this.db.prepare(`
+            INSERT INTO public_response_publications (
+                public_id, response_id, projection_json, publication_token_sha256,
+                published_at, expires_at, state
+            ) VALUES (@public_id, @response_id, @projection_json, @publication_token_sha256,
+                      @published_at, @expires_at, 'published')
+        `);
+        this.retrievePublicResponseStatement = this.db.prepare(`
+            SELECT public_id, response_id, projection_json, publication_token_sha256,
+                   published_at, expires_at, state
+            FROM public_response_publications WHERE public_id = ? LIMIT 1
+        `);
+        this.updatePublicResponseStateStatement = this.db.prepare(`
+            UPDATE public_response_publications
+            SET state = @state, projection_json = NULL
+            WHERE public_id = @public_id
+        `);
+        this.revokePublicResponseStatement = this.db.prepare(`
+            UPDATE public_response_publications
+            SET state = 'revoked', projection_json = NULL
+            WHERE public_id = ? AND state = 'published'
+        `);
+        this.cleanupExpiredPublicResponsesStatement = this.db.prepare(`
+            UPDATE public_response_publications
+            SET state = 'expired', projection_json = NULL
+            WHERE state = 'published' AND expires_at <= ?
+        `);
+        this.deleteRetainedPublicResponseTombstonesStatement = this.db.prepare(`
+            DELETE FROM public_response_publications
+            WHERE state IN ('expired', 'revoked', 'unavailable') AND expires_at <= ?
+        `);
+        this.invalidatePublicResponsesByTraceStatement = this.db.prepare(`
+            UPDATE public_response_publications
+            SET state = 'unavailable', projection_json = NULL
+            WHERE response_id = ? AND state = 'published'
+        `);
+        this.cleanupPublicResponses(new Date().toISOString());
+        this.publicResponseCleanupTimer = setInterval(() => {
+            try {
+                this.cleanupPublicResponses(new Date().toISOString());
+            } catch {
+                traceLogger.warn(
+                    'Public response cleanup failed; it will retry on the next interval.'
+                );
+            }
+        }, PUBLIC_RESPONSE_CLEANUP_INTERVAL_MS);
+        this.publicResponseCleanupTimer.unref();
+        this.db
+            .prepare(
+                `DELETE FROM response_publication_sources WHERE expires_at <= ?`
+            )
+            .run(new Date().toISOString());
         traceLogger.info(`Initialized SQLite trace store at ${resolvedPath}`);
+    }
+
+    /** Keeps unavailable-link tombstones for one week after their public expiry. */
+    private cleanupPublicResponses(now: string): void {
+        this.cleanupExpiredPublicResponsesStatement.run(now);
+        const tombstoneCutoff = new Date(
+            Date.parse(now) - PUBLIC_RESPONSE_TOMBSTONE_RETENTION_MS
+        ).toISOString();
+        this.deleteRetainedPublicResponseTombstonesStatement.run(
+            tombstoneCutoff
+        );
+    }
+
+    /** Stores hashes only; the exact answer is kept only after explicit publication. */
+    async createPublicResponseSource(source: PublicationSource): Promise<void> {
+        await this.withRetry(() => {
+            const now = new Date().toISOString();
+            this.cleanupPublicResponses(now);
+            this.db
+                .prepare(
+                    `DELETE FROM response_publication_sources WHERE expires_at <= ?`
+                )
+                .run(now);
+            this.createPublicationSourceStatement.run({
+                response_id: source.responseId,
+                answer_sha256: sha256(source.answer),
+                publication_token_sha256: sha256(source.publicationToken),
+                metadata_sha256: sha256(
+                    JSON.stringify(
+                        this.normalizeMetadata(source.metadata),
+                        traceStoreJsonReplacer
+                    )
+                ),
+                expires_at: source.expiresAt,
+            });
+        });
+    }
+
+    /** Creates one immutable, allowlisted publication after checking the backend capability. */
+    async publishPublicResponse(input: {
+        responseId: string;
+        answer: string;
+        publicationToken: string;
+        expectedMetadataSha256: string;
+        publicId: string;
+        projection: PublicResponseProjection;
+        publishedAt: string;
+        expiresAt: string;
+    }): Promise<'published' | 'invalid' | 'expired'> {
+        return this.withRetry(() => {
+            const publish = this.db.transaction(() => {
+                const now = new Date().toISOString();
+                this.cleanupPublicResponses(now);
+                const source = this.retrievePublicationSourceStatement.get(
+                    input.responseId
+                ) as
+                    | {
+                          answer_sha256: string;
+                          publication_token_sha256: string;
+                          metadata_sha256: string;
+                          expires_at: string;
+                      }
+                    | undefined;
+                if (!source) {
+                    return 'invalid' as const;
+                }
+                if (source.expires_at <= now) {
+                    this.deletePublicationSourceStatement.run(input.responseId);
+                    return 'expired' as const;
+                }
+                const trace = this.retrieveTraceForPublicationStatement.get(
+                    input.responseId
+                ) as
+                    | { metadata_json: string; stale_after: string | null }
+                    | undefined;
+                if (!trace) {
+                    return 'invalid' as const;
+                }
+                const staleAfterMs = Date.parse(trace.stale_after ?? '');
+                if (
+                    !Number.isFinite(staleAfterMs) ||
+                    staleAfterMs <= Date.parse(now)
+                ) {
+                    return 'expired' as const;
+                }
+                const currentMetadataSha256 = sha256(trace.metadata_json);
+                if (
+                    !hashesMatch(source.answer_sha256, sha256(input.answer)) ||
+                    !hashesMatch(
+                        source.publication_token_sha256,
+                        sha256(input.publicationToken)
+                    ) ||
+                    !hashesMatch(
+                        source.metadata_sha256,
+                        input.expectedMetadataSha256
+                    ) ||
+                    !hashesMatch(source.metadata_sha256, currentMetadataSha256)
+                ) {
+                    return 'invalid' as const;
+                }
+                this.insertPublicResponseStatement.run({
+                    public_id: input.publicId,
+                    response_id: input.responseId,
+                    projection_json: JSON.stringify(input.projection),
+                    publication_token_sha256: source.publication_token_sha256,
+                    published_at: input.publishedAt,
+                    expires_at: input.expiresAt,
+                });
+                this.deletePublicationSourceStatement.run(input.responseId);
+                return 'published' as const;
+            });
+            return publish();
+        });
+    }
+
+    /** Reads a publication without exposing its internal response reference. */
+    async getPublicResponse(
+        publicId: string,
+        now = new Date().toISOString()
+    ): Promise<PublicResponseResult> {
+        return this.withRetry(() => {
+            this.cleanupPublicResponses(now);
+            const row = this.retrievePublicResponseStatement.get(publicId) as
+                | {
+                      response_id: string;
+                      projection_json: string | null;
+                      expires_at: string;
+                      state: string;
+                  }
+                | undefined;
+            if (!row) {
+                return { status: 'not_found' } as const;
+            }
+            if (row.state !== 'published' || row.expires_at <= now) {
+                if (row.state === 'published') {
+                    this.updatePublicResponseStateStatement.run({
+                        public_id: publicId,
+                        state: 'expired',
+                    });
+                    return { status: 'expired' } as const;
+                }
+                return {
+                    status:
+                        row.state === 'expired' || row.state === 'revoked'
+                            ? row.state
+                            : 'unavailable',
+                } as const;
+            }
+            if (!row.projection_json) {
+                this.updatePublicResponseStateStatement.run({
+                    public_id: publicId,
+                    state: 'unavailable',
+                });
+                return { status: 'unavailable' } as const;
+            }
+            let candidate: unknown;
+            try {
+                candidate = JSON.parse(row.projection_json) as unknown;
+            } catch {
+                candidate = null;
+            }
+            const parsed = GetPublicResponseResponseSchema.safeParse(candidate);
+            if (!parsed.success) {
+                this.updatePublicResponseStateStatement.run({
+                    public_id: publicId,
+                    state: 'unavailable',
+                });
+                return { status: 'unavailable' } as const;
+            }
+            return {
+                status: 'published',
+                responseId: row.response_id,
+                projection: parsed.data,
+            } as const;
+        });
+    }
+
+    /** Revokes a published response only with the original backend-issued capability. */
+    async revokePublicResponse(
+        publicId: string,
+        publicationToken: string,
+        now = new Date().toISOString()
+    ): Promise<'revoked' | 'invalid' | 'expired' | 'unavailable'> {
+        return this.withRetry(() => {
+            const revoke = this.db.transaction(() => {
+                this.cleanupPublicResponses(now);
+                const row = this.retrievePublicResponseStatement.get(
+                    publicId
+                ) as
+                    | {
+                          publication_token_sha256: string;
+                          expires_at: string;
+                          state: string;
+                      }
+                    | undefined;
+                if (
+                    !row ||
+                    !hashesMatch(
+                        row.publication_token_sha256,
+                        sha256(publicationToken)
+                    )
+                ) {
+                    return 'invalid' as const;
+                }
+                if (row.expires_at <= now || row.state === 'expired') {
+                    return 'expired' as const;
+                }
+                if (row.state !== 'published') {
+                    return 'unavailable' as const;
+                }
+                this.revokePublicResponseStatement.run(publicId);
+                return 'revoked' as const;
+            });
+            return revoke();
+        });
+    }
+
+    /** Invalidates the answer snapshot when its trace is missing, malformed, or stale. */
+    async invalidatePublicResponse(publicId: string): Promise<void> {
+        await this.withRetry(() =>
+            this.updatePublicResponseStateStatement.run({
+                public_id: publicId,
+                state: 'unavailable',
+            })
+        );
     }
 
     private ensureTraceCardForeignKey(): void {
@@ -485,6 +847,9 @@ export class SqliteTraceStore {
                     traceCandidates: readonly ResponseCandidate[] | undefined
                 ) => {
                     this.upsertMetadataSync(traceMetadata);
+                    this.invalidatePublicResponsesByTraceStatement.run(
+                        traceMetadata.responseId
+                    );
                     if (traceCandidates !== undefined) {
                         this.replaceResponseCandidatesSync(
                             traceMetadata.responseId,
@@ -532,6 +897,15 @@ export class SqliteTraceStore {
     async retrieveForDisplay(
         responseId: string
     ): Promise<TraceDisplayMetadata | null> {
+        const result = await this.retrieveForDisplayWithRevision(responseId);
+        return result?.metadata ?? null;
+    }
+
+    /** Reads the safe display projection and its hash from the same stored version. */
+    async retrieveForDisplayWithRevision(responseId: string): Promise<{
+        metadata: TraceDisplayMetadata;
+        metadataSha256: string;
+    } | null> {
         const row = await this.withRetry(
             () =>
                 this.retrieveStatement.get(responseId) as
@@ -557,7 +931,14 @@ export class SqliteTraceStore {
             return null;
         }
 
-        return projectTraceMetadataForDisplay(parsedJson, responseId);
+        const metadata = projectTraceMetadataForDisplay(parsedJson, responseId);
+        if (!metadata) {
+            return null;
+        }
+        return {
+            metadata,
+            metadataSha256: sha256(row.metadata_json),
+        };
     }
 
     async delete(responseId: string): Promise<void> {
@@ -685,6 +1066,7 @@ export class SqliteTraceStore {
 
     close(): void {
         // Close the SQLite handle so Windows can clean up temp DB files.
+        clearInterval(this.publicResponseCleanupTimer);
         this.db.close();
     }
 }

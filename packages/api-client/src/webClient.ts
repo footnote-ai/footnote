@@ -34,6 +34,10 @@ import {
     type UnknownChatActionResponse,
 } from './chat.js';
 import { createWebReadApi, type WebReadApi } from './web.js';
+import {
+    createPublicResponsesApi,
+    type PublicResponsesApi,
+} from './publicResponses.js';
 
 export type CreateWebApiClientOptions = CreateApiTransportOptions &
     Pick<CreateChatApiOptions, 'traceApiToken'>;
@@ -46,6 +50,7 @@ export type WebApiClient = {
     requestJson: ApiRequester;
     chatQuestion: ChatApi['chatQuestion'];
 } & WebReadApi &
+    PublicResponsesApi &
     AccountAuthApi &
     AccountIncidentApi &
     AccountMemoryApi;
@@ -72,6 +77,7 @@ export const createWebApiClient = ({
     });
     const chatApi = createChatApi(requestJson, { traceApiToken });
     const webReadApi = createWebReadApi(requestJson);
+    const publicResponsesApi = createPublicResponsesApi(requestJson);
     const accountAuthApi = createAccountAuthApi(requestJson);
     const accountIncidentApi = createAccountIncidentApi(requestJson);
     const accountMemoryApi = createAccountMemoryApi(requestJson);
@@ -80,6 +86,7 @@ export const createWebApiClient = ({
         requestJson,
         chatQuestion: chatApi.chatQuestion,
         ...webReadApi,
+        ...publicResponsesApi,
         ...accountAuthApi,
         ...accountIncidentApi,
         ...accountMemoryApi,
@@ -93,6 +100,7 @@ export {
     createAccountMemoryApi,
     createChatApi,
     createWebReadApi,
+    createPublicResponsesApi,
 };
 export type {
     AccountAuthApi,
@@ -110,4 +118,5 @@ export type {
     DiscordChatApiResponse,
     UnknownChatActionResponse,
     WebReadApi,
+    PublicResponsesApi,
 };
