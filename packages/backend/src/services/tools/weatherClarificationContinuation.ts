@@ -152,19 +152,25 @@ const parseClarificationFromAssistantMessage = (
     }
 
     const options: ParsedClarificationOption[] = [];
-    const optionPattern = /^\s*(\d+)\.\s+(.+?)\s*$/gm;
-    let match: RegExpExecArray | null = optionPattern.exec(content);
-    while (match) {
-        const indexText = match[1];
-        const label = match[2]?.trim();
-        if (indexText && label) {
-            options.push({
-                id: `option-${indexText}`,
-                label,
-                input: toWeatherInputFromLabel(label),
-            });
-        }
-        match = optionPattern.exec(content);
+    for (const rawLine of content.split(/\r\n|[\n\r\u2028\u2029]/u)) {
+        const line = rawLine.trim();
+        const separatorIndex = line.indexOf('.');
+        if (separatorIndex < 1) continue;
+
+        const indexText = line.slice(0, separatorIndex);
+        if (!/^\d+$/u.test(indexText)) continue;
+
+        const value = rawLine.slice(rawLine.indexOf('.') + 1);
+        if (value.length === value.trimStart().length) continue;
+
+        const label = value.trim();
+        if (label.length === 0) continue;
+
+        options.push({
+            id: `option-${indexText}`,
+            label,
+            input: toWeatherInputFromLabel(label),
+        });
     }
 
     if (options.length === 0) {
