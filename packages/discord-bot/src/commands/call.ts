@@ -35,6 +35,42 @@ import {
 } from '@footnote/contracts/providers';
 
 /**
+ * Sends a voice invite and keeps reply failures separate from invite creation.
+ */
+export const sendVoiceChannelInvite = async (
+    voiceChannel: Pick<VoiceChannel, 'createInvite'>,
+    interaction: Pick<ChatInputCommandInteraction, 'followUp'>
+): Promise<void> => {
+    let inviteUrl: string;
+    try {
+        inviteUrl = (await voiceChannel.createInvite()).url;
+    } catch (error) {
+        logger.error('Failed to create voice channel invite:', error);
+        try {
+            await interaction.followUp({
+                content: `Failed to create invite: ${error}`,
+                flags: [1 << 6],
+            });
+        } catch (followUpError) {
+            logger.error(
+                'Failed to send invite failure follow-up:',
+                followUpError
+            );
+        }
+        return;
+    }
+
+    try {
+        await interaction.followUp({
+            content: `Join the call by clicking this link: ${inviteUrl}`,
+            flags: [1 << 6],
+        });
+    } catch (error) {
+        logger.error('Failed to send voice channel invite follow-up:', error);
+    }
+};
+
+/**
  * @name call
  * @description: Have a voice conversation with the AI using Discord's voice features
  * @usage /call <voice channel>
@@ -381,25 +417,8 @@ const callCommand: Command = {
                 );
             });
 
-            // Invite the user to join the voice channel
-            voiceChannel
-                .createInvite()
-                .then((invite) => {
-                    interaction.followUp({
-                        content: `Join the call by clicking this link: ${invite.url}`,
-                        flags: [1 << 6],
-                    });
-                })
-                .catch((error) => {
-                    logger.error(
-                        `Failed to create voice channel invite:`,
-                        error
-                    );
-                    interaction.followUp({
-                        content: `Failed to create invite: ${error}`,
-                        flags: [1 << 6],
-                    });
-                });
+            // Invite the user to join the voice channel.
+            await sendVoiceChannelInvite(voiceChannel, interaction);
         } catch (error) {
             const errorMessage =
                 error instanceof Error ? error.message : String(error);
