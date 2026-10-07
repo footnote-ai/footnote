@@ -53,6 +53,10 @@ type CompletedChatTurn = {
     assistantMessage: string;
     metadata: ResponseMetadata | null;
     answerProvenanceEligible: boolean | undefined;
+    publicationToken?: string;
+    publicId?: string;
+    publicationState?: 'publishing' | 'published' | 'revoking' | 'revoked';
+    publicationMessage?: string;
 };
 type CurrentChatRequest = {
     userMessage: string;
@@ -111,6 +115,73 @@ const Chat = (): JSX.Element => {
         requestState?: ChatRequestState
     ): void => {
         setStatus({ kind, message, requestState });
+    };
+
+    const updatePublicationTurn = (
+        turnId: number,
+        updates: Pick<
+            CompletedChatTurn,
+            'publicId' | 'publicationState' | 'publicationMessage'
+        >
+    ): void => {
+        setCompletedTurns((previous) =>
+            previous.map((turn) =>
+                turn.id === turnId ? { ...turn, ...updates } : turn
+            )
+        );
+    };
+
+    const publishTurn = async (turn: CompletedChatTurn): Promise<void> => {
+        const responseId = turn.metadata?.responseId;
+        if (!responseId || !turn.publicationToken) return;
+        updatePublicationTurn(turn.id, {
+            publicationState: 'publishing',
+            publicationMessage: undefined,
+        });
+        try {
+            const publication = await api.createPublicResponse({
+                responseId,
+                answer: turn.assistantMessage,
+                publicationToken: turn.publicationToken,
+            });
+            updatePublicationTurn(turn.id, {
+                publicId: publication.publicId,
+                publicationState: 'published',
+            });
+        } catch {
+            updatePublicationTurn(turn.id, {
+                publicationState: undefined,
+                publicationMessage:
+                    'This answer could not be published. The response may be unavailable or its publish window may have ended.',
+            });
+        }
+    };
+
+    const revokeTurn = async (turn: CompletedChatTurn): Promise<void> => {
+        if (!turn.publicId || !turn.publicationToken) return;
+        updatePublicationTurn(turn.id, {
+            publicationState: 'revoking',
+            publicationMessage: undefined,
+        });
+        try {
+            const result = await api.revokePublicResponse(turn.publicId, {
+                publicationToken: turn.publicationToken,
+            });
+            if (result.status === 200 && 'revoked' in result.data) {
+                updatePublicationTurn(turn.id, {
+                    publicationState: 'revoked',
+                    publicId: undefined,
+                });
+                return;
+            }
+        } catch {
+            // Keep the current link visible when revocation could not be confirmed.
+        }
+        updatePublicationTurn(turn.id, {
+            publicationState: 'published',
+            publicationMessage:
+                'The response could not be unpublished. Please try again.',
+        });
     };
 
     const clearInformationalStatus = useCallback((): void => {
@@ -390,6 +461,9 @@ const Chat = (): JSX.Element => {
                     metadata: backendMetadata ?? null,
                     answerProvenanceEligible:
                         payload.answerProvenanceEligible !== false,
+                    ...(payload.publicationToken !== undefined && {
+                        publicationToken: payload.publicationToken,
+                    }),
                 },
             ]);
             setCurrentRequest(null);
@@ -709,6 +783,56 @@ const Chat = (): JSX.Element => {
                                     turn.answerProvenanceEligible
                                 }
                             />
+                            {turn.publicationToken && (
+                                <div className="chat-publication-controls">
+                                    {!turn.publicationState && (
+                                        <button
+                                            type="button"
+                                            onClick={() =>
+                                                void publishTurn(turn)
+                                            }
+                                        >
+                                            Publish this answer
+                                        </button>
+                                    )}
+                                    {turn.publicationState === 'publishing' && (
+                                        <span role="status">Publishing…</span>
+                                    )}
+                                    {turn.publicationState === 'published' &&
+                                        turn.publicId && (
+                                            <>
+                                                <a
+                                                    href={`/share/${encodeURIComponent(turn.publicId)}`}
+                                                    target="_blank"
+                                                    rel="noreferrer"
+                                                >
+                                                    View public page
+                                                </a>
+                                                <button
+                                                    type="button"
+                                                    onClick={() =>
+                                                        void revokeTurn(turn)
+                                                    }
+                                                >
+                                                    Unpublish
+                                                </button>
+                                            </>
+                                        )}
+                                    {turn.publicationState === 'revoking' && (
+                                        <span role="status">Unpublishing…</span>
+                                    )}
+                                    {turn.publicationState === 'revoked' && (
+                                        <span role="status">
+                                            This answer is unpublished.
+                                        </span>
+                                    )}
+                                    {turn.publicationMessage && (
+                                        <p role="status">
+                                            {turn.publicationMessage}
+                                        </p>
+                                    )}
+                                </div>
+                            )}
                         </div>
                     ))}
                     {currentRequest && (

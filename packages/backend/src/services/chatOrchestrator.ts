@@ -1916,6 +1916,9 @@ export const createChatOrchestrator = ({
             modality: executionPlan.modality,
             metadata: response.metadata,
             answerProvenanceEligible: response.answerProvenanceEligible,
+            ...(response.publicationToken !== undefined && {
+                publicationToken: response.publicationToken,
+            }),
         };
     };
 

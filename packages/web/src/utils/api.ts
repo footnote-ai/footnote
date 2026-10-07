@@ -87,6 +87,15 @@ export type WebApiClient = {
             GetResponseVersionsResponse | GetResponseVersionsStaleResponse
         >
     >;
+    createPublicResponse: ReturnType<
+        typeof createSharedWebApiClient
+    >['createPublicResponse'];
+    getPublicResponse: ReturnType<
+        typeof createSharedWebApiClient
+    >['getPublicResponse'];
+    revokePublicResponse: ReturnType<
+        typeof createSharedWebApiClient
+    >['revokePublicResponse'];
 };
 
 // Keep this thin local wrapper so web can add surface-specific behavior later
@@ -118,6 +127,9 @@ export const createWebApiClient = (
     const cancelDiscordConnection = shared.cancelDiscordConnection;
     const getTrace = shared.getTrace;
     const getResponseVersions = shared.getResponseVersions;
+    const createPublicResponse = shared.createPublicResponse;
+    const getPublicResponse = shared.getPublicResponse;
+    const revokePublicResponse = shared.revokePublicResponse;
 
     return {
         requestJson: shared.requestJson,
@@ -140,6 +152,9 @@ export const createWebApiClient = (
         cancelDiscordConnection,
         getTrace,
         getResponseVersions,
+        createPublicResponse,
+        getPublicResponse,
+        revokePublicResponse,
     };
 };
 

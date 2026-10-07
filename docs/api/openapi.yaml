@@ -28,6 +28,8 @@ tags:
       description: Voice and audio.
     - name: Traces
       description: Trace storage and retrieval.
+    - name: Public responses
+      description: 'Explicitly published, allowlisted answer pages.'
     - name: Admin
       description: Trusted admin settings read/validate/write endpoints.
     - name: Accounts
@@ -44,6 +46,8 @@ paths:
                 - packages/contracts/src/web/types.ts#PostChatRequest
                 - packages/contracts/src/web/types.ts#ChatAssistantIdentity
                 - packages/contracts/src/web/types.ts#PostChatResponse
+                - packages/contracts/src/web/types.ts#ChatMessageActionResponse
+                - packages/contracts/src/web/schemas.ts#PostChatResponseSchema
                 - packages/contracts/src/web/schemas.ts#ChatAssistantIdentitySchema
                 - packages/contracts/src/web/schemas.ts#ResponseMetadataSchema
                 - packages/contracts/src/web/schemas.ts#PresentationMetadataSchema
@@ -484,6 +488,122 @@ paths:
                     $ref: '#/components/responses/TooManyRequests'
                 '500':
                     $ref: '#/components/responses/InternalServerError'
+                '503':
+                    $ref: '#/components/responses/ServiceUnavailable'
+    /api/public-responses:
+        post:
+            operationId: createPublicResponse
+            x-codeRefs:
+                - packages/backend/src/handlers/publicResponses.ts#createPublicResponse
+                - packages/api-client/src/publicResponses.ts#createPublicResponse
+                - packages/contracts/src/web/types.ts#CreatePublicResponseRequest
+                - packages/contracts/src/web/types.ts#CreatePublicResponseResponse
+                - packages/contracts/src/web/schemas.ts#CreatePublicResponseRequestSchema
+            summary: Publish one delivered answer
+            description: >
+                Explicitly creates an anonymous public page from one backend-delivered answer.
+
+                The short-lived, single-use publication capability is bound to the server-stored response version and
+                exact
+
+                delivered answer. It is sent in the request body and is never placed in the permalink. The backend
+                builds
+
+                a strict allowlisted snapshot. Publications expire after 30 days. No account is required to view a page.
+            tags:
+                - Public responses
+            requestBody:
+                required: true
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/CreatePublicResponseRequest'
+            responses:
+                '201':
+                    description: Public page created.
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/CreatePublicResponseResponse'
+                '400':
+                    $ref: '#/components/responses/BadRequest'
+                '404':
+                    $ref: '#/components/responses/NotFound'
+                '410':
+                    $ref: '#/components/responses/Gone'
+                '413':
+                    $ref: '#/components/responses/PayloadTooLarge'
+                '503':
+                    $ref: '#/components/responses/ServiceUnavailable'
+    '/api/public-responses/{publicId}':
+        parameters:
+            - name: publicId
+              in: path
+              required: true
+              schema:
+                  type: string
+                  pattern: '^[A-Za-z0-9_-]{43}$'
+        get:
+            operationId: getPublicResponse
+            x-codeRefs:
+                - packages/backend/src/handlers/publicResponses.ts#getPublicResponse
+                - packages/api-client/src/publicResponses.ts#getPublicResponse
+                - packages/contracts/src/web/types.ts#GetPublicResponseResponse
+                - packages/contracts/src/web/types.ts#PublicResponseProjection
+                - packages/contracts/src/web/schemas.ts#GetPublicResponseResponseSchema
+            summary: Read a public answer page
+            description: |
+                Returns only the immutable public projection, never the raw trace or internal response identifier.
+                Expired, revoked, stale, malformed, or deleted-source pages are unavailable. Responses use no-store,
+                no-referrer, and noindex/noarchive protections.
+            tags:
+                - Public responses
+            responses:
+                '200':
+                    description: Allowlisted public answer projection.
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/PublicResponseProjection'
+                '404':
+                    $ref: '#/components/responses/NotFound'
+                '410':
+                    $ref: '#/components/responses/Gone'
+                '503':
+                    $ref: '#/components/responses/ServiceUnavailable'
+        delete:
+            operationId: revokePublicResponse
+            x-codeRefs:
+                - packages/backend/src/handlers/publicResponses.ts#revokePublicResponse
+                - packages/api-client/src/publicResponses.ts#revokePublicResponse
+                - packages/contracts/src/web/types.ts#RevokePublicResponseRequest
+                - packages/contracts/src/web/types.ts#RevokePublicResponseResponse
+                - packages/contracts/src/web/schemas.ts#RevokePublicResponseRequestSchema
+            summary: Revoke a public answer page
+            description: >-
+                The original publication capability is required in the request body; answer content is erased on
+                revocation.
+            tags:
+                - Public responses
+            requestBody:
+                required: true
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/RevokePublicResponseRequest'
+            responses:
+                '200':
+                    description: Page unpublished.
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/RevokePublicResponseResponse'
+                '400':
+                    $ref: '#/components/responses/BadRequest'
+                '404':
+                    $ref: '#/components/responses/NotFound'
+                '410':
+                    $ref: '#/components/responses/Gone'
                 '503':
                     $ref: '#/components/responses/ServiceUnavailable'
     /api/trace-cards:
@@ -2389,6 +2509,13 @@ components:
                 answerProvenanceEligible:
                     type: boolean
                     description: Whether the user-visible response is eligible for normal answer-provenance presentation.
+                publicationToken:
+                    type: string
+                    pattern: '^[A-Za-z0-9_-]{43}$'
+                    readOnly: true
+                    description: >-
+                        Short-lived backend-issued capability for an explicit publication request. Keep out of URLs and
+                        logs.
                 metadata:
                     $ref: '#/components/schemas/ResponseMetadata'
             required:
@@ -4831,6 +4958,117 @@ components:
                           additionalProperties: false
                   required:
                       - displayIntegrity
+        CreatePublicResponseRequest:
+            type: object
+            properties:
+                responseId:
+                    type: string
+                    minLength: 1
+                    maxLength: 128
+                answer:
+                    type: string
+                    minLength: 1
+                    maxLength: 64000
+                publicationToken:
+                    type: string
+                    pattern: '^[A-Za-z0-9_-]{43}$'
+                    description: Short-lived backend-issued capability; never put this value in a URL.
+            required:
+                - responseId
+                - answer
+                - publicationToken
+            additionalProperties: false
+        CreatePublicResponseResponse:
+            type: object
+            properties:
+                publicId:
+                    type: string
+                    pattern: '^[A-Za-z0-9_-]{43}$'
+                publishedAt:
+                    type: string
+                    format: date-time
+                expiresAt:
+                    type: string
+                    format: date-time
+            required:
+                - publicId
+                - publishedAt
+                - expiresAt
+            additionalProperties: false
+        PublicResponseSource:
+            type: object
+            properties:
+                title:
+                    type: string
+                    minLength: 1
+                    maxLength: 200
+                url:
+                    type: string
+                    format: uri
+                    maxLength: 2048
+                    pattern: '^https?://'
+            required:
+                - title
+                - url
+            additionalProperties: false
+        PublicResponseProjection:
+            type: object
+            properties:
+                answer:
+                    type: string
+                    minLength: 1
+                    maxLength: 64000
+                provenance:
+                    type: string
+                    enum:
+                        - Retrieved
+                        - Inferred
+                        - Speculative
+                sources:
+                    type: array
+                    maxItems: 50
+                    items:
+                        $ref: '#/components/schemas/PublicResponseSource'
+                limitations:
+                    type: array
+                    maxItems: 8
+                    items:
+                        type: string
+                        minLength: 1
+                        maxLength: 500
+                publishedAt:
+                    type: string
+                    format: date-time
+                expiresAt:
+                    type: string
+                    format: date-time
+            required:
+                - answer
+                - provenance
+                - sources
+                - limitations
+                - publishedAt
+                - expiresAt
+            additionalProperties: false
+        RevokePublicResponseRequest:
+            type: object
+            properties:
+                publicationToken:
+                    type: string
+                    pattern: '^[A-Za-z0-9_-]{43}$'
+                    description: 'Original backend-issued capability, sent only in the request body.'
+            required:
+                - publicationToken
+            additionalProperties: false
+        RevokePublicResponseResponse:
+            type: object
+            properties:
+                revoked:
+                    type: boolean
+                    const: true
+            required:
+                - revoked
+            additionalProperties: false
         TraceUpsertRequest:
             description: ResponseMetadata payload for trace ingestion.
             allOf:

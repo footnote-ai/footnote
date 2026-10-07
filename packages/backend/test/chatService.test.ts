@@ -157,6 +157,100 @@ test('createChatService records backend token usage and estimated cost', async (
     assert.equal(usageRecords[0].totalCostUsd, 0.00019);
 });
 
+test('web chat issues a publication capability bound to the delivered answer', async () => {
+    let storedAnswer: string | undefined;
+    let storedPublicationToken: string | undefined;
+    const chatService = createChatService({
+        generationRuntime: createRuntime({
+            text: '  Delivered, normalized answer.  ',
+        }),
+        storeTrace: async (_metadata, _candidates, publicationSource) => {
+            storedAnswer = publicationSource?.answer;
+            storedPublicationToken = publicationSource?.publicationToken;
+        },
+        buildResponseMetadata: () => createMetadata(),
+        defaultModel: 'gpt-5-mini',
+        chatWorkflowConfig: {
+            modeId: 'balanced',
+            reviewLoopEnabled: true,
+            maxIterations: 2,
+            maxDurationMs: 15000,
+        },
+    });
+
+    const response = await chatService.runChat({ question: 'Share this?' });
+
+    assert.equal(response.action, 'message');
+    if (response.action !== 'message') return;
+    assert.match(response.publicationToken ?? '', /^[A-Za-z0-9_-]{43}$/u);
+    assert.equal(storedAnswer, response.message.trim());
+    assert.equal(storedPublicationToken, response.publicationToken);
+});
+
+test('web chat does not return a publication capability before source persistence succeeds', async () => {
+    let finishStorage: (() => void) | undefined;
+    let storageStarted = false;
+    const storageGate = new Promise<void>((resolve) => {
+        finishStorage = resolve;
+    });
+    const chatService = createChatService({
+        generationRuntime: createRuntime(),
+        storeTrace: async () => {
+            storageStarted = true;
+            await storageGate;
+        },
+        buildResponseMetadata: () => createMetadata(),
+        defaultModel: 'gpt-5-mini',
+        recordUsage: () => undefined,
+        chatWorkflowConfig: {
+            modeId: 'balanced',
+            reviewLoopEnabled: true,
+            maxIterations: 2,
+            maxDurationMs: 15000,
+        },
+    });
+
+    const responsePromise = chatService.runChat({ question: 'Publish?' });
+    for (let attempt = 0; attempt < 20 && !storageStarted; attempt += 1) {
+        await new Promise<void>((resolve) => setImmediate(resolve));
+    }
+    assert.equal(storageStarted, true);
+
+    let responseReady = false;
+    void responsePromise.then(() => {
+        responseReady = true;
+    });
+    await new Promise<void>((resolve) => setImmediate(resolve));
+    assert.equal(responseReady, false);
+
+    finishStorage?.();
+    const response = await responsePromise;
+    assert.equal(response.action, 'message');
+    if (response.action === 'message') {
+        assert.match(response.publicationToken ?? '', /^[A-Za-z0-9_-]{43}$/u);
+    }
+});
+
+test('web chat still delivers its answer when publication-source storage fails', async () => {
+    const chatService = createChatService({
+        generationRuntime: createRuntime(),
+        storeTrace: async () => {
+            throw new Error('isolated persistence failure');
+        },
+        buildResponseMetadata: () => createMetadata(),
+        defaultModel: 'gpt-5-mini',
+        recordUsage: () => undefined,
+    });
+
+    const response = await chatService.runChat({ question: 'Still answer?' });
+
+    assert.equal(response.action, 'message');
+    if (response.action === 'message') {
+        assert.equal(response.message, 'chat response');
+        assert.equal(response.publicationToken, undefined);
+    }
+});
+
 test('runChatMessages normalizes Discord output at the backend boundary', async () => {
     const chatService = createChatService({
         generationRuntime: {

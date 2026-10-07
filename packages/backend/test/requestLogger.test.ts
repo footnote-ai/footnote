@@ -50,3 +50,36 @@ test('redacts mounted auth callback query values from request logs', () => {
     assert.doesNotMatch(emittedMessage, /authorization-code/);
     assert.doesNotMatch(emittedMessage, /csrf-state/);
 });
+
+test('redacts opaque public response ids from API and permalink request logs', () => {
+    const publicId = 'a'.repeat(43);
+    const originalDebug = logger.debug;
+    const emittedMessages: string[] = [];
+    logger.debug = ((message: string) => {
+        emittedMessages.push(message);
+    }) as typeof logger.debug;
+
+    try {
+        for (const url of [
+            `/api/public-responses/${publicId}`,
+            `/share/${publicId}`,
+        ]) {
+            logRequest(
+                Object.assign(Object.create(null), {
+                    method: 'GET',
+                    url,
+                }) as IncomingMessage,
+                { statusCode: 200 } as ServerResponse
+            );
+        }
+    } finally {
+        logger.debug = originalDebug;
+    }
+
+    assert.match(
+        emittedMessages[0] ?? '',
+        /\/api\/public-responses\/\[public-id\]/u
+    );
+    assert.match(emittedMessages[1] ?? '', /\/share\/\[public-id\]/u);
+    assert.doesNotMatch(emittedMessages.join(' '), new RegExp(publicId, 'u'));
+});

@@ -107,6 +107,7 @@ const baseAppDeps = (
     handleTraceCardFromTraceRequest: createUnhandledRouteHandler,
     handleTraceCardAssetRequest: async (req, res) =>
         createUnhandledRouteHandler(req, res),
+    handlePublicResponsesRequest: createUnhandledRouteHandler,
     handleRuntimeConfigRequest: createUnhandledRouteHandler,
     handleChatProfilesRequest: createUnhandledRouteHandler,
     handleAdminSettingsSchemaRequest: createUnhandledRouteHandler,
@@ -130,6 +131,31 @@ const baseAppDeps = (
     frameAncestors: [],
     logRequest: () => undefined,
     ...overrides,
+});
+
+test('public response routes are Express-owned and bypass central API dispatch', async (t) => {
+    const dispatchCalls: string[] = [];
+    const responsePaths: string[] = [];
+    const app = createExpressApp(
+        baseAppDeps(dispatchCalls, {
+            handlePublicResponsesRequest: async (_req, res, parsedUrl) => {
+                responsePaths.push(parsedUrl.pathname);
+                res.statusCode = 202;
+                res.end('public response');
+            },
+        })
+    );
+    const server = await createTestServer(app);
+    t.after(server.stop);
+
+    const response = await fetch(`${server.baseUrl}/api/public-responses`, {
+        method: 'POST',
+    });
+
+    assert.equal(response.status, 202);
+    assert.equal(await response.text(), 'public response');
+    assert.deepEqual(responsePaths, ['/api/public-responses']);
+    assert.deepEqual(dispatchCalls, []);
 });
 
 test('account auth routes keep exact Express path and method ownership', async (t) => {

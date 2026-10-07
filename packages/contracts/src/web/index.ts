@@ -128,6 +128,24 @@ export type {
 } from './types.js';
 
 /**
+ * @api.operationId: createPublicResponse
+ * @api.path: POST /api/public-responses
+ * @api.operationId: getPublicResponse
+ * @api.path: GET /api/public-responses/{publicId}
+ * @api.operationId: revokePublicResponse
+ * @api.path: DELETE /api/public-responses/{publicId}
+ */
+export type {
+    PublicResponseSource,
+    PublicResponseProjection,
+    CreatePublicResponseRequest,
+    CreatePublicResponseResponse,
+    GetPublicResponseResponse,
+    RevokePublicResponseRequest,
+    RevokePublicResponseResponse,
+} from './types.js';
+
+/**
  * @api.operationId: getResponseVersions
  * @api.path: GET /api/traces/{responseId}/response-versions
  */
@@ -261,6 +279,11 @@ export {
     GetIncidentsResponseSchema,
     GetTraceResponseSchema,
     GetTraceStaleResponseSchema,
+    CreatePublicResponseRequestSchema,
+    CreatePublicResponseResponseSchema,
+    GetPublicResponseResponseSchema,
+    RevokePublicResponseRequestSchema,
+    RevokePublicResponseResponseSchema,
     PostIncidentNotesRequestSchema,
     PostIncidentNotesResponseSchema,
     PostIncidentRemediationRequestSchema,

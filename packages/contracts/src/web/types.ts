@@ -9,6 +9,7 @@
 import type {
     PersonaExpressionStrength,
     PartialResponseTemperament,
+    Provenance,
     ResponseMetadata,
     TraceAxisScore,
     WorkflowRecord,
@@ -533,6 +534,8 @@ export type ChatMessageActionResponse = {
      * presentation.
      */
     answerProvenanceEligible?: boolean;
+    /** Backend-issued, short-lived capability used only when the user explicitly publishes this exact answer. */
+    publicationToken?: string;
 };
 
 /**
@@ -584,6 +587,49 @@ export type PostChatResponse =
     | ChatReactActionResponse
     | ChatIgnoreActionResponse
     | ChatImageActionResponse;
+
+/** One approved source link; snippets and retrieved bodies are never included. */
+export type PublicResponseSource = {
+    title: string;
+    url: string;
+};
+
+/** Backend-owned allowlist for an explicitly published answer. */
+export type PublicResponseProjection = {
+    answer: string;
+    provenance: Provenance;
+    sources: PublicResponseSource[];
+    limitations: string[];
+    publishedAt: string;
+    expiresAt: string;
+};
+
+/** @api.operationId: createPublicResponse @api.path: POST /api/public-responses */
+export type CreatePublicResponseRequest = {
+    responseId: string;
+    answer: string;
+    publicationToken: string;
+};
+
+/** @api.operationId: createPublicResponse @api.path: POST /api/public-responses */
+export type CreatePublicResponseResponse = {
+    publicId: string;
+    publishedAt: string;
+    expiresAt: string;
+};
+
+/** @api.operationId: getPublicResponse @api.path: GET /api/public-responses/{publicId} */
+export type GetPublicResponseResponse = PublicResponseProjection;
+
+/** @api.operationId: revokePublicResponse @api.path: DELETE /api/public-responses/{publicId} */
+export type RevokePublicResponseRequest = {
+    publicationToken: string;
+};
+
+/** @api.operationId: revokePublicResponse @api.path: DELETE /api/public-responses/{publicId} */
+export type RevokePublicResponseResponse = {
+    revoked: true;
+};
 
 /**
  * One chat profile choice exposed for Discord slash-command model switching.

@@ -28,6 +28,8 @@ tags:
       description: Voice and audio.
     - name: Traces
       description: Trace storage and retrieval.
+    - name: Public responses
+      description: Explicitly published, allowlisted answer pages.
     - name: Admin
       description: Trusted admin settings read/validate/write endpoints.
     - name: Accounts

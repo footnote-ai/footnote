@@ -137,6 +137,7 @@ test('incident routes are handled in Express with explicit precedence and no spe
             res.statusCode = 200;
             res.end('trace-card-asset');
         },
+        handlePublicResponsesRequest: createUnhandledRouteHandler,
         handleRuntimeConfigRequest: createUnhandledRouteHandler,
         handleChatProfilesRequest: createUnhandledRouteHandler,
         handleAdminSettingsSchemaRequest: createUnhandledRouteHandler,

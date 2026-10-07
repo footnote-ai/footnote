@@ -114,6 +114,7 @@ test('public routes are Express-owned and bypass central /api dispatch while pre
             res.statusCode = 200;
             res.end('trace-card-asset');
         },
+        handlePublicResponsesRequest: createUnhandledRouteHandler,
         handleRuntimeConfigRequest: async (_req, res) => {
             handledPaths.push('/config.json');
             res.statusCode = 200;

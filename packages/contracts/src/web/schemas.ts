@@ -41,10 +41,15 @@ import type {
     ChatAddressingEvidence,
     ChatAddressingParticipant,
     GetAuthSessionResponse,
+    GetPublicResponseResponse,
     GetTraceResponse,
     GetTraceStaleResponse,
     TraceDisplayMetadata,
     PostChatResponse,
+    CreatePublicResponseRequest,
+    CreatePublicResponseResponse,
+    RevokePublicResponseRequest,
+    RevokePublicResponseResponse,
 } from './types.js';
 import {
     internalImageRenderModels,
@@ -2365,6 +2370,10 @@ export const PostChatResponseSchema: z.ZodType<PostChatResponse> =
                 modality: z.enum(['text', 'tts']),
                 metadata: ResponseMetadataSchema,
                 answerProvenanceEligible: z.boolean().optional(),
+                publicationToken: z
+                    .string()
+                    .regex(/^[A-Za-z0-9_-]{43}$/u)
+                    .optional(),
             })
             .passthrough(),
         z
@@ -2815,6 +2824,59 @@ export const GetResponseVersionsApiResponseSchema = z.union([
 export const GetTraceApiResponseSchema: z.ZodType<
     GetTraceResponse | GetTraceStaleResponse
 > = z.union([GetTraceResponseSchema, GetTraceStaleResponseSchema]);
+
+const PublicResponseIdSchema = z.string().regex(/^[A-Za-z0-9_-]{43}$/u);
+const PublicResponseSourceSchema = z
+    .object({
+        title: z.string().min(1).max(200),
+        url: z
+            .string()
+            .url()
+            .max(2048)
+            .refine((value) => /^https?:/iu.test(value)),
+    })
+    .strict();
+
+/** @api.operationId: createPublicResponse @api.path: POST /api/public-responses */
+export const CreatePublicResponseRequestSchema: z.ZodType<CreatePublicResponseRequest> =
+    z
+        .object({
+            responseId: z.string().min(1).max(128),
+            answer: z.string().min(1).max(64_000),
+            publicationToken: PublicResponseIdSchema,
+        })
+        .strict();
+
+/** @api.operationId: createPublicResponse @api.path: POST /api/public-responses */
+export const CreatePublicResponseResponseSchema: z.ZodType<CreatePublicResponseResponse> =
+    z
+        .object({
+            publicId: PublicResponseIdSchema,
+            publishedAt: z.string().datetime(),
+            expiresAt: z.string().datetime(),
+        })
+        .strict();
+
+/** @api.operationId: getPublicResponse @api.path: GET /api/public-responses/{publicId} */
+export const GetPublicResponseResponseSchema: z.ZodType<GetPublicResponseResponse> =
+    z
+        .object({
+            answer: z.string().min(1).max(64_000),
+            provenance: ProvenanceSchema,
+            sources: z.array(PublicResponseSourceSchema).max(50),
+            limitations: z.array(z.string().min(1).max(500)).max(8),
+            publishedAt: z.string().datetime(),
+            expiresAt: z.string().datetime(),
+        })
+        .strict();
+
+/** @api.operationId: revokePublicResponse @api.path: DELETE /api/public-responses/{publicId} */
+export const RevokePublicResponseRequestSchema: z.ZodType<RevokePublicResponseRequest> =
+    z.object({ publicationToken: PublicResponseIdSchema }).strict();
+
+/** @api.operationId: revokePublicResponse @api.path: DELETE /api/public-responses/{publicId} */
+export const RevokePublicResponseResponseSchema: z.ZodType<RevokePublicResponseResponse> =
+    z.object({ revoked: z.literal(true) }).strict();
 
 /**
  * Shared API error envelope for normalized server-side error responses.

@@ -46,12 +46,18 @@ function logRequest(
         requestUrls.some(
             (url) =>
                 url?.includes('/api/chat') ||
-                url?.includes('/api/auth/callback')
+                url?.includes('/api/auth/callback') ||
+                url?.includes('/api/public-responses/') ||
+                url?.includes('/share/')
         )
     ) {
         try {
             const parsedUrl = new URL(requestUrl, 'http://localhost');
-            logUrl = parsedUrl.pathname;
+            logUrl = parsedUrl.pathname.startsWith('/api/public-responses/')
+                ? '/api/public-responses/[public-id]'
+                : parsedUrl.pathname.startsWith('/share/')
+                  ? '/share/[public-id]'
+                  : parsedUrl.pathname;
         } catch {
             logUrl = requestUrl;
         }
