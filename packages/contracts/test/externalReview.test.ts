@@ -161,7 +161,7 @@ test('ExternalRunReviewInputSchema accepts a minimal generic host fixture and re
             ...genericHostFixture,
             origin: 'footnote_observed',
         }).success,
-        false
+        true
     );
 
     for (const field of [
@@ -200,5 +200,20 @@ test('ExternalRunReviewInputSchema accepts a minimal generic host fixture and re
             signals: { citationCount: -1 },
         }).success,
         false
+    );
+});
+
+test('reviewExternalRun attributes canonical Footnote observations without calling them host reports', () => {
+    const review = reviewExternalRun({
+        schemaVersion: 'v0alpha',
+        origin: 'footnote_observed',
+        signals: { retrievalUsed: true },
+    });
+
+    assert.equal(review.origin, 'footnote_observed');
+    assert.ok(
+        review.assessment.limitations.some((limitation) =>
+            limitation.startsWith('Footnote did not report')
+        )
     );
 });

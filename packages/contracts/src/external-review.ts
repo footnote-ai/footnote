@@ -1,5 +1,5 @@
 /**
- * @description: Validates a bounded host-reported run record and returns Footnote's provenance assessment.
+ * @description: Validates a bounded run review record and returns Footnote's provenance assessment.
  * @footnote-scope: interface
  * @footnote-module: ExternalRunReview
  * @footnote-risk: medium - Missing or malformed signals can change the reported classification.
@@ -26,7 +26,7 @@ const ExternalRunReviewSignalsSchema = z
 export const ExternalRunReviewInputSchema = z
     .object({
         schemaVersion: z.literal('v0alpha'),
-        origin: z.literal('host_reported'),
+        origin: z.enum(['host_reported', 'footnote_observed']),
         signals: ExternalRunReviewSignalsSchema,
     })
     .strict();
@@ -54,7 +54,7 @@ const EXTERNAL_RUN_REVIEW_SIGNAL_NAMES = [
 ] as const satisfies readonly (keyof ExternalRunReviewSignals)[];
 
 export type ExternalRunReviewResult = {
-    origin: 'host_reported';
+    origin: ExternalRunReviewInput['origin'];
     reportedSignals: ExternalRunReviewSignals;
     missingSignals: Array<keyof ExternalRunReviewSignals>;
     provenance: Provenance;
@@ -62,9 +62,9 @@ export type ExternalRunReviewResult = {
 };
 
 /**
- * Validates one host-reported run and classifies only its supplied metadata.
+ * Validates one run review and classifies only its supplied metadata.
  * Missing signals remain unknown to absence checks in the deterministic
- * classifier and are listed separately from host-reported false facts.
+ * classifier and are listed separately from source-reported false facts.
  */
 export function reviewExternalRun(input: unknown): ExternalRunReviewResult {
     const record = ExternalRunReviewInputSchema.parse(input);
@@ -120,7 +120,7 @@ export function reviewExternalRun(input: unknown): ExternalRunReviewResult {
                 ? classification.assessment.limitations
                 : [
                       ...classification.assessment.limitations,
-                      `Host did not report these provenance signals: ${missingSignals.join(', ')}.`,
+                      `${record.origin === 'host_reported' ? 'Host' : 'Footnote'} did not report these provenance signals: ${missingSignals.join(', ')}.`,
                   ],
     };
 
