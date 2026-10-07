@@ -100,6 +100,7 @@ import type {
 import type { ScopeValidationPolicy } from './executionContractTrustGraph/scopeValidator.js';
 import { logger } from '../utils/logger.js';
 import type { PublicResponseSourceCredential } from './traceStore.js';
+import type { ModelDebugCaptureRecord } from '../storage/traces/sqliteTraceStore.js';
 import {
     normalizeChatOutput,
     type ChatOutputBoundaryOptions,
@@ -958,7 +959,8 @@ export type CreateChatServiceOptions = {
     storeTrace: (
         metadata: ResponseMetadata,
         candidates?: readonly ResponseCandidate[],
-        publicationSource?: PublicResponseSourceCredential
+        publicationSource?: PublicResponseSourceCredential,
+        modelDebugCaptures?: readonly ModelDebugCaptureRecord[]
     ) => Promise<void>;
     buildResponseMetadata: (
         generationMetadata: ResponseMetadataGenerationInput,
@@ -1560,6 +1562,7 @@ export const createChatService = ({
                   workflowConversationSnapshot?: string;
                   presentationMetadata?: PresentationMetadata;
                   responseCandidates?: ResponseCandidate[];
+                  modelDebugCaptures?: ModelDebugCaptureRecord[];
                   terminalActionResponse?: Exclude<
                       PostChatResponse,
                       { action: 'message' }
@@ -1583,6 +1586,7 @@ export const createChatService = ({
             let workflowConversationSnapshot: string | undefined;
             let presentationMetadata: PresentationMetadata | undefined;
             let responseCandidates: ResponseCandidate[] | undefined;
+            let modelDebugCaptures: ModelDebugCaptureRecord[] | undefined;
             let fallbackAfterInternalNoGeneration = false;
             let generationCanBecomeAnswer = false;
 
@@ -1720,6 +1724,7 @@ export const createChatService = ({
                 }
                 workflowContextStepResult = workflowResult.contextStepResult;
                 workflowContextStepResults = workflowResult.contextStepResults;
+                modelDebugCaptures = workflowResult.modelDebugCaptures;
                 const canonicalWorkflowLineage =
                     addEvaluatorStepToWorkflowLineage({
                         workflow: workflowResult.workflowLineage,
@@ -2047,6 +2052,7 @@ export const createChatService = ({
                 workflowConversationSnapshot,
                 presentationMetadata,
                 responseCandidates,
+                modelDebugCaptures,
                 terminalActionResponse,
                 fallbackAfterInternalNoGeneration,
                 generationCanBecomeAnswer,
@@ -2079,6 +2085,7 @@ export const createChatService = ({
             generationPhase.fallbackAfterInternalNoGeneration;
         const presentationMetadata = generationPhase.presentationMetadata;
         const responseCandidates = generationPhase.responseCandidates;
+        const modelDebugCaptures = generationPhase.modelDebugCaptures;
         const terminalActionResponse = generationPhase.terminalActionResponse;
 
         const effectiveContextStepResults = getEffectiveContextStepResults(
@@ -2621,7 +2628,8 @@ export const createChatService = ({
                 await storeTrace(
                     metadataWithTrustGraph,
                     normalizedResponseCandidates,
-                    publicationSource
+                    publicationSource,
+                    modelDebugCaptures
                 );
                 availablePublicationToken = publicationToken;
             } catch (error) {
@@ -2632,7 +2640,9 @@ export const createChatService = ({
         } else {
             void storeTrace(
                 metadataWithTrustGraph,
-                normalizedResponseCandidates
+                normalizedResponseCandidates,
+                undefined,
+                modelDebugCaptures
             ).catch((error) => {
                 logger.error(
                     `Background trace storage error: ${error instanceof Error ? error.message : String(error)}`

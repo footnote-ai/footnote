@@ -15,6 +15,7 @@ import {
     type ExhaustedExecutionLimit,
     validateExecutionLimits,
 } from '../workflowEngine/limits.js';
+import { withModelDebugAttempt } from '../modelDebugCapture.js';
 import {
     type Attempt,
     type AttemptResult,
@@ -638,7 +639,13 @@ export const executeWorkflow = async <TContext>(
             const attemptStartedAtMs = now();
             let attemptResult: AttemptResult;
             try {
-                const rawAttemptResult: unknown = await handler(handlerInput);
+                const rawAttemptResult: unknown = await withModelDebugAttempt(
+                    {
+                        stepId: currentStepId,
+                        attempt: attemptNumber,
+                    },
+                    () => handler(handlerInput)
+                );
                 if (!isValidHandlerResult(rawAttemptResult)) {
                     const attemptFinishedAtMs = now();
                     attempts.push(

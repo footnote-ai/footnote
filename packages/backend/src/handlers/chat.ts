@@ -61,7 +61,7 @@ type ChatHandlerDeps = {
     ipRateLimiter: SimpleRateLimiter | null;
     sessionRateLimiter: SimpleRateLimiter | null;
     serviceRateLimiter: SimpleRateLimiter | null;
-    storeTrace: (metadata: ResponseMetadata) => Promise<void>;
+    storeTrace: CreateChatServiceOptions['storeTrace'];
     logRequest: LogRequest;
     buildResponseMetadata: BuildResponseMetadata;
     maxChatBodyBytes: number;

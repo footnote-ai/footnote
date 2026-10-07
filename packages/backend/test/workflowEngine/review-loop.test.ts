@@ -14,6 +14,7 @@ import type {
 import type { ModelProfile } from '@footnote/contracts';
 import { ok } from 'neverthrow';
 import { runBoundedReviewWorkflowForTest } from './helpers.js';
+import { createModelDebugCapturingRuntime } from '../../src/services/modelDebugCapture.js';
 
 const makeWorkflowTestProfile = (input: {
     id: string;
@@ -1281,7 +1282,16 @@ test('runBoundedReviewWorkflow persists assess TRACE alignment signals when prov
     assert.equal(assessStep.outcome.signals?.finalTemperamentCaution, 4);
 });
 
-test('runBoundedReviewWorkflow records invalid JSON assess parse failure signals', async () => {
+test('runBoundedReviewWorkflow records invalid JSON assess parse failure signals', async (t) => {
+    const previousDebugCapture = process.env.FOOTNOTE_DEBUG_CAPTURE_MODEL_IO;
+    t.after(() => {
+        if (previousDebugCapture === undefined) {
+            delete process.env.FOOTNOTE_DEBUG_CAPTURE_MODEL_IO;
+        } else {
+            process.env.FOOTNOTE_DEBUG_CAPTURE_MODEL_IO = previousDebugCapture;
+        }
+    });
+    process.env.FOOTNOTE_DEBUG_CAPTURE_MODEL_IO = 'true';
     let generationCalls = 0;
     const generationRuntime: GenerationRuntime = {
         kind: 'test-runtime',
@@ -1315,7 +1325,7 @@ test('runBoundedReviewWorkflow records invalid JSON assess parse failure signals
     };
 
     const result = await runBoundedReviewWorkflowForTest({
-        generationRuntime,
+        generationRuntime: createModelDebugCapturingRuntime(generationRuntime),
         generationRequest: {
             model: 'gpt-5-mini',
             messages: [{ role: 'user', content: 'Draft answer' }],
@@ -1362,6 +1372,15 @@ test('runBoundedReviewWorkflow records invalid JSON assess parse failure signals
     assert.equal(
         failedAssessStep.outcome.signals?.reviewParseFailureReason,
         'invalid_json'
+    );
+    assert.ok(
+        result.outcome === 'generated' &&
+            result.modelDebugCaptures?.some(
+                (capture) =>
+                    capture.stepId === 'assess' &&
+                    capture.outputText === '{"reviewDecision":"finalize",}'
+            ),
+        'the exact model output remains available even when parsing fails'
     );
 });
 

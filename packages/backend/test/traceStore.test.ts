@@ -486,6 +486,62 @@ test('TraceStore returns no candidate history for older traces', async () => {
     }
 });
 
+test('TraceStore keeps model debug bodies separate from ordinary trace reads', async () => {
+    const tempRoot = await fs.mkdtemp(
+        path.join(os.tmpdir(), 'trace-model-debug-')
+    );
+    const store = new SqliteTraceStore({
+        dbPath: path.join(tempRoot, 'provenance.db'),
+    });
+    const responseId = 'model_debug_trace_123';
+    const capture = {
+        runId: 'run-123',
+        stepId: 'generate',
+        attempt: 1,
+        invocation: 0,
+        inputText: 'private model input',
+        inputTruncated: false,
+        inputRedacted: false,
+        outputText: 'private model output',
+        outputTruncated: false,
+        outputRedacted: false,
+    };
+
+    try {
+        await store.upsert({
+            responseId,
+            provenance: 'Inferred',
+            safetyTier: 'Low',
+            tradeoffCount: 1,
+            chainHash: 'model_debug_chain_hash',
+            licenseContext: 'MIT + HL3',
+            modelVersion: 'gpt-5-mini',
+            staleAfter: new Date(Date.now() + 60000).toISOString(),
+            citations: [],
+            trace_target: {},
+            trace_final: {},
+        });
+        await store.storeModelDebugCaptures(responseId, [capture]);
+
+        assert.deepEqual(await store.retrieveModelDebugCaptures(responseId), [
+            capture,
+        ]);
+        const ordinaryTrace = await store.retrieve(responseId);
+        assert.equal(
+            ordinaryTrace !== null && 'modelDebugCaptures' in ordinaryTrace,
+            false
+        );
+        await store.delete(responseId);
+        assert.deepEqual(
+            await store.retrieveModelDebugCaptures(responseId),
+            []
+        );
+    } finally {
+        store.close();
+        await fs.rm(tempRoot, { recursive: true, force: true });
+    }
+});
+
 test('TraceStore round trips trace-card SVG assets', async () => {
     const tempRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'trace-card-'));
     const dbPath = path.join(tempRoot, 'provenance.db');

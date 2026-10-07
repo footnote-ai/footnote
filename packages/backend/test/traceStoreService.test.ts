@@ -10,6 +10,7 @@ import assert from 'node:assert/strict';
 
 import type { ResponseMetadata } from '@footnote/contracts/policy';
 import type { TraceStore } from '../src/storage/traces/traceStore.js';
+import type { ModelDebugCaptureRecord } from '../src/storage/traces/sqliteTraceStore.js';
 import {
     configureTraceMetadataMirror,
     storeTrace,
@@ -117,6 +118,35 @@ test('storeTrace stays fail-open when trace upsert throws', async () => {
                 },
             })
         )
+    );
+    assert.equal(upsertCalled, true);
+});
+
+test('storeTrace stays fail-open when optional model debug persistence throws', async () => {
+    let upsertCalled = false;
+    const traceStore = {
+        upsert: async () => {
+            upsertCalled = true;
+        },
+        storeModelDebugCaptures: async () => {
+            throw new Error('debug store unavailable');
+        },
+    } as unknown as TraceStore;
+    const captures: ModelDebugCaptureRecord[] = [
+        {
+            runId: 'run-1',
+            stepId: 'generate',
+            attempt: 1,
+            invocation: 0,
+            inputText: 'private input',
+            inputTruncated: false,
+            inputRedacted: false,
+            outputText: 'private output',
+        },
+    ];
+
+    await assert.doesNotReject(
+        storeTrace(traceStore, createMetadata(), undefined, undefined, captures)
     );
     assert.equal(upsertCalled, true);
 });

@@ -138,6 +138,12 @@ import type {
 } from './types.js';
 import { executeWorkflow } from './engine.js';
 import {
+    isModelDebugCaptureEnabled,
+    reuseResponseCandidateOutputs,
+    withModelDebugCaptureSession,
+    type ModelDebugCaptureRecord,
+} from '../modelDebugCapture.js';
+import {
     activityForWorkflowStep,
     resolveExecutionLimits,
     buildExecutionLimitStop,
@@ -235,6 +241,7 @@ export type RunBoundedReviewWorkflowResult =
           generationResult: GenerationResult;
           workflowLineage: WorkflowRecord;
           responseCandidates?: ResponseCandidate[];
+          modelDebugCaptures?: ModelDebugCaptureRecord[];
           presentation?: PresentationMetadata;
           plannerStepResult?: PlannerStepResult;
           planContinuation?: PlanContinuation;
@@ -246,6 +253,7 @@ export type RunBoundedReviewWorkflowResult =
           terminalAction: PlanTerminalAction;
           workflowLineage: WorkflowRecord;
           plannerStepResult?: PlannerStepResult;
+          modelDebugCaptures?: ModelDebugCaptureRecord[];
           planContinuation?: PlanContinuation;
           contextStepResult?: ContextStepResult;
           contextStepResults?: ContextStepResult[];
@@ -255,6 +263,7 @@ export type RunBoundedReviewWorkflowResult =
           workflowLineage: WorkflowRecord;
           presentation?: PresentationMetadata;
           plannerStepResult?: PlannerStepResult;
+          modelDebugCaptures?: ModelDebugCaptureRecord[];
           planContinuation?: PlanContinuation;
           contextStepResult?: ContextStepResult;
           contextStepResults?: ContextStepResult[];
@@ -3365,7 +3374,17 @@ export const runBoundedReviewWorkflow = async (
         now: () => Date.now(),
         reserveAttempt,
     };
-    const execution = await executeWorkflow(executeInput);
+    const modelDebugCaptures: ModelDebugCaptureRecord[] = [];
+    const execution = isModelDebugCaptureEnabled()
+        ? await withModelDebugCaptureSession(
+              {
+                  runId: workflowId,
+                  records: modelDebugCaptures,
+                  omittedInvocationCount: 0,
+              },
+              () => executeWorkflow(executeInput)
+          )
+        : await executeWorkflow(executeInput);
     const lastMetadata = [...execution.run.steps]
         .reverse()
         .flatMap((step) => [...step.attempts].reverse())
@@ -3510,6 +3529,9 @@ export const runBoundedReviewWorkflow = async (
             outcome: 'terminal_action',
             terminalAction,
             workflowLineage,
+            ...(modelDebugCaptures.length > 0 && {
+                modelDebugCaptures: [...modelDebugCaptures],
+            }),
             ...(plannerStepResult === undefined ? {} : { plannerStepResult }),
             ...(continuation === undefined
                 ? {}
@@ -3524,6 +3546,9 @@ export const runBoundedReviewWorkflow = async (
         return {
             outcome: 'no_generation',
             workflowLineage,
+            ...(modelDebugCaptures.length > 0 && {
+                modelDebugCaptures: [...modelDebugCaptures],
+            }),
             ...(presentationMetadata === undefined
                 ? {}
                 : { presentation: presentationMetadata }),
@@ -3548,11 +3573,19 @@ export const runBoundedReviewWorkflow = async (
     if (selectedCandidateId !== undefined) {
         candidates.markSelected(selectedCandidateId);
     }
+    const responseCandidates = candidates.finalize();
+    const storedModelDebugCaptures = reuseResponseCandidateOutputs(
+        modelDebugCaptures,
+        responseCandidates
+    );
     return {
         outcome: 'generated',
         generationResult,
         workflowLineage,
-        responseCandidates: candidates.finalize(),
+        responseCandidates,
+        ...(modelDebugCaptures.length > 0 && {
+            modelDebugCaptures: storedModelDebugCaptures,
+        }),
         ...(presentationMetadata === undefined
             ? {}
             : { presentation: presentationMetadata }),

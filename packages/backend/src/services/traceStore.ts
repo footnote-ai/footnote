@@ -7,6 +7,7 @@
  */
 import type { ResponseMetadata } from '@footnote/contracts/policy';
 import type { ResponseCandidate } from '@footnote/contracts/web';
+import type { ModelDebugCaptureRecord } from '../storage/traces/sqliteTraceStore.js';
 import {
     createTraceStoreFromConfig,
     type TraceStore,
@@ -63,7 +64,8 @@ const storeTrace = async (
     traceStore: TraceStore,
     metadata: ResponseMetadata,
     candidates?: readonly ResponseCandidate[],
-    publicationSource?: PublicResponseSourceCredential
+    publicationSource?: PublicResponseSourceCredential,
+    modelDebugCaptures?: readonly ModelDebugCaptureRecord[]
 ): Promise<void> => {
     try {
         // --- Response identifier guard ---
@@ -75,6 +77,19 @@ const storeTrace = async (
 
         // --- Write-through ---
         await traceStore.upsert(metadata, candidates);
+        if (modelDebugCaptures !== undefined && modelDebugCaptures.length > 0) {
+            try {
+                await traceStore.storeModelDebugCaptures(
+                    responseId,
+                    modelDebugCaptures
+                );
+            } catch {
+                // Debug storage is optional; never fail the delivered response.
+                logger.warn('Model debug capture persistence failed.', {
+                    responseId,
+                });
+            }
+        }
         if (publicationSource !== undefined) {
             await traceStore.createPublicResponseSource({
                 responseId,
