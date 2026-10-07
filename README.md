@@ -15,21 +15,12 @@ Footnote tries to bridge the gap between what AI can do and what people need in 
 Footnote is built with AI assistance. Read the
 [AI use disclosure](docs/ai/ai-use-disclosure.md) for more information.
 
-<!-- screenshot of a question+response here -->
-
-<!-- screenshot of an expanded footnote -->
-
-[Try the live demo](https://ai.jordanmakes.dev)
-
 ## Quickstart
 
-Try Footnote without cloning the repository:
+Try Footnote in your browser with the [live demo](https://ai.jordanmakes.dev).
 
-1. [Download the latest release](https://github.com/footnote-ai/footnote/releases)
-   for your system.
-2. Double-click the downloaded file to start Footnote.
-3. On first run, Footnote opens the setup page. Accept the defaults or adjust
-   the settings, select **Save settings**, then restart Footnote.
+To run your own instance, follow the [deployment guide](deploy/README.md). To
+contribute or run from the repository, follow [Run from source](#run-from-source-developers-and-contributors).
 
 ## Run from source (developers and contributors)
 
@@ -64,3 +55,4 @@ cloud. See the [deployment guide](deploy/README.md) for details.
 ## License
 
 Footnote is [dual-licensed under MIT and HL3-CORE](docs/LICENSE_STRATEGY.md).
+
