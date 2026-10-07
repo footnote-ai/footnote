@@ -10,24 +10,29 @@ import assert from 'node:assert/strict';
 
 import { runAsyncCallback } from '../src/utils/runAsyncCallback.js';
 
-test('runAsyncCallback reports sync and async failures without returning a promise', async () => {
-    const asyncError = new Error('async callback failed');
+test('runAsyncCallback reports a rejected follow-up and sync failures', async () => {
+    const followUpError = new Error('follow-up failed');
     const syncError = new Error('sync callback failed');
     const reported: unknown[] = [];
+    const interaction = {
+        followUp: async (): Promise<void> => {
+            throw followUpError;
+        },
+    };
     const onError = (error: unknown): void => {
         reported.push(error);
     };
 
     const asyncResult = runAsyncCallback(async () => {
-        throw asyncError;
+        await interaction.followUp();
     }, onError);
     assert.equal(asyncResult, undefined);
     await new Promise<void>((resolve) => setImmediate(resolve));
-    assert.deepEqual(reported, [asyncError]);
+    assert.deepEqual(reported, [followUpError]);
 
     const syncResult = runAsyncCallback(() => {
         throw syncError;
     }, onError);
     assert.equal(syncResult, undefined);
-    assert.deepEqual(reported, [asyncError, syncError]);
+    assert.deepEqual(reported, [followUpError, syncError]);
 });

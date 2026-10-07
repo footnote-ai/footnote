@@ -7,6 +7,7 @@
  */
 
 import { logger } from '../utils/logger.js';
+import { runAsyncCallback } from '../utils/runAsyncCallback.js';
 import { Command } from './BaseCommand.js';
 import {
     ChatInputCommandInteraction,
@@ -317,42 +318,53 @@ const callCommand: Command = {
             // Handle disconnections
             voiceConnection.on(
                 VoiceConnectionStatus.Disconnected,
-                async (oldState, newState) => {
-                    logger.warn(
-                        `Voice connection status changed: ${oldState} -> ${newState}`
-                    );
+                (oldState, newState) => {
+                    runAsyncCallback(
+                        async () => {
+                            logger.warn(
+                                `Voice connection status changed: ${oldState} -> ${newState}`
+                            );
 
-                    try {
-                        // Try to reconnect if it was a temporary disconnection
-                        if (voiceConnection) {
-                            await Promise.race([
-                                entersState(
-                                    voiceConnection,
-                                    VoiceConnectionStatus.Signalling,
-                                    5_000
-                                ),
-                                entersState(
-                                    voiceConnection,
-                                    VoiceConnectionStatus.Connecting,
-                                    5_000
-                                ),
-                            ]);
-                            logger.info(
-                                'Successfully reconnected to voice channel'
-                            );
-                        } else {
-                            throw new Error(
-                                'Cannot reconnect - Voice connection is null'
-                            );
-                        }
-                    } catch (error) {
-                        logger.error(`Permanent voice disconnection: ${error}`);
-                        voiceConnection?.destroy();
-                        interaction.followUp({
-                            content: `I was unable to maintain a connection to the voice channel ${voiceChannel.name}. Please try again.`,
-                            flags: [1 << 6],
-                        });
-                    }
+                            try {
+                                // Try to reconnect if it was a temporary disconnection
+                                if (voiceConnection) {
+                                    await Promise.race([
+                                        entersState(
+                                            voiceConnection,
+                                            VoiceConnectionStatus.Signalling,
+                                            5_000
+                                        ),
+                                        entersState(
+                                            voiceConnection,
+                                            VoiceConnectionStatus.Connecting,
+                                            5_000
+                                        ),
+                                    ]);
+                                    logger.info(
+                                        'Successfully reconnected to voice channel'
+                                    );
+                                } else {
+                                    throw new Error(
+                                        'Cannot reconnect - Voice connection is null'
+                                    );
+                                }
+                            } catch (error) {
+                                logger.error(
+                                    `Permanent voice disconnection: ${error}`
+                                );
+                                voiceConnection?.destroy();
+                                await interaction.followUp({
+                                    content: `I was unable to maintain a connection to the voice channel ${voiceChannel.name}. Please try again.`,
+                                    flags: [1 << 6],
+                                });
+                            }
+                        },
+                        (error: unknown) =>
+                            logger.error(
+                                'Voice disconnection handling failed.',
+                                { error }
+                            )
+                    );
                 }
             );
 
