@@ -43,6 +43,7 @@ type RegistryDeployment = {
     modelId: string;
     role: Fact<string>;
     artifact: Fact<string>;
+    artifactDigest: Fact<string>;
     quantization: Fact<string>;
     provider: Fact<string>;
     capabilities: {
@@ -110,6 +111,12 @@ function assertFact<T>(fact: Fact<T>, sourceIds: ReadonlySet<string>): void {
     }
 }
 
+function assertDateOnly(value: string): void {
+    assert.match(value, /^\d{4}-\d{2}-\d{2}$/);
+    assert.ok(Number.isFinite(Date.parse(value)));
+    assert.equal(new Date(value).toISOString().slice(0, 10), value);
+}
+
 function validateRegistry(value: ModelCapabilityRegistry): void {
     assert.equal(value.version, 1);
     assertUniqueIds(value.sources);
@@ -123,6 +130,9 @@ function validateRegistry(value: ModelCapabilityRegistry): void {
     const deploymentIds = new Set(
         value.deployments.map((deployment) => deployment.id)
     );
+    const deploymentsById = new Map(
+        value.deployments.map((deployment) => [deployment.id, deployment])
+    );
     const assessmentIds = new Set(
         value.assessments.map((assessment) => assessment.id)
     );
@@ -131,15 +141,16 @@ function validateRegistry(value: ModelCapabilityRegistry): void {
         assert.ok(existsSync(path.resolve(source.path)), source.path);
     }
     for (const model of value.models) {
-        assert.ok(Number.isFinite(Date.parse(model.recordedAt)));
+        assertDateOnly(model.recordedAt);
         assertFact(model.family, sourceIds);
         assertFact(model.revision, sourceIds);
     }
     for (const deployment of value.deployments) {
-        assert.ok(Number.isFinite(Date.parse(deployment.recordedAt)));
+        assertDateOnly(deployment.recordedAt);
         assert.ok(modelIds.has(deployment.modelId));
         assertFact(deployment.role, sourceIds);
         assertFact(deployment.artifact, sourceIds);
+        assertFact(deployment.artifactDigest, sourceIds);
         assertFact(deployment.quantization, sourceIds);
         assertFact(deployment.provider, sourceIds);
         assertFact(
@@ -153,7 +164,7 @@ function validateRegistry(value: ModelCapabilityRegistry): void {
         assertFact(deployment.artifactSize, sourceIds);
     }
     for (const evaluation of value.evaluations) {
-        assert.ok(Number.isFinite(Date.parse(evaluation.assessedAt)));
+        assertDateOnly(evaluation.assessedAt);
         assert.ok(
             evaluation.modelId === null || modelIds.has(evaluation.modelId)
         );
@@ -161,13 +172,20 @@ function validateRegistry(value: ModelCapabilityRegistry): void {
             evaluation.deploymentId === null ||
                 deploymentIds.has(evaluation.deploymentId)
         );
+        if (evaluation.modelId !== null && evaluation.deploymentId !== null) {
+            assert.equal(
+                deploymentsById.get(evaluation.deploymentId)?.modelId,
+                evaluation.modelId,
+                `deployment ${evaluation.deploymentId} must belong to model ${evaluation.modelId}`
+            );
+        }
         assertFact(evaluation.status, sourceIds);
         for (const sourceId of evaluation.evidence) {
             assert.ok(sourceIds.has(sourceId));
         }
     }
     for (const assessment of value.assessments) {
-        assert.ok(Number.isFinite(Date.parse(assessment.date)));
+        assertDateOnly(assessment.date);
         assert.ok(
             assessment.evidence.every((sourceId) => sourceIds.has(sourceId))
         );
@@ -207,6 +225,11 @@ test('registry separates deployments, preserves unknowns, and cites checked-in e
                 model.revision.value === null &&
                 model.revision.nature === 'unavailable'
         )
+    );
+    assert.equal(registry.models[1]?.revision.nature, 'unavailable');
+    assert.equal(
+        registry.deployments[1]?.artifactDigest.value,
+        'd0f50978e07996f96480c90a4b789b7988d91a9c015aa84f5cfb5ff7d5d2ece4'
     );
     assert.equal(registry.evaluations[0]?.status.value, 'not run or scheduled');
     assert.equal(registry.assessments[0]?.supersedes, null);
@@ -248,4 +271,42 @@ test('registry allows multiple deployments and derives only unsuperseded assessm
     assert.deepEqual(currentAssessments(extendedRegistry.assessments), [
         currentAssessment,
     ]);
+});
+
+test('registry rejects an evaluation deployment linked to a different model', () => {
+    const evaluation = registry.evaluations[0];
+    const model = registry.models[0];
+    const deployment = registry.deployments[1];
+    assert.ok(evaluation);
+    assert.ok(model);
+    assert.ok(deployment);
+
+    const invalidRegistry: ModelCapabilityRegistry = {
+        ...registry,
+        evaluations: [
+            {
+                ...evaluation,
+                modelId: model.id,
+                deploymentId: deployment.id,
+            },
+        ],
+    };
+    assert.throws(
+        () => validateRegistry(invalidRegistry),
+        /must belong to model/
+    );
+});
+
+test('registry rejects impossible date-only values', () => {
+    const model = registry.models[0];
+    assert.ok(model);
+
+    const invalidRegistry: ModelCapabilityRegistry = {
+        ...registry,
+        models: [
+            { ...model, recordedAt: '2026-02-30' },
+            ...registry.models.slice(1),
+        ],
+    };
+    assert.throws(() => validateRegistry(invalidRegistry));
 });

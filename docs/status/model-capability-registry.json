@@ -56,8 +56,8 @@
                 "source": "local-ollama-cohort"
             },
             "revision": {
-                "value": "d0f50978e07996f96480c90a4b789b7988d91a9c015aa84f5cfb5ff7d5d2ece4",
-                "nature": "provider-reported",
+                "value": null,
+                "nature": "unavailable",
                 "source": "local-ollama-cohort"
             }
         },
@@ -150,6 +150,11 @@
                 "value": "about 17 GB locally",
                 "nature": "maintainer judgment",
                 "source": "local-ollama-cohort"
+            },
+            "artifactDigest": {
+                "value": null,
+                "nature": "unavailable",
+                "source": "local-ollama-cohort"
             }
         },
         {
@@ -210,6 +215,11 @@
             "artifactSize": {
                 "value": "about 9.4 GB locally",
                 "nature": "maintainer judgment",
+                "source": "local-ollama-cohort"
+            },
+            "artifactDigest": {
+                "value": "d0f50978e07996f96480c90a4b789b7988d91a9c015aa84f5cfb5ff7d5d2ece4",
+                "nature": "provider-reported",
                 "source": "local-ollama-cohort"
             }
         },
@@ -272,6 +282,11 @@
                 "value": "about 6.6 GB locally",
                 "nature": "maintainer judgment",
                 "source": "local-ollama-cohort"
+            },
+            "artifactDigest": {
+                "value": null,
+                "nature": "unavailable",
+                "source": "local-ollama-cohort"
             }
         },
         {
@@ -332,6 +347,11 @@
             "artifactSize": {
                 "value": "about 5.6 GB locally",
                 "nature": "maintainer judgment",
+                "source": "local-ollama-cohort"
+            },
+            "artifactDigest": {
+                "value": null,
+                "nature": "unavailable",
                 "source": "local-ollama-cohort"
             }
         }
