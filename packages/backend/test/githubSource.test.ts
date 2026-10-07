@@ -201,7 +201,18 @@ test('source selection requires user-authored repo, ref, and path and rejects un
             positiveRequest
         );
     }
-    const sourceWithoutSearch = { ...selection, searchTerm: undefined };
+    const sourceWithoutSearch = {
+        repository: selection.repository,
+        revision: selection.revision,
+        path: selection.path,
+    };
+    assert.deepEqual(
+        normalizeGitHubSourceSelection(
+            sourceWithoutSearch,
+            "Don't inspect README; inspect acme/repo at main in src/service.ts now."
+        ),
+        sourceWithoutSearch
+    );
     for (const unrelatedRequest of [
         'Check the docs. acme/repo at main in src/service.ts.',
         'Search the web first. acme/repo at main in src/service.ts.',

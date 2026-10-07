@@ -120,21 +120,42 @@ const hasExplicitToken = (text: string, token: string): boolean => {
     return false;
 };
 
+const sourceRequestClauses = (text: string): string[] =>
+    text.split(/(?:[.!?;]\s+|\r?\n+)/u);
+
+const clauseNamesSourceSelection = (
+    clause: string,
+    repository: string,
+    revision: string,
+    path: string
+): boolean =>
+    isRepositorySlugInConversation(repository, [clause]) &&
+    hasExplicitToken(clause, revision) &&
+    hasExplicitToken(clause, path);
+
 const hasPositiveSourceRequest = (
     text: string,
     repository: string,
     revision: string,
     path: string
 ): boolean =>
-    text
-        .split(/(?:[.!?;]\s+|\r?\n+)/u)
-        .some(
-            (clause) =>
-                SOURCE_REQUEST_PATTERN.test(clause) &&
-                isRepositorySlugInConversation(repository, [clause]) &&
-                hasExplicitToken(clause, revision) &&
-                hasExplicitToken(clause, path)
-        );
+    sourceRequestClauses(text).some(
+        (clause) =>
+            SOURCE_REQUEST_PATTERN.test(clause) &&
+            clauseNamesSourceSelection(clause, repository, revision, path)
+    );
+
+const hasNegatedSourceRequest = (
+    text: string,
+    repository: string,
+    revision: string,
+    path: string
+): boolean =>
+    sourceRequestClauses(text).some(
+        (clause) =>
+            SOURCE_REQUEST_NEGATION_PATTERN.test(clause) &&
+            clauseNamesSourceSelection(clause, repository, revision, path)
+    );
 
 const parseSelection = (
     value: unknown
@@ -197,7 +218,12 @@ export const normalizeGitHubSourceSelection = (
             selection.revision,
             selection.path
         ) ||
-        SOURCE_REQUEST_NEGATION_PATTERN.test(latestUserInput) ||
+        hasNegatedSourceRequest(
+            latestUserInput,
+            selection.repository,
+            selection.revision,
+            selection.path
+        ) ||
         (selection.searchTerm !== undefined &&
             !latestUserInput.includes(selection.searchTerm))
     ) {
