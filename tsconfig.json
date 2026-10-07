@@ -41,6 +41,12 @@
             "@footnote/launcher-cli/*": ["./packages/launcher-cli/src/*"],
             "@footnote/prompts": ["./packages/prompts/src/index.ts"],
             "@footnote/prompts/*": ["./packages/prompts/src/*"],
+            "@footnote/repository-context": [
+                "./packages/repository-context/src/index.ts"
+            ],
+            "@footnote/repository-context/*": [
+                "./packages/repository-context/src/*"
+            ],
             "@components/*": ["./packages/web/src/components/*"],
             "@pages/*": ["./packages/web/src/pages/*"],
             "@styles/*": ["./packages/web/src/styles/*"],
