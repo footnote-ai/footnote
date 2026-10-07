@@ -84,6 +84,8 @@
 }
 
 .trace-evidence-status {
+    display: block;
+    margin-block: 1em;
     border-left: 3px solid var(--public-focus);
     padding: 0.75rem;
     background: color-mix(

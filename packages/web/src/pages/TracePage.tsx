@@ -684,54 +684,14 @@ const TracePage = (): JSX.Element => {
                 </Link>
             </header>
 
-            <article className="card trace-card" aria-label="Trace summary">
-                <h2>What happened</h2>
-                <p>
-                    This page summarizes how this answer was produced and where
-                    you can inspect evidence next.
-                </p>
-                {renderRunOutcomeSummary(runOutcomeSummary)}
-                <p
-                    className={`trace-evidence-status${groundingEvidenceSummary.status === 'sources_available' ? '' : ' trace-evidence-status--caution'}`}
-                    role="status"
-                >
-                    <strong>Evidence status:</strong>{' '}
-                    {groundingEvidenceSummary.value}.{' '}
-                    {groundingEvidenceSummary.explanation}
-                </p>
-                <p>
-                    <strong>Provenance label:</strong> {provenance}
-                </p>
-                <p>{provenanceExplanation}</p>
-                <p>
-                    <strong>Generated:</strong> {timestampDisplay}
-                </p>
-                <ul>
-                    {summarySignals.map((signal) => (
-                        <li key={signal.label}>
-                            <strong>{signal.label}:</strong> {signal.value}
-                            <br />
-                            {signal.explanation}
-                        </li>
-                    ))}
-                </ul>
-                <p>
-                    <strong>Next:</strong>{' '}
-                    <a href="#trace-sources">Check sources</a>,{' '}
-                    <a href="#trace-runtime">review model/runtime details</a>,
-                    or <a href="#trace-raw">open raw trace JSON</a>.
-                </p>
-            </article>
-
             <article
                 className="card trace-card response-versions"
                 aria-label="Response versions"
             >
                 <h2>Response versions</h2>
                 <p>
-                    The authoritative answer opens first. Earlier generated text
-                    is kept for inspection; presentation candidates influence
-                    expression only and never replace the answer.
+                    The selected version is the delivered answer. Earlier drafts
+                    and revisions remain available for comparison.
                 </p>
                 {responseCandidates === null &&
                     !responseVersionsUnavailable && (
@@ -743,10 +703,12 @@ const TracePage = (): JSX.Element => {
                     </p>
                 )}
                 {responseAuthorityUnavailable && (
-                    <p role="status">
-                        No response version is marked authoritative in this
-                        trace. The stored versions below are historical and are
-                        not presented as the delivered answer.
+                    <p>
+                        <output>
+                            No response version is marked authoritative in this
+                            trace. The stored versions below are historical and
+                            are not presented as the delivered answer.
+                        </output>
                     </p>
                 )}
                 {responseCandidates !== null &&
@@ -759,11 +721,7 @@ const TracePage = (): JSX.Element => {
                     responseCandidates.length > 0 && (
                         <ResponseCarousel
                             items={responseCandidates}
-                            initialIndex={
-                                selectedCandidateIndex >= 0
-                                    ? selectedCandidateIndex
-                                    : 0
-                            }
+                            initialIndex={Math.max(selectedCandidateIndex, 0)}
                             ariaLabel="Response versions"
                             getKey={(candidate) => candidate.id}
                             getDotLabel={(candidate, index) =>
@@ -833,6 +791,44 @@ const TracePage = (): JSX.Element => {
                             )}
                         />
                     )}
+            </article>
+
+            <article className="card trace-card" aria-label="Trace summary">
+                <h2>What happened</h2>
+                <p>
+                    This page summarizes how this answer was produced and where
+                    you can inspect evidence next.
+                </p>
+                {renderRunOutcomeSummary(runOutcomeSummary)}
+                <output
+                    className={`trace-evidence-status${groundingEvidenceSummary.status === 'sources_available' ? '' : ' trace-evidence-status--caution'}`}
+                >
+                    <strong>Evidence status:</strong>{' '}
+                    {groundingEvidenceSummary.value}.{' '}
+                    {groundingEvidenceSummary.explanation}
+                </output>
+                <p>
+                    <strong>Provenance label:</strong> {provenance}
+                </p>
+                <p>{provenanceExplanation}</p>
+                <p>
+                    <strong>Generated:</strong> {timestampDisplay}
+                </p>
+                <ul>
+                    {summarySignals.map((signal) => (
+                        <li key={signal.label}>
+                            <strong>{signal.label}:</strong> {signal.value}
+                            <br />
+                            {signal.explanation}
+                        </li>
+                    ))}
+                </ul>
+                <p>
+                    <strong>Next:</strong>{' '}
+                    <a href="#trace-sources">Check sources</a>,{' '}
+                    <a href="#trace-runtime">review model/runtime details</a>,
+                    or <a href="#trace-raw">open raw trace JSON</a>.
+                </p>
             </article>
 
             <article

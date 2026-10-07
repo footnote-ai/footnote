@@ -23,6 +23,11 @@ const tracePagePath = path.join(
 test('trace response versions load final-first with controls, warnings, and unavailable state', async () => {
     const source = await readFile(tracePagePath, 'utf8');
 
+    assert.ok(
+        source.indexOf('<h2>Response versions</h2>') <
+            source.indexOf('<h2>What happened</h2>')
+    );
+    assert.match(source, /The selected version is the delivered answer/u);
     assert.match(source, /api\.getResponseVersions/);
     assert.match(source, /candidate\.state === 'selected'/);
     assert.match(source, /showPreviousNextControls/);
@@ -38,7 +43,10 @@ test('trace response versions load final-first with controls, warnings, and unav
         source,
         /stored versions below are historical[\s\S]{0,80}not presented as the delivered answer/
     );
-    assert.match(source, /selectedCandidateIndex >= 0[\s\S]{0,200}: 0/u);
+    assert.match(
+        source,
+        /initialIndex=\{Math\.max\(selectedCandidateIndex, 0\)\}/u
+    );
 });
 
 test('trace page makes partial provenance explicit', async () => {

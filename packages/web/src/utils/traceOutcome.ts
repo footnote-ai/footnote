@@ -190,20 +190,25 @@ export const buildRunOutcomeSummary = (
             stoppedBeforeStepKind !== undefined
                 ? `Answer generation completed, but the workflow stopped before ${STEP_KIND_LABELS[stoppedBeforeStepKind] ?? stoppedBeforeStepKind}. ${stopExplanation}`
                 : stopExplanation;
-        const fallbackExplanation =
-            primaryFallbackReason !== undefined
-                ? (FALLBACK_REASON_EXPLANATIONS[primaryFallbackReason] ??
-                  'A fallback signal was recorded.')
-                : hasPlannerFallbackSignal
-                  ? 'A fallback planner-contract signal was recorded.'
-                  : '';
+        let fallbackExplanation = '';
+        if (primaryFallbackReason !== undefined) {
+            fallbackExplanation =
+                FALLBACK_REASON_EXPLANATIONS[primaryFallbackReason] ??
+                'A fallback signal was recorded.';
+        } else if (hasPlannerFallbackSignal) {
+            fallbackExplanation =
+                'A fallback planner-contract signal was recorded.';
+        }
+        const explanation = fallbackExplanation
+            ? reason + ' ' + fallbackExplanation
+            : reason;
 
         return {
             category: 'stopped',
             headline:
                 explicitRunStatus[0]!.toUpperCase() +
                 explicitRunStatus.slice(1),
-            explanation: `${reason}${fallbackExplanation ? ` ${fallbackExplanation}` : ''}`,
+            explanation,
             reasonCode: terminationReason,
             secondaryReasonCode: primaryFallbackReason,
         };

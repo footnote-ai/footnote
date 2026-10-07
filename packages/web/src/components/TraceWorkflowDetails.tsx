@@ -65,12 +65,15 @@ const displayTokens = (usage: {
 
 const displayRefs = (
     refs: WorkflowRecord['steps'][number]['inputRefs']
-): string =>
-    refs === undefined
-        ? 'Unavailable (not recorded)'
-        : refs.length === 0
-          ? 'None recorded'
-          : refs.map((reference) => reference.name).join(', ');
+): string => {
+    if (refs === undefined) {
+        return 'Unavailable (not recorded)';
+    }
+    if (refs.length === 0) {
+        return 'None recorded';
+    }
+    return refs.map((reference) => reference.name).join(', ');
+};
 
 const TraceWorkflowDetails = ({
     workflow,
@@ -100,25 +103,28 @@ const TraceWorkflowDetails = ({
                 </p>
                 <details className="trace-details">
                     <summary>Recorded limits</summary>
-                    {workflow.effectiveLimits === undefined ? (
+                    {workflow.effectiveLimits === undefined && (
                         <p>Unavailable (not recorded).</p>
-                    ) : workflow.effectiveLimits.length === 0 ? (
-                        <p>No limit details were recorded.</p>
-                    ) : (
-                        <ul>
-                            {workflow.effectiveLimits.map((limit) => (
-                                <li key={limit.key}>
-                                    {limit.key}:{' '}
-                                    {limit.value === undefined
-                                        ? limit.state
-                                        : `${limit.value} (${limit.state})`}
-                                    {limit.stoppedRun
-                                        ? ' — stopped this run'
-                                        : ''}
-                                </li>
-                            ))}
-                        </ul>
                     )}
+                    {workflow.effectiveLimits?.length === 0 && (
+                        <p>No limit details were recorded.</p>
+                    )}
+                    {workflow.effectiveLimits !== undefined &&
+                        workflow.effectiveLimits.length > 0 && (
+                            <ul>
+                                {workflow.effectiveLimits.map((limit) => (
+                                    <li key={limit.key}>
+                                        {limit.key}:{' '}
+                                        {limit.value === undefined
+                                            ? limit.state
+                                            : `${limit.value} (${limit.state})`}
+                                        {limit.stoppedRun
+                                            ? ' — stopped this run'
+                                            : ''}
+                                    </li>
+                                ))}
+                            </ul>
+                        )}
                 </details>
                 {workflow.steps.length === 0 ? (
                     <p>No workflow Steps were recorded.</p>
@@ -195,143 +201,148 @@ const TraceWorkflowDetails = ({
                                         <strong>Declared results:</strong>{' '}
                                         {displayRefs(step.resultRefs)}
                                     </p>
-                                    {step.attempts === undefined ? (
+                                    {step.attempts === undefined && (
                                         <p>
                                             Attempt details are unavailable (not
                                             recorded).
                                         </p>
-                                    ) : step.attempts.length === 0 ? (
+                                    )}
+                                    {step.attempts?.length === 0 && (
                                         <p>No Attempts were recorded.</p>
-                                    ) : (
-                                        <details className="trace-details trace-workflow-attempts">
-                                            <summary>
-                                                {step.attempts.length}{' '}
-                                                {step.attempts.length === 1
-                                                    ? 'Attempt'
-                                                    : 'Attempts'}
-                                                {' · '}
-                                                {step.attempts.length > 1
-                                                    ? 'retry history'
-                                                    : 'inspect attempt facts'}
-                                            </summary>
-                                            <ol>
-                                                {step.attempts.map(
-                                                    (attempt) => (
-                                                        <li
-                                                            key={
-                                                                attempt.attempt
-                                                            }
-                                                        >
-                                                            <strong>
-                                                                Attempt{' '}
-                                                                {
+                                    )}
+                                    {step.attempts !== undefined &&
+                                        step.attempts.length > 0 && (
+                                            <details className="trace-details trace-workflow-attempts">
+                                                <summary>
+                                                    {step.attempts.length}{' '}
+                                                    {step.attempts.length === 1
+                                                        ? 'Attempt'
+                                                        : 'Attempts'}
+                                                    {' · '}
+                                                    {step.attempts.length > 1
+                                                        ? 'retry history'
+                                                        : 'inspect attempt facts'}
+                                                </summary>
+                                                <ol>
+                                                    {step.attempts.map(
+                                                        (attempt) => (
+                                                            <li
+                                                                key={
                                                                     attempt.attempt
                                                                 }
-                                                                {attempt.attempt >
-                                                                    1 &&
-                                                                    ' (retry)'}
-                                                                :{' '}
-                                                                {
-                                                                    ATTEMPT_STATUS_LABELS[
-                                                                        attempt
-                                                                            .status
-                                                                    ]
-                                                                }
-                                                            </strong>
-                                                            {attempt.reasonCode ===
-                                                                PUBLIC_FALLBACK_ROUTE_REASON_CODE && (
-                                                                <p>
-                                                                    A fallback
-                                                                    search
-                                                                    profile was
-                                                                    used.
-                                                                </p>
-                                                            )}
-                                                            <dl className="trace-details__list">
-                                                                <div>
-                                                                    <dt>
-                                                                        Requested
-                                                                        provider
-                                                                    </dt>
-                                                                    <dd>
-                                                                        {attempt.requestedProvider ??
-                                                                            'Unavailable (not recorded)'}
-                                                                    </dd>
-                                                                </div>
-                                                                <div>
-                                                                    <dt>
-                                                                        Observed
-                                                                        provider
-                                                                    </dt>
-                                                                    <dd>
-                                                                        {attempt.actualProvider ??
-                                                                            'Unavailable (not recorded)'}
-                                                                    </dd>
-                                                                </div>
-                                                                <div>
-                                                                    <dt>
-                                                                        Requested
-                                                                        model
-                                                                    </dt>
-                                                                    <dd>
-                                                                        {attempt.requestedModel ??
-                                                                            'Unavailable (not recorded)'}
-                                                                    </dd>
-                                                                </div>
-                                                                <div>
-                                                                    <dt>
-                                                                        Observed
-                                                                        model
-                                                                    </dt>
-                                                                    <dd>
-                                                                        {attempt.actualModel ??
-                                                                            'Unavailable (not recorded)'}
-                                                                    </dd>
-                                                                </div>
-                                                                <div>
-                                                                    <dt>
-                                                                        Duration
-                                                                    </dt>
-                                                                    <dd>
-                                                                        {attempt.durationMs ===
-                                                                        undefined
-                                                                            ? 'Unavailable (not recorded)'
-                                                                            : `${attempt.durationMs}ms`}
-                                                                    </dd>
-                                                                </div>
-                                                                <div>
-                                                                    <dt>
-                                                                        Token
-                                                                        usage
-                                                                    </dt>
-                                                                    <dd>
-                                                                        {attempt.usage
-                                                                            ? displayTokens(
-                                                                                  attempt.usage
-                                                                              )
-                                                                            : 'Unavailable (not recorded)'}
-                                                                    </dd>
-                                                                </div>
-                                                                <div>
-                                                                    <dt>
-                                                                        Recorded
-                                                                        cost
-                                                                        estimate
-                                                                    </dt>
-                                                                    <dd>
-                                                                        {attempt.cost ===
-                                                                        undefined
-                                                                            ? 'Unavailable (not recorded)'
-                                                                            : `$${attempt.cost.totalCostUsd.toFixed(6)}`}
-                                                                    </dd>
-                                                                </div>
-                                                            </dl>
-                                                        </li>
-                                                    )
-                                                )}
-                                            </ol>
-                                        </details>
-                                    )}
+                                                            >
+                                                                <strong>
+                                                                    Attempt{' '}
+                                                                    {
+                                                                        attempt.attempt
+                                                                    }
+                                                                    {attempt.attempt >
+                                                                        1 &&
+                                                                        ' (retry)'}
+                                                                    :{' '}
+                                                                    {
+                                                                        ATTEMPT_STATUS_LABELS[
+                                                                            attempt
+                                                                                .status
+                                                                        ]
+                                                                    }
+                                                                </strong>
+                                                                {attempt.reasonCode ===
+                                                                    PUBLIC_FALLBACK_ROUTE_REASON_CODE && (
+                                                                    <p>
+                                                                        A
+                                                                        fallback
+                                                                        search
+                                                                        profile
+                                                                        was
+                                                                        used.
+                                                                    </p>
+                                                                )}
+                                                                <dl className="trace-details__list">
+                                                                    <div>
+                                                                        <dt>
+                                                                            Requested
+                                                                            provider
+                                                                        </dt>
+                                                                        <dd>
+                                                                            {attempt.requestedProvider ??
+                                                                                'Unavailable (not recorded)'}
+                                                                        </dd>
+                                                                    </div>
+                                                                    <div>
+                                                                        <dt>
+                                                                            Observed
+                                                                            provider
+                                                                        </dt>
+                                                                        <dd>
+                                                                            {attempt.actualProvider ??
+                                                                                'Unavailable (not recorded)'}
+                                                                        </dd>
+                                                                    </div>
+                                                                    <div>
+                                                                        <dt>
+                                                                            Requested
+                                                                            model
+                                                                        </dt>
+                                                                        <dd>
+                                                                            {attempt.requestedModel ??
+                                                                                'Unavailable (not recorded)'}
+                                                                        </dd>
+                                                                    </div>
+                                                                    <div>
+                                                                        <dt>
+                                                                            Observed
+                                                                            model
+                                                                        </dt>
+                                                                        <dd>
+                                                                            {attempt.actualModel ??
+                                                                                'Unavailable (not recorded)'}
+                                                                        </dd>
+                                                                    </div>
+                                                                    <div>
+                                                                        <dt>
+                                                                            Duration
+                                                                        </dt>
+                                                                        <dd>
+                                                                            {attempt.durationMs ===
+                                                                            undefined
+                                                                                ? 'Unavailable (not recorded)'
+                                                                                : `${attempt.durationMs}ms`}
+                                                                        </dd>
+                                                                    </div>
+                                                                    <div>
+                                                                        <dt>
+                                                                            Token
+                                                                            usage
+                                                                        </dt>
+                                                                        <dd>
+                                                                            {attempt.usage
+                                                                                ? displayTokens(
+                                                                                      attempt.usage
+                                                                                  )
+                                                                                : 'Unavailable (not recorded)'}
+                                                                        </dd>
+                                                                    </div>
+                                                                    <div>
+                                                                        <dt>
+                                                                            Recorded
+                                                                            cost
+                                                                            estimate
+                                                                        </dt>
+                                                                        <dd>
+                                                                            {attempt.cost ===
+                                                                            undefined
+                                                                                ? 'Unavailable (not recorded)'
+                                                                                : `$${attempt.cost.totalCostUsd.toFixed(6)}`}
+                                                                        </dd>
+                                                                    </div>
+                                                                </dl>
+                                                            </li>
+                                                        )
+                                                    )}
+                                                </ol>
+                                            </details>
+                                        )}
                                 </li>
                             );
                         })}
