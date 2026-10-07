@@ -19,7 +19,9 @@ import {
 test('model debug text redacts credential-shaped fields before storing', () => {
     const result = boundAndRedactDebugText(
         'Authorization: Bearer abc123\napi_key="secret-value"\ntoken=session-token\n' +
-            'https://operator:uri-password@example.com/private\nnormal text'
+            'https://operator:uri-password@example.com/private\n' +
+            'postgres://operator:db-password@db.example/db\n' +
+            'mongodb+srv://user:mongo-password@cluster.example/db\nnormal text'
     );
 
     assert.equal(result.redacted, true);
@@ -28,6 +30,8 @@ test('model debug text redacts credential-shaped fields before storing', () => {
     assert.equal(result.text.includes('secret-value'), false);
     assert.equal(result.text.includes('session-token'), false);
     assert.equal(result.text.includes('uri-password'), false);
+    assert.equal(result.text.includes('db-password'), false);
+    assert.equal(result.text.includes('mongo-password'), false);
     assert.match(result.text, /normal text/u);
 });
 
