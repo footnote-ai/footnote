@@ -113,6 +113,36 @@ test('retained scan evidence has a bounded number of facts', () => {
     }
 });
 
+test('no conversation scope means image context is not retained', () => {
+    const store = new ConversationImageContextStore();
+    store.record({
+        imageUrl: 'https://images.test/a',
+        result,
+        now: 1_000,
+    });
+
+    assert.equal(
+        store.lookup({
+            scope,
+            imageUrl: 'https://images.test/a',
+            toolName: 'file_scan',
+            refersToImage: true,
+            refresh: false,
+            now: 1_000,
+        }).status,
+        'unavailable'
+    );
+    assert.equal(
+        store.lookup({
+            toolName: 'file_scan',
+            refersToImage: true,
+            refresh: false,
+            now: 1_000,
+        }).status,
+        'unavailable'
+    );
+});
+
 test('ambiguous images are not guessed; refresh and missing session do not reuse', () => {
     const store = new ConversationImageContextStore();
     store.record({
