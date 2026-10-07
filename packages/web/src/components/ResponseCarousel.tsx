@@ -106,7 +106,20 @@ const ResponseCarousel = <T,>({
                     Previous
                 </button>
             )}
-            <div className={dotsClassName} aria-label={ariaLabel}>
+            <div
+                className={dotsClassName}
+                aria-label={ariaLabel}
+                onKeyDown={(event) => {
+                    if (event.key === 'ArrowLeft') {
+                        event.preventDefault();
+                        selectIndex(activeIndex - 1);
+                    }
+                    if (event.key === 'ArrowRight') {
+                        event.preventDefault();
+                        selectIndex(activeIndex + 1);
+                    }
+                }}
+            >
                 {items.map((item, index) => {
                     const isSelected = index === activeIndex;
                     return (
@@ -116,7 +129,7 @@ const ResponseCarousel = <T,>({
                             className={`${dotClassName}${isSelected ? ` ${selectedDotClassName}` : ''}`}
                             aria-label={getDotLabel(item, index)}
                             aria-pressed={isSelected}
-                            disabled={isTransitioning}
+                            aria-disabled={isTransitioning}
                             onClick={() => selectIndex(index)}
                         />
                     );
@@ -140,22 +153,7 @@ const ResponseCarousel = <T,>({
 
     const selectedItem = items[activeIndex]!;
     return (
-        <div
-            className="response-carousel"
-            aria-label={ariaLabel}
-            role="group"
-            tabIndex={0}
-            onKeyDown={(event) => {
-                if (event.key === 'ArrowLeft') {
-                    event.preventDefault();
-                    selectIndex(activeIndex - 1);
-                }
-                if (event.key === 'ArrowRight') {
-                    event.preventDefault();
-                    selectIndex(activeIndex + 1);
-                }
-            }}
-        >
+        <div className="response-carousel" aria-label={ariaLabel} role="group">
             <div
                 className={`${className}${isTransitioning ? ` ${className}--transitioning` : ''}`}
             >

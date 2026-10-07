@@ -322,6 +322,28 @@ test('public homepage explains prepared and live paths', async ({
     });
 });
 
+test('prepared response dots handle arrow keys without a fake carousel tab stop', async ({
+    page,
+}) => {
+    await page.goto('/');
+
+    const carousel = page.locator('.response-carousel').first();
+    const dots = page.locator('.public-home__scenario-dot');
+    await expect(carousel).not.toHaveAttribute('tabindex');
+    await expect(dots.nth(0)).toHaveAttribute('aria-pressed', 'true');
+
+    await dots.nth(0).focus();
+    await page.keyboard.press('ArrowRight');
+
+    await expect(dots.nth(1)).toHaveAttribute('aria-pressed', 'true');
+    await expect(dots.nth(0)).toBeFocused();
+
+    await page.keyboard.press('ArrowLeft');
+
+    await expect(dots.nth(0)).toHaveAttribute('aria-pressed', 'true');
+    await expect(dots.nth(0)).toBeFocused();
+});
+
 test('public homepage remains usable at mobile width', async ({ page }) => {
     const context = await page
         .context()

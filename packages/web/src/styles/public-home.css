@@ -524,7 +524,7 @@
         transform 160ms ease;
 }
 
-.public-home__scenario-dot:hover:not(:disabled),
+.public-home__scenario-dot:hover:not(:disabled):not([aria-disabled='true']),
 .public-home__scenario-dot:focus-visible {
     border-color: var(--public-focus);
     background: color-mix(in srgb, var(--public-focus) 30%, transparent);
@@ -538,7 +538,7 @@
     background: var(--public-focus);
 }
 
-.public-home__scenario-dot:disabled {
+.public-home__scenario-dot[aria-disabled='true'] {
     cursor: wait;
 }
 
