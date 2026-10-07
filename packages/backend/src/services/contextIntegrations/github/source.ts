@@ -38,9 +38,9 @@ const MAX_SOURCE_OUTPUT_BYTES = 12 * 1024;
 const MAX_SOURCE_LINES = 20;
 const MAX_SOURCE_LINE_LENGTH = 600;
 const SOURCE_REQUEST_PATTERN =
-    /\b(?:inspect|read|review|open|search|find|show|explain|look\s+at|check)\b/iu;
+    /\b(?:inspect|read|review|open|search|find|show|explain|look\s+at|check|examine)\b/iu;
 const SOURCE_REQUEST_NEGATION_PATTERN =
-    /\b(?:not|never|don't|dont|do\s+not|no\s+need\s+to|not\s+asking(?:\s+you)?\s+to)\b[^.!?\n]{0,80}\b(?:inspect|read|review|open|search|find|show|explain|look\s+at|check)\b/iu;
+    /\b(?:not|never|don't|dont|do\s+not|no\s+need\s+to|not\s+asking(?:\s+you)?\s+to)\b[^.!?\n]{0,80}\b(?:inspect|read|review|open|search|find|show|explain|look\s+at|check|examine)\b/iu;
 const RESTRICTED_PATH_SEGMENT_PATTERN =
     /(?:\.footnote|prompt|persona|profile[-_]?overlay)/iu;
 
@@ -120,6 +120,22 @@ const hasExplicitToken = (text: string, token: string): boolean => {
     return false;
 };
 
+const hasPositiveSourceRequest = (
+    text: string,
+    repository: string,
+    revision: string,
+    path: string
+): boolean =>
+    text
+        .split(/(?:[.!?;]\s+|\r?\n+)/u)
+        .some(
+            (clause) =>
+                SOURCE_REQUEST_PATTERN.test(clause) &&
+                isRepositorySlugInConversation(repository, [clause]) &&
+                hasExplicitToken(clause, revision) &&
+                hasExplicitToken(clause, path)
+        );
+
 const parseSelection = (
     value: unknown
 ): RepositorySourceSelection | undefined => {
@@ -175,7 +191,12 @@ export const normalizeGitHubSourceSelection = (
         ]) ||
         !hasExplicitToken(latestUserInput, selection.revision) ||
         !hasExplicitToken(latestUserInput, selection.path) ||
-        !SOURCE_REQUEST_PATTERN.test(latestUserInput) ||
+        !hasPositiveSourceRequest(
+            latestUserInput,
+            selection.repository,
+            selection.revision,
+            selection.path
+        ) ||
         SOURCE_REQUEST_NEGATION_PATTERN.test(latestUserInput) ||
         (selection.searchTerm !== undefined &&
             !latestUserInput.includes(selection.searchTerm))

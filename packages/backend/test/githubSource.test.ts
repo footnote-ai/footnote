@@ -193,11 +193,26 @@ test('source selection requires user-authored repo, ref, and path and rejects un
     for (const positiveRequest of [
         'Please check acme/repo at main in src/service.ts for target().',
         'Open acme/repo at main in src/service.ts and find target().',
+        'Please examine acme/repo at main in src/service.ts for target().',
     ]) {
         assert.deepEqual(
             normalizeGitHubSourceSelection(selection, positiveRequest),
             selection,
             positiveRequest
+        );
+    }
+    const sourceWithoutSearch = { ...selection, searchTerm: undefined };
+    for (const unrelatedRequest of [
+        'Check the docs. acme/repo at main in src/service.ts.',
+        'Search the web first. acme/repo at main in src/service.ts.',
+    ]) {
+        assert.equal(
+            normalizeGitHubSourceSelection(
+                sourceWithoutSearch,
+                unrelatedRequest
+            ),
+            undefined,
+            unrelatedRequest
         );
     }
 });
