@@ -997,77 +997,74 @@ test('voltagent runtime uses the native path for explicitly supported Ollama thi
     });
 });
 
-test('voltagent runtime records unknown Ollama think support and continues without the option', async () => {
-    let seenThinkSetting: unknown;
-    let seenOptions: VoltAgentGenerateTextOptions | undefined;
-    const runtime = createVoltAgentRuntime({
-        defaultModel: 'ollama/qwen3',
-        createExecutor: ({ ollama }) => {
-            seenThinkSetting = ollama?.think;
-            return {
-                async generateText(_messages, options) {
-                    seenOptions = options;
-                    return { text: 'Fallback answer.' };
+test('voltagent runtime records unsupported Ollama think settings and continues without the option', async (t) => {
+    const cases: Array<{
+        name: string;
+        requested: boolean | string;
+        supportedControls?: Array<boolean | string>;
+        reasonCode: 'capability_unknown' | 'capability_unsupported';
+    }> = [
+        {
+            name: 'unknown capability',
+            requested: false,
+            reasonCode: 'capability_unknown',
+        },
+        {
+            name: 'declared support excludes request',
+            requested: 'high',
+            supportedControls: ['low'],
+            reasonCode: 'capability_unsupported',
+        },
+    ];
+
+    for (const scenario of cases) {
+        await t.test(scenario.name, async () => {
+            let seenThinkSetting: unknown;
+            let seenOptions: VoltAgentGenerateTextOptions | undefined;
+            const runtime = createVoltAgentRuntime({
+                defaultModel: 'ollama/qwen3',
+                createExecutor: ({ ollama }) => {
+                    seenThinkSetting = ollama?.think;
+                    return {
+                        async generateText(_messages, options) {
+                            seenOptions = options;
+                            return { text: 'Fallback answer.' };
+                        },
+                    };
                 },
-            };
-        },
-    });
-
-    const result = await runtime.generate({
-        model: 'qwen3',
-        provider: 'ollama',
-        messages: [{ role: 'user', content: 'Answer this.' }],
-        capabilities: { canUseSearch: false },
-        providerOptions: { ollama: { think: false } },
-    });
-
-    assert.equal(seenThinkSetting, undefined);
-    assert.equal(seenOptions?.providerOptions, undefined);
-    assert.equal(result.text, 'Fallback answer.');
-    assert.deepEqual(result.providerSettingResolution, {
-        requested: { 'ollama.think': false },
-        ignored: [
-            { setting: 'ollama.think', reasonCode: 'capability_unknown' },
-        ],
-    });
-});
-
-test('voltagent runtime records unsupported Ollama think values and continues without the option', async () => {
-    let seenThinkSetting: unknown;
-    let seenOptions: VoltAgentGenerateTextOptions | undefined;
-    const runtime = createVoltAgentRuntime({
-        defaultModel: 'ollama/qwen3',
-        createExecutor: ({ ollama }) => {
-            seenThinkSetting = ollama?.think;
-            return {
-                async generateText(_messages, options) {
-                    seenOptions = options;
-                    return { text: 'Fallback answer.' };
+            });
+            const result = await runtime.generate({
+                model: 'qwen3',
+                provider: 'ollama',
+                messages: [{ role: 'user', content: 'Answer this.' }],
+                capabilities: {
+                    canUseSearch: false,
+                    ...(scenario.supportedControls === undefined
+                        ? {}
+                        : {
+                              supportedOllamaThinkingControls:
+                                  scenario.supportedControls,
+                          }),
                 },
-            };
-        },
-    });
+                providerOptions: {
+                    ollama: { think: scenario.requested },
+                },
+            });
 
-    const result = await runtime.generate({
-        model: 'qwen3',
-        provider: 'ollama',
-        messages: [{ role: 'user', content: 'Answer this.' }],
-        capabilities: {
-            canUseSearch: false,
-            supportedOllamaThinkingControls: ['low'],
-        },
-        providerOptions: { ollama: { think: 'high' } },
-    });
-
-    assert.equal(seenThinkSetting, undefined);
-    assert.equal(seenOptions?.providerOptions, undefined);
-    assert.equal(result.text, 'Fallback answer.');
-    assert.deepEqual(result.providerSettingResolution, {
-        requested: { 'ollama.think': 'high' },
-        ignored: [
-            { setting: 'ollama.think', reasonCode: 'capability_unsupported' },
-        ],
-    });
+            assert.equal(seenThinkSetting, undefined);
+            assert.equal(seenOptions?.providerOptions, undefined);
+            assert.equal(result.text, 'Fallback answer.');
+            assert.deepEqual(result.providerSettingResolution, {
+                requested: { 'ollama.think': scenario.requested },
+                ignored: [
+                    {
+                        setting: 'ollama.think',
+                        reasonCode: scenario.reasonCode,
+                    },
+                ],
+            });
+        });
+    }
 });
 
 test('Ollama native observations are allowlisted and reasoning-token usage stays unavailable', () => {

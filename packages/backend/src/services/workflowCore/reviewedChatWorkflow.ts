@@ -432,6 +432,17 @@ const toWorkflowAttemptSettings = (
     };
 };
 
+const toWorkflowRoutingAttemptProviderEvidence = (
+    attempt: RoutingChainAttemptLog
+): Pick<WorkflowAttemptRoutingRecord, 'settings' | 'providerObservations'> => ({
+    ...(attempt.providerSettingResolution === undefined
+        ? {}
+        : { settings: attempt.providerSettingResolution }),
+    ...(attempt.providerObservations === undefined
+        ? {}
+        : { providerObservations: attempt.providerObservations }),
+});
+
 const toWorkflowRoutingAttempts = (
     attempts: readonly RoutingChainAttemptLog[] | undefined
 ): WorkflowAttemptRoutingRecord[] | undefined => {
@@ -462,12 +473,7 @@ const toWorkflowRoutingAttempts = (
             ? {}
             : { completion: attempt.completion }),
         ...(attempt.usage === undefined ? {} : { usage: attempt.usage }),
-        ...(attempt.providerSettingResolution === undefined
-            ? {}
-            : { settings: attempt.providerSettingResolution }),
-        ...(attempt.providerObservations === undefined
-            ? {}
-            : { providerObservations: attempt.providerObservations }),
+        ...toWorkflowRoutingAttemptProviderEvidence(attempt),
         ...(attempt.cost === undefined
             ? {}
             : { cost: toWorkflowCost(attempt.cost) }),
