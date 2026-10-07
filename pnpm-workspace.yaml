@@ -94,7 +94,7 @@ catalog:
     nodemailer: ^9.1.1
     only: ^0.0.2
     openai: ^6.42.0
-    openid-client: ^6.8.4
+    openid-client: ^6.8.8
     opusscript: ^0.1.1
     postcss: ^8.5.28
     prettier: 3.9.6
