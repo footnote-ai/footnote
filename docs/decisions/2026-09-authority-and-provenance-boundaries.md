@@ -59,11 +59,14 @@ authorization. A model cannot authorize its own restart.
 
 ## What we need to be able to show
 
-The existing Run → Step → Attempt → Result records should explain what was
-requested, what authorized it, the allowed scope, and what actually happened.
-For delegated work, that includes who granted it, the parent relationship,
-limits, expiry, stop state, and any required confirmation. This describes the
-evidence we need, not a new schema or parallel record system.
+The existing Run → Step → Attempt → Result path is the intended evidence seam
+for future authorization decisions and observed outcomes: what was requested,
+what backend policy authorized it, the allowed scope, and what happened. Today
+these records do not contain general authorization or delegation grant/source
+lineage. For delegated work, future evidence also needs who granted it, the
+parent relationship, limits, expiry, stop state, and any required confirmation.
+This describes evidence we need, not current record fields, a new schema, or a
+parallel record system.
 
 Web-chat disconnect cancellation is now propagated from the handler into chat
 orchestration and planner/generation calls by [#775](https://github.com/footnote-ai/footnote/pull/775),
