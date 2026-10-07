@@ -11,6 +11,7 @@
         "@footnote/config-spec": "workspace:*",
         "@footnote/contracts": "workspace:*",
         "@footnote/prompts": "workspace:*",
+        "@footnote/repository-context": "workspace:*",
         "@resvg/resvg-js": "catalog:",
         "better-sqlite3": "catalog:",
         "dotenv": "catalog:",

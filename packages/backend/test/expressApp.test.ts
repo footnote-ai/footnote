@@ -100,6 +100,10 @@ test('express shell returns handled API dispatch without entering static fallbac
         handleSetupSessionPostRequest: createUnhandledRouteHandler,
         handleSetupSessionDeleteRequest: createUnhandledRouteHandler,
         handleSetupOperatorLinkPostRequest: createUnhandledRouteHandler,
+        handleSetupRepositoryContextConnectionStateRequest: createUnhandledRouteHandler,
+        handleSetupRepositoryContextConnectionTestRequest: createUnhandledRouteHandler,
+        handleSetupRepositoryContextPreviewRequest: createUnhandledRouteHandler,
+        handleSetupRepositoryContextLoadRequest: createUnhandledRouteHandler,
         handleStaticTransportRequest: async ({ res }) => {
             staticCalls += 1;
             res.statusCode = 200;
@@ -161,6 +165,10 @@ test('express shell falls through API dispatch and serves static transport', asy
         handleSetupSessionPostRequest: createUnhandledRouteHandler,
         handleSetupSessionDeleteRequest: createUnhandledRouteHandler,
         handleSetupOperatorLinkPostRequest: createUnhandledRouteHandler,
+        handleSetupRepositoryContextConnectionStateRequest: createUnhandledRouteHandler,
+        handleSetupRepositoryContextConnectionTestRequest: createUnhandledRouteHandler,
+        handleSetupRepositoryContextPreviewRequest: createUnhandledRouteHandler,
+        handleSetupRepositoryContextLoadRequest: createUnhandledRouteHandler,
         handleStaticTransportRequest: async ({ res }) => {
             staticCalls += 1;
             res.statusCode = 200;

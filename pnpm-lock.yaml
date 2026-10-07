@@ -372,6 +372,9 @@ importers:
       '@footnote/prompts':
         specifier: workspace:*
         version: link:../prompts
+      '@footnote/repository-context':
+        specifier: workspace:*
+        version: link:../repository-context
       '@resvg/resvg-js':
         specifier: 'catalog:'
         version: 2.6.2

@@ -41,6 +41,7 @@ type CreateSetupSessionHandlersDeps = {
     setupBaseUrl: string;
     logger: SetupSessionLogger;
     logRequest: LogRequest;
+    clearSetupSessionState?: (sessionId: string) => void;
 };
 
 type SetupSessionHandlers = {
@@ -302,6 +303,7 @@ export const createSetupSessionHandlers = ({
     setupBaseUrl,
     logger,
     logRequest,
+    clearSetupSessionState,
 }: CreateSetupSessionHandlersDeps): SetupSessionHandlers => {
     /**
      * @api.operationId: postSetupSession
@@ -424,6 +426,7 @@ export const createSetupSessionHandlers = ({
         const sessionId = readSetupSessionIdFromRequest(req);
         if (sessionId) {
             setupBootstrapService.clearSetupSession(sessionId);
+            clearSetupSessionState?.(sessionId);
         }
         const secure = requestUsesSecureTransport(req);
         res.statusCode = 204;

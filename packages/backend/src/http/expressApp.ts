@@ -216,6 +216,22 @@ type CreateExpressAppDeps = {
         req: http.IncomingMessage,
         res: http.ServerResponse
     ) => Promise<void>;
+    handleSetupRepositoryContextConnectionStateRequest: (
+        req: http.IncomingMessage,
+        res: http.ServerResponse
+    ) => Promise<void>;
+    handleSetupRepositoryContextConnectionTestRequest: (
+        req: http.IncomingMessage,
+        res: http.ServerResponse
+    ) => Promise<void>;
+    handleSetupRepositoryContextPreviewRequest: (
+        req: http.IncomingMessage,
+        res: http.ServerResponse
+    ) => Promise<void>;
+    handleSetupRepositoryContextLoadRequest: (
+        req: http.IncomingMessage,
+        res: http.ServerResponse
+    ) => Promise<void>;
     handleAuthLoginRequest: (
         req: http.IncomingMessage,
         res: http.ServerResponse
@@ -308,6 +324,10 @@ const createExpressApp = ({
     handleSetupSessionPostRequest,
     handleSetupSessionDeleteRequest,
     handleSetupOperatorLinkPostRequest,
+    handleSetupRepositoryContextConnectionStateRequest,
+    handleSetupRepositoryContextConnectionTestRequest,
+    handleSetupRepositoryContextPreviewRequest,
+    handleSetupRepositoryContextLoadRequest,
     handleAuthLoginRequest,
     handleAuthCallbackRequest,
     handleAuthSessionRequest,
@@ -378,6 +398,10 @@ const createExpressApp = ({
         handleSetupSessionPostRequest,
         handleSetupSessionDeleteRequest,
         handleSetupOperatorLinkPostRequest,
+        handleSetupRepositoryContextConnectionStateRequest,
+        handleSetupRepositoryContextConnectionTestRequest,
+        handleSetupRepositoryContextPreviewRequest,
+        handleSetupRepositoryContextLoadRequest,
         logRequest,
     });
     registerAuthRoutes({

@@ -170,6 +170,15 @@ export type {
     PostSetupSessionResponse,
     PostSetupOperatorLinkRequest,
     PostSetupOperatorLinkResponse,
+    PostSetupRepositoryContextConnectionTestRequest,
+    PostSetupRepositoryContextConnectionTestResponse,
+    GetSetupRepositoryContextConnectionStateResponse,
+    GetSetupRepositoryContextPreviewResponse,
+    PostSetupRepositoryContextLoadRequest,
+    PostSetupRepositoryContextLoadResponse,
+    SetupRepositoryContextLoadStatus,
+    SetupRepositoryContextPreviewFile,
+    SetupRepositoryContextTarget,
 } from './types.js';
 
 /**
@@ -272,6 +281,12 @@ export {
     PostSetupSessionResponseSchema,
     PostSetupOperatorLinkRequestSchema,
     PostSetupOperatorLinkResponseSchema,
+    PostSetupRepositoryContextConnectionTestRequestSchema,
+    PostSetupRepositoryContextConnectionTestResponseSchema,
+    GetSetupRepositoryContextConnectionStateResponseSchema,
+    GetSetupRepositoryContextPreviewResponseSchema,
+    PostSetupRepositoryContextLoadRequestSchema,
+    PostSetupRepositoryContextLoadResponseSchema,
     CitationSchema,
     GetTraceApiResponseSchema,
     GetIncidentResponseSchema,

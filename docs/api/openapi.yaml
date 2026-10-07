@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
     title: Footnote Backend API
-    version: 1.11.0
+    version: 1.12.0
     license:
         name: MIT + Hippocratic License v3 (HL3-CORE)
         url: docs/LICENSE_STRATEGY.md
@@ -1886,6 +1886,159 @@ paths:
                     $ref: '#/components/responses/Conflict'
                 '500':
                     $ref: '#/components/responses/InternalServerError'
+    /api/setup/repository-context/connection:
+        get:
+            operationId: getSetupRepositoryContextConnectionState
+            x-codeRefs:
+                - packages/backend/src/handlers/setupRepositoryContext.ts#createSetupRepositoryContextHandlers
+                - packages/contracts/src/web/types.ts#GetSetupRepositoryContextConnectionStateResponse
+            summary: Get the configured TrustGraph setup state
+            description: >-
+                Returns only server-approved TrustGraph target identifiers and routing metadata. Connection credentials
+                remain in backend runtime configuration and are never returned to the browser. Requires a valid setup
+                session.
+            tags:
+                - Admin
+            security:
+                - SetupSessionCookie: []
+            responses:
+                '200':
+                    description: 'Configured targets, or an empty list when TrustGraph is unavailable.'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/SetupRepositoryContextConnectionState'
+                '401':
+                    $ref: '#/components/responses/Unauthorized'
+                '405':
+                    $ref: '#/components/responses/MethodNotAllowed'
+    /api/setup/repository-context/connection/test:
+        post:
+            operationId: postSetupRepositoryContextConnectionTest
+            x-codeRefs:
+                - packages/backend/src/handlers/setupRepositoryContext.ts#createSetupRepositoryContextHandlers
+                - packages/contracts/src/web/types.ts#PostSetupRepositoryContextConnectionTestRequest
+                - packages/contracts/src/web/types.ts#PostSetupRepositoryContextConnectionTestResponse
+            summary: Test a configured TrustGraph target
+            description: >-
+                Tests a target already approved in backend runtime configuration. The request selects only a target ID;
+                credentials and service URLs cannot be supplied by the browser. Requires a setup session and its CSRF
+                token.
+            tags:
+                - Admin
+            security:
+                - SetupSessionCookie: []
+            parameters:
+                - $ref: '#/components/parameters/SetupCsrfHeader'
+            requestBody:
+                required: true
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/SetupRepositoryContextConnectionTestRequest'
+            responses:
+                '200':
+                    description: The configured target is reachable.
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/SetupRepositoryContextConnectionTestResponse'
+                '400':
+                    $ref: '#/components/responses/BadRequest'
+                '401':
+                    $ref: '#/components/responses/Unauthorized'
+                '403':
+                    $ref: '#/components/responses/Forbidden'
+                '405':
+                    $ref: '#/components/responses/MethodNotAllowed'
+                '409':
+                    $ref: '#/components/responses/Conflict'
+                '413':
+                    $ref: '#/components/responses/PayloadTooLarge'
+                '502':
+                    description: TrustGraph connection test failed.
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ErrorResponse'
+    /api/setup/repository-context/preview:
+        get:
+            operationId: getSetupRepositoryContextPreview
+            x-codeRefs:
+                - packages/backend/src/handlers/setupRepositoryContext.ts#createSetupRepositoryContextHandlers
+                - packages/contracts/src/web/types.ts#GetSetupRepositoryContextPreviewResponse
+            summary: Preview the prepared repository context bundle
+            description: >-
+                Lists bounded file paths and sizes from the deployment-prepared bundle only. The backend does not use a
+                checkout or Git for this operation. Requires a valid setup session.
+            tags:
+                - Admin
+            security:
+                - SetupSessionCookie: []
+            responses:
+                '200':
+                    description: 'Prepared bundle revision, selected file count, total bytes, and skipped files.'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/SetupRepositoryContextPreviewResponse'
+                '401':
+                    $ref: '#/components/responses/Unauthorized'
+                '405':
+                    $ref: '#/components/responses/MethodNotAllowed'
+                '503':
+                    $ref: '#/components/responses/ServiceUnavailable'
+    /api/setup/repository-context/load:
+        post:
+            operationId: postSetupRepositoryContextLoad
+            x-codeRefs:
+                - packages/backend/src/handlers/setupRepositoryContext.ts#createSetupRepositoryContextHandlers
+                - packages/contracts/src/web/types.ts#PostSetupRepositoryContextLoadRequest
+                - packages/contracts/src/web/types.ts#PostSetupRepositoryContextLoadResponse
+            summary: Load the prepared repository context once during setup
+            description: >-
+                Reconciles only the approved prepared bundle with a target already approved in backend runtime
+                configuration. Credentials remain in backend runtime configuration; the browser supplies only a target
+                ID and receives bounded per-file status results. Requires a setup session and its CSRF token.
+            tags:
+                - Admin
+            security:
+                - SetupSessionCookie: []
+            parameters:
+                - $ref: '#/components/parameters/SetupCsrfHeader'
+            requestBody:
+                required: true
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/SetupRepositoryContextLoadRequest'
+            responses:
+                '200':
+                    description: Per-file load statuses and result counts; repository contents and credentials are omitted.
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/SetupRepositoryContextLoadResponse'
+                '400':
+                    $ref: '#/components/responses/BadRequest'
+                '401':
+                    $ref: '#/components/responses/Unauthorized'
+                '403':
+                    $ref: '#/components/responses/Forbidden'
+                '405':
+                    $ref: '#/components/responses/MethodNotAllowed'
+                '409':
+                    $ref: '#/components/responses/Conflict'
+                '413':
+                    $ref: '#/components/responses/PayloadTooLarge'
+                '502':
+                    description: Repository context load failed.
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ErrorResponse'
+                '503':
+                    $ref: '#/components/responses/ServiceUnavailable'
     /api/admin/settings/schema:
         get:
             operationId: getAdminSettingsSchema
@@ -6395,6 +6548,213 @@ components:
                 - expiresAt
                 - settingsState
             additionalProperties: false
+        SetupRepositoryContextTarget:
+            type: object
+            properties:
+                id:
+                    type: string
+                flow:
+                    type: string
+                collection:
+                    type: string
+                workspace:
+                    type: string
+            required:
+                - id
+                - flow
+                - collection
+                - workspace
+            additionalProperties: false
+        SetupRepositoryContextConnectionState:
+            type: object
+            description: Backend-provisioned TrustGraph targets; credentials are never returned.
+            properties:
+                configured:
+                    type: boolean
+                targets:
+                    type: array
+                    maxItems: 8
+                    items:
+                        $ref: '#/components/schemas/SetupRepositoryContextTarget'
+            required:
+                - configured
+                - targets
+            additionalProperties: false
+            x-codeRefs:
+                - packages/contracts/src/web/types.ts#GetSetupRepositoryContextConnectionStateResponse
+        SetupRepositoryContextConnectionTestRequest:
+            type: object
+            properties:
+                targetId:
+                    type: string
+                    minLength: 1
+                    maxLength: 128
+            required:
+                - targetId
+            additionalProperties: false
+            x-codeRefs:
+                - packages/contracts/src/web/types.ts#PostSetupRepositoryContextConnectionTestRequest
+        SetupRepositoryContextConnectionTestResponse:
+            type: object
+            properties:
+                connected:
+                    type: boolean
+                    const: true
+                targetId:
+                    type: string
+                testedAt:
+                    type: string
+                    format: date-time
+            required:
+                - connected
+                - targetId
+                - testedAt
+            additionalProperties: false
+            x-codeRefs:
+                - packages/contracts/src/web/types.ts#PostSetupRepositoryContextConnectionTestResponse
+        SetupRepositoryContextPreviewFile:
+            type: object
+            properties:
+                path:
+                    type: string
+                sizeBytes:
+                    type: integer
+                    minimum: 0
+            required:
+                - path
+                - sizeBytes
+            additionalProperties: false
+        SetupRepositoryContextPreviewResponse:
+            type: object
+            properties:
+                revision:
+                    type: string
+                    pattern: '^[a-f0-9]{7,64}$'
+                fileCount:
+                    type: integer
+                    minimum: 0
+                totalBytes:
+                    type: integer
+                    minimum: 0
+                files:
+                    type: array
+                    maxItems: 250
+                    items:
+                        $ref: '#/components/schemas/SetupRepositoryContextPreviewFile'
+                skipped:
+                    type: array
+                    items:
+                        type: object
+                        properties:
+                            path:
+                                type: string
+                            reason:
+                                type: string
+                        required:
+                            - path
+                            - reason
+                        additionalProperties: false
+            required:
+                - revision
+                - fileCount
+                - totalBytes
+                - files
+                - skipped
+            additionalProperties: false
+            x-codeRefs:
+                - packages/contracts/src/web/types.ts#GetSetupRepositoryContextPreviewResponse
+        SetupRepositoryContextLoadRequest:
+            type: object
+            properties:
+                targetId:
+                    type: string
+                    minLength: 1
+                    maxLength: 128
+            required:
+                - targetId
+            additionalProperties: false
+            x-codeRefs:
+                - packages/contracts/src/web/types.ts#PostSetupRepositoryContextLoadRequest
+        SetupRepositoryContextLoadCounts:
+            type: object
+            properties:
+                added:
+                    type: integer
+                    minimum: 0
+                changed:
+                    type: integer
+                    minimum: 0
+                unchanged:
+                    type: integer
+                    minimum: 0
+                skipped:
+                    type: integer
+                    minimum: 0
+                failed:
+                    type: integer
+                    minimum: 0
+            required:
+                - added
+                - changed
+                - unchanged
+                - skipped
+                - failed
+            additionalProperties: false
+        SetupRepositoryContextLoadItem:
+            type: object
+            properties:
+                path:
+                    type: string
+                status:
+                    type: string
+                    enum:
+                        - added
+                        - changed
+                        - unchanged
+                        - skipped
+                        - failed
+                sizeBytes:
+                    type: integer
+                    minimum: 0
+            required:
+                - path
+                - status
+            additionalProperties: false
+        SetupRepositoryContextLoadResponse:
+            type: object
+            properties:
+                repositoryId:
+                    type: string
+                startedAt:
+                    type: string
+                    format: date-time
+                completedAt:
+                    type: string
+                    format: date-time
+                selectedFileCount:
+                    type: integer
+                    minimum: 0
+                selectedBytes:
+                    type: integer
+                    minimum: 0
+                counts:
+                    $ref: '#/components/schemas/SetupRepositoryContextLoadCounts'
+                items:
+                    type: array
+                    maxItems: 500
+                    items:
+                        $ref: '#/components/schemas/SetupRepositoryContextLoadItem'
+            required:
+                - repositoryId
+                - startedAt
+                - completedAt
+                - selectedFileCount
+                - selectedBytes
+                - counts
+                - items
+            additionalProperties: false
+            x-codeRefs:
+                - packages/contracts/src/web/types.ts#PostSetupRepositoryContextLoadResponse
         AdminSettingsSchemaField:
             type: object
             properties:
