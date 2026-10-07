@@ -76,6 +76,43 @@ test('image context is conversation-scoped and expires at a fixed 24 hours', () 
     );
 });
 
+test('retained scan evidence has a bounded number of facts', () => {
+    const store = new ConversationImageContextStore();
+    store.record({
+        scope,
+        imageUrl: 'https://images.test/a',
+        result: {
+            ...result,
+            evidence: {
+                content: Array.from(
+                    { length: 20 },
+                    (_, index) => `fact ${index}`
+                ),
+            },
+        },
+        now: 1_000,
+    });
+
+    const lookup = store.lookup({
+        scope,
+        imageUrl: 'https://images.test/a',
+        toolName: 'file_scan',
+        refersToImage: true,
+        refresh: false,
+        now: 1_000,
+    });
+
+    assert.equal(lookup.status, 'reused');
+    if (lookup.status === 'reused') {
+        assert.equal(
+            'evidence' in lookup.result
+                ? lookup.result.evidence?.content.length
+                : undefined,
+            8
+        );
+    }
+});
+
 test('ambiguous images are not guessed; refresh and missing session do not reuse', () => {
     const store = new ConversationImageContextStore();
     store.record({

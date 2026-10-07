@@ -12,6 +12,7 @@ import { createHash } from 'node:crypto';
 const IMAGE_CONTEXT_TTL_MS = 24 * 60 * 60 * 1000;
 const MAX_CONTEXTS_PER_CONVERSATION = 8;
 const MAX_ACTIVE_CONVERSATIONS = 1_000;
+const MAX_EVIDENCE_FACTS = 8;
 const MAX_EVIDENCE_CHARS = 1_200;
 const MAX_SOURCES = 4;
 const MAX_SOURCE_URL_CHARS = 2_048;
@@ -53,9 +54,9 @@ const boundedResult = (
         executionContext: result.executionContext,
         ...(result.evidence && {
             evidence: {
-                content: result.evidence.content.map((fact) =>
-                    fact.slice(0, MAX_EVIDENCE_CHARS)
-                ),
+                content: result.evidence.content
+                    .slice(0, MAX_EVIDENCE_FACTS)
+                    .map((fact) => fact.slice(0, MAX_EVIDENCE_CHARS)),
             },
         }),
         ...(result.sources && {
