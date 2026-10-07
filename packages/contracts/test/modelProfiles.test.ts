@@ -249,26 +249,22 @@ test('ModelProfileCatalogSchema rejects a default when supported efforts are abs
     }
 });
 
-test('ModelProfileCatalogSchema rejects duplicate profile ids with a clear error', () => {
+test('ModelProfileCatalogSchema reports duplicate profile ids in deterministic order', () => {
+    const profile = {
+        description: 'Test profile',
+        provider: 'openai',
+        providerModel: 'gpt-5-mini',
+        enabled: true,
+        tierBindings: ['text-fast'],
+        capabilities: { canUseSearch: true },
+    };
     const parsed = ModelProfileCatalogSchema.safeParse([
-        {
-            id: 'openai-text-fast',
-            description: 'Fast profile',
-            provider: 'openai',
-            providerModel: 'gpt-5-mini',
-            enabled: true,
-            tierBindings: ['text-fast'],
-            capabilities: { canUseSearch: true },
-        },
-        {
-            id: 'openai-text-fast',
-            description: 'Duplicate id profile',
-            provider: 'openai',
-            providerModel: 'gpt-5',
-            enabled: true,
-            tierBindings: ['text-quality'],
-            capabilities: { canUseSearch: true },
-        },
+        { ...profile, id: 'zulu-profile' },
+        { ...profile, id: 'alpha-profile' },
+        { ...profile, id: 'mango-profile' },
+        { ...profile, id: 'mango-profile' },
+        { ...profile, id: 'zulu-profile' },
+        { ...profile, id: 'alpha-profile' },
     ]);
 
     assert.equal(parsed.success, false);
@@ -279,5 +275,8 @@ test('ModelProfileCatalogSchema rejects duplicate profile ids with a clear error
     const message = parsed.error.issues
         .map((issue) => issue.message)
         .join('\n');
-    assert.match(message, /Duplicate model profile id\(s\): openai-text-fast/);
+    assert.equal(
+        message,
+        'Duplicate model profile id(s): alpha-profile, mango-profile, zulu-profile'
+    );
 });

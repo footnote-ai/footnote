@@ -316,7 +316,13 @@ export const ModelProfileCatalogSchema = z
         if (duplicates.size > 0) {
             context.addIssue({
                 code: z.ZodIssueCode.custom,
-                message: `Duplicate model profile id(s): ${Array.from(duplicates).sort().join(', ')}`,
+                message: `Duplicate model profile id(s): ${Array.from(
+                    duplicates
+                )
+                    .sort((left, right) =>
+                        left < right ? -1 : left > right ? 1 : 0
+                    )
+                    .join(', ')}`,
             });
         }
     });
