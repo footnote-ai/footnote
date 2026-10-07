@@ -29,7 +29,7 @@ const normalizeInitialIndex = (length: number, index: number): number =>
 
 /**
  * Shows one prepared response at a time. The delayed handoff preserves the
- * landing page transition while keeping dots and arrows keyboard accessible.
+ * landing page transition while keeping native selection controls keyboard accessible.
  */
 const ResponseCarousel = <T,>({
     items,
@@ -100,26 +100,13 @@ const ResponseCarousel = <T,>({
                     type="button"
                     className="response-carousel__control"
                     aria-label={previousLabel}
-                    disabled={isTransitioning || activeIndex === 0}
+                    aria-disabled={isTransitioning || activeIndex === 0}
                     onClick={() => selectIndex(activeIndex - 1)}
                 >
                     Previous
                 </button>
             )}
-            <div
-                className={dotsClassName}
-                aria-label={ariaLabel}
-                onKeyDown={(event) => {
-                    if (event.key === 'ArrowLeft') {
-                        event.preventDefault();
-                        selectIndex(activeIndex - 1);
-                    }
-                    if (event.key === 'ArrowRight') {
-                        event.preventDefault();
-                        selectIndex(activeIndex + 1);
-                    }
-                }}
-            >
+            <div className={dotsClassName} aria-label={ariaLabel}>
                 {items.map((item, index) => {
                     const isSelected = index === activeIndex;
                     return (
@@ -140,7 +127,7 @@ const ResponseCarousel = <T,>({
                     type="button"
                     className="response-carousel__control"
                     aria-label={nextLabel}
-                    disabled={
+                    aria-disabled={
                         isTransitioning || activeIndex === items.length - 1
                     }
                     onClick={() => selectIndex(activeIndex + 1)}

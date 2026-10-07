@@ -6,7 +6,24 @@
  * @footnote-ethics: medium - It protects visible provenance and trace access in a user-facing answer.
  */
 import { expect, test } from '@playwright/test';
+import { configureRuntime } from './chat-test-helpers';
 import outputCase from './fixtures/ordinary-text-answer.json';
+
+const tabToButton = async (
+    page: import('@playwright/test').Page,
+    label: string
+): Promise<void> => {
+    for (let tabCount = 0; tabCount < 100; tabCount += 1) {
+        await page.keyboard.press('Tab');
+        const activeLabel = await page.evaluate(() =>
+            document.activeElement?.getAttribute('aria-label')
+        );
+        if (activeLabel === label) {
+            return;
+        }
+    }
+    throw new Error(`Could not Tab to button: ${label}`);
+};
 
 test('shows one ordinary answer with its provenance', async ({
     page,
@@ -322,7 +339,7 @@ test('public homepage explains prepared and live paths', async ({
     });
 });
 
-test('prepared response dots handle arrow keys without a fake carousel tab stop', async ({
+test('prepared response dots are native Tab stops and retain focus while selecting', async ({
     page,
 }) => {
     await page.goto('/');
@@ -332,16 +349,101 @@ test('prepared response dots handle arrow keys without a fake carousel tab stop'
     await expect(carousel).not.toHaveAttribute('tabindex');
     await expect(dots.nth(0)).toHaveAttribute('aria-pressed', 'true');
 
-    await dots.nth(0).focus();
-    await page.keyboard.press('ArrowRight');
-
+    const firstDotLabel = await dots.nth(0).getAttribute('aria-label');
+    if (firstDotLabel === null) {
+        throw new Error('First prepared response dot is missing its label.');
+    }
+    await tabToButton(page, firstDotLabel);
+    await expect(dots.nth(0)).toBeFocused();
+    await page.keyboard.press('Tab');
+    await expect(dots.nth(1)).toBeFocused();
+    const selectSecondResponse = page.keyboard.press('Enter');
+    await expect(dots.nth(1)).toHaveAttribute('aria-disabled', 'true');
+    await expect(dots.nth(1)).toBeFocused();
+    await selectSecondResponse;
     await expect(dots.nth(1)).toHaveAttribute('aria-pressed', 'true');
-    await expect(dots.nth(0)).toBeFocused();
+    await expect(dots.nth(1)).toHaveAttribute('aria-disabled', 'false');
+    await expect(dots.nth(1)).toBeFocused();
+});
 
-    await page.keyboard.press('ArrowLeft');
+test('trace response controls work from Tab stops and keep focus during transitions', async ({
+    page,
+}) => {
+    const responseId = 'response-carousel-test';
+    await configureRuntime(page);
+    await page.route(`**/api/traces/${responseId}`, async (route) => {
+        await route.fulfill({
+            contentType: 'application/json',
+            body: JSON.stringify({
+                ...outputCase.response.metadata,
+                displayIntegrity: { status: 'complete', unavailableFields: [] },
+            }),
+        });
+    });
+    await page.route(
+        `**/api/traces/${responseId}/response-versions`,
+        async (route) => {
+            await route.fulfill({
+                contentType: 'application/json',
+                body: JSON.stringify({
+                    responseId,
+                    candidates: [
+                        {
+                            id: 'candidate-initial',
+                            workflowStepId: 'step-initial',
+                            sequence: 0,
+                            stage: 'initial_generation',
+                            state: 'superseded',
+                            text: 'Initial response text.',
+                        },
+                        {
+                            id: 'candidate-revised',
+                            parentCandidateId: 'candidate-initial',
+                            workflowStepId: 'step-revision',
+                            sequence: 1,
+                            stage: 'revision',
+                            state: 'selected',
+                            text: 'Revised response text.',
+                        },
+                    ],
+                }),
+            });
+        }
+    );
 
-    await expect(dots.nth(0)).toHaveAttribute('aria-pressed', 'true');
-    await expect(dots.nth(0)).toBeFocused();
+    await page.goto(`/traces/${responseId}`);
+    await expect(page.getByText('Revised response text.')).toBeVisible();
+
+    const previous = page.getByRole('button', {
+        name: 'Show previous response version',
+    });
+    const next = page.getByRole('button', {
+        name: 'Show next response version',
+    });
+    await expect(next).toHaveAttribute('aria-disabled', 'true');
+    await tabToButton(page, 'Show next response version');
+    await expect(next).toBeFocused();
+    await page.keyboard.press('Enter');
+    await expect(page.getByText('Revised response text.')).toBeVisible();
+    await expect(next).toBeFocused();
+
+    await tabToButton(page, 'Show previous response version');
+    await expect(previous).toBeFocused();
+    const selectPreviousResponse = page.keyboard.press('Enter');
+    await expect(previous).toHaveAttribute('aria-disabled', 'true');
+    await expect(previous).toBeFocused();
+    await selectPreviousResponse;
+    await expect(page.getByText('Initial response text.')).toBeVisible();
+    await expect(previous).toBeFocused();
+
+    await tabToButton(page, 'Show next response version');
+    await expect(next).toBeFocused();
+    const selectNextResponse = page.keyboard.press('Enter');
+    await expect(next).toHaveAttribute('aria-disabled', 'true');
+    await expect(next).toBeFocused();
+    await selectNextResponse;
+    await expect(page.getByText('Revised response text.')).toBeVisible();
+    await expect(next).toBeFocused();
 });
 
 test('public homepage remains usable at mobile width', async ({ page }) => {
