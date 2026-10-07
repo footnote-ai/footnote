@@ -732,7 +732,11 @@ export const createImageDescriptionAdapter = ({
                 [400, 404, 422].includes(response.status)
             ) {
                 usedJsonFallback = true;
-                await response.body?.cancel();
+                try {
+                    await response.body?.cancel();
+                } catch {
+                    // Response cleanup must not prevent the JSON fallback request.
+                }
                 response = await makeRequest(false);
             }
 
