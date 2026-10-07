@@ -419,7 +419,7 @@ class ServerNodeSupervisor {
             backendBaseUrl,
             personaRoster
         );
-        const child = spawn('node', ['dist/index.js'], {
+        const child = spawn(process.execPath, ['dist/index.js'], {
             cwd: DISCORD_BOT_WORKDIR,
             env: nodeEnv,
             stdio: 'inherit',
