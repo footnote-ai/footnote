@@ -197,13 +197,28 @@ export class EventManager {
                 continue;
             }
 
+            // Discord's event emitter ignores callback return values, so catch
+            // event failures here instead of returning an unobserved promise.
+            const executeEvent = (...args: unknown[]): void => {
+                try {
+                    void Promise.resolve(event.execute(...args)).catch(
+                        (error: unknown) => {
+                            logger.error(
+                                `Error in event ${event.name}:`,
+                                error
+                            );
+                        }
+                    );
+                } catch (error) {
+                    logger.error(`Error in event ${event.name}:`, error);
+                }
+            };
+
             // Register the event
             if (event.once) {
-                this.client.once(event.name, (...args) =>
-                    event.execute(...args)
-                );
+                this.client.once(event.name, executeEvent);
             } else {
-                this.client.on(event.name, (...args) => event.execute(...args));
+                this.client.on(event.name, executeEvent);
             }
 
             // Track that we've registered this event name

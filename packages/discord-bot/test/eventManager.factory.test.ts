@@ -14,7 +14,7 @@ import { Collection, Client, GatewayIntentBits } from 'discord.js';
 
 import { EventManager } from '../src/utils/eventManager.js';
 
-test('EventManager loads events through createEvent factories', async () => {
+test('EventManager loads factory events and handles rejected callbacks', async () => {
     const tempDir = await mkdtemp(path.join(os.tmpdir(), 'footnote-events-'));
     const eventFile = path.join(tempDir, 'FactoryEvent.js');
 
@@ -28,6 +28,7 @@ test('EventManager loads events through createEvent factories', async () => {
             '    once: false,',
             '    execute: () => {',
             "      client.handlers.set('factoryExecuted', true);",
+            "      return Promise.reject(new Error('event failed'));",
             '    },',
             '  };',
             '};',
@@ -45,6 +46,10 @@ test('EventManager loads events through createEvent factories', async () => {
     };
 
     const manager = new EventManager(client, { contextManager: null });
+    const unhandledRejections: unknown[] = [];
+    const recordUnhandledRejection = (reason: unknown): void => {
+        unhandledRejections.push(reason);
+    };
 
     try {
         await manager.loadEvents(tempDir);
@@ -56,9 +61,13 @@ test('EventManager loads events through createEvent factories', async () => {
             dependencyCount: 1,
         });
 
+        process.on('unhandledRejection', recordUnhandledRejection);
         testClient.emit('ready');
+        await new Promise<void>((resolve) => setImmediate(resolve));
         assert.equal(client.handlers.get('factoryExecuted'), true);
+        assert.deepEqual(unhandledRejections, []);
     } finally {
+        process.off('unhandledRejection', recordUnhandledRejection);
         testClient.destroy();
         await rm(tempDir, { recursive: true, force: true });
     }
