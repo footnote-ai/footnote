@@ -14,7 +14,6 @@ export const EMBED_LAYOUT_CHANGE_EVENT = 'footnote:embed-layout-change';
 interface EmbedHeightMessengerOptions {
     document?: Document;
     root?: HTMLElement | null;
-    targetOrigin?: string;
     targetWindow?: Window | null;
 }
 
@@ -50,14 +49,23 @@ export function measureEmbedHeight(
 export function createEmbedHeightMessenger({
     document: documentRef = document,
     root,
-    targetOrigin = '*',
     targetWindow = window.parent,
 }: EmbedHeightMessengerOptions) {
+    let targetOrigin: string | null = null;
+    try {
+        const referrerOrigin = new URL(documentRef.referrer).origin;
+        if (referrerOrigin !== 'null') {
+            targetOrigin = referrerOrigin;
+        }
+    } catch {
+        // A missing or opaque parent referrer cannot be safely targeted.
+    }
+
     let frameId: number | null = null;
     let lastHeight: number | null = null;
 
     const postHeight = (): number | null => {
-        if (!targetWindow || targetWindow === window) {
+        if (!targetWindow || targetWindow === window || !targetOrigin) {
             return null;
         }
 
