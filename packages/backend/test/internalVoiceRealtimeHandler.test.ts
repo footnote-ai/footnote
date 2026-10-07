@@ -411,7 +411,17 @@ test('internal realtime handler starts a session and forwards session.ready to t
             },
         });
 
+        const completeUsageResponse = waitForJsonMessage(ws);
         session.emitServerEvent({
+            type: 'response.done',
+            responseId: 'resp_123',
+            usage: {
+                tokensPrompt: 50,
+                tokensCompletion: 25,
+                model: 'gpt-realtime',
+            },
+        });
+        assert.deepEqual(await completeUsageResponse, {
             type: 'response.done',
             responseId: 'resp_123',
             usage: {
@@ -426,6 +436,62 @@ test('internal realtime handler starts a session and forwards session.ready to t
         assert.equal(harness.recordedUsage[0].model, 'gpt-realtime');
         assert.equal(harness.recordedUsage[0].promptTokens, 50);
         assert.equal(harness.recordedUsage[0].completionTokens, 25);
+
+        const incompleteUsageResponse = waitForJsonMessage(ws);
+        session.emitServerEvent({
+            type: 'response.done',
+            responseId: 'resp_missing_output_usage',
+            usage: {
+                tokensPrompt: 0,
+                model: 'gpt-realtime',
+            },
+        });
+
+        assert.deepEqual(await incompleteUsageResponse, {
+            type: 'response.done',
+            responseId: 'resp_missing_output_usage',
+            usage: {
+                tokensPrompt: 0,
+                model: 'gpt-realtime',
+            },
+        });
+        assert.equal(harness.recordedUsage.length, 1);
+
+        const unavailableUsageResponse = waitForJsonMessage(ws);
+        session.emitServerEvent({
+            type: 'response.done',
+            responseId: 'resp_usage_unavailable',
+        });
+
+        assert.deepEqual(await unavailableUsageResponse, {
+            type: 'response.done',
+            responseId: 'resp_usage_unavailable',
+        });
+        assert.equal(harness.recordedUsage.length, 1);
+
+        const zeroUsageResponse = waitForJsonMessage(ws);
+        session.emitServerEvent({
+            type: 'response.done',
+            responseId: 'resp_reported_zero_usage',
+            usage: {
+                tokensPrompt: 0,
+                tokensCompletion: 0,
+                model: 'gpt-realtime',
+            },
+        });
+
+        assert.deepEqual(await zeroUsageResponse, {
+            type: 'response.done',
+            responseId: 'resp_reported_zero_usage',
+            usage: {
+                tokensPrompt: 0,
+                tokensCompletion: 0,
+                model: 'gpt-realtime',
+            },
+        });
+        assert.equal(harness.recordedUsage.length, 2);
+        assert.equal(harness.recordedUsage[1].promptTokens, 0);
+        assert.equal(harness.recordedUsage[1].completionTokens, 0);
 
         await closeWebSocket(ws);
     } finally {

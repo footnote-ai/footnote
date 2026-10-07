@@ -151,33 +151,38 @@ export const createInternalVoiceRealtimeHandler = ({
         ) => {
             if (event.type === 'response.done') {
                 const usage = event.usage;
-                const model = usage?.model ?? 'unknown';
-                const promptTokens = usage?.tokensPrompt ?? 0;
-                const completionTokens = usage?.tokensCompletion ?? 0;
-                const estimatedCost = estimateBackendVoiceRealtimeCost(
-                    model,
-                    promptTokens,
-                    completionTokens
-                );
-
-                try {
-                    recordUsage({
-                        feature: 'voice_realtime',
+                if (
+                    usage?.tokensPrompt !== undefined &&
+                    usage.tokensCompletion !== undefined
+                ) {
+                    const model = usage.model ?? 'unknown';
+                    const promptTokens = usage.tokensPrompt;
+                    const completionTokens = usage.tokensCompletion;
+                    const estimatedCost = estimateBackendVoiceRealtimeCost(
                         model,
                         promptTokens,
-                        completionTokens,
-                        totalTokens: promptTokens + completionTokens,
-                        ...estimatedCost,
-                        timestamp: Date.now(),
-                    });
-                } catch (error) {
-                    realtimeLogger.warn(
-                        `Internal voice realtime usage recording failed: ${
-                            error instanceof Error
-                                ? error.message
-                                : String(error)
-                        }`
+                        completionTokens
                     );
+
+                    try {
+                        recordUsage({
+                            feature: 'voice_realtime',
+                            model,
+                            promptTokens,
+                            completionTokens,
+                            totalTokens: promptTokens + completionTokens,
+                            ...estimatedCost,
+                            timestamp: Date.now(),
+                        });
+                    } catch (error) {
+                        realtimeLogger.warn(
+                            `Internal voice realtime usage recording failed: ${
+                                error instanceof Error
+                                    ? error.message
+                                    : String(error)
+                            }`
+                        );
+                    }
                 }
             }
 
