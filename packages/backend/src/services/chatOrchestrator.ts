@@ -55,6 +55,7 @@ import { resolveWorkflowModeDecision } from './workflowProfileRegistry.js';
 import { buildSteerabilityControls } from './steerabilityControls.js';
 import type { WeatherForecastTool } from './contextIntegrations/weather/index.js';
 import type { InternalImageDescriptionTaskService } from './internalText.js';
+import { createModelDebugCapturingRuntime } from './modelDebugCapture.js';
 import { resolveWeatherClarificationContinuation } from './tools/weatherClarificationContinuation.js';
 import { createWeatherForecastContextStepExecutor } from './contextIntegrations/weather/index.js';
 import { createFileScanningContextStepExecutor } from './contextIntegrations/fileScanning/index.js';
@@ -188,7 +189,7 @@ const combinePlannerUsage = (
  * generation.
  */
 export const createChatOrchestrator = ({
-    generationRuntime,
+    generationRuntime: rawGenerationRuntime,
     storeTrace,
     buildResponseMetadata,
     defaultModel = runtimeConfig.modelProfiles.defaultProfileId,
@@ -198,6 +199,8 @@ export const createChatOrchestrator = ({
     internalImageDescriptionTaskService,
     alertRouter,
 }: CreateChatOrchestratorOptions) => {
+    const generationRuntime =
+        createModelDebugCapturingRuntime(rawGenerationRuntime);
     const chatOrchestratorLogger =
         typeof logger.child === 'function'
             ? logger.child({ module: 'chatOrchestrator' })

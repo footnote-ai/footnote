@@ -163,6 +163,23 @@ export interface SqliteTraceStoreConfig {
     dbPath: string;
 }
 
+export type ModelDebugCaptureRecord = {
+    runId: string;
+    stepId: string;
+    attempt: number;
+    invocation: number;
+    inputText: string;
+    inputTruncated: boolean;
+    inputRedacted: boolean;
+    outputText?: string;
+    outputCandidateId?: string;
+    outputTruncated?: boolean;
+    outputRedacted?: boolean;
+    outputUnavailable?: boolean;
+    captureLimitReached?: boolean;
+    omittedInvocationCount?: number;
+};
+
 type PublicResponseState = 'published' | 'expired' | 'revoked' | 'unavailable';
 type PublicResponseResult =
     | {
@@ -252,6 +269,24 @@ export class SqliteTraceStore {
       );
       CREATE INDEX IF NOT EXISTS idx_provenance_response_candidates_response_sequence
         ON provenance_response_candidates (response_id, sequence_number);
+      CREATE TABLE IF NOT EXISTS model_debug_captures (
+        response_id TEXT NOT NULL REFERENCES provenance_traces(response_id) ON DELETE CASCADE,
+        run_id TEXT NOT NULL,
+        step_id TEXT NOT NULL,
+        attempt_number INTEGER NOT NULL,
+        invocation_number INTEGER NOT NULL,
+        input_text TEXT NOT NULL,
+        input_truncated INTEGER NOT NULL,
+        input_redacted INTEGER NOT NULL,
+        output_text TEXT,
+        output_candidate_id TEXT,
+        output_truncated INTEGER,
+        output_redacted INTEGER,
+        output_unavailable INTEGER,
+        capture_limit_reached INTEGER,
+        omitted_invocation_count INTEGER,
+        PRIMARY KEY (response_id, run_id, step_id, attempt_number, invocation_number)
+      );
       CREATE TABLE IF NOT EXISTS response_publication_sources (
         response_id TEXT PRIMARY KEY REFERENCES provenance_traces(response_id) ON DELETE CASCADE,
         answer_sha256 TEXT NOT NULL,
@@ -1053,6 +1088,136 @@ export class SqliteTraceStore {
             candidates.push(parsed.data);
         }
         return candidates;
+    }
+
+    /** Persists bounded model debug bodies separately from public Trace metadata. */
+    async storeModelDebugCaptures(
+        responseId: string,
+        captures: readonly ModelDebugCaptureRecord[]
+    ): Promise<void> {
+        const insert = this.db.prepare(`
+            INSERT INTO model_debug_captures (
+                response_id, run_id, step_id, attempt_number, invocation_number,
+                input_text, input_truncated, input_redacted, output_text,
+                output_candidate_id, output_truncated, output_redacted, output_unavailable,
+                capture_limit_reached, omitted_invocation_count
+            ) VALUES (
+                @response_id, @run_id, @step_id, @attempt_number, @invocation_number,
+                @input_text, @input_truncated, @input_redacted, @output_text,
+                @output_candidate_id, @output_truncated, @output_redacted, @output_unavailable,
+                @capture_limit_reached, @omitted_invocation_count
+            )
+        `);
+        const transaction = this.db.transaction(() => {
+            this.db
+                .prepare(
+                    'DELETE FROM model_debug_captures WHERE response_id = ?'
+                )
+                .run(responseId);
+            for (const capture of captures.slice(0, 33)) {
+                insert.run({
+                    response_id: responseId,
+                    run_id: capture.runId,
+                    step_id: capture.stepId,
+                    attempt_number: capture.attempt,
+                    invocation_number: capture.invocation,
+                    input_text: capture.inputText,
+                    input_truncated: capture.inputTruncated ? 1 : 0,
+                    input_redacted: capture.inputRedacted ? 1 : 0,
+                    output_text: capture.outputText ?? null,
+                    output_candidate_id: capture.outputCandidateId ?? null,
+                    output_truncated:
+                        capture.outputTruncated === undefined
+                            ? null
+                            : capture.outputTruncated
+                              ? 1
+                              : 0,
+                    output_redacted:
+                        capture.outputRedacted === undefined
+                            ? null
+                            : capture.outputRedacted
+                              ? 1
+                              : 0,
+                    output_unavailable:
+                        capture.outputUnavailable === undefined
+                            ? null
+                            : capture.outputUnavailable
+                              ? 1
+                              : 0,
+                    capture_limit_reached:
+                        capture.captureLimitReached === true ? 1 : 0,
+                    omitted_invocation_count:
+                        capture.omittedInvocationCount ?? null,
+                });
+            }
+        });
+        transaction();
+    }
+
+    /** Loads private debug bodies only for a trusted backend operator read path. */
+    async retrieveModelDebugCaptures(
+        responseId: string
+    ): Promise<ModelDebugCaptureRecord[]> {
+        const rows = await this.withRetry(
+            () =>
+                this.db
+                    .prepare(
+                        `SELECT run_id, step_id, attempt_number, invocation_number,
+                                input_text, input_truncated, input_redacted, output_text,
+                                output_candidate_id, output_truncated, output_redacted,
+                                output_unavailable, capture_limit_reached,
+                                omitted_invocation_count
+                         FROM model_debug_captures WHERE response_id = ?
+                         ORDER BY step_id, attempt_number, invocation_number
+                         LIMIT 33`
+                    )
+                    .all(responseId) as Array<{
+                    run_id: string;
+                    step_id: string;
+                    attempt_number: number;
+                    invocation_number: number;
+                    input_text: string;
+                    input_truncated: number;
+                    input_redacted: number;
+                    output_text: string | null;
+                    output_candidate_id: string | null;
+                    output_truncated: number | null;
+                    output_redacted: number | null;
+                    output_unavailable: number | null;
+                    capture_limit_reached: number;
+                    omitted_invocation_count: number | null;
+                }>
+        );
+        return rows.map((row) => ({
+            runId: row.run_id,
+            stepId: row.step_id,
+            attempt: row.attempt_number,
+            invocation: row.invocation_number,
+            inputText: row.input_text,
+            inputTruncated: row.input_truncated === 1,
+            inputRedacted: row.input_redacted === 1,
+            ...(row.output_text === null
+                ? {}
+                : { outputText: row.output_text }),
+            ...(row.output_candidate_id === null
+                ? {}
+                : { outputCandidateId: row.output_candidate_id }),
+            ...(row.output_truncated === null
+                ? {}
+                : { outputTruncated: row.output_truncated === 1 }),
+            ...(row.output_redacted === null
+                ? {}
+                : { outputRedacted: row.output_redacted === 1 }),
+            ...(row.output_unavailable === null
+                ? {}
+                : { outputUnavailable: row.output_unavailable === 1 }),
+            ...(row.capture_limit_reached === 1 && {
+                captureLimitReached: true,
+            }),
+            ...(row.omitted_invocation_count === null
+                ? {}
+                : { omittedInvocationCount: row.omitted_invocation_count }),
+        }));
     }
 
     /**

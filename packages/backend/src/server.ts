@@ -32,6 +32,7 @@ import {
     storeTrace,
 } from './services/traceStore.js';
 import type { PublicResponseSourceCredential } from './services/traceStore.js';
+import type { ModelDebugCaptureRecord } from './storage/traces/sqliteTraceStore.js';
 import { createLangfuseMetadataMirrorExporter } from './services/langfuseMetadataMirrorExporter.js';
 import { getDefaultIncidentStore } from './storage/incidents/incidentStore.js';
 import { createAssetResolver } from './http/assets.js';
@@ -533,13 +534,20 @@ try {
 const storeTraceWithStore = (
     metadata: ResponseMetadata,
     candidates?: readonly ResponseCandidate[],
-    publicationSource?: PublicResponseSourceCredential
+    publicationSource?: PublicResponseSourceCredential,
+    modelDebugCaptures?: readonly ModelDebugCaptureRecord[]
 ) => {
     // Prevent trace writes when the store failed to initialize.
     if (!traceStore) {
         return Promise.reject(new Error('Trace store is not initialized'));
     }
-    return storeTrace(traceStore, metadata, candidates, publicationSource);
+    return storeTrace(
+        traceStore,
+        metadata,
+        candidates,
+        publicationSource,
+        modelDebugCaptures
+    );
 };
 
 // --- Handler wiring ---
