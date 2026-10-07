@@ -21,13 +21,11 @@ import type {
     TraceAxisScore,
 } from '@footnote/contracts/policy';
 import {
+    classifyProvenanceWithSignals,
     isTraceTemperamentEqual,
     TRACE_TEMPERAMENT_AXIS_KEYS,
 } from '@footnote/contracts/policy';
-import {
-    classifyProvenanceWithSignals,
-    deriveRetrievedChips,
-} from '../responseMetadataHeuristics.js';
+import { deriveRetrievedChips } from '../responseMetadataHeuristics.js';
 import type {
     ResponseMetadataGenerationInput,
     ResponseMetadataRuntimeContext,
