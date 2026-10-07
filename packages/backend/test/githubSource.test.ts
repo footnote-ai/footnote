@@ -194,6 +194,7 @@ test('source selection requires user-authored repo, ref, and path and rejects un
         'Please check acme/repo at main in src/service.ts for target().',
         'Open acme/repo at main in src/service.ts and find target().',
         'Please examine acme/repo at main in src/service.ts for target().',
+        'Could you inspect acme/repo at main in src/service.ts for target()?',
     ]) {
         assert.deepEqual(
             normalizeGitHubSourceSelection(selection, positiveRequest),
@@ -223,6 +224,7 @@ test('source selection requires user-authored repo, ref, and path and rejects un
     for (const unrelatedRequest of [
         'Check the docs. acme/repo at main in src/service.ts.',
         'Search the web first. acme/repo at main in src/service.ts.',
+        'I already inspected acme/repo at main in src/service.ts.',
     ]) {
         assert.equal(
             normalizeGitHubSourceSelection(

@@ -37,8 +37,39 @@ const MAX_SOURCE_FILE_BYTES = 64 * 1024;
 const MAX_SOURCE_OUTPUT_BYTES = 12 * 1024;
 const MAX_SOURCE_LINES = 20;
 const MAX_SOURCE_LINE_LENGTH = 600;
-const SOURCE_REQUEST_PATTERN =
-    /\b(?:inspect|read|review|open|search|find|show|explain|look\s+at|check|examine)\b/iu;
+const SOURCE_REQUEST_ACTIONS = [
+    'inspect',
+    'read',
+    'review',
+    'open',
+    'search',
+    'find',
+    'show',
+    'explain',
+    'look at',
+    'check',
+    'examine',
+];
+const SOURCE_REQUEST_PREFIXES = [
+    '',
+    'please ',
+    'can you ',
+    'can you please ',
+    'could you ',
+    'could you please ',
+    'would you ',
+    'would you please ',
+    'will you ',
+    'will you please ',
+    "i'm asking you to ",
+    'i am asking you to ',
+    "i'd like you to ",
+    'i would like you to ',
+    'i want you to ',
+    'i need you to ',
+    'help me ',
+    'help me to ',
+];
 const SOURCE_REQUEST_NEGATION_PATTERN =
     /\b(?:not|never|don't|dont|do\s+not|no\s+need\s+to|not\s+asking(?:\s+you)?\s+to)\b[^.!?\n]{0,80}\b(?:inspect|read|review|open|search|find|show|explain|look\s+at|check|examine)\b/iu;
 const RESTRICTED_PATH_SEGMENT_PATTERN =
@@ -147,6 +178,21 @@ const clauseNamesSourceSelection = (
     hasExplicitToken(clause, revision) &&
     hasExplicitToken(clause, path);
 
+const isExplicitSourceRequest = (clause: string): boolean => {
+    const normalized = clause.trim().toLowerCase();
+    return SOURCE_REQUEST_PREFIXES.some((prefix) => {
+        if (!normalized.startsWith(prefix)) return false;
+        const request = normalized.slice(prefix.length);
+        return SOURCE_REQUEST_ACTIONS.some((action) => {
+            const remainder = request.slice(action.length);
+            return (
+                request.startsWith(action) &&
+                (remainder.length === 0 || /^[\s,:?]/u.test(remainder))
+            );
+        });
+    });
+};
+
 const hasPositiveSourceRequest = (
     text: string,
     repository: string,
@@ -155,7 +201,7 @@ const hasPositiveSourceRequest = (
 ): boolean =>
     sourceRequestClauses(text).some(
         (clause) =>
-            SOURCE_REQUEST_PATTERN.test(clause) &&
+            isExplicitSourceRequest(clause) &&
             clauseNamesSourceSelection(clause, repository, revision, path)
     );
 
