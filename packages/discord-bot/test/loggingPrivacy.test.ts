@@ -13,6 +13,9 @@ import { transports } from 'winston';
 
 import { runtimeConfig } from '../src/config.js';
 import type { BotProfileConfig } from '../src/config/profile.js';
+import { VoiceSubsystem } from '../src/events/VoiceSubsystem.js';
+import { RealtimeSession } from '../src/utils/realtimeService.js';
+import type { RealtimeContextParticipant } from '../src/utils/prompting/RealtimeContextBuilder.js';
 import { logger, sanitizeLogData } from '../src/utils/logger.js';
 import { MessageProcessor } from '../src/utils/MessageProcessor.js';
 import {
@@ -62,6 +65,53 @@ test('logger pipeline applies sanitizer before emitting logs', () => {
         output.includes('[REDACTED_ID]'),
         'Redacted placeholder should be present'
     );
+});
+
+test('Realtime response and greeting text are not written to logs', async () => {
+    const responseText = 'private realtime response text';
+    const greetingText = 'private realtime greeting text';
+    const capturedCalls: unknown[][] = [];
+    const originalDebug = logger.debug;
+    const originalInfo = logger.info;
+    const originalConnect = RealtimeSession.prototype.connect;
+
+    logger.debug = ((...args: unknown[]) => {
+        capturedCalls.push(args);
+        return logger;
+    }) as typeof logger.debug;
+    logger.info = ((...args: unknown[]) => {
+        capturedCalls.push(args);
+        return logger;
+    }) as typeof logger.info;
+    RealtimeSession.prototype.connect = async function (
+        this: RealtimeSession
+    ): Promise<void> {
+        this.emit('text', responseText);
+        this.emit('greeting', greetingText);
+    };
+
+    try {
+        const subsystem = new VoiceSubsystem({} as never);
+        const subsystemAccess = subsystem as unknown as {
+            createRealtimeSession: (
+                guildId: string,
+                participants: RealtimeContextParticipant[]
+            ) => Promise<RealtimeSession>;
+        };
+        const session = await subsystemAccess.createRealtimeSession(
+            'test-guild',
+            []
+        );
+        session.removeAllListeners();
+
+        const serializedLogs = JSON.stringify(capturedCalls);
+        assert.ok(!serializedLogs.includes(responseText));
+        assert.ok(!serializedLogs.includes(greetingText));
+    } finally {
+        logger.debug = originalDebug;
+        logger.info = originalInfo;
+        RealtimeSession.prototype.connect = originalConnect;
+    }
 });
 
 test('incident-style structured logs do not emit raw Discord IDs', () => {
