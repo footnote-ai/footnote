@@ -1,0 +1,79 @@
+{
+    "version": 1,
+    "scope": "backend-observed-behavior",
+    "providerRequired": false,
+    "cases": [
+        {
+            "id": "retrieved-context-is-not-instruction-authority",
+            "status": "implemented",
+            "input": "Context retrieval returns trusted guidance and untrusted repository evidence.",
+            "expected": "Trusted guidance and evidence remain distinct; evidence is passed as user content, not system instructions.",
+            "limits": "This proves input-role separation, not that arbitrary external actions are generally authorized or denied.",
+            "evidence": [
+                {
+                    "file": "packages/backend/test/workflowEngine/context-steps.test.ts",
+                    "test": "runBoundedReviewWorkflow keeps project evidence separate from trusted instructions"
+                }
+            ]
+        },
+        {
+            "id": "retrieval-scope-and-workflow-budget",
+            "status": "implemented",
+            "input": "A caller omits explicit project scope, or a workflow attempt reaches its configured resource limit.",
+            "expected": "Session correlation is not promoted into project scope; workflow admission rejects work that exceeds configured step, tool, deliberation, token, or duration bounds.",
+            "limits": "Retrieval scope validation and workflow resource limits are not a general action-authorization engine.",
+            "evidence": [
+                {
+                    "file": "packages/backend/test/chatOrchestratorExecutionContractTrustGraph.test.ts",
+                    "test": "orchestrator does not backfill TrustGraph project scope from sessionId when explicit scope fields are absent"
+                },
+                {
+                    "file": "packages/backend/test/workflowEngine/limits.test.ts",
+                    "test": "checkExecutionLimits reports each exhausted limit key"
+                },
+                {
+                    "file": "packages/backend/test/workflowEngine/limits.test.ts",
+                    "test": "generation admission fails closed before provider call when prompt uses the remainder"
+                }
+            ]
+        },
+        {
+            "id": "http-chat-disconnect-cancellation",
+            "status": "implemented-with-limits",
+            "input": "The HTTP client disconnects after provider generation starts.",
+            "expected": "The request AbortSignal reaches generation. If generation ignores it and completes, usage and response metadata may still be recorded, the disconnected response is not delivered, and this interrupted path has no WorkflowRecord.",
+            "limits": "Cancellation propagation does not guarantee provider/tool termination, undo completed effects, or establish delegated-work cancellation.",
+            "evidence": [
+                {
+                    "file": "packages/backend/test/chatHandler.test.ts",
+                    "test": "chat cancellation reaches provider generation after the client disconnects"
+                },
+                {
+                    "file": "packages/backend/test/chatHandler.test.ts",
+                    "test": "chat disconnect hides a non-cancellable completed planner result without rewriting its usage"
+                }
+            ]
+        },
+        {
+            "id": "delegated-execution",
+            "status": "unsupported",
+            "input": "A model or parent requests nested delegated work.",
+            "expected": "No delegated execution behavior is asserted; the current backend has no multi-agent execution runtime or delegated grant boundary.",
+            "limits": "Do not treat a model refusal, output contract, or prompt as proof that delegation is enforced.",
+            "evidence": []
+        },
+        {
+            "id": "interrupted-request-observability",
+            "status": "implemented-with-limits",
+            "input": "An interrupted request's provider call completes after disconnect.",
+            "expected": "Backend-recorded usage and response metadata remain observable without inventing a WorkflowRecord or a canonical Run cancellation status.",
+            "limits": "The fixture asserts only currently exposed observations; it does not infer an external effect or a general authorization decision.",
+            "evidence": [
+                {
+                    "file": "packages/backend/test/chatHandler.test.ts",
+                    "test": "chat disconnect hides a non-cancellable completed planner result without rewriting its usage"
+                }
+            ]
+        }
+    ]
+}
