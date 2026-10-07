@@ -69,5 +69,7 @@ detail once you have the main runtime shape in mind.
   walkthrough of the current backend-owned realtime voice boundary.
 - [OpenRouter Provider Boundary](./openrouter-provider.md): named-provider
   routing, privacy posture, and trace cost provenance for OpenRouter models.
+- [Ollama Provider Controls and Observations](./ollama-provider-controls.md):
+  per-profile native thinking controls and provider-reported runtime facts.
 - [Provider Retention](./provider-retention.md): request-side retention
   settings and their limits across provider paths.

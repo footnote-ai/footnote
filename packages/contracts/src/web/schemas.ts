@@ -1093,6 +1093,46 @@ const WorkflowCostSchema = z
     })
     .strict();
 
+const WorkflowAttemptSettingsSchema = z
+    .object({
+        requested: z
+            .record(z.string(), z.union([z.string(), z.number(), z.boolean()]))
+            .optional(),
+        applied: z
+            .record(z.string(), z.union([z.string(), z.number(), z.boolean()]))
+            .optional(),
+        ignored: z
+            .array(
+                z
+                    .object({
+                        setting: z.string().min(1),
+                        reasonCode: z.string().min(1),
+                    })
+                    .strict()
+            )
+            .optional(),
+        observed: z
+            .record(z.string(), z.union([z.string(), z.number(), z.boolean()]))
+            .optional(),
+    })
+    .strict();
+
+const OllamaRuntimeObservationsSchema = z
+    .object({
+        source: z.literal('ollama'),
+        authority: z.literal('provider_reported'),
+        resolvedModel: z.string().max(256).optional(),
+        digest: z.string().max(256).optional(),
+        totalDurationNs: z.number().int().nonnegative().optional(),
+        loadDurationNs: z.number().int().nonnegative().optional(),
+        promptEvalDurationNs: z.number().int().nonnegative().optional(),
+        evalDurationNs: z.number().int().nonnegative().optional(),
+        promptEvalCount: z.number().int().nonnegative().optional(),
+        evalCount: z.number().int().nonnegative().optional(),
+        thinkingPresent: z.boolean().optional(),
+    })
+    .strict();
+
 const WorkflowAttemptRoutingRecordSchema = z
     .object({
         index: z.number().int().nonnegative(),
@@ -1105,6 +1145,8 @@ const WorkflowAttemptRoutingRecordSchema = z
         reasonCode: z.string().min(1).optional(),
         finishReason: z.string().min(1).optional(),
         completion: GenerationCompletionSchema.optional(),
+        settings: WorkflowAttemptSettingsSchema.optional(),
+        providerObservations: OllamaRuntimeObservationsSchema.optional(),
         usage: GenerationUsageSchema.optional().describe(
             'Provider/runtime-reported token counts for this routing attempt. Omitted counts are unavailable.'
         ),
@@ -1133,30 +1175,6 @@ const WorkflowAttemptRoutingRecordSchema = z
         chooseOneSelectedIndex: z.number().int().nonnegative().optional(),
         temporaryUnavailableReason: z.string().min(1).optional(),
         selectionSource: z.enum(['explicit', 'configured']).optional(),
-    })
-    .strict();
-
-const WorkflowAttemptSettingsSchema = z
-    .object({
-        requested: z
-            .record(z.string(), z.union([z.string(), z.number()]))
-            .optional(),
-        applied: z
-            .record(z.string(), z.union([z.string(), z.number()]))
-            .optional(),
-        ignored: z
-            .array(
-                z
-                    .object({
-                        setting: z.string().min(1),
-                        reasonCode: z.string().min(1),
-                    })
-                    .strict()
-            )
-            .optional(),
-        observed: z
-            .record(z.string(), z.union([z.string(), z.number()]))
-            .optional(),
     })
     .strict();
 
@@ -1266,6 +1284,7 @@ const WorkflowAttemptRecordSchema = z
         actualProvider: z.string().min(1).optional(),
         actualModel: z.string().min(1).optional(),
         settings: WorkflowAttemptSettingsSchema.optional(),
+        providerObservations: OllamaRuntimeObservationsSchema.optional(),
         capabilities: WorkflowAttemptCapabilitiesSchema.optional(),
         completion: GenerationCompletionSchema.optional(),
         usage: GenerationUsageSchema.optional().describe(

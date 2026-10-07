@@ -318,6 +318,151 @@ test('gives a large-prompt generation useful output room and advances after inco
     assert.equal(canonicalJson.includes('routingChainAttemptsJson'), false);
 });
 
+test('keeps each Ollama route attempt settings and observations when incomplete output falls back', async () => {
+    const first: ModelProfile = {
+        ...makeProfile('ollama-first'),
+        provider: 'ollama',
+        providerModel: 'qwen3:8b',
+        capabilities: {
+            canUseSearch: false,
+            supportedOllamaThinkingControls: ['high'],
+        },
+        providerOptions: { ollama: { think: 'high' } },
+    };
+    const fallback: ModelProfile = {
+        ...makeProfile('ollama-fallback'),
+        provider: 'ollama',
+        providerModel: 'llama3.2:3b',
+        capabilities: {
+            canUseSearch: false,
+            supportedOllamaThinkingControls: [false],
+        },
+        providerOptions: { ollama: { think: false } },
+    };
+    const firstObservations = {
+        source: 'ollama',
+        authority: 'provider_reported',
+        resolvedModel: 'qwen3:8b',
+        digest: 'sha256:first-digest',
+        totalDurationNs: 7_500_000,
+        thinkingPresent: true,
+    } as const;
+    const fallbackObservations = {
+        source: 'ollama',
+        authority: 'provider_reported',
+        resolvedModel: 'llama3.2:3b',
+        digest: 'sha256:fallback-digest',
+        totalDurationNs: 11_000_000,
+        thinkingPresent: false,
+    } as const;
+    const requests: GenerationRequest[] = [];
+    const runtime: GenerationRuntime = {
+        kind: 'test-runtime',
+        async generate(request): Promise<GenerationResult> {
+            requests.push(request);
+            if (requests.length === 1) {
+                return {
+                    text: '',
+                    model: first.providerModel,
+                    completion: {
+                        status: 'incomplete',
+                        reason: 'max_output_tokens',
+                        visibleTextLength: 0,
+                    },
+                    providerSettingResolution: {
+                        requested: {
+                            'ollama.think': 'high',
+                            'private.reasoning': 'PRIVATE_REASONING_SENTINEL',
+                        },
+                        applied: {
+                            'ollama.think': 'high',
+                            'provider.raw_body': 'PRIVATE_REASONING_SENTINEL',
+                        },
+                        observed: {
+                            'provider.raw_body': 'PRIVATE_REASONING_SENTINEL',
+                        },
+                    },
+                    providerObservations: {
+                        ...firstObservations,
+                        thinking: 'PRIVATE_REASONING_SENTINEL',
+                        rawBody: {
+                            message: { thinking: 'PRIVATE_REASONING_SENTINEL' },
+                        },
+                    } as unknown as NonNullable<
+                        GenerationResult['providerObservations']
+                    >,
+                    provenance: 'Inferred',
+                    citations: [],
+                };
+            }
+            return {
+                text: 'A complete fallback answer.',
+                model: fallback.providerModel,
+                completion: {
+                    status: 'completed',
+                    visibleTextLength: 27,
+                },
+                providerSettingResolution: {
+                    requested: { 'ollama.think': false },
+                    applied: { 'ollama.think': false },
+                },
+                providerObservations: fallbackObservations,
+                provenance: 'Inferred',
+                citations: [],
+            };
+        },
+    };
+
+    const result = await runGeneration({
+        runtime,
+        request: {
+            messages: [{ role: 'user', content: 'Explain this context.' }],
+        },
+        candidates: [first, fallback],
+    });
+
+    assert.equal(result.outcome, 'generated');
+    assert.equal(requests.length, 2);
+    const generationStep = result.workflowLineage.steps.find(
+        (step) => step.stepKind === 'generate'
+    );
+    assert.ok(generationStep);
+    const attempt = generationStep.attempts?.[0];
+    assert.equal(attempt?.profileId, fallback.id);
+    assert.deepEqual(
+        attempt?.routingAttempts?.map((routeAttempt) => [
+            routeAttempt.profileId,
+            routeAttempt.status,
+        ]),
+        [
+            ['ollama-first', 'failed_transient_advanced'],
+            ['ollama-fallback', 'executed'],
+        ]
+    );
+    assert.deepEqual(attempt?.routingAttempts?.[0]?.settings, {
+        requested: { 'ollama.think': 'high' },
+        applied: { 'ollama.think': 'high' },
+    });
+    assert.deepEqual(
+        attempt?.routingAttempts?.[0]?.providerObservations,
+        firstObservations
+    );
+    assert.deepEqual(attempt?.routingAttempts?.[1]?.settings, {
+        requested: { 'ollama.think': false },
+        applied: { 'ollama.think': false },
+    });
+    assert.deepEqual(
+        attempt?.routingAttempts?.[1]?.providerObservations,
+        fallbackObservations
+    );
+    assert.equal(
+        JSON.stringify(result.workflowLineage).includes(
+            'PRIVATE_REASONING_SENTINEL'
+        ),
+        false
+    );
+});
+
 test('records only a bounded user-memory inclusion count in generation provenance', async () => {
     const secretMemory = 'PRIVATE_MEMORY_SENTINEL';
     let receivedMemory = false;

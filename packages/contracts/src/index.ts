@@ -252,6 +252,8 @@ export type {
     ModelProfile,
     ModelProfileCapabilities,
     ModelProfileProviderRouting,
+    ModelProfileProviderOptions,
+    OllamaThinkingControl,
     PresentationGenerationSettings,
     PresentationPromptVariant,
     PresentationSamplingControl,
@@ -265,6 +267,7 @@ export type {
 export {
     ModelProfileCapabilitiesSchema,
     ModelProfileProviderRoutingSchema,
+    ModelProfileProviderOptionsSchema,
     ModelProfileCatalogSchema,
     ModelProfileSchema,
     PresentationGenerationSettingsSchema,

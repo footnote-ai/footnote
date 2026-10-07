@@ -338,6 +338,7 @@ export const createInternalNewsTaskService = ({
             model: defaultProfile.providerModel,
             provider: defaultProfile.provider,
             capabilities: defaultProfile.capabilities,
+            providerOptions: defaultProfile.providerOptions,
             messages: [
                 { role: 'system', content: systemPrompt },
                 {

@@ -2839,6 +2839,51 @@ components:
                 oneOf:
                     - type: string
                     - type: number
+                    - type: boolean
+        WorkflowOllamaRuntimeObservations:
+            x-codeRefs:
+                - packages/contracts/src/policy/types.ts#OllamaRuntimeObservations
+                - packages/contracts/src/web/schemas.ts#OllamaRuntimeObservationsSchema
+            type: object
+            properties:
+                source:
+                    type: string
+                    enum:
+                        - ollama
+                authority:
+                    type: string
+                    enum:
+                        - provider_reported
+                resolvedModel:
+                    type: string
+                    maxLength: 256
+                digest:
+                    type: string
+                    maxLength: 256
+                totalDurationNs:
+                    type: integer
+                    minimum: 0
+                loadDurationNs:
+                    type: integer
+                    minimum: 0
+                promptEvalDurationNs:
+                    type: integer
+                    minimum: 0
+                evalDurationNs:
+                    type: integer
+                    minimum: 0
+                promptEvalCount:
+                    type: integer
+                    minimum: 0
+                evalCount:
+                    type: integer
+                    minimum: 0
+                thinkingPresent:
+                    type: boolean
+            required:
+                - source
+                - authority
+            additionalProperties: false
         WorkflowCapabilitySupport:
             type: string
             enum:
@@ -2903,6 +2948,33 @@ components:
                     minLength: 1
                 completion:
                     $ref: '#/components/schemas/WorkflowAttemptCompletion'
+                settings:
+                    type: object
+                    properties:
+                        requested:
+                            $ref: '#/components/schemas/WorkflowSettingValues'
+                        applied:
+                            $ref: '#/components/schemas/WorkflowSettingValues'
+                        ignored:
+                            type: array
+                            items:
+                                type: object
+                                properties:
+                                    setting:
+                                        type: string
+                                        minLength: 1
+                                    reasonCode:
+                                        type: string
+                                        minLength: 1
+                                required:
+                                    - setting
+                                    - reasonCode
+                                additionalProperties: false
+                        observed:
+                            $ref: '#/components/schemas/WorkflowSettingValues'
+                    additionalProperties: false
+                providerObservations:
+                    $ref: '#/components/schemas/WorkflowOllamaRuntimeObservations'
                 usage:
                     description: Provider/runtime-reported token counts for this routing attempt. Omitted counts are unavailable.
                     $ref: '#/components/schemas/WorkflowGenerationUsage'
@@ -3166,6 +3238,8 @@ components:
                         observed:
                             $ref: '#/components/schemas/WorkflowSettingValues'
                     additionalProperties: false
+                providerObservations:
+                    $ref: '#/components/schemas/WorkflowOllamaRuntimeObservations'
                 capabilities:
                     type: object
                     properties:

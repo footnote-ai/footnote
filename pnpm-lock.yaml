@@ -332,6 +332,9 @@ importers:
       ai:
         specifier: 6.0.224
         version: 6.0.224(zod@4.4.3)
+      ollama-ai-provider-v2:
+        specifier: 1.5.5
+        version: 1.5.5(zod@4.4.3)
       openai:
         specifier: 'catalog:'
         version: 6.42.0(ws@8.21.3(bufferutil@4.1.0))(zod@4.4.3)
@@ -6435,6 +6438,7 @@ snapshots:
       '@footnote/contracts': file:packages/contracts
       '@voltagent/core': 2.9.2(@ai-sdk/provider-utils@4.0.38(zod@4.4.3))(@ai-sdk/provider@3.0.14)(@cfworker/json-schema@4.1.1)(ai@6.0.224(zod@4.4.3))(bufferutil@4.1.0)(debug@4.4.3(supports-color@10.2.2))(graphql@16.13.1)(supports-color@10.2.2)(ws@8.21.3(bufferutil@4.1.0))(zod@4.4.3)
       ai: 6.0.224(zod@4.4.3)
+      ollama-ai-provider-v2: 1.5.5(zod@4.4.3)
       openai: 6.42.0(ws@8.21.3(bufferutil@4.1.0))(zod@4.4.3)
       ws: 8.21.3(bufferutil@4.1.0)
       zod: 4.4.3
@@ -10053,7 +10057,7 @@ snapshots:
 
   ollama-ai-provider-v2@1.5.5(zod@4.4.3):
     dependencies:
-      '@ai-sdk/provider': 2.0.3
+      '@ai-sdk/provider': 2.0.4
       '@ai-sdk/provider-utils': 3.0.37(zod@4.4.3)
       zod: 4.4.3
 

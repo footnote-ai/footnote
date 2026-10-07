@@ -28,6 +28,8 @@ import type {
     PlannerExecutionPurpose,
     PlannerStructuredOutputOutcome,
     ExecutionStatus,
+    OllamaRuntimeObservations,
+    WorkflowAttemptSettings,
     SafetyTier,
     ResponseTemperament,
     TraceAxisScore,
@@ -114,6 +116,8 @@ export type ChatPlannerExecution = {
         routingAttemptCount?: number;
         upstreamReportedCostUsd?: number;
     };
+    providerSettingResolution?: WorkflowAttemptSettings;
+    providerObservations?: OllamaRuntimeObservations;
 };
 
 export type ChatPlannerResult = {
@@ -300,6 +304,8 @@ type ChatPlannerExecutionResult = {
     finishReason?: string;
     completion?: GenerationResult['completion'];
     upstreamAttribution?: ChatPlannerExecution['upstreamAttribution'];
+    providerSettingResolution?: ChatPlannerExecution['providerSettingResolution'];
+    providerObservations?: ChatPlannerExecution['providerObservations'];
 };
 
 type ChatPlannerExecutor = (
@@ -313,6 +319,8 @@ type ChatPlannerStructuredExecutionResult = {
     usage?: GenerationUsage;
     rawArguments?: string;
     upstreamAttribution?: ChatPlannerExecution['upstreamAttribution'];
+    providerSettingResolution?: ChatPlannerExecution['providerSettingResolution'];
+    providerObservations?: ChatPlannerExecution['providerObservations'];
 };
 
 /** Carries a bounded, serializable classification across the planner seam. */
@@ -1779,6 +1787,8 @@ export const createChatPlanner = ({
         let plannerStructuredArguments: string | undefined;
         let structuredOutputOutcome: PlannerStructuredOutputOutcome | undefined;
         let upstreamAttribution: ChatPlannerExecution['upstreamAttribution'];
+        let providerSettingResolution: ChatPlannerExecution['providerSettingResolution'];
+        let providerObservations: ChatPlannerExecution['providerObservations'];
         let plannerProvider: string | undefined;
         let plannerModel: string | undefined;
         const requestSummary = summarizeRequest(request);
@@ -1843,6 +1853,10 @@ export const createChatPlanner = ({
                 structuredOutputOutcome,
             }),
             ...(upstreamAttribution !== undefined && { upstreamAttribution }),
+            ...(providerSettingResolution !== undefined && {
+                providerSettingResolution,
+            }),
+            ...(providerObservations !== undefined && { providerObservations }),
             ...(plannerProvider !== undefined && { provider: plannerProvider }),
             ...(plannerModel !== undefined && { model: plannerModel }),
             ...(plannerUsageRecorded && {
@@ -1951,6 +1965,9 @@ export const createChatPlanner = ({
             );
             plannerResponseText = expandedResponse.text;
             upstreamAttribution = expandedResponse.upstreamAttribution;
+            providerSettingResolution =
+                expandedResponse.providerSettingResolution;
+            providerObservations = expandedResponse.providerObservations;
             plannerModel = expandedResponse.model;
             plannerProvider = expandedResponse.provider;
             recordPlannerUsage(
@@ -2135,6 +2152,9 @@ export const createChatPlanner = ({
                 }
                 plannerStructuredArguments = structuredResponse.rawArguments;
                 upstreamAttribution = structuredResponse.upstreamAttribution;
+                providerSettingResolution =
+                    structuredResponse.providerSettingResolution;
+                providerObservations = structuredResponse.providerObservations;
                 plannerModel = structuredResponse.model;
                 plannerProvider = structuredResponse.provider;
                 structuredOutputOutcome = 'strict_success';
@@ -2180,6 +2200,9 @@ export const createChatPlanner = ({
             const plannerResponse = await executePlanner(requestPayload);
             plannerResponseText = plannerResponse.text;
             upstreamAttribution = plannerResponse.upstreamAttribution;
+            providerSettingResolution =
+                plannerResponse.providerSettingResolution;
+            providerObservations = plannerResponse.providerObservations;
             plannerModel = plannerResponse.model;
             plannerProvider = plannerResponse.provider;
             recordPlannerUsage(
@@ -2297,6 +2320,10 @@ export const createChatPlanner = ({
                     });
                     plannerResponseText = textJsonResponse.text;
                     upstreamAttribution = textJsonResponse.upstreamAttribution;
+                    providerSettingResolution =
+                        textJsonResponse.providerSettingResolution;
+                    providerObservations =
+                        textJsonResponse.providerObservations;
                     plannerModel = textJsonResponse.model;
                     plannerProvider = textJsonResponse.provider;
                     recordPlannerUsage(

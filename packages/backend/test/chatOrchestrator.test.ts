@@ -98,6 +98,79 @@ const createGenerationRuntime = (
     generate: implementation,
 });
 
+test('planner forwards the selected Ollama profile control', async () => {
+    const originalModelProfiles = runtimeConfig.modelProfiles;
+    const runtimeConfigMutable = runtimeConfig as unknown as {
+        modelProfiles: typeof runtimeConfig.modelProfiles;
+    };
+    const existingOllamaProfile = runtimeConfig.modelProfiles.catalog.find(
+        (profile) => profile.provider === 'ollama'
+    );
+    assert.ok(existingOllamaProfile);
+    const selectedProfile = {
+        ...existingOllamaProfile,
+        enabled: true,
+        capabilities: {
+            ...existingOllamaProfile.capabilities,
+            supportedOllamaThinkingControls: [false],
+            toolCapabilities: {
+                ...existingOllamaProfile.capabilities.toolCapabilities,
+                'generation.structured_output': false,
+                'generation.json_mode': false,
+            },
+        },
+        providerOptions: { ollama: { think: false } },
+    };
+    runtimeConfigMutable.modelProfiles = {
+        ...runtimeConfig.modelProfiles,
+        plannerProfileId: selectedProfile.id,
+        defaultProfileId: selectedProfile.id,
+        catalog: runtimeConfig.modelProfiles.catalog.map((profile) =>
+            profile.id === selectedProfile.id ? selectedProfile : profile
+        ),
+    };
+
+    let plannerRequest: GenerationRequest | undefined;
+    try {
+        const orchestrator = createChatOrchestrator({
+            generationRuntime: createGenerationRuntime(async (request) => {
+                if (plannerRequest === undefined) {
+                    plannerRequest = request;
+                    return {
+                        text: JSON.stringify({
+                            action: 'message',
+                            modality: 'text',
+                            safetyTier: 'Low',
+                            reasoning: 'Use the selected profile.',
+                            generation: {},
+                        }),
+                        model: request.model,
+                    };
+                }
+                return { text: 'Ollama response.', model: request.model };
+            }),
+            storeTrace: async () => undefined,
+            buildResponseMetadata: () => createMetadata(),
+            defaultModel: selectedProfile.providerModel,
+            recordUsage: () => undefined,
+        });
+
+        const response = await orchestrator.runChat(
+            createChatRequest({
+                plannerProfileId: selectedProfile.id,
+            })
+        );
+
+        assert.equal(response.action, 'message');
+        assert.equal(plannerRequest?.provider, 'ollama');
+        assert.deepEqual(plannerRequest?.providerOptions, {
+            ollama: { think: false },
+        });
+    } finally {
+        runtimeConfigMutable.modelProfiles = originalModelProfiles;
+    }
+});
+
 const withDefaultPersonaExpressionGuidance = (personaPrompt: string): string =>
     `${personaPrompt}\n\n${buildPersonaExpressionGuidance('balanced')}`;
 

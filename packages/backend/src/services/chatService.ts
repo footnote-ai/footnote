@@ -1433,6 +1433,7 @@ export const createChatService = ({
                                 provider: profile.provider,
                                 capabilities: profile.capabilities,
                                 providerRouting: profile.providerRouting,
+                                providerOptions: profile.providerOptions,
                             })
                         );
                         // Record every routed provider Attempt, including an

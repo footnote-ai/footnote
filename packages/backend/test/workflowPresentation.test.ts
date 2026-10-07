@@ -269,6 +269,56 @@ test('workflow attempts and their step retain cost completeness evidence', async
     );
 });
 
+test('workflow Attempt keeps provider-reported Ollama facts separate from Footnote wall time', async () => {
+    const { result } = await runScenario(
+        async (_request, call) =>
+            call === 1
+                ? generated('A presentation candidate.')
+                : {
+                      ...generated('The answer.'),
+                      model: 'qwen3:8b',
+                      providerSettingResolution: {
+                          requested: { 'ollama.think': false },
+                          applied: { 'ollama.think': false },
+                      },
+                      providerObservations: {
+                          source: 'ollama',
+                          authority: 'provider_reported',
+                          resolvedModel: 'qwen3:8b',
+                          totalDurationNs: 1_200_000,
+                          evalDurationNs: 900_000,
+                          thinkingPresent: false,
+                      },
+                  },
+        {
+            workflowPolicy: { ...policy, enableAssessment: false },
+            generationRequest: {
+                ...baseRequest,
+                model: 'qwen3:8b',
+                provider: 'ollama',
+                capabilities: {
+                    canUseSearch: false,
+                    supportedOllamaThinkingControls: [false],
+                },
+                providerOptions: { ollama: { think: false } },
+            },
+        }
+    );
+
+    assert.equal(result.outcome, 'generated');
+    if (result.outcome !== 'generated') return;
+    const attempt = result.workflowLineage.steps.find(
+        (step) => step.stepKind === 'generate'
+    )?.attempts?.[0];
+    assert.equal(attempt?.requestedProvider, 'ollama');
+    assert.equal(attempt?.settings?.requested?.['ollama.think'], false);
+    assert.equal(attempt?.settings?.applied?.['ollama.think'], false);
+    assert.equal(attempt?.providerObservations?.source, 'ollama');
+    assert.equal(attempt?.providerObservations?.authority, 'provider_reported');
+    assert.equal(attempt?.providerObservations?.totalDurationNs, 1_200_000);
+    assert.notEqual(attempt?.durationMs, 1_200_000);
+});
+
 test('runs presentation with a finite reasoning-aware authority budget at 512k', async () => {
     const { calls, result } = await runScenario(
         async (_request, call) =>
