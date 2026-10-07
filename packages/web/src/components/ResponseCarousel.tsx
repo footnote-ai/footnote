@@ -29,7 +29,7 @@ const normalizeInitialIndex = (length: number, index: number): number =>
 
 /**
  * Shows one prepared response at a time. The delayed handoff preserves the
- * landing page transition while keeping dots and arrows keyboard accessible.
+ * landing page transition while keeping native selection controls keyboard accessible.
  */
 const ResponseCarousel = <T,>({
     items,
@@ -100,7 +100,7 @@ const ResponseCarousel = <T,>({
                     type="button"
                     className="response-carousel__control"
                     aria-label={previousLabel}
-                    disabled={isTransitioning || activeIndex === 0}
+                    aria-disabled={isTransitioning || activeIndex === 0}
                     onClick={() => selectIndex(activeIndex - 1)}
                 >
                     Previous
@@ -116,7 +116,7 @@ const ResponseCarousel = <T,>({
                             className={`${dotClassName}${isSelected ? ` ${selectedDotClassName}` : ''}`}
                             aria-label={getDotLabel(item, index)}
                             aria-pressed={isSelected}
-                            disabled={isTransitioning}
+                            aria-disabled={isTransitioning}
                             onClick={() => selectIndex(index)}
                         />
                     );
@@ -127,7 +127,7 @@ const ResponseCarousel = <T,>({
                     type="button"
                     className="response-carousel__control"
                     aria-label={nextLabel}
-                    disabled={
+                    aria-disabled={
                         isTransitioning || activeIndex === items.length - 1
                     }
                     onClick={() => selectIndex(activeIndex + 1)}
@@ -140,22 +140,7 @@ const ResponseCarousel = <T,>({
 
     const selectedItem = items[activeIndex]!;
     return (
-        <div
-            className="response-carousel"
-            aria-label={ariaLabel}
-            role="group"
-            tabIndex={0}
-            onKeyDown={(event) => {
-                if (event.key === 'ArrowLeft') {
-                    event.preventDefault();
-                    selectIndex(activeIndex - 1);
-                }
-                if (event.key === 'ArrowRight') {
-                    event.preventDefault();
-                    selectIndex(activeIndex + 1);
-                }
-            }}
-        >
+        <div className="response-carousel" aria-label={ariaLabel} role="group">
             <div
                 className={`${className}${isTransitioning ? ` ${className}--transitioning` : ''}`}
             >

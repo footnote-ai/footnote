@@ -131,9 +131,9 @@ test('response carousel owns the preserved transition and accessible dot control
 
     assert.match(source, /setIsTransitioning\(true\)/);
     assert.match(source, /aria-pressed/);
-    assert.match(source, /ArrowLeft/);
-    assert.match(source, /ArrowRight/);
-    assert.match(source, /tabIndex=\{0\}/);
+    assert.match(source, /aria-disabled/);
+    assert.doesNotMatch(source, /onKeyDown/);
+    assert.doesNotMatch(source, /tabIndex=\{0\}/);
     assert.match(source, /role="group"/);
     assert.match(source, /showPreviousNextControls/);
     assert.match(source, /const activeIndex = normalizeInitialIndex/);

@@ -21,7 +21,7 @@
     padding: 0.35rem 0.6rem;
 }
 
-.response-carousel__control:disabled {
+.response-carousel__control[aria-disabled='true'] {
     cursor: not-allowed;
     opacity: 0.55;
 }
