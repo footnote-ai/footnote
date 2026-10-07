@@ -57,6 +57,47 @@ test('buildRunOutcomeSummary returns completed for goal_satisfied termination', 
     );
 });
 
+test('buildRunOutcomeSummary respects explicit limited and degraded run outcomes', () => {
+    const limited = createWorkflow('goal_satisfied');
+    limited.runStatus = 'limited';
+    const limitedSummary = buildRunOutcomeSummary(
+        createSource({ workflow: limited })
+    );
+    assert.equal(limitedSummary?.headline, 'Limited');
+    assert.equal(limitedSummary?.reasonCode, 'goal_satisfied');
+
+    const degraded = createWorkflow('goal_satisfied');
+    degraded.runStatus = 'degraded';
+    const degradedSummary = buildRunOutcomeSummary(
+        createSource({ workflow: degraded })
+    );
+    assert.equal(degradedSummary?.headline, 'Degraded');
+
+    const legacyDegraded = createWorkflow('goal_satisfied');
+    legacyDegraded.status = 'degraded';
+    assert.equal(
+        buildRunOutcomeSummary(createSource({ workflow: legacyDegraded }))
+            ?.headline,
+        'Degraded'
+    );
+});
+
+test('buildRunOutcomeSummary distinguishes failed and rejected workflow outcomes', () => {
+    const workflow = createWorkflow('goal_satisfied');
+
+    workflow.runStatus = 'failed';
+    assert.equal(
+        buildRunOutcomeSummary(createSource({ workflow }))?.headline,
+        'Failed'
+    );
+
+    workflow.runStatus = 'rejected';
+    assert.equal(
+        buildRunOutcomeSummary(createSource({ workflow }))?.headline,
+        'Rejected'
+    );
+});
+
 test('buildRunOutcomeSummary returns stopped for workflow budget limits', () => {
     const summary = buildRunOutcomeSummary(
         createSource({

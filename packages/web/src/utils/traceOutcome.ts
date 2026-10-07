@@ -16,11 +16,7 @@ import type {
 import { isPlannerFallbackStep } from '@footnote/contracts/policy';
 
 type RunOutcomeCategory =
-    | 'completed'
-    | 'stopped'
-    | 'skipped'
-    | 'fell_back'
-    | 'unknown';
+    'completed' | 'stopped' | 'skipped' | 'fell_back' | 'unknown';
 
 export type RunOutcomeSummary = {
     category: RunOutcomeCategory;
@@ -173,6 +169,50 @@ export const buildRunOutcomeSummary = (
                 step.stepKind === 'generate' &&
                 step.outcome.status === 'executed'
         );
+    const explicitRunStatus =
+        workflow?.runStatus ??
+        (workflow?.status === 'degraded' &&
+        (!terminationReason || terminationReason === 'goal_satisfied')
+            ? 'degraded'
+            : undefined);
+
+    if (explicitRunStatus && explicitRunStatus !== 'completed') {
+        const stopExplanation =
+            terminationReason && terminationReason !== 'goal_satisfied'
+                ? STOP_REASON_EXPLANATIONS[terminationReason]
+                : `The workflow ended with a recorded ${explicitRunStatus} outcome.`;
+        const stoppedBeforeStepKind =
+            workflow?.limitStop?.stoppedBeforeStepKind;
+        const reason =
+            explicitRunStatus === 'limited' &&
+            hasGeneratedAnswer &&
+            workflow?.limitStop?.stoppedByLimit === true &&
+            stoppedBeforeStepKind !== undefined
+                ? `Answer generation completed, but the workflow stopped before ${STEP_KIND_LABELS[stoppedBeforeStepKind] ?? stoppedBeforeStepKind}. ${stopExplanation}`
+                : stopExplanation;
+        let fallbackExplanation = '';
+        if (primaryFallbackReason !== undefined) {
+            fallbackExplanation =
+                FALLBACK_REASON_EXPLANATIONS[primaryFallbackReason] ??
+                'A fallback signal was recorded.';
+        } else if (hasPlannerFallbackSignal) {
+            fallbackExplanation =
+                'A fallback planner-contract signal was recorded.';
+        }
+        const explanation = fallbackExplanation
+            ? reason + ' ' + fallbackExplanation
+            : reason;
+
+        return {
+            category: 'stopped',
+            headline:
+                explicitRunStatus[0]!.toUpperCase() +
+                explicitRunStatus.slice(1),
+            explanation,
+            reasonCode: terminationReason,
+            secondaryReasonCode: primaryFallbackReason,
+        };
+    }
 
     if (terminationReason && terminationReason !== 'goal_satisfied') {
         const stopExplanation =

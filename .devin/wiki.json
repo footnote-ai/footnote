@@ -706,14 +706,15 @@
             "parent": "Web",
             "entrypoints": [
                 "packages/web/src/pages/TracePage.tsx",
+                "packages/web/src/components/TraceWorkflowDetails.tsx",
                 "packages/web/src/components/ProvenanceFooter.tsx",
-                "packages/web/src/utils/traceAccounting.ts",
                 "packages/web/src/utils/traceDisplay.ts",
+                "packages/backend/src/storage/traces/traceDisplayProjection.ts",
                 "packages/web/src/utils/api.ts"
             ],
             "page_notes": [
                 {
-                    "content": "Include one screenshot of the trace page and call out the key provenance fields users actually see. Explain requested versus applied workflow budgets, termination outcomes, token totals, and backend-recorded costs without recomputing cost authority in the web package.",
+                    "content": "Explain the delivered answer and evidence first, then show backend-recorded workflow Steps, subordinate Attempts, result lineage, limits, and available usage/cost facts. Keep prompt text, hidden reasoning, retrieved bodies, tool payloads, operator detail, and derived request-wide cost out of the public Trace.",
                     "author": "Maintainer"
                 }
             ]
