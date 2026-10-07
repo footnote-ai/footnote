@@ -68,8 +68,9 @@ parent relationship, limits, expiry, stop state, and any required confirmation.
 This describes evidence we need, not current record fields, a new schema, or a
 parallel record system.
 
-Web-chat disconnect cancellation is now propagated from the handler into chat
-orchestration and planner/generation calls by [#775](https://github.com/footnote-ai/footnote/pull/775),
+HTTP `/api/chat` disconnect cancellation is now propagated from the shared
+handler into chat orchestration and planner/generation calls by
+[#775](https://github.com/footnote-ai/footnote/pull/775),
 which closed [#672](https://github.com/footnote-ai/footnote/issues/672). This
 does not guarantee that providers or tools stop: interrupted requests can keep
 observed usage and response metadata without a WorkflowRecord, and a

@@ -83,7 +83,7 @@ enforced.
    reversed a committed effect. Children cannot restart without a valid
    renewed grant. Treat parent/child cancellation as a future design fixture;
    Footnote does not currently provide a multi-agent execution runtime.
-   Web-chat disconnect propagation was implemented by
+   HTTP `/api/chat` disconnect propagation was implemented by
    [#775](https://github.com/footnote-ai/footnote/pull/775), which closed
    [#672](https://github.com/footnote-ai/footnote/issues/672), but it does not
    establish delegated cancellation or guarantee that providers/tools stop.
@@ -115,7 +115,7 @@ the enforcement oracle. Evaluate missing evidence by its effect:
 | **Optional explanation/trace detail:** rationale, presentation metadata, or extra audience-safe projection                                                                                                                           | Permission and action outcome are independently established                 | Degrade observability only; do not block an otherwise authorized read-only task or invent missing detail.                                   |
 
 The `unknown` outcome is an evaluation meaning, not a current workflow status
-or a proposed schema. Current interrupted web-chat requests persist response
+or a proposed schema. Current interrupted `/api/chat` requests persist response
 metadata without a WorkflowRecord, and cancellation-ignoring providers/tools
 may finish; fixtures must assert only observations the tested boundary actually
 exposes. In particular, do not require a Run cancellation status that does not
