@@ -16,6 +16,13 @@ const currentDirectory = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(currentDirectory, '..');
 const envExamplePath = path.join(repoRoot, '.env.example');
 
+const compareCodeUnits = (left: string, right: string): number =>
+    left < right ? -1 : left > right ? 1 : 0;
+
+/** Sorts diagnostic keys in stable UTF-16 code-unit order. */
+export const sortKeysInCodeUnitOrder = (keys: string[]): string[] =>
+    keys.sort(compareCodeUnits);
+
 const parseExampleKeys = (content: string): string[] => {
     const keys: string[] = [];
     const keyPattern = /^\s*([A-Z][A-Z0-9_]+)\s*=/;
@@ -56,8 +63,8 @@ const validate = (): void => {
         }
     }
 
-    unknownKeys.sort();
-    nonSecretKeys.sort();
+    sortKeysInCodeUnitOrder(unknownKeys);
+    sortKeysInCodeUnitOrder(nonSecretKeys);
 
     for (const key of unknownKeys) {
         logger.error(
@@ -80,4 +87,9 @@ const validate = (): void => {
     );
 };
 
-validate();
+if (
+    process.argv[1] &&
+    path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)
+) {
+    validate();
+}

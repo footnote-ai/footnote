@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /* eslint-env node */
-/* global process, console */
+/* global process, console, module, require */
 /**
  * @description: Runs Prettier on changed files only, with optional base-ref support for CI.
  * @footnote-scope: utility
@@ -73,7 +73,10 @@ const listChangedFiles = () => {
     return [...unstaged, ...staged, ...untracked];
 };
 
-const uniqueSorted = (values) => [...new Set(values)].sort();
+const compareCodeUnits = (left, right) =>
+    left < right ? -1 : left > right ? 1 : 0;
+
+const uniqueSorted = (values) => [...new Set(values)].sort(compareCodeUnits);
 
 const runPrettier = (modeArg, files) => {
     const pnpmBinary = process.platform === 'win32' ? 'pnpm.cmd' : 'pnpm';
@@ -102,28 +105,38 @@ const runPrettier = (modeArg, files) => {
     return prettierResult;
 };
 
-try {
-    const changedFiles =
-        uniqueSorted(listChangedFiles()).filter(isSupportedFile);
-    if (changedFiles.length === 0) {
-        console.log('No changed files matched Prettier-supported extensions.');
-        process.exit(0);
-    }
+const main = () => {
+    try {
+        const changedFiles =
+            uniqueSorted(listChangedFiles()).filter(isSupportedFile);
+        if (changedFiles.length === 0) {
+            console.log(
+                'No changed files matched Prettier-supported extensions.'
+            );
+            process.exit(0);
+        }
 
-    console.log(
-        `Running Prettier (${mode}) on ${changedFiles.length} changed file(s).`
-    );
-    const prettierResult = runPrettier(mode, changedFiles);
-    if (prettierResult.error) {
+        console.log(
+            `Running Prettier (${mode}) on ${changedFiles.length} changed file(s).`
+        );
+        const prettierResult = runPrettier(mode, changedFiles);
+        if (prettierResult.error) {
+            console.error(
+                `format-changed failed to start prettier: ${prettierResult.error.message}`
+            );
+            process.exit(1);
+        }
+        process.exit(prettierResult.status ?? 1);
+    } catch (error) {
         console.error(
-            `format-changed failed to start prettier: ${prettierResult.error.message}`
+            `format-changed failed: ${error instanceof Error ? error.message : String(error)}`
         );
         process.exit(1);
     }
-    process.exit(prettierResult.status ?? 1);
-} catch (error) {
-    console.error(
-        `format-changed failed: ${error instanceof Error ? error.message : String(error)}`
-    );
-    process.exit(1);
+};
+
+if (require.main === module) {
+    main();
 }
+
+module.exports = { uniqueSorted };
