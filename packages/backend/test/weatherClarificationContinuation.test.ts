@@ -11,10 +11,13 @@ import assert from 'node:assert/strict';
 import type { PostChatRequest } from '@footnote/contracts/web';
 import { resolveWeatherClarificationContinuation } from '../src/services/tools/weatherClarificationContinuation.js';
 
-const requestWithPriorClarification = (content: string): PostChatRequest => ({
+const requestWithPriorClarification = (
+    content: string,
+    latestUserInput = '2'
+): PostChatRequest => ({
     surface: 'web',
     trigger: { kind: 'submit' },
-    latestUserInput: '2',
+    latestUserInput,
     conversation: [{ role: 'assistant', content }],
 });
 
@@ -40,6 +43,28 @@ test('does not treat blank or malformed lines as numbered choices', () => {
     );
 
     assert.equal(result.kind, 'none');
+});
+
+test('requires whitespace after the period before a numbered choice label', () => {
+    const malformed = resolveWeatherClarificationContinuation(
+        requestWithPriorClarification(
+            'Which location did you mean?\n\n1.Springfield \n\nPlease reply with your choice.',
+            '1'
+        )
+    );
+    assert.equal(malformed.kind, 'none');
+
+    const valid = resolveWeatherClarificationContinuation(
+        requestWithPriorClarification(
+            'Which location did you mean?\n\n1. Springfield\n\nPlease reply with your choice.',
+            '1'
+        )
+    );
+
+    assert.equal(valid.kind, 'resolved');
+    if (valid.kind === 'resolved') {
+        assert.equal(valid.selectedOption.label, 'Springfield');
+    }
 });
 
 test('does not parse labels across long runs of whitespace and blank lines', () => {

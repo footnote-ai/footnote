@@ -160,9 +160,11 @@ const parseClarificationFromAssistantMessage = (
         const indexText = line.slice(0, separatorIndex);
         if (!/^\d+$/u.test(indexText)) continue;
 
-        const value = line.slice(separatorIndex + 1);
+        const value = rawLine.slice(rawLine.indexOf('.') + 1);
+        if (value.length === value.trimStart().length) continue;
+
         const label = value.trim();
-        if (label.length === 0 || value.length === label.length) continue;
+        if (label.length === 0) continue;
 
         options.push({
             id: `option-${indexText}`,
