@@ -35,6 +35,12 @@ export type ExternalRunReviewInput = z.infer<
     typeof ExternalRunReviewInputSchema
 >;
 export type ExternalRunReviewSignals = ExternalRunReviewInput['signals'];
+export type ExternalRunReviewAssessment = Omit<
+    ProvenanceAssessment,
+    'signals'
+> & {
+    signals: Partial<ProvenanceAssessment['signals']>;
+};
 
 const EXTERNAL_RUN_REVIEW_SIGNAL_NAMES = [
     'citationCount',
@@ -52,7 +58,7 @@ export type ExternalRunReviewResult = {
     reportedSignals: ExternalRunReviewSignals;
     missingSignals: Array<keyof ExternalRunReviewSignals>;
     provenance: Provenance;
-    assessment: ProvenanceAssessment;
+    assessment: ExternalRunReviewAssessment;
 };
 
 /**
@@ -79,16 +85,44 @@ export function reviewExternalRun(input: unknown): ExternalRunReviewResult {
                 ? 'Speculative'
                 : undefined,
     });
-    const assessment =
-        missingSignals.length === 0
-            ? classification.assessment
-            : {
-                  ...classification.assessment,
-                  limitations: [
+    const assessment: ExternalRunReviewAssessment = {
+        ...classification.assessment,
+        signals: {
+            ...(signals.citationCount !== undefined && {
+                citationsPresent: signals.citationCount > 0,
+            }),
+            ...(signals.retrievalRequested !== undefined && {
+                retrievalRequested: signals.retrievalRequested,
+            }),
+            ...(signals.retrievalUsed !== undefined && {
+                retrievalUsed: signals.retrievalUsed,
+            }),
+            ...(signals.retrievalToolExecuted !== undefined && {
+                retrievalToolExecuted: signals.retrievalToolExecuted,
+            }),
+            ...(signals.workflowEvidence !== undefined && {
+                workflowEvidence: signals.workflowEvidence,
+            }),
+            ...(signals.trustGraphEvidenceAvailable !== undefined && {
+                trustGraphEvidenceAvailable:
+                    signals.trustGraphEvidenceAvailable,
+            }),
+            ...(signals.trustGraphEvidenceUsed !== undefined && {
+                trustGraphEvidenceUsed: signals.trustGraphEvidenceUsed,
+            }),
+            ...(signals.assistantDeclaredSpeculative !== undefined && {
+                assistantDeclaredSpeculative:
+                    signals.assistantDeclaredSpeculative,
+            }),
+        },
+        limitations:
+            missingSignals.length === 0
+                ? classification.assessment.limitations
+                : [
                       ...classification.assessment.limitations,
                       `Host did not report these provenance signals: ${missingSignals.join(', ')}.`,
                   ],
-              };
+    };
 
     return {
         origin: record.origin,

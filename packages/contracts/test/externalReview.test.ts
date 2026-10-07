@@ -68,6 +68,7 @@ test('reviewExternalRun does not infer missing citations from retrieval-only evi
     });
 
     assert.ok(review.missingSignals.includes('citationCount'));
+    assert.deepEqual(review.assessment.signals, { retrievalUsed: true });
     assert.equal(
         review.assessment.conflicts.includes(
             'retrieval_used_without_citations'
@@ -87,6 +88,34 @@ test('reviewExternalRun does not infer missing citations from retrieval-only evi
     );
 });
 
+test('reviewExternalRun preserves explicitly reported false signals and zero citations in the assessment', () => {
+    const review = reviewExternalRun({
+        schemaVersion: 'v0alpha',
+        origin: 'host_reported',
+        signals: {
+            citationCount: 0,
+            retrievalRequested: false,
+            retrievalUsed: false,
+            retrievalToolExecuted: false,
+            workflowEvidence: false,
+            trustGraphEvidenceAvailable: false,
+            trustGraphEvidenceUsed: false,
+            assistantDeclaredSpeculative: false,
+        },
+    });
+
+    assert.deepEqual(review.assessment.signals, {
+        citationsPresent: false,
+        retrievalRequested: false,
+        retrievalUsed: false,
+        retrievalToolExecuted: false,
+        workflowEvidence: false,
+        trustGraphEvidenceAvailable: false,
+        trustGraphEvidenceUsed: false,
+        assistantDeclaredSpeculative: false,
+    });
+});
+
 test('reviewExternalRun does not infer unavailable TrustGraph evidence when availability is unreported', () => {
     const review = reviewExternalRun({
         schemaVersion: 'v0alpha',
@@ -95,6 +124,9 @@ test('reviewExternalRun does not infer unavailable TrustGraph evidence when avai
     });
 
     assert.ok(review.missingSignals.includes('trustGraphEvidenceAvailable'));
+    assert.deepEqual(review.assessment.signals, {
+        trustGraphEvidenceUsed: true,
+    });
     assert.equal(
         review.assessment.conflicts.includes(
             'trustgraph_usage_without_availability'
