@@ -43,8 +43,9 @@ export interface BotProfileConfig {
     displayName: string;
     mentionAliases: string[];
     promptOverlay: BotProfilePromptOverlay;
-    /** Optional operator default; persona catalog defaults apply when absent. */
+    /** Optional persona expression override. */
     personaExpressionStrength?: PersonaExpressionStrength;
+    /** Optional operator overrides; deployment defaults apply until auditioned persona defaults are implemented. */
     speechPresentation?: BotProfileSpeechPresentation;
 }
 

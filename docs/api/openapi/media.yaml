@@ -235,10 +235,12 @@ components:
             type: string
             minLength: 1
             maxLength: 128
+            pattern: '\S'
         InternalTtsVoice:
             type: string
             minLength: 1
             maxLength: 128
+            pattern: '\S'
         InternalVoiceChannelContext:
             type: object
             properties:
@@ -260,6 +262,7 @@ components:
                     type: string
                     minLength: 1
                     maxLength: 500
+                    pattern: '\S'
                 speed:
                     type: string
                     enum:
@@ -282,6 +285,7 @@ components:
                     type: string
                     minLength: 1
                     maxLength: 200
+                    pattern: '\S'
                 styleDegree:
                     type: string
                     enum:
@@ -292,6 +296,7 @@ components:
                     type: string
                     minLength: 1
                     maxLength: 500
+                    pattern: '\S'
             additionalProperties: false
         InternalTtsUsage:
             type: object
@@ -416,7 +421,6 @@ components:
             enum:
                 - request_or_session
                 - operator_profile
-                - persona_default
                 - deployment_fallback
         InternalImageStreamEvent:
             oneOf:

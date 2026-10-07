@@ -9,10 +9,7 @@ import type { BotProfileConfig } from '../config/profile.js';
 
 export type SpeechModality = 'tts' | 'realtime';
 export type SpeechSelectionSource =
-    | 'request_or_session'
-    | 'operator_profile'
-    | 'persona_default'
-    | 'deployment_fallback';
+    'request_or_session' | 'operator_profile' | 'deployment_fallback';
 
 export type SpeechSelection = {
     profileId: string;

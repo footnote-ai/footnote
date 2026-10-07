@@ -28,7 +28,6 @@ const InternalVoiceOutputFormatSchema = z.enum([
 const SpeechSelectionSourceSchema = z.enum([
     'request_or_session',
     'operator_profile',
-    'persona_default',
     'deployment_fallback',
 ]);
 
@@ -54,15 +53,15 @@ const SpeechSelectionMetadataSchema = z
 
 const InternalTtsOptionsSchema = z
     .object({
-        model: z.string().min(1).max(128).optional(),
-        voice: z.string().min(1).max(128).optional(),
+        model: z.string().trim().min(1).max(128).optional(),
+        voice: z.string().trim().min(1).max(128).optional(),
         speed: z.enum(['slow', 'normal', 'fast']).optional(),
         pitch: z.enum(['low', 'normal', 'high']).optional(),
         emphasis: z.enum(['none', 'moderate', 'strong']).optional(),
-        style: z.string().min(1).max(200).optional(),
+        style: z.string().trim().min(1).max(200).optional(),
         styleDegree: z.enum(['low', 'normal', 'high']).optional(),
-        styleNote: z.string().min(1).max(500).optional(),
-        delivery: z.string().min(1).max(500).optional(),
+        styleNote: z.string().trim().min(1).max(500).optional(),
+        delivery: z.string().trim().min(1).max(500).optional(),
     })
     .strict();
 
@@ -153,9 +152,9 @@ const InternalVoiceSessionContextSchema = z
 
 const InternalVoiceRealtimeOptionsSchema = z
     .object({
-        model: z.string().min(1).max(128).optional(),
-        voice: z.string().min(1).max(128).optional(),
-        delivery: z.string().min(1).max(500).optional(),
+        model: z.string().trim().min(1).max(128).optional(),
+        voice: z.string().trim().min(1).max(128).optional(),
+        delivery: z.string().trim().min(1).max(500).optional(),
         temperature: z.number().min(0).max(2).optional(),
         maxResponseOutputTokens: z.number().int().min(1).max(4096).optional(),
         turnDetection: z.enum(supportedOpenAIRealtimeTurnDetections).optional(),
