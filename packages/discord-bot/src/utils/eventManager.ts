@@ -10,6 +10,7 @@ import { Client } from 'discord.js';
 import path from 'path';
 import { readdir } from 'fs/promises';
 import { logger } from './logger.js';
+import { runAsyncCallback } from './runAsyncCallback.js';
 import { Event } from '../events/Event.js';
 import { runtimeConfig } from '../config.js';
 
@@ -197,13 +198,19 @@ export class EventManager {
                 continue;
             }
 
+            const executeEvent = (...args: unknown[]): void => {
+                runAsyncCallback(
+                    () => event.execute(...args),
+                    (error) =>
+                        logger.error(`Error in event ${event.name}:`, error)
+                );
+            };
+
             // Register the event
             if (event.once) {
-                this.client.once(event.name, (...args) =>
-                    event.execute(...args)
-                );
+                this.client.once(event.name, executeEvent);
             } else {
-                this.client.on(event.name, (...args) => event.execute(...args));
+                this.client.on(event.name, executeEvent);
             }
 
             // Track that we've registered this event name

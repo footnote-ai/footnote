@@ -7,6 +7,7 @@
  */
 
 import { logger } from '../utils/logger.js';
+import { runAsyncCallback } from '../utils/runAsyncCallback.js';
 import { Command } from './BaseCommand.js';
 import {
     ChatInputCommandInteraction,
@@ -32,6 +33,42 @@ import {
     supportedOpenAITtsVoices,
     type InternalTtsVoiceId,
 } from '@footnote/contracts/providers';
+
+/**
+ * Sends a voice invite and keeps reply failures separate from invite creation.
+ */
+export const sendVoiceChannelInvite = async (
+    voiceChannel: Pick<VoiceChannel, 'createInvite'>,
+    interaction: Pick<ChatInputCommandInteraction, 'followUp'>
+): Promise<void> => {
+    let inviteUrl: string;
+    try {
+        inviteUrl = (await voiceChannel.createInvite()).url;
+    } catch (error) {
+        logger.error('Failed to create voice channel invite:', error);
+        try {
+            await interaction.followUp({
+                content: `Failed to create invite: ${error}`,
+                flags: [1 << 6],
+            });
+        } catch (followUpError) {
+            logger.error(
+                'Failed to send invite failure follow-up:',
+                followUpError
+            );
+        }
+        return;
+    }
+
+    try {
+        await interaction.followUp({
+            content: `Join the call by clicking this link: ${inviteUrl}`,
+            flags: [1 << 6],
+        });
+    } catch (error) {
+        logger.error('Failed to send voice channel invite follow-up:', error);
+    }
+};
 
 /**
  * @name call
@@ -317,42 +354,53 @@ const callCommand: Command = {
             // Handle disconnections
             voiceConnection.on(
                 VoiceConnectionStatus.Disconnected,
-                async (oldState, newState) => {
-                    logger.warn(
-                        `Voice connection status changed: ${oldState} -> ${newState}`
-                    );
+                (oldState, newState) => {
+                    runAsyncCallback(
+                        async () => {
+                            logger.warn(
+                                `Voice connection status changed: ${oldState} -> ${newState}`
+                            );
 
-                    try {
-                        // Try to reconnect if it was a temporary disconnection
-                        if (voiceConnection) {
-                            await Promise.race([
-                                entersState(
-                                    voiceConnection,
-                                    VoiceConnectionStatus.Signalling,
-                                    5_000
-                                ),
-                                entersState(
-                                    voiceConnection,
-                                    VoiceConnectionStatus.Connecting,
-                                    5_000
-                                ),
-                            ]);
-                            logger.info(
-                                'Successfully reconnected to voice channel'
-                            );
-                        } else {
-                            throw new Error(
-                                'Cannot reconnect - Voice connection is null'
-                            );
-                        }
-                    } catch (error) {
-                        logger.error(`Permanent voice disconnection: ${error}`);
-                        voiceConnection?.destroy();
-                        interaction.followUp({
-                            content: `I was unable to maintain a connection to the voice channel ${voiceChannel.name}. Please try again.`,
-                            flags: [1 << 6],
-                        });
-                    }
+                            try {
+                                // Try to reconnect if it was a temporary disconnection
+                                if (voiceConnection) {
+                                    await Promise.race([
+                                        entersState(
+                                            voiceConnection,
+                                            VoiceConnectionStatus.Signalling,
+                                            5_000
+                                        ),
+                                        entersState(
+                                            voiceConnection,
+                                            VoiceConnectionStatus.Connecting,
+                                            5_000
+                                        ),
+                                    ]);
+                                    logger.info(
+                                        'Successfully reconnected to voice channel'
+                                    );
+                                } else {
+                                    throw new Error(
+                                        'Cannot reconnect - Voice connection is null'
+                                    );
+                                }
+                            } catch (error) {
+                                logger.error(
+                                    `Permanent voice disconnection: ${error}`
+                                );
+                                voiceConnection?.destroy();
+                                await interaction.followUp({
+                                    content: `I was unable to maintain a connection to the voice channel ${voiceChannel.name}. Please try again.`,
+                                    flags: [1 << 6],
+                                });
+                            }
+                        },
+                        (error: unknown) =>
+                            logger.error(
+                                'Voice disconnection handling failed.',
+                                { error }
+                            )
+                    );
                 }
             );
 
@@ -369,25 +417,8 @@ const callCommand: Command = {
                 );
             });
 
-            // Invite the user to join the voice channel
-            voiceChannel
-                .createInvite()
-                .then((invite) => {
-                    interaction.followUp({
-                        content: `Join the call by clicking this link: ${invite.url}`,
-                        flags: [1 << 6],
-                    });
-                })
-                .catch((error) => {
-                    logger.error(
-                        `Failed to create voice channel invite:`,
-                        error
-                    );
-                    interaction.followUp({
-                        content: `Failed to create invite: ${error}`,
-                        flags: [1 << 6],
-                    });
-                });
+            // Invite the user to join the voice channel.
+            await sendVoiceChannelInvite(voiceChannel, interaction);
         } catch (error) {
             const errorMessage =
                 error instanceof Error ? error.message : String(error);
