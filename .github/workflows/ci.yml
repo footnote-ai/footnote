@@ -16,13 +16,13 @@ jobs:
     validate:
         runs-on: ubuntu-latest
         steps:
-            - uses: actions/checkout@v7
+            - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
-            - uses: actions/setup-node@v4
+            - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
               with:
                   node-version: 22
 
-            - uses: pnpm/action-setup@v6
+            - uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6
             - run: pnpm install --frozen-lockfile
             - run: pnpm review
             - run: pnpm -r build
@@ -31,13 +31,13 @@ jobs:
         name: Turnstile browser integration
         runs-on: ubuntu-latest
         steps:
-            - uses: actions/checkout@v7
+            - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
-            - uses: actions/setup-node@v4
+            - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
               with:
                   node-version: 22
 
-            - uses: pnpm/action-setup@v6
+            - uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6
             - run: pnpm install --frozen-lockfile
             - run: pnpm exec playwright install --with-deps chromium
             - run: pnpm test:e2e:turnstile:pass
@@ -243,8 +243,8 @@ jobs:
                     - name: server
                       dockerfile: deploy/Dockerfile.server
         steps:
-            - uses: actions/checkout@v7
-            - uses: docker/setup-buildx-action@v4
+            - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+            - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4
             - id: context
               name: Prepare revision-safe project context bundle
               shell: bash
