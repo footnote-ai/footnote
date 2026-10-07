@@ -126,7 +126,7 @@ Footnote applies this work to the full interaction: what entered, what acted, wh
 
 ## What we ask while building
 
-These ideas have to affect the code. For any feature with real power, ask: What can it do? Will the user understand that? What record will remain? Can they stop, reverse, or correct it? Does it make Footnote harder to leave? These questions catch technical changes that quietly give the system more authority.
+These ideas have to affect the code. For any feature with real power, ask: What can it do? What has the user authorized? Will the user understand that? What record will remain? Can they stop, reverse, or correct it? Does it make Footnote harder to leave? These questions catch technical changes that quietly give the system more authority.
 
 ## What success looks like
 
