@@ -54,10 +54,8 @@ own Footnote's outer Workflow, Execution Contract, provenance, trace, review,
 or failure semantics. W3C PROV, OpenTelemetry, A2A, and MCP are useful alignment
 or export references, not replacements for Footnote's everyday domain names.
 
-Footnote is pre-production. The workflow cutover now expresses the current path
-through the shared core and removes the superseded internal topology. Keep
-future workflow changes on that single path rather than adding a second live
-engine. Every merged migration PR must leave chat usable.
+The shared workflow core is the only live workflow engine. Extend it rather
+than adding a second one.
 
 ## Workflow core foundation
 
@@ -146,8 +144,7 @@ The live conditional topology is `plan? -> tool? -> presentation? -> generate
 -> assess? -> [replan? -> generate -> assess?] -> finish`. A `?` step runs only
 when the active policy and dependencies enable it. When assessment requests a
 revision, `replan` returns to `generate`, which may enter `assess` again before
-`finish`. This is the post-cutover topology, and the superseded internal
-topology has been removed.
+`finish`.
 
 Mode details:
 
