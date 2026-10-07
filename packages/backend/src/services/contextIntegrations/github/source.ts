@@ -135,7 +135,7 @@ const hasExplicitToken = (text: string, token: string): boolean => {
 };
 
 const sourceRequestClauses = (text: string): string[] =>
-    text.split(/(?:[.!?;]\s+|\r?\n+)/u);
+    text.split(/(?:[.!?;,]\s+|\r?\n+)/u);
 
 const clauseNamesSourceSelection = (
     clause: string,

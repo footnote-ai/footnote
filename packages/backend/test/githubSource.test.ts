@@ -213,6 +213,13 @@ test('source selection requires user-authored repo, ref, and path and rejects un
         ),
         sourceWithoutSearch
     );
+    assert.deepEqual(
+        normalizeGitHubSourceSelection(
+            sourceWithoutSearch,
+            "Don't inspect README, examine acme/repo at main in src/service.ts now."
+        ),
+        sourceWithoutSearch
+    );
     for (const unrelatedRequest of [
         'Check the docs. acme/repo at main in src/service.ts.',
         'Search the web first. acme/repo at main in src/service.ts.',
