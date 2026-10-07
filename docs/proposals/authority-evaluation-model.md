@@ -1,7 +1,7 @@
 # Testing authority boundaries
 
 **Status:** Draft acceptance criteria for [#709](https://github.com/footnote-ai/footnote/issues/709); implementation deferred.
-**Updated:** 2026-09-28
+**Updated:** 2026-10-06
 
 The [authority decision](../decisions/2026-09-authority-and-provenance-boundaries.md)
 draws a simple distinction: information can be useful without being allowed to
@@ -20,9 +20,35 @@ were attempted, and their observed results. Simulate failures, cancellation,
 expiry, and uncertain external effects as well as success.
 
 Keep the source of information, its reliability, its model-input role, and
-its permission to direct work separate. A signed file or authenticated tool
-response is not automatically an instruction. The existing context manifest's
-authority label is an input classification, not an action grant.
+its permission to direct work separate. Use these roles rather than a single
+trust ranking:
+
+- **Constrain:** license/governance terms constrain deployment and use;
+  backend-validated deployment policy sets the Execution Contract's allowed
+  behavior and limits. Neither is a blanket action grant.
+- **Direct:** an authenticated user's request selects a task within those
+  limits. Operator policy can define a bounded command only through an explicit
+  backend-validated mapping.
+- **Inform:** retrieved documents, webpages, and tool responses provide data;
+  they have no instruction authority by default, even when first-party, signed,
+  structured, or authenticated.
+- **Propose:** model, planner, reviewer, and delegated-agent outputs suggest
+  work; the backend decides whether it is permitted. A delegate cannot expand
+  the parent's scope, capabilities, constraints, budget, or stop conditions.
+- **Report:** backend-observed Run → Step → Attempt → Result facts describe
+  what was admitted, attempted, and observed. A tool's report or a model's
+  claim is not proof of an external effect.
+
+When instructions conflict, governance and deployment constraints bound the
+task; user direction cannot exceed them, and informative or proposed content
+cannot override either. Provenance, source quality, authentication, and model
+input roles do not silently grant action authority. The existing context
+manifest's authority label is an input classification, not an action grant.
+
+These are behavioral roles, not a runtime schema. The current backend does not
+provide a general authorization or delegation gate for arbitrary external
+actions, so these acceptance cases do not claim that such actions are already
+enforced.
 
 ## Cases that must hold
 
@@ -55,8 +81,12 @@ authority label is an input classification, not an action grant.
    parent cancellation. An in-flight write is stopped when possible; otherwise
    its actual or uncertain outcome is recorded. Do not claim cancellation
    reversed a committed effect. Children cannot restart without a valid
-   renewed grant. [#672](https://github.com/footnote-ai/footnote/issues/672)
-   owns the transport and runtime mechanics.
+   renewed grant. Treat parent/child cancellation as a future design fixture;
+   Footnote does not currently provide a multi-agent execution runtime.
+   Web-chat disconnect propagation was implemented by
+   [#775](https://github.com/footnote-ai/footnote/pull/775), which closed
+   [#672](https://github.com/footnote-ai/footnote/issues/672), but it does not
+   establish delegated cancellation or guarantee that providers/tools stop.
 8. **Retry after permission changes.** Revoke a credential or narrow the scope,
    then retry or resume the run. It must recheck current permission, expiry,
    and stop state rather than replay the old grant. A still-authorized
@@ -71,6 +101,25 @@ authority label is an input classification, not an action grant.
     evidence needed to verify that permission must prevent the action; fail-open
     behavior cannot create a capability. Missing optional explanation or trace
     detail should not block an otherwise authorized read-only task.
+
+## Evaluation oracle
+
+Fixtures must exercise a backend-owned action boundary with deterministic fake
+models and tools. A model's refusal, explanation, or claimed completion is never
+the enforcement oracle. Evaluate missing evidence by its effect:
+
+| Evidence                                                                                                                                                                                                                             | If missing, stale, or uncertain                                             | Expected result                                                                                                                             |
+| ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Authorization-critical:** authenticated actor or validated policy source; requested action and scope; current capability/limits; delegated parent grant and stop state where relevant; and action-bound confirmation when required | The backend cannot prove permission for the consequential action            | Do not dispatch that action. Ask for valid authorization or confirmation; continue unrelated authorized read-only work when possible.       |
+| **Effect observation:** whether dispatch occurred and the executor's observed result                                                                                                                                                 | The external effect may have happened, but cannot be confirmed or ruled out | Report `unknown` in the fixture; do not convert a model/tool claim into success or automatically replay a potentially consequential action. |
+| **Optional explanation/trace detail:** rationale, presentation metadata, or extra audience-safe projection                                                                                                                           | Permission and action outcome are independently established                 | Degrade observability only; do not block an otherwise authorized read-only task or invent missing detail.                                   |
+
+The `unknown` outcome is an evaluation meaning, not a current workflow status
+or a proposed schema. Current interrupted web-chat requests persist response
+metadata without a WorkflowRecord, and cancellation-ignoring providers/tools
+may finish; fixtures must assert only observations the tested boundary actually
+exposes. In particular, do not require a Run cancellation status that does not
+exist.
 
 ## What counts as passing
 
