@@ -44,8 +44,14 @@ import type {
     GetPublicResponseResponse,
     GetTraceResponse,
     GetTraceStaleResponse,
+    GetSetupRepositoryContextConnectionStateResponse,
+    GetSetupRepositoryContextPreviewResponse,
     TraceDisplayMetadata,
     PostChatResponse,
+    PostSetupRepositoryContextConnectionTestRequest,
+    PostSetupRepositoryContextConnectionTestResponse,
+    PostSetupRepositoryContextLoadRequest,
+    PostSetupRepositoryContextLoadResponse,
     CreatePublicResponseRequest,
     CreatePublicResponseResponse,
     RevokePublicResponseRequest,
@@ -2926,6 +2932,120 @@ export const PostSetupOperatorLinkResponseSchema = z
         backupPath: z.string().min(1).optional(),
     })
     .strict();
+
+const SetupRepositoryContextConnectionStateSchema: z.ZodType<GetSetupRepositoryContextConnectionStateResponse> =
+    z
+        .object({
+            configured: z.boolean(),
+            targets: z
+                .array(
+                    z
+                        .object({
+                            id: z.string().min(1),
+                            flow: z.string().min(1),
+                            collection: z.string().min(1),
+                            workspace: z.string().min(1),
+                        })
+                        .strict()
+                )
+                .max(8),
+        })
+        .strict();
+
+/** @api.operationId: getSetupRepositoryContextConnectionState @api.path: GET /api/setup/repository-context/connection */
+export const GetSetupRepositoryContextConnectionStateResponseSchema =
+    SetupRepositoryContextConnectionStateSchema;
+
+/** @api.operationId: postSetupRepositoryContextConnectionTest @api.path: POST /api/setup/repository-context/connection/test */
+export const PostSetupRepositoryContextConnectionTestRequestSchema: z.ZodType<PostSetupRepositoryContextConnectionTestRequest> =
+    z
+        .object({
+            targetId: z.string().trim().min(1).max(128),
+        })
+        .strict();
+
+/** @api.operationId: postSetupRepositoryContextConnectionTest @api.path: POST /api/setup/repository-context/connection/test */
+export const PostSetupRepositoryContextConnectionTestResponseSchema = z
+    .object({
+        connected: z.literal(true),
+        targetId: z.string().min(1),
+        testedAt: z.string().datetime(),
+    })
+    .strict() as z.ZodType<PostSetupRepositoryContextConnectionTestResponse>;
+
+/** @api.operationId: getSetupRepositoryContextPreview @api.path: GET /api/setup/repository-context/preview */
+export const GetSetupRepositoryContextPreviewResponseSchema: z.ZodType<GetSetupRepositoryContextPreviewResponse> =
+    z
+        .object({
+            revision: z.string().regex(/^[a-f0-9]{7,64}$/u),
+            fileCount: z.number().int().nonnegative(),
+            totalBytes: z.number().int().nonnegative(),
+            files: z
+                .array(
+                    z
+                        .object({
+                            path: z.string().min(1),
+                            sizeBytes: z.number().int().nonnegative(),
+                        })
+                        .strict()
+                )
+                .max(250),
+            skipped: z.array(
+                z
+                    .object({
+                        path: z.string(),
+                        reason: z.string(),
+                    })
+                    .strict()
+            ),
+        })
+        .strict();
+
+/** @api.operationId: postSetupRepositoryContextLoad @api.path: POST /api/setup/repository-context/load */
+export const PostSetupRepositoryContextLoadResponseSchema: z.ZodType<PostSetupRepositoryContextLoadResponse> =
+    z
+        .object({
+            repositoryId: z.string().min(1),
+            startedAt: z.string().datetime(),
+            completedAt: z.string().datetime(),
+            selectedFileCount: z.number().int().nonnegative(),
+            selectedBytes: z.number().int().nonnegative(),
+            counts: z
+                .object({
+                    added: z.number().int().nonnegative(),
+                    changed: z.number().int().nonnegative(),
+                    unchanged: z.number().int().nonnegative(),
+                    skipped: z.number().int().nonnegative(),
+                    failed: z.number().int().nonnegative(),
+                })
+                .strict(),
+            items: z
+                .array(
+                    z
+                        .object({
+                            path: z.string(),
+                            status: z.enum([
+                                'added',
+                                'changed',
+                                'unchanged',
+                                'skipped',
+                                'failed',
+                            ]),
+                            sizeBytes: z
+                                .number()
+                                .int()
+                                .nonnegative()
+                                .optional(),
+                        })
+                        .strict()
+                )
+                .max(500),
+        })
+        .strict();
+
+/** @api.operationId: postSetupRepositoryContextLoad @api.path: POST /api/setup/repository-context/load */
+export const PostSetupRepositoryContextLoadRequestSchema: z.ZodType<PostSetupRepositoryContextLoadRequest> =
+    z.object({ targetId: z.string().trim().min(1).max(128) }).strict();
 
 const AdminSettingsValidationErrorCategorySchema = z.enum([
     'yaml_parse_error',

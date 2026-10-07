@@ -20,6 +20,10 @@ type RegisterSetupRoutesDeps = {
     handleSetupSessionPostRequest: RequestHandler;
     handleSetupSessionDeleteRequest: RequestHandler;
     handleSetupOperatorLinkPostRequest: RequestHandler;
+    handleSetupRepositoryContextConnectionStateRequest: RequestHandler;
+    handleSetupRepositoryContextConnectionTestRequest: RequestHandler;
+    handleSetupRepositoryContextPreviewRequest: RequestHandler;
+    handleSetupRepositoryContextLoadRequest: RequestHandler;
     logRequest: LogRequest;
 };
 
@@ -28,7 +32,7 @@ type RegisterSetupRoutesDeps = {
  *
  * Route/method contract:
  * - Mounted at `/api/setup` via `registerSetupRoutes`.
- * - Matcher handles `/api/setup/session` and `/api/setup/operator-link` only.
+ * - Matcher handles setup sessions, operator links, and the one-time repository-context setup API.
  * - `POST /api/setup/session` dispatches to `handleSetupSessionPostRequest`.
  * - `DELETE /api/setup/session` dispatches to `handleSetupSessionDeleteRequest`.
  * - `POST /api/setup/operator-link` dispatches to `handleSetupOperatorLinkPostRequest`.
@@ -44,6 +48,10 @@ const registerSetupRoutes = ({
     handleSetupSessionPostRequest,
     handleSetupSessionDeleteRequest,
     handleSetupOperatorLinkPostRequest,
+    handleSetupRepositoryContextConnectionStateRequest,
+    handleSetupRepositoryContextConnectionTestRequest,
+    handleSetupRepositoryContextPreviewRequest,
+    handleSetupRepositoryContextLoadRequest,
     logRequest,
 }: RegisterSetupRoutesDeps): void => {
     const setupRouter = createDispatchRouter({
@@ -65,6 +73,36 @@ const registerSetupRoutes = ({
                 req.method === 'POST'
             ) {
                 await handleSetupOperatorLinkPostRequest(req, res);
+                return;
+            }
+            if (
+                normalizedPathname ===
+                '/api/setup/repository-context/connection'
+            ) {
+                await handleSetupRepositoryContextConnectionStateRequest(
+                    req,
+                    res
+                );
+                return;
+            }
+            if (
+                normalizedPathname ===
+                '/api/setup/repository-context/connection/test'
+            ) {
+                await handleSetupRepositoryContextConnectionTestRequest(
+                    req,
+                    res
+                );
+                return;
+            }
+            if (
+                normalizedPathname === '/api/setup/repository-context/preview'
+            ) {
+                await handleSetupRepositoryContextPreviewRequest(req, res);
+                return;
+            }
+            if (normalizedPathname === '/api/setup/repository-context/load') {
+                await handleSetupRepositoryContextLoadRequest(req, res);
                 return;
             }
             next();

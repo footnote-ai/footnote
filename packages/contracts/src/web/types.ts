@@ -1233,6 +1233,75 @@ export type PostSetupOperatorLinkResponse = {
     backupPath?: string;
 };
 
+/** One server-approved TrustGraph destination safe to display to setup users. */
+export type SetupRepositoryContextTarget = {
+    id: string;
+    flow: string;
+    collection: string;
+    workspace: string;
+};
+
+/** Connection state exposes only the backend's configured destination list, never credentials. */
+export type GetSetupRepositoryContextConnectionStateResponse = {
+    configured: boolean;
+    targets: SetupRepositoryContextTarget[];
+};
+
+/** Selects a destination already approved in backend runtime configuration. */
+export type PostSetupRepositoryContextConnectionTestRequest = {
+    targetId: string;
+};
+
+/** @api.operationId: postSetupRepositoryContextConnectionTest @api.path: POST /api/setup/repository-context/connection/test */
+export type PostSetupRepositoryContextConnectionTestResponse = {
+    connected: true;
+    targetId: string;
+    testedAt: string;
+};
+
+export type SetupRepositoryContextPreviewFile = {
+    path: string;
+    sizeBytes: number;
+};
+
+/** @api.operationId: getSetupRepositoryContextPreview @api.path: GET /api/setup/repository-context/preview */
+export type GetSetupRepositoryContextPreviewResponse = {
+    revision: string;
+    fileCount: number;
+    totalBytes: number;
+    files: SetupRepositoryContextPreviewFile[];
+    skipped: { path: string; reason: string }[];
+};
+
+export type SetupRepositoryContextLoadStatus =
+    'added' | 'changed' | 'unchanged' | 'skipped' | 'failed';
+
+/** @api.operationId: postSetupRepositoryContextLoad @api.path: POST /api/setup/repository-context/load */
+export type PostSetupRepositoryContextLoadRequest = {
+    targetId: string;
+};
+
+/** @api.operationId: postSetupRepositoryContextLoad @api.path: POST /api/setup/repository-context/load */
+export type PostSetupRepositoryContextLoadResponse = {
+    repositoryId: string;
+    startedAt: string;
+    completedAt: string;
+    selectedFileCount: number;
+    selectedBytes: number;
+    counts: {
+        added: number;
+        changed: number;
+        unchanged: number;
+        skipped: number;
+        failed: number;
+    };
+    items: {
+        path: string;
+        status: SetupRepositoryContextLoadStatus;
+        sizeBytes?: number;
+    }[];
+};
+
 export type AdminSettingsValidationErrorCategory =
     | 'yaml_parse_error'
     | 'invalid_root'

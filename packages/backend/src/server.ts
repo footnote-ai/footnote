@@ -53,6 +53,7 @@ import { createRuntimeConfigHandler } from './handlers/config.js';
 import { createAdminSettingsHandlers } from './handlers/adminSettings.js';
 import { createOperatorExecutionHandler } from './handlers/operatorExecution.js';
 import { createSetupSessionHandlers } from './handlers/setupSession.js';
+import { createSetupRepositoryContextHandlers } from './handlers/setupRepositoryContext.js';
 import { createAccountAuthHandlers } from './handlers/accountAuth.js';
 import { createAccountIncidentHandlers } from './handlers/accountIncidents.js';
 import { createAccountMemoryHandlers } from './handlers/accountMemories.js';
@@ -744,6 +745,17 @@ const handleOperatorExecutionRequest = createOperatorExecutionHandler({
     traceStore,
     logRequest,
 });
+const setupRepositoryContextHandlers = createSetupRepositoryContextHandlers({
+    setupBootstrapService,
+    trustGraphConfig: runtimeConfig.executionContractTrustGraph,
+    bundleRoot: path.join(
+        runtimeConfig.runtime.projectRoot,
+        '.footnote',
+        'context-bundle'
+    ),
+    logger,
+    logRequest,
+});
 const {
     handleSetupSessionPostRequest,
     handleSetupSessionDeleteRequest,
@@ -756,6 +768,7 @@ const {
         : `http://localhost:${runtimeConfig.server.port}`,
     logger,
     logRequest,
+    clearSetupSessionState: setupRepositoryContextHandlers.clearSetupSession,
 });
 const {
     handleAuthLoginRequest,
@@ -934,6 +947,14 @@ const app = createExpressApp({
     handleSetupSessionPostRequest,
     handleSetupSessionDeleteRequest,
     handleSetupOperatorLinkPostRequest,
+    handleSetupRepositoryContextConnectionStateRequest:
+        setupRepositoryContextHandlers.handleSetupRepositoryContextConnectionStateRequest,
+    handleSetupRepositoryContextConnectionTestRequest:
+        setupRepositoryContextHandlers.handleSetupRepositoryContextConnectionTestRequest,
+    handleSetupRepositoryContextPreviewRequest:
+        setupRepositoryContextHandlers.handleSetupRepositoryContextPreviewRequest,
+    handleSetupRepositoryContextLoadRequest:
+        setupRepositoryContextHandlers.handleSetupRepositoryContextLoadRequest,
     handleAuthLoginRequest,
     handleAuthCallbackRequest,
     handleAuthSessionRequest,
