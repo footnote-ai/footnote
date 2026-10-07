@@ -1,12 +1,11 @@
 # Repository Context and TrustGraph Status
 
-Status: repository context selection, preview, manual TrustGraph loading, and
-the guarded multi-target Graph RAG chat integration are implemented. Guided
-setup remains open in [#454](https://github.com/footnote-ai/footnote/issues/454).
-Bounded revision-aware source-code retrieval is a separate follow-up in
+Status: repository context selection, preview, one-time TrustGraph loading,
+guided setup, and the guarded multi-target Graph RAG chat integration are
+implemented. Bounded revision-aware source-code retrieval is a separate follow-up in
 [#539](https://github.com/footnote-ai/footnote/issues/539).
 
-Last updated: 2026-10-01.
+Last updated: 2026-10-07.
 
 ## Goal
 
@@ -175,7 +174,7 @@ Done when a scoped chat request can use repository context from TrustGraph and
 show that use in its response details. This is complete; the three-target live
 deployment path is validated separately from this status document.
 
-### 4. Add guided setup
+### 4. Complete one-time guided setup
 
 The first-run `/setup` page now includes a repository-context flow. It lets the
 user:
@@ -188,19 +187,15 @@ Credentials remain backend-only. If the deployment has no TrustGraph
 connection, setup still shows the file preview and explains what must be
 configured before a load can run.
 
-Done when a new user can review and load repository context from normal setup
-without editing YAML or running a manual loading command. A repository's
-allowlist and prepared bundle are still maintained as repository/deployment
-configuration; setup does not browse arbitrary checkouts.
+Complete: a new user can review and load repository context from normal setup
+without editing YAML or running a manual loading command. The deployment still
+owns the TrustGraph connection and prepared context bundle; setup does not
+browse arbitrary checkouts or change deployment configuration.
 
 ## Later Work
 
-A hosted TrustGraph option can come after the local path works. Local and hosted
-setups should use the same repository context file and the same backend
-connection boundary.
-
 Automatic refresh, background jobs, broader source-code loading, and hosted
-service billing are not part of the first branches.
+service billing are not part of the current one-time setup flow.
 
 ## Related Docs
 
