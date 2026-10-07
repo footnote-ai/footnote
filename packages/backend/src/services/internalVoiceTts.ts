@@ -10,10 +10,18 @@ import type {
     TextToSpeechRuntime,
 } from '@footnote/agent-runtime';
 import type {
+    ResolvedInternalTtsOptions,
     PostInternalVoiceTtsRequest,
     PostInternalVoiceTtsResponse,
+    SpeechSelectionMetadata,
 } from '@footnote/contracts/voice';
+import { DEFAULT_INTERNAL_TTS_OPTIONS } from '@footnote/contracts/voice';
 import { PostInternalVoiceTtsResponseSchema } from '@footnote/contracts/voice';
+import type { BotProfileConfig } from '../config/profile.js';
+import {
+    resolveSpeechSelection,
+    UnsupportedSpeechSelectionError,
+} from './speechPresentation.js';
 import {
     recordBackendLLMUsage,
     type BackendLLMCostRecord,
@@ -33,6 +41,8 @@ const ttsLogger =
 
 export type CreateInternalVoiceTtsServiceOptions = {
     ttsRuntime: TextToSpeechRuntime;
+    profile: BotProfileConfig;
+    fallbackOptions?: ResolvedInternalTtsOptions;
     recordUsage?: (record: BackendLLMCostRecord) => void;
 };
 
@@ -43,7 +53,8 @@ export type InternalVoiceTtsService = {
 };
 
 const toInternalVoiceTtsResponse = (
-    result: TextToSpeechResult
+    result: TextToSpeechResult,
+    speechSelection: SpeechSelectionMetadata
 ): PostInternalVoiceTtsResponse => ({
     task: 'synthesize',
     result: {
@@ -52,6 +63,7 @@ const toInternalVoiceTtsResponse = (
         mimeType: result.mimeType,
         model: result.model,
         voice: result.voice,
+        speechSelection,
         usage: result.usage,
         costs: result.costs,
         generationTimeMs: result.generationTimeMs,
@@ -60,20 +72,108 @@ const toInternalVoiceTtsResponse = (
 
 export const createInternalVoiceTtsService = ({
     ttsRuntime,
+    profile,
+    fallbackOptions = DEFAULT_INTERNAL_TTS_OPTIONS,
     recordUsage = recordBackendLLMUsage,
 }: CreateInternalVoiceTtsServiceOptions): InternalVoiceTtsService => {
     const runTtsTask = async (
         request: PostInternalVoiceTtsRequest
     ): Promise<PostInternalVoiceTtsResponse> => {
+        const requestedOptions = request.options ?? {};
+        let speechSelection = resolveSpeechSelection({
+            profile,
+            provider: ttsRuntime.provider,
+            modality: 'tts',
+            request: {
+                model: requestedOptions.model,
+                voice: requestedOptions.voice,
+                delivery:
+                    requestedOptions.delivery ?? requestedOptions.styleNote,
+            },
+            fallback: {
+                model: fallbackOptions.model,
+                voice: fallbackOptions.voice,
+            },
+        });
+        const unsupportedModel = !ttsRuntime.supportsModel(
+            speechSelection.model
+        );
+        const unsupportedVoice = !ttsRuntime.supportsVoice(
+            speechSelection.voice
+        );
+        if (unsupportedModel || unsupportedVoice) {
+            if (
+                (unsupportedModel &&
+                    speechSelection.selectionSource.model ===
+                        'request_or_session') ||
+                (unsupportedVoice &&
+                    speechSelection.selectionSource.voice ===
+                        'request_or_session')
+            ) {
+                throw new UnsupportedSpeechSelectionError('tts');
+            }
+            const ignoreOperatorModel =
+                unsupportedModel &&
+                speechSelection.selectionSource.model === 'operator_profile';
+            const ignoreOperatorVoice =
+                unsupportedVoice &&
+                speechSelection.selectionSource.voice === 'operator_profile';
+            const unsupportedSettings = [
+                ...(ignoreOperatorModel ? ['model'] : []),
+                ...(ignoreOperatorVoice ? ['voice'] : []),
+            ];
+            speechSelection = resolveSpeechSelection({
+                profile,
+                provider: ttsRuntime.provider,
+                modality: 'tts',
+                request: {
+                    model: requestedOptions.model,
+                    voice: requestedOptions.voice,
+                    delivery:
+                        requestedOptions.delivery ?? requestedOptions.styleNote,
+                },
+                ignoreOperatorModel,
+                ignoreOperatorVoice,
+                fallbackReason: `Configured profile ${unsupportedSettings.join(' and ')} is unsupported; using deployment fallback for that setting.`,
+                fallback: {
+                    model: fallbackOptions.model,
+                    voice: fallbackOptions.voice,
+                },
+            });
+        }
+
+        const resolvedOptions: ResolvedInternalTtsOptions = {
+            ...fallbackOptions,
+            ...requestedOptions,
+            model: speechSelection.model,
+            voice: speechSelection.voice,
+            styleNote:
+                speechSelection.delivery ??
+                requestedOptions.styleNote ??
+                fallbackOptions.styleNote,
+        };
+        if (
+            speechSelection.delivery &&
+            !ttsRuntime.supportsDelivery(speechSelection.model)
+        ) {
+            speechSelection = {
+                ...speechSelection,
+                delivery: null,
+                fallbackReason:
+                    'Selected TTS model does not support delivery instructions; delivery guidance was not applied.',
+            };
+        }
         ttsLogger.debug('Starting internal voice TTS synthesis.', {
-            model: request.options.model,
-            voice: request.options.voice,
+            model: speechSelection.model,
+            voice: speechSelection.voice,
+            profileId: profile.id,
+            selectionSource: speechSelection.selectionSource,
             outputFormat: request.outputFormat,
             textLength: request.text.length,
         });
         const result = await ttsRuntime.synthesize({
             text: request.text,
-            options: request.options,
+            options: resolvedOptions,
             outputFormat: request.outputFormat,
         });
 
@@ -81,12 +181,16 @@ export const createInternalVoiceTtsService = ({
             recordUsage({
                 feature: 'tts',
                 model: result.model,
-                promptTokens: result.usage.inputTokens,
-                completionTokens: result.usage.outputTokens,
-                totalTokens: result.usage.totalTokens,
+                promptTokens: result.usage.inputTokens ?? 0,
+                completionTokens: 0,
+                totalTokens: result.usage.inputTokens ?? 0,
+                usageUnit: result.usage.billingUnit,
+                usageQuantity: result.usage.inputQuantity,
                 inputCostUsd: result.costs.input,
                 outputCostUsd: result.costs.output,
                 totalCostUsd: result.costs.total,
+                costCompleteness: result.costs.completeness,
+                costIncompleteReasons: result.costs.incompleteReasons,
                 timestamp: Date.now(),
             });
         } catch (error) {
@@ -104,9 +208,10 @@ export const createInternalVoiceTtsService = ({
             generationTimeMs: result.generationTimeMs,
             usage: result.usage,
             costs: result.costs,
+            speechSelection,
         });
 
-        const response = toInternalVoiceTtsResponse(result);
+        const response = toInternalVoiceTtsResponse(result, speechSelection);
         const parsed = PostInternalVoiceTtsResponseSchema.safeParse(response);
         if (!parsed.success) {
             const firstIssue = parsed.error.issues[0];

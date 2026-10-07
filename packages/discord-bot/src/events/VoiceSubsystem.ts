@@ -320,11 +320,7 @@ export class VoiceSubsystem extends Event {
         const voiceOverride = this.initiatingVoices.get(guildId);
         const realtimeSession = new RealtimeSession({
             context: context.sessionContext,
-            model: runtimeConfig.realtime.defaultModel ?? undefined,
-            voice:
-                voiceOverride ??
-                runtimeConfig.realtime.defaultVoice ??
-                undefined,
+            voice: voiceOverride ?? undefined,
             turnDetection: runtimeConfig.realtime.turnDetection,
             turnDetectionConfig:
                 runtimeConfig.realtime.turnDetectionConfig ?? undefined,

@@ -29,7 +29,7 @@ import type {
 } from '@footnote/contracts/policy';
 import type {
     InternalTtsCosts,
-    InternalTtsOptions,
+    ResolvedInternalTtsOptions,
     InternalTtsUsage,
     InternalVoiceOutputFormat,
     InternalVoiceRealtimeClientEvent,
@@ -573,7 +573,7 @@ export interface ImageGenerationRuntime {
  */
 export interface TextToSpeechRequest {
     text: string;
-    options: InternalTtsOptions;
+    options: ResolvedInternalTtsOptions;
     outputFormat: InternalVoiceOutputFormat;
     signal?: AbortSignal;
 }
@@ -585,8 +585,8 @@ export interface TextToSpeechResult {
     audioBase64: string;
     outputFormat: InternalVoiceOutputFormat;
     mimeType: string;
-    model: InternalTtsOptions['model'];
-    voice: InternalTtsOptions['voice'];
+    model: string;
+    voice: string;
     usage: InternalTtsUsage;
     costs: InternalTtsCosts;
     generationTimeMs: number;
@@ -597,6 +597,10 @@ export interface TextToSpeechResult {
  */
 export interface TextToSpeechRuntime {
     readonly kind: string;
+    readonly provider: string;
+    supportsModel(model: string): boolean;
+    supportsVoice(voice: string): boolean;
+    supportsDelivery(model: string): boolean;
     synthesize(request: TextToSpeechRequest): Promise<TextToSpeechResult>;
 }
 
@@ -631,6 +635,9 @@ export interface RealtimeVoiceSessionRequest {
  */
 export interface RealtimeVoiceRuntime {
     readonly kind: string;
+    readonly provider: string;
+    supportsModel(model: string): boolean;
+    supportsVoice(voice: string): boolean;
     createSession(
         request: RealtimeVoiceSessionRequest
     ): Promise<RealtimeVoiceSession>;

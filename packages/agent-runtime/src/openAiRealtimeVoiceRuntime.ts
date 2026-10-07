@@ -19,6 +19,10 @@ import type {
     RealtimeVoiceSession,
     RealtimeVoiceSessionRequest,
 } from './index.js';
+import {
+    supportedOpenAIRealtimeModels,
+    supportedOpenAITtsVoices,
+} from '@footnote/contracts/providers';
 
 type OpenAiRealtimeRuntimeDebugData = Record<string, unknown>;
 
@@ -699,6 +703,15 @@ export const createOpenAiRealtimeVoiceRuntime = ({
 
     return {
         kind,
+        provider: 'openai',
+        supportsModel: (model) =>
+            supportedOpenAIRealtimeModels.includes(
+                model as (typeof supportedOpenAIRealtimeModels)[number]
+            ),
+        supportsVoice: (voice) =>
+            supportedOpenAITtsVoices.includes(
+                voice as (typeof supportedOpenAITtsVoices)[number]
+            ),
         async createSession(
             request: RealtimeVoiceSessionRequest
         ): Promise<RealtimeVoiceSession> {

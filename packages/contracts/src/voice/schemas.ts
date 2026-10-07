@@ -8,9 +8,6 @@
 
 import { z } from 'zod';
 import {
-    internalTtsModels,
-    internalTtsVoices,
-    supportedOpenAIRealtimeModels,
     supportedOpenAIRealtimeTurnDetections,
     supportedOpenAIRealtimeVadEagerness,
 } from '../providers.js';
@@ -28,16 +25,43 @@ const InternalVoiceOutputFormatSchema = z.enum([
     'pcm',
 ]);
 
+const SpeechSelectionSourceSchema = z.enum([
+    'request_or_session',
+    'operator_profile',
+    'deployment_fallback',
+]);
+
+const SpeechSelectionMetadataSchema = z
+    .object({
+        profileId: z.string().min(1).max(32),
+        modality: z.enum(['tts', 'realtime']),
+        provider: z.string().min(1).max(64),
+        model: z.string().min(1).max(128),
+        voice: z.string().min(1).max(128),
+        delivery: z.string().max(500).nullable(),
+        requestedVoice: z.string().max(128).nullable(),
+        selectionSource: z
+            .object({
+                model: SpeechSelectionSourceSchema,
+                voice: SpeechSelectionSourceSchema,
+                delivery: SpeechSelectionSourceSchema,
+            })
+            .strict(),
+        fallbackReason: z.string().max(300).nullable(),
+    })
+    .strict();
+
 const InternalTtsOptionsSchema = z
     .object({
-        model: z.enum(internalTtsModels),
-        voice: z.enum(internalTtsVoices),
+        model: z.string().trim().min(1).max(128).optional(),
+        voice: z.string().trim().min(1).max(128).optional(),
         speed: z.enum(['slow', 'normal', 'fast']).optional(),
         pitch: z.enum(['low', 'normal', 'high']).optional(),
         emphasis: z.enum(['none', 'moderate', 'strong']).optional(),
-        style: z.string().min(1).max(200).optional(),
+        style: z.string().trim().min(1).max(200).optional(),
         styleDegree: z.enum(['low', 'normal', 'high']).optional(),
-        styleNote: z.string().min(1).max(500).optional(),
+        styleNote: z.string().trim().min(1).max(500).optional(),
+        delivery: z.string().trim().min(1).max(500).optional(),
     })
     .strict();
 
@@ -52,7 +76,7 @@ export const PostInternalVoiceTtsRequestSchema = z
     .object({
         task: z.literal('synthesize'),
         text: z.string().min(1).max(8000),
-        options: InternalTtsOptionsSchema,
+        options: InternalTtsOptionsSchema.optional(),
         outputFormat: InternalVoiceOutputFormatSchema,
         channelContext: InternalVoiceChannelContextSchema.optional(),
     })
@@ -66,13 +90,19 @@ export const PostInternalVoiceTtsResponseSchema = z
                 audioBase64: z.string().min(1),
                 outputFormat: InternalVoiceOutputFormatSchema,
                 mimeType: z.string().min(1),
-                model: z.enum(internalTtsModels),
-                voice: z.enum(internalTtsVoices),
+                model: z.string().min(1).max(128),
+                voice: z.string().min(1).max(128),
+                speechSelection: SpeechSelectionMetadataSchema,
                 usage: z
                     .object({
-                        inputTokens: z.number().int().nonnegative(),
-                        outputTokens: z.number().int().nonnegative(),
-                        totalTokens: z.number().int().nonnegative(),
+                        billingUnit: z.enum([
+                            'characters',
+                            'estimated_tokens',
+                            'unknown',
+                        ]),
+                        inputQuantity: z.number().int().nonnegative(),
+                        inputCharacters: z.number().int().nonnegative(),
+                        inputTokens: z.number().int().nonnegative().optional(),
                     })
                     .strict(),
                 costs: z
@@ -80,6 +110,19 @@ export const PostInternalVoiceTtsResponseSchema = z
                         input: z.number().nonnegative(),
                         output: z.number().nonnegative(),
                         total: z.number().nonnegative(),
+                        completeness: z.enum([
+                            'complete',
+                            'partial',
+                            'unknown',
+                        ]),
+                        incompleteReasons: z.array(
+                            z.enum([
+                                'unpriced_model',
+                                'provider_usage_unavailable',
+                                'estimated_tts_token_quantity',
+                                'estimated_tts_character_quantity',
+                            ])
+                        ),
                     })
                     .strict(),
                 generationTimeMs: z.number().int().nonnegative(),
@@ -109,8 +152,9 @@ const InternalVoiceSessionContextSchema = z
 
 const InternalVoiceRealtimeOptionsSchema = z
     .object({
-        model: z.enum(supportedOpenAIRealtimeModels).optional(),
-        voice: z.enum(internalTtsVoices).optional(),
+        model: z.string().trim().min(1).max(128).optional(),
+        voice: z.string().trim().min(1).max(128).optional(),
+        delivery: z.string().trim().min(1).max(500).optional(),
         temperature: z.number().min(0).max(2).optional(),
         maxResponseOutputTokens: z.number().int().min(1).max(4096).optional(),
         turnDetection: z.enum(supportedOpenAIRealtimeTurnDetections).optional(),
@@ -186,7 +230,12 @@ export const InternalVoiceRealtimeClientEventSchema = z.discriminatedUnion(
 export const InternalVoiceRealtimeServerEventSchema = z.discriminatedUnion(
     'type',
     [
-        z.object({ type: z.literal('session.ready') }).strict(),
+        z
+            .object({
+                type: z.literal('session.ready'),
+                speechSelection: SpeechSelectionMetadataSchema.optional(),
+            })
+            .strict(),
         z
             .object({
                 type: z.literal('session.closed'),

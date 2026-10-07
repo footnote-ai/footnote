@@ -12,6 +12,7 @@ import type {
     InternalVoiceRealtimeClientEvent,
     InternalVoiceRealtimeServerEvent,
     InternalVoiceSessionContext,
+    SpeechSelectionMetadata,
 } from '@footnote/contracts/voice';
 import {
     InternalVoiceRealtimeClientEventSchema,
@@ -22,6 +23,8 @@ import type {
     RealtimeVoiceSession,
 } from '@footnote/agent-runtime';
 import type { BackendLLMCostRecord } from '../services/llmCostRecorder.js';
+import type { BotProfileConfig } from '../config/profile.js';
+import { resolveSpeechSelection } from '../services/speechPresentation.js';
 import {
     estimateBackendVoiceRealtimeCost,
     recordBackendLLMUsage,
@@ -48,6 +51,8 @@ type CreateInternalVoiceRealtimeHandlerOptions = {
     serviceToken: string | null;
     serviceRateLimiter: SimpleRateLimiter;
     buildInstructions: (context: InternalVoiceSessionContext) => string;
+    profile: BotProfileConfig;
+    fallbackOptions: { model: string; voice: string };
     recordUsage?: (record: BackendLLMCostRecord) => void;
 };
 
@@ -110,6 +115,8 @@ export const createInternalVoiceRealtimeHandler = ({
     serviceToken,
     serviceRateLimiter,
     buildInstructions,
+    profile,
+    fallbackOptions,
     recordUsage = recordBackendLLMUsage,
 }: CreateInternalVoiceRealtimeHandlerOptions) => {
     const wss = new WebSocketServer({ noServer: true });
@@ -126,6 +133,7 @@ export const createInternalVoiceRealtimeHandler = ({
         let sessionStarted = false;
         let closed = false;
         let socketClosed = false;
+        let speechSelection: SpeechSelectionMetadata | undefined;
 
         const isSocketOpen = () =>
             !socketClosed && ws.readyState === WebSocket.OPEN;
@@ -174,7 +182,12 @@ export const createInternalVoiceRealtimeHandler = ({
             }
 
             try {
-                sendServerEvent(ws, event);
+                sendServerEvent(
+                    ws,
+                    event.type === 'session.ready' && speechSelection
+                        ? { ...event, speechSelection }
+                        : event
+                );
             } catch (error) {
                 realtimeLogger.warn(
                     `Failed to send internal voice realtime event: ${
@@ -254,18 +267,94 @@ export const createInternalVoiceRealtimeHandler = ({
                 }
 
                 sessionStarted = true;
+                speechSelection = resolveSpeechSelection({
+                    profile,
+                    provider: realtimeVoiceRuntime.provider,
+                    modality: 'realtime',
+                    request: {
+                        model: event.options?.model,
+                        voice: event.options?.voice,
+                        delivery: event.options?.delivery,
+                    },
+                    fallback: fallbackOptions,
+                });
+                const unsupportedModel = !realtimeVoiceRuntime.supportsModel(
+                    speechSelection.model
+                );
+                const unsupportedVoice = !realtimeVoiceRuntime.supportsVoice(
+                    speechSelection.voice
+                );
+                if (unsupportedModel || unsupportedVoice) {
+                    if (
+                        (unsupportedModel &&
+                            speechSelection.selectionSource.model ===
+                                'request_or_session') ||
+                        (unsupportedVoice &&
+                            speechSelection.selectionSource.voice ===
+                                'request_or_session')
+                    ) {
+                        sessionStarted = false;
+                        speechSelection = undefined;
+                        sendServerEvent(ws, {
+                            type: 'error',
+                            message:
+                                'Requested Realtime model or voice is not supported by the configured provider.',
+                            code: 'unsupported_speech_selection',
+                        });
+                        return;
+                    }
+                    const ignoreOperatorModel =
+                        unsupportedModel &&
+                        speechSelection.selectionSource.model ===
+                            'operator_profile';
+                    const ignoreOperatorVoice =
+                        unsupportedVoice &&
+                        speechSelection.selectionSource.voice ===
+                            'operator_profile';
+                    const unsupportedSettings = [
+                        ...(ignoreOperatorModel ? ['model'] : []),
+                        ...(ignoreOperatorVoice ? ['voice'] : []),
+                    ];
+                    speechSelection = resolveSpeechSelection({
+                        profile,
+                        provider: realtimeVoiceRuntime.provider,
+                        modality: 'realtime',
+                        request: {
+                            model: event.options?.model,
+                            voice: event.options?.voice,
+                            delivery: event.options?.delivery,
+                        },
+                        ignoreOperatorModel,
+                        ignoreOperatorVoice,
+                        fallbackReason: `Configured profile ${unsupportedSettings.join(' and ')} is unsupported; using deployment fallback for that setting.`,
+                        fallback: fallbackOptions,
+                    });
+                }
                 realtimeLogger.info(
                     'Internal voice realtime session starting.',
                     {
-                        model: event.options?.model,
-                        voice: event.options?.voice,
+                        model: speechSelection.model,
+                        voice: speechSelection.voice,
+                        profileId: profile.id,
+                        speechSelection,
                     }
                 );
                 let createdSession: RealtimeVoiceSession | null = null;
                 try {
                     createdSession = await realtimeVoiceRuntime.createSession({
-                        instructions: buildInstructions(event.context),
-                        options: event.options,
+                        instructions: [
+                            buildInstructions(event.context),
+                            ...(speechSelection.delivery
+                                ? [
+                                      `Speech delivery guidance: ${speechSelection.delivery}`,
+                                  ]
+                                : []),
+                        ].join('\n\n'),
+                        options: {
+                            ...event.options,
+                            model: speechSelection.model,
+                            voice: speechSelection.voice,
+                        },
                     });
                     if (!isSocketOpen()) {
                         createdSession.close('client_close');

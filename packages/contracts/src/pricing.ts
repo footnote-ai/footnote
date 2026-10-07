@@ -141,10 +141,7 @@ export type ImageGenerationQuality = 'low' | 'medium' | 'high' | 'auto';
  * Image canvas sizes that change per-image pricing.
  */
 export type ImageGenerationSize =
-    | '1024x1024'
-    | '1024x1536'
-    | '1536x1024'
-    | 'auto';
+    '1024x1024' | '1024x1536' | '1536x1024' | 'auto';
 
 /**
  * Resolved quality level after callers normalize image pricing inputs.
@@ -184,6 +181,14 @@ export interface OpenAITextCostEstimate extends OpenAITextCostBreakdown {
 
 export type OpenAITextCostCompleteness = 'complete' | 'partial' | 'unknown';
 
+export type OpenAITtsCostIncompleteReason = Extract<
+    OpenAITextCostIncompleteReason,
+    | 'unpriced_model'
+    | 'provider_usage_unavailable'
+    | 'estimated_tts_token_quantity'
+    | 'estimated_tts_character_quantity'
+>;
+
 export type OpenAITextCostAppliedRule =
     | 'prompt_cache_read_discount'
     | 'prompt_cache_write_multiplier'
@@ -195,7 +200,9 @@ export type OpenAITextCostIncompleteReason =
     | 'cached_input_tokens_unavailable'
     | 'cache_write_tokens_unavailable'
     | 'invalid_input_token_breakdown'
-    | 'provider_usage_unavailable';
+    | 'provider_usage_unavailable'
+    | 'estimated_tts_token_quantity'
+    | 'estimated_tts_character_quantity';
 
 export interface OpenAITextUsageDetails {
     cachedInputTokens?: number;
@@ -217,16 +224,17 @@ export type ImageGenerationCostCompleteness = 'complete' | 'unknown';
  * Reasons an image-render cost estimate cannot be treated as complete.
  */
 export type ImageGenerationCostIncompleteReason =
-    | 'unpriced_model'
-    | 'auto_quality'
-    | 'auto_size';
+    'unpriced_model' | 'auto_quality' | 'auto_size';
 
 /**
  * Shared TTS-cost breakdown used by backend accounting and bot-side display
  * helpers.
  */
 export interface OpenAITtsCostBreakdown {
-    inputTokens: number;
+    billingUnit: 'characters' | 'tokens' | 'unknown';
+    inputQuantity: number;
+    completeness: OpenAITextCostCompleteness;
+    incompleteReasons: OpenAITtsCostIncompleteReason[];
     inputCost: number;
     outputCost: number;
     totalCost: number;
@@ -294,9 +302,7 @@ export interface OpenAIModelPricingResolution<ModelKey extends string> {
 }
 
 export type ModelPricingCoverageClassification =
-    | 'priced'
-    | 'unpriced_by_policy'
-    | 'unknown_unpriced';
+    'priced' | 'unpriced_by_policy' | 'unknown_unpriced';
 
 /**
  * OpenAI text model ids intentionally excluded from shared backend pricing.
@@ -429,9 +435,16 @@ export const openAIRealtimePricingTable: Record<
 };
 
 /**
- * Canonical TTS pricing per 1M input tokens (USD).
- * Source: https://platform.openai.com/pricing
- * Last updated in-repo: 2026-03-20
+ * Canonical TTS pricing per 1M billable units (USD): characters for `tts-1`
+ * models and text tokens for `gpt-4o-mini-tts`. The official model pages show
+ * these distinct units: https://developers.openai.com/api/docs/models/tts-1,
+ * https://developers.openai.com/api/docs/models/tts-1-hd, and
+ * https://developers.openai.com/api/docs/models/gpt-4o-mini-tts.
+ * All three currently supported aliases are deprecated; the provider lists
+ * removal dates in https://developers.openai.com/api/docs/deprecations. Their
+ * continued presence here preserves current adapter behavior, not future
+ * availability.
+ * Last verified in-repo: 2026-10-07.
  */
 export const openAITtsPricingTable: Record<PricedOpenAITtsModel, number> = {
     'tts-1': 15,
@@ -906,23 +919,50 @@ export const estimateOpenAITextCost = (
  */
 export const estimateOpenAITtsCost = (
     model: string,
-    inputTokens: number
+    inputQuantity: number,
+    quantityIsEstimated = false
 ): OpenAITtsCostBreakdown => {
     const pricingModel = resolveOpenAITtsPricingModel(model).matchedModel;
     const pricing = pricingModel ? openAITtsPricingTable[pricingModel] : null;
+    const billingUnit = !pricingModel
+        ? 'unknown'
+        : pricingModel === 'gpt-4o-mini-tts'
+          ? 'tokens'
+          : 'characters';
 
     if (!pricing) {
         return {
-            inputTokens,
+            billingUnit,
+            inputQuantity,
+            completeness: 'unknown',
+            incompleteReasons: ['unpriced_model'],
             inputCost: 0,
             outputCost: 0,
             totalCost: 0,
         };
     }
 
-    const inputCost = (inputTokens / 1_000_000) * pricing;
+    const inputCost = (inputQuantity / 1_000_000) * pricing;
+    const incompleteReasons: OpenAITtsCostIncompleteReason[] = [];
+    if (quantityIsEstimated) {
+        incompleteReasons.push(
+            billingUnit === 'characters'
+                ? 'estimated_tts_character_quantity'
+                : 'estimated_tts_token_quantity'
+        );
+    }
+    // GPT-4o Mini TTS also charges generated audio tokens. The Speech API
+    // response does not provide that quantity, so only the input estimate is
+    // available for this partial cost.
+    if (billingUnit === 'tokens') {
+        incompleteReasons.push('provider_usage_unavailable');
+    }
+
     return {
-        inputTokens,
+        billingUnit,
+        inputQuantity,
+        completeness: incompleteReasons.length > 0 ? 'partial' : 'complete',
+        incompleteReasons,
         inputCost,
         outputCost: 0,
         totalCost: inputCost,

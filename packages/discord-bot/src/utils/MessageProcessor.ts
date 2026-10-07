@@ -19,10 +19,7 @@ import type {
     ChatAddressingEvidence,
     ChatTriggerKind,
 } from '@footnote/contracts/web';
-import {
-    DEFAULT_INTERNAL_TTS_OPTIONS,
-    DEFAULT_INTERNAL_TTS_OUTPUT_FORMAT,
-} from '@footnote/contracts/voice';
+import { DEFAULT_INTERNAL_TTS_OUTPUT_FORMAT } from '@footnote/contracts/voice';
 import { logger } from './logger.js';
 import { ResponseHandler } from './response/ResponseHandler.js';
 import { RateLimiter } from './RateLimiter.js';
@@ -177,7 +174,6 @@ const VALID_IMAGE_STYLES = new Set<ImageStylePreset>([
 ]);
 // Use shared defaults so the bot and backend remain aligned on voice style.
 const DEFAULT_TTS_OUTPUT_FORMAT = DEFAULT_INTERNAL_TTS_OUTPUT_FORMAT;
-const DEFAULT_TTS_OPTIONS = DEFAULT_INTERNAL_TTS_OPTIONS;
 const DEFAULT_SAFETY_FALLBACK_MESSAGES: Readonly<
     Record<SafetyResponseBehavior, string>
 > = {
@@ -1074,7 +1070,7 @@ export class MessageProcessor {
                 const response = await botApi.runVoiceTtsViaApi({
                     task: 'synthesize',
                     text: finalResponseText,
-                    options: DEFAULT_TTS_OPTIONS,
+                    options: {},
                     outputFormat: DEFAULT_TTS_OUTPUT_FORMAT,
                     channelContext: {
                         channelId: message.channelId,

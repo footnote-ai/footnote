@@ -8,9 +8,9 @@
 import {
     estimateOpenAITextCost,
     estimateOpenAIRealtimeCost,
-    type ImageGenerationCostIncompleteReason,
     resolveOpenAITextPricingModel,
     resolveOpenAIRealtimePricingModel,
+    type ImageGenerationCostIncompleteReason,
     type OpenAITextCostAppliedRule,
     type OpenAITextCostCompleteness,
     type OpenAITextCostIncompleteReason,
@@ -35,6 +35,8 @@ export type BackendLLMCostRecord = {
     provider?: string;
     purpose?: 'index' | 'query';
     promptTokens: number;
+    usageUnit?: 'characters' | 'estimated_tokens' | 'unknown';
+    usageQuantity?: number;
     cachedInputTokens?: number;
     cacheWriteTokens?: number;
     completionTokens: number;
@@ -213,6 +215,12 @@ export const recordBackendLLMUsage = (record: BackendLLMCostRecord): void => {
             ...(record.provider !== undefined && { provider: record.provider }),
             ...(record.purpose !== undefined && { purpose: record.purpose }),
             promptTokens: record.promptTokens,
+            ...(record.usageUnit !== undefined && {
+                usageUnit: record.usageUnit,
+            }),
+            ...(record.usageQuantity !== undefined && {
+                usageQuantity: record.usageQuantity,
+            }),
             ...(record.cachedInputTokens !== undefined && {
                 cachedInputTokens: record.cachedInputTokens,
             }),

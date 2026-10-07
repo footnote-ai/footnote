@@ -902,6 +902,48 @@ export const envEntries = [
         ],
     }),
 
+    ...(
+        [
+            [
+                'BOT_PROFILE_TTS_MODEL',
+                'OpenAI TTS model override for this profile.',
+            ],
+            [
+                'BOT_PROFILE_TTS_VOICE',
+                'OpenAI TTS voice override for this profile.',
+            ],
+            [
+                'BOT_PROFILE_TTS_DELIVERY',
+                "Bounded delivery guidance for this profile's generated speech.",
+            ],
+            [
+                'BOT_PROFILE_REALTIME_MODEL',
+                'OpenAI Realtime model override for this profile.',
+            ],
+            [
+                'BOT_PROFILE_REALTIME_VOICE',
+                'OpenAI Realtime voice override for this profile.',
+            ],
+            [
+                'BOT_PROFILE_REALTIME_DELIVERY',
+                "Bounded delivery guidance for this profile's Realtime speech.",
+            ],
+        ] as const
+    ).map(([key, description]) =>
+        defineEnv({
+            key,
+            owner: 'backend',
+            stage: 'runtime',
+            section: 'speech',
+            required: false,
+            secret: false,
+            kind: 'string',
+            description,
+            defaultValue: noDefault(),
+            usedBy: ['packages/backend/src/config/profile.ts'],
+        })
+    ),
+
     defineEnv({
         key: 'BOT_PROFILE_PROMPT_OVERLAY',
         owner: 'discord-bot',

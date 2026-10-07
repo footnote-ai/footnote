@@ -375,6 +375,7 @@ const initializeServices = () => {
             },
         });
         internalVoiceTtsService = createInternalVoiceTtsService({
+            profile: runtimeConfig.profile,
             ttsRuntime: createOpenAiTtsRuntime({
                 apiKey: runtimeConfig.openai.apiKey,
                 requestTimeoutMs: runtimeConfig.openai.requestTimeoutMs,
@@ -845,6 +846,11 @@ const { handleInternalVoiceTtsRequest } = createInternalVoiceTtsHandler({
 const { handleUpgrade: handleInternalVoiceRealtimeUpgrade } =
     createInternalVoiceRealtimeHandler({
         realtimeVoiceRuntime,
+        profile: runtimeConfig.profile,
+        fallbackOptions: {
+            model: runtimeConfig.openai.defaultRealtimeModel,
+            voice: runtimeConfig.openai.defaultRealtimeVoice,
+        },
         traceApiToken: runtimeConfig.trace.apiToken,
         serviceToken: runtimeConfig.reflect.serviceToken,
         serviceRateLimiter:

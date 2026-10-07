@@ -9,6 +9,7 @@ import type { IncomingMessage, ServerResponse } from 'node:http';
 import type { PostInternalVoiceTtsRequest } from '@footnote/contracts/voice';
 import { PostInternalVoiceTtsRequestSchema } from '@footnote/contracts/voice';
 import type { InternalVoiceTtsService } from '../services/internalVoiceTts.js';
+import { UnsupportedSpeechSelectionError } from '../services/speechPresentation.js';
 import { SimpleRateLimiter } from '../services/rateLimiter.js';
 import { logger } from '../utils/logger.js';
 import { buildProviderUnavailableError, sendJson } from './chatResponses.js';
@@ -150,8 +151,8 @@ export const createInternalVoiceTtsHandler = ({
             const ttsRequest: PostInternalVoiceTtsRequest = parsedRequest;
             ttsLogger.info('Internal voice TTS request accepted.', {
                 source: auth.source,
-                model: ttsRequest.options.model,
-                voice: ttsRequest.options.voice,
+                model: ttsRequest.options?.model,
+                voice: ttsRequest.options?.voice,
                 outputFormat: ttsRequest.outputFormat,
                 textLength: ttsRequest.text.length,
             });
@@ -164,6 +165,14 @@ export const createInternalVoiceTtsHandler = ({
                 `internal voice tts success task=${response.task}`
             );
         } catch (error) {
+            if (error instanceof UnsupportedSpeechSelectionError) {
+                sendJson(res, 400, {
+                    error: error.message,
+                    code: error.code,
+                });
+                logRequest(req, res, 'internal voice tts invalid-selection');
+                return;
+            }
             ttsLogger.error('Internal voice TTS execution failed.', {
                 error: error instanceof Error ? error.message : String(error),
             });

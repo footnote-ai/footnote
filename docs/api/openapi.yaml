@@ -266,6 +266,7 @@ paths:
                 - packages/api-client/src/internalVoice.ts#runVoiceTtsViaApi
                 - packages/contracts/src/voice/types.ts#PostInternalVoiceTtsRequest
                 - packages/contracts/src/voice/types.ts#PostInternalVoiceTtsResponse
+                - packages/contracts/src/voice/types.ts#SpeechSelectionMetadata
             summary: Run a trusted internal voice TTS task
             description: >
                 Trusted internal endpoint for backend-owned voice synthesis that should not become a generic TTS proxy.
@@ -314,6 +315,7 @@ paths:
                 - packages/discord-bot/src/utils/realtimeService.ts#connect
                 - packages/contracts/src/voice/types.ts#InternalVoiceRealtimeClientEvent
                 - packages/contracts/src/voice/types.ts#InternalVoiceRealtimeServerEvent
+                - packages/contracts/src/voice/types.ts#SpeechSelectionMetadata
             summary: Open a trusted internal realtime voice session (WebSocket)
             description: |
                 Upgrades the request to a WebSocket connection used for realtime
@@ -4010,7 +4012,6 @@ components:
             required:
                 - task
                 - text
-                - options
                 - outputFormat
             additionalProperties: false
         InternalVoiceTtsResponse:
@@ -4035,6 +4036,8 @@ components:
                             $ref: '#/components/schemas/InternalTtsModel'
                         voice:
                             $ref: '#/components/schemas/InternalTtsVoice'
+                        speechSelection:
+                            $ref: '#/components/schemas/SpeechSelectionMetadata'
                         usage:
                             $ref: '#/components/schemas/InternalTtsUsage'
                         costs:
@@ -4048,6 +4051,7 @@ components:
                         - mimeType
                         - model
                         - voice
+                        - speechSelection
                         - usage
                         - costs
                         - generationTimeMs
@@ -4067,23 +4071,14 @@ components:
                 - pcm
         InternalTtsModel:
             type: string
-            enum:
-                - tts-1
-                - tts-1-hd
-                - gpt-4o-mini-tts
+            minLength: 1
+            maxLength: 128
+            pattern: \S
         InternalTtsVoice:
             type: string
-            enum:
-                - alloy
-                - ash
-                - ballad
-                - coral
-                - echo
-                - fable
-                - nova
-                - onyx
-                - sage
-                - shimmer
+            minLength: 1
+            maxLength: 128
+            pattern: \S
         InternalVoiceChannelContext:
             type: object
             properties:
@@ -4101,6 +4096,11 @@ components:
                     $ref: '#/components/schemas/InternalTtsModel'
                 voice:
                     $ref: '#/components/schemas/InternalTtsVoice'
+                delivery:
+                    type: string
+                    minLength: 1
+                    maxLength: 500
+                    pattern: \S
                 speed:
                     type: string
                     enum:
@@ -4123,6 +4123,7 @@ components:
                     type: string
                     minLength: 1
                     maxLength: 200
+                    pattern: \S
                 styleDegree:
                     type: string
                     enum:
@@ -4133,32 +4134,30 @@ components:
                     type: string
                     minLength: 1
                     maxLength: 500
-            required:
-                - model
-                - voice
+                    pattern: \S
             additionalProperties: false
         InternalTtsUsage:
             type: object
             properties:
+                billingUnit:
+                    type: string
+                    enum:
+                        - characters
+                        - estimated_tokens
+                        - unknown
+                inputQuantity:
+                    type: integer
+                    minimum: 0
+                inputCharacters:
+                    type: integer
+                    minimum: 0
                 inputTokens:
                     type: integer
                     minimum: 0
-                cachedInputTokens:
-                    type: integer
-                    minimum: 0
-                cacheWriteTokens:
-                    type: integer
-                    minimum: 0
-                outputTokens:
-                    type: integer
-                    minimum: 0
-                totalTokens:
-                    type: integer
-                    minimum: 0
             required:
-                - inputTokens
-                - outputTokens
-                - totalTokens
+                - billingUnit
+                - inputQuantity
+                - inputCharacters
             additionalProperties: false
         InternalTtsCosts:
             type: object
@@ -4172,11 +4171,95 @@ components:
                 total:
                     type: number
                     minimum: 0
+                completeness:
+                    type: string
+                    enum:
+                        - complete
+                        - partial
+                        - unknown
+                incompleteReasons:
+                    type: array
+                    items:
+                        type: string
+                        enum:
+                            - unpriced_model
+                            - provider_usage_unavailable
+                            - estimated_tts_token_quantity
+                            - estimated_tts_character_quantity
             required:
                 - input
                 - output
                 - total
+                - completeness
+                - incompleteReasons
             additionalProperties: false
+        SpeechSelectionMetadata:
+            type: object
+            properties:
+                profileId:
+                    type: string
+                    minLength: 1
+                    maxLength: 32
+                modality:
+                    type: string
+                    enum:
+                        - tts
+                        - realtime
+                provider:
+                    type: string
+                    minLength: 1
+                    maxLength: 64
+                model:
+                    type: string
+                    minLength: 1
+                    maxLength: 128
+                voice:
+                    type: string
+                    minLength: 1
+                    maxLength: 128
+                delivery:
+                    type: string
+                    maxLength: 500
+                    nullable: true
+                requestedVoice:
+                    type: string
+                    maxLength: 128
+                    nullable: true
+                selectionSource:
+                    type: object
+                    properties:
+                        model:
+                            $ref: '#/components/schemas/SpeechSelectionSource'
+                        voice:
+                            $ref: '#/components/schemas/SpeechSelectionSource'
+                        delivery:
+                            $ref: '#/components/schemas/SpeechSelectionSource'
+                    required:
+                        - model
+                        - voice
+                        - delivery
+                    additionalProperties: false
+                fallbackReason:
+                    type: string
+                    maxLength: 300
+                    nullable: true
+            required:
+                - profileId
+                - modality
+                - provider
+                - model
+                - voice
+                - delivery
+                - requestedVoice
+                - selectionSource
+                - fallbackReason
+            additionalProperties: false
+        SpeechSelectionSource:
+            type: string
+            enum:
+                - request_or_session
+                - operator_profile
+                - deployment_fallback
         InternalImageStreamEvent:
             oneOf:
                 - $ref: '#/components/schemas/InternalImagePartialImageEvent'
