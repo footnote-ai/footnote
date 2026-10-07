@@ -56,9 +56,14 @@ test('measureEmbedHeight uses the tallest available source', () => {
 
 test('createEmbedHeightMessenger posts current and legacy message types once per frame', () => {
     const postedMessages: Array<{ height: number; type: string }> = [];
+    const targetOrigins: string[] = [];
     const parentWindow = {
-        postMessage: (message: { height: number; type: string }) => {
+        postMessage: (
+            message: { height: number; type: string },
+            targetOrigin: string
+        ) => {
             postedMessages.push(message);
+            targetOrigins.push(targetOrigin);
         },
     } as Window;
 
@@ -83,6 +88,7 @@ test('createEmbedHeightMessenger posts current and legacy message types once per
         const documentRef = {
             body: createMockElement({ scrollHeight: 480 }),
             documentElement: createMockElement({ scrollHeight: 500 }),
+            referrer: 'https://host.example/article',
         } as Document;
         const messenger = createEmbedHeightMessenger({
             document: documentRef,
@@ -103,6 +109,10 @@ test('createEmbedHeightMessenger posts current and legacy message types once per
             { type: EMBED_HEIGHT_MESSAGE_TYPE, height: 540 },
             { type: LEGACY_EMBED_HEIGHT_MESSAGE_TYPE, height: 540 },
         ]);
+        assert.deepEqual(targetOrigins, [
+            'https://host.example',
+            'https://host.example',
+        ]);
     } finally {
         Object.defineProperty(globalThis, 'window', {
             configurable: true,
@@ -113,9 +123,14 @@ test('createEmbedHeightMessenger posts current and legacy message types once per
 
 test('createEmbedHeightMessenger posts again when the height grows later', () => {
     const postedMessages: Array<{ height: number; type: string }> = [];
+    const targetOrigins: string[] = [];
     const parentWindow = {
-        postMessage: (message: { height: number; type: string }) => {
+        postMessage: (
+            message: { height: number; type: string },
+            targetOrigin: string
+        ) => {
             postedMessages.push(message);
+            targetOrigins.push(targetOrigin);
         },
     } as Window;
 
@@ -127,6 +142,7 @@ test('createEmbedHeightMessenger posts again when the height grows later', () =>
         const documentRef = {
             body: createMockElement({ scrollHeight: 280 }),
             documentElement: createMockElement({ scrollHeight: 300 }),
+            referrer: 'https://host.example/article',
         } as Document;
         const queuedWindow = {
             cancelAnimationFrame: () => undefined,
@@ -167,6 +183,43 @@ test('createEmbedHeightMessenger posts again when the height grows later', () =>
             { type: EMBED_HEIGHT_MESSAGE_TYPE, height: 640 },
             { type: LEGACY_EMBED_HEIGHT_MESSAGE_TYPE, height: 640 },
         ]);
+        assert.equal(targetOrigins.length, 4);
+        assert.ok(
+            targetOrigins.every((origin) => origin === 'https://host.example')
+        );
+    } finally {
+        Object.defineProperty(globalThis, 'window', {
+            configurable: true,
+            value: previousWindow,
+        });
+    }
+});
+
+test('createEmbedHeightMessenger skips posts without a parent referrer', () => {
+    const postedMessages: Array<{ height: number; type: string }> = [];
+    const parentWindow = {
+        postMessage: (message: { height: number; type: string }) => {
+            postedMessages.push(message);
+        },
+    } as Window;
+    const previousWindow = globalThis.window;
+    Object.defineProperty(globalThis, 'window', {
+        configurable: true,
+        value: { parent: parentWindow },
+    });
+
+    try {
+        const messenger = createEmbedHeightMessenger({
+            document: {
+                body: createMockElement({ scrollHeight: 480 }),
+                documentElement: createMockElement({ scrollHeight: 500 }),
+                referrer: '',
+            } as Document,
+            targetWindow: parentWindow,
+        });
+
+        assert.equal(messenger.postHeight(), null);
+        assert.deepEqual(postedMessages, []);
     } finally {
         Object.defineProperty(globalThis, 'window', {
             configurable: true,
