@@ -71,7 +71,7 @@ const SOURCE_REQUEST_PREFIXES = [
     'help me to ',
 ];
 const SOURCE_REQUEST_NEGATION_PATTERN =
-    /\b(?:not|never|don't|dont|do\s+not|no\s+need\s+to|not\s+asking(?:\s+you)?\s+to)\b[^.!?\n]{0,80}\b(?:inspect|read|review|open|search|find|show|explain|look\s+at|check|examine)\b/iu;
+    /\b(?:not|never|don't|dont|do\s+not|no\s+need\s+to)\b/iu;
 const RESTRICTED_PATH_SEGMENT_PATTERN =
     /(?:\.footnote|prompt|persona|profile[-_]?overlay)/iu;
 
@@ -338,14 +338,13 @@ const requestGitHubJson = async (
     }
 };
 
-const resolveRepositoryHeaders = async (
+const fetchRepositoryBodyWithPrivateFallback = async (
     requestJson: GitHubJsonRequest,
     allowedPrivateRepository: boolean,
     authenticatedHeaders: Record<string, string> | undefined,
     publicHeaders: Record<string, string>
-): Promise<SourceOperation<Record<string, string>>> => {
+): Promise<SourceOperation<unknown>> => {
     const publicRepository = await requestJson('', publicHeaders);
-    let repositoryBody = publicRepository.json;
     if (
         publicRepository.status === 404 &&
         allowedPrivateRepository &&
@@ -354,28 +353,44 @@ const resolveRepositoryHeaders = async (
         const privateRepository = await requestJson('', authenticatedHeaders);
         if (privateRepository.failure !== undefined)
             return privateRepository.failure;
-        if (privateRepository.json === undefined) {
-            return {
-                status: 'unavailable',
-                reasonCode:
-                    privateRepository.status === 404
-                        ? 'not_found_or_private'
-                        : failureForStatus(privateRepository.status ?? 0),
-            };
+        if (privateRepository.json !== undefined) {
+            return { value: privateRepository.json };
         }
-        repositoryBody = privateRepository.json;
-    } else if (publicRepository.failure !== undefined) {
-        return publicRepository.failure;
-    } else if (repositoryBody === undefined) {
         return {
             status: 'unavailable',
             reasonCode:
-                publicRepository.status === 404
+                privateRepository.status === 404
                     ? 'not_found_or_private'
-                    : failureForStatus(publicRepository.status ?? 0),
+                    : failureForStatus(privateRepository.status ?? 0),
         };
     }
+    if (publicRepository.failure !== undefined) return publicRepository.failure;
+    if (publicRepository.json !== undefined) {
+        return { value: publicRepository.json };
+    }
+    return {
+        status: 'unavailable',
+        reasonCode:
+            publicRepository.status === 404
+                ? 'not_found_or_private'
+                : failureForStatus(publicRepository.status ?? 0),
+    };
+};
 
+const resolveRepositoryHeaders = async (
+    requestJson: GitHubJsonRequest,
+    allowedPrivateRepository: boolean,
+    authenticatedHeaders: Record<string, string> | undefined,
+    publicHeaders: Record<string, string>
+): Promise<SourceOperation<Record<string, string>>> => {
+    const repositoryResult = await fetchRepositoryBodyWithPrivateFallback(
+        requestJson,
+        allowedPrivateRepository,
+        authenticatedHeaders,
+        publicHeaders
+    );
+    if (!('value' in repositoryResult)) return repositoryResult;
+    const repositoryBody = repositoryResult.value;
     if (
         !isRecord(repositoryBody) ||
         typeof repositoryBody.private !== 'boolean'
