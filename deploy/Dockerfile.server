@@ -62,6 +62,7 @@ RUN pnpm --filter @footnote/contracts run build \
   && pnpm --filter @footnote/prompts run build \
   && pnpm --filter @footnote/api-client run build \
   && pnpm --filter @footnote/agent-runtime run build \
+  && pnpm --filter @footnote/repository-context run build \
   && pnpm --filter @footnote/backend run build \
   && pnpm --filter @footnote/discord-bot run build \
   && pnpm --filter @footnote/web run build

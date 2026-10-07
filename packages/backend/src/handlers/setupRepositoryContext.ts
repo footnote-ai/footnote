@@ -168,6 +168,18 @@ export const createSetupRepositoryContextHandlers = ({
     );
     let manifestPromise: Promise<ContextManifest> | undefined;
 
+    const pruneExpiredTestedConnections = (): void => {
+        const nowMs = Date.now();
+        for (const [sessionId, tested] of testedConnections) {
+            if (
+                !Number.isFinite(tested.expiresAtMs) ||
+                tested.expiresAtMs <= nowMs
+            ) {
+                testedConnections.delete(sessionId);
+            }
+        }
+    };
+
     const readManifest = (): Promise<ContextManifest> => {
         manifestPromise ??= (async () => {
             const revision = (
@@ -303,6 +315,9 @@ export const createSetupRepositoryContextHandlers = ({
         requireCsrf: boolean,
         routeLabel: string
     ): Promise<{ sessionId: string; expiresAtMs: number } | undefined> => {
+        // Session validation prunes expired sessions before it returns one, so clean
+        // associated connection-test state independently of the incoming session.
+        pruneExpiredTestedConnections();
         const sessionId = readSetupSessionIdFromRequest(req);
         const session = sessionId
             ? await setupBootstrapService.validateSetupSession(sessionId)
@@ -324,13 +339,6 @@ export const createSetupRepositoryContextHandlers = ({
             return undefined;
         }
         const expiresAtMs = Date.parse(session.expiresAt);
-        const tested = testedConnections.get(sessionId);
-        if (
-            tested &&
-            (!Number.isFinite(expiresAtMs) || tested.expiresAtMs <= Date.now())
-        ) {
-            testedConnections.delete(sessionId);
-        }
         return { sessionId, expiresAtMs };
     };
 
