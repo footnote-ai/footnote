@@ -319,9 +319,15 @@ export const ModelProfileCatalogSchema = z
                 message: `Duplicate model profile id(s): ${Array.from(
                     duplicates
                 )
-                    .sort((left, right) =>
-                        left < right ? -1 : left > right ? 1 : 0
-                    )
+                    .sort((left, right) => {
+                        if (left < right) {
+                            return -1;
+                        }
+                        if (left > right) {
+                            return 1;
+                        }
+                        return 0;
+                    })
                     .join(', ')}`,
             });
         }
