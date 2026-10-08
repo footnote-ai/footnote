@@ -71,8 +71,8 @@ catalogs:
       specifier: ^7.3.2
       version: 7.3.2
     autoprefixer:
-      specifier: ^10.5.6
-      version: 10.6.0
+      specifier: ^10.6.1
+      version: 10.6.1
     better-sqlite3:
       specifier: ^12.10.0
       version: 12.10.0
@@ -655,7 +655,7 @@ importers:
         version: 7.3.2(@astrojs/markdown-remark@7.3.1(supports-color@10.2.2))(@emnapi/core@1.11.1)(@emnapi/runtime@1.11.3)(@types/node@25.9.2)(aws4fetch@1.0.20)(jiti@2.7.0)(tsx@4.23.15)(yaml@2.9.0)
       autoprefixer:
         specifier: 'catalog:'
-        version: 10.6.0(postcss@8.5.28)
+        version: 10.6.1(postcss@8.5.28)
       esbuild:
         specifier: ^0.28.2
         version: 0.28.2
@@ -2756,8 +2756,8 @@ packages:
   asynckit@0.4.0:
     resolution: {integrity: sha512-Oei9OH4tRh0YqU3GxhX79dM/mwVgvbZJaSNaRk+bshkj0S5cfHcgYakreBjrHwatXKbz+IoIdYLxrKim2MjW0Q==}
 
-  autoprefixer@10.6.0:
-    resolution: {integrity: sha512-A26d6qs9kqGgkmImIXMYvXTzqb4Qv7AVgpY1NXzr9Y659J8qHHnLOO/zE8ewIGFMprOolAoRAQYDgNryXIJKBw==}
+  autoprefixer@10.6.1:
+    resolution: {integrity: sha512-cL1Qz6ADZhcEbny/8HPfe99J6HhNoYtpX2LFLIbhgGE7Q1hlQVkYFdetDN7Id3KiQxhDrHwzlHr/YQCnZ8+xSA==}
     engines: {node: ^10 || ^12 || >=14}
     hasBin: true
     peerDependencies:
@@ -7944,7 +7944,7 @@ snapshots:
 
   asynckit@0.4.0: {}
 
-  autoprefixer@10.6.0(postcss@8.5.28):
+  autoprefixer@10.6.1(postcss@8.5.28):
     dependencies:
       browserslist: 4.28.9
       caniuse-lite: 1.0.30001810
