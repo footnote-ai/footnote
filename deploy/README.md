@@ -73,6 +73,15 @@ event names when checking startup.
 
 ## First Setup
 
+Operators can use the web `/setup` page for the one-time repository-context flow:
+test the configured TrustGraph destination, preview the prepared context bundle,
+and load the approved files. Credentials stay on the backend. Setup does not
+browse arbitrary checkouts or change deployment configuration; the destination
+and selected bundle remain deployment-owned. See [Setup and Settings Flow](/wiki/architecture/first-setup-flow/)
+and [Repository Context and TrustGraph Status](/wiki/status/repository-context-status/).
+The `pnpm` steps below remain useful for local development and operator maintenance,
+but they are not required for this setup flow.
+
 1. Run local start once:
 
 ```bash
