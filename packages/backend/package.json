@@ -30,7 +30,6 @@
         "@types/better-sqlite3": "catalog:",
         "@types/express": "catalog:",
         "@types/node": "catalog:",
-        "@types/nodemailer": "catalog:",
         "typescript": "catalog:"
     }
 }
