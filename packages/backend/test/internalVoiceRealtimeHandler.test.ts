@@ -15,6 +15,8 @@ import type {
     InternalVoiceRealtimeServerEvent,
     InternalVoiceSessionContext,
 } from '@footnote/contracts/voice';
+import type { WorkflowRecord } from '@footnote/contracts/policy';
+import { ResponseMetadataSchema } from '@footnote/contracts/web/schemas';
 import type { BotProfileConfig } from '../src/config/profile.js';
 import type {
     RealtimeVoiceRuntime,
@@ -115,6 +117,7 @@ type RealtimeHandlerHarness = {
     connect: (headers?: Record<string, string>) => Promise<WebSocket>;
     lastSession: () => StubRealtimeSession | null;
     recordedUsage: BackendLLMCostRecord[];
+    recordedExecutions: Array<{ responseId: string; workflow: WorkflowRecord }>;
     requests: Array<{
         instructions: string;
         context: InternalVoiceSessionContext;
@@ -132,10 +135,15 @@ const createRealtimeHandlerHarness = async (
         profile?: typeof testProfile;
         supportsModel?: (model: string) => boolean;
         supportsVoice?: (voice: string) => boolean;
+        recordExecution?: (
+            responseId: string,
+            workflow: WorkflowRecord
+        ) => void;
     } = {}
 ): Promise<RealtimeHandlerHarness> => {
     const requests: RealtimeHandlerHarness['requests'] = [];
     const recordedUsage: BackendLLMCostRecord[] = [];
+    const recordedExecutions: RealtimeHandlerHarness['recordedExecutions'] = [];
     let currentSession: StubRealtimeSession | null = null;
     let lastContext: InternalVoiceSessionContext = {
         participants: [],
@@ -173,6 +181,11 @@ const createRealtimeHandlerHarness = async (
         recordUsage: (record) => {
             recordedUsage.push(record);
         },
+        recordExecution:
+            overrides.recordExecution ??
+            ((responseId, workflow) => {
+                recordedExecutions.push({ responseId, workflow });
+            }),
     });
 
     const server = http.createServer((_req, res) => {
@@ -217,6 +230,7 @@ const createRealtimeHandlerHarness = async (
             }),
         lastSession: () => currentSession,
         recordedUsage,
+        recordedExecutions,
         requests,
     };
 };
@@ -280,6 +294,252 @@ test('internal realtime handler rejects websocket upgrades without trusted auth'
     assert.match(socket.written, /401 Unauthorized/);
     assert.match(socket.written, /Missing trusted service credentials/);
     assert.equal(socket.endedByHandler, true);
+});
+
+test('Realtime records one private canonical Run per response with shared session correlation', async () => {
+    const harness = await createRealtimeHandlerHarness();
+
+    try {
+        const ws = await harness.connect();
+        ws.send(
+            JSON.stringify({
+                type: 'session.start',
+                context: { participants: [] },
+            })
+        );
+        const session = await new Promise<StubRealtimeSession>(
+            (resolve, reject) => {
+                const startedAt = Date.now();
+                const poll = () => {
+                    const current = harness.lastSession();
+                    if (current) return resolve(current);
+                    if (Date.now() - startedAt > 1000)
+                        return reject(
+                            new Error('Realtime session was not created.')
+                        );
+                    setTimeout(poll, 10);
+                };
+                poll();
+            }
+        );
+
+        session.emitServerEvent({
+            type: 'response.started',
+            responseId: 'provider-a',
+        });
+        session.emitServerEvent({
+            type: 'response.done',
+            responseId: 'provider-a',
+            status: 'completed',
+            usage: {
+                tokensPrompt: 20,
+                tokensCompletion: 10,
+                model: 'gpt-realtime',
+            },
+        });
+        session.emitServerEvent({
+            type: 'response.started',
+            responseId: 'provider-b',
+        });
+        session.emitServerEvent({
+            type: 'response.done',
+            responseId: 'provider-b',
+            status: 'completed',
+        });
+
+        assert.equal(harness.recordedExecutions.length, 2);
+        const [first, second] = harness.recordedExecutions;
+        assert.ok(first && second);
+        assert.notEqual(first.workflow.runId, second.workflow.runId);
+        assert.equal(first.responseId, first.workflow.runId);
+        assert.equal(
+            first.workflow.sessionCorrelationId,
+            second.workflow.sessionCorrelationId
+        );
+        assert.equal(first.workflow.steps[0]?.stepKind, 'generate');
+        assert.equal(
+            first.workflow.steps[0]?.attempts?.[0]?.profileId,
+            'winter'
+        );
+        assert.equal(
+            first.workflow.steps[0]?.attempts?.[0]?.actualProvider,
+            'openai'
+        );
+        assert.equal(
+            first.workflow.steps[0]?.attempts?.[0]?.actualModel,
+            'gpt-realtime'
+        );
+        assert.equal(
+            first.workflow.steps[0]?.attempts?.[0]?.settings?.applied
+                ?.effectiveVoice,
+            'echo'
+        );
+        assert.equal(
+            first.workflow.steps[0]?.attempts?.[0]?.usage?.promptTokens,
+            20
+        );
+        assert.equal(second.workflow.steps[0]?.attempts?.[0]?.usage, undefined);
+        assert.equal(
+            second.workflow.steps[0]?.cost?.costCompleteness,
+            'unknown'
+        );
+        assert.equal(second.workflow.steps[0]?.cost?.totalCostUsd, 0);
+        assert.equal(
+            JSON.stringify(harness.recordedExecutions).includes('output_text'),
+            false
+        );
+        const firstRun = first.workflow;
+        const storedMetadata = ResponseMetadataSchema.safeParse({
+            responseId: first.responseId,
+            provenance: 'Inferred',
+            safetyTier: 'Low',
+            tradeoffCount: 0,
+            chainHash: first.responseId,
+            licenseContext: 'MIT + HL3',
+            modelVersion: 'gpt-realtime',
+            staleAfter: new Date(
+                Date.now() + 90 * 24 * 60 * 60 * 1000
+            ).toISOString(),
+            citations: [],
+            workflow: firstRun,
+            trace_target: {},
+            trace_final: {},
+        });
+        assert.equal(storedMetadata.success, true);
+
+        session.emitServerEvent({
+            type: 'response.started',
+            responseId: 'provider-c',
+        });
+        session.emitServerEvent({
+            type: 'response.done',
+            responseId: 'provider-c',
+            status: 'completed',
+            usage: {
+                tokensPrompt: 0,
+                tokensCompletion: 0,
+                model: 'gpt-realtime',
+            },
+        });
+        assert.equal(
+            harness.recordedExecutions[2]?.workflow.steps[0]?.cost
+                ?.totalCostUsd,
+            0
+        );
+        assert.equal(
+            harness.recordedExecutions[2]?.workflow.steps[0]?.cost
+                ?.costCompleteness,
+            'complete'
+        );
+
+        session.emitServerEvent({
+            type: 'response.started',
+            responseId: 'provider-d',
+        });
+        session.emitServerEvent({
+            type: 'response.done',
+            responseId: 'provider-d',
+            status: 'cancelled',
+            terminationReason: 'client_cancelled',
+        });
+        const failed = harness.recordedExecutions[3];
+        assert.equal(failed?.workflow.runStatus, 'failed');
+        assert.equal(failed?.workflow.terminationReason, 'provider_cancelled');
+
+        await closeWebSocket(ws);
+
+        const secondWs = await harness.connect();
+        secondWs.send(
+            JSON.stringify({
+                type: 'session.start',
+                context: { participants: [] },
+            })
+        );
+        const secondSession = await new Promise<StubRealtimeSession>(
+            (resolve, reject) => {
+                const startedAt = Date.now();
+                const poll = () => {
+                    const current = harness.lastSession();
+                    if (current && current !== session) return resolve(current);
+                    if (Date.now() - startedAt > 1000)
+                        return reject(
+                            new Error(
+                                'Second Realtime session was not created.'
+                            )
+                        );
+                    setTimeout(poll, 10);
+                };
+                poll();
+            }
+        );
+        secondSession.emitServerEvent({
+            type: 'response.started',
+            responseId: 'other-session-response',
+        });
+        secondSession.emitServerEvent({
+            type: 'response.done',
+            responseId: 'other-session-response',
+            status: 'completed',
+        });
+        assert.notEqual(
+            harness.recordedExecutions[0]?.workflow.sessionCorrelationId,
+            harness.recordedExecutions[4]?.workflow.sessionCorrelationId
+        );
+        await closeWebSocket(secondWs);
+    } finally {
+        await harness.close();
+    }
+});
+
+test('Realtime execution-record persistence failure does not block the response', async () => {
+    const harness = await createRealtimeHandlerHarness({
+        recordExecution: () => {
+            throw new Error('test persistence failure');
+        },
+    });
+
+    try {
+        const ws = await harness.connect();
+        ws.send(
+            JSON.stringify({
+                type: 'session.start',
+                context: { participants: [] },
+            })
+        );
+        const session = await new Promise<StubRealtimeSession>(
+            (resolve, reject) => {
+                const startedAt = Date.now();
+                const poll = () => {
+                    const current = harness.lastSession();
+                    if (current) return resolve(current);
+                    if (Date.now() - startedAt > 1000)
+                        return reject(
+                            new Error('Realtime session was not created.')
+                        );
+                    setTimeout(poll, 10);
+                };
+                poll();
+            }
+        );
+        const response = waitForJsonMessage(ws);
+        session.emitServerEvent({
+            type: 'response.started',
+            responseId: 'provider-response',
+        });
+        session.emitServerEvent({
+            type: 'response.done',
+            responseId: 'provider-response',
+            status: 'completed',
+        });
+        assert.deepEqual(await response, {
+            type: 'response.done',
+            responseId: 'provider-response',
+            status: 'completed',
+        });
+        await closeWebSocket(ws);
+    } finally {
+        await harness.close();
+    }
 });
 
 test('internal realtime handler returns provider_unavailable when runtime is missing', () => {

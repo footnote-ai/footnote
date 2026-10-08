@@ -1527,6 +1527,7 @@ const validateAssessTraceSignals = (
 const WorkflowRecordSchema = z
     .object({
         runId: z.string().min(1).optional(),
+        sessionCorrelationId: z.string().min(1).max(64).optional(),
         runStatus: z
             .enum(['completed', 'degraded', 'limited', 'failed', 'rejected'])
             .optional(),
@@ -1553,7 +1554,7 @@ const WorkflowRecordSchema = z
         status: z.enum(['completed', 'degraded']),
         stepCount: z.number().int().nonnegative(),
         maxSteps: z.number().int().positive(),
-        maxDurationMs: z.number().int().positive(),
+        maxDurationMs: z.number().int().positive().optional(),
         effectiveLimits: z
             .array(
                 z

@@ -246,6 +246,7 @@ export type InternalVoiceRealtimeClientEvent =
  */
 export type InternalVoiceRealtimeServerEvent =
     | { type: 'session.ready'; speechSelection?: SpeechSelectionMetadata }
+    | { type: 'response.started'; responseId: string }
     | {
           type: 'session.closed';
           reason?: string;
@@ -262,6 +263,8 @@ export type InternalVoiceRealtimeServerEvent =
     | {
           type: 'response.done';
           responseId?: string;
+          status?: 'completed' | 'cancelled' | 'failed' | 'incomplete';
+          terminationReason?: string;
           usage?: InternalVoiceRealtimeUsage;
       }
     | {

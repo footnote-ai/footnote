@@ -166,6 +166,18 @@ const Attempt = ({
                         'Requested',
                         `${attempt.requestedProvider ?? 'Unavailable'} / ${attempt.requestedModel ?? 'Unavailable'}`,
                     ],
+                    ['Profile', attempt.profileId ?? 'Unavailable'],
+                    [
+                        'Effective settings',
+                        attempt.settings?.applied
+                            ? Object.entries(attempt.settings.applied)
+                                  .map(
+                                      ([key, value]) =>
+                                          `${key}: ${String(value)}`
+                                  )
+                                  .join(', ')
+                            : 'Unavailable',
+                    ],
                     ['Duration', duration(attempt.durationMs)],
                     [
                         'Reason',
@@ -413,6 +425,12 @@ const ExecutionReportPage = (): JSX.Element => {
                                                 'Unavailable',
                                         ],
                                         [
+                                            'Session correlation',
+                                            readState.workflow
+                                                .sessionCorrelationId ??
+                                                'Unavailable',
+                                        ],
+                                        [
                                             'Workflow',
                                             readState.workflow.workflowName,
                                         ],
@@ -438,7 +456,10 @@ const ExecutionReportPage = (): JSX.Element => {
                                         ],
                                         [
                                             'Time limit',
-                                            `${readState.workflow.maxDurationMs} ms`,
+                                            readState.workflow.maxDurationMs ===
+                                            undefined
+                                                ? 'Unavailable'
+                                                : `${readState.workflow.maxDurationMs} ms`,
                                         ],
                                     ]}
                                 />

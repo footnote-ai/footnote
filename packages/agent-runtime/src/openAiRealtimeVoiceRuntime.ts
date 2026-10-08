@@ -205,6 +205,12 @@ const mapServerEvent = (
     rawEvent: Record<string, unknown>
 ): InternalVoiceRealtimeServerEvent | null => {
     const type = rawEvent.type;
+    if (type === 'response.created') {
+        const responsePayload = asRecord(rawEvent.response);
+        return typeof responsePayload?.id === 'string'
+            ? { type: 'response.started', responseId: responsePayload.id }
+            : null;
+    }
     if (type === 'response.output_audio.delta') {
         return {
             type: 'output_audio.delta',
@@ -223,6 +229,9 @@ const mapServerEvent = (
     if (type === 'response.done') {
         const usage = extractRealtimeUsage(rawEvent);
         const responsePayload = asRecord(rawEvent.response);
+        const status = responsePayload?.status;
+        const statusDetails = asRecord(responsePayload?.status_details);
+        const terminationReason = statusDetails?.reason;
         return {
             type: 'response.done',
             responseId:
@@ -231,6 +240,18 @@ const mapServerEvent = (
                     : typeof responsePayload?.id === 'string'
                       ? responsePayload.id
                       : undefined,
+            ...(status === 'completed' ||
+            status === 'cancelled' ||
+            status === 'failed' ||
+            status === 'incomplete'
+                ? { status }
+                : {}),
+            ...(terminationReason === 'turn_detected' ||
+            terminationReason === 'client_cancelled' ||
+            terminationReason === 'max_output_tokens' ||
+            terminationReason === 'content_filter'
+                ? { terminationReason }
+                : {}),
             usage,
         };
     }
