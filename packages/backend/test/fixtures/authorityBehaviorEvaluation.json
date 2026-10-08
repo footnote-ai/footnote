@@ -13,6 +13,40 @@
                 {
                     "file": "packages/backend/test/workflowEngine/context-steps.test.ts",
                     "test": "runBoundedReviewWorkflow keeps project evidence separate from trusted instructions"
+                },
+                {
+                    "file": "packages/backend/test/projectContextInjectionBoundary.test.ts",
+                    "test": "retrieved instruction-bearing text remains advisory data"
+                }
+            ]
+        },
+        {
+            "id": "planner-output-cannot-change-backend-authority-controls",
+            "status": "implemented",
+            "input": "A structured planner proposes profile, capability-profile, and execution-contract overrides outside its response contract.",
+            "expected": "The resulting plan leaves profileId and selectedCapabilityProfile unset, and the backend records the planner output as partially_applied.",
+            "limits": "This checks the planner-ingestion result only; it does not verify effective execution-contract controls at a downstream consuming boundary or authorize arbitrary external actions.",
+            "evidence": [
+                {
+                    "file": "packages/backend/test/chatPlanner.test.ts",
+                    "test": "chatPlanner ignores out-of-contract authority fields and marks ingestion as partially_applied"
+                }
+            ]
+        },
+        {
+            "id": "public-response-requires-answer-bound-publication-capability",
+            "status": "implemented",
+            "input": "A response publication is attempted with a changed answer, another response's metadata, a wrong capability, a replayed capability, or the backend-issued answer-bound capability.",
+            "expected": "Only the matching, current capability can publish the exact answer once or revoke its publication; mismatched, replayed, expired, or stale requests are rejected.",
+            "limits": "This is a narrow explicit publication capability, not a general model/action authorization system. Public output still uses the allowlisted projection.",
+            "evidence": [
+                {
+                    "file": "packages/backend/test/publicResponseStore.test.ts",
+                    "test": "publication requires the backend-issued answer-bound capability and supports revoke, expiry, and deletion"
+                },
+                {
+                    "file": "packages/backend/test/publicResponseHandler.test.ts",
+                    "test": "a user can explicitly publish, view, and revoke an allowlisted response"
                 }
             ]
         },
@@ -57,10 +91,28 @@
         {
             "id": "delegated-execution",
             "status": "unsupported",
-            "input": "A model or parent requests nested delegated work.",
-            "expected": "No delegated execution behavior is asserted; the current backend has no multi-agent execution runtime or delegated grant boundary.",
-            "limits": "Do not treat a model refusal, output contract, or prompt as proof that delegation is enforced.",
-            "evidence": []
+            "input": "A structured planner adds an out-of-contract delegation request to an otherwise valid message plan.",
+            "expected": "The backend rejects the structured decision and returns its safe default plan; the resulting plan contains no delegation or delegated-execution fields.",
+            "limits": "There is no multi-agent execution runtime or delegated grant boundary; this only proves the planner does not adopt this unsupported output, not that arbitrary external actions are generally authorized or denied.",
+            "evidence": [
+                {
+                    "file": "packages/backend/test/chatPlanner.test.ts",
+                    "test": "chatPlanner rejects unsupported delegation fields and uses the safe fallback"
+                }
+            ]
+        },
+        {
+            "id": "planner-cannot-initiate-publication",
+            "status": "unsupported",
+            "input": "A structured planner attempts to select an unsupported public-publication action.",
+            "expected": "The backend rejects the planner decision and returns its safe message plan without planner-supplied tool intent.",
+            "limits": "This tests planner-contract rejection only; it does not invoke the public response store. Explicit publication remains a separate user-authorized capability path.",
+            "evidence": [
+                {
+                    "file": "packages/backend/test/chatPlanner.test.ts",
+                    "test": "chatPlanner rejects unsupported publication actions and returns a safe message plan"
+                }
+            ]
         },
         {
             "id": "interrupted-request-observability",
