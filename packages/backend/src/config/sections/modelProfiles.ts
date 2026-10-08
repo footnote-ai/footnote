@@ -16,7 +16,7 @@ import {
     type StepRoutingChainsConfig,
 } from '@footnote/contracts';
 import { type SupportedProvider } from '@footnote/contracts/providers';
-import yaml from 'js-yaml';
+import * as yaml from 'js-yaml';
 import { parseBooleanFlag, parseOptionalTrimmedString } from '../parsers.js';
 import type { RuntimeConfig, WarningSink } from '../types.js';
 
