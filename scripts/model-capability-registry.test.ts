@@ -214,6 +214,98 @@ function currentAssessments(
     );
 }
 
+function renderCurrentModelMap(value: ModelCapabilityRegistry): string {
+    const current = currentAssessments(value.assessments);
+    const sourceById = new Map(
+        value.sources.map((source) => [source.id, source])
+    );
+    const modelById = new Map(value.models.map((model) => [model.id, model]));
+    const lines = [
+        '# Current model deployment map',
+        '',
+        'This view is generated from the versioned registry. It records current evidence and maintainer judgments; it is not a universal ranking or production routing policy.',
+        '',
+        '## Current assessment',
+        '',
+    ];
+
+    for (const assessment of current) {
+        const evidenceLinks = assessment.evidence.map((sourceId) => {
+            const source = sourceById.get(sourceId);
+            assert.ok(source, `assessment source ${sourceId} must exist`);
+            return `[${sourceId}](./${path.basename(source.path)})`;
+        });
+        lines.push(
+            `- **${assessment.date} — ${assessment.target} (${assessment.nature}):** ${assessment.recommendation}`,
+            `  Evidence: ${evidenceLinks.join(', ')}.`
+        );
+    }
+
+    lines.push(
+        '',
+        '## Deployments',
+        '',
+        'Every deployment in the current local Ollama cohort is experimental. No per-deployment production recommendation or live result is recorded.',
+        ''
+    );
+
+    for (const deployment of value.deployments) {
+        const model = modelById.get(deployment.modelId);
+        assert.ok(model, `deployment model ${deployment.modelId} must exist`);
+        const unknowns: string[] = [];
+        if (model.revision.value === null) unknowns.push('model revision');
+        if (deployment.artifactDigest.value === null)
+            unknowns.push('artifact digest');
+        if (deployment.runtime.version.value === null)
+            unknowns.push('Ollama version');
+        if (
+            deployment.capabilities.supportedOllamaThinkingControls.value ===
+            null
+        ) {
+            unknowns.push('supported Ollama thinking controls');
+        }
+        const evidence = Array.from(
+            new Set([
+                deployment.role.source,
+                deployment.artifact.source,
+                deployment.runtime.version.source,
+                deployment.capabilities.supportedOllamaThinkingControls.source,
+            ])
+        );
+        const evidenceLinks = evidence.map((sourceId) => {
+            const source = sourceById.get(sourceId);
+            assert.ok(source, `deployment source ${sourceId} must exist`);
+            return `[${sourceId}](./${path.basename(source.path)})`;
+        });
+
+        lines.push(
+            `### ${deployment.id}`,
+            '',
+            `- **Model:** ${model.family.value} — ${deployment.artifact.value}`,
+            `- **Role:** ${deployment.role.value} (${deployment.role.nature})`,
+            `- **Runtime:** ${deployment.provider.value}; ${deployment.deployment.environment.value}; ${deployment.quantization.value}; ${deployment.artifactSize.value}.`,
+            `- **Hardware:** ${deployment.deployment.hardware.value}.`,
+            `- **Unknown:** ${unknowns.join(', ')}.`,
+            `- **Evidence:** ${evidenceLinks.join(', ')}.`,
+            ''
+        );
+    }
+
+    const liveEvaluation = value.evaluations.find(
+        (evaluation) => evaluation.scope === 'live provider/model evaluation'
+    );
+    if (liveEvaluation) {
+        lines.push(
+            '## Live evaluation',
+            '',
+            `${liveEvaluation.status.value}; no observation date or model/deployment is linked.`,
+            ''
+        );
+    }
+
+    return lines.join('\n');
+}
+
 test('registry separates deployments, preserves unknowns, and cites checked-in evidence', () => {
     validateRegistry(registry);
 
@@ -271,6 +363,13 @@ test('registry allows multiple deployments and derives only unsuperseded assessm
     assert.deepEqual(currentAssessments(extendedRegistry.assessments), [
         currentAssessment,
     ]);
+});
+
+test('current model map is a deterministic projection that preserves unknowns and avoids ranking', () => {
+    assert.equal(
+        renderCurrentModelMap(registry),
+        readFileSync('docs/status/model-capability-map.md', 'utf8')
+    );
 });
 
 test('registry rejects an evaluation deployment linked to a different model', () => {

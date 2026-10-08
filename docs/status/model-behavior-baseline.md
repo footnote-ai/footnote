@@ -22,7 +22,7 @@ packages/backend/test/modelBehaviorBaseline.test.ts         # integrity tests
 
 ## Initial Cases
 
-The six cases keep first-pass behavior isolated, rather than folding
+The seven cases keep first-pass behavior isolated, rather than folding
 retrieval, current-state judgment, and answer quality into one workload:
 
 1. direct generation with retrieval forbidden
