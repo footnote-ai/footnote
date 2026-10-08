@@ -235,6 +235,33 @@ const createRealtimeHandlerHarness = async (
     };
 };
 
+const waitForRealtimeSession = (
+    harness: RealtimeHandlerHarness,
+    previous?: StubRealtimeSession
+): Promise<StubRealtimeSession> =>
+    new Promise((resolve, reject) => {
+        const startedAt = Date.now();
+        const poll = () => {
+            const current = harness.lastSession();
+            if (current && current !== previous) {
+                resolve(current);
+                return;
+            }
+            if (Date.now() - startedAt > 1000) {
+                reject(
+                    new Error(
+                        previous
+                            ? 'Second Realtime session was not created.'
+                            : 'Realtime session was not created.'
+                    )
+                );
+                return;
+            }
+            setTimeout(poll, 10);
+        };
+        poll();
+    });
+
 const waitForJsonMessage = async (
     ws: WebSocket
 ): Promise<Record<string, unknown>> =>
@@ -307,21 +334,7 @@ test('Realtime records one private canonical Run per response with shared sessio
                 context: { participants: [] },
             })
         );
-        const session = await new Promise<StubRealtimeSession>(
-            (resolve, reject) => {
-                const startedAt = Date.now();
-                const poll = () => {
-                    const current = harness.lastSession();
-                    if (current) return resolve(current);
-                    if (Date.now() - startedAt > 1000)
-                        return reject(
-                            new Error('Realtime session was not created.')
-                        );
-                    setTimeout(poll, 10);
-                };
-                poll();
-            }
-        );
+        const session = await waitForRealtimeSession(harness);
 
         session.emitServerEvent({
             type: 'response.started',
@@ -455,23 +468,7 @@ test('Realtime records one private canonical Run per response with shared sessio
                 context: { participants: [] },
             })
         );
-        const secondSession = await new Promise<StubRealtimeSession>(
-            (resolve, reject) => {
-                const startedAt = Date.now();
-                const poll = () => {
-                    const current = harness.lastSession();
-                    if (current && current !== session) return resolve(current);
-                    if (Date.now() - startedAt > 1000)
-                        return reject(
-                            new Error(
-                                'Second Realtime session was not created.'
-                            )
-                        );
-                    setTimeout(poll, 10);
-                };
-                poll();
-            }
-        );
+        const secondSession = await waitForRealtimeSession(harness, session);
         secondSession.emitServerEvent({
             type: 'response.started',
             responseId: 'other-session-response',
@@ -506,21 +503,7 @@ test('Realtime execution-record persistence failure does not block the response'
                 context: { participants: [] },
             })
         );
-        const session = await new Promise<StubRealtimeSession>(
-            (resolve, reject) => {
-                const startedAt = Date.now();
-                const poll = () => {
-                    const current = harness.lastSession();
-                    if (current) return resolve(current);
-                    if (Date.now() - startedAt > 1000)
-                        return reject(
-                            new Error('Realtime session was not created.')
-                        );
-                    setTimeout(poll, 10);
-                };
-                poll();
-            }
-        );
+        const session = await waitForRealtimeSession(harness);
         const response = waitForJsonMessage(ws);
         session.emitServerEvent({
             type: 'response.started',
@@ -617,24 +600,7 @@ test('internal realtime handler starts a session and forwards session.ready to t
             })
         );
 
-        const session = await new Promise<StubRealtimeSession>(
-            (resolve, reject) => {
-                const startedAt = Date.now();
-                const poll = () => {
-                    const current = harness.lastSession();
-                    if (current) {
-                        resolve(current);
-                        return;
-                    }
-                    if (Date.now() - startedAt > 1000) {
-                        reject(new Error('Realtime session was not created.'));
-                        return;
-                    }
-                    setTimeout(poll, 10);
-                };
-                poll();
-            }
-        );
+        const session = await waitForRealtimeSession(harness);
 
         assert.equal(harness.requests.length, 1);
         assert.equal(harness.requests[0].options?.model, 'gpt-realtime');
@@ -781,24 +747,7 @@ test('Realtime falls back only the unsupported profile model and keeps an explic
             })
         );
 
-        const session = await new Promise<StubRealtimeSession>(
-            (resolve, reject) => {
-                const startedAt = Date.now();
-                const poll = () => {
-                    const current = harness.lastSession();
-                    if (current) {
-                        resolve(current);
-                        return;
-                    }
-                    if (Date.now() - startedAt > 1000) {
-                        reject(new Error('Realtime session was not created.'));
-                        return;
-                    }
-                    setTimeout(poll, 10);
-                };
-                poll();
-            }
-        );
+        const session = await waitForRealtimeSession(harness);
 
         assert.equal(harness.requests[0].options?.model, 'gpt-realtime-mini');
         assert.equal(harness.requests[0].options?.voice, 'alloy');
