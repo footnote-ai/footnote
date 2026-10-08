@@ -63,9 +63,9 @@ catalog:
     '@types/ws': ^8.18.2
     '@typescript-eslint/eslint-plugin': ^8.71.0
     '@typescript-eslint/parser': ^8.71.0
-    '@vitejs/plugin-react': ^6.0.2
+    '@vitejs/plugin-react': ^6.1.1
     autoprefixer: ^10.6.1
-    astro: ^7.3.2
+    astro: ^7.3.5
     better-sqlite3: ^12.10.0
     bufferutil: ^4.1.0
     body-parser: ^2.2.2
@@ -101,13 +101,13 @@ catalog:
     react: ^19.3.0
     react-dom: ^19.3.0
     react-markdown: ^10.1.0
-    react-router-dom: ^7.18.2
+    react-router-dom: ^7.18.4
     reindex: ^0.1.0
     remark-gfm: ^4.0.1
     rimraf: ^6.1.3
     tsx: ^4.23.15
     typescript: ^5.9.3
-    vite: ^8.0.16
+    vite: ^8.3.2
     winston: ^3.19.0
     winston-daily-rotate-file: ^5.0.0
     ws: ^8.22.0
