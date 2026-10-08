@@ -20,8 +20,8 @@ catalogs:
       specifier: ^10.0.1
       version: 10.0.1
     '@marsidev/react-turnstile':
-      specifier: ^1.5.3
-      version: 1.5.3
+      specifier: ^1.6.1
+      version: 1.6.1
     '@openai/agents':
       specifier: ^0.11.8
       version: 0.11.8
@@ -615,7 +615,7 @@ importers:
         version: link:../contracts
       '@marsidev/react-turnstile':
         specifier: 'catalog:'
-        version: 1.5.3(react-dom@19.3.0(react@19.3.0))(react@19.3.0)
+        version: 1.6.1(react-dom@19.3.0(react@19.3.0))(react@19.3.0)
       react:
         specifier: 'catalog:'
         version: 19.3.0
@@ -1640,8 +1640,8 @@ packages:
   '@keyv/serialize@1.1.1':
     resolution: {integrity: sha512-dXn3FZhPv0US+7dtJsIi2R+c7qWYiReoEh5zUntWCf4oSpMNib8FDhSoed6m3QyZdx5hK7iLFkYk3rNxwt8vTA==}
 
-  '@marsidev/react-turnstile@1.5.3':
-    resolution: {integrity: sha512-8Dij2jiNGNczq1U4EKpO4do2XepcTPxSMc2ZzvHndO+gcp68tvMULm27z2P99rGkdB89hc3452NZeu2Rti4g6A==}
+  '@marsidev/react-turnstile@1.6.1':
+    resolution: {integrity: sha512-ojI9NLYv821IRKi7KraTkxTto6KC/m58hNNyKxvYxm/cQBu5MI5eMkaiJs2JSQBFiXE3LPQI3seJVjv/2lgALA==}
     peerDependencies:
       react: ^17.0.2 || ^18.0.0 || ^19.0
       react-dom: ^17.0.2 || ^18.0.0 || ^19.0
@@ -6653,7 +6653,7 @@ snapshots:
 
   '@keyv/serialize@1.1.1': {}
 
-  '@marsidev/react-turnstile@1.5.3(react-dom@19.3.0(react@19.3.0))(react@19.3.0)':
+  '@marsidev/react-turnstile@1.6.1(react-dom@19.3.0(react@19.3.0))(react@19.3.0)':
     dependencies:
       react: 19.3.0
       react-dom: 19.3.0(react@19.3.0)
