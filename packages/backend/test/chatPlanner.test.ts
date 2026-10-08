@@ -781,6 +781,7 @@ test('chatPlanner rejects unsupported delegation fields without creating delegat
 
     assert.equal(execution.status, 'failed');
     assert.equal(execution.reasonCode, 'planner_invalid_output');
+    assert.equal(plan.action, 'message');
     assert.equal(Object.hasOwn(plan, 'delegation'), false);
     assert.equal(Object.hasOwn(plan, 'delegatedExecution'), false);
 });

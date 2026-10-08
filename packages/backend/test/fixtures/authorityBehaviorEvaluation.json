@@ -90,10 +90,10 @@
         },
         {
             "id": "delegated-execution",
-            "status": "unsupported-with-enforced-output-boundary",
+            "status": "unsupported",
             "input": "A structured planner adds an out-of-contract delegation request to an otherwise valid message plan.",
             "expected": "The backend rejects the structured decision and uses its safe default plan; no delegated execution or grant is created.",
-            "limits": "There is no multi-agent execution runtime or delegated grant boundary; this proves unknown planner output is not adopted, not that arbitrary external actions are generally authorized or denied.",
+            "limits": "There is no multi-agent execution runtime or delegated grant boundary; this only proves the planner does not adopt this unsupported output, not that arbitrary external actions are generally authorized or denied.",
             "evidence": [
                 {
                     "file": "packages/backend/test/chatPlanner.test.ts",
