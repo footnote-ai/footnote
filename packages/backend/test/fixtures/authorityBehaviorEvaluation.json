@@ -51,6 +51,23 @@
             ]
         },
         {
+            "id": "optional-trace-persistence-failure",
+            "status": "implemented-with-limits",
+            "input": "Optional trace, trace-card, or model-debug persistence throws while response metadata is being stored.",
+            "expected": "The trace-storage helper remains fail-open when optional trace and model-debug persistence throws.",
+            "limits": "These tests do not invoke action dispatch or authorization; they prove optional persistence failure does not block storage callers. Trace storage is not an authorization input. Invalid publication capabilities are separately rejected by the answer-bound capability tests.",
+            "evidence": [
+                {
+                    "file": "packages/backend/test/traceStoreService.test.ts",
+                    "test": "storeTrace stays fail-open when trace upsert throws"
+                },
+                {
+                    "file": "packages/backend/test/traceStoreService.test.ts",
+                    "test": "storeTrace stays fail-open when optional model debug persistence throws"
+                }
+            ]
+        },
+        {
             "id": "retrieval-scope-and-workflow-budget",
             "status": "implemented",
             "input": "A caller omits explicit project scope, or a workflow attempt reaches its configured resource limit.",
