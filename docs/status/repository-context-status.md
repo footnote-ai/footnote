@@ -35,8 +35,8 @@ and preview the safe, tracked selection with `pnpm context:repo:list`.
 Repository context is not loaded by default. The preview resolver does not read
 file contents or contact TrustGraph.
 
-An operator can now load the selected text files with
-`pnpm context:repo:load`. The command uses TrustGraph's Librarian API directly,
+Developers working from a repository checkout can load the selected text files with
+`pnpm context:repo:load`. For normal deployment setup, operators can use `/setup` to load the already-prepared bundle without YAML edits or CLI use; see [Setup and Settings Flow](../architecture/first-setup-flow.md). The CLI uses TrustGraph's Librarian API directly,
 keeps the repository-relative path and SHA-256 content hash with every
 document, and reports added, changed, unchanged, skipped, and failed files.
 The earlier hand-written snapshot and seed loader have been removed.
