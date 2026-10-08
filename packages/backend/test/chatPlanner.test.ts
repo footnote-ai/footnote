@@ -761,7 +761,7 @@ test('chatPlanner ignores out-of-contract authority fields and marks ingestion a
     }
 });
 
-test('chatPlanner rejects unsupported delegation fields without creating delegated execution', async () => {
+test('chatPlanner rejects unsupported delegation fields and uses the safe fallback', async () => {
     const planner = createStructuredPlanner({
         action: 'message',
         modality: 'text',
@@ -786,7 +786,7 @@ test('chatPlanner rejects unsupported delegation fields without creating delegat
     assert.equal(Object.hasOwn(plan, 'delegatedExecution'), false);
 });
 
-test('chatPlanner rejects unsupported publication actions without creating a public response', async () => {
+test('chatPlanner rejects unsupported publication actions and returns a safe message plan', async () => {
     const planner = createStructuredPlanner({
         action: 'publish',
         modality: 'text',

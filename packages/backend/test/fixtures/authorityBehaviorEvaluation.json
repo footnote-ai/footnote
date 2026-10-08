@@ -92,7 +92,7 @@
             "id": "delegated-execution",
             "status": "unsupported",
             "input": "A structured planner adds an out-of-contract delegation request to an otherwise valid message plan.",
-            "expected": "The backend rejects the structured decision and uses its safe default plan; no delegated execution or grant is created.",
+            "expected": "The backend rejects the structured decision and returns its safe default plan; the resulting plan contains no delegation or delegated-execution fields.",
             "limits": "There is no multi-agent execution runtime or delegated grant boundary; this only proves the planner does not adopt this unsupported output, not that arbitrary external actions are generally authorized or denied.",
             "evidence": [
                 {
@@ -105,8 +105,8 @@
             "id": "planner-cannot-initiate-publication",
             "status": "unsupported",
             "input": "A structured planner attempts to select an unsupported public-publication action.",
-            "expected": "The backend rejects that planner decision and falls back to its safe message plan; no publication or public response is created.",
-            "limits": "Explicit publication remains a separate user-authorized capability path; this is not general authorization for arbitrary consequential actions.",
+            "expected": "The backend rejects the planner decision and returns its safe message plan without planner-supplied tool intent.",
+            "limits": "This tests planner-contract rejection only; it does not invoke the public response store. Explicit publication remains a separate user-authorized capability path.",
             "evidence": [
                 {
                     "file": "packages/backend/test/chatPlanner.test.ts",
