@@ -97,7 +97,7 @@
             "evidence": [
                 {
                     "file": "packages/backend/test/chatPlanner.test.ts",
-                    "test": "chatPlanner rejects unsupported delegation fields without creating delegated execution"
+                    "test": "chatPlanner rejects unsupported delegation fields and uses the safe fallback"
                 }
             ]
         },
@@ -110,7 +110,7 @@
             "evidence": [
                 {
                     "file": "packages/backend/test/chatPlanner.test.ts",
-                    "test": "chatPlanner rejects unsupported publication actions without creating a public response"
+                    "test": "chatPlanner rejects unsupported publication actions and returns a safe message plan"
                 }
             ]
         },
