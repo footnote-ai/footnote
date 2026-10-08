@@ -12,7 +12,7 @@ updates:
                   - 'ai'
                   - '@ai-sdk/*'
                   - 'ollama-ai-provider-v2'
-                  - '@voltagent/core'
+
           openai-runtime:
               patterns:
                   - 'openai'
