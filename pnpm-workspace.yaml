@@ -47,7 +47,7 @@ catalog:
     '@discordjs/voice': ^0.19.2
     '@eslint/js': ^10.0.1
     '@marsidev/react-turnstile': ^1.6.1
-    '@openai/agents': ^0.11.8
+    '@openai/agents': ^0.18.0
     '@resvg/resvg-js': ^2.6.2
     '@sapphire/shapeshift': ^4.0.0
     '@swc/core': ^1.16.2
@@ -92,7 +92,7 @@ catalog:
     node-fetch: ^3.3.2
     nodemailer: ^10.0.14
     only: ^0.0.2
-    openai: ^6.42.0
+    openai: ^7.28.0
     openid-client: ^6.8.8
     opusscript: ^0.1.1
     postcss: ^8.5.28
