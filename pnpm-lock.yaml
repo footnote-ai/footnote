@@ -330,8 +330,8 @@ importers:
         specifier: workspace:*
         version: link:../contracts
       '@voltagent/core':
-        specifier: 2.9.2
-        version: 2.9.2(@ai-sdk/provider-utils@4.0.38(zod@4.4.3))(@ai-sdk/provider@3.0.14)(@cfworker/json-schema@4.1.1)(ai@6.0.224(zod@4.4.3))(bufferutil@4.1.0)(debug@4.4.3(supports-color@10.2.2))(graphql@16.13.1)(supports-color@10.2.2)(ws@8.22.0(bufferutil@4.1.0))(zod@4.4.3)
+        specifier: 2.11.0
+        version: 2.11.0(@ai-sdk/provider-utils@4.0.38(zod@4.4.3))(@ai-sdk/provider@3.0.14)(@cfworker/json-schema@4.1.1)(ai@6.0.224(zod@4.4.3))(bufferutil@4.1.0)(debug@4.4.3(supports-color@10.2.2))(graphql@16.13.1)(supports-color@10.2.2)(ws@8.22.0(bufferutil@4.1.0))(zod@4.4.3)
       ai:
         specifier: 6.0.224
         version: 6.0.224(zod@4.4.3)
@@ -2603,8 +2603,8 @@ packages:
     resolution: {integrity: sha512-Xfe6rpCTxSxfbswi/W/Pz7zp1WWSNn4A0eW4mLkQUewCrXXtMj31lCg+iQyTkh/CkusZSq9eDflu7tjEDXUY6g==}
     engines: {node: '>=v14.0.0', npm: '>=7.0.0'}
 
-  '@voltagent/core@2.9.2':
-    resolution: {integrity: sha512-D7CxQag3oqX5Ul2Zh7NdWgYlsWxL8wM4eAoZTDb3BYNf/uVrQPBX0COTwDU8tbDx8gQ+vkAbYKwFR+NbDbgY0Q==}
+  '@voltagent/core@2.11.0':
+    resolution: {integrity: sha512-VHNlLyHg0e7+lxlet0CJlNeMWDDuzbtyjHvFSp6QH3JCFtkJ3ik/tQDqyAXS3Rt8O7af1NE7NOG3oG2S8j/Ceg==}
     peerDependencies:
       '@ai-sdk/provider-utils': 4.x
       '@voltagent/logger': 2.0.2
@@ -3349,12 +3349,6 @@ packages:
     resolution: {integrity: sha512-XYfuKMvj4O35f/pOXLObndIRvyQ+/+6AhODh+OKWj9S9498pHHn/IMszH+gt0fBCRWMNfk1ZSp5x3AifmnI2vg==}
     engines: {node: '>=6'}
 
-  express-rate-limit@8.5.2:
-    resolution: {integrity: sha512-5Kb34ipNX694DH48vN9irak1Qx30nb0PLYHXfJgw4YEjiC3ZEmZJhwOp+VfiCYwFzvFTdB9QkArYS5kXa2cx2A==}
-    engines: {node: '>= 16'}
-    peerDependencies:
-      express: '>= 4.11'
-
   express-rate-limit@8.6.2:
     resolution: {integrity: sha512-YH4ru+eOJxQABscKFfRCy9R7x9QFGdezclVMwwgFFndzS2Xnm0uo6B0ABZsLhcpeptGv2qvuJVWlQr9gQZoC3A==}
     engines: {node: '>= 16'}
@@ -3874,9 +3868,6 @@ packages:
 
   jose@6.2.12:
     resolution: {integrity: sha512-9NiFmJEex0sy2Dk58j2UGBSHgUs2ypF9eZSu4L6vjOX3Dp96Sw1F3uL+H+D1sx02jZZdzUT0HgvCy59CuvXcWw==}
-
-  jose@6.2.3:
-    resolution: {integrity: sha512-YYVDInQKFJfR/xa3ojUTl8c2KoTwiL1R5Wg9YCydwH0x0B9grbzlg5HC7mMjCtUJjbQ/YnGEZIhI5tCgfTb4Hw==}
 
   js-tokens@4.0.0:
     resolution: {integrity: sha512-RdJUflcE3cUzKiMqQgsCu06FPu9UdIJO0beYbPhHN4k6apgJtifcoCtT9bcxOpYBtpD2kCM6Sbzg4CausW/PKQ==}
@@ -6456,7 +6447,7 @@ snapshots:
       '@ai-sdk/openai-compatible': 2.0.59(zod@4.4.3)
       '@ai-sdk/provider-utils': 4.0.38(zod@4.4.3)
       '@footnote/contracts': file:packages/contracts
-      '@voltagent/core': 2.9.2(@ai-sdk/provider-utils@4.0.38(zod@4.4.3))(@ai-sdk/provider@3.0.14)(@cfworker/json-schema@4.1.1)(ai@6.0.224(zod@4.4.3))(bufferutil@4.1.0)(debug@4.4.3(supports-color@10.2.2))(graphql@16.13.1)(supports-color@10.2.2)(ws@8.22.0(bufferutil@4.1.0))(zod@4.4.3)
+      '@voltagent/core': 2.11.0(@ai-sdk/provider-utils@4.0.38(zod@4.4.3))(@ai-sdk/provider@3.0.14)(@cfworker/json-schema@4.1.1)(ai@6.0.224(zod@4.4.3))(bufferutil@4.1.0)(debug@4.4.3(supports-color@10.2.2))(graphql@16.13.1)(supports-color@10.2.2)(ws@8.22.0(bufferutil@4.1.0))(zod@4.4.3)
       ai: 6.0.224(zod@4.4.3)
       ollama-ai-provider-v2: 1.5.5(zod@4.4.3)
       openai: 6.42.0(ws@8.22.0(bufferutil@4.1.0))(zod@4.4.3)
@@ -6707,9 +6698,9 @@ snapshots:
       eventsource: 3.0.7
       eventsource-parser: 3.1.0
       express: 5.2.1(supports-color@10.2.2)
-      express-rate-limit: 8.5.2(express@5.2.1(supports-color@10.2.2))
+      express-rate-limit: 8.6.2(express@5.2.1(supports-color@10.2.2))(supports-color@10.2.2)
       hono: 4.13.7
-      jose: 6.2.3
+      jose: 6.2.12
       json-schema-typed: 8.0.2
       pkce-challenge: 5.0.1
       raw-body: 3.0.2
@@ -7680,7 +7671,7 @@ snapshots:
 
   '@vladfrangu/async_event_emitter@2.4.7': {}
 
-  '@voltagent/core@2.9.2(@ai-sdk/provider-utils@4.0.38(zod@4.4.3))(@ai-sdk/provider@3.0.14)(@cfworker/json-schema@4.1.1)(ai@6.0.224(zod@4.4.3))(bufferutil@4.1.0)(debug@4.4.3(supports-color@10.2.2))(graphql@16.13.1)(supports-color@10.2.2)(ws@8.22.0(bufferutil@4.1.0))(zod@4.4.3)':
+  '@voltagent/core@2.11.0(@ai-sdk/provider-utils@4.0.38(zod@4.4.3))(@ai-sdk/provider@3.0.14)(@cfworker/json-schema@4.1.1)(ai@6.0.224(zod@4.4.3))(bufferutil@4.1.0)(debug@4.4.3(supports-color@10.2.2))(graphql@16.13.1)(supports-color@10.2.2)(ws@8.22.0(bufferutil@4.1.0))(zod@4.4.3)':
     dependencies:
       '@ai-sdk/amazon-bedrock': 3.0.105(zod@4.4.3)
       '@ai-sdk/anthropic': 3.0.96(zod@4.4.3)
@@ -8596,11 +8587,6 @@ snapshots:
 
   expand-template@2.0.3: {}
 
-  express-rate-limit@8.5.2(express@5.2.1(supports-color@10.2.2)):
-    dependencies:
-      express: 5.2.1(supports-color@10.2.2)
-      ip-address: 10.5.0
-
   express-rate-limit@8.6.2(express@5.2.1(supports-color@10.2.2))(supports-color@10.2.2):
     dependencies:
       debug: 4.4.3(supports-color@10.2.2)
@@ -9274,8 +9260,6 @@ snapshots:
       node-rsa: 1.1.1
 
   jose@6.2.12: {}
-
-  jose@6.2.3: {}
 
   js-tokens@4.0.0: {}
 
