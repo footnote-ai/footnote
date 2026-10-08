@@ -334,6 +334,19 @@ export const createInternalVoiceRealtimeHandler = ({
             }
         };
 
+        const flushActiveResponses = (terminationReason: string): void => {
+            const responses = [...activeResponses.values()];
+            activeResponses.clear();
+            for (const response of responses) {
+                recordResponseRun(
+                    response,
+                    'failed',
+                    undefined,
+                    terminationReason
+                );
+            }
+        };
+
         const isSocketOpen = () =>
             !socketClosed && ws.readyState === WebSocket.OPEN;
 
@@ -403,16 +416,8 @@ export const createInternalVoiceRealtimeHandler = ({
                     );
                 }
             }
-            if (event.type === 'session.closed' && activeResponses.size > 0) {
-                for (const response of activeResponses.values()) {
-                    recordResponseRun(
-                        response,
-                        'failed',
-                        undefined,
-                        'session_closed'
-                    );
-                }
-                activeResponses.clear();
+            if (event.type === 'session.closed') {
+                flushActiveResponses('session_closed');
             }
 
             try {
@@ -690,6 +695,7 @@ export const createInternalVoiceRealtimeHandler = ({
         ws.on('close', () => {
             socketClosed = true;
             closed = true;
+            flushActiveResponses('client_close');
             session?.close('client_close');
         });
 

@@ -488,6 +488,46 @@ test('Realtime records one private canonical Run per response with shared sessio
     }
 });
 
+test('Realtime records unfinished responses once when the client socket closes', async () => {
+    const harness = await createRealtimeHandlerHarness();
+
+    try {
+        const ws = await harness.connect();
+        ws.send(
+            JSON.stringify({
+                type: 'session.start',
+                context: { participants: [] },
+            })
+        );
+        const session = await waitForRealtimeSession(harness);
+        session.emitServerEvent({
+            type: 'response.started',
+            responseId: 'unfinished-response',
+        });
+
+        await closeWebSocket(ws);
+        await new Promise((resolve) => setTimeout(resolve, 20));
+
+        assert.equal(harness.recordedExecutions.length, 1);
+        assert.equal(
+            harness.recordedExecutions[0]?.workflow.runStatus,
+            'failed'
+        );
+        assert.equal(
+            harness.recordedExecutions[0]?.workflow.steps[0]?.attempts?.[0]
+                ?.terminationReason,
+            'client_close'
+        );
+        session.emitServerEvent({
+            type: 'session.closed',
+            reason: 'client_close',
+        });
+        assert.equal(harness.recordedExecutions.length, 1);
+    } finally {
+        await harness.close();
+    }
+});
+
 test('Realtime execution-record persistence failure does not block the response', async () => {
     const harness = await createRealtimeHandlerHarness({
         recordExecution: () => {
