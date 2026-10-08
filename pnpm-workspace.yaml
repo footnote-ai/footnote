@@ -49,7 +49,7 @@ catalog:
     '@marsidev/react-turnstile': ^1.5.3
     '@openai/agents': ^0.11.8
     '@resvg/resvg-js': ^2.6.2
-    '@sapphire/shapeshift': ^4.0.0
+    '@sapphire/shapeshift': ^5.0.0
     '@swc/core': ^1.16.2
     '@swc/helpers': ^0.5.23
     '@types/better-sqlite3': ^7.6.13
