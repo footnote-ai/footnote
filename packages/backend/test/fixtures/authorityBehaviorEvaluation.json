@@ -13,6 +13,10 @@
                 {
                     "file": "packages/backend/test/workflowEngine/context-steps.test.ts",
                     "test": "runBoundedReviewWorkflow keeps project evidence separate from trusted instructions"
+                },
+                {
+                    "file": "packages/backend/test/projectContextInjectionBoundary.test.ts",
+                    "test": "retrieved instruction-bearing text remains advisory data"
                 }
             ]
         },
@@ -86,11 +90,16 @@
         },
         {
             "id": "delegated-execution",
-            "status": "unsupported",
-            "input": "A model or parent requests nested delegated work.",
-            "expected": "No delegated execution behavior is asserted; the current backend has no multi-agent execution runtime or delegated grant boundary.",
-            "limits": "Do not treat a model refusal, output contract, or prompt as proof that delegation is enforced.",
-            "evidence": []
+            "status": "unsupported-with-enforced-output-boundary",
+            "input": "A structured planner adds an out-of-contract delegation request to an otherwise valid message plan.",
+            "expected": "The backend rejects the structured decision and uses its safe default plan; no delegated execution or grant is created.",
+            "limits": "There is no multi-agent execution runtime or delegated grant boundary; this proves unknown planner output is not adopted, not that arbitrary external actions are generally authorized or denied.",
+            "evidence": [
+                {
+                    "file": "packages/backend/test/chatPlanner.test.ts",
+                    "test": "chatPlanner rejects unsupported delegation fields without creating delegated execution"
+                }
+            ]
         },
         {
             "id": "interrupted-request-observability",

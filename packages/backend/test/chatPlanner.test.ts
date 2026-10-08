@@ -761,6 +761,30 @@ test('chatPlanner ignores out-of-contract authority fields and marks ingestion a
     }
 });
 
+test('chatPlanner rejects unsupported delegation fields without creating delegated execution', async () => {
+    const planner = createStructuredPlanner({
+        action: 'message',
+        modality: 'text',
+        safetyTier: 'Low',
+        reasoning: 'Reply to the user normally.',
+        generation: { verbosity: 'low' },
+        delegation: {
+            target: 'external-agent',
+            scope: 'modify another repository',
+        },
+    });
+
+    const { plan, execution } = await planFromWorkflow(
+        planner,
+        createChatRequest()
+    );
+
+    assert.equal(execution.status, 'failed');
+    assert.equal(execution.reasonCode, 'planner_invalid_output');
+    assert.equal(Object.hasOwn(plan, 'delegation'), false);
+    assert.equal(Object.hasOwn(plan, 'delegatedExecution'), false);
+});
+
 test('chatPlanner marks structured policy-invalid decisions as failed with invalid-output reason', async () => {
     const infos: Array<{ message: string; meta?: unknown }> = [];
     const originalInfo = logger.info;
