@@ -247,11 +247,9 @@ test('landing scenario runtime loader strips capture data', () => {
         assert.equal(scenario.response.modality, 'text');
 
         const parsed = PostChatResponseSchema.safeParse(scenario.response);
-        assert.equal(
-            parsed.success,
-            true,
-            parsed.success ? undefined : parsed.error.message
-        );
+        if (!parsed.success) {
+            assert.fail(parsed.error.message);
+        }
     }
 });
 
