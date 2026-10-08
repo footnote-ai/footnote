@@ -16,7 +16,7 @@ import remarkParse from 'remark-parse';
 import { visit } from 'unist-util-visit';
 
 // provides robust URL detection in plain text (punctuation/parentheses/etc.) without maintaining a regex.
-import LinkifyIt from 'linkify-it';
+import { LinkifyIt } from 'linkify-it';
 
 // the AST type produced by remark-parse.
 import type { Root } from 'mdast';
@@ -34,7 +34,8 @@ interface TextRange {
 }
 
 // Linkify is scoped to this module to keep behavior consistent and testable.
-const linkify = new LinkifyIt();
+// Preserve v5 matching so URL credentials stay inside the same matched link.
+const linkify = new LinkifyIt({ urlAuth: true });
 
 // Node types that should never be rewritten by the outbound normalizer.
 // https://www.npmjs.com/package/mdast

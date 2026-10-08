@@ -34,7 +34,7 @@
         "dotenv": "catalog:",
         "express": "catalog:",
         "js-yaml": "catalog:",
-        "linkify-it": "^5.0.2",
+        "linkify-it": "^6.1.0",
         "mime-types": "catalog:",
         "node-fetch": "catalog:",
         "only": "catalog:",
@@ -51,7 +51,6 @@
     },
     "devDependencies": {
         "@types/express": "catalog:",
-        "@types/linkify-it": "^5.0.0",
         "@types/mdast": "^4.0.4",
         "@types/node": "catalog:",
         "@types/unist": "^3.0.3",
