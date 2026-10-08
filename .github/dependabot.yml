@@ -7,8 +7,30 @@ updates:
           interval: 'weekly'
       open-pull-requests-limit: 10
       groups:
-          core-dependencies:
-              patterns: ['*']
+          ai-runtime:
+              patterns:
+                  - 'ai'
+                  - '@ai-sdk/*'
+                  - 'ollama-ai-provider-v2'
+                  - '@voltagent/core'
+          openai-runtime:
+              patterns:
+                  - 'openai'
+                  - '@openai/agents'
+          web-runtime:
+              patterns:
+                  - 'react'
+                  - 'react-dom'
+                  - '@types/react'
+                  - '@types/react-dom'
+                  - 'react-router-dom'
+                  - 'vite'
+                  - '@vitejs/plugin-react'
+                  - 'astro'
+          typescript-eslint:
+              patterns:
+                  - '@typescript-eslint/eslint-plugin'
+                  - '@typescript-eslint/parser'
       ignore:
           - dependency-name: 'typescript'
             update-types: ['version-update:semver-major']
